@@ -11,6 +11,8 @@ router.register(r"sessions", views.ExperimentSessionViewSet, basename="session")
 
 connect_patterns = [
     path("generate_key/", views.generate_key, name="generate_key"),
+    path("callback/", views.callback, name="callback"),
+    path("consent/", views.consent, name="consent"),
 ]
 
 urlpatterns = [

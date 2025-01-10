@@ -52,6 +52,12 @@ class BearerTokenAuthentication(BaseKeyAuthentication):
         return ConfigurableKeyParser(keyword=self.keyword).get_from_authorization(request)
 
 
+class CommCareConnectAuthentication(BaseAuthentication):
+    def authenticate(self, request):
+        """Match the HMAC signature in the request to the calculated HMAC using the request payload."""
+        # TODO
+
+
 class ConfigurableKeyParser(KeyParser):
     def __init__(self, keyword: str):
         self.keyword = keyword

@@ -1,4 +1,6 @@
 import base64
+import hashlib
+import hmac
 import json
 import uuid
 
@@ -6,6 +8,8 @@ import pytest
 import requests
 import responses
 from dateutil.relativedelta import relativedelta
+from django.conf import settings
+from django.test import override_settings
 from django.urls import reverse
 from django.utils import timezone
 
@@ -322,3 +326,27 @@ class TestConnectApis:
 
         with pytest.raises(requests.exceptions.HTTPError):
             self._make_request(client=client, data={})
+
+    @override_settings(CONNECT_MESSAGING_SERVER_SECRET="123123")
+    def test_user_consented(self, client, experiment):
+        connect_id = uuid.uuid4().hex
+        channel_id = uuid.uuid4().hex
+        participant_data = self._setup_participant(experiment, connect_id=connect_id, channel_id=channel_id)
+
+        payload = {"channel_id": channel_id, "consent": True}
+        response = client.post(
+            reverse("api:commcare-connect:consent"),
+            json.dumps(payload),
+            headers=self._get_request_headers(payload),
+            content_type="application/json",
+        )
+        assert response.status_code == 200
+        participant_data.refresh_from_db()
+        assert participant_data.system_metadata == {"channel_id": channel_id, "consent": True}
+
+    def _get_request_headers(self, payload: dict) -> dict:
+        msg = json.dumps(payload).encode("utf-8")
+        key = settings.CONNECT_MESSAGING_SERVER_SECRET.encode()
+        return {
+            "Authorization": hmac.new(key=key, msg=msg, digestmod=hashlib.sha256).hexdigest(),
+        }

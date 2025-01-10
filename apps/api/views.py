@@ -18,7 +18,7 @@ from rest_framework.response import Response
 from rest_framework.views import Request
 from rest_framework.viewsets import GenericViewSet
 
-from apps.api.permissions import DjangoModelPermissionsWithView
+from apps.api.permissions import CommCareConnectAuthentication, DjangoModelPermissionsWithView
 from apps.api.serializers import (
     ExperimentSerializer,
     ExperimentSessionCreateSerializer,
@@ -334,3 +334,22 @@ def generate_key(request: Request):
     participant_data.encryption_key = key
     participant_data.save(update_fields=["encryption_key"])
     return Response({"key": key}, status=status.HTTP_200_OK)
+
+
+@api_view(["POST"])
+@authentication_classes([CommCareConnectAuthentication])
+@permission_classes([])
+def callback(request: Request):
+    # Not sure what to do with this, so just return
+    return HttpResponse()
+
+
+@api_view(["POST"])
+@authentication_classes([CommCareConnectAuthentication])
+@permission_classes([])
+def consent(request: Request):
+    """The user gave consent to the bot to message them"""
+    participant_data = get_object_or_404(ParticipantData, system_metadata__channel_id=request.data["channel_id"])
+    participant_data.system_metadata["consent"] = request.data["consent"]
+    participant_data.save(update_fields=["system_metadata"])
+    return HttpResponse()
