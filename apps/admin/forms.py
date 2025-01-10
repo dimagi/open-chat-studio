@@ -16,7 +16,9 @@ class DateRanges(TextChoices):
             case DateRanges.THIS_MONTH:
                 return now.replace(day=1), now
             case DateRanges.LAST_MONTH:
-                return now - relativedelta(months=1, day=1), now + relativedelta(day=31)
+                start = now - relativedelta(months=1, day=1)
+                end = start + relativedelta(day=31)  # gets coerced to the last day of the month
+                return start, end
             case DateRanges.LAST_30_DAYS:
                 return now - relativedelta(days=30), now
             case DateRanges.CUSTOM:
