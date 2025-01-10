@@ -377,9 +377,6 @@ class BaseExperimentView(LoginAndTeamRequiredMixin, PermissionRequiredMixin):
         if self.object:
             team_participant_identifiers.extend(self.object.participant_allowlist)
             team_participant_identifiers = set(team_participant_identifiers)
-            fields_changed = self.object.compare_with_latest()
-        else:
-            fields_changed = []
 
         return {
             **{
@@ -389,7 +386,7 @@ class BaseExperimentView(LoginAndTeamRequiredMixin, PermissionRequiredMixin):
                 "experiment_type": experiment_type,
                 "available_tools": AgentTools.choices,
                 "team_participant_identifiers": team_participant_identifiers,
-                "disable_version_button": (not bool(fields_changed)) or self.object.create_version_task_id,
+                "disable_version_button": self.object.create_version_task_id,
             },
             **_get_voice_provider_alpine_context(self.request),
         }
