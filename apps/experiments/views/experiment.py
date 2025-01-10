@@ -468,12 +468,11 @@ class CreateExperiment(BaseExperimentView, CreateView):
             files = file_formset.save(self.request)
             self.object.files.set(files)
 
-        if flag_is_active(self.request, "experiment_versions"):
-            task_id = async_create_experiment_version.delay(
-                experiment_id=self.object.id, version_description="", make_default=True
-            )
-            self.object.create_version_task_id = task_id
-            self.object.save(update_fields=["create_version_task_id"])
+        task_id = async_create_experiment_version.delay(
+            experiment_id=self.object.id, version_description="", make_default=True
+        )
+        self.object.create_version_task_id = task_id
+        self.object.save(update_fields=["create_version_task_id"])
 
         return HttpResponseRedirect(self.get_success_url())
 
