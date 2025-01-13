@@ -14,6 +14,7 @@ from telebot import TeleBot
 from telebot.util import antiflood, smart_split
 
 from apps.channels import audio
+from apps.channels.clients.connect_client import ConnectClient
 from apps.channels.models import ChannelPlatform, ExperimentChannel
 from apps.chat.bots import get_bot
 from apps.chat.exceptions import (
@@ -200,6 +201,8 @@ class ChannelBase(ABC):
             channel_cls = SureAdhereChannel
         elif platform == "slack":
             channel_cls = SlackChannel
+        elif platform == "connect_messaging":
+            channel_cls = ConnectMessagingChannel
         else:
             raise Exception(f"Unsupported platform type {platform}")
         return channel_cls(
@@ -767,6 +770,26 @@ class SlackChannel(ChannelBase):
     def _ensure_sessions_exists(self):
         if not self.experiment_session:
             raise MessageHandlerException("WebChannel requires an existing session")
+
+
+class ConnectMessagingChannel(ChannelBase):
+    # TODO: Finish in followup PR
+    voice_replies_supported = False
+    supported_message_types = [MESSAGE_TYPES.TEXT]
+
+    def __init__(
+        self,
+        experiment: Experiment,
+        experiment_channel: ExperimentChannel,
+        experiment_session: ExperimentSession | None = None,
+    ):
+        super().__init__(experiment, experiment_channel, experiment_session)
+        self.client = ConnectClient()
+
+    def send_text_to_user(self, text: str):
+        """
+        TODO: make request to connect messaging service
+        """
 
 
 def _start_experiment_session(
