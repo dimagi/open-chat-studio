@@ -1,3 +1,4 @@
+import logging
 from uuid import UUID
 
 from celery.app import shared_task
@@ -8,6 +9,8 @@ from taskbadger.celery import Task as TaskbadgerTask
 from apps.channels.clients.connect_client import ConnectClient
 from apps.channels.models import ChannelPlatform, ExperimentChannel
 from apps.experiments.models import Experiment, ParticipantData
+
+logger = logging.getLogger(__name__)
 
 
 @shared_task(bind=True, base=TaskbadgerTask, ignore_result=True)
@@ -44,9 +47,12 @@ def setup_connect_channels_for_bots(self, connect_id: UUID, experiment_data_map:
     connect_client = ConnectClient()
 
     for participant_datum in participant_data:
-        experiment = participant_datum.content_object
-        channel_id = connect_client.create_channel(
-            connect_id=connect_id, channel_source=f"{experiment.team}-{experiment.name}"
-        )
-        participant_datum.system_metadata["channel_id"] = channel_id
-        participant_datum.save(update_fields=["system_metadata"])
+        try:
+            experiment = participant_datum.content_object
+            channel_id = connect_client.create_channel(
+                connect_id=connect_id, channel_source=f"{experiment.team}-{experiment.name}"
+            )
+            participant_datum.system_metadata["channel_id"] = channel_id
+            participant_datum.save(update_fields=["system_metadata"])
+        except Exception as e:
+            logger.exception(f"Failed to create channel for participant data {participant_datum.id}: {e}")
