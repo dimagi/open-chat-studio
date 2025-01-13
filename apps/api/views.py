@@ -25,6 +25,8 @@ from apps.api.serializers import (
     ExperimentSessionSerializer,
     ParticipantDataUpdateRequest,
 )
+from apps.api.tasks import setup_connect_channels_for_bots
+from apps.channels.models import ChannelPlatform
 from apps.events.models import ScheduledMessage, TimePeriod
 from apps.experiments.models import Experiment, ExperimentSession, Participant, ParticipantData
 from apps.files.models import File
@@ -139,10 +141,11 @@ def update_participant_data(request):
     experiment_map = _get_participant_experiments(team, experiment_data)
 
     content_type = ContentType.objects.get_for_model(Experiment)
+    experiment_data_map = {}
     for data in experiment_data:
         experiment = experiment_map[data["experiment"]]
 
-        ParticipantData.objects.update_or_create(
+        participant_data, _created = ParticipantData.objects.update_or_create(
             participant=participant,
             content_type=content_type,
             object_id=experiment.id,
@@ -152,6 +155,13 @@ def update_participant_data(request):
 
         if schedule_data := data.get("schedules"):
             _create_update_schedules(team, experiment, participant, schedule_data)
+
+        if platform == ChannelPlatform.CONNECT_MESSAGING:
+            experiment_data_map[experiment.id] = participant_data.id
+
+    if platform == ChannelPlatform.CONNECT_MESSAGING:
+        setup_connect_channels_for_bots.delay(connect_id=identifier, experiment_data_map=experiment_data_map)
+
     return HttpResponse()
 
 

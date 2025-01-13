@@ -3,6 +3,7 @@ import hashlib
 import hmac
 import json
 import uuid
+from unittest.mock import patch
 
 import pytest
 import requests
@@ -14,8 +15,10 @@ from django.urls import reverse
 from django.utils import timezone
 
 from apps.api.views import VERIFY_CONNECT_ID_URL
+from apps.channels.models import ChannelPlatform
 from apps.experiments.models import Participant, ParticipantData
 from apps.teams.backends import EXPERIMENT_ADMIN_GROUP, add_user_to_team
+from apps.utils.factories.channels import ExperimentChannelFactory
 from apps.utils.factories.experiment import ExperimentFactory, ParticipantFactory
 from apps.utils.factories.team import TeamWithUsersFactory
 from apps.utils.tests.clients import ApiTestClient
@@ -270,6 +273,95 @@ def test_update_participant_schedules(experiment):
         "time_period": "days",
     }
     assert updated_schedules[1].next_trigger_date == trigger_date3
+
+
+def _setup_channel_participant(experiment, identifier, channel_platform, system_metadata=None):
+    participant, _ = Participant.objects.get_or_create(
+        team=experiment.team, identifier=identifier, platform=channel_platform
+    )
+    ParticipantData.objects.create(
+        team=experiment.team, participant=participant, content_object=experiment, system_metadata=system_metadata or {}
+    )
+
+
+@pytest.mark.django_db()
+@override_settings(CELERY_TASK_ALWAYS_EAGER=True)
+@patch("apps.api.tasks.ConnectClient")
+def test_update_participant_data_and_setup_connect_channels(connect_client_mock):
+    """
+    Test that a connect channel is created for a participant where
+    1. there isn't one set up already
+    2. the experiment has a connect messaging channel linked
+    """
+    client_instance_mock = connect_client_mock.return_value
+    client_instance_mock.create_channel.return_value = "channel_id_2"
+
+    team = TeamWithUsersFactory()
+    experiment1 = ExperimentFactory(team=team)
+    ExperimentChannelFactory(team=team, experiment=experiment1, platform=ChannelPlatform.TELEGRAM)
+    ExperimentChannelFactory(team=team, experiment=experiment1, platform=ChannelPlatform.CONNECT_MESSAGING)
+    experiment2 = ExperimentFactory(team=team)
+    experiment3 = ExperimentFactory(team=team)
+
+    # Participant 1. This is a telegram participant, so should be ignored
+    _setup_channel_participant(experiment1, identifier="97878997", channel_platform=ChannelPlatform.TELEGRAM)
+
+    # Participant 2. Already has a channel_id, so should be ignored
+    _setup_channel_participant(
+        experiment1,
+        identifier="connectid_1",
+        channel_platform=ChannelPlatform.CONNECT_MESSAGING,
+        system_metadata={"channel_id": "f8f5dc93-7d6a-4e9c"},
+    )
+
+    # Participant 3.
+    # Experiment 1: Doesn't have a connect channel set up
+    # Experiment 2: This bot isn't linked to a connect messaging channel
+    # Experiment 3: The participant already have a connect channel set up
+    # Expectation: Only 1 channel needs to be set up for this participant
+    _setup_channel_participant(
+        experiment1, identifier="connectid_2", channel_platform=ChannelPlatform.CONNECT_MESSAGING, system_metadata={}
+    )
+
+    _setup_channel_participant(
+        experiment3,
+        identifier="connectid_2",
+        channel_platform=ChannelPlatform.CONNECT_MESSAGING,
+        system_metadata={"channel_id": "7d6a-fdc93-4e9c"},
+    )
+
+    user = team.members.first()
+    client = ApiTestClient(user, team)
+
+    data = {
+        "identifier": "connectid_2",
+        "platform": "connect_messaging",
+        "data": [
+            {
+                "experiment": str(experiment1.public_id),
+                "data": {},
+                "schedules": [],
+            },
+            {
+                "experiment": str(experiment2.public_id),
+                "data": {},
+                "schedules": [],
+            },
+        ],
+    }
+    url = reverse("api:update-participant-data")
+    response = client.post(url, json.dumps(data), content_type="application/json")
+    assert response.status_code == 200
+
+    # Only one of the two experiments that the "connectid_2" participant belongs to has a connect messaging channel, so
+    # we expect only one call to the Connect servers to have been made
+    assert client_instance_mock.create_channel.call_count == 1
+    call_kwargs = client_instance_mock.create_channel.call_args_list[0][1]
+    assert call_kwargs["connect_id"] == "connectid_2"
+    assert call_kwargs["channel_source"] == f"{experiment1.team}-{experiment1.name}"
+    assert Participant.objects.filter(identifier="connectid_2").exists()
+    data = ParticipantData.objects.get(participant__identifier="connectid_2", object_id=experiment1.id)
+    assert data.system_metadata["channel_id"] == "channel_id_2"
 
 
 @pytest.mark.django_db()
