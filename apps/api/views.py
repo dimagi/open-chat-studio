@@ -1,4 +1,5 @@
 import base64
+import json
 import os
 import textwrap
 
@@ -6,19 +7,21 @@ import requests
 from django.contrib.auth.decorators import permission_required
 from django.contrib.contenttypes.models import ContentType
 from django.db import transaction
-from django.http import FileResponse, Http404, HttpResponse
+from django.http import FileResponse, Http404, HttpResponse, JsonResponse
 from django.shortcuts import get_object_or_404
+from django.views.decorators.csrf import csrf_exempt
+from django.views.decorators.http import require_POST
 from drf_spectacular.types import OpenApiTypes
 from drf_spectacular.utils import OpenApiExample, OpenApiParameter, extend_schema, extend_schema_view
 from rest_framework import filters, mixins, status
-from rest_framework.decorators import api_view, authentication_classes, permission_classes, renderer_classes
+from rest_framework.decorators import api_view, renderer_classes
 from rest_framework.exceptions import NotFound
 from rest_framework.renderers import BaseRenderer
 from rest_framework.response import Response
 from rest_framework.views import Request
 from rest_framework.viewsets import GenericViewSet
 
-from apps.api.permissions import CommCareConnectAuthentication, DjangoModelPermissionsWithView
+from apps.api.permissions import DjangoModelPermissionsWithView, verify_hmac
 from apps.api.serializers import (
     ExperimentSerializer,
     ExperimentSessionCreateSerializer,
@@ -323,16 +326,18 @@ def file_content_view(request, pk: int):
         raise Http404()
 
 
-@api_view(["POST"])
-@authentication_classes([])
-@permission_classes([])
+@csrf_exempt
+@require_POST
 def generate_key(request: Request):
     """Generates a key for a specific channel to use for secure communication"""
     token = request.META["HTTP_AUTHORIZATION"]
+    if not (token and request.body):
+        return HttpResponse("Missing token or data", status=400)
     response = requests.get(VERIFY_CONNECT_ID_URL, headers={"AUTHORIZATION": token})
     response.raise_for_status()
     connect_id = response.json().get("sub")
-    channel_id = request.data.get("channel_id")
+    request_data = json.loads(request.body)
+    channel_id = request_data.get("channel_id")
     try:
         participant_data = ParticipantData.objects.get(
             participant__identifier=connect_id, system_metadata__channel_id=channel_id
@@ -343,23 +348,26 @@ def generate_key(request: Request):
     key = base64.b64encode(os.urandom(32)).decode("utf-8")
     participant_data.encryption_key = key
     participant_data.save(update_fields=["encryption_key"])
-    return Response({"key": key}, status=status.HTTP_200_OK)
+    return JsonResponse({"key": key})
 
 
-@api_view(["POST"])
-@authentication_classes([CommCareConnectAuthentication])
-@permission_classes([])
+@csrf_exempt
+@require_POST
+@verify_hmac
 def callback(request: Request):
     # Not sure what to do with this, so just return
     return HttpResponse()
 
 
-@api_view(["POST"])
-@authentication_classes([CommCareConnectAuthentication])
-@permission_classes([])
+@csrf_exempt
+@require_POST
+@verify_hmac
 def consent(request: Request):
     """The user gave consent to the bot to message them"""
-    participant_data = get_object_or_404(ParticipantData, system_metadata__channel_id=request.data["channel_id"])
-    participant_data.system_metadata["consent"] = request.data["consent"]
+    if not request.body:
+        return HttpResponse("Missing data", status=400)
+    request_data = json.loads(request.body)
+    participant_data = get_object_or_404(ParticipantData, system_metadata__channel_id=request_data["channel_id"])
+    participant_data.system_metadata["consent"] = request_data["consent"]
     participant_data.save(update_fields=["system_metadata"])
     return HttpResponse()
