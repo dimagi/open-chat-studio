@@ -3,13 +3,23 @@ import logging
 import uuid
 
 from celery.app import shared_task
+from django.contrib.contenttypes.models import ContentType
 from taskbadger.celery import Task as TaskbadgerTask
 from telebot import types
 from twilio.request_validator import RequestValidator
 
+from apps.channels.clients.connect_client import ConnectClient, MessagePayload
 from apps.channels.datamodels import BaseMessage, SureAdhereMessage, TelegramMessage, TurnWhatsappMessage, TwilioMessage
 from apps.channels.models import ChannelPlatform, ExperimentChannel
-from apps.chat.channels import ApiChannel, FacebookMessengerChannel, SureAdhereChannel, TelegramChannel, WhatsappChannel
+from apps.chat.channels import (
+    ApiChannel,
+    ConnectMessagingChannel,
+    FacebookMessengerChannel,
+    SureAdhereChannel,
+    TelegramChannel,
+    WhatsappChannel,
+)
+from apps.experiments.models import Experiment, ParticipantData
 from apps.service_providers.models import MessagingProviderType
 from apps.teams.utils import current_team
 from apps.utils.taskbadger import update_taskbadger_data
@@ -146,3 +156,41 @@ def handle_api_message(
         user=user,
     )
     return channel.new_user_message(message)
+
+
+def handle_connect_messaging_message(payload: dict):
+    connect_channel_id = payload.get("channel_id")
+
+    try:
+        participant_data = ParticipantData.objects.get(
+            content_type=ContentType.objects.get_for_model(Experiment), system_metadata__channel_id=connect_channel_id
+        ).prefetch_related("participant")
+
+        experiment_channel = ExperimentChannel.objects.get(
+            platform=ChannelPlatform.CONNECT_MESSAGING, experiment__participantdata=participant_data
+        ).prefetch_related("experiment")
+    except ParticipantData.DoesNotExist:
+        log.error(f"No participant data found for channel_id: {connect_channel_id}")
+        return
+    except ExperimentChannel.DoesNotExist:
+        log.error("No experiment channel found for")
+        return
+
+    connect_client = ConnectClient()
+    # If we receive multiple messages from the user, concatenate them into a single message
+    messages = [MessagePayload.model_validate(message) for message in payload["messages"]]
+
+    # Ensure the messages are in the correct order according to timestamp
+    messages.sort(key=lambda x: x.timestamp)
+    decrypted_messages = connect_client.decrypt_messages(participant_data.get_encryption_key_bytes(), messages=messages)
+
+    # If the user sent multiple messages, we should append it together instead of the bot replying to each one
+    user_message = "\n\n".join(decrypted_messages)
+
+    message = BaseMessage(participant_id=participant_data.participant.identifier, message_text=user_message)
+    channel = ConnectMessagingChannel(
+        experiment=experiment_channel.experiment.default_version, experiment_channel=experiment_channel
+    )
+
+    with current_team(experiment_channel.team):
+        channel.new_user_message(message)

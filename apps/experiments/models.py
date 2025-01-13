@@ -1,3 +1,4 @@
+import base64
 import logging
 import uuid
 from datetime import datetime
@@ -1388,6 +1389,10 @@ class ParticipantData(BaseTeamModel):
     encryption_key = encrypt(
         models.CharField(max_length=255, blank=True, help_text="The base64 encoded encryption key")
     )
+
+    def get_encryption_key_bytes(self):
+        # TODO: What if we use a getter/setting to ensure what we have is always bytes?
+        return base64.b64decode(self.encryption_key)
 
     class Meta:
         indexes = [
