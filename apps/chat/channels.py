@@ -19,7 +19,7 @@ from apps.channels.models import ChannelPlatform, ExperimentChannel
 from apps.chat.bots import get_bot
 from apps.chat.exceptions import (
     AudioSynthesizeException,
-    MessageHandlerException,
+    ChannelException,
     ParticipantNotAllowedException,
     VersionedExperimentSessionsNotAllowedException,
 )
@@ -83,7 +83,7 @@ class ChannelBase(ABC):
         experiment_session: An optional ExperimentSession object representing the experiment session associated
             with the handler.
     Raises:
-        MessageHandlerException: If both 'experiment_channel' and 'experiment_session' arguments are not provided.
+        ChannelException: If both 'experiment_channel' and 'experiment_session' arguments are not provided.
 
     Class variables:
         supported_message_types: A list of message content types that are supported by this channel
@@ -536,7 +536,7 @@ class WebChannel(ChannelBase):
 
     def _ensure_sessions_exists(self):
         if not self.experiment_session:
-            raise MessageHandlerException("WebChannel requires an existing session")
+            raise ChannelException("WebChannel requires an existing session")
 
     @classmethod
     def start_new_session(
@@ -718,7 +718,7 @@ class ApiChannel(ChannelBase):
         super().__init__(experiment, experiment_channel, experiment_session)
         self.user = user
         if not self.user and not self.experiment_session:
-            raise MessageHandlerException("ApiChannel requires either an existing session or a user")
+            raise ChannelException("ApiChannel requires either an existing session or a user")
 
     @property
     def participant_user(self):
@@ -769,7 +769,7 @@ class SlackChannel(ChannelBase):
 
     def _ensure_sessions_exists(self):
         if not self.experiment_session:
-            raise MessageHandlerException("WebChannel requires an existing session")
+            raise ChannelException("WebChannel requires an existing session")
 
 
 class ConnectMessagingChannel(ChannelBase):
