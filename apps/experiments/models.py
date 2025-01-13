@@ -1385,7 +1385,9 @@ class ParticipantData(BaseTeamModel):
     object_id = models.PositiveIntegerField()
     content_object = GenericForeignKey("content_type", "object_id")
     system_metadata = models.JSONField(default=dict)
-    encryption_key = models.CharField(max_length=255, blank=True, help_text="The base64 encoded encryption key")
+    encryption_key = encrypt(
+        models.CharField(max_length=255, blank=True, help_text="The base64 encoded encryption key")
+    )
 
     class Meta:
         indexes = [
