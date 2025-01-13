@@ -2,7 +2,7 @@ import json
 import uuid
 
 from django.conf import settings
-from django.http import Http404, HttpResponse, HttpResponseBadRequest
+from django.http import Http404, HttpRequest, HttpResponse, HttpResponseBadRequest
 from django.shortcuts import get_object_or_404
 from django.views.decorators.csrf import csrf_exempt
 from django.views.decorators.http import require_POST
@@ -12,6 +12,7 @@ from rest_framework import serializers
 from rest_framework.decorators import api_view
 from rest_framework.response import Response
 
+from apps.api.permissions import verify_hmac
 from apps.channels import tasks
 from apps.channels.models import ChannelPlatform, ExperimentChannel
 from apps.experiments.models import Experiment, ExperimentSession
@@ -124,3 +125,11 @@ def new_api_message(request, experiment_id: uuid):
         session,
     )
     return Response(data={"response": response})
+
+
+@require_POST
+@csrf_exempt
+@verify_hmac
+def new_connect_message(request: HttpRequest):
+    tasks.handle_connect_messaging_message.delay(json.loads(request.body))
+    return HttpResponse()

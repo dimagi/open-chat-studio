@@ -30,6 +30,7 @@ from apps.experiments.models import (
     Experiment,
     ExperimentSession,
     Participant,
+    ParticipantData,
     SessionStatus,
     VoiceResponseBehaviours,
 )
@@ -787,9 +788,25 @@ class ConnectMessagingChannel(ChannelBase):
         self.client = ConnectClient()
 
     def send_text_to_user(self, text: str):
-        """
-        TODO: make request to connect messaging service
-        """
+        self.client.send_message_to_user(self.connect_channel_id, message=text, encryption_key=self.encryption_key)
+
+    @cached_property
+    def participant_data(self) -> ParticipantData:
+        return self.experiment.data_set.filter(participant__identifier=self.participant_identifier).defer("data")
+
+    @cached_property
+    def connect_channel_id(self) -> str:
+        channel_id = self.participant_data.system_metadata.get("channel_id")
+        if not channel_id:
+            raise ChannelException(f"channel_id is missing for participant {self.participant_identifier}")
+        return channel_id
+
+    @cached_property
+    def encryption_key(self) -> bytes:
+        key = self.participant_data.get_encryption_key_bytes()
+        if not key:
+            raise ChannelException(f"Encryption key is missing for participant {self.participant_identifier}")
+        return key
 
 
 def _start_experiment_session(
