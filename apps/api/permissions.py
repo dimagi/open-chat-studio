@@ -87,7 +87,7 @@ def verify_hmac(view_func):
         expected_digest = convert_to_bytestring_if_unicode(request.headers.get("X-Mac-Digest"))
         secret_key_bytes = convert_to_bytestring_if_unicode(settings.CONNECT_MESSAGING_SERVER_SECRET)
 
-        if not expected_digest and secret_key_bytes:
+        if not (expected_digest and secret_key_bytes):
             logger.exception(
                 "Request rejected reason=%s request=%s",
                 "hmac:missing_key" if not secret_key_bytes else "hmac:missing_header",

@@ -13,7 +13,7 @@ class ConnectClient:
     def create_channel(self, connect_id: UUID, channel_source: str) -> UUID:
         url = f"{self._base_url}/messaging/create_channel"
         response = requests.post(
-            url, json={"connectid": str(connect_id), "channel_source": channel_source}, auth=self._auth
+            url, json={"connectid": str(connect_id), "channel_source": channel_source}, auth=self._auth, timeout=10
         )
         response.raise_for_status()
         return UUID(response.json()["channel_id"])

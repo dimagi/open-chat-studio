@@ -330,7 +330,7 @@ def file_content_view(request, pk: int):
 @require_POST
 def generate_key(request: Request):
     """Generates a key for a specific channel to use for secure communication"""
-    token = request.META["HTTP_AUTHORIZATION"]
+    token = request.META.get("HTTP_AUTHORIZATION")
     if not (token and request.body):
         return HttpResponse("Missing token or data", status=400)
     response = requests.get(VERIFY_CONNECT_ID_URL, headers={"AUTHORIZATION": token})
@@ -367,7 +367,11 @@ def consent(request: Request):
     if not request.body:
         return HttpResponse("Missing data", status=400)
     request_data = json.loads(request.body)
+    if "consent" not in request_data or "channel_id" not in request_data:
+        return HttpResponse("Missing consent or channel_id", status=400)
+
     participant_data = get_object_or_404(ParticipantData, system_metadata__channel_id=request_data["channel_id"])
     participant_data.system_metadata["consent"] = request_data["consent"]
     participant_data.save(update_fields=["system_metadata"])
+
     return HttpResponse()

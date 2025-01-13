@@ -443,3 +443,26 @@ class TestConnectApis:
         return {
             "X-MAC-DIGEST": base64.b64encode(digest),
         }
+
+    def test_invalid_hmac_signature(self, client):
+        """Test that requests with invalid HMAC signatures are rejected."""
+        payload = {"channel_id": "valid_id", "consent": True}
+        headers = {"X-MAC-DIGEST": "invalid_digest"}
+        response = client.post(
+            reverse("api:commcare-connect:consent"),
+            json.dumps(payload),
+            headers=headers,
+            content_type="application/json",
+        )
+        assert response.status_code == 401
+
+    def test_empty_request_body(self, client):
+        """Test that empty request bodies are rejected."""
+        headers = self._get_request_headers({})
+        response = client.post(
+            reverse("api:commcare-connect:consent"),
+            "",
+            headers=headers,
+            content_type="application/json",
+        )
+        assert response.status_code == 401
