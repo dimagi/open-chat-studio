@@ -111,7 +111,7 @@ pyyaml==6.0.1
     #   -c requirements.txt
     #   pre-commit
     #   responses
-requests==2.32.0
+requests==2.32.3
     # via
     #   -c requirements.txt
     #   responses
@@ -135,7 +135,7 @@ typing-extensions==4.12.2
     # via
     #   -c requirements.txt
     #   faker
-urllib3==2.0.7
+urllib3==2.3.0
     # via
     #   -c requirements.txt
     #   requests
