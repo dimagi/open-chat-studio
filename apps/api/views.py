@@ -321,13 +321,13 @@ def generate_key(request: Request):
     token = request.META["HTTP_AUTHORIZATION"]
     response = requests.get(VERIFY_CONNECT_ID_URL, headers={"AUTHORIZATION": token})
     response.raise_for_status()
-    connectid = response.json().get("sub")
+    connect_id = response.json().get("sub")
     channel_id = request.data.get("channel_id")
     try:
         participant_data = ParticipantData.objects.get(
-            participant__identifier=connectid, system_metadata__channel_id=channel_id
+            participant__identifier=connect_id, system_metadata__channel_id=channel_id
         )
-    except Participant.DoesNotExist:
+    except ParticipantData.DoesNotExist:
         raise Http404()
 
     key = base64.b64encode(os.urandom(32)).decode("utf-8")
