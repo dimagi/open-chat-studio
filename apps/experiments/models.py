@@ -919,6 +919,7 @@ class Experiment(BaseTeamModel, VersionsMixin, CustomActionOperationMixin):
             fields=[
                 VersionField(group_name="General", name="name", raw_value=self.name),
                 VersionField(group_name="General", name="description", raw_value=self.description),
+                VersionField(group_name="General", name="seed_message", raw_value=self.seed_message),
                 VersionField(
                     group_name="General",
                     name="allowlist",
