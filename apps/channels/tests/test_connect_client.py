@@ -3,11 +3,10 @@ import json
 import os
 from uuid import uuid4
 
-import responses
 from Crypto.Cipher import AES
 from django.conf import settings
 
-from apps.channels.clients.connect_client import ConnectClient, NewMessagePayload
+from apps.channels.clients.connect_client import CommCareConnectClient, NewMessagePayload
 
 
 class TestConnectClient:
@@ -16,7 +15,7 @@ class TestConnectClient:
         cipher = AES.new(encryption_key, mode=AES.MODE_GCM)
         ciphertext, tag = cipher.encrypt_and_digest(b"this is a secret message")
 
-        connect_client = ConnectClient()
+        connect_client = CommCareConnectClient()
         payload = NewMessagePayload(
             timestamp="2021-10-10T10:10:10Z",
             message_id=uuid4(),
@@ -31,7 +30,7 @@ class TestConnectClient:
 
     def test_encrypt_message(self):
         encryption_key = os.urandom(32)
-        connect_client = ConnectClient()
+        connect_client = CommCareConnectClient()
         ciphertext, tag, nonce = connect_client._encrypt_message(key=encryption_key, message="this is a secret message")
         assert isinstance(ciphertext, bytes)
         assert isinstance(tag, bytes)
@@ -40,25 +39,23 @@ class TestConnectClient:
         cipher = AES.new(encryption_key, AES.MODE_GCM, nonce=nonce)
         assert cipher.decrypt_and_verify(ciphertext, tag).decode("utf-8") == "this is a secret message"
 
-    @responses.activate
-    def test_send_message_to_user_1(self):
-        response = responses.Response(
+    def test_send_message_to_user(self, httpx_mock):
+        httpx_mock.add_response(
             method="POST",
             url=f"{settings.CONNECT_ID_SERVER_BASE_URL}/messaging/send_fcm/",
             json={"message_id": "765aec754eacf3221"},
-            status=200,
+            status_code=200,
         )
-        responses.add(response)
 
         channel_id = uuid4().hex
-        raw_message = "Hi there human"
+        message = "Hi there human"
         encryption_key = os.urandom(32)
 
-        connect_client = ConnectClient()
-        connect_client.send_message_to_user(channel_id, raw_message=raw_message, encryption_key=encryption_key)
-        request = responses.calls[0].request
+        connect_client = CommCareConnectClient()
+        connect_client.send_message_to_user(channel_id, message=message, encryption_key=encryption_key)
+        request = httpx_mock.get_request()
         assert request.headers["Authorization"].split(" ")[0] == "Basic"
-        request_data = json.loads(request.body)
+        request_data = json.loads(request.read())
         message_content = request_data["content"]
 
         assert "content" in request_data

@@ -8,7 +8,7 @@ from taskbadger.celery import Task as TaskbadgerTask
 from telebot import types
 from twilio.request_validator import RequestValidator
 
-from apps.channels.clients.connect_client import ConnectClient, NewMessagePayload
+from apps.channels.clients.connect_client import CommCareConnectClient, NewMessagePayload
 from apps.channels.datamodels import BaseMessage, SureAdhereMessage, TelegramMessage, TurnWhatsappMessage, TwilioMessage
 from apps.channels.models import ChannelPlatform, ExperimentChannel
 from apps.chat.channels import (
@@ -163,11 +163,12 @@ def handle_connect_messaging_message(payload: NewMessagePayload):
 
     try:
         participant_data = ParticipantData.objects.prefetch_related("participant").get(
-            content_type=ContentType.objects.get_for_model(Experiment), system_metadata__channel_id=connect_channel_id
+            content_type=ContentType.objects.get_for_model(Experiment),
+            system_metadata__commcare_connect_channel_id=connect_channel_id,
         )
 
         experiment_channel = ExperimentChannel.objects.prefetch_related("experiment").get(
-            platform=ChannelPlatform.CONNECT_MESSAGING, experiment__id=participant_data.object_id
+            platform=ChannelPlatform.COMMCARE_CONNECT, experiment__id=participant_data.object_id
         )
     except ParticipantData.DoesNotExist:
         log.error(f"No participant data found for channel_id: {connect_channel_id}")
@@ -180,7 +181,7 @@ def handle_connect_messaging_message(payload: NewMessagePayload):
     messages = payload["messages"]
     messages.sort(key=lambda x: x["timestamp"])
 
-    connect_client = ConnectClient()
+    connect_client = CommCareConnectClient()
     decrypted_messages = connect_client.decrypt_messages(participant_data.get_encryption_key_bytes(), messages=messages)
 
     # If the user sent multiple messages, we should append it together instead of the bot replying to each one

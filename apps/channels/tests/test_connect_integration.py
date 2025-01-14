@@ -4,9 +4,8 @@ from unittest.mock import patch
 from uuid import uuid4
 
 import pytest
-import responses
 
-from apps.channels.clients.connect_client import ConnectClient, Message, NewMessagePayload
+from apps.channels.clients.connect_client import CommCareConnectClient, Message, NewMessagePayload
 from apps.channels.models import ChannelPlatform
 from apps.channels.tasks import handle_connect_messaging_message
 from apps.experiments.models import ParticipantData
@@ -23,22 +22,22 @@ def _setup(experiment, message_spec: dict | None = None) -> tuple:
 
     team = experiment.team
     connect_id = uuid4().hex
-    channel_id = uuid4().hex
+    commcare_connect_channel_id = uuid4().hex
 
     encryption_key = os.urandom(32)
-    participant = ParticipantFactory(identifier=connect_id, team=team, platform=ChannelPlatform.CONNECT_MESSAGING)
+    participant = ParticipantFactory(identifier=connect_id, team=team, platform=ChannelPlatform.COMMCARE_CONNECT)
     part_data = ParticipantData.objects.create(
         team=team,
         participant=participant,
-        system_metadata={"channel_id": channel_id},
+        system_metadata={"commcare_connect_channel_id": commcare_connect_channel_id},
         content_object=experiment,
         encryption_key=base64.b64encode(encryption_key).decode("utf-8"),
     )
     experiment_channel = ExperimentChannelFactory(
-        team=team, experiment=experiment, platform=ChannelPlatform.CONNECT_MESSAGING
+        team=team, experiment=experiment, platform=ChannelPlatform.COMMCARE_CONNECT
     )
 
-    connect_client = ConnectClient()
+    connect_client = CommCareConnectClient()
     messages = []
     for timestamp, message in message_spec.items():
         ciphertext_bytes, tag_bytes, nonce_bytes = connect_client._encrypt_message(key=encryption_key, message=message)
@@ -52,9 +51,9 @@ def _setup(experiment, message_spec: dict | None = None) -> tuple:
             )
         )
 
-    payload = NewMessagePayload(channel_id=channel_id, messages=messages)
+    payload = NewMessagePayload(channel_id=commcare_connect_channel_id, messages=messages)
 
-    return channel_id, encryption_key, experiment_channel, part_data, payload
+    return commcare_connect_channel_id, encryption_key, experiment_channel, part_data, payload
 
 
 @pytest.mark.django_db()
@@ -88,18 +87,17 @@ class TestHandleConnectMessageTask:
         base_message = channel_instance.new_user_message.call_args[0][0]
         assert base_message.message_text == "Hi bot\n\nI need to ask something"
 
-    @responses.activate
     @pytest.mark.django_db()
     @patch("apps.chat.bots.TopicBot.process_input")
     def test_bot_generate_and_sends_message(self, process_input, experiment):
         process_input.return_value = "Hi human"
-        channel_id, encryption_key, _, _, payload = _setup(experiment)
+        commcare_connect_channel_id, encryption_key, _, _, payload = _setup(experiment)
 
-        with patch("apps.chat.channels.ConnectClient") as ConnectClientMock:
+        with patch("apps.chat.channels.CommCareConnectClient") as ConnectClientMock:
             client_mock = ConnectClientMock.return_value
             handle_connect_messaging_message(payload)
             assert client_mock.send_message_to_user.call_count == 1
             call_kwargs = client_mock.send_message_to_user.call_args[1]
-            assert call_kwargs["channel_id"] == channel_id
+            assert call_kwargs["channel_id"] == commcare_connect_channel_id
             assert call_kwargs["message"] == "Hi human"
             assert call_kwargs["encryption_key"] == encryption_key

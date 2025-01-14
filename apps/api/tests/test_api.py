@@ -377,8 +377,8 @@ class TestConnectApis:
     def test_generate_key_success(self, client, experiment, httpx_mock):
         connect_id = uuid.uuid4().hex
         commcare_connect_channel_id = uuid.uuid4().hex
-        participant_data = self._setup_participant(
-            experiment, connect_id=connect_id, channel_id=commcare_connect_channel_id
+        participant_data = _setup_participant_data(
+            experiment, connect_id=connect_id, commcare_connect_channel_id=commcare_connect_channel_id
         )
 
         httpx_mock.add_response(method="GET", url=VERIFY_CONNECT_ID_URL, json={"sub": connect_id})
@@ -393,7 +393,9 @@ class TestConnectApis:
     def test_generate_key_cannot_the_find_user(self, client, experiment, httpx_mock):
         connect_id = uuid.uuid4().hex
         commcare_connect_channel_id = uuid.uuid4().hex
-        self._setup_participant(experiment, connect_id=connect_id, channel_id=commcare_connect_channel_id)
+        _setup_participant_data(
+            experiment, connect_id=connect_id, commcare_connect_channel_id=commcare_connect_channel_id
+        )
 
         httpx_mock.add_response(method="GET", url=VERIFY_CONNECT_ID_URL, json={"sub": "garbage"})
 
@@ -410,8 +412,8 @@ class TestConnectApis:
     def test_user_consented(self, client, experiment):
         connect_id = uuid.uuid4().hex
         commcare_connect_channel_id = uuid.uuid4().hex
-        participant_data = self._setup_participant(
-            experiment, connect_id=connect_id, channel_id=commcare_connect_channel_id
+        participant_data = _setup_participant_data(
+            experiment, connect_id=connect_id, commcare_connect_channel_id=commcare_connect_channel_id
         )
 
         payload = {"channel_id": commcare_connect_channel_id, "consent": True}
@@ -460,24 +462,23 @@ class TestConnectApis:
         assert response.status_code == 401
 
 
-def _setup_participant_data(experiment, connect_id, channel_id, encryption_key=None):
+def _setup_participant_data(experiment, connect_id, commcare_connect_channel_id, encryption_key=None):
     participant = ParticipantFactory(
-        team=experiment.team, identifier=connect_id, platform=ChannelPlatform.CONNECT_MESSAGING
+        team=experiment.team, identifier=connect_id, platform=ChannelPlatform.COMMCARE_CONNECT
     )
     return ParticipantData.objects.create(
         team=experiment.team,
         participant=participant,
         content_object=experiment,
-        system_metadata={"channel_id": channel_id},
+        system_metadata={"commcare_connect_channel_id": commcare_connect_channel_id},
         encryption_key=encryption_key or "",
     )
 
 
 @pytest.mark.django_db()
 @override_settings(CELERY_TASK_ALWAYS_EAGER=True)
-@responses.activate
 @patch("apps.experiments.models.Experiment.get_llm_service")
-@patch("apps.chat.channels.ConnectClient")
+@patch("apps.chat.channels.CommCareConnectClient")
 def test_generate_bot_message_and_send(ConnectClient, get_llm_service, experiment):
     """
     Test that a bot message is generated and sent to a participant. If there isn't a session for the participant yet,
@@ -489,14 +490,17 @@ def test_generate_bot_message_and_send(ConnectClient, get_llm_service, experimen
     connect_client_mock = ConnectClient.return_value
 
     connect_id = uuid.uuid4().hex
-    channel_id = uuid.uuid4().hex
+    commcare_connect_channel_id = uuid.uuid4().hex
     encryption_key = os.urandom(32).hex()
     participant_data = _setup_participant_data(
-        experiment, connect_id=connect_id, channel_id=channel_id, encryption_key=encryption_key
+        experiment,
+        connect_id=connect_id,
+        commcare_connect_channel_id=commcare_connect_channel_id,
+        encryption_key=encryption_key,
     )
     participant_data.system_metadata["consent"] = True
     participant_data.save(update_fields=["system_metadata"])
-    ExperimentChannelFactory(team=experiment.team, experiment=experiment, platform=ChannelPlatform.CONNECT_MESSAGING)
+    ExperimentChannelFactory(team=experiment.team, experiment=experiment, platform=ChannelPlatform.COMMCARE_CONNECT)
 
     assert (
         ExperimentSession.objects.filter(participant=participant_data.participant, experiment=experiment).exists()
@@ -508,7 +512,7 @@ def test_generate_bot_message_and_send(ConnectClient, get_llm_service, experimen
 
     data = {
         "identifier": connect_id,
-        "platform": ChannelPlatform.CONNECT_MESSAGING,
+        "platform": ChannelPlatform.COMMCARE_CONNECT,
         "experiment": str(experiment.public_id),
         "prompt_text": "Tell the user to take a break and make coffee",
     }

@@ -146,7 +146,7 @@ class ChannelBase(ABC):
 
     @property
     def participant_identifier(self) -> str:
-        if self._participant_identifier:
+        if self._participant_identifier is not None:
             return self._participant_identifier
 
         if self.experiment_session and self.experiment_session.participant.identifier:
@@ -825,7 +825,7 @@ class ConnectMessagingChannel(ChannelBase):
 
     @cached_property
     def connect_channel_id(self) -> str:
-        channel_id = self.participant_data.system_metadata.get("channel_id")
+        channel_id = self.participant_data.system_metadata.get("commcare_connect_channel_id")
         if not channel_id:
             raise ChannelException(f"channel_id is missing for participant {self.participant_identifier}")
         return channel_id
