@@ -23,9 +23,6 @@ def setup_connect_channels_for_bots(self, connect_id: UUID, experiment_data_map:
 
     experiment_ids = list(experiment_data_map.keys())
     participant_data_ids = list(experiment_data_map.values())
-    connect_specific_data = ParticipantData.objects.filter(
-        id__in=participant_data_ids, participant__platform=ChannelPlatform.COMMCARE_CONNECT
-    ).values_list("id", flat=True)
 
     # Only create channels for experiments that are using the ConnectMessaging channel
     experiments_using_connect = ExperimentChannel.objects.filter(
@@ -35,8 +32,7 @@ def setup_connect_channels_for_bots(self, connect_id: UUID, experiment_data_map:
 
     participant_data = (
         ParticipantData.objects.filter(
-            id__in=Subquery(connect_specific_data),
-            participant__platform=ChannelPlatform.COMMCARE_CONNECT,
+            id__in=participant_data_ids,
             object_id__in=Subquery(experiments_using_connect),
             content_type=ContentType.objects.get_for_model(Experiment),
         )
