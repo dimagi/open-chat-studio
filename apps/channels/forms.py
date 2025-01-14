@@ -217,3 +217,20 @@ class SlackChannelForm(ExtraFormBase):
                 service.join_channel(channel_id)
             except Exception as e:
                 raise ExperimentChannelException("Failed to join the channel") from e
+
+
+class CommCareConnectChannelForm(ExtraFormBase):
+    bot_name = forms.CharField(
+        label="Bot Name",
+        help_text=(
+            "This is the name of the bot that will be displayed to users on commcare connect"
+            "Once set, this name cannot be changed."
+        ),
+        max_length=100,
+    )
+
+    def __init__(self, *args, **kwargs):
+        initial = kwargs.get("initial", {})
+        super().__init__(*args, **kwargs)
+        if initial.get("bot_name"):
+            self.fields["bot_name"].widget.attrs["readonly"] = True

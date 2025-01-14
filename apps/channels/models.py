@@ -12,7 +12,7 @@ from field_audit.models import AuditingManager
 from apps.experiments import model_audit_fields
 from apps.experiments.exceptions import ChannelAlreadyUtilizedException
 from apps.experiments.models import Experiment
-from apps.teams.models import BaseTeamModel
+from apps.teams.models import BaseTeamModel, Flag
 from apps.web.meta import absolute_url
 
 WEB = "web"
@@ -53,6 +53,13 @@ class ChannelPlatform(models.TextChoices):
         if not settings.SLACK_ENABLED:
             platform_availability.pop(cls.SLACK)
 
+        flag = Flag.get("commcare_connect")
+        commcare_connect_flag_enabled = flag.is_active_for_team(team)
+        if not commcare_connect_flag_enabled:
+            platform_availability.pop(cls.COMMCARE_CONNECT)
+        elif settings.COMMCARE_CONNECT_ENABLED:
+            platform_availability[cls.COMMCARE_CONNECT] = True
+
         # Platforms already used should not be displayed
         for platform in used_platforms:
             platform_availability.pop(platform)
@@ -80,6 +87,8 @@ class ChannelPlatform(models.TextChoices):
                 return forms.SureAdhereChannelForm(channel=channel, *args, **kwargs)
             case self.SLACK:
                 return forms.SlackChannelForm(*args, **kwargs)
+            case self.COMMCARE_CONNECT:
+                return forms.CommCareConnectChannelForm(*args, **kwargs)
 
     @property
     def channel_identifier_key(self) -> str:
