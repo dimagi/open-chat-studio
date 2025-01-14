@@ -5,9 +5,8 @@ import json
 import uuid
 from unittest.mock import patch
 
+import httpx
 import pytest
-import requests
-import responses
 from dateutil.relativedelta import relativedelta
 from django.conf import settings
 from django.test import override_settings
@@ -382,15 +381,12 @@ class TestConnectApis:
             url, data=data, headers={"Authorization": f"Bearer {token}"}, content_type="application/json"
         )
 
-    @responses.activate
-    def test_generate_key_success(self, client, experiment):
+    def test_generate_key_success(self, client, experiment, httpx_mock):
         connect_id = uuid.uuid4().hex
         channel_id = uuid.uuid4().hex
         participant_data = self._setup_participant(experiment, connect_id=connect_id, channel_id=channel_id)
 
-        success_resp = responses.Response(method="GET", url=VERIFY_CONNECT_ID_URL, json={"sub": connect_id})
-        responses.add(success_resp)
-
+        httpx_mock.add_response(method="GET", url=VERIFY_CONNECT_ID_URL, json={"sub": connect_id})
         response = self._make_request(client=client, data={"channel_id": channel_id})
 
         assert response.status_code == 200
@@ -399,24 +395,20 @@ class TestConnectApis:
         participant_data.refresh_from_db()
         assert participant_data.encryption_key == base64_key
 
-    @responses.activate
-    def test_generate_key_cannot_the_find_user(self, client, experiment):
+    def test_generate_key_cannot_the_find_user(self, client, experiment, httpx_mock):
         connect_id = uuid.uuid4().hex
         channel_id = uuid.uuid4().hex
         self._setup_participant(experiment, connect_id=connect_id, channel_id=channel_id)
 
-        success_resp = responses.Response(method="GET", url=VERIFY_CONNECT_ID_URL, json={"sub": "garbage"})
-        responses.add(success_resp)
+        httpx_mock.add_response(method="GET", url=VERIFY_CONNECT_ID_URL, json={"sub": "garbage"})
 
         response = self._make_request(client=client, data={"channel_id": channel_id})
         assert response.status_code == 404
 
-    @responses.activate
-    def test_generate_key_fails_auth_at_connect(self, client):
-        success_resp = responses.Response(method="GET", url=VERIFY_CONNECT_ID_URL, status=401)
-        responses.add(success_resp)
+    def test_generate_key_fails_auth_at_connect(self, client, httpx_mock):
+        httpx_mock.add_response(method="GET", url=VERIFY_CONNECT_ID_URL, status_code=401)
 
-        with pytest.raises(requests.exceptions.HTTPError):
+        with pytest.raises(httpx.HTTPStatusError):
             self._make_request(client=client, data={})
 
     @override_settings(COMMCARE_CONNECT_SERVER_SECRET="123123")

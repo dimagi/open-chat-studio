@@ -3,7 +3,7 @@ import json
 import os
 import textwrap
 
-import requests
+import httpx
 from django.contrib.auth.decorators import permission_required
 from django.contrib.contenttypes.models import ContentType
 from django.db import transaction
@@ -333,7 +333,8 @@ def generate_key(request: Request):
     token = request.META.get("HTTP_AUTHORIZATION")
     if not (token and request.body):
         return HttpResponse("Missing token or data", status=400)
-    response = requests.get(VERIFY_CONNECT_ID_URL, headers={"AUTHORIZATION": token})
+
+    response = httpx.get(VERIFY_CONNECT_ID_URL, headers={"AUTHORIZATION": token})
     response.raise_for_status()
     connect_id = response.json().get("sub")
     request_data = json.loads(request.body)

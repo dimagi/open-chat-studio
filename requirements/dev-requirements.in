@@ -13,4 +13,3 @@ factory-boy
 pytest-httpx
 pytest-cov
 pytest-xdist
-responses
