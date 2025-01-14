@@ -1,3 +1,93 @@
+[project]
+name = "open-chat-studio"
+version = "0.1.0"
+requires-python = ">=3.11"
+dependencies = [
+    "Django",
+    "Markdown",
+    "anthropic",
+    "azure-cognitiveservices-speech",
+    "boto3",
+    "celery",
+    "celery-progress",
+    "celery[redis]",
+    "django-allauth",
+    "django-allauth-2fa",
+    "django-anymail",
+    "django-cleanup",
+    # original django-cryptography is not compatible with Django 5 and does not seem to be maintained
+    # https://github.com/georgemarshall/django-cryptography/issues/74
+    "django-cryptography-django5",
+    "django-environ",
+    "django-field-audit>=1.2.7",
+    "django-health-check",
+    "django-hijack",
+    "django-redis",
+    "django-storages[s3]",
+    "django-tables2",
+    "django-taggit",
+    "django-template-partials",
+    "django-tz-detect",
+    "django-waffle",
+    "django_celery_beat",
+    "djangorestframework",
+    "djangorestframework-api-key",
+    "drf-spectacular",
+    "fbmessenger",
+    "ffmpeg",  # Audio transcription
+    "httpx",
+    "jinja2",
+    "langchain>=0.3,<0.4",
+    "langchain-core>=0.3.23,<0.4",
+    "langchain-anthropic",
+    "langchain-openai",
+    "langchain-community>=0.3,<0.4",
+    "langfuse",
+    "langgraph>=0.2.20,<0.3",
+    "loguru",
+    "openai",
+    "openapi_pydantic",
+    "pandas",
+    "psycopg[binary]",
+    "pyTelegramBotAPI==4.12.0",
+    "pydantic",
+    "pydub", # Audio transcription
+    "RestrictedPython",
+    "sentry-sdk",
+    "slack-bolt",
+    "taskbadger",
+    "tenacity",
+    "tiktoken",
+    "transformers",  # this is required by the tokenizer that langchain uses
+    "turn-python>=0.2.0",
+    "twilio",
+    "whitenoise[brotli]",
+    "phonenumberslite",
+    "emoji",
+    "python-magic",
+]
+
+[dependency-groups]
+dev = [
+    "uv",
+    "ruff",
+    "mock",
+    "freezegun",
+    "invoke",
+    "termcolor",
+    "watchfiles",
+    "pytest",
+    "pytest-django",
+    "factory-boy",
+    "pytest-httpx",
+    "pytest-cov",
+    "pytest-xdist",
+]
+prod = [
+    "gunicorn",
+    "gevent",
+]
+
 [tool.pytest.ini_options]
 addopts = "--ds=gpt_playground.settings --reuse-db --strict-markers --tb=short"
 python_files = "tests.py test_*.py *_tests.py"
