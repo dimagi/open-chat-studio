@@ -7,7 +7,7 @@ import responses
 from Crypto.Cipher import AES
 from django.conf import settings
 
-from apps.channels.clients.connect_client import ConnectClient, MessagePayload
+from apps.channels.clients.connect_client import ConnectClient, NewMessagePayload
 
 
 class TestConnectClient:
@@ -17,7 +17,7 @@ class TestConnectClient:
         ciphertext, tag = cipher.encrypt_and_digest(b"this is a secret message")
 
         connect_client = ConnectClient()
-        payload = MessagePayload(
+        payload = NewMessagePayload(
             timestamp="2021-10-10T10:10:10Z",
             message_id=uuid4(),
             ciphertext=base64.b64encode(
