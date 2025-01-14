@@ -3,12 +3,11 @@ import logging
 import uuid
 
 from celery.app import shared_task
-from django.contrib.contenttypes.models import ContentType
 from taskbadger.celery import Task as TaskbadgerTask
 from telebot import types
 from twilio.request_validator import RequestValidator
 
-from apps.channels.clients.connect_client import CommCareConnectClient, NewMessagePayload
+from apps.channels.clients.connect_client import CommCareConnectClient, Message
 from apps.channels.datamodels import BaseMessage, SureAdhereMessage, TelegramMessage, TurnWhatsappMessage, TwilioMessage
 from apps.channels.models import ChannelPlatform, ExperimentChannel
 from apps.chat.channels import (
@@ -19,7 +18,7 @@ from apps.chat.channels import (
     TelegramChannel,
     WhatsappChannel,
 )
-from apps.experiments.models import Experiment, ParticipantData
+from apps.experiments.models import ParticipantData
 from apps.service_providers.models import MessagingProviderType
 from apps.teams.utils import current_team
 from apps.utils.taskbadger import update_taskbadger_data
@@ -159,27 +158,13 @@ def handle_api_message(
 
 
 @shared_task(bind=True, base=TaskbadgerTask, ignore_result=True)
-def handle_commcare_connect_message(payload: NewMessagePayload):
-    connect_channel_id = payload.get("channel_id")
-
-    try:
-        participant_data = ParticipantData.objects.prefetch_related("participant").get(
-            content_type=ContentType.objects.get_for_model(Experiment),
-            system_metadata__commcare_connect_channel_id=connect_channel_id,
-        )
-
-        experiment_channel = ExperimentChannel.objects.prefetch_related("experiment").get(
-            platform=ChannelPlatform.COMMCARE_CONNECT, experiment__id=participant_data.object_id
-        )
-    except ParticipantData.DoesNotExist:
-        log.error(f"No participant data found for channel_id: {connect_channel_id}")
-        return
-    except ExperimentChannel.DoesNotExist:
-        log.error(f"No experiment channel found for participant channel_id: {connect_channel_id}")
-        return
+def handle_commcare_connect_message(
+    self, experiment_channel_id: int, participant_data_id: int, messages: list[Message]
+):
+    participant_data = ParticipantData.objects.prefetch_related("participant").get(id=participant_data_id)
+    experiment_channel = ExperimentChannel.objects.prefetch_related("experiment").get(id=experiment_channel_id)
 
     # Ensure the messages are in the correct order according to timestamp
-    messages = payload["messages"]
     messages.sort(key=lambda x: x["timestamp"])
 
     connect_client = CommCareConnectClient()
@@ -193,5 +178,6 @@ def handle_commcare_connect_message(payload: NewMessagePayload):
         experiment=experiment_channel.experiment.default_version, experiment_channel=experiment_channel
     )
 
+    update_taskbadger_data(self, channel, message)
     with current_team(experiment_channel.team):
         channel.new_user_message(message)

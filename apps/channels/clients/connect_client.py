@@ -80,7 +80,7 @@ class CommCareConnectClient:
                 "tag": base64.b64encode(tag_bytes).decode(),
                 "nonce": base64.b64encode(nonce_bytes).decode(),
             },
-            "message_id": uuid4().hex,
+            "message_id": str(uuid4()),
         }
 
         url = f"{self._base_url}/messaging/send_fcm/"

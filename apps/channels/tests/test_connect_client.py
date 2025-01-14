@@ -47,7 +47,7 @@ class TestConnectClient:
             status_code=200,
         )
 
-        channel_id = uuid4().hex
+        channel_id = str(uuid4())
         message = "Hi there human"
         encryption_key = os.urandom(32)
 
