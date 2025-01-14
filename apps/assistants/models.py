@@ -190,18 +190,18 @@ class OpenAiAssistant(BaseTeamModel, VersionsMixin, CustomActionOperationMixin):
         delete_openai_assistant_task.delay(self.id)
         return True
 
-    def get_related_experiments_queryset(self, query=None):
-        if query:
-            return Experiment.objects.filter(assistant_id__in=query, is_archived=False)
+    def get_related_experiments_queryset(self, assistant_ids: list = None):
+        if assistant_ids:
+            return Experiment.objects.filter(assistant_id__in=assistant_ids, is_archived=False)
 
         return self.experiment_set.filter(is_archived=False)
 
-    def get_related_pipeline_node_queryset(self, query=None):
+    def get_related_pipeline_node_queryset(self, assistant_ids: list = None):
         from apps.pipelines.models import Node
 
-        if query:
+        if assistant_ids:
             return Node.objects.filter(type="AssistantNode").filter(
-                params__assistant_id__in=query,
+                params__assistant_id__in=assistant_ids,
                 pipeline__is_archived=False,
             )
 
