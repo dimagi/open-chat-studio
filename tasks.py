@@ -36,11 +36,12 @@ def requirements(c: Context, upgrade_all=False, upgrade_package=None):
         raise Exit("Cannot specify both upgrade and upgrade-package", -1)
     args = " -U" if upgrade_all else ""
     has_uv = c.run("uv -V", hide=True, timeout=1, warn=True)
-    if has_uv.ok:
-        cmd_base = "uv pip compile --no-strip-extras --no-emit-package setuptools"
-    else:
-        cmd_base = "pip-compile --resolver=backtracking"
-    env = {"CUSTOM_COMPILE_COMMAND": "inv requirements", "UV_CUSTOM_COMPILE_COMMAND": "inv requirements"}
+    if not has_uv.ok:
+        cprint("uv is not installed. See https://docs.astral.sh/uv/getting-started/installation/", "red")
+        return 1
+
+    env = {"UV_CUSTOM_COMPILE_COMMAND": "inv requirements"}
+    cmd_base = "uv pip compile --no-strip-extras --no-emit-package setuptools"
     if upgrade_package:
         cmd_base += f" --upgrade-package {upgrade_package}"
 
