@@ -2,14 +2,12 @@ import uuid
 from unittest.mock import Mock, patch
 
 import pytest
-from django.db.models import Q
 
-from apps.assistants.models import OpenAiAssistant, ToolResources
+from apps.assistants.models import ToolResources
 from apps.assistants.sync import _get_files_to_delete, delete_openai_files_for_resource
 from apps.utils.factories.assistants import OpenAiAssistantFactory
 from apps.utils.factories.experiment import ExperimentFactory
 from apps.utils.factories.files import FileFactory
-from apps.utils.factories.pipelines import NodeFactory, PipelineFactory
 
 
 @pytest.fixture()
@@ -74,94 +72,49 @@ class TestAssistantArchival:
         assistant.archive()
         assert assistant.is_archived is True
 
-    def test_archive_assistant_with_still_exisiting_experiment(self):
+    @patch("apps.assistants.sync.push_assistant_to_openai", Mock())
+    def test_archive_assistant_succeeds_with_released_experiment_experiment(self):
         experiment = ExperimentFactory()
-        assistant = OpenAiAssistantFactory()
-        experiment.assistant = assistant
+        exp_v2 = experiment.create_new_version()
+        experiment.is_default = True
         experiment.save()
-
+        assistant = OpenAiAssistantFactory()
+        exp_v2 = experiment.create_new_version()
+        exp_v2.assistant = assistant
+        exp_v2.save()
+        assert exp_v2.is_default_version is False
+        assert exp_v2.is_working_version is False
         assistant.archive()
-        assert assistant.is_archived is False  # archiving failed
+        assistant.refresh_from_db()
 
-        experiment.archive()
-        assistant.archive()
-        assert assistant.is_archived is True  # archiving successful
+        assert assistant.is_archived is True  # archiving succeeded
 
     @patch("apps.assistants.sync.push_assistant_to_openai", Mock())
-    def test_archive_versioned_assistant_with_still_exisiting_experiment_and_pipeline(self):
+    def test_asistant_archive_blocked_by_working_related_experiment(self):
+        assistant = OpenAiAssistantFactory()
+        experiment = ExperimentFactory(assistant=assistant)
+        experiment.save()
+
+        assert experiment.is_working_version is True
+        assistant.archive()
+        assistant.refresh_from_db()
+        assert assistant.is_archived is False  # archiving blocked
+
+    @patch("apps.assistants.sync.push_assistant_to_openai", Mock())
+    def test_asistant_archive_blocked_by_published_related_experiment(self):
         assistant = OpenAiAssistantFactory()
         v2_assistant = assistant.create_new_version()
-        pipeline = PipelineFactory()
-        experiment = ExperimentFactory(pipeline=pipeline)
-        experiment.assistant = v2_assistant
+        experiment = ExperimentFactory(assistant=v2_assistant)
+        experiment.is_default = True
         experiment.save()
 
         assistant.archive()
         assert assistant.is_archived is False  # archiving failed
         assert v2_assistant.is_archived is False
 
-        experiment.archive()
+        experiment.archive()  # first archive related experiment through v2_assistant
         assistant.archive()
         v2_assistant.refresh_from_db()
 
         assert assistant.is_archived is True  # archiving successful
         assert v2_assistant.is_archived is True
-
-    @patch("apps.assistants.sync.push_assistant_to_openai", Mock())
-    def test_get_related_pipeline_node_queryset_with_versions(self):
-        assistant = OpenAiAssistantFactory()
-        v2_assistant = assistant.create_new_version()
-        pipeline = PipelineFactory()
-        NodeFactory(type="AssistantNode", pipeline=pipeline, params={"assistant_id": str(assistant.id)})
-        exp = ExperimentFactory(pipeline=pipeline)
-        exp.assistant = assistant
-        exp.save()
-        v2_exp = exp.create_new_version()
-        NodeFactory(type="AssistantNode", pipeline=v2_exp.pipeline, params={"assistant_id": str(v2_assistant.id)})
-        NodeFactory(type="AssistantNode", pipeline=v2_exp.pipeline, params={"assistant_id": str(v2_assistant.id)})
-        v2_exp.assistant = v2_assistant
-        v2_exp.save()
-        assistant.refresh_from_db()
-        v2_assistant.refresh_from_db()
-
-        version_query = list(
-            map(
-                str,
-                OpenAiAssistant.objects.filter(Q(id=assistant.id) | Q(working_version__id=assistant.id)).values_list(
-                    "id", flat=True
-                ),
-            )
-        )
-
-        assert len(assistant.get_related_pipeline_node_queryset()) == 1
-        assert len(v2_assistant.get_related_pipeline_node_queryset()) == 2
-        assert len(assistant.get_related_pipeline_node_queryset(query=version_query)) == 3
-
-    @patch("apps.assistants.sync.push_assistant_to_openai", Mock())
-    def test_get_related_experiments_queryset_with_versions(self):
-        assistant = OpenAiAssistantFactory()
-        v2_assistant = assistant.create_new_version()
-        exp = ExperimentFactory()
-        exp.assistant = assistant
-        exp.save()
-        exp2 = ExperimentFactory()
-        exp2.assistant = assistant
-        exp2.save()
-        v2_exp = exp.create_new_version()
-        v2_exp.assistant = v2_assistant
-        v2_exp.save()
-        assistant.refresh_from_db()
-        v2_assistant.refresh_from_db()
-
-        version_query = list(
-            map(
-                str,
-                OpenAiAssistant.objects.filter(Q(id=assistant.id) | Q(working_version__id=assistant.id)).values_list(
-                    "id", flat=True
-                ),
-            )
-        )
-
-        assert len(assistant.get_related_experiments_queryset()) == 2
-        assert len(v2_assistant.get_related_experiments_queryset()) == 1
-        assert len(assistant.get_related_experiments_queryset(query=version_query)) == 3
