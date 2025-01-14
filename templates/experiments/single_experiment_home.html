@@ -18,28 +18,27 @@
     <div class="flex">
       <div class="flex-1 flex flex-row gap-2">
         <h1 class="pg-title">{{ experiment.name }}</h1>
-        {% flag "experiment_versions" %}
-          {% if experiment.is_archived %}
-            <div class="badge badge-warning badge-sm">
-              Archived
+        {% if experiment.is_archived %}
+          <div class="badge badge-warning badge-sm">
+            Archived
+          </div>
+        {% elif deployed_version %}
+          <div class="flex flex-row gap-2">
+            <div class="tooltip" data-tip="Current published version">
+              <a class="badge badge-success badge-sm"
+                 href="#versions">
+                v{{ deployed_version }}
+              </a>
             </div>
-          {% elif deployed_version %}
-            <div class="flex flex-row gap-2">
-              <div class="tooltip" data-tip="Current published version">
-                <a class="badge badge-success badge-sm"
-                   href="#versions">
-                  v{{ deployed_version }}
-                </a>
-              </div>
-              <div
-                class="watchVersionChange"
-                hx-get="{% url 'experiments:get_release_status_badge' experiment.team.slug experiment.id %}"
-                hx-trigger="load, version-changed"
-                hx-swap="innerHTML">
-              </div>
+            <div
+              id="version-status-badge"
+              class="watchVersionChange"
+              hx-get="{% url 'experiments:get_release_status_badge' experiment.team.slug experiment.id %}"
+              hx-trigger="load, version-changed"
+              hx-swap="innerHTML">
             </div>
-          {% endif %}
-        {% endflag %}
+          </div>
+        {% endif %}
       </div>
       <div class="justify-self-end">
         <div class="join">
@@ -299,20 +298,18 @@
       </div>
     </div>
 
-    {% flag "experiment_versions" %}
-      <input type="radio" name="tab_group" role="tab" class="tab" aria-label="Versions" id="tab-versions" />
-      <div role="tabpanel" class="tab-content" id="content-versions">
-        <div class="app-card">
-          <div id="versions-table"
-               class="watchVersionChange"
-               hx-trigger="load, version-changed"
-               hx-target="this"
-               hx-get="{% url 'experiments:versions-list' request.team.slug experiment.id %}"
-               hx-swap="innerHTML">
-          </div>
+    <input type="radio" name="tab_group" role="tab" class="tab" aria-label="Versions" id="tab-versions" />
+    <div role="tabpanel" class="tab-content" id="content-versions">
+      <div class="app-card">
+        <div id="versions-table"
+             class="watchVersionChange"
+             hx-trigger="load, version-changed"
+             hx-target="this"
+             hx-get="{% url 'experiments:versions-list' request.team.slug experiment.id %}"
+             hx-swap="innerHTML">
         </div>
       </div>
-    {% endflag %}
+    </div>
 
     {% flag "events" %}
       <input type="radio" name="tab_group" role="tab" class="tab" aria-label="Events" id="tab-events" />

@@ -75,7 +75,6 @@ def test_create_experiment_success(client, team_with_users):
     experiment.tools == [AgentTools.ONE_OFF_REMINDER]
 
 
-@override_flag("experiment_versions", active=True)
 @override_settings(CELERY_TASK_ALWAYS_EAGER=True)
 @pytest.mark.django_db()
 def test_create_experiment_creates_first_version(client, team_with_users):
