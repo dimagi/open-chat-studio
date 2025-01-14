@@ -8,7 +8,7 @@ from taskbadger.celery import Task as TaskbadgerTask
 from telebot import types
 from twilio.request_validator import RequestValidator
 
-from apps.channels.clients.connect_client import ConnectClient, MessagePayload
+from apps.channels.clients.connect_client import ConnectClient, NewMessagePayload
 from apps.channels.datamodels import BaseMessage, SureAdhereMessage, TelegramMessage, TurnWhatsappMessage, TwilioMessage
 from apps.channels.models import ChannelPlatform, ExperimentChannel
 from apps.chat.channels import (
@@ -158,30 +158,29 @@ def handle_api_message(
     return channel.new_user_message(message)
 
 
-def handle_connect_messaging_message(payload: dict):
+def handle_connect_messaging_message(payload: NewMessagePayload):
     connect_channel_id = payload.get("channel_id")
 
     try:
-        participant_data = ParticipantData.objects.get(
+        participant_data = ParticipantData.objects.prefetch_related("participant").get(
             content_type=ContentType.objects.get_for_model(Experiment), system_metadata__channel_id=connect_channel_id
-        ).prefetch_related("participant")
+        )
 
-        experiment_channel = ExperimentChannel.objects.get(
-            platform=ChannelPlatform.CONNECT_MESSAGING, experiment__participantdata=participant_data
-        ).prefetch_related("experiment")
+        experiment_channel = ExperimentChannel.objects.prefetch_related("experiment").get(
+            platform=ChannelPlatform.CONNECT_MESSAGING, experiment__id=participant_data.object_id
+        )
     except ParticipantData.DoesNotExist:
         log.error(f"No participant data found for channel_id: {connect_channel_id}")
         return
     except ExperimentChannel.DoesNotExist:
-        log.error("No experiment channel found for")
+        log.error(f"No experiment channel found for participant channel_id: {connect_channel_id}")
         return
 
-    connect_client = ConnectClient()
-    # If we receive multiple messages from the user, concatenate them into a single message
-    messages = [MessagePayload.model_validate(message) for message in payload["messages"]]
-
     # Ensure the messages are in the correct order according to timestamp
-    messages.sort(key=lambda x: x.timestamp)
+    messages = payload["messages"]
+    messages.sort(key=lambda x: x["timestamp"])
+
+    connect_client = ConnectClient()
     decrypted_messages = connect_client.decrypt_messages(participant_data.get_encryption_key_bytes(), messages=messages)
 
     # If the user sent multiple messages, we should append it together instead of the bot replying to each one

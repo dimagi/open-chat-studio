@@ -788,11 +788,13 @@ class ConnectMessagingChannel(ChannelBase):
         self.client = ConnectClient()
 
     def send_text_to_user(self, text: str):
-        self.client.send_message_to_user(self.connect_channel_id, message=text, encryption_key=self.encryption_key)
+        self.client.send_message_to_user(
+            channel_id=self.connect_channel_id, message=text, encryption_key=self.encryption_key
+        )
 
     @cached_property
     def participant_data(self) -> ParticipantData:
-        return self.experiment.data_set.filter(participant__identifier=self.participant_identifier).defer("data")
+        return self.experiment.participant_data.defer("data").get(participant__identifier=self.participant_identifier)
 
     @cached_property
     def connect_channel_id(self) -> str:

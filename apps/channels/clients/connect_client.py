@@ -69,8 +69,8 @@ class ConnectClient:
         stop=stop_after_attempt(3),
         before_sleep=before_sleep_log(logger, logging.INFO),
     )
-    def send_message_to_user(self, channel_id: str, raw_message: str, encryption_key: bytes):
-        ciphertext_bytes, tag_bytes, nonce_bytes = self._encrypt_message(key=encryption_key, message=raw_message)
+    def send_message_to_user(self, channel_id: str, message: str, encryption_key: bytes):
+        ciphertext_bytes, tag_bytes, nonce_bytes = self._encrypt_message(key=encryption_key, message=message)
 
         payload = {
             "channel": channel_id,
