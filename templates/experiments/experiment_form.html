@@ -115,12 +115,9 @@
 
       <input type="radio" name="main_tabs" role="tab" class="tab" aria-label="Advanced">
       <div role="tabpanel" class="tab-content">
-        {% render_form_fields form "debug_mode_enabled" "trace_provider" %}
-        <span x-show="type === 'llm'">
-          {% render_form_fields form "seed_message" %}
-        </span>
+        {% render_form_fields form "debug_mode_enabled" "trace_provider" "seed_message" %}
         <span x-show="type == 'assistant'">
-          {% render_form_fields form "seed_message" "citations_enabled" %}
+          {% render_form_fields form "citations_enabled" %}
         </span>
       </div>
     </div>
