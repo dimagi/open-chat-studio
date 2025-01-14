@@ -1,23 +1,28 @@
 import base64
 import logging
+from typing import TypedDict
 from uuid import UUID, uuid4
 
 import requests
 from Crypto.Cipher import AES
 from django.conf import settings
-from pydantic import BaseModel
 from requests.auth import HTTPBasicAuth
 from tenacity import before_sleep_log, retry, retry_if_exception_type, stop_after_attempt, wait_exponential
 
 logger = logging.getLogger("connectid-api")
 
 
-class MessagePayload(BaseModel):
+class Message(TypedDict):
     timestamp: str
     message_id: UUID
     ciphertext: str
     tag: str
     nonce: str
+
+
+class NewMessagePayload(TypedDict):
+    channel_id: UUID
+    messages: list[Message]
 
 
 class ConnectClient:
@@ -40,7 +45,7 @@ class ConnectClient:
         response.raise_for_status()
         return UUID(response.json()["channel_id"])
 
-    def decrypt_messages(self, key: bytes, messages: list[MessagePayload]) -> list[str]:
+    def decrypt_messages(self, key: bytes, messages: list[Message]) -> list[str]:
         """
         Decrypts the `MessagePayload` list using the provided key and verifies the message authenticity
 
@@ -49,9 +54,9 @@ class ConnectClient:
         """
         decrypted_messages = []
         for message in messages:
-            nonce = base64.b64decode(message.nonce)
-            tag = base64.b64decode(message.tag)
-            ciphertext = base64.b64decode(message.ciphertext)
+            nonce = base64.b64decode(message["nonce"])
+            tag = base64.b64decode(message["tag"])
+            ciphertext = base64.b64decode(message["ciphertext"])
             cipher = AES.new(key, AES.MODE_GCM, nonce=nonce)
             decrypted_messages.append(cipher.decrypt_and_verify(ciphertext, tag).decode("utf-8"))
 
