@@ -13,7 +13,7 @@ from apps.channels.datamodels import BaseMessage, SureAdhereMessage, TelegramMes
 from apps.channels.models import ChannelPlatform, ExperimentChannel
 from apps.chat.channels import (
     ApiChannel,
-    ConnectMessagingChannel,
+    CommCareConnectChannel,
     FacebookMessengerChannel,
     SureAdhereChannel,
     TelegramChannel,
@@ -188,7 +188,7 @@ def handle_connect_messaging_message(payload: NewMessagePayload):
     user_message = "\n\n".join(decrypted_messages)
 
     message = BaseMessage(participant_id=participant_data.participant.identifier, message_text=user_message)
-    channel = ConnectMessagingChannel(
+    channel = CommCareConnectChannel(
         experiment=experiment_channel.experiment.default_version, experiment_channel=experiment_channel
     )
 

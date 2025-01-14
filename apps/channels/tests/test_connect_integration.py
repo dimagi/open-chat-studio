@@ -58,9 +58,9 @@ def _setup(experiment, message_spec: dict | None = None) -> tuple:
 
 @pytest.mark.django_db()
 class TestHandleConnectMessageTask:
-    @patch("apps.channels.tasks.ConnectMessagingChannel")
-    def test_participant_data_is_missing(self, ConnectMessagingChannelMock, experiment, caplog):
-        channel_instance = ConnectMessagingChannelMock.return_value
+    @patch("apps.channels.tasks.CommCareConnectChannel")
+    def test_participant_data_is_missing(self, CommCareConnectChannelMock, experiment, caplog):
+        channel_instance = CommCareConnectChannelMock.return_value
         channel_id, _, _, participant_data, payload = _setup(experiment)
         participant_data.delete()
 
@@ -68,9 +68,9 @@ class TestHandleConnectMessageTask:
         channel_instance.new_user_message.assert_not_called()
         assert caplog.messages[0] == f"No participant data found for channel_id: {channel_id}"
 
-    @patch("apps.channels.tasks.ConnectMessagingChannel")
-    def test_experiment_channel_is_missing(self, ConnectMessagingChannelMock, experiment, caplog):
-        channel_instance = ConnectMessagingChannelMock.return_value
+    @patch("apps.channels.tasks.CommCareConnectChannel")
+    def test_experiment_channel_is_missing(self, CommCareConnectChannelMock, experiment, caplog):
+        channel_instance = CommCareConnectChannelMock.return_value
         channel_id, _, experiment_channel, _, payload = _setup(experiment)
         experiment_channel.delete()
 
@@ -78,9 +78,9 @@ class TestHandleConnectMessageTask:
         channel_instance.new_user_message.assert_not_called()
         assert caplog.messages[0] == f"No experiment channel found for participant channel_id: {channel_id}"
 
-    @patch("apps.channels.tasks.ConnectMessagingChannel")
-    def test_multiple_messages_are_sorted_and_concatenated(self, ConnectMessagingChannelMock, experiment):
-        channel_instance = ConnectMessagingChannelMock.return_value
+    @patch("apps.channels.tasks.CommCareConnectChannel")
+    def test_multiple_messages_are_sorted_and_concatenated(self, CommCareConnectChannelMock, experiment):
+        channel_instance = CommCareConnectChannelMock.return_value
         _, _, _, _, payload = _setup(experiment, message_spec={2: "I need to ask something", 1: "Hi bot"})
 
         handle_connect_messaging_message(payload)

@@ -207,7 +207,7 @@ class ChannelBase(ABC):
         elif platform == "slack":
             channel_cls = SlackChannel
         elif platform == "commcare_connect":
-            channel_cls = ConnectMessagingChannel
+            channel_cls = CommCareConnectChannel
         else:
             raise Exception(f"Unsupported platform type {platform}")
         return channel_cls
@@ -801,7 +801,7 @@ class SlackChannel(ChannelBase):
             raise ChannelException("WebChannel requires an existing session")
 
 
-class ConnectMessagingChannel(ChannelBase):
+class CommCareConnectChannel(ChannelBase):
     voice_replies_supported = False
     supported_message_types = [MESSAGE_TYPES.TEXT]
 
