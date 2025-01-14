@@ -774,7 +774,6 @@ class SlackChannel(ChannelBase):
 
 
 class ConnectMessagingChannel(ChannelBase):
-    # TODO: Finish in followup PR
     voice_replies_supported = False
     supported_message_types = [MESSAGE_TYPES.TEXT]
 
