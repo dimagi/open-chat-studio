@@ -27,9 +27,10 @@ from apps.api.serializers import (
     ExperimentSessionCreateSerializer,
     ExperimentSessionSerializer,
     ParticipantDataUpdateRequest,
+    TriggerBotMessageRequest,
 )
-from apps.api.tasks import setup_connect_channels_for_bots
-from apps.channels.models import ChannelPlatform
+from apps.api.tasks import setup_connect_channels_for_bots, trigger_bot_message_task
+from apps.channels.models import ChannelPlatform, ExperimentChannel
 from apps.events.models import ScheduledMessage, TimePeriod
 from apps.experiments.models import Experiment, ExperimentSession, Participant, ParticipantData
 from apps.files.models import File
@@ -382,3 +383,41 @@ def consent(request: Request):
     participant_data.save(update_fields=["system_metadata"])
 
     return HttpResponse()
+
+
+@api_view(["POST"])
+def trigger_bot_message(request):
+    """
+    Trigger the bot to send a message to the user
+    """
+    serializer = TriggerBotMessageRequest(data=request.data)
+    serializer.is_valid(raise_exception=True)
+
+    identifier = serializer.data["identifier"]
+    platform = serializer.data["platform"]
+    experiment_public_id = serializer.data["experiment"]
+
+    experiment = get_object_or_404(Experiment, public_id=experiment_public_id, team=request.team)
+
+    try:
+        participant_data = ParticipantData.objects.defer("data").get(
+            participant__identifier=identifier,
+            participant__platform=platform,
+            object_id=experiment.id,
+            content_type=ContentType.objects.get_for_model(Experiment),
+        )
+
+        ExperimentChannel.objects.prefetch_related("experiment").get(platform=platform, experiment=experiment)
+    except ParticipantData.DoesNotExist:
+        return Response({"detail": "Participant not found"}, status=status.HTTP_404_NOT_FOUND)
+    except ExperimentChannel.DoesNotExist:
+        return Response(
+            {"detail": f"Experiment cannot send messages on the {platform} channel"}, status=status.HTTP_404_NOT_FOUND
+        )
+
+    if not participant_data.system_metadata.get("consent", False):
+        return Response({"detail": "User has not given consent"}, status=status.HTTP_400_BAD_REQUEST)
+
+    trigger_bot_message_task.delay(serializer.data)
+
+    return Response(status=status.HTTP_200_OK)
