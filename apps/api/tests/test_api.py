@@ -305,12 +305,12 @@ def test_update_participant_data_and_setup_connect_channels(connect_client_mock)
     # Participant 1. This is a telegram participant, so should be ignored
     _setup_channel_participant(experiment1, identifier="97878997", channel_platform=ChannelPlatform.TELEGRAM)
 
-    # Participant 2. Already has a channel_id, so should be ignored
+    # Participant 2. Already has a commcare_connect_channel_id, so should be ignored
     _setup_channel_participant(
         experiment1,
         identifier="connectid_1",
         channel_platform=ChannelPlatform.COMMCARE_CONNECT,
-        system_metadata={"channel_id": "f8f5dc93-7d6a-4e9c"},
+        system_metadata={"commcare_connect_channel_id": "f8f5dc93-7d6a-4e9c"},
     )
 
     # Participant 3.
@@ -326,7 +326,7 @@ def test_update_participant_data_and_setup_connect_channels(connect_client_mock)
         experiment3,
         identifier="connectid_2",
         channel_platform=ChannelPlatform.COMMCARE_CONNECT,
-        system_metadata={"channel_id": "7d6a-fdc93-4e9c"},
+        system_metadata={"commcare_connect_channel_id": "7d6a-fdc93-4e9c"},
     )
 
     user = team.members.first()
@@ -360,7 +360,7 @@ def test_update_participant_data_and_setup_connect_channels(connect_client_mock)
     assert call_kwargs["channel_source"] == f"{experiment1.team}-{experiment1.name}"
     assert Participant.objects.filter(identifier="connectid_2").exists()
     data = ParticipantData.objects.get(participant__identifier="connectid_2", object_id=experiment1.id)
-    assert data.system_metadata["channel_id"] == "channel_id_2"
+    assert data.system_metadata["commcare_connect_channel_id"] == "channel_id_2"
 
 
 @pytest.mark.django_db()
@@ -371,7 +371,7 @@ class TestConnectApis:
             team=experiment.team,
             participant=participant,
             content_object=experiment,
-            system_metadata={"channel_id": channel_id},
+            system_metadata={"commcare_connect_channel_id": channel_id},
         )
 
     def _make_request(self, client, data):
@@ -383,11 +383,13 @@ class TestConnectApis:
 
     def test_generate_key_success(self, client, experiment, httpx_mock):
         connect_id = uuid.uuid4().hex
-        channel_id = uuid.uuid4().hex
-        participant_data = self._setup_participant(experiment, connect_id=connect_id, channel_id=channel_id)
+        commcare_connect_channel_id = uuid.uuid4().hex
+        participant_data = self._setup_participant(
+            experiment, connect_id=connect_id, channel_id=commcare_connect_channel_id
+        )
 
         httpx_mock.add_response(method="GET", url=VERIFY_CONNECT_ID_URL, json={"sub": connect_id})
-        response = self._make_request(client=client, data={"channel_id": channel_id})
+        response = self._make_request(client=client, data={"channel_id": commcare_connect_channel_id})
 
         assert response.status_code == 200
         base64_key = response.json()["key"]
@@ -397,12 +399,12 @@ class TestConnectApis:
 
     def test_generate_key_cannot_the_find_user(self, client, experiment, httpx_mock):
         connect_id = uuid.uuid4().hex
-        channel_id = uuid.uuid4().hex
-        self._setup_participant(experiment, connect_id=connect_id, channel_id=channel_id)
+        commcare_connect_channel_id = uuid.uuid4().hex
+        self._setup_participant(experiment, connect_id=connect_id, channel_id=commcare_connect_channel_id)
 
         httpx_mock.add_response(method="GET", url=VERIFY_CONNECT_ID_URL, json={"sub": "garbage"})
 
-        response = self._make_request(client=client, data={"channel_id": channel_id})
+        response = self._make_request(client=client, data={"channel_id": commcare_connect_channel_id})
         assert response.status_code == 404
 
     def test_generate_key_fails_auth_at_connect(self, client, httpx_mock):
@@ -414,10 +416,12 @@ class TestConnectApis:
     @override_settings(COMMCARE_CONNECT_SERVER_SECRET="123123")
     def test_user_consented(self, client, experiment):
         connect_id = uuid.uuid4().hex
-        channel_id = uuid.uuid4().hex
-        participant_data = self._setup_participant(experiment, connect_id=connect_id, channel_id=channel_id)
+        commcare_connect_channel_id = uuid.uuid4().hex
+        participant_data = self._setup_participant(
+            experiment, connect_id=connect_id, channel_id=commcare_connect_channel_id
+        )
 
-        payload = {"channel_id": channel_id, "consent": True}
+        payload = {"channel_id": commcare_connect_channel_id, "consent": True}
         response = client.post(
             reverse("api:commcare-connect:consent"),
             json.dumps(payload),
@@ -426,7 +430,10 @@ class TestConnectApis:
         )
         assert response.status_code == 200
         participant_data.refresh_from_db()
-        assert participant_data.system_metadata == {"channel_id": channel_id, "consent": True}
+        assert participant_data.system_metadata == {
+            "commcare_connect_channel_id": commcare_connect_channel_id,
+            "consent": True,
+        }
 
     def _get_request_headers(self, payload: dict) -> dict:
         msg = json.dumps(payload).encode("utf-8")

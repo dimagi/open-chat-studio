@@ -338,10 +338,10 @@ def generate_key(request: Request):
     response.raise_for_status()
     connect_id = response.json().get("sub")
     request_data = json.loads(request.body)
-    channel_id = request_data.get("channel_id")
+    commcare_connect_channel_id = request_data.get("channel_id")
     try:
         participant_data = ParticipantData.objects.get(
-            participant__identifier=connect_id, system_metadata__channel_id=channel_id
+            participant__identifier=connect_id, system_metadata__commcare_connect_channel_id=commcare_connect_channel_id
         )
     except ParticipantData.DoesNotExist:
         raise Http404()
@@ -373,9 +373,11 @@ def consent(request: Request):
         return HttpResponse("Missing data", status=400)
     request_data = json.loads(request.body)
     if "consent" not in request_data or "channel_id" not in request_data:
-        return HttpResponse("Missing consent or channel_id", status=400)
+        return HttpResponse("Missing consent or commcare_connect_channel_id", status=400)
 
-    participant_data = get_object_or_404(ParticipantData, system_metadata__channel_id=request_data["channel_id"])
+    participant_data = get_object_or_404(
+        ParticipantData, system_metadata__commcare_connect_channel_id=request_data["channel_id"]
+    )
     participant_data.system_metadata["consent"] = request_data["consent"]
     participant_data.save(update_fields=["system_metadata"])
 
