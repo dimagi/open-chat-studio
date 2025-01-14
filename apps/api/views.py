@@ -381,6 +381,48 @@ def consent(request: Request):
     return HttpResponse()
 
 
+@extend_schema(
+    operation_id="trigger_bot_message",
+    summary="Trigger the bot to send a message to the user",
+    tags=["Channels"],
+    request=TriggerBotMessageRequest(),
+    responses={
+        200: {},
+        400: {"description": "Bad Request"},
+        404: {"description": "Not Found"},
+    },
+    examples=[
+        OpenApiExample(
+            name="GenerateBotMessageAndSend",
+            summary="Generates a bot message and sends it to the user",
+            value={
+                "identifier": "part1",
+                "experiment": "exp1",
+                "platform": "connect_messaging",
+                "prompt_text": "Tell the user to do something",
+            },
+            status_codes=[200],
+        ),
+        OpenApiExample(
+            name="ParticipantNotFound",
+            summary="Participant not found",
+            value={"detail": "Participant not found"},
+            status_codes=[404],
+        ),
+        OpenApiExample(
+            name="ExperimentChannelNotFound",
+            summary="Experiment cannot send messages on the specified channel",
+            value={"detail": "Experiment cannot send messages on the connect_messaging channel"},
+            status_codes=[404],
+        ),
+        OpenApiExample(
+            name="ConsentNotGiven",
+            summary="User has not given consent",
+            value={"detail": "User has not given consent"},
+            status_codes=[400],
+        ),
+    ],
+)
 @api_view(["POST"])
 def trigger_bot_message(request):
     """
