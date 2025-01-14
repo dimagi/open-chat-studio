@@ -3,6 +3,7 @@ from typing import Self
 from django.contrib.postgres.fields import ArrayField
 from django.core.validators import MaxValueValidator, MinValueValidator
 from django.db import models, transaction
+from django.db.models import Q
 from django.urls import reverse
 from field_audit import audit_fields
 from field_audit.models import AuditAction, AuditingManager
@@ -192,20 +193,26 @@ class OpenAiAssistant(BaseTeamModel, VersionsMixin, CustomActionOperationMixin):
 
     def get_related_experiments_queryset(self, assistant_ids: list = None):
         if assistant_ids:
-            return Experiment.objects.filter(assistant_id__in=assistant_ids, is_archived=False)
+            return Experiment.objects.filter(
+                Q(working_version_id=None) | Q(is_default_version=True),
+                assistant_id__in=assistant_ids,
+                is_archived=False,
+            )
 
-        return self.experiment_set.filter(is_archived=False)
+        return self.experiment_set.filter(Q(working_version_id=None) | Q(is_default_version=True), is_archived=False)
 
     def get_related_pipeline_node_queryset(self, assistant_ids: list = None):
         from apps.pipelines.models import Node
 
         if assistant_ids:
             return Node.objects.filter(type="AssistantNode").filter(
+                Q(pipeline__working_version_id=None),
                 params__assistant_id__in=assistant_ids,
                 pipeline__is_archived=False,
             )
 
         return Node.objects.filter(type="AssistantNode").filter(
+            Q(pipeline__working_version_id=None),
             params__assistant_id=str(self.id),
             pipeline__is_archived=False,
         )
