@@ -1,6 +1,6 @@
 import base64
 import json
-import os
+import secrets
 import textwrap
 
 import httpx
@@ -349,7 +349,7 @@ def generate_key(request: Request):
     if participant_data.encryption_key:
         return JsonResponse({"key": participant_data.encryption_key})
 
-    key = base64.b64encode(os.urandom(32)).decode("utf-8")
+    key = base64.b64encode(secrets.token_bytes(32)).decode("utf-8")
     participant_data.encryption_key = key
     participant_data.save(update_fields=["encryption_key"])
     return JsonResponse({"key": key})
