@@ -34,35 +34,26 @@ def down(c: Context):
 def requirements(c: Context, upgrade_all=False, upgrade_package=None):
     if upgrade_all and upgrade_package:
         raise Exit("Cannot specify both upgrade and upgrade-package", -1)
-    args = " -U" if upgrade_all else ""
     has_uv = c.run("uv -V", hide=True, timeout=1, warn=True)
     if not has_uv.ok:
         cprint("uv is not installed. See https://docs.astral.sh/uv/getting-started/installation/", "red")
         return 1
 
-    env = {"UV_CUSTOM_COMPILE_COMMAND": "inv requirements"}
-    cmd_base = "uv pip compile --no-strip-extras --no-emit-package setuptools"
-    if upgrade_package:
-        cmd_base += f" --upgrade-package {upgrade_package}"
+    cmd = "uv lock"
+    if upgrade_all:
+        cmd += " --upgrade"
+    elif upgrade_package:
+        cmd += f" --upgrade-package {upgrade_package}"
 
-    def _compile(base_path):
-        with c.cd("requirements"):
-            c.run(f"{cmd_base} {base_path}.in -o {base_path}.txt{args}", env=env)
-
-    _compile("requirements")
-    _compile("dev-requirements")
-    _compile("prod-requirements")
+    c.run(cmd)
 
     if _confirm("\nDo you want to sync your venv with the new requirements?", _exit=False):
-        if has_uv.ok:
-            result = c.run("uv pip sync --dry-run dev-requirements.txt", echo=True, pty=True)
-            if "no changes" in result.stdout:
-                return
+        result = c.run("uv pip install -r pyproject.yml --dry-run", echo=True, pty=True)
+        if "no changes" in result.stdout:
+            return
 
-            if _confirm("Do you want to apply the changes?", _exit=False):
-                c.run("uv pip sync dev-requirements.txt", echo=True, pty=True)
-        else:
-            c.run("pip-sync -a dev-requirements.txt", echo=True, pty=True)
+        if _confirm("Do you want to apply the changes?", _exit=False):
+            c.run("pip install -r pyproject.yml", echo=True, pty=True)
 
 
 @task
