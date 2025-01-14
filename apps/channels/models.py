@@ -30,7 +30,7 @@ class ChannelPlatform(models.TextChoices):
     SUREADHERE = "sureadhere", "SureAdhere"
     API = "api", "API"
     SLACK = "slack", "Slack"
-    CONNECT_MESSAGING = "connect_messaging", "Connect Messaging"
+    COMMCARE_CONNECT = "commcare_connect", "Connect Messaging"
 
     @classmethod
     def team_global_platforms(cls):
@@ -94,7 +94,7 @@ class ChannelPlatform(models.TextChoices):
                 return "sureadhere_tenant_id"
             case self.SLACK:
                 return "slack_channel_id"
-            case self.CONNECT_MESSAGING:
+            case self.COMMCARE_CONNECT:
                 return "connect_id"
 
     @staticmethod

@@ -9,10 +9,10 @@ from tenacity import before_sleep_log, retry, retry_if_exception_type, stop_afte
 logger = logging.getLogger("connectid-api")
 
 
-class ConnectClient:
+class CommCareConnectClient:
     def __init__(self):
         self._base_url = settings.CONNECT_ID_SERVER_BASE_URL
-        self._auth = HTTPBasicAuth(settings.CONNECT_MESSAGING_SERVER_ID, settings.CONNECT_MESSAGING_SERVER_SECRET)
+        self._auth = HTTPBasicAuth(settings.COMMCARE_CONNECT_SERVER_ID, settings.COMMCARE_CONNECT_SERVER_SECRET)
 
     @retry(
         wait=wait_exponential(multiplier=1, min=1, max=5),

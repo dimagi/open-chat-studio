@@ -286,7 +286,7 @@ def _setup_channel_participant(experiment, identifier, channel_platform, system_
 
 @pytest.mark.django_db()
 @override_settings(CELERY_TASK_ALWAYS_EAGER=True)
-@patch("apps.api.tasks.ConnectClient")
+@patch("apps.api.tasks.CommCareConnectClient")
 def test_update_participant_data_and_setup_connect_channels(connect_client_mock):
     """
     Test that a connect channel is created for a participant where
@@ -299,7 +299,7 @@ def test_update_participant_data_and_setup_connect_channels(connect_client_mock)
     team = TeamWithUsersFactory()
     experiment1 = ExperimentFactory(team=team)
     ExperimentChannelFactory(team=team, experiment=experiment1, platform=ChannelPlatform.TELEGRAM)
-    ExperimentChannelFactory(team=team, experiment=experiment1, platform=ChannelPlatform.CONNECT_MESSAGING)
+    ExperimentChannelFactory(team=team, experiment=experiment1, platform=ChannelPlatform.COMMCARE_CONNECT)
     experiment2 = ExperimentFactory(team=team)
     experiment3 = ExperimentFactory(team=team)
 
@@ -310,7 +310,7 @@ def test_update_participant_data_and_setup_connect_channels(connect_client_mock)
     _setup_channel_participant(
         experiment1,
         identifier="connectid_1",
-        channel_platform=ChannelPlatform.CONNECT_MESSAGING,
+        channel_platform=ChannelPlatform.COMMCARE_CONNECT,
         system_metadata={"channel_id": "f8f5dc93-7d6a-4e9c"},
     )
 
@@ -320,13 +320,13 @@ def test_update_participant_data_and_setup_connect_channels(connect_client_mock)
     # Experiment 3: The participant already have a connect channel set up
     # Expectation: Only 1 channel needs to be set up for this participant
     _setup_channel_participant(
-        experiment1, identifier="connectid_2", channel_platform=ChannelPlatform.CONNECT_MESSAGING, system_metadata={}
+        experiment1, identifier="connectid_2", channel_platform=ChannelPlatform.COMMCARE_CONNECT, system_metadata={}
     )
 
     _setup_channel_participant(
         experiment3,
         identifier="connectid_2",
-        channel_platform=ChannelPlatform.CONNECT_MESSAGING,
+        channel_platform=ChannelPlatform.COMMCARE_CONNECT,
         system_metadata={"channel_id": "7d6a-fdc93-4e9c"},
     )
 
@@ -335,7 +335,7 @@ def test_update_participant_data_and_setup_connect_channels(connect_client_mock)
 
     data = {
         "identifier": "connectid_2",
-        "platform": "connect_messaging",
+        "platform": "commcare_connect",
         "data": [
             {
                 "experiment": str(experiment1.public_id),
@@ -419,7 +419,7 @@ class TestConnectApis:
         with pytest.raises(requests.exceptions.HTTPError):
             self._make_request(client=client, data={})
 
-    @override_settings(CONNECT_MESSAGING_SERVER_SECRET="123123")
+    @override_settings(COMMCARE_CONNECT_SERVER_SECRET="123123")
     def test_user_consented(self, client, experiment):
         connect_id = uuid.uuid4().hex
         channel_id = uuid.uuid4().hex
@@ -438,7 +438,7 @@ class TestConnectApis:
 
     def _get_request_headers(self, payload: dict) -> dict:
         msg = json.dumps(payload).encode("utf-8")
-        key = settings.CONNECT_MESSAGING_SERVER_SECRET.encode()
+        key = settings.COMMCARE_CONNECT_SERVER_SECRET.encode()
         digest = hmac.new(key=key, msg=msg, digestmod=hashlib.sha256).digest()
         return {
             "X-MAC-DIGEST": base64.b64encode(digest),

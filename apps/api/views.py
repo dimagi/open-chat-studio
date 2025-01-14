@@ -159,10 +159,10 @@ def update_participant_data(request):
         if schedule_data := data.get("schedules"):
             _create_update_schedules(team, experiment, participant, schedule_data)
 
-        if platform == ChannelPlatform.CONNECT_MESSAGING:
+        if platform == ChannelPlatform.COMMCARE_CONNECT:
             experiment_data_map[experiment.id] = participant_data.id
 
-    if platform == ChannelPlatform.CONNECT_MESSAGING:
+    if platform == ChannelPlatform.COMMCARE_CONNECT:
         setup_connect_channels_for_bots.delay(connect_id=identifier, experiment_data_map=experiment_data_map)
 
     return HttpResponse()

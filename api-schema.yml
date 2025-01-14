@@ -683,7 +683,7 @@ components:
       - sureadhere
       - api
       - slack
-      - connect_messaging
+      - commcare_connect
       type: string
       description: |-
         * `telegram` - Telegram
@@ -693,7 +693,7 @@ components:
         * `sureadhere` - SureAdhere
         * `api` - API
         * `slack` - Slack
-        * `connect_messaging` - Connect Messaging
+        * `commcare_connect` - Connect Messaging
     Team:
       type: object
       properties:

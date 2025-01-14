@@ -85,7 +85,7 @@ def verify_hmac(view_func):
     @wraps(view_func)
     def _inner(request, *args, **kwargs):
         expected_digest = convert_to_bytestring_if_unicode(request.headers.get("X-Mac-Digest"))
-        secret_key_bytes = convert_to_bytestring_if_unicode(settings.CONNECT_MESSAGING_SERVER_SECRET)
+        secret_key_bytes = convert_to_bytestring_if_unicode(settings.COMMCARE_CONNECT_SERVER_SECRET)
 
         if not (expected_digest and secret_key_bytes):
             logger.exception(

@@ -6,7 +6,7 @@ from django.contrib.contenttypes.models import ContentType
 from django.db.models import Subquery
 from taskbadger.celery import Task as TaskbadgerTask
 
-from apps.channels.clients.connect_client import ConnectClient
+from apps.channels.clients.connect_client import CommCareConnectClient
 from apps.channels.models import ChannelPlatform, ExperimentChannel
 from apps.experiments.models import Experiment, ParticipantData
 
@@ -24,19 +24,19 @@ def setup_connect_channels_for_bots(self, connect_id: UUID, experiment_data_map:
     experiment_ids = list(experiment_data_map.keys())
     participant_data_ids = list(experiment_data_map.values())
     connect_specific_data = ParticipantData.objects.filter(
-        id__in=participant_data_ids, participant__platform=ChannelPlatform.CONNECT_MESSAGING
+        id__in=participant_data_ids, participant__platform=ChannelPlatform.COMMCARE_CONNECT
     ).values_list("id", flat=True)
 
     # Only create channels for experiments that are using the ConnectMessaging channel
     experiments_using_connect = ExperimentChannel.objects.filter(
-        platform=ChannelPlatform.CONNECT_MESSAGING,
+        platform=ChannelPlatform.COMMCARE_CONNECT,
         experiment__id__in=experiment_ids,
     ).values_list("experiment_id", flat=True)
 
     participant_data = (
         ParticipantData.objects.filter(
             id__in=Subquery(connect_specific_data),
-            participant__platform=ChannelPlatform.CONNECT_MESSAGING,
+            participant__platform=ChannelPlatform.COMMCARE_CONNECT,
             object_id__in=Subquery(experiments_using_connect),
             content_type=ContentType.objects.get_for_model(Experiment),
         )
@@ -44,7 +44,7 @@ def setup_connect_channels_for_bots(self, connect_id: UUID, experiment_data_map:
         .all()
     )
 
-    connect_client = ConnectClient()
+    connect_client = CommCareConnectClient()
 
     for participant_datum in participant_data:
         try:

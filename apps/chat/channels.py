@@ -14,7 +14,7 @@ from telebot import TeleBot
 from telebot.util import antiflood, smart_split
 
 from apps.channels import audio
-from apps.channels.clients.connect_client import ConnectClient
+from apps.channels.clients.connect_client import CommCareConnectClient
 from apps.channels.models import ChannelPlatform, ExperimentChannel
 from apps.chat.bots import get_bot
 from apps.chat.exceptions import (
@@ -201,7 +201,7 @@ class ChannelBase(ABC):
             channel_cls = SureAdhereChannel
         elif platform == "slack":
             channel_cls = SlackChannel
-        elif platform == "connect_messaging":
+        elif platform == "commcare_connect":
             channel_cls = ConnectMessagingChannel
         else:
             raise Exception(f"Unsupported platform type {platform}")
@@ -784,7 +784,7 @@ class ConnectMessagingChannel(ChannelBase):
         experiment_session: ExperimentSession | None = None,
     ):
         super().__init__(experiment, experiment_channel, experiment_session)
-        self.client = ConnectClient()
+        self.client = CommCareConnectClient()
 
     def send_text_to_user(self, text: str):
         """
