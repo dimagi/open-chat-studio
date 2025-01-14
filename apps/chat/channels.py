@@ -117,6 +117,7 @@ class ChannelBase(ABC):
         self.message = None
         self._user_query = None
         self.bot = get_bot(experiment_session, experiment=experiment) if experiment_session else None
+        self._participant_identifier = experiment_session.participant.identifier if experiment_session else None
 
     @classmethod
     def start_new_session(
@@ -145,9 +146,15 @@ class ChannelBase(ABC):
 
     @property
     def participant_identifier(self) -> str:
+        if self._participant_identifier:
+            return self._participant_identifier
+
         if self.experiment_session and self.experiment_session.participant.identifier:
-            return self.experiment_session.participant.identifier
-        return self.message.participant_id
+            self._participant_identifier = self.experiment_session.participant.identifier
+        elif self.message:
+            self._participant_identifier = self.message.participant_id
+
+        return self._participant_identifier
 
     @property
     def participant_user(self):
@@ -184,10 +191,7 @@ class ChannelBase(ABC):
         pass
 
     @staticmethod
-    def from_experiment_session(experiment_session: ExperimentSession) -> "ChannelBase":
-        """Given an `experiment_session` instance, returns the correct ChannelBase subclass to use"""
-        platform = experiment_session.experiment_channel.platform
-
+    def get_channel_class_for_platform(platform: ChannelPlatform) -> "ChannelBase":
         if platform == "telegram":
             channel_cls = TelegramChannel
         elif platform == "web":
@@ -206,6 +210,12 @@ class ChannelBase(ABC):
             channel_cls = ConnectMessagingChannel
         else:
             raise Exception(f"Unsupported platform type {platform}")
+        return channel_cls
+
+    @staticmethod
+    def from_experiment_session(experiment_session: ExperimentSession) -> "ChannelBase":
+        """Given an `experiment_session` instance, returns the correct ChannelBase subclass to use"""
+        channel_cls = ChannelBase.get_channel_class_for_platform(experiment_session.experiment_channel.platform)
         return channel_cls(
             experiment_session.experiment,
             experiment_channel=experiment_session.experiment_channel,
@@ -464,6 +474,24 @@ class ChannelBase(ABC):
                 # to the channel sessions when removing this code
                 self.experiment_session.experiment_channel = self.experiment_channel
                 self.experiment_session.save()
+
+    def ensure_session_exists_for_participant(self, identifier: str):
+        """
+        Ensures an experiment session exists for the participant specied with `identifier`. This is useful for creating
+        a session outside of the normal flow where a participant initiates the interaction and where we'll have the
+        participant identifier from the incoming messasge. When the bot initiates the conversation, this is not true
+        anymore, so we'll need to get the identifier from the params.
+
+        Raises:
+            ChannelException when there is an existing session, but with another participant.
+        """
+        if self.participant_identifier:
+            if self.participant_identifier != identifier:
+                raise ChannelException("Participant identifier does not match the existing one")
+        else:
+            self._participant_identifier = identifier
+
+        self._ensure_sessions_exists()
 
     def _get_latest_session(self):
         return (
