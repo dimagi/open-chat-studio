@@ -56,7 +56,7 @@ def setup_connect_channels_for_bots(self, connect_id: UUID, experiment_data_map:
 
 
 @shared_task(ignore_result=True)
-def trigger_bot_message_task(self, data):
+def trigger_bot_message_task(data):
     """
     Trigger a bot message for a participant on a specific platform using the prompt from the given data.
     """
