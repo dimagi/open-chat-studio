@@ -158,7 +158,8 @@ def handle_api_message(
     return channel.new_user_message(message)
 
 
-def handle_connect_messaging_message(payload: NewMessagePayload):
+@shared_task(bind=True, base=TaskbadgerTask, ignore_result=True)
+def handle_commcare_connect_message(payload: NewMessagePayload):
     connect_channel_id = payload.get("channel_id")
 
     try:

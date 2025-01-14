@@ -131,5 +131,5 @@ def new_api_message(request, experiment_id: uuid):
 @csrf_exempt
 @verify_hmac
 def new_connect_message(request: HttpRequest):
-    tasks.handle_connect_messaging_message.delay(json.loads(request.body))
+    tasks.handle_commcare_connect_message.delay(json.loads(request.body))
     return HttpResponse()

@@ -7,7 +7,7 @@ import pytest
 
 from apps.channels.clients.connect_client import CommCareConnectClient, Message, NewMessagePayload
 from apps.channels.models import ChannelPlatform
-from apps.channels.tasks import handle_connect_messaging_message
+from apps.channels.tasks import handle_commcare_connect_message
 from apps.experiments.models import ParticipantData
 from apps.utils.factories.channels import ExperimentChannelFactory
 from apps.utils.factories.experiment import ParticipantFactory
@@ -64,7 +64,7 @@ class TestHandleConnectMessageTask:
         channel_id, _, _, participant_data, payload = _setup(experiment)
         participant_data.delete()
 
-        handle_connect_messaging_message(payload)
+        handle_commcare_connect_message(payload)
         channel_instance.new_user_message.assert_not_called()
         assert caplog.messages[0] == f"No participant data found for channel_id: {channel_id}"
 
@@ -74,7 +74,7 @@ class TestHandleConnectMessageTask:
         channel_id, _, experiment_channel, _, payload = _setup(experiment)
         experiment_channel.delete()
 
-        handle_connect_messaging_message(payload)
+        handle_commcare_connect_message(payload)
         channel_instance.new_user_message.assert_not_called()
         assert caplog.messages[0] == f"No experiment channel found for participant channel_id: {channel_id}"
 
@@ -83,7 +83,7 @@ class TestHandleConnectMessageTask:
         channel_instance = CommCareConnectChannelMock.return_value
         _, _, _, _, payload = _setup(experiment, message_spec={2: "I need to ask something", 1: "Hi bot"})
 
-        handle_connect_messaging_message(payload)
+        handle_commcare_connect_message(payload)
         base_message = channel_instance.new_user_message.call_args[0][0]
         assert base_message.message_text == "Hi bot\n\nI need to ask something"
 
@@ -95,7 +95,7 @@ class TestHandleConnectMessageTask:
 
         with patch("apps.chat.channels.CommCareConnectClient") as ConnectClientMock:
             client_mock = ConnectClientMock.return_value
-            handle_connect_messaging_message(payload)
+            handle_commcare_connect_message(payload)
             assert client_mock.send_message_to_user.call_count == 1
             call_kwargs = client_mock.send_message_to_user.call_args[1]
             assert call_kwargs["channel_id"] == commcare_connect_channel_id
