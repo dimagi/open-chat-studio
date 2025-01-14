@@ -53,7 +53,7 @@ def requirements(c: Context, upgrade_all=False, upgrade_package=None):
             return
 
         if _confirm("Do you want to apply the changes?", _exit=False):
-            c.run("pip install -r pyproject.yml", echo=True, pty=True)
+            c.run("uv pip install -r pyproject.yml", echo=True, pty=True)
 
 
 @task
