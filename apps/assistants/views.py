@@ -219,7 +219,9 @@ class LocalDeleteOpenAiAssistant(LoginAndTeamRequiredMixin, View, PermissionRequ
                     map(
                         str,
                         OpenAiAssistant.objects.filter(
-                            Q(id=assistant.id) | Q(working_version__id=assistant.id)
+                            Q(id=assistant.id)
+                            | Q(working_version__id=assistant.id)
+                            & (Q(is_working_version=True) | Q(is_default_version=True))
                         ).values_list("id", flat=True),
                     )
                 )
