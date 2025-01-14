@@ -359,6 +359,7 @@ def generate_key(request: Request):
 @require_POST
 @verify_hmac
 def callback(request: Request):
+    """This callback endpoint is called by commcare connect when the message is delivered to the user"""
     # Not sure what to do with this, so just return
     return HttpResponse()
 
