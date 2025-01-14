@@ -457,7 +457,7 @@ def trigger_bot_message(request):
             {"detail": f"Experiment cannot send messages on the {platform} channel"}, status=status.HTTP_404_NOT_FOUND
         )
 
-    if not participant_data.system_metadata.get("consent", False):
+    if platform == ChannelPlatform.COMMCARE_CONNECT and participant_data.system_metadata.get("consent", False) is False:
         return Response({"detail": "User has not given consent"}, status=status.HTTP_400_BAD_REQUEST)
 
     trigger_bot_message_task.delay(serializer.data)
