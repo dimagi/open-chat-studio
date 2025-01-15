@@ -118,6 +118,7 @@ class ChannelBase(ABC):
         self._user_query = None
         self.bot = get_bot(experiment_session, experiment=experiment) if experiment_session else None
         self._participant_identifier = experiment_session.participant.identifier if experiment_session else None
+        self._is_user_message = False
 
     @classmethod
     def start_new_session(
@@ -246,6 +247,7 @@ class ChannelBase(ABC):
         """Handles the message coming from the user. Call this to send bot messages to the user.
         The `message` here will probably be some object, depending on the channel being used.
         """
+        self._is_user_message = True
         try:
             return self._new_user_message(message)
         except GenerationCancelled:
@@ -460,7 +462,7 @@ class ChannelBase(ABC):
 
         if not self.experiment_session:
             self._create_new_experiment_session()
-        else:
+        elif self._is_user_message:
             if self._is_reset_conversation_request() and self.experiment_session.user_already_engaged():
                 self._reset_session()
             if not self.experiment_session.experiment_channel:
@@ -815,6 +817,8 @@ class CommCareConnectChannel(ChannelBase):
         self.client = CommCareConnectClient()
 
     def send_text_to_user(self, text: str):
+        if self.participant_data.system_metadata.get("consent", False) is False:
+            raise ChannelException("Participant has not given consent to chat")
         self.client.send_message_to_user(
             channel_id=self.connect_channel_id, message=text, encryption_key=self.encryption_key
         )

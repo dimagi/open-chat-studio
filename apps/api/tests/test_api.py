@@ -528,3 +528,12 @@ def test_generate_bot_message_and_send(ConnectClient, get_llm_service, experimen
     first_message = session.chat.messages.first()
     assert first_message.message_type == "ai"
     assert first_message.content == "Time to take a break an brew some coffee"
+
+    # Call it a second time to make sure the session is reused
+    response = client.post(url, json.dumps(data), content_type="application/json")
+    assert response.status_code == 200
+    session = ExperimentSession.objects.get(participant=participant_data.participant, experiment=experiment)
+    assert session.chat.messages.count() == 2
+    last_message = session.chat.messages.last()
+    assert last_message.message_type == "ai"
+    assert last_message.content == "Time to take a break an brew some coffee"
