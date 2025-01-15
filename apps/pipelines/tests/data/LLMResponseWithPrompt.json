@@ -1,5 +1,5 @@
 {
-  "description": "Calls an LLM with a prompt",
+  "description": "Uses and LLM to respond to the input.",
   "properties": {
     "llm_provider_id": {
       "title": "LLM Model",
