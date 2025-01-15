@@ -30,7 +30,6 @@ export default function Page() {
     <div className="flex h-full overflow-hidden">
       <div className="flex flex-1">
         <div className="h-full w-full">
-          <div className="grid grid-cols-2">
             <div className="flex gap-2">
               {editingName ? (
                 <>
@@ -69,7 +68,6 @@ export default function Page() {
                 </div>
               )}
             </div>
-          </div>
           <div id="react-flow-id" className="relative h-full w-full">
             <Pipeline />
           </div>
