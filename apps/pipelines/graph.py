@@ -1,4 +1,4 @@
-from collections import defaultdict
+from collections import Counter, defaultdict
 from functools import cached_property, partial
 from typing import Self
 
@@ -104,6 +104,7 @@ class PipelineGraph(pydantic.BaseModel):
             raise PipelineBuildError("There are no nodes in the graph")
 
         self._validate_start_end_nodes()
+        self._validate_no_parallel_nodes()
         if self._check_for_cycles():
             raise PipelineBuildError("A cycle was detected")
 
@@ -116,9 +117,39 @@ class PipelineGraph(pydantic.BaseModel):
         self._add_nodes_to_graph(state_graph, reachable_nodes)
         self._add_edges_to_graph(state_graph, reachable_nodes)
 
-        compiled_graph = state_graph.compile()
-        # compiled_graph.get_graph().print_ascii()
+        try:
+            compiled_graph = state_graph.compile()
+        except ValueError as e:
+            raise PipelineBuildError(str(e))
         return compiled_graph
+
+    def _validate_no_parallel_nodes(self):
+        edges_by_target = defaultdict(list)
+        edges_by_source = defaultdict(list)
+        for edge in self.edges:
+            edges_by_target[edge.target].append(edge)
+            edges_by_source[edge.source].append(edge)
+
+        for source, edges in edges_by_source.items():
+            handles = Counter(edge.sourceHandle for edge in edges)
+            handle, count = handles.most_common(1)[0]
+            if count > 1:
+                edge_ids = [edge.id for edge in edges if edge.sourceHandle == handle]
+                raise PipelineBuildError(
+                    "Multiple edges connected to the same output", node_id=source, edge_ids=edge_ids
+                )
+
+        for target, edges in edges_by_target.items():
+            if target == self.end_node.id:
+                # It is expected that the end node could have multiple incoming edges
+                continue
+
+            if len(edges) > 1 and not all(edge.is_conditional() for edge in edges):
+                raise PipelineBuildError(
+                    "Multiple unconditional edges connected to the same input",
+                    node_id=target,
+                    edge_ids=[edge.id for edge in edges],
+                )
 
     def _check_for_cycles(self):
         """Detect cycles in a directed graph."""
@@ -162,7 +193,8 @@ class PipelineGraph(pydantic.BaseModel):
         if self.end_node not in nodes:
             raise PipelineBuildError(
                 f"{EndNode.model_config['json_schema_extra'].label} node is not reachable "
-                f"from {StartNode.model_config['json_schema_extra'].label} node"
+                f"from {StartNode.model_config['json_schema_extra'].label} node",
+                node_id=self.end_node.id,
             )
 
         for node in nodes:

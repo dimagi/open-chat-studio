@@ -71,10 +71,23 @@ const usePipelineManagerStore = create<PipelineManagerStoreType>((set, get) => (
       });
     });
   },
-  getFieldError: (nodeId: string, fieldName: string) => {
-    const nodeError = get().errors[nodeId];
-    return nodeError ? nodeError[fieldName] : "";
+  nodeHasErrors: (nodeId: string) => {
+    return !!get().errors["node"] && !!get().errors["node"]![nodeId];
   },
+  getNodeFieldError: (nodeId: string, fieldName: string) => {
+    const errors = get().errors;
+    if (!errors["node"]) {
+      return "";
+    }
+    const nodeErrors = errors["node"][nodeId];
+    return nodeErrors ? nodeErrors[fieldName] : "";
+  },
+  edgeHasErrors: (edgeId: string) => {
+    return !!get().errors["edge"] && get().errors["edge"]!.includes(edgeId);
+  },
+  getPipelineError: () => {
+    return get().errors["pipeline"];
+  }
 }));
 
 export default usePipelineManagerStore;

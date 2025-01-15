@@ -12,7 +12,7 @@ export default function Page() {
   const savePipeline = usePipelineManagerStore((state) => state.savePipeline);
   const dirty = usePipelineManagerStore((state) => state.dirty);
   const isSaving = usePipelineManagerStore((state) => state.isSaving);
-  const getFieldError = usePipelineManagerStore((state) => state.getFieldError);
+  const error = usePipelineManagerStore((state) => state.getPipelineError());
   const [name, setName] = useState(currentPipeline?.name);
   const [editingName, setEditingName] = useState(false);
   const handleNameChange = (event: ChangeEvent<HTMLInputElement>) => {
@@ -25,7 +25,6 @@ export default function Page() {
       savePipeline(updatedPipeline).then(() => setEditingName(false));
     }
   };
-  const error = getFieldError("_pipeline_", "root");
   return (
     <div className="flex h-full overflow-hidden">
       <div className="flex flex-1">

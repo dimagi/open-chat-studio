@@ -143,13 +143,15 @@ class Pipeline(BaseTeamModel, VersionsMixin):
                 node_class.model_validate(node.params)
             except pydantic.ValidationError as e:
                 errors[node.flow_id] = {err["loc"][0]: err["msg"] for err in e.errors()}
+        if errors:
+            return {"node": errors}
 
-        if not errors:
-            try:
-                PipelineGraph.build_runnable_from_pipeline(self)
-            except PipelineBuildError as e:
-                errors["_pipeline_"] = {"root": str(e)}
-        return errors
+        try:
+            PipelineGraph.build_runnable_from_pipeline(self)
+        except PipelineBuildError as e:
+            return e.to_json()
+
+        return {}
 
     @cached_property
     def flow_data(self) -> dict:
