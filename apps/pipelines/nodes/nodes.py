@@ -175,7 +175,7 @@ class HistoryMixin(LLMResponseMixin):
         return message
 
 
-@deprecated_node(message="Use the 'LLM response with prompt' node instead.")
+@deprecated_node(message="Use the 'LLM' node instead.")
 class LLMResponse(PipelineNode, LLMResponseMixin):
     """Calls an LLM with the given input"""
 
@@ -188,9 +188,9 @@ class LLMResponse(PipelineNode, LLMResponseMixin):
 
 
 class LLMResponseWithPrompt(LLMResponse, HistoryMixin):
-    """Calls an LLM with a prompt"""
+    """Uses and LLM to respond to the input."""
 
-    model_config = ConfigDict(json_schema_extra=NodeSchema(label="LLM response with prompt"))
+    model_config = ConfigDict(json_schema_extra=NodeSchema(label="LLM"))
 
     source_material_id: int | None = Field(
         None, json_schema_extra=UiSchema(widget=Widgets.select, options_source=OptionsSource.source_material)

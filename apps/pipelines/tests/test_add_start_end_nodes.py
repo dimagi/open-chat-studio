@@ -114,7 +114,7 @@ def test_sentry_6107296412(team):
                     "data": {
                         "id": "LLMResponseWithPrompt-efcB5",
                         "type": "LLMResponseWithPrompt",
-                        "label": "LLM response with prompt",
+                        "label": "LLM",
                         "params": {},
                         "inputParams": [
                             {"name": "llm_provider_id", "type": "LlmProviderId", "default": None},
@@ -142,7 +142,7 @@ def test_sentry_6107296412(team):
     Node.objects.create(
         pipeline=pipeline,
         flow_id="LLMResponseWithPrompt-efcB5",
-        label="LLM response with prompt",
+        label="LLM",
         type="LLMResponseWithPrompt",
         params={},
     )

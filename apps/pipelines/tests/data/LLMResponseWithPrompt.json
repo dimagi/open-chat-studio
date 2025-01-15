@@ -87,5 +87,5 @@
   "ui:can_delete": true,
   "ui:deprecated": false,
   "ui:flow_node_type": "pipelineNode",
-  "ui:label": "LLM response with prompt"
+  "ui:label": "LLM"
 }

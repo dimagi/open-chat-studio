@@ -29,7 +29,7 @@
   "ui:can_add": false,
   "ui:can_delete": true,
   "ui:deprecated": true,
-  "ui:deprecation_message": "Use the 'LLM response with prompt' node instead.",
+  "ui:deprecation_message": "Use the 'LLM' node instead.",
   "ui:flow_node_type": "pipelineNode",
   "ui:label": "LLM response"
 }
