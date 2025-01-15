@@ -167,6 +167,7 @@ class NodeSchema(BaseModel):
     flow_node_type: Literal["pipelineNode", "startNode", "endNode"] = "pipelineNode"
     can_delete: bool = None
     can_add: bool = None
+    deprecated: bool = False
 
     @model_validator(mode="after")
     def update_metadata_fields(self) -> Self:
@@ -175,6 +176,9 @@ class NodeSchema(BaseModel):
             self.can_delete = is_pipeline_node
         if self.can_add is None:
             self.can_add = is_pipeline_node
+
+        if self.deprecated:
+            self.can_add = False
         return self
 
     def __call__(self, schema: JsonDict):
@@ -182,3 +186,12 @@ class NodeSchema(BaseModel):
         schema["ui:flow_node_type"] = self.flow_node_type
         schema["ui:can_delete"] = self.can_delete
         schema["ui:can_add"] = self.can_add
+        schema["ui:deprecated"] = self.deprecated
+
+
+def deprecated_node(cls):
+    """Class decorator for deprecating a node"""
+    schema = cls.model_config["json_schema_extra"]
+    schema.deprecated = True
+    schema.can_add = False
+    return cls

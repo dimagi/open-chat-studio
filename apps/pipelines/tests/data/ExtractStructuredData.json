@@ -35,6 +35,7 @@
   "type": "object",
   "ui:can_add": true,
   "ui:can_delete": true,
+  "ui:deprecated": false,
   "ui:flow_node_type": "pipelineNode",
   "ui:label": "Extract Structured Data"
 }

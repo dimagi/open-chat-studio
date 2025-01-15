@@ -27,7 +27,15 @@ from apps.chat.models import ChatMessageType
 from apps.experiments.models import ExperimentSession, ParticipantData
 from apps.pipelines.exceptions import PipelineNodeBuildError, PipelineNodeRunError
 from apps.pipelines.models import Node, PipelineChatHistory, PipelineChatHistoryTypes
-from apps.pipelines.nodes.base import NodeSchema, OptionsSource, PipelineNode, PipelineState, UiSchema, Widgets
+from apps.pipelines.nodes.base import (
+    NodeSchema,
+    OptionsSource,
+    PipelineNode,
+    PipelineState,
+    UiSchema,
+    Widgets,
+    deprecated_node,
+)
 from apps.pipelines.tasks import send_email_from_pipeline
 from apps.service_providers.exceptions import ServiceProviderConfigError
 from apps.service_providers.llm_service.adapters import AssistantAdapter, ChatAdapter
@@ -167,10 +175,11 @@ class HistoryMixin(LLMResponseMixin):
         return message
 
 
+@deprecated_node
 class LLMResponse(PipelineNode, LLMResponseMixin):
     """Calls an LLM with the given input"""
 
-    model_config = ConfigDict(json_schema_extra=NodeSchema(label="LLM response", can_add=False))
+    model_config = ConfigDict(json_schema_extra=NodeSchema(label="LLM response"))
 
     def _process(self, input, node_id: str, **kwargs) -> PipelineState:
         llm = self.get_chat_model()
@@ -299,10 +308,11 @@ class EndNode(Passthrough):
     model_config = ConfigDict(json_schema_extra=NodeSchema(label="End", flow_node_type="endNode"))
 
 
+@deprecated_node
 class BooleanNode(Passthrough):
     """Branches based whether the input matches a certain value"""
 
-    model_config = ConfigDict(json_schema_extra=NodeSchema(label="Conditional Node", can_add=False))
+    model_config = ConfigDict(json_schema_extra=NodeSchema(label="Conditional Node"))
 
     input_equals: str
 
