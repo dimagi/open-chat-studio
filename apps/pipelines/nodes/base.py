@@ -168,6 +168,7 @@ class NodeSchema(BaseModel):
     can_delete: bool = None
     can_add: bool = None
     deprecated: bool = False
+    deprecation_message: str = None
 
     @model_validator(mode="after")
     def update_metadata_fields(self) -> Self:
@@ -187,11 +188,21 @@ class NodeSchema(BaseModel):
         schema["ui:can_delete"] = self.can_delete
         schema["ui:can_add"] = self.can_add
         schema["ui:deprecated"] = self.deprecated
+        if self.deprecated and self.deprecation_message:
+            schema["ui:deprecation_message"] = self.deprecation_message
 
 
-def deprecated_node(cls):
+def deprecated_node(cls=None, *, message=None):
     """Class decorator for deprecating a node"""
-    schema = cls.model_config["json_schema_extra"]
-    schema.deprecated = True
-    schema.can_add = False
-    return cls
+
+    def _inner(cls):
+        schema = cls.model_config["json_schema_extra"]
+        schema.deprecated = True
+        schema.deprecation_message = message
+        schema.can_add = False
+        return cls
+
+    if cls is None:
+        return _inner
+
+    return _inner(cls)

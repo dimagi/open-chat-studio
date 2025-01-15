@@ -175,7 +175,7 @@ class HistoryMixin(LLMResponseMixin):
         return message
 
 
-@deprecated_node
+@deprecated_node(message="Use the 'LLM response with prompt' node instead.")
 class LLMResponse(PipelineNode, LLMResponseMixin):
     """Calls an LLM with the given input"""
 
@@ -308,7 +308,7 @@ class EndNode(Passthrough):
     model_config = ConfigDict(json_schema_extra=NodeSchema(label="End", flow_node_type="endNode"))
 
 
-@deprecated_node
+@deprecated_node(message="Use the 'Router' node instead.")
 class BooleanNode(Passthrough):
     """Branches based whether the input matches a certain value"""
 
