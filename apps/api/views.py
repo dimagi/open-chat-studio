@@ -448,7 +448,7 @@ def trigger_bot_message(request):
             content_type=ContentType.objects.get_for_model(Experiment),
         )
 
-        ExperimentChannel.objects.prefetch_related("experiment").get(platform=platform, experiment=experiment)
+        ExperimentChannel.objects.get(platform=platform, experiment=experiment)
     except ParticipantData.DoesNotExist:
         return Response({"detail": "Participant not found"}, status=status.HTTP_404_NOT_FOUND)
     except ExperimentChannel.DoesNotExist:
