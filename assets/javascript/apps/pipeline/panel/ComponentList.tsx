@@ -14,7 +14,7 @@ type ComponentListParams = {
 export default function ComponentList({isOpen, setIsOpen}: ComponentListParams) {
   const addNode = usePipelineStore((state) => state.addNode);
   const {defaultValues, nodeSchemas} = getCachedData();
-  const schemaList = Array.from(nodeSchemas.values())
+  const schemaList = Array.from(nodeSchemas.values()).sort((a, b) => a["ui:label"].localeCompare(b["ui:label"]));
 
   function getDefaultParamValues(schema: any): Record<string, any> {
     const defaults: Record<string, any> = {};
