@@ -374,9 +374,11 @@ class BaseExperimentView(LoginAndTeamRequiredMixin, PermissionRequiredMixin):
         team_participant_identifiers = list(
             self.request.team.participant_set.filter(user=None).values_list("identifier", flat=True)
         )
+        disable_version_button = False
         if self.object:
             team_participant_identifiers.extend(self.object.participant_allowlist)
             team_participant_identifiers = set(team_participant_identifiers)
+            disable_version_button = self.object.create_version_task_id
 
         return {
             **{
@@ -386,7 +388,7 @@ class BaseExperimentView(LoginAndTeamRequiredMixin, PermissionRequiredMixin):
                 "experiment_type": experiment_type,
                 "available_tools": AgentTools.choices,
                 "team_participant_identifiers": team_participant_identifiers,
-                "disable_version_button": self.object.create_version_task_id,
+                "disable_version_button": disable_version_button,
             },
             **_get_voice_provider_alpine_context(self.request),
         }
