@@ -46,14 +46,14 @@ def _setup(experiment, message_spec: dict | None = None) -> tuple:
     connect_client = CommCareConnectClient()
     messages = []
     for timestamp, message in message_spec.items():
-        ciphertext_bytes, tag_bytes, nonce_bytes = connect_client._encrypt_message(key=encryption_key, message=message)
+        ciphertext, tag, nonce = connect_client._encrypt_message(key=encryption_key, message=message)
         messages.append(
             Message(
                 timestamp=timestamp,
                 message_id=str(uuid4()),
-                ciphertext=base64.b64encode(ciphertext_bytes).decode(),
-                tag=base64.b64encode(tag_bytes).decode(),
-                nonce=base64.b64encode(nonce_bytes).decode(),
+                ciphertext=ciphertext,
+                tag=tag,
+                nonce=nonce,
             )
         )
 
