@@ -144,7 +144,7 @@ def new_connect_message(request: HttpRequest):
             system_metadata__commcare_connect_channel_id=connect_channel_id,
         )
 
-        channel = ExperimentChannel.objects.prefetch_related("experiment").get(
+        channel = ExperimentChannel.objects.get(
             platform=ChannelPlatform.COMMCARE_CONNECT, experiment__id=participant_data.object_id
         )
     except ParticipantData.DoesNotExist:
