@@ -55,11 +55,10 @@ class CommCareConnectClient:
         """
         decrypted_messages = []
         for message in messages:
-            nonce = base64.b64decode(message["nonce"])
-            tag = base64.b64decode(message["tag"])
-            ciphertext = base64.b64decode(message["ciphertext"])
-            cipher = AES.new(key, AES.MODE_GCM, nonce=nonce)
-            decrypted_messages.append(cipher.decrypt_and_verify(ciphertext, tag).decode("utf-8"))
+            message_text = self._decrypt_message(
+                key, ciphertext=message["ciphertext"], tag=message["tag"], nonce=message["nonce"]
+            )
+            decrypted_messages.append(message_text)
 
         return decrypted_messages
 
@@ -71,14 +70,14 @@ class CommCareConnectClient:
         before_sleep=before_sleep_log(logger, logging.INFO),
     )
     def send_message_to_user(self, channel_id: str, message: str, encryption_key: bytes):
-        ciphertext_bytes, tag_bytes, nonce_bytes = self._encrypt_message(key=encryption_key, message=message)
+        ciphertext, tag, nonce = self._encrypt_message(key=encryption_key, message=message)
 
         payload = {
             "channel": channel_id,
             "content": {
-                "ciphertext": base64.b64encode(ciphertext_bytes).decode(),
-                "tag": base64.b64encode(tag_bytes).decode(),
-                "nonce": base64.b64encode(nonce_bytes).decode(),
+                "ciphertext": ciphertext,
+                "tag": tag,
+                "nonce": nonce,
             },
             "message_id": str(uuid4()),
         }
@@ -87,8 +86,17 @@ class CommCareConnectClient:
         response = self.client.post(url, json=payload)
         response.raise_for_status()
 
-    def _encrypt_message(self, key: bytes, message: str) -> tuple[bytes, bytes, bytes]:
+    def _encrypt_message(self, key: bytes, message: str) -> tuple[str, str, str]:
         cipher = AES.new(key, AES.MODE_GCM)
-        ciphertext_bytes, tag_bytes = cipher.encrypt_and_digest(message.encode("utf-8"))
-        nonce = cipher.nonce
-        return ciphertext_bytes, tag_bytes, nonce
+        ciphertext_bytes, tag_bytes = cipher.encrypt_and_digest(message.encode())
+        ciphertext = base64.b64encode(ciphertext_bytes).decode()
+        tag = base64.b64encode(tag_bytes).decode()
+        nonce = base64.b64encode(cipher.nonce).decode()
+        return ciphertext, tag, nonce
+
+    def _decrypt_message(self, key: bytes, ciphertext: str, tag: str, nonce: str) -> str:
+        ciphertext = base64.b64decode(ciphertext)
+        tag = base64.b64decode(tag)
+        nonce = base64.b64decode(nonce)
+        cipher = AES.new(key, AES.MODE_GCM, nonce=nonce)
+        return cipher.decrypt_and_verify(ciphertext, tag).decode()

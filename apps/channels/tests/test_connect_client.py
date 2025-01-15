@@ -10,6 +10,13 @@ from apps.channels.clients.connect_client import CommCareConnectClient, NewMessa
 
 
 class TestConnectClient:
+    def test_encrypt_and_decrypt_message(self):
+        encryption_key = os.urandom(32)
+        connect_client = CommCareConnectClient()
+        msg = "this is a secret message"
+        result = connect_client._decrypt_message(encryption_key, *connect_client._encrypt_message(encryption_key, msg))
+        assert result == msg
+
     def test_decrypt_messages(self):
         encryption_key = os.urandom(32)
         cipher = AES.new(encryption_key, mode=AES.MODE_GCM)
@@ -28,18 +35,7 @@ class TestConnectClient:
         messages = connect_client.decrypt_messages(key=encryption_key, messages=[payload])
         assert messages[0] == "this is a secret message"
 
-    def test_encrypt_message(self):
-        encryption_key = os.urandom(32)
-        connect_client = CommCareConnectClient()
-        ciphertext, tag, nonce = connect_client._encrypt_message(key=encryption_key, message="this is a secret message")
-        assert isinstance(ciphertext, bytes)
-        assert isinstance(tag, bytes)
-        assert isinstance(nonce, bytes)
-
-        cipher = AES.new(encryption_key, AES.MODE_GCM, nonce=nonce)
-        assert cipher.decrypt_and_verify(ciphertext, tag).decode("utf-8") == "this is a secret message"
-
-    def test_send_message_to_user(self, httpx_mock):
+    def test_send_message_to_user_1(self, httpx_mock):
         httpx_mock.add_response(
             method="POST",
             url=f"{settings.COMMCARE_CONNECT_SERVER_URL}/messaging/send_fcm/",
