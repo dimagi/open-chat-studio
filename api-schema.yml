@@ -693,7 +693,7 @@ components:
         * `sureadhere` - SureAdhere
         * `api` - API
         * `slack` - Slack
-        * `commcare_connect` - Connect Messaging
+        * `commcare_connect` - CommCare Connect
     Team:
       type: object
       properties:

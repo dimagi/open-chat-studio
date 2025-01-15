@@ -13,6 +13,6 @@ class Migration(migrations.Migration):
         migrations.AlterField(
             model_name='experimentchannel',
             name='platform',
-            field=models.CharField(choices=[('telegram', 'Telegram'), ('web', 'Web'), ('whatsapp', 'WhatsApp'), ('facebook', 'Facebook'), ('sureadhere', 'SureAdhere'), ('api', 'API'), ('slack', 'Slack'), ('commcare_connect', 'Connect Messaging')], default='telegram', max_length=32),
+            field=models.CharField(choices=[('telegram', 'Telegram'), ('web', 'Web'), ('whatsapp', 'WhatsApp'), ('facebook', 'Facebook'), ('sureadhere', 'SureAdhere'), ('api', 'API'), ('slack', 'Slack'), ('commcare_connect', 'CommCare Connect')], default='telegram', max_length=32),
         ),
     ]

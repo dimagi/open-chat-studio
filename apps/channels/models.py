@@ -30,7 +30,7 @@ class ChannelPlatform(models.TextChoices):
     SUREADHERE = "sureadhere", "SureAdhere"
     API = "api", "API"
     SLACK = "slack", "Slack"
-    COMMCARE_CONNECT = "commcare_connect", "Connect Messaging"
+    COMMCARE_CONNECT = "commcare_connect", "CommCare Connect"
 
     @classmethod
     def team_global_platforms(cls):
