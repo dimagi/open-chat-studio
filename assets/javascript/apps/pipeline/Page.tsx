@@ -30,44 +30,44 @@ export default function Page() {
     <div className="flex h-full overflow-hidden">
       <div className="flex flex-1">
         <div className="h-full w-full">
-            <div className="flex gap-2">
-              {editingName ? (
-                <>
-                  <input
-                    type="text"
-                    value={name}
-                    onChange={handleNameChange}
-                    className="input input-bordered input-sm"
-                    placeholder="Edit pipeline name"
-                  />
-                  <button className="btn btn-sm btn-primary" onClick={onClickSave}>
-                    <i className="fa fa-check"></i>
-                  </button>
-                </>
-              ) : (
-                <>
-                  <div className="text-lg font-bold">{name}</div>
-                  <button className="btn btn-sm btn-ghost" onClick={() => setEditingName(true)}>
-                    <i className="fa fa-pencil"></i>
-                  </button>
-                </>
-              )}
-              <div className="tooltip tooltip-right" data-tip={dirty ? (isSaving ? "Saving ..." : "Preparing to Save") : "Saved"}>
-                <button className="btn btn-sm btn-circle no-animation self-center">
-                  {dirty ?
-                    (isSaving ? <div className="loader loader-sm ml-2"></div> :
-                      <i className="fa fa-cloud-upload"></i>)
-                    : <i className="fa fa-check"></i>
-                  }
+          <div className="flex gap-2">
+            {editingName ? (
+              <>
+                <input
+                  type="text"
+                  value={name}
+                  onChange={handleNameChange}
+                  className="input input-bordered input-sm"
+                  placeholder="Edit pipeline name"
+                />
+                <button className="btn btn-sm btn-primary" onClick={onClickSave}>
+                  <i className="fa fa-check"></i>
                 </button>
-              </div>
-              {!isSaving && error && (
-                <div className="content-center">
-                  <i className="fa fa-exclamation-triangle text-red-500 mr-2"></i>
-                  <small className="text-red-500">{error}</small>
-                </div>
-              )}
+              </>
+            ) : (
+              <>
+                <div className="text-lg font-bold">{name}</div>
+                <button className="btn btn-sm btn-ghost" onClick={() => setEditingName(true)}>
+                  <i className="fa fa-pencil"></i>
+                </button>
+              </>
+            )}
+            <div className="tooltip tooltip-right" data-tip={dirty ? (isSaving ? "Saving ..." : "Preparing to Save") : "Saved"}>
+              <button className="btn btn-sm btn-circle no-animation self-center">
+                {dirty ?
+                  (isSaving ? <div className="loader loader-sm ml-2"></div> :
+                    <i className="fa fa-cloud-upload"></i>)
+                  : <i className="fa fa-check"></i>
+                }
+              </button>
             </div>
+            {!isSaving && error && (
+              <div className="content-center">
+                <i className="fa fa-exclamation-triangle text-red-500 mr-2"></i>
+                <small className="text-red-500">{error}</small>
+              </div>
+            )}
+          </div>
           <div id="react-flow-id" className="relative h-full w-full">
             <Pipeline />
           </div>
