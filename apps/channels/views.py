@@ -139,7 +139,7 @@ def new_connect_message(request: HttpRequest):
 
     connect_channel_id = serializer.data["channel_id"]
     try:
-        participant_data = ParticipantData.objects.prefetch_related("participant").get(
+        participant_data = ParticipantData.objects.get(
             content_type=ContentType.objects.get_for_model(Experiment),
             system_metadata__commcare_connect_channel_id=connect_channel_id,
         )
