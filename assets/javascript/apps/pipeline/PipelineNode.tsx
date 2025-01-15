@@ -68,7 +68,14 @@ export function PipelineNode(nodeProps: NodeProps<NodeData>) {
         </div>
       </NodeToolbar>
       <div className={nodeBorderClass(nodeErrors, selected)}>
-        <div className="m-1 text-lg font-bold text-center">{nodeSchema["ui:label"]}</div>
+        <div className="m-1 text-lg font-bold text-center">
+          {nodeSchema["ui:deprecated"] && (
+            <div className="mr-2 text-warning inline-block tooltip"
+                 data-tip="This node type has been deprecated and will be removed in future">
+              <i className="fa-solid fa-exclamation-triangle"></i></div>
+          )}
+          {nodeSchema["ui:label"]}
+        </div>
 
         <NodeInput />
         <div className="px-4">
