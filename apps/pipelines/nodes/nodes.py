@@ -170,7 +170,7 @@ class HistoryMixin(LLMResponseMixin):
 class LLMResponse(PipelineNode, LLMResponseMixin):
     """Calls an LLM with the given input"""
 
-    model_config = ConfigDict(json_schema_extra=NodeSchema(label="LLM response"))
+    model_config = ConfigDict(json_schema_extra=NodeSchema(label="LLM response", can_add=False))
 
     def _process(self, input, node_id: str, **kwargs) -> PipelineState:
         llm = self.get_chat_model()
@@ -279,7 +279,7 @@ class SendEmail(PipelineNode):
 class Passthrough(PipelineNode):
     """Returns the input without modification"""
 
-    model_config = ConfigDict(json_schema_extra=NodeSchema(label="Do Nothing"))
+    model_config = ConfigDict(json_schema_extra=NodeSchema(label="Do Nothing", can_add=False))
 
     def _process(self, input, state: PipelineState, node_id: str) -> PipelineState:
         if self.logger:
@@ -302,7 +302,7 @@ class EndNode(Passthrough):
 class BooleanNode(Passthrough):
     """Branches based whether the input matches a certain value"""
 
-    model_config = ConfigDict(json_schema_extra=NodeSchema(label="Conditional Node"))
+    model_config = ConfigDict(json_schema_extra=NodeSchema(label="Conditional Node", can_add=False))
 
     input_equals: str
 
