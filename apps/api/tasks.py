@@ -66,9 +66,7 @@ def trigger_bot_message_task(data):
     identifier = data["identifier"]
 
     experiment = Experiment.objects.get(public_id=experiment_public_id)
-    experiment_channel = ExperimentChannel.objects.get(
-        platform=platform, experiment=experiment
-    )
+    experiment_channel = ExperimentChannel.objects.get(platform=platform, experiment=experiment)
 
     published_experiment = experiment.default_version
     ChannelClass = ChannelBase.get_channel_class_for_platform(platform)
