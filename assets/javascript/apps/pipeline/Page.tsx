@@ -12,6 +12,7 @@ export default function Page() {
   const savePipeline = usePipelineManagerStore((state) => state.savePipeline);
   const dirty = usePipelineManagerStore((state) => state.dirty);
   const isSaving = usePipelineManagerStore((state) => state.isSaving);
+  const getFieldError = usePipelineManagerStore((state) => state.getFieldError);
   const [name, setName] = useState(currentPipeline?.name);
   const [editingName, setEditingName] = useState(false);
   const handleNameChange = (event: ChangeEvent<HTMLInputElement>) => {
@@ -24,6 +25,7 @@ export default function Page() {
       savePipeline(updatedPipeline).then(() => setEditingName(false));
     }
   };
+  const error = getFieldError("_pipeline_", "root");
   return (
     <div className="flex h-full overflow-hidden">
       <div className="flex flex-1">
@@ -60,6 +62,12 @@ export default function Page() {
                   }
                 </button>
               </div>
+              {!isSaving && error && (
+                <div className="content-center">
+                  <i className="fa fa-exclamation-triangle text-red-500 mr-2"></i>
+                  <small className="text-red-500">{error}</small>
+                </div>
+              )}
             </div>
           </div>
           <div id="react-flow-id" className="relative h-full w-full">

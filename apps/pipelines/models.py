@@ -15,6 +15,7 @@ from apps.chat.models import ChatMessage, ChatMessageType
 from apps.custom_actions.form_utils import set_custom_actions
 from apps.custom_actions.mixins import CustomActionOperationMixin
 from apps.experiments.models import ExperimentSession, VersionsMixin, VersionsObjectManagerMixin
+from apps.pipelines.exceptions import PipelineBuildError
 from apps.pipelines.flow import Flow, FlowNode, FlowNodeData
 from apps.pipelines.logging import PipelineLoggingCallbackHandler
 from apps.pipelines.nodes.base import PipelineState
@@ -131,6 +132,7 @@ class Pipeline(BaseTeamModel, VersionsMixin):
 
     def validate(self) -> dict:
         """Validate the pipeline nodes and return a dictionary of errors"""
+        from apps.pipelines.graph import PipelineGraph
         from apps.pipelines.nodes import nodes as pipeline_nodes
 
         errors = {}
@@ -141,6 +143,12 @@ class Pipeline(BaseTeamModel, VersionsMixin):
                 node_class.model_validate(node.params)
             except pydantic.ValidationError as e:
                 errors[node.flow_id] = {err["loc"][0]: err["msg"] for err in e.errors()}
+
+        if not errors:
+            try:
+                PipelineGraph.build_runnable_from_pipeline(self)
+            except PipelineBuildError as e:
+                errors["_pipeline_"] = {"root": str(e)}
         return errors
 
     @cached_property
