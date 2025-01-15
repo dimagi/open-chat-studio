@@ -59,7 +59,7 @@ class OpenAiAssistantForm(forms.ModelForm):
             "x-model.fill": "builtinTools",
         }
         self.fields["instructions"].help_text = render_help_with_link(
-            INSTRUCTIONS_HELP_TEXT, "/concepts/prompt_variables/"
+            INSTRUCTIONS_HELP_TEXT, "concepts.prompt_variables"
         )
         initialize_form_for_custom_actions(request.team, self)
 

@@ -291,10 +291,8 @@ class ExperimentForm(forms.ModelForm):
         self.fields["synthetic_voice"].widget.template_name = "django/forms/widgets/select_dynamic.html"
         self.fields["llm_provider_model"].widget.template_name = "django/forms/widgets/select_dynamic.html"
 
-        self.fields["prompt_text"].help_text = render_help_with_link(
-            self.PROMPT_HELP_TEXT, "/concepts/prompt_variables/"
-        )
-        self.fields["type"].help_text = render_help_with_link("", "/concepts/experiment/")
+        self.fields["prompt_text"].help_text = render_help_with_link(self.PROMPT_HELP_TEXT, "concepts.prompt_variables")
+        self.fields["type"].help_text = render_help_with_link("", "concepts.experiments")
 
     def clean_participant_allowlist(self):
         cleaned_identifiers = []
