@@ -104,7 +104,7 @@ class ChannelPlatform(models.TextChoices):
             case self.SLACK:
                 return "slack_channel_id"
             case self.COMMCARE_CONNECT:
-                return "connect_id"
+                return "bot_name"
 
     @staticmethod
     def as_list(exclude: list["ChannelPlatform"]) -> list["ChannelPlatform"]:
