@@ -380,7 +380,9 @@ class TestConnectApis:
         connect_id = uuid.uuid4().hex
         commcare_connect_channel_id = uuid.uuid4().hex
         participant_data = _setup_participant_data(
-            experiment, connect_id=connect_id, commcare_connect_channel_id=commcare_connect_channel_id
+            experiment,
+            connect_id=connect_id,
+            system_metadata={"commcare_connect_channel_id": commcare_connect_channel_id},
         )
 
         httpx_mock.add_response(
@@ -398,7 +400,9 @@ class TestConnectApis:
         connect_id = uuid.uuid4().hex
         commcare_connect_channel_id = uuid.uuid4().hex
         _setup_participant_data(
-            experiment, connect_id=connect_id, commcare_connect_channel_id=commcare_connect_channel_id
+            experiment,
+            connect_id=connect_id,
+            system_metadata={"commcare_connect_channel_id": commcare_connect_channel_id},
         )
 
         httpx_mock.add_response(method="GET", url=settings.COMMCARE_CONNECT_GET_CONNECT_ID_URL, json={"sub": "garbage"})
@@ -417,7 +421,9 @@ class TestConnectApis:
         connect_id = uuid.uuid4().hex
         commcare_connect_channel_id = uuid.uuid4().hex
         participant_data = _setup_participant_data(
-            experiment, connect_id=connect_id, commcare_connect_channel_id=commcare_connect_channel_id
+            experiment,
+            connect_id=connect_id,
+            system_metadata={"commcare_connect_channel_id": commcare_connect_channel_id},
         )
 
         payload = {"channel_id": commcare_connect_channel_id, "consent": True}
@@ -466,7 +472,12 @@ class TestConnectApis:
         assert response.status_code == 401
 
 
-def _setup_participant_data(experiment, connect_id, commcare_connect_channel_id, encryption_key=None):
+def _setup_participant_data(
+    experiment,
+    connect_id,
+    system_metadata: dict,
+    encryption_key=None,
+):
     participant = ParticipantFactory(
         team=experiment.team, identifier=connect_id, platform=ChannelPlatform.COMMCARE_CONNECT
     )
@@ -474,7 +485,7 @@ def _setup_participant_data(experiment, connect_id, commcare_connect_channel_id,
         team=experiment.team,
         participant=participant,
         content_object=experiment,
-        system_metadata={"commcare_connect_channel_id": commcare_connect_channel_id},
+        system_metadata=system_metadata,
         encryption_key=encryption_key or "",
     )
 
@@ -499,11 +510,9 @@ def test_generate_bot_message_and_send(ConnectClient, get_llm_service, experimen
     participant_data = _setup_participant_data(
         experiment,
         connect_id=connect_id,
-        commcare_connect_channel_id=commcare_connect_channel_id,
+        system_metadata={"commcare_connect_channel_id": commcare_connect_channel_id, "consent": True},
         encryption_key=encryption_key,
     )
-    participant_data.system_metadata["consent"] = True
-    participant_data.save(update_fields=["system_metadata"])
     ExperimentChannelFactory(team=experiment.team, experiment=experiment, platform=ChannelPlatform.COMMCARE_CONNECT)
 
     assert (
