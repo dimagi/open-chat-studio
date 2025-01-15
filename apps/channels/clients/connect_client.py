@@ -85,10 +85,7 @@ class CommCareConnectClient:
 
         url = f"{self._base_url}/messaging/send_fcm/"
         response = self.client.post(url, json=payload)
-        if response.status_code == 403:
-            logger.info("User did not give consent to receive messages")
-        else:
-            response.raise_for_status()
+        response.raise_for_status()
 
     def _encrypt_message(self, key: bytes, message: str) -> tuple[bytes, bytes, bytes]:
         cipher = AES.new(key, AES.MODE_GCM)
