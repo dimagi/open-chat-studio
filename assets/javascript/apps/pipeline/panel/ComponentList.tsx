@@ -91,7 +91,7 @@ export default function ComponentList({isOpen, setIsOpen}: ComponentListParams) 
     setIsOpen(!isOpen);
   }
 
-  const components = schemaList.filter((schema) => schema["ui:flow_node_type"] === "pipelineNode").map((schema) => {
+  const components = schemaList.filter((schema) => schema["ui:can_add"]).map((schema) => {
     return (
       <Component
         key={schema.title}

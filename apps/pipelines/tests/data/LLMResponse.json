@@ -26,6 +26,8 @@
   ],
   "title": "LLMResponse",
   "type": "object",
+  "ui:can_add": true,
+  "ui:can_delete": true,
   "ui:flow_node_type": "pipelineNode",
   "ui:label": "LLM response"
 }

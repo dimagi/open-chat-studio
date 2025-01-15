@@ -3,6 +3,8 @@
   "properties": {},
   "title": "EndNode",
   "type": "object",
+  "ui:can_add": false,
+  "ui:can_delete": false,
   "ui:flow_node_type": "endNode",
   "ui:label": "End"
 }
