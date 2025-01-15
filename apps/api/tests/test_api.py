@@ -286,15 +286,18 @@ def _setup_channel_participant(experiment, identifier, channel_platform, system_
 
 @pytest.mark.django_db()
 @override_settings(CELERY_TASK_ALWAYS_EAGER=True)
-@patch("apps.api.tasks.CommCareConnectClient")
-def test_update_participant_data_and_setup_connect_channels(connect_client_mock):
+def test_update_participant_data_and_setup_connect_channels(httpx_mock):
     """
     Test that a connect channel is created for a participant where
     1. there isn't one set up already
     2. the experiment has a connect messaging channel linked
     """
-    client_instance_mock = connect_client_mock.return_value
-    client_instance_mock.create_channel.return_value = "channel_id_2"
+    created_connect_channel_id = str(uuid.uuid4())
+    httpx_mock.add_response(
+        method="POST",
+        url=f"{settings.COMMCARE_CONNECT_SERVER_URL}/messaging/create_channel",
+        json={"channel_id": created_connect_channel_id},
+    )
 
     team = TeamWithUsersFactory()
     experiment1 = ExperimentFactory(team=team)
@@ -355,13 +358,13 @@ def test_update_participant_data_and_setup_connect_channels(connect_client_mock)
 
     # Only one of the two experiments that the "connectid_2" participant belongs to has a connect messaging channel, so
     # we expect only one call to the Connect servers to have been made
-    assert client_instance_mock.create_channel.call_count == 1
-    call_kwargs = client_instance_mock.create_channel.call_args_list[0][1]
-    assert call_kwargs["connect_id"] == "connectid_2"
-    assert call_kwargs["channel_source"] == f"{experiment1.team}-{experiment1.name}"
+    request = httpx_mock.get_request()
+    request_data = json.loads(request.read())
+    request_data["connectid"] == "connectid_2"
+    request_data["channel_source"] == f"{experiment1.team}-{experiment1.name}"
     assert Participant.objects.filter(identifier="connectid_2").exists()
     data = ParticipantData.objects.get(participant__identifier="connectid_2", object_id=experiment1.id)
-    assert data.system_metadata["commcare_connect_channel_id"] == "channel_id_2"
+    assert data.system_metadata["commcare_connect_channel_id"] == created_connect_channel_id
 
 
 @pytest.mark.django_db()
