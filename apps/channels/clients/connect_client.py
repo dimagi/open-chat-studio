@@ -27,7 +27,7 @@ class NewMessagePayload(TypedDict):
 
 class CommCareConnectClient:
     def __init__(self):
-        self._base_url = settings.CONNECT_ID_SERVER_BASE_URL
+        self._base_url = settings.COMMCARE_CONNECT_SERVER_URL
         self.client = httpx.Client(
             auth=httpx.BasicAuth(settings.COMMCARE_CONNECT_SERVER_ID, settings.COMMCARE_CONNECT_SERVER_SECRET),
             timeout=10,

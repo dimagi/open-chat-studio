@@ -14,7 +14,6 @@ from django.test import override_settings
 from django.urls import reverse
 from django.utils import timezone
 
-from apps.api.views import VERIFY_CONNECT_ID_URL
 from apps.channels.models import ChannelPlatform
 from apps.experiments.models import ExperimentSession, Participant, ParticipantData
 from apps.teams.backends import EXPERIMENT_ADMIN_GROUP, add_user_to_team
@@ -381,7 +380,9 @@ class TestConnectApis:
             experiment, connect_id=connect_id, commcare_connect_channel_id=commcare_connect_channel_id
         )
 
-        httpx_mock.add_response(method="GET", url=VERIFY_CONNECT_ID_URL, json={"sub": connect_id})
+        httpx_mock.add_response(
+            method="GET", url=settings.COMMCARE_CONNECT_GET_CONNECT_ID_URL, json={"sub": connect_id}
+        )
         response = self._make_request(client=client, data={"channel_id": commcare_connect_channel_id})
 
         assert response.status_code == 200
@@ -397,13 +398,13 @@ class TestConnectApis:
             experiment, connect_id=connect_id, commcare_connect_channel_id=commcare_connect_channel_id
         )
 
-        httpx_mock.add_response(method="GET", url=VERIFY_CONNECT_ID_URL, json={"sub": "garbage"})
+        httpx_mock.add_response(method="GET", url=settings.COMMCARE_CONNECT_GET_CONNECT_ID_URL, json={"sub": "garbage"})
 
         response = self._make_request(client=client, data={"channel_id": commcare_connect_channel_id})
         assert response.status_code == 404
 
     def test_generate_key_fails_auth_at_connect(self, client, httpx_mock):
-        httpx_mock.add_response(method="GET", url=VERIFY_CONNECT_ID_URL, status_code=401)
+        httpx_mock.add_response(method="GET", url=settings.COMMCARE_CONNECT_GET_CONNECT_ID_URL, status_code=401)
 
         with pytest.raises(httpx.HTTPStatusError):
             self._make_request(client=client, data={})

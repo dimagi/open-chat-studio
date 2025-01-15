@@ -42,7 +42,7 @@ class TestConnectClient:
     def test_send_message_to_user(self, httpx_mock):
         httpx_mock.add_response(
             method="POST",
-            url=f"{settings.CONNECT_ID_SERVER_BASE_URL}/messaging/send_fcm/",
+            url=f"{settings.COMMCARE_CONNECT_SERVER_URL}/messaging/send_fcm/",
             json={"message_id": "765aec754eacf3221"},
             status_code=200,
         )

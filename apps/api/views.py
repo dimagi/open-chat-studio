@@ -4,6 +4,7 @@ import secrets
 import textwrap
 
 import httpx
+from django.conf import settings
 from django.contrib.auth.decorators import permission_required
 from django.contrib.contenttypes.models import ContentType
 from django.db import transaction
@@ -34,8 +35,6 @@ from apps.channels.models import ChannelPlatform, ExperimentChannel
 from apps.events.models import ScheduledMessage, TimePeriod
 from apps.experiments.models import Experiment, ExperimentSession, Participant, ParticipantData
 from apps.files.models import File
-
-VERIFY_CONNECT_ID_URL = "https://connectid.dimagi.com/o/userinfo"
 
 
 @extend_schema_view(
@@ -335,7 +334,7 @@ def generate_key(request: Request):
     if not (token and request.body):
         return HttpResponse("Missing token or data", status=400)
 
-    response = httpx.get(VERIFY_CONNECT_ID_URL, headers={"AUTHORIZATION": token})
+    response = httpx.get(settings.COMMCARE_CONNECT_GET_CONNECT_ID_URL, headers={"AUTHORIZATION": token})
     response.raise_for_status()
     connect_id = response.json().get("sub")
     request_data = json.loads(request.body)
