@@ -158,6 +158,9 @@ def delete_file_from_openai(client: OpenAI, file: File):
 @wrap_openai_errors
 def sync_from_openai(assistant: OpenAiAssistant):
     """Syncs the local assistant instance with the remote OpenAI assistant."""
+    if not assistant.assistant_id:
+        return
+
     client = assistant.llm_provider.get_llm_service().get_raw_client()
     openai_assistant = client.beta.assistants.retrieve(assistant.assistant_id)
     for key, value in _openai_assistant_to_ocs_kwargs(openai_assistant, team=assistant.team).items():
@@ -190,6 +193,9 @@ def delete_openai_assistant(assistant: OpenAiAssistant):
     """Deletes the assistant from OpenAI and removes all associated files.
 
     This function should be idempotent and safe to call multiple times."""
+    if not assistant.assistant_id:
+        return
+
     client = assistant.llm_provider.get_llm_service().get_raw_client()
     try:
         client.beta.assistants.delete(assistant.assistant_id)
