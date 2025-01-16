@@ -326,6 +326,8 @@ psycopg-binary==3.2.1
     # via psycopg
 pycparser==2.21
     # via cffi
+pycryptodome==3.21.0
+    # via -r requirements.in
 pydantic==2.9.2
     # via
     #   -r requirements.in

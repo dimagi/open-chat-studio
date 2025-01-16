@@ -2,6 +2,7 @@ import base64
 import hashlib
 import hmac
 import json
+import os
 import uuid
 from unittest.mock import patch
 
@@ -13,13 +14,13 @@ from django.test import override_settings
 from django.urls import reverse
 from django.utils import timezone
 
-from apps.api.views import VERIFY_CONNECT_ID_URL
 from apps.channels.models import ChannelPlatform
-from apps.experiments.models import Participant, ParticipantData
+from apps.experiments.models import ExperimentSession, Participant, ParticipantData
 from apps.teams.backends import EXPERIMENT_ADMIN_GROUP, add_user_to_team
 from apps.utils.factories.channels import ExperimentChannelFactory
 from apps.utils.factories.experiment import ExperimentFactory, ParticipantFactory
 from apps.utils.factories.team import TeamWithUsersFactory
+from apps.utils.langchain import build_fake_llm_service
 from apps.utils.tests.clients import ApiTestClient
 
 
@@ -284,16 +285,21 @@ def _setup_channel_participant(experiment, identifier, channel_platform, system_
 
 
 @pytest.mark.django_db()
-@override_settings(CELERY_TASK_ALWAYS_EAGER=True)
-@patch("apps.api.tasks.CommCareConnectClient")
-def test_update_participant_data_and_setup_connect_channels(connect_client_mock):
+@override_settings(
+    CELERY_TASK_ALWAYS_EAGER=True, COMMCARE_CONNECT_SERVER_SECRET="123", COMMCARE_CONNECT_SERVER_ID="123"
+)
+def test_update_participant_data_and_setup_connect_channels(httpx_mock):
     """
     Test that a connect channel is created for a participant where
     1. there isn't one set up already
     2. the experiment has a connect messaging channel linked
     """
-    client_instance_mock = connect_client_mock.return_value
-    client_instance_mock.create_channel.return_value = "channel_id_2"
+    created_connect_channel_id = str(uuid.uuid4())
+    httpx_mock.add_response(
+        method="POST",
+        url=f"{settings.COMMCARE_CONNECT_SERVER_URL}/messaging/create_channel",
+        json={"channel_id": created_connect_channel_id},
+    )
 
     team = TeamWithUsersFactory()
     experiment1 = ExperimentFactory(team=team)
@@ -354,26 +360,17 @@ def test_update_participant_data_and_setup_connect_channels(connect_client_mock)
 
     # Only one of the two experiments that the "connectid_2" participant belongs to has a connect messaging channel, so
     # we expect only one call to the Connect servers to have been made
-    assert client_instance_mock.create_channel.call_count == 1
-    call_kwargs = client_instance_mock.create_channel.call_args_list[0][1]
-    assert call_kwargs["connect_id"] == "connectid_2"
-    assert call_kwargs["channel_source"] == f"{experiment1.team}-{experiment1.name}"
+    request = httpx_mock.get_request()
+    request_data = json.loads(request.read())
+    assert request_data["connectid"] == "connectid_2"
+    assert request_data["channel_source"] == f"{experiment1.team}-{experiment1.name}"
     assert Participant.objects.filter(identifier="connectid_2").exists()
     data = ParticipantData.objects.get(participant__identifier="connectid_2", object_id=experiment1.id)
-    assert data.system_metadata["commcare_connect_channel_id"] == "channel_id_2"
+    assert data.system_metadata["commcare_connect_channel_id"] == created_connect_channel_id
 
 
 @pytest.mark.django_db()
 class TestConnectApis:
-    def _setup_participant(self, experiment, connect_id, channel_id):
-        participant = ParticipantFactory(team=experiment.team, identifier=connect_id)
-        return ParticipantData.objects.create(
-            team=experiment.team,
-            participant=participant,
-            content_object=experiment,
-            system_metadata={"commcare_connect_channel_id": channel_id},
-        )
-
     def _make_key_request(self, client, data):
         token = uuid.uuid4()
         url = reverse("api:commcare-connect:generate_key")
@@ -384,11 +381,15 @@ class TestConnectApis:
     def test_generate_key_success(self, client, experiment, httpx_mock):
         connect_id = uuid.uuid4().hex
         commcare_connect_channel_id = uuid.uuid4().hex
-        participant_data = self._setup_participant(
-            experiment, connect_id=connect_id, channel_id=commcare_connect_channel_id
+        participant_data = _setup_participant_data(
+            experiment,
+            connect_id=connect_id,
+            system_metadata={"commcare_connect_channel_id": commcare_connect_channel_id},
         )
 
-        httpx_mock.add_response(method="GET", url=VERIFY_CONNECT_ID_URL, json={"sub": connect_id})
+        httpx_mock.add_response(
+            method="GET", url=settings.COMMCARE_CONNECT_GET_CONNECT_ID_URL, json={"sub": connect_id}
+        )
         response = self._make_key_request(client=client, data={"channel_id": commcare_connect_channel_id})
 
         assert response.status_code == 200
@@ -400,15 +401,19 @@ class TestConnectApis:
     def test_generate_key_cannot_the_find_user(self, client, experiment, httpx_mock):
         connect_id = uuid.uuid4().hex
         commcare_connect_channel_id = uuid.uuid4().hex
-        self._setup_participant(experiment, connect_id=connect_id, channel_id=commcare_connect_channel_id)
+        _setup_participant_data(
+            experiment,
+            connect_id=connect_id,
+            system_metadata={"commcare_connect_channel_id": commcare_connect_channel_id},
+        )
 
-        httpx_mock.add_response(method="GET", url=VERIFY_CONNECT_ID_URL, json={"sub": "garbage"})
+        httpx_mock.add_response(method="GET", url=settings.COMMCARE_CONNECT_GET_CONNECT_ID_URL, json={"sub": "garbage"})
 
         response = self._make_key_request(client=client, data={"channel_id": commcare_connect_channel_id})
         assert response.status_code == 404
 
     def test_generate_key_fails_auth_at_connect(self, client, httpx_mock):
-        httpx_mock.add_response(method="GET", url=VERIFY_CONNECT_ID_URL, status_code=401)
+        httpx_mock.add_response(method="GET", url=settings.COMMCARE_CONNECT_GET_CONNECT_ID_URL, status_code=401)
 
         with pytest.raises(httpx.HTTPStatusError):
             self._make_key_request(client=client, data={})
@@ -417,8 +422,10 @@ class TestConnectApis:
     def test_user_consented(self, client, experiment):
         connect_id = uuid.uuid4().hex
         commcare_connect_channel_id = uuid.uuid4().hex
-        participant_data = self._setup_participant(
-            experiment, connect_id=connect_id, channel_id=commcare_connect_channel_id
+        participant_data = _setup_participant_data(
+            experiment,
+            connect_id=connect_id,
+            system_metadata={"commcare_connect_channel_id": commcare_connect_channel_id},
         )
 
         payload = {"channel_id": commcare_connect_channel_id, "consent": True}
@@ -465,3 +472,82 @@ class TestConnectApis:
             content_type="application/json",
         )
         assert response.status_code == 401
+
+
+def _setup_participant_data(
+    experiment,
+    connect_id,
+    system_metadata: dict,
+    encryption_key=None,
+):
+    participant = ParticipantFactory(
+        team=experiment.team, identifier=connect_id, platform=ChannelPlatform.COMMCARE_CONNECT
+    )
+    return ParticipantData.objects.create(
+        team=experiment.team,
+        participant=participant,
+        content_object=experiment,
+        system_metadata=system_metadata,
+        encryption_key=encryption_key or "",
+    )
+
+
+@pytest.mark.django_db()
+@override_settings(CELERY_TASK_ALWAYS_EAGER=True)
+@patch("apps.experiments.models.Experiment.get_llm_service")
+@patch("apps.chat.channels.CommCareConnectClient")
+def test_generate_bot_message_and_send(ConnectClient, get_llm_service, experiment):
+    """
+    Test that a bot message is generated and sent to a participant. If there isn't a session for the participant yet,
+    we expect one to be created. The generated bot message should be saved as an AI message, but the prompt should not
+    be saved.
+    """
+    fake_llm_service = build_fake_llm_service(responses=["Time to take a break an brew some coffee"], token_counts=[0])
+    get_llm_service.return_value = fake_llm_service
+    connect_client_mock = ConnectClient.return_value
+
+    connect_id = uuid.uuid4().hex
+    commcare_connect_channel_id = uuid.uuid4().hex
+    encryption_key = os.urandom(32).hex()
+    participant_data = _setup_participant_data(
+        experiment,
+        connect_id=connect_id,
+        system_metadata={"commcare_connect_channel_id": commcare_connect_channel_id, "consent": True},
+        encryption_key=encryption_key,
+    )
+    ExperimentChannelFactory(team=experiment.team, experiment=experiment, platform=ChannelPlatform.COMMCARE_CONNECT)
+
+    assert (
+        ExperimentSession.objects.filter(participant=participant_data.participant, experiment=experiment).exists()
+        is False
+    )
+
+    api_user = experiment.team.members.first()
+    client = ApiTestClient(api_user, experiment.team)
+
+    data = {
+        "identifier": connect_id,
+        "platform": ChannelPlatform.COMMCARE_CONNECT,
+        "experiment": str(experiment.public_id),
+        "prompt_text": "Tell the user to take a break and make coffee",
+    }
+    url = reverse("api:trigger_bot")
+    response = client.post(url, json.dumps(data), content_type="application/json")
+    assert response.status_code == 200
+    connect_client_mock.send_message_to_user.assert_called()
+    kwargs = connect_client_mock.send_message_to_user.call_args.kwargs
+    assert kwargs["message"] == "Time to take a break an brew some coffee"
+    session = ExperimentSession.objects.get(participant=participant_data.participant, experiment=experiment)
+    assert session.chat.messages.count() == 1
+    first_message = session.chat.messages.first()
+    assert first_message.message_type == "ai"
+    assert first_message.content == "Time to take a break an brew some coffee"
+
+    # Call it a second time to make sure the session is reused
+    response = client.post(url, json.dumps(data), content_type="application/json")
+    assert response.status_code == 200
+    session = ExperimentSession.objects.get(participant=participant_data.participant, experiment=experiment)
+    assert session.chat.messages.count() == 2
+    last_message = session.chat.messages.last()
+    assert last_message.message_type == "ai"
+    assert last_message.content == "Time to take a break an brew some coffee"

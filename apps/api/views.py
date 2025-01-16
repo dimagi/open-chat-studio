@@ -2,6 +2,7 @@ import json
 import textwrap
 
 import httpx
+from django.conf import settings
 from django.contrib.auth.decorators import permission_required
 from django.contrib.contenttypes.models import ContentType
 from django.db import transaction
@@ -25,14 +26,13 @@ from apps.api.serializers import (
     ExperimentSessionCreateSerializer,
     ExperimentSessionSerializer,
     ParticipantDataUpdateRequest,
+    TriggerBotMessageRequest,
 )
-from apps.api.tasks import setup_connect_channels_for_bots
-from apps.channels.models import ChannelPlatform
+from apps.api.tasks import setup_connect_channels_for_bots, trigger_bot_message_task
+from apps.channels.models import ChannelPlatform, ExperimentChannel
 from apps.events.models import ScheduledMessage, TimePeriod
 from apps.experiments.models import Experiment, ExperimentSession, Participant, ParticipantData
 from apps.files.models import File
-
-VERIFY_CONNECT_ID_URL = "https://connectid.dimagi.com/o/userinfo"
 
 
 @extend_schema_view(
@@ -332,13 +332,13 @@ def generate_key(request: Request):
     if not (token and request.body):
         return HttpResponse("Missing token or data", status=400)
 
-    response = httpx.get(VERIFY_CONNECT_ID_URL, headers={"AUTHORIZATION": token})
+    response = httpx.get(settings.COMMCARE_CONNECT_GET_CONNECT_ID_URL, headers={"AUTHORIZATION": token})
     response.raise_for_status()
     connect_id = response.json().get("sub")
     request_data = json.loads(request.body)
     commcare_connect_channel_id = request_data.get("channel_id")
     try:
-        participant_data = ParticipantData.objects.get(
+        participant_data = ParticipantData.objects.defer("data").get(
             participant__identifier=connect_id, system_metadata__commcare_connect_channel_id=commcare_connect_channel_id
         )
     except ParticipantData.DoesNotExist:
@@ -373,7 +373,87 @@ def consent(request: Request):
     participant_data = get_object_or_404(
         ParticipantData, system_metadata__commcare_connect_channel_id=request_data["channel_id"]
     )
-    participant_data.system_metadata["consent"] = request_data["consent"]
-    participant_data.save(update_fields=["system_metadata"])
+    participant_data.update_consent(request_data["consent"])
 
     return HttpResponse()
+
+
+@extend_schema(
+    operation_id="trigger_bot_message",
+    summary="Trigger the bot to send a message to the user",
+    tags=["Channels"],
+    request=TriggerBotMessageRequest(),
+    responses={
+        200: {},
+        400: {"description": "Bad Request"},
+        404: {"description": "Not Found"},
+    },
+    examples=[
+        OpenApiExample(
+            name="GenerateBotMessageAndSend",
+            summary="Generates a bot message and sends it to the user",
+            value={
+                "identifier": "part1",
+                "experiment": "exp1",
+                "platform": "connect_messaging",
+                "prompt_text": "Tell the user to do something",
+            },
+            status_codes=[200],
+        ),
+        OpenApiExample(
+            name="ParticipantNotFound",
+            summary="Participant not found",
+            value={"detail": "Participant not found"},
+            status_codes=[404],
+        ),
+        OpenApiExample(
+            name="ExperimentChannelNotFound",
+            summary="Experiment cannot send messages on the specified channel",
+            value={"detail": "Experiment cannot send messages on the connect_messaging channel"},
+            status_codes=[404],
+        ),
+        OpenApiExample(
+            name="ConsentNotGiven",
+            summary="User has not given consent",
+            value={"detail": "User has not given consent"},
+            status_codes=[400],
+        ),
+    ],
+)
+@api_view(["POST"])
+def trigger_bot_message(request):
+    """
+    Trigger the bot to send a message to the user
+    """
+    serializer = TriggerBotMessageRequest(data=request.data)
+    serializer.is_valid(raise_exception=True)
+
+    identifier = serializer.data["identifier"]
+    platform = serializer.data["platform"]
+    experiment_public_id = serializer.data["experiment"]
+
+    experiment = get_object_or_404(Experiment, public_id=experiment_public_id, team=request.team)
+
+    try:
+        participant_data = ParticipantData.objects.defer("data").get(
+            participant__identifier=identifier,
+            participant__platform=platform,
+            object_id=experiment.id,
+            content_type=ContentType.objects.get_for_model(Experiment),
+        )
+
+    except ParticipantData.DoesNotExist:
+        return Response({"detail": "Participant not found"}, status=status.HTTP_404_NOT_FOUND)
+
+    if not ExperimentChannel.objects.filter(platform=platform, experiment=experiment).exists():
+        return Response(
+            {"detail": f"Experiment cannot send messages on the {platform} channel"},
+            status=status.HTTP_404_NOT_FOUND,
+        )
+
+    if platform == ChannelPlatform.COMMCARE_CONNECT and not participant_data.has_consented():
+        return Response({"detail": "User has not given consent"}, status=status.HTTP_400_BAD_REQUEST)
+
+    trigger_bot_message_task.delay(serializer.data)
+
+    return Response(status=status.HTTP_200_OK)
