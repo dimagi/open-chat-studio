@@ -373,8 +373,7 @@ def consent(request: Request):
     participant_data = get_object_or_404(
         ParticipantData, system_metadata__commcare_connect_channel_id=request_data["channel_id"]
     )
-    participant_data.system_metadata["consent"] = request_data["consent"]
-    participant_data.save(update_fields=["system_metadata"])
+    participant_data.update_consent(request_data["consent"])
 
     return HttpResponse()
 
@@ -443,7 +442,7 @@ def trigger_bot_message(request):
             content_type=ContentType.objects.get_for_model(Experiment),
         )
 
-        ExperimentChannel.objects.get(platform=platform, experiment=experiment)
+        ExperimentChannel.objects.filter(platform=platform, experiment=experiment).exists()
     except ParticipantData.DoesNotExist:
         return Response({"detail": "Participant not found"}, status=status.HTTP_404_NOT_FOUND)
     except ExperimentChannel.DoesNotExist:
@@ -451,7 +450,7 @@ def trigger_bot_message(request):
             {"detail": f"Experiment cannot send messages on the {platform} channel"}, status=status.HTTP_404_NOT_FOUND
         )
 
-    if platform == ChannelPlatform.COMMCARE_CONNECT and participant_data.system_metadata.get("consent", False) is False:
+    if platform == ChannelPlatform.COMMCARE_CONNECT and not participant_data.has_consented():
         return Response({"detail": "User has not given consent"}, status=status.HTTP_400_BAD_REQUEST)
 
     trigger_bot_message_task.delay(serializer.data)

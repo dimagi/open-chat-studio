@@ -1399,6 +1399,13 @@ class ParticipantData(BaseTeamModel):
         self.encryption_key = key
         self.save(update_fields=["encryption_key"])
 
+    def has_consented(self) -> bool:
+        return self.system_metadata.get("consent", False)
+
+    def update_consent(self, consent: bool):
+        self.system_metadata["consent"] = consent
+        self.save(update_fields=["system_metadata"])
+
     class Meta:
         indexes = [
             models.Index(fields=["content_type", "object_id"]),
