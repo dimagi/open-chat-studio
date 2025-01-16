@@ -120,7 +120,7 @@ class PipelineNode(BaseModel, ABC):
         state["outputs"][node_id]["output_handle"] = output_handle
         return conditional_branch
 
-    def _process(self, input: str, state: PipelineState, node_id: str) -> str:
+    def _process(self, input: str, state: PipelineState, node_id: str) -> PipelineState:
         """The method that executes node specific functionality"""
         raise NotImplementedError
 
