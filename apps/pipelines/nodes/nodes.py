@@ -398,8 +398,12 @@ class StaticRouterNode(Passthrough):
     keywords: list[str] = Field(default_factory=list, json_schema_extra=UiSchema(widget=Widgets.keywords))
 
     def _process_conditional(self, state: PipelineState, node_id=None):
+        from apps.service_providers.llm_service.prompt_context import SafeAccessWrapper
+
+        data = state["shared_state"]
+        formatted_key = f"{{data.{self.route_key}}}"
         try:
-            return state["shared_state"][self.route_key]
+            return formatted_key.format(data=SafeAccessWrapper(data))
         except KeyError:
             raise PipelineNodeRunError(f"The key '{self.route_key}' is not defined in the shared state")
 

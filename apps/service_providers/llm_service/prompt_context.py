@@ -83,8 +83,8 @@ class SafeAccessWrapper(dict):
     """
 
     def __init__(self, data: Any):
-        super().__init__(self, __data=data)
         self.__data = data
+        super().__init__(self, __data=data)
 
     def __getitem__(self, key):
         if isinstance(self.__data, list | str):
