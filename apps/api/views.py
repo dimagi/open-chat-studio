@@ -442,14 +442,14 @@ def trigger_bot_message(request):
             content_type=ContentType.objects.get_for_model(Experiment),
         )
 
-        if not ExperimentChannel.objects.filter(platform=platform, experiment=experiment).exists():
-            return Response(
-                {"detail": f"Experiment cannot send messages on the {platform} channel"},
-                status=status.HTTP_404_NOT_FOUND,
-            )
-
     except ParticipantData.DoesNotExist:
         return Response({"detail": "Participant not found"}, status=status.HTTP_404_NOT_FOUND)
+
+    if not ExperimentChannel.objects.filter(platform=platform, experiment=experiment).exists():
+        return Response(
+            {"detail": f"Experiment cannot send messages on the {platform} channel"},
+            status=status.HTTP_404_NOT_FOUND,
+        )
 
     if platform == ChannelPlatform.COMMCARE_CONNECT and not participant_data.has_consented():
         return Response({"detail": "User has not given consent"}, status=status.HTTP_400_BAD_REQUEST)
