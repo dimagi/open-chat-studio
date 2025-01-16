@@ -2,7 +2,7 @@ import datetime
 import inspect
 import json
 import time
-from typing import Any, Literal
+from typing import Literal
 
 import tiktoken
 from django.contrib.contenttypes.models import ContentType
