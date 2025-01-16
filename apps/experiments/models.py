@@ -1392,10 +1392,20 @@ class ParticipantData(BaseTeamModel):
         models.CharField(max_length=255, blank=True, help_text="The base64 encoded encryption key")
     )
 
+    def get_encryption_key_bytes(self):
+        return base64.b64decode(self.encryption_key)
+
     def generate_encryption_key(self):
         key = base64.b64encode(secrets.token_bytes(32)).decode("utf-8")
         self.encryption_key = key
         self.save(update_fields=["encryption_key"])
+
+    def has_consented(self) -> bool:
+        return self.system_metadata.get("consent", False)
+
+    def update_consent(self, consent: bool):
+        self.system_metadata["consent"] = consent
+        self.save(update_fields=["system_metadata"])
 
     class Meta:
         indexes = [
