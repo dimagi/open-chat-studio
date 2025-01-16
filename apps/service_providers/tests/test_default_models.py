@@ -106,7 +106,7 @@ def get_pipeline(llm_provider_model):
             "id": "1",
             "data": {
                 "id": "1",
-                "label": "LLM Response with prompt",
+                "label": "LLM",
                 "type": "LLMResponseWithPrompt",
                 "params": {
                     "llm_provider_model_id": str(llm_provider_model.id),

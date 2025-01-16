@@ -11,6 +11,7 @@ https://docs.djangoproject.com/en/3.2/ref/settings/
 """
 
 import os
+import sys
 from pathlib import Path
 
 import environ
@@ -30,6 +31,7 @@ SECRET_KEY = env("SECRET_KEY", default="YNAazYQdzqQWddeZmFZfBfROzqlzvLEwVxoOjGgK
 
 # SECURITY WARNING: don't run with debug turned on in production!
 DEBUG = True
+IS_TESTING = "pytest" in sys.modules
 
 ALLOWED_HOSTS = ["*"]
 CSRF_TRUSTED_ORIGINS = env.list("CSRF_TRUSTED_ORIGINS", default=[])
@@ -478,16 +480,9 @@ LOGGING = {
             "handlers": ["console"],
             "level": env("DJANGO_LOG_LEVEL", default="INFO"),
         },
-        "ocs": {
-            "handlers": ["console"],
-            "level": LOG_LEVEL,
-        },
+        "ocs": {"handlers": ["console"], "level": LOG_LEVEL, "propagate": IS_TESTING},
         "httpx": {"handlers": ["console"], "level": "WARN"},
         "slack_bolt": {"handlers": ["console"], "level": "DEBUG"},
-        "audit": {"handlers": ["console"], "level": LOG_LEVEL, "propagate": False},
-        "openai_sync": {"handlers": ["console"], "level": LOG_LEVEL, "propagate": False},
-        "tools": {"handlers": ["console"], "level": LOG_LEVEL, "propagate": False},
-        "runnables": {"handlers": ["console"], "level": LOG_LEVEL, "propagate": False},
     },
 }
 
@@ -521,10 +516,14 @@ TAGGIT_CASE_INSENSITIVE = True
 
 # Documentation links
 DOCUMENTATION_LINKS = {
+    # Try to make these keys grep-able so that usages are easy to find
     "consent": "https://dimagi.atlassian.net/wiki/spaces/OCS/pages/2144305304/Consent+Forms+on+OCS",
     "survey": "https://dimagi.atlassian.net/wiki/spaces/OCS/pages/2144305308/Surveys",
     "experiment": "https://dimagi.atlassian.net/wiki/spaces/OCS/pages/2144305312/Creating+a+Chatbot+Experiment",
+    "concepts.prompt_variables": "/concepts/prompt_variables/",
+    "concepts.experiments": "/concepts/experiment/",
 }
+DOCUMENTATION_BASE_URL = env("DOCUMENTATION_BASE_URL", default="https://dimagi.github.io/open-chat-studio-docs")
 
 # Django rest framework config
 API_KEY_CUSTOM_HEADER = "HTTP_X_API_KEY"

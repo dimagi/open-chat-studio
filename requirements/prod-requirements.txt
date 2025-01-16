@@ -6,7 +6,7 @@ greenlet==3.0.1
     # via
     #   -c requirements.txt
     #   gevent
-gunicorn==22.0.0
+gunicorn==23.0.0
     # via -r prod-requirements.in
 packaging==23.2
     # via
@@ -16,6 +16,3 @@ zope-event==5.0
     # via gevent
 zope-interface==6.1
     # via gevent
-
-# The following packages were excluded from the output:
-# setuptools

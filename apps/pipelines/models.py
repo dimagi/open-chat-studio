@@ -12,7 +12,10 @@ from langchain_core.runnables import RunnableConfig
 from pydantic import ConfigDict
 
 from apps.chat.models import ChatMessage, ChatMessageType
+from apps.custom_actions.form_utils import set_custom_actions
+from apps.custom_actions.mixins import CustomActionOperationMixin
 from apps.experiments.models import ExperimentSession, VersionsMixin, VersionsObjectManagerMixin
+from apps.pipelines.executor import patch_executor
 from apps.pipelines.flow import Flow, FlowNode, FlowNodeData
 from apps.pipelines.logging import PipelineLoggingCallbackHandler
 from apps.pipelines.nodes.base import PipelineState
@@ -116,7 +119,7 @@ class Pipeline(BaseTeamModel, VersionsMixin):
 
         # Set new nodes or update existing ones
         for node in nodes:
-            Node.objects.update_or_create(
+            created_node, _ = Node.objects.update_or_create(
                 pipeline=self,
                 flow_id=node.id,
                 defaults={
@@ -125,6 +128,7 @@ class Pipeline(BaseTeamModel, VersionsMixin):
                     "label": node.data.label,
                 },
             )
+            created_node.update_from_params()
 
     def validate(self) -> dict:
         """Validate the pipeline nodes and return a dictionary of errors"""
@@ -170,11 +174,11 @@ class Pipeline(BaseTeamModel, VersionsMixin):
         """Invoke the pipeline without a session or the ability to save the run to history"""
         from apps.pipelines.graph import PipelineGraph
 
-        output = ""
         with temporary_session(self.team, user_id) as session:
             runnable = PipelineGraph.build_runnable_from_pipeline(self)
-            input = PipelineState(messages=[input], experiment_session=session)
-            output = runnable.invoke(input)
+            input = PipelineState(messages=[input], experiment_session=session, pipeline_version=self.version_number)
+            with patch_executor():
+                output = runnable.invoke(input, config={"max_concurrency": 1})
             output = PipelineState(**output).json_safe()
         return output
 
@@ -251,13 +255,10 @@ class Pipeline(BaseTeamModel, VersionsMixin):
         pipeline_version.version_number = version_number
         pipeline_version.save()
 
-        new_nodes = []
         for node in self.node_set.all():
-            node_version = node.create_new_version(save=False)
+            node_version = node.create_new_version()
             node_version.pipeline = pipeline_version
-            new_nodes.append(node_version)
-
-        Node.objects.bulk_create(new_nodes)
+            node_version.save(update_fields=["pipeline"])
 
         return pipeline_version
 
@@ -303,7 +304,7 @@ class Pipeline(BaseTeamModel, VersionsMixin):
         )
 
 
-class Node(BaseModel, VersionsMixin):
+class Node(BaseModel, VersionsMixin, CustomActionOperationMixin):
     flow_id = models.CharField(max_length=128, db_index=True)  # The ID assigned by react-flow
     type = models.CharField(max_length=128)  # The node type, should be one from nodes/nodes.py
     label = models.CharField(max_length=128, blank=True, default="")  # The human readable label
@@ -322,7 +323,7 @@ class Node(BaseModel, VersionsMixin):
     def __str__(self):
         return self.flow_id
 
-    def create_new_version(self, save: bool = True):
+    def create_new_version(self):
         """
         Create a new version of the node and if the node is an assistant node, create a new version of the assistant
         and update the `assistant_id` in the node params to the new assistant version id.
@@ -338,11 +339,25 @@ class Node(BaseModel, VersionsMixin):
             assistant = OpenAiAssistant.objects.get(id=new_version.params.get("assistant_id"))
             if not assistant.is_a_version:
                 assistant_version = assistant.create_new_version()
-                new_version.params["assistant_id"] = assistant_version.id
+                # convert to string to be consistent with values from the UI
+                new_version.params["assistant_id"] = str(assistant_version.id)
 
-        if save:
-            new_version.save()
+        new_version.save()
+        self._copy_custom_action_operations_to_new_version(new_node=new_version)
+
         return new_version
+
+    def update_from_params(self):
+        """Callback to do DB related updates pertaining to the node params"""
+        from apps.pipelines.nodes.nodes import LLMResponseWithPrompt
+
+        if self.type == LLMResponseWithPrompt.__name__:
+            custom_action_infos = []
+            for custom_action_operation in self.params.get("custom_actions") or []:
+                custom_action_id, operation_id = custom_action_operation.split(":")
+                custom_action_infos.append({"custom_action_id": custom_action_id, "operation_id": operation_id})
+
+            set_custom_actions(self, custom_action_infos)
 
     def archive(self):
         """

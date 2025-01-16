@@ -14,7 +14,7 @@ from apps.service_providers.models import MessagingProvider, MessagingProviderTy
 from apps.teams.models import Team
 from apps.web.meta import absolute_url
 
-logger = logging.getLogger(__name__)
+logger = logging.getLogger("ocs.channels")
 
 
 class ChannelForm(forms.ModelForm):

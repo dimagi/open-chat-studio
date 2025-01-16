@@ -1,4 +1,3 @@
-import logging
 from enum import StrEnum
 from functools import cache
 from urllib.parse import quote
@@ -11,8 +10,6 @@ from apps.annotations.models import Tag, TagCategories, TaggedModelMixin, UserCo
 from apps.files.models import File
 from apps.teams.models import BaseTeamModel
 from apps.utils.models import BaseModel
-
-logger = logging.getLogger(__name__)
 
 
 class Chat(BaseTeamModel, TaggedModelMixin, UserCommentsMixin):

@@ -11,6 +11,7 @@ from apps.chat.agent.openapi_tool import openapi_spec_op_to_function_def
 from apps.events.forms import ScheduledMessageConfigForm
 from apps.events.models import ScheduledMessage, TimePeriod
 from apps.experiments.models import AgentTools, Experiment, ExperimentSession, ParticipantData
+from apps.pipelines.models import Node
 from apps.utils.time import pretty_date
 
 if TYPE_CHECKING:
@@ -242,6 +243,12 @@ def get_tools(experiment_session, experiment) -> list[BaseTool]:
 def get_assistant_tools(assistant, experiment_session: ExperimentSession | None = None) -> list[BaseTool]:
     tools = get_tool_instances(assistant.tools, experiment_session)
     tools.extend(get_custom_action_tools(assistant))
+    return tools
+
+
+def get_node_tools(node: Node, experiment_session: ExperimentSession | None = None) -> list[BaseTool]:
+    tools = get_tool_instances(node.params.get("tools") or [], experiment_session)
+    tools.extend(get_custom_action_tools(node))
     return tools
 
 

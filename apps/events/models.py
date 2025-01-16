@@ -18,7 +18,7 @@ from apps.utils.models import BaseModel
 from apps.utils.slug import get_next_unique_id
 from apps.utils.time import pretty_date
 
-logger = logging.getLogger(__name__)
+logger = logging.getLogger("ocs.events")
 
 ACTION_HANDLERS = {
     "end_conversation": actions.EndConversationAction,
@@ -349,7 +349,7 @@ class ScheduledMessage(BaseTeamModel):
         try:
             self._trigger()
         except Exception as e:
-            logger.exception(f"An error occured while trying to send scheduled messsage {self.id}. Error: {e}")
+            logger.exception(f"An error occurred while trying to send scheduled message {self.id}. Error: {e}")
 
     def _trigger(self):
         experiment_session = self.participant.get_latest_session(experiment=self.experiment)

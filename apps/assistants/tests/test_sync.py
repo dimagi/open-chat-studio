@@ -238,7 +238,7 @@ def test_import_openai_assistant_raises_for_invalid_instructions(mock_retrieve):
 @patch("openai.resources.Files.delete")
 def test_delete_openai_assistant(mock_file_delete, mock_vector_store_delete, mock_delete):
     files = FileFactory.create_batch(3, external_id="test_id", external_source="openai")
-    local_assistant = OpenAiAssistantFactory()
+    local_assistant = OpenAiAssistantFactory(assistant_id="123")
 
     code_resource = ToolResources.objects.create(tool_type="code_interpreter", assistant=local_assistant)
     code_resource.files.set(files[:2])

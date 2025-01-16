@@ -3,7 +3,7 @@ from datetime import datetime, timedelta
 
 from django.utils import timezone
 
-logger = logging.getLogger("audit")
+logger = logging.getLogger("ocs.audit")
 
 EXPIRY = 60 * 30  # 30 minutes
 

@@ -1,0 +1,12 @@
+<div class="form-control w-full" {% include "generic/attrs.html" with attrs=control_attrs %}>
+  <label class="label font-bold" for="{{ form_field.id_for_label }}">
+    <div>
+      {{ form_field.label }}
+      {% if form_field.help_text %}
+        <small class="form-text text-muted">{% include "generic/help.html" with help_content=form_field.help_text %}</small>
+      {% endif %}
+    </div>
+  </label>
+  {{ form_field }}
+  {{ form_field.errors }}
+</div>

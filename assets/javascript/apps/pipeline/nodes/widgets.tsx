@@ -178,6 +178,9 @@ function SelectWidget(props: WidgetParams) {
 
 function MultiSelectWidget(props: WidgetParams) {
   const options = getSelectOptions(props.schema);
+  if (options.length == 0) {
+    return <></>
+  }
   let selectedValues = Array.isArray(props.paramValue) ? props.paramValue : [];
 
   const setNode = usePipelineStore((state) => state.setNode);

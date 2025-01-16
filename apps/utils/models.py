@@ -4,7 +4,7 @@ from django.db import models
 
 
 class VersioningMixin:
-    def compare_with_model(self, new: Self, exclude_fields: list[str]) -> set[str]:
+    def compare_with_model(self, new: Self, exclude_fields: list[str], early_abort=False) -> set[str]:
         """
         Compares the field values of between `self` and `new`, excluding those in `exclude_fields`
         """
@@ -26,6 +26,8 @@ class VersioningMixin:
 
             if new_value != current_value:
                 changed_fields.add(field.name)
+                if early_abort:
+                    return changed_fields
         return changed_fields
 
 

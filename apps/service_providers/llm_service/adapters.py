@@ -16,7 +16,7 @@ from typing import TYPE_CHECKING, Self
 from langchain_core.prompts import PromptTemplate, get_template_variables
 
 from apps.assistants.models import OpenAiAssistant
-from apps.chat.agent.tools import get_assistant_tools, get_tool_instances, get_tools
+from apps.chat.agent.tools import get_assistant_tools, get_tools
 from apps.chat.models import Chat, ChatMessageType
 from apps.experiments.models import Experiment, ExperimentSession
 from apps.service_providers.llm_service.main import LlmService, OpenAIAssistantRunnable
@@ -111,6 +111,7 @@ class ChatAdapter(BaseAdapter):
         node: "AssistantNode",
         llm_service: LlmService,
         provider_model: "LlmProviderModel",
+        tools: list,
     ) -> Self:
         return cls(
             session=session,
@@ -119,7 +120,7 @@ class ChatAdapter(BaseAdapter):
             temperature=node.llm_temperature,
             prompt_text=node.prompt,
             max_token_limit=provider_model.max_token_limit,
-            tools=get_tool_instances(node.tools, session),
+            tools=tools,
             input_formatter="{input}",
             source_material_id=node.source_material_id,
             trace_service=session.experiment.trace_service,

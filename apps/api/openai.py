@@ -6,7 +6,7 @@ from drf_spectacular.types import OpenApiTypes
 from drf_spectacular.utils import OpenApiParameter, extend_schema, inline_serializer
 from rest_framework import serializers
 from rest_framework.decorators import api_view
-from rest_framework.exceptions import ValidationError
+from rest_framework.exceptions import APIException, ValidationError
 from rest_framework.response import Response
 
 from apps.api.serializers import ExperimentSessionCreateSerializer, MessageSerializer
@@ -88,7 +88,10 @@ from apps.channels.tasks import handle_api_message
 )
 @api_view(["POST"])
 def chat_completions(request, experiment_id: uuid.UUID):
-    messages = request.data.get("messages", [])
+    try:
+        messages = [_convert_message(message) for message in request.data.get("messages", [])]
+    except APIException as e:
+        return _make_error_response(400, str(e))
     try:
         last_message = messages.pop()
     except IndexError:
@@ -135,3 +138,14 @@ def chat_completions(request, experiment_id: uuid.UUID):
 def _make_error_response(status_code, message):
     data = {"error": {"message": message, "type": "error", "param": None, "code": None}}
     return Response(data=data, status=status_code)
+
+
+def _convert_message(message):
+    content = message.get("content")
+    if isinstance(content, list):
+        text_messages = [part for part in content if part.get("type") == "text"]
+        if len(text_messages) != len(content):
+            raise APIException("Only text messages are supported")
+        content = " ".join(part["text"] for part in text_messages)
+        message["content"] = content
+    return message

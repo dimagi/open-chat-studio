@@ -18,20 +18,27 @@
     <div class="flex">
       <div class="flex-1 flex flex-row gap-2">
         <h1 class="pg-title">{{ experiment.name }}</h1>
-        {% flag "experiment_versions" %}
-          {% if experiment.is_archived %}
-            <div class="badge badge-warning badge-sm">
-              Archived
-            </div>
-          {% elif deployed_version %}
+        {% if experiment.is_archived %}
+          <div class="badge badge-warning badge-sm">
+            Archived
+          </div>
+        {% elif deployed_version %}
+          <div class="flex flex-row gap-2">
             <div class="tooltip" data-tip="Current published version">
               <a class="badge badge-success badge-sm"
                  href="#versions">
                 v{{ deployed_version }}
               </a>
             </div>
-          {% endif %}
-        {% endflag %}
+            <div
+              id="version-status-badge"
+              class="watchVersionChange"
+              hx-get="{% url 'experiments:get_release_status_badge' experiment.team.slug experiment.id %}"
+              hx-trigger="load, version-changed"
+              hx-swap="innerHTML">
+            </div>
+          </div>
+        {% endif %}
       </div>
       <div class="justify-self-end">
         <div class="join">
@@ -187,17 +194,15 @@
         {% endif %}
       </div>
     {% endif %}
-    {% if pipeline_chip %}
-      {% include 'generic/chip.html' with chip=pipeline_chip %}
-    {% elif assistant_chip %}
-      {% include 'generic/chip.html' with chip=assistant_chip %}
+    {% if bot_type_chip %}
+      {% include 'generic/chip.html' with chip=bot_type_chip %}
     {% endif %}
 
     {% if not can_make_child_routes %}
       <div class="my-4">
         <h3 class="font-bold text-lg">Parent Experiments:
           <span class="ml-2 tooltip" data-tip="This experiment is configured as a child of the following experiments.">
-            <i class="text-sm fa fa-circle-question" ></i>
+            <i class="text-sm fa-regular fa-circle-question" ></i>
           </span>
         </h3>
       </div>
@@ -293,19 +298,18 @@
       </div>
     </div>
 
-    {% flag "experiment_versions" %}
-      <input type="radio" name="tab_group" role="tab" class="tab" aria-label="Versions" id="tab-versions" />
-      <div role="tabpanel" class="tab-content" id="content-versions">
-        <div class="app-card">
-          <div id="versions-table"
-               hx-trigger="load,refetch-versions"
-               hx-target="this"
-               hx-get="{% url 'experiments:versions-list' request.team.slug experiment.id %}"
-               hx-swap="innerHTML">
-          </div>
+    <input type="radio" name="tab_group" role="tab" class="tab" aria-label="Versions" id="tab-versions" />
+    <div role="tabpanel" class="tab-content" id="content-versions">
+      <div class="app-card">
+        <div id="versions-table"
+             class="watchVersionChange"
+             hx-trigger="load, version-changed"
+             hx-target="this"
+             hx-get="{% url 'experiments:versions-list' request.team.slug experiment.id %}"
+             hx-swap="innerHTML">
         </div>
       </div>
-    {% endflag %}
+    </div>
 
     {% flag "events" %}
       <input type="radio" name="tab_group" role="tab" class="tab" aria-label="Events" id="tab-events" />
