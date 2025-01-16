@@ -6,8 +6,9 @@
       "title": "Name",
       "type": "string"
     },
-    "state_key": {
-      "title": "State Key",
+    "route_key": {
+      "description": "The key in the to use for routing",
+      "title": "Route Key",
       "type": "string"
     },
     "num_outputs": {
@@ -27,10 +28,13 @@
   },
   "required": [
     "name",
-    "state_key"
+    "route_key"
   ],
   "title": "StaticRouterNode",
   "type": "object",
+  "ui:can_add": true,
+  "ui:can_delete": true,
+  "ui:deprecated": false,
   "ui:flow_node_type": "pipelineNode",
   "ui:label": "Static Router"
 }

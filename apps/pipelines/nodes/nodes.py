@@ -393,15 +393,15 @@ class StaticRouterNode(Passthrough):
 
     model_config = ConfigDict(json_schema_extra=NodeSchema(label="Static Router"))
 
-    state_key: str
+    route_key: str = Field(..., description="The key in the to use for routing")
     num_outputs: int = Field(2, json_schema_extra=UiSchema(widget=Widgets.none))
     keywords: list[str] = Field(default_factory=list, json_schema_extra=UiSchema(widget=Widgets.keywords))
 
     def _process_conditional(self, state: PipelineState, node_id=None):
         try:
-            return state["shared_state"][self.state_key]
+            return state["shared_state"][self.route_key]
         except KeyError:
-            raise PipelineNodeRunError(f"The key '{self.state_key}' is not defined in the shared state")
+            raise PipelineNodeRunError(f"The key '{self.route_key}' is not defined in the shared state")
 
     def get_output_map(self):
         """Returns a mapping of the form:
