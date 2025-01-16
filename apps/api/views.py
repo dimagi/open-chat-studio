@@ -338,7 +338,7 @@ def generate_key(request: Request):
     request_data = json.loads(request.body)
     commcare_connect_channel_id = request_data.get("channel_id")
     try:
-        participant_data = ParticipantData.objects.get(
+        participant_data = ParticipantData.objects.defer("data").get(
             participant__identifier=connect_id, system_metadata__commcare_connect_channel_id=commcare_connect_channel_id
         )
     except ParticipantData.DoesNotExist:
