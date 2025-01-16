@@ -126,7 +126,7 @@ class TestApiEndpoint:
             content_type="application/json",
         )
         assert response.status_code == 400
-        assert response.json() == {"messages": {"0": {"timestamp": ["This field may not be null."]}}}
+        assert response.json() == {"messages": [{"timestamp": ["This field may not be null."]}]}
 
     @pytest.mark.parametrize(
         ("missing_record", "expected_response"),

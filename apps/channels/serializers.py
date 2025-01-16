@@ -11,4 +11,4 @@ class MessageSerializer(serializers.Serializer):
 
 class CommCareConnectMessageSerializer(serializers.Serializer):
     channel_id = serializers.UUIDField()
-    messages = serializers.ListField(child=MessageSerializer())
+    messages = MessageSerializer(many=True)
