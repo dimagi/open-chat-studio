@@ -1,5 +1,5 @@
 {
-  "description": "Calls an LLM with a prompt",
+  "description": "Uses and LLM to respond to the input.",
   "properties": {
     "llm_provider_id": {
       "title": "LLM Model",
@@ -83,6 +83,9 @@
   ],
   "title": "LLMResponseWithPrompt",
   "type": "object",
+  "ui:can_add": true,
+  "ui:can_delete": true,
+  "ui:deprecated": false,
   "ui:flow_node_type": "pipelineNode",
-  "ui:label": "LLM response with prompt"
+  "ui:label": "LLM"
 }

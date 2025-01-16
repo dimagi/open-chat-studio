@@ -27,7 +27,15 @@ from apps.chat.models import ChatMessageType
 from apps.experiments.models import ExperimentSession, ParticipantData
 from apps.pipelines.exceptions import PipelineNodeBuildError, PipelineNodeRunError
 from apps.pipelines.models import Node, PipelineChatHistory, PipelineChatHistoryTypes
-from apps.pipelines.nodes.base import NodeSchema, OptionsSource, PipelineNode, PipelineState, UiSchema, Widgets
+from apps.pipelines.nodes.base import (
+    NodeSchema,
+    OptionsSource,
+    PipelineNode,
+    PipelineState,
+    UiSchema,
+    Widgets,
+    deprecated_node,
+)
 from apps.pipelines.tasks import send_email_from_pipeline
 from apps.service_providers.exceptions import ServiceProviderConfigError
 from apps.service_providers.llm_service.adapters import AssistantAdapter, ChatAdapter
@@ -167,6 +175,7 @@ class HistoryMixin(LLMResponseMixin):
         return message
 
 
+@deprecated_node(message="Use the 'LLM' node instead.")
 class LLMResponse(PipelineNode, LLMResponseMixin):
     """Calls an LLM with the given input"""
 
@@ -179,9 +188,9 @@ class LLMResponse(PipelineNode, LLMResponseMixin):
 
 
 class LLMResponseWithPrompt(LLMResponse, HistoryMixin):
-    """Calls an LLM with a prompt"""
+    """Uses and LLM to respond to the input."""
 
-    model_config = ConfigDict(json_schema_extra=NodeSchema(label="LLM response with prompt"))
+    model_config = ConfigDict(json_schema_extra=NodeSchema(label="LLM"))
 
     source_material_id: int | None = Field(
         None, json_schema_extra=UiSchema(widget=Widgets.select, options_source=OptionsSource.source_material)
@@ -279,7 +288,7 @@ class SendEmail(PipelineNode):
 class Passthrough(PipelineNode):
     """Returns the input without modification"""
 
-    model_config = ConfigDict(json_schema_extra=NodeSchema(label="Do Nothing"))
+    model_config = ConfigDict(json_schema_extra=NodeSchema(label="Do Nothing", can_add=False))
 
     def _process(self, input, state: PipelineState, node_id: str) -> PipelineState:
         if self.logger:
@@ -299,6 +308,7 @@ class EndNode(Passthrough):
     model_config = ConfigDict(json_schema_extra=NodeSchema(label="End", flow_node_type="endNode"))
 
 
+@deprecated_node(message="Use the 'Router' node instead.")
 class BooleanNode(Passthrough):
     """Branches based whether the input matches a certain value"""
 
