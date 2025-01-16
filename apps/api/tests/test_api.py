@@ -389,7 +389,7 @@ class TestConnectApis:
         )
 
         httpx_mock.add_response(method="GET", url=VERIFY_CONNECT_ID_URL, json={"sub": connect_id})
-        response = self._make_request(client=client, data={"channel_id": commcare_connect_channel_id})
+        response = self._make_key_request(client=client, data={"channel_id": commcare_connect_channel_id})
 
         assert response.status_code == 200
         base64_key = response.json()["key"]
@@ -404,14 +404,14 @@ class TestConnectApis:
 
         httpx_mock.add_response(method="GET", url=VERIFY_CONNECT_ID_URL, json={"sub": "garbage"})
 
-        response = self._make_request(client=client, data={"channel_id": commcare_connect_channel_id})
+        response = self._make_key_request(client=client, data={"channel_id": commcare_connect_channel_id})
         assert response.status_code == 404
 
     def test_generate_key_fails_auth_at_connect(self, client, httpx_mock):
         httpx_mock.add_response(method="GET", url=VERIFY_CONNECT_ID_URL, status_code=401)
 
         with pytest.raises(httpx.HTTPStatusError):
-            self._make_request(client=client, data={})
+            self._make_key_request(client=client, data={})
 
     @override_settings(COMMCARE_CONNECT_SERVER_SECRET="123123")
     def test_user_consented(self, client, experiment):
