@@ -37,6 +37,7 @@ def setup_connect_channels_for_bots(self, connect_id: UUID, experiment_data_map:
             content_type=ContentType.objects.get_for_model(Experiment),
         )
         .exclude(system_metadata__has_key="commcare_connect_channel_id")
+        .prefetch_related("content_object")
         .all()
     )
 
