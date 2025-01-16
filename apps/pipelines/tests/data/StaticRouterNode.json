@@ -29,8 +29,8 @@
     "name",
     "state_key"
   ],
-  "title": "StateKeyRouterNode",
+  "title": "StaticRouterNode",
   "type": "object",
   "ui:flow_node_type": "pipelineNode",
-  "ui:label": "State Key Router"
+  "ui:label": "Static Router"
 }

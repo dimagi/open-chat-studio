@@ -2,7 +2,7 @@ import datetime
 import inspect
 import json
 import time
-from typing import Any, Literal
+from typing import Literal
 
 import tiktoken
 from django.contrib.contenttypes.models import ContentType
@@ -332,7 +332,7 @@ class BooleanNode(Passthrough):
 class RouterNode(Passthrough, HistoryMixin):
     """Routes the input to one of the linked nodes using an LLM"""
 
-    model_config = ConfigDict(json_schema_extra=NodeSchema(label="Router"))
+    model_config = ConfigDict(json_schema_extra=NodeSchema(label="LLM Router"))
 
     prompt: str = Field(
         default="You are an extremely helpful router",
@@ -388,10 +388,10 @@ class RouterNode(Passthrough, HistoryMixin):
         return {f"output_{output_num}": keyword.lower() for output_num, keyword in enumerate(self.keywords)}
 
 
-class StateKeyRouterNode(Passthrough):
+class StaticRouterNode(Passthrough):
     """Routes the input to a linked node using the shared state of the pipeline"""
 
-    model_config = ConfigDict(json_schema_extra=NodeSchema(label="State Key Router"))
+    model_config = ConfigDict(json_schema_extra=NodeSchema(label="Static Router"))
 
     state_key: str
     num_outputs: int = Field(2, json_schema_extra=UiSchema(widget=Widgets.none))

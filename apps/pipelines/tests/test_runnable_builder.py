@@ -372,8 +372,8 @@ def test_router_node(get_llm_service, provider, provider_model, pipeline, experi
 
 @django_db_with_data(available_apps=("apps.service_providers",))
 @mock.patch("apps.pipelines.nodes.base.PipelineNode.logger", mock.Mock())
-def test_state_key_router(pipeline):
-    # The state key router will switch based on a state key, and pass its input through
+def test_static_router(pipeline):
+    # The static router will switch based on a state key, and pass its input through
 
     code_set = """
 def main(input, **kwargs):
