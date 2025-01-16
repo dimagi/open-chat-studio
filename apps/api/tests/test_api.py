@@ -297,7 +297,7 @@ def test_update_participant_data_and_setup_connect_channels(httpx_mock):
     created_connect_channel_id = str(uuid.uuid4())
     httpx_mock.add_response(
         method="POST",
-        url=f"{settings.COMMCARE_CONNECT_SERVER_URL}/messaging/create_channel",
+        url=f"{settings.COMMCARE_CONNECT_SERVER_URL}/messaging/create_channel/",
         json={"channel_id": created_connect_channel_id},
     )
 
