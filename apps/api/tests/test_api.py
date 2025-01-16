@@ -369,7 +369,7 @@ def test_update_participant_data_and_setup_connect_channels(httpx_mock):
 
 @pytest.mark.django_db()
 class TestConnectApis:
-    def _make_request(self, client, data):
+    def _make_key_request(self, client, data):
         token = uuid.uuid4()
         url = reverse("api:commcare-connect:generate_key")
         return client.post(
@@ -407,14 +407,14 @@ class TestConnectApis:
 
         httpx_mock.add_response(method="GET", url=settings.COMMCARE_CONNECT_GET_CONNECT_ID_URL, json={"sub": "garbage"})
 
-        response = self._make_request(client=client, data={"channel_id": commcare_connect_channel_id})
+        response = self._make_key_request(client=client, data={"channel_id": commcare_connect_channel_id})
         assert response.status_code == 404
 
     def test_generate_key_fails_auth_at_connect(self, client, httpx_mock):
         httpx_mock.add_response(method="GET", url=settings.COMMCARE_CONNECT_GET_CONNECT_ID_URL, status_code=401)
 
         with pytest.raises(httpx.HTTPStatusError):
-            self._make_request(client=client, data={})
+            self._make_key_request(client=client, data={})
 
     @override_settings(COMMCARE_CONNECT_SERVER_SECRET="123123")
     def test_user_consented(self, client, experiment):

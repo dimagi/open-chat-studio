@@ -27,6 +27,8 @@ class NewMessagePayload(TypedDict):
 
 class CommCareConnectClient:
     def __init__(self):
+        if not all([settings.COMMCARE_CONNECT_SERVER_ID, settings.COMMCARE_CONNECT_SERVER_SECRET]):
+            raise ValueError("COMMCARE_CONNECT_SERVER_ID and COMMCARE_CONNECT_SERVER_SECRET must be set")
         self._base_url = settings.COMMCARE_CONNECT_SERVER_URL
         self.client = httpx.Client(
             auth=httpx.BasicAuth(settings.COMMCARE_CONNECT_SERVER_ID, settings.COMMCARE_CONNECT_SERVER_SECRET),
