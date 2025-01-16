@@ -222,15 +222,6 @@ class SlackChannelForm(ExtraFormBase):
 class CommCareConnectChannelForm(ExtraFormBase):
     bot_name = forms.CharField(
         label="Bot Name",
-        help_text=(
-            "This is the name of the bot that will be displayed to users on commcare connect"
-            "Once set, this name cannot be changed."
-        ),
+        help_text=("This is the name of the bot that will be displayed to users on commcare connect"),
         max_length=100,
     )
-
-    def __init__(self, *args, **kwargs):
-        initial = kwargs.get("initial", {})
-        super().__init__(*args, **kwargs)
-        if initial.get("bot_name"):
-            self.fields["bot_name"].widget.attrs["readonly"] = True
