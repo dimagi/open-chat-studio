@@ -16,6 +16,7 @@ type InputWidgetParams = {
 
 const nodeTypeToInputParamsMap: Record<string, string[]> = {
   "RouterNode": ["llm_model", "history_type", "prompt"],
+  "StaticRouterNode": ["data_source", "route_key"],
   "ExtractParticipantData": ["llm_model", "history_type", "data_schema"],
   "ExtractStructuredData": ["llm_model", "history_type", "data_schema"],
   "LLMResponseWithPrompt": ["llm_model", "history_type", "prompt"],
@@ -61,7 +62,7 @@ export const getInputWidget = (params: InputWidgetParams) => {
     return <></>;
   }
 
-  const Widget = getWidget(widgetOrType)
+  const Widget = getWidget(widgetOrType, params.schema)
   let fieldError = getFieldError(params.id, params.name);
   const paramValue = params.params[params.name];
   if (params.required && (paramValue === null || paramValue === undefined)) {

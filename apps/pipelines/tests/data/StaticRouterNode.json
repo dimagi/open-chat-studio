@@ -6,6 +6,20 @@
       "title": "Name",
       "type": "string"
     },
+    "data_source": {
+      "enum": [
+        "participant_data",
+        "shared_state"
+      ],
+      "title": "DataSource",
+      "type": "string",
+      "default": "participant_data",
+      "description": "The source of the data to use for routing",
+      "ui:enumLabels": [
+        "Participant Data",
+        "Shared State"
+      ]
+    },
     "route_key": {
       "description": "The key in the to use for routing",
       "title": "Route Key",

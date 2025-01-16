@@ -17,7 +17,7 @@ import { NodeParams, PropertySchema } from "../types/nodeParams";
 import { Node, useUpdateNodeInternals } from "reactflow";
 import DOMPurify from 'dompurify';
 
-export function getWidget(name: string) {
+export function getWidget(name: string, params: PropertySchema) {
   switch (name) {
     case "toggle":
       return ToggleWidget
@@ -40,6 +40,9 @@ export function getWidget(name: string) {
     case "keywords":
       return KeywordsWidget
     default:
+      if (params.enum) {
+        return SelectWidget
+      }
       return DefaultWidget
   }
 }

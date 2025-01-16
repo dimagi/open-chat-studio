@@ -5,9 +5,9 @@ import time
 from typing import Literal
 
 import tiktoken
-from django.contrib.contenttypes.models import ContentType
 from django.core.exceptions import ValidationError
 from django.core.validators import validate_email
+from django.db.models import TextChoices
 from jinja2 import meta
 from jinja2.sandbox import SandboxedEnvironment
 from langchain_core.messages import BaseMessage
@@ -25,7 +25,7 @@ from apps.channels.datamodels import Attachment
 from apps.chat.agent.tools import get_node_tools
 from apps.chat.conversation import compress_chat_history, compress_pipeline_chat_history
 from apps.chat.models import ChatMessageType
-from apps.experiments.models import Experiment, ExperimentSession, ParticipantData
+from apps.experiments.models import ExperimentSession, ParticipantData
 from apps.pipelines.exceptions import PipelineNodeBuildError, PipelineNodeRunError
 from apps.pipelines.models import Node, PipelineChatHistory, PipelineChatHistoryTypes
 from apps.pipelines.nodes.base import (
@@ -37,6 +37,7 @@ from apps.pipelines.nodes.base import (
     Widgets,
     deprecated_node,
 )
+from apps.pipelines.nodes.helpers import ParticipantDataProxy
 from apps.pipelines.tasks import send_email_from_pipeline
 from apps.service_providers.exceptions import ServiceProviderConfigError
 from apps.service_providers.llm_service.adapters import AssistantAdapter, ChatAdapter
@@ -391,21 +392,40 @@ class RouterNode(Passthrough, HistoryMixin):
 class StaticRouterNode(Passthrough):
     """Routes the input to a linked node using the shared state of the pipeline"""
 
+    class DataSource(TextChoices):
+        participant_data = "participant_data", "Participant Data"
+        shared_state = "shared_state", "Shared State"
+
     model_config = ConfigDict(json_schema_extra=NodeSchema(label="Static Router"))
 
-    route_key: str = Field(..., description="The key in the to use for routing")
+    data_source: DataSource = Field(
+        DataSource.participant_data,
+        description="The source of the data to use for routing",
+        json_schema_extra=UiSchema(enum_labels=DataSource.labels),
+    )
+    route_key: str = Field(..., description="The key in the data to use for routing")
     num_outputs: int = Field(2, json_schema_extra=UiSchema(widget=Widgets.none))
     keywords: list[str] = Field(default_factory=list, json_schema_extra=UiSchema(widget=Widgets.keywords))
 
     def _process_conditional(self, state: PipelineState, node_id=None):
         from apps.service_providers.llm_service.prompt_context import SafeAccessWrapper
 
-        data = state["shared_state"]
+        if self.data_source == self.DataSource.participant_data:
+            data = ParticipantDataProxy.from_state(state).get()
+        else:
+            data = state["shared_state"]
+
         formatted_key = f"{{data.{self.route_key}}}"
         try:
-            return formatted_key.format(data=SafeAccessWrapper(data))
+            destination = formatted_key.format(data=SafeAccessWrapper(data))
         except KeyError:
-            raise PipelineNodeRunError(f"The key '{self.route_key}' is not defined in the shared state")
+            raise PipelineNodeRunError(f"The key '{self.route_key}' is not defined in the {self.data_source}")
+
+        if not destination:
+            label = self.DataSource(self.data_source).label
+            raise PipelineNodeRunError(f"The key '{self.route_key}' is not defined in the {label}")
+
+        return destination
 
     def get_output_map(self):
         """Returns a mapping of the form:
@@ -767,34 +787,7 @@ class CodeNode(PipelineNode):
 
         custom_globals = safe_globals.copy()
 
-        class ParticipantDataProxy:
-            """Allows multiple access without needing to re-fetch from the DB"""
-
-            def __init__(self, state):
-                self.state = state
-                self._participant_data = None
-
-            def _get_db_object(self):
-                if not self._participant_data:
-                    content_type = ContentType.objects.get_for_model(Experiment)
-                    session = state["experiment_session"]
-                    self._participant_data, _ = ParticipantData.objects.get_or_create(
-                        participant_id=session.participant_id,
-                        content_type=content_type,
-                        object_id=session.experiment_id,
-                        team_id=session.experiment.team_id,
-                    )
-                return self._participant_data
-
-            def get(self):
-                return self._get_db_object().data
-
-            def set(self, data):
-                participant_data = self._get_db_object()
-                participant_data.data = data
-                participant_data.save(update_fields=["data"])
-
-        participant_data_proxy = ParticipantDataProxy(state)
+        participant_data_proxy = ParticipantDataProxy.from_state(state)
         custom_globals.update(
             {
                 "__builtins__": self._get_custom_builtins(),
