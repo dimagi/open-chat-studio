@@ -17,6 +17,7 @@ const usePipelineManagerStore = create<PipelineManagerStoreType>((set, get) => (
     set({isLoading: true});
     apiClient.getPipeline(pipelineId).then((pipeline) => {
       if (pipeline) {
+        updateEdgeClasses(pipeline, pipeline.errors);
         set({currentPipeline: pipeline, currentPipelineId: pipelineId});
         set({errors: pipeline.errors});
         set({isLoading: false});
@@ -58,6 +59,7 @@ const usePipelineManagerStore = create<PipelineManagerStoreType>((set, get) => (
         .then((response) => {
           if (response) {
             pipeline.data = response.data;
+            updateEdgeClasses(pipeline, response.errors);
             set({currentPipeline: pipeline, dirty: false});
             set({errors: response.errors});
             resolve();
@@ -87,7 +89,19 @@ const usePipelineManagerStore = create<PipelineManagerStoreType>((set, get) => (
   },
   getPipelineError: () => {
     return get().errors["pipeline"];
-  }
+  },
 }));
+
+
+function updateEdgeClasses(pipeline, errors) {
+  const edgeErrors = errors["edge"] || [];
+  for (const edge of pipeline.data.edges) {
+    if (edgeErrors.includes(edge["id"])) {
+      edge["className"] = "edge-error";
+    } else {
+      delete edge["className"];
+    }
+  }
+}
 
 export default usePipelineManagerStore;

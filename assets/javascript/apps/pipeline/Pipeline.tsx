@@ -26,7 +26,6 @@ import TestMessageBox from "./panel/TestMessageBox";
 import AnnotatedEdge from "./AnnotatedEdge";
 import { EndNode, StartNode } from "./BoundaryNode";
 import { NodeData } from "./types/nodeParams";
-import BasicEdge from "./BasicEdge";
 
 const fitViewOptions: FitViewOptions = {
   padding: 0.2,
@@ -39,7 +38,6 @@ const nodeTypes: NodeTypes = {
 };
 
 const edgeTypes: EdgeTypes = {
-  default: BasicEdge,
   annotatedEdge: AnnotatedEdge,
 };
 

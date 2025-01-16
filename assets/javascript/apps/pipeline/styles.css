@@ -1,3 +1,13 @@
 .react-flow__node {
    z-index: -1 !important;
 }
+
+.edge-error .react-flow__edge-path {
+    stroke: var(--fallback-er,oklch(var(--er)));
+    stroke-width: 2px;
+}
+
+.edge-error.selected .react-flow__edge-path {
+    stroke: var(--fallback-s,oklch(var(--s)));
+    stroke-width: 2px;
+}
