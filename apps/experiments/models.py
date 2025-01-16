@@ -1,4 +1,6 @@
+import base64
 import logging
+import secrets
 import uuid
 from datetime import datetime
 from functools import cached_property
@@ -1385,6 +1387,15 @@ class ParticipantData(BaseTeamModel):
     content_type = models.ForeignKey(ContentType, on_delete=models.CASCADE)
     object_id = models.PositiveIntegerField()
     content_object = GenericForeignKey("content_type", "object_id")
+    system_metadata = models.JSONField(default=dict)
+    encryption_key = encrypt(
+        models.CharField(max_length=255, blank=True, help_text="The base64 encoded encryption key")
+    )
+
+    def generate_encryption_key(self):
+        key = base64.b64encode(secrets.token_bytes(32)).decode("utf-8")
+        self.encryption_key = key
+        self.save(update_fields=["encryption_key"])
 
     class Meta:
         indexes = [

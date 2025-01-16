@@ -1,10 +1,14 @@
+import json
 import textwrap
 
+import httpx
 from django.contrib.auth.decorators import permission_required
 from django.contrib.contenttypes.models import ContentType
 from django.db import transaction
-from django.http import FileResponse, Http404, HttpResponse
+from django.http import FileResponse, Http404, HttpResponse, JsonResponse
 from django.shortcuts import get_object_or_404
+from django.views.decorators.csrf import csrf_exempt
+from django.views.decorators.http import require_POST
 from drf_spectacular.types import OpenApiTypes
 from drf_spectacular.utils import OpenApiExample, OpenApiParameter, extend_schema, extend_schema_view
 from rest_framework import filters, mixins, status
@@ -12,18 +16,23 @@ from rest_framework.decorators import api_view, renderer_classes
 from rest_framework.exceptions import NotFound
 from rest_framework.renderers import BaseRenderer
 from rest_framework.response import Response
+from rest_framework.views import Request
 from rest_framework.viewsets import GenericViewSet
 
-from apps.api.permissions import DjangoModelPermissionsWithView
+from apps.api.permissions import DjangoModelPermissionsWithView, verify_hmac
 from apps.api.serializers import (
     ExperimentSerializer,
     ExperimentSessionCreateSerializer,
     ExperimentSessionSerializer,
     ParticipantDataUpdateRequest,
 )
+from apps.api.tasks import setup_connect_channels_for_bots
+from apps.channels.models import ChannelPlatform
 from apps.events.models import ScheduledMessage, TimePeriod
 from apps.experiments.models import Experiment, ExperimentSession, Participant, ParticipantData
 from apps.files.models import File
+
+VERIFY_CONNECT_ID_URL = "https://connectid.dimagi.com/o/userinfo"
 
 
 @extend_schema_view(
@@ -133,10 +142,11 @@ def update_participant_data(request):
     experiment_map = _get_participant_experiments(team, experiment_data)
 
     content_type = ContentType.objects.get_for_model(Experiment)
+    experiment_data_map = {}
     for data in experiment_data:
         experiment = experiment_map[data["experiment"]]
 
-        ParticipantData.objects.update_or_create(
+        participant_data, _created = ParticipantData.objects.update_or_create(
             participant=participant,
             content_type=content_type,
             object_id=experiment.id,
@@ -146,6 +156,13 @@ def update_participant_data(request):
 
         if schedule_data := data.get("schedules"):
             _create_update_schedules(team, experiment, participant, schedule_data)
+
+        if platform == ChannelPlatform.COMMCARE_CONNECT:
+            experiment_data_map[experiment.id] = participant_data.id
+
+    if platform == ChannelPlatform.COMMCARE_CONNECT:
+        setup_connect_channels_for_bots.delay(connect_id=identifier, experiment_data_map=experiment_data_map)
+
     return HttpResponse()
 
 
@@ -305,3 +322,58 @@ def file_content_view(request, pk: int):
         return FileResponse(file.file.open(), as_attachment=True, filename=file.file.name)
     except FileNotFoundError:
         raise Http404()
+
+
+@csrf_exempt
+@require_POST
+def generate_key(request: Request):
+    """Generates a key for a specific channel to use for secure communication"""
+    token = request.META.get("HTTP_AUTHORIZATION")
+    if not (token and request.body):
+        return HttpResponse("Missing token or data", status=400)
+
+    response = httpx.get(VERIFY_CONNECT_ID_URL, headers={"AUTHORIZATION": token})
+    response.raise_for_status()
+    connect_id = response.json().get("sub")
+    request_data = json.loads(request.body)
+    commcare_connect_channel_id = request_data.get("channel_id")
+    try:
+        participant_data = ParticipantData.objects.get(
+            participant__identifier=connect_id, system_metadata__commcare_connect_channel_id=commcare_connect_channel_id
+        )
+    except ParticipantData.DoesNotExist:
+        raise Http404()
+
+    if not participant_data.encryption_key:
+        participant_data.generate_encryption_key()
+
+    return JsonResponse({"key": participant_data.encryption_key})
+
+
+@csrf_exempt
+@require_POST
+@verify_hmac
+def callback(request: Request):
+    """This callback endpoint is called by commcare connect when the message is delivered to the user"""
+    # Not sure what to do with this, so just return
+    return HttpResponse()
+
+
+@csrf_exempt
+@require_POST
+@verify_hmac
+def consent(request: Request):
+    """The user gave consent to the bot to message them"""
+    if not request.body:
+        return HttpResponse("Missing data", status=400)
+    request_data = json.loads(request.body)
+    if "consent" not in request_data or "channel_id" not in request_data:
+        return HttpResponse("Missing consent or commcare_connect_channel_id", status=400)
+
+    participant_data = get_object_or_404(
+        ParticipantData, system_metadata__commcare_connect_channel_id=request_data["channel_id"]
+    )
+    participant_data.system_metadata["consent"] = request_data["consent"]
+    participant_data.save(update_fields=["system_metadata"])
+
+    return HttpResponse()
