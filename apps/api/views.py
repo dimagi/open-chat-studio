@@ -1,4 +1,5 @@
 import json
+import logging
 import textwrap
 
 import httpx
@@ -33,6 +34,8 @@ from apps.channels.models import ChannelPlatform, ExperimentChannel
 from apps.events.models import ScheduledMessage, TimePeriod
 from apps.experiments.models import Experiment, ExperimentSession, Participant, ParticipantData
 from apps.files.models import File
+
+logger = logging.getLogger(__name__)
 
 
 @extend_schema_view(
@@ -335,6 +338,7 @@ def generate_key(request: Request):
     response = httpx.get(settings.COMMCARE_CONNECT_GET_CONNECT_ID_URL, headers={"AUTHORIZATION": token})
     response.raise_for_status()
     connect_id = response.json().get("sub")
+    logger.info(f"Response: {request.body}")
     request_data = json.loads(request.body)
     commcare_connect_channel_id = request_data.get("channel_id")
     try:
