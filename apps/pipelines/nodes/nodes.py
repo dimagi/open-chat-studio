@@ -330,16 +330,7 @@ class BooleanNode(Passthrough):
         return {"output_0": "true", "output_1": "false"}
 
 
-class RouterNode(Passthrough, HistoryMixin):
-    """Routes the input to one of the linked nodes using an LLM"""
-
-    model_config = ConfigDict(json_schema_extra=NodeSchema(label="LLM Router"))
-
-    prompt: str = Field(
-        default="You are an extremely helpful router",
-        min_length=1,
-        json_schema_extra=UiSchema(widget=Widgets.expandable_text),
-    )
+class RouterMixin(BaseModel):
     num_outputs: int = Field(2, json_schema_extra=UiSchema(widget=Widgets.none))
     keywords: list[str] = Field(default_factory=list, json_schema_extra=UiSchema(widget=Widgets.keywords))
 
@@ -353,6 +344,31 @@ class RouterNode(Passthrough, HistoryMixin):
             raise PydanticCustomError("invalid_keywords", "Keywords must be unique")
 
         return value[:num_outputs]  # Ensure the number of keywords matches the number of outputs
+
+    def _get_keyword(self, result: str):
+        keyword = result.lower().strip()
+        if keyword in [k.lower() for k in self.keywords]:
+            return keyword.lower()
+        else:
+            return self.keywords[0].lower()
+
+    def get_output_map(self):
+        """Returns a mapping of the form:
+        {"output_1": "keyword 1", "output_2": "keyword_2", ...} where keywords are defined by the user
+        """
+        return {f"output_{output_num}": keyword.lower() for output_num, keyword in enumerate(self.keywords)}
+
+
+class RouterNode(RouterMixin, Passthrough, HistoryMixin):
+    """Routes the input to one of the linked nodes using an LLM"""
+
+    model_config = ConfigDict(json_schema_extra=NodeSchema(label="LLM Router"))
+
+    prompt: str = Field(
+        default="You are an extremely helpful router",
+        min_length=1,
+        json_schema_extra=UiSchema(widget=Widgets.expandable_text),
+    )
 
     def _process_conditional(self, state: PipelineState, node_id=None):
         prompt = OcsPromptTemplate.from_messages(
@@ -370,26 +386,13 @@ class RouterNode(Passthrough, HistoryMixin):
         chain = prompt | self.get_chat_model()
 
         result = chain.invoke(context, config=self._config)
-        keyword = self._get_keyword(result)
+        keyword = self._get_keyword(result.content)
         if session:
             self._save_history(session, node_id, node_input, keyword)
         return keyword
 
-    def _get_keyword(self, result):
-        keyword = result.content.lower().strip()
-        if keyword in [k.lower() for k in self.keywords]:
-            return keyword.lower()
-        else:
-            return self.keywords[0].lower()
 
-    def get_output_map(self):
-        """Returns a mapping of the form:
-        {"output_1": "keyword 1", "output_2": "keyword_2", ...} where keywords are defined by the user
-        """
-        return {f"output_{output_num}": keyword.lower() for output_num, keyword in enumerate(self.keywords)}
-
-
-class StaticRouterNode(Passthrough):
+class StaticRouterNode(RouterMixin, Passthrough):
     """Routes the input to a linked node using the shared state of the pipeline"""
 
     class DataSource(TextChoices):
@@ -404,8 +407,6 @@ class StaticRouterNode(Passthrough):
         json_schema_extra=UiSchema(enum_labels=DataSource.labels),
     )
     route_key: str = Field(..., description="The key in the data to use for routing")
-    num_outputs: int = Field(2, json_schema_extra=UiSchema(widget=Widgets.none))
-    keywords: list[str] = Field(default_factory=list, json_schema_extra=UiSchema(widget=Widgets.keywords))
 
     def _process_conditional(self, state: PipelineState, node_id=None):
         from apps.service_providers.llm_service.prompt_context import SafeAccessWrapper
@@ -417,21 +418,11 @@ class StaticRouterNode(Passthrough):
 
         formatted_key = f"{{data.{self.route_key}}}"
         try:
-            destination = formatted_key.format(data=SafeAccessWrapper(data))
+            result = formatted_key.format(data=SafeAccessWrapper(data))
         except KeyError:
-            raise PipelineNodeRunError(f"The key '{self.route_key}' is not defined in the {self.data_source}")
+            result = ""
 
-        if not destination:
-            label = self.DataSource(self.data_source).label
-            raise PipelineNodeRunError(f"The key '{self.route_key}' is not defined in the {label}")
-
-        return destination
-
-    def get_output_map(self):
-        """Returns a mapping of the form:
-        {"output_1": "keyword 1", "output_2": "keyword_2", ...} where keywords are defined by the user
-        """
-        return {f"output_{output_num}": keyword.lower() for output_num, keyword in enumerate(self.keywords)}
+        return self._get_keyword(result)
 
 
 class ExtractStructuredDataNodeMixin:

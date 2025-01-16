@@ -414,8 +414,13 @@ def main(input, **kwargs):
     runnable = create_runnable(pipeline, nodes, edges)
     output = runnable.invoke(PipelineState(messages=["Go to FIRST"], experiment_session=experiment_session))
     assert output["messages"][-1] == "A Go to FIRST"
+
     output = runnable.invoke(PipelineState(messages=["Go to Second"], experiment_session=experiment_session))
     assert output["messages"][-1] == "B Go to Second"
+
+    # default route
+    output = runnable.invoke(PipelineState(messages=["Go to Third"], experiment_session=experiment_session))
+    assert output["messages"][-1] == "A Go to Third"
 
 
 @django_db_with_data(available_apps=("apps.service_providers",))
@@ -455,6 +460,11 @@ def test_static_router_participant_data(pipeline, experiment_session):
     ParticipantDataProxy(experiment_session).set({"route_to": "second"})
     output = runnable.invoke(PipelineState(messages=["Hi"], experiment_session=experiment_session))
     assert output["messages"][-1] == "B Hi"
+
+    # default route
+    ParticipantDataProxy(experiment_session).set({})
+    output = runnable.invoke(PipelineState(messages=["Hi"], experiment_session=experiment_session))
+    assert output["messages"][-1] == "A Hi"
 
 
 @contextmanager
