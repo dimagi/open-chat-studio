@@ -285,7 +285,9 @@ def _setup_channel_participant(experiment, identifier, channel_platform, system_
 
 
 @pytest.mark.django_db()
-@override_settings(CELERY_TASK_ALWAYS_EAGER=True)
+@override_settings(
+    CELERY_TASK_ALWAYS_EAGER=True, COMMCARE_CONNECT_SERVER_SECRET="123", COMMCARE_CONNECT_SERVER_ID="123"
+)
 def test_update_participant_data_and_setup_connect_channels(httpx_mock):
     """
     Test that a connect channel is created for a participant where

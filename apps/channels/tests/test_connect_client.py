@@ -5,19 +5,22 @@ from uuid import uuid4
 
 from Crypto.Cipher import AES
 from django.conf import settings
+from django.test import override_settings
 
 from apps.channels.clients.connect_client import CommCareConnectClient, NewMessagePayload
 
 
 class TestConnectClient:
-    def test_encrypt_and_decrypt_message(self):
+    @override_settings(COMMCARE_CONNECT_SERVER_SECRET="123", COMMCARE_CONNECT_SERVER_ID="123")
+    def test_encrypt_and_decrypt_message(self, require_connect_settings):
         encryption_key = os.urandom(32)
         connect_client = CommCareConnectClient()
         msg = "this is a secret message"
         result = connect_client._decrypt_message(encryption_key, *connect_client._encrypt_message(encryption_key, msg))
         assert result == msg
 
-    def test_decrypt_messages(self):
+    @override_settings(COMMCARE_CONNECT_SERVER_SECRET="123", COMMCARE_CONNECT_SERVER_ID="123")
+    def test_decrypt_messages(self, require_connect_settings):
         encryption_key = os.urandom(32)
         cipher = AES.new(encryption_key, mode=AES.MODE_GCM)
         ciphertext, tag = cipher.encrypt_and_digest(b"this is a secret message")
@@ -35,7 +38,8 @@ class TestConnectClient:
         messages = connect_client.decrypt_messages(key=encryption_key, messages=[payload])
         assert messages[0] == "this is a secret message"
 
-    def test_send_message_to_user_1(self, httpx_mock):
+    @override_settings(COMMCARE_CONNECT_SERVER_SECRET="123", COMMCARE_CONNECT_SERVER_ID="123")
+    def test_send_message_to_user(self, httpx_mock, require_connect_settings):
         httpx_mock.add_response(
             method="POST",
             url=f"{settings.COMMCARE_CONNECT_SERVER_URL}/messaging/send_fcm/",
