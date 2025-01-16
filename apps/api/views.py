@@ -332,15 +332,14 @@ def file_content_view(request, pk: int):
 def generate_key(request: Request):
     """Generates a key for a specific channel to use for secure communication"""
     token = request.META.get("HTTP_AUTHORIZATION")
-    if not (token and request.body):
+    if not (token and "channel_id" in request.POST):
         return HttpResponse("Missing token or data", status=400)
 
+    commcare_connect_channel_id = request.POST["channel_id"]
     response = httpx.get(settings.COMMCARE_CONNECT_GET_CONNECT_ID_URL, headers={"AUTHORIZATION": token})
     response.raise_for_status()
     connect_id = response.json().get("sub")
-    logger.info(f"Response: {request.body}")
-    request_data = json.loads(request.body)
-    commcare_connect_channel_id = request_data.get("channel_id")
+
     try:
         participant_data = ParticipantData.objects.defer("data").get(
             participant__identifier=connect_id, system_metadata__commcare_connect_channel_id=commcare_connect_channel_id
