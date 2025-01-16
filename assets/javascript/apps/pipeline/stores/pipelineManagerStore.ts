@@ -1,7 +1,7 @@
 import {Edge, Node} from "reactflow";
 import {create} from "zustand";
 import {PipelineType} from "../types/pipeline";
-import {PipelineManagerStoreType} from "../types/pipelineManagerStore";
+import {ErrorsType, PipelineManagerStoreType} from "../types/pipelineManagerStore";
 import {apiClient} from "../api/api";
 
 let saveTimeoutId: NodeJS.Timeout | null = null;
@@ -93,9 +93,12 @@ const usePipelineManagerStore = create<PipelineManagerStoreType>((set, get) => (
 }));
 
 
-function updateEdgeClasses(pipeline, errors) {
+function updateEdgeClasses(pipeline: PipelineType, errors: ErrorsType) {
+  if (!pipeline.data) {
+    return;
+  }
   const edgeErrors = errors["edge"] || [];
-  for (const edge of pipeline.data.edges) {
+  for (const edge of pipeline.data!.edges) {
     if (edgeErrors.includes(edge["id"])) {
       edge["className"] = "edge-error";
     } else {

@@ -54,7 +54,7 @@ export default function Page() {
             <div className="tooltip tooltip-right" data-tip={dirty ? (isSaving ? "Saving ..." : "Preparing to Save") : "Saved"}>
               <button className="btn btn-sm btn-circle no-animation self-center">
                 {dirty ?
-                  (isSaving ? <div className="loader loader-sm ml-2"></div> :
+                  (isSaving ? <span className="loading loading-spinner loading-xs"></span> :
                     <i className="fa fa-cloud-upload"></i>)
                   : <i className="fa fa-check"></i>
                 }
