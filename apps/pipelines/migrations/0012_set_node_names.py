@@ -24,7 +24,6 @@ def _add_default_name_to_nodes(apps, schema_editor):
             node.save()
 
 
-
 def _remove_node_names(apps, schema_editor):
     Pipeline = apps.get_model("pipelines", "Pipeline")
     Node = apps.get_model("pipelines", "Node")
@@ -38,10 +37,11 @@ def _remove_node_names(apps, schema_editor):
                 del node.params["name"]
                 node.save()
 
+
 class Migration(migrations.Migration):
 
     dependencies = [
-        ('pipelines', '0010_auto_20241127_2042'),
+        ('pipelines', '0011_migrate_assistant_id'),
     ]
 
     operations = [
