@@ -2,9 +2,9 @@
   "description": "Send the input to the node to the list of addresses provided",
   "properties": {
     "name": {
-      "description": "The node name",
-      "title": "Name",
-      "type": "string"
+      "title": "Node Name",
+      "type": "string",
+      "ui:widget": "node_name"
     },
     "recipient_list": {
       "description": "A comma-separated list of email addresses",

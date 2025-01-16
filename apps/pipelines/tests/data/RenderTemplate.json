@@ -2,9 +2,9 @@
   "description": "Renders a Jinja template",
   "properties": {
     "name": {
-      "description": "The node name",
-      "title": "Name",
-      "type": "string"
+      "title": "Node Name",
+      "type": "string",
+      "ui:widget": "node_name"
     },
     "template_string": {
       "description": "Use {{your_variable_name}} to refer to designate input",

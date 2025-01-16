@@ -92,9 +92,7 @@ class PipelineNode(BaseModel, ABC):
     model_config = ConfigDict(arbitrary_types_allowed=True)
 
     _config: RunnableConfig | None = None
-    name: str = Field(
-        description="The node name",
-    )
+    name: str = Field(title="Node Name", json_schema_extra={"ui:widget": "node_name"})
 
     def process(self, node_id: str, incoming_edges: list, state: PipelineState, config) -> PipelineState:
         self._config = config

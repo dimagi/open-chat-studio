@@ -44,9 +44,9 @@
       "type": "string"
     },
     "name": {
-      "description": "The node name",
-      "title": "Name",
-      "type": "string"
+      "title": "Node Name",
+      "type": "string",
+      "ui:widget": "node_name"
     },
     "source_material_id": {
       "default": null,

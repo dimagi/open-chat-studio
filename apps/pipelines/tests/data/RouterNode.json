@@ -44,16 +44,9 @@
       "type": "string"
     },
     "name": {
-      "description": "The node name",
-      "title": "Name",
-      "type": "string"
-    },
-    "prompt": {
-      "default": "You are an extremely helpful router",
-      "minLength": 1,
-      "title": "Prompt",
+      "title": "Node Name",
       "type": "string",
-      "ui:widget": "expandable_text"
+      "ui:widget": "node_name"
     },
     "num_outputs": {
       "default": 2,
@@ -68,6 +61,13 @@
       "title": "Keywords",
       "type": "array",
       "ui:widget": "keywords"
+    },
+    "prompt": {
+      "default": "You are an extremely helpful router",
+      "minLength": 1,
+      "title": "Prompt",
+      "type": "string",
+      "ui:widget": "expandable_text"
     }
   },
   "required": [

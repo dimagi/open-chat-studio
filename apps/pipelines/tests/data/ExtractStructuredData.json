@@ -20,9 +20,9 @@
       "ui:widget": "range"
     },
     "name": {
-      "description": "The node name",
-      "title": "Name",
-      "type": "string"
+      "title": "Node Name",
+      "type": "string",
+      "ui:widget": "node_name"
     },
     "data_schema": {
       "default": "{\"name\": \"the name of the user\"}",

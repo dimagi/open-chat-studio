@@ -2,9 +2,9 @@
   "description": "Returns the input without modification",
   "properties": {
     "name": {
-      "description": "The node name",
-      "title": "Name",
-      "type": "string"
+      "title": "Node Name",
+      "type": "string",
+      "ui:widget": "node_name"
     }
   },
   "required": [

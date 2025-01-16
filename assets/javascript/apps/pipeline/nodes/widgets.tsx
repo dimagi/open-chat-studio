@@ -1,20 +1,13 @@
-import React, {
-  ChangeEvent,
-  ChangeEventHandler,
-  ReactNode,
-  useId,
-  useEffect,
-} from "react";
-import { useState } from "react";
+import React, {ChangeEvent, ChangeEventHandler, ReactNode, useEffect, useId, useState,} from "react";
 import CodeMirror from '@uiw/react-codemirror';
-import { python } from "@codemirror/lang-python";
-import { githubLight, githubDark } from "@uiw/codemirror-theme-github";
-import { CompletionContext, snippetCompletion as snip } from '@codemirror/autocomplete'
-import { TypedOption } from "../types/nodeParameterValues";
+import {python} from "@codemirror/lang-python";
+import {githubDark, githubLight} from "@uiw/codemirror-theme-github";
+import {CompletionContext, snippetCompletion as snip} from '@codemirror/autocomplete'
+import {TypedOption} from "../types/nodeParameterValues";
 import usePipelineStore from "../stores/pipelineStore";
-import { classNames, concatenate, getCachedData, getSelectOptions } from "../utils";
-import { NodeParams, PropertySchema } from "../types/nodeParams";
-import { Node, useUpdateNodeInternals } from "reactflow";
+import {classNames, concatenate, getCachedData, getSelectOptions} from "../utils";
+import {NodeParams, PropertySchema} from "../types/nodeParams";
+import {Node, useUpdateNodeInternals} from "reactflow";
 import DOMPurify from 'dompurify';
 
 export function getWidget(name: string, params: PropertySchema) {
@@ -39,6 +32,8 @@ export function getWidget(name: string, params: PropertySchema) {
       return HistoryTypeWidget
     case "keywords":
       return KeywordsWidget
+    case "node_name":
+      return NodeNameWidget
     default:
       if (params.enum) {
         return SelectWidget
@@ -69,6 +64,37 @@ function DefaultWidget(props: WidgetParams) {
         name={props.name}
         onChange={props.updateParamValue}
         value={props.paramValue}
+        type="text"
+        required={props.required}
+      ></input>
+    </InputField>
+  );
+}
+
+/**
+ * A widget component for displaying and editing the name of a node.
+ *
+ * Will display a blank input field if the current value matches the node ID.
+ */
+function NodeNameWidget(props: WidgetParams) {
+  const value = concatenate(props.paramValue);
+  const [inputValue, setInputValue] = React.useState(value === props.nodeId ? "" : value);
+
+  const handleInputChange = (event: React.ChangeEvent<HTMLInputElement>) => {
+    setInputValue(event.target.value);
+    if (!event.target.value) {
+      event.target.value = props.nodeId;
+    }
+    props.updateParamValue(event);
+  };
+
+  return (
+    <InputField label={props.label} help_text={props.helpText} inputError={props.inputError}>
+      <input
+        className="input input-bordered w-full"
+        name={props.name}
+        onChange={handleInputChange}
+        value={inputValue}
         type="text"
         required={props.required}
       ></input>

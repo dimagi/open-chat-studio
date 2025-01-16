@@ -2,9 +2,23 @@
   "description": "Routes the input to a linked node using the shared state of the pipeline",
   "properties": {
     "name": {
-      "description": "The node name",
-      "title": "Name",
-      "type": "string"
+      "title": "Node Name",
+      "type": "string",
+      "ui:widget": "node_name"
+    },
+    "num_outputs": {
+      "default": 2,
+      "title": "Num Outputs",
+      "type": "integer",
+      "ui:widget": "none"
+    },
+    "keywords": {
+      "items": {
+        "type": "string"
+      },
+      "title": "Keywords",
+      "type": "array",
+      "ui:widget": "keywords"
     },
     "data_source": {
       "enum": [
@@ -21,23 +35,9 @@
       ]
     },
     "route_key": {
-      "description": "The key in the to use for routing",
+      "description": "The key in the data to use for routing",
       "title": "Route Key",
       "type": "string"
-    },
-    "num_outputs": {
-      "default": 2,
-      "title": "Num Outputs",
-      "type": "integer",
-      "ui:widget": "none"
-    },
-    "keywords": {
-      "items": {
-        "type": "string"
-      },
-      "title": "Keywords",
-      "type": "array",
-      "ui:widget": "keywords"
     }
   },
   "required": [

@@ -2,9 +2,9 @@
   "description": "Runs python",
   "properties": {
     "name": {
-      "description": "The node name",
-      "title": "Name",
-      "type": "string"
+      "title": "Node Name",
+      "type": "string",
+      "ui:widget": "node_name"
     },
     "code": {
       "default": "# You must define a main function, which takes the node input as a string.\n# Return a string to pass to the next node.\n\n# Available functions:\n# - get_participant_data() -> dict\n# - set_participant_data(data: Any) -> None\n# - get_state_key(key_name: str) -> str | None\n# - set_state_key(key_name: str, data: Any) -> None\n\ndef main(input: str, **kwargs) -> str:\n    return input\n",
