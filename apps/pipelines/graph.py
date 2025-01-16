@@ -107,7 +107,6 @@ class PipelineGraph(pydantic.BaseModel):
         self._validate_no_parallel_nodes()
         if self._check_for_cycles():
             raise PipelineBuildError("A cycle was detected")
-        self._validate_conditional_edges_in_all_routes()
 
         state_graph = StateGraph(PipelineState)
 
@@ -125,6 +124,8 @@ class PipelineGraph(pydantic.BaseModel):
         return compiled_graph
 
     def _validate_no_parallel_nodes(self):
+        """This is a simple check to ensure that no two edges are connected to the same output
+        which serves as a proxy for parallel nodes."""
         outgoing_edges = defaultdict(list)
         for edge in self.edges:
             outgoing_edges[edge.source].append(edge)
@@ -136,36 +137,6 @@ class PipelineGraph(pydantic.BaseModel):
                 edge_ids = [edge.id for edge in edges if edge.sourceHandle == handle]
                 raise PipelineBuildError(
                     "Multiple edges connected to the same output", node_id=source, edge_ids=edge_ids
-                )
-
-    def _get_all_complete_paths(self) -> list[list[Edge]]:
-        """Generate a list of all paths through the graph from start to end node, including edges."""
-
-        def dfs(current_node: str, edges: list[Edge]):
-            if current_node == self.end_node.id:
-                all_paths.append(edges.copy())
-            else:
-                for edge in self.edges_by_source[current_node]:
-                    edges.append(edge)
-                    dfs(edge.target, edges)
-                    edges.pop()
-
-        all_paths = []
-        dfs(self.start_node.id, [])
-        return all_paths
-
-    def _validate_conditional_edges_in_all_routes(self):
-        """Ensure all routes through the graph have at least one conditional edge."""
-
-        paths = self._get_all_complete_paths()
-        if len(paths) == 1:
-            return
-
-        for path in paths:
-            if not any(edge.is_conditional() for edge in path):
-                raise PipelineBuildError(
-                    "All routes through the graph must have at least one conditional edge",
-                    edge_ids=[edge.id for edge in path],
                 )
 
     def _check_for_cycles(self):
