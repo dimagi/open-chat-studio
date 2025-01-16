@@ -104,9 +104,9 @@ class ChannelPlatform(models.TextChoices):
             case self.SLACK:
                 return "slack_channel_id"
             case self.COMMCARE_CONNECT:
-                # The bot_name will be shown to the user, which is how they'll know which bot it is. We use the bot_name
+                # The bot_name will be shown to the user, which is how they'll know which bot it is. We use the bot name
                 # here to prevent other bots from using the same name in order to mitigate confusion.
-                return "bot_name"
+                return "commcare_connect_bot_name"
 
     @staticmethod
     def as_list(exclude: list["ChannelPlatform"]) -> list["ChannelPlatform"]:

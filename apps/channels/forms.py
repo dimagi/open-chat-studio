@@ -220,7 +220,7 @@ class SlackChannelForm(ExtraFormBase):
 
 
 class CommCareConnectChannelForm(ExtraFormBase):
-    bot_name = forms.CharField(
+    commcare_connect_bot_name = forms.CharField(
         label="Bot Name",
         help_text="This is the name of the chatbot that will be displayed to users on CommCare Connect",
         max_length=100,
