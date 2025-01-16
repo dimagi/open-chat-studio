@@ -12,7 +12,7 @@ from apps.channels.clients.connect_client import CommCareConnectClient, NewMessa
 
 class TestConnectClient:
     @override_settings(COMMCARE_CONNECT_SERVER_SECRET="123", COMMCARE_CONNECT_SERVER_ID="123")
-    def test_encrypt_and_decrypt_message(self, require_connect_settings):
+    def test_encrypt_and_decrypt_message(self):
         encryption_key = os.urandom(32)
         connect_client = CommCareConnectClient()
         msg = "this is a secret message"
@@ -20,7 +20,7 @@ class TestConnectClient:
         assert result == msg
 
     @override_settings(COMMCARE_CONNECT_SERVER_SECRET="123", COMMCARE_CONNECT_SERVER_ID="123")
-    def test_decrypt_messages(self, require_connect_settings):
+    def test_decrypt_messages(self):
         encryption_key = os.urandom(32)
         cipher = AES.new(encryption_key, mode=AES.MODE_GCM)
         ciphertext, tag = cipher.encrypt_and_digest(b"this is a secret message")
@@ -39,7 +39,7 @@ class TestConnectClient:
         assert messages[0] == "this is a secret message"
 
     @override_settings(COMMCARE_CONNECT_SERVER_SECRET="123", COMMCARE_CONNECT_SERVER_ID="123")
-    def test_send_message_to_user(self, httpx_mock, require_connect_settings):
+    def test_send_message_to_user(self, httpx_mock):
         httpx_mock.add_response(
             method="POST",
             url=f"{settings.COMMCARE_CONNECT_SERVER_URL}/messaging/send_fcm/",

@@ -65,6 +65,7 @@ def _setup(experiment, message_spec: dict | None = None) -> tuple:
 @pytest.mark.django_db()
 class TestHandleConnectMessageTask:
     @patch("apps.channels.tasks.CommCareConnectChannel")
+    @override_settings(COMMCARE_CONNECT_SERVER_SECRET="123", COMMCARE_CONNECT_SERVER_ID="123")
     def test_multiple_messages_are_sorted_and_concatenated(self, CommCareConnectChannelMock, experiment):
         channel_instance = CommCareConnectChannelMock.return_value
         _, _, experiment_channel, data, payload = _setup(
@@ -77,6 +78,7 @@ class TestHandleConnectMessageTask:
 
     @pytest.mark.django_db()
     @patch("apps.chat.bots.TopicBot.process_input")
+    @override_settings(COMMCARE_CONNECT_SERVER_SECRET="123", COMMCARE_CONNECT_SERVER_ID="123")
     def test_bot_generate_and_sends_message(self, process_input, experiment):
         process_input.return_value = "Hi human"
         commcare_connect_channel_id, encryption_key, experiment_channel, data, payload = _setup(experiment)
@@ -102,7 +104,7 @@ class TestApiEndpoint:
         }
 
     @patch("apps.channels.views.tasks.handle_commcare_connect_message", Mock())
-    @override_settings(COMMCARE_CONNECT_SERVER_SECRET="123123")
+    @override_settings(COMMCARE_CONNECT_SERVER_SECRET="123", COMMCARE_CONNECT_SERVER_ID="123")
     def test_payload_passes_validation(self, client, experiment):
         _, _, _, _, payload = _setup(experiment)
 
@@ -114,7 +116,7 @@ class TestApiEndpoint:
         )
         assert response.status_code == 200
 
-    @override_settings(COMMCARE_CONNECT_SERVER_SECRET="123123")
+    @override_settings(COMMCARE_CONNECT_SERVER_SECRET="123", COMMCARE_CONNECT_SERVER_ID="123")
     def test_invalid_payload(self, client, experiment):
         _, _, _, _, payload = _setup(experiment)
         payload["messages"][0]["timestamp"] = None
@@ -135,7 +137,7 @@ class TestApiEndpoint:
             ("experiment_channel", {"detail": "No experiment channel found"}),
         ],
     )
-    @override_settings(COMMCARE_CONNECT_SERVER_SECRET="123123")
+    @override_settings(COMMCARE_CONNECT_SERVER_SECRET="123", COMMCARE_CONNECT_SERVER_ID="123")
     def test_missing_records(self, missing_record, expected_response, client, experiment):
         _, _, experiment_channel, participant_data, payload = _setup(experiment)
         if missing_record == "participant_data":
