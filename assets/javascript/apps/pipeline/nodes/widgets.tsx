@@ -311,16 +311,16 @@ export function CodeModal(
     inputError: string | undefined;
   }) {
   const customCompletions = {
-    get_participant_data: snip("get_participant_data(\"${key_name}\")", {
+    get_participant_data: snip("get_participant_data()", {
       label: "get_participant_data",
       type: "keyword",
-      detail: "Gets participant data for the given key",
+      detail: "Gets participant data for the current participant",
       boost: 1
     }),
-    set_participant_data: snip("set_participant_data(\"${key_name}\", ${data})", {
+    set_participant_data: snip("set_participant_data(${data})", {
       label: "set_participant_data",
       type: "keyword",
-      detail: "Sets participant data for the given key",
+      detail: "Overwrites the participant data with the value provided",
       boost: 1
     }),
   }

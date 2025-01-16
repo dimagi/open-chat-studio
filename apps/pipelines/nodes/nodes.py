@@ -659,8 +659,8 @@ DEFAULT_FUNCTION = """# You must define a main function, which takes the node in
 # Return a string to pass to the next node.
 
 # Available functions:
-# - get_participant_data(key_name: str) -> str | None
-# - set_participant_data(key_name: str, data: Any) -> None
+# - get_participant_data() -> dict
+# - set_participant_data(data: Any) -> None
 
 def main(input: str, **kwargs) -> str:
     return input
@@ -733,6 +733,35 @@ class CodeNode(PipelineNode):
         )
 
         custom_globals = safe_globals.copy()
+
+        class ParticipantDataProxy:
+            """Allows multiple access without needing to re-fetch from the DB"""
+
+            def __init__(self, state):
+                self.state = state
+                self._participant_data = None
+
+            def _get_db_object(self):
+                if not self._participant_data:
+                    content_type = ContentType.objects.get_for_model(Experiment)
+                    session = state["experiment_session"]
+                    self._participant_data, _ = ParticipantData.objects.get_or_create(
+                        participant_id=session.participant_id,
+                        content_type=content_type,
+                        object_id=session.experiment_id,
+                        team_id=session.experiment.team_id,
+                    )
+                return self._participant_data
+
+            def get(self):
+                return self._get_db_object().data
+
+            def set(self, data):
+                participant_data = self._get_db_object()
+                participant_data.data = data
+                participant_data.save(update_fields=["data"])
+
+        participant_data_proxy = ParticipantDataProxy(state)
         custom_globals.update(
             {
                 "__builtins__": self._get_custom_builtins(),
@@ -742,36 +771,11 @@ class CodeNode(PipelineNode):
                 "_getitem_": default_guarded_getitem,
                 "_getiter_": default_guarded_getiter,
                 "_write_": lambda x: x,
-                "get_participant_data": self._get_participant_data(state),
-                "set_participant_data": self._set_participant_data(state),
+                "get_participant_data": participant_data_proxy.get,
+                "set_participant_data": participant_data_proxy.set,
             }
         )
         return custom_globals
-
-    def _set_participant_data(self, state: PipelineState):
-        def set_particpant_data(key_name: str, value: str) -> None:
-            content_type = ContentType.objects.get_for_model(Experiment)
-            session = state["experiment_session"]
-            participant_data, _ = ParticipantData.objects.get_or_create(
-                participant=session.participant,
-                content_type=content_type,
-                object_id=session.experiment.id,
-                team=session.experiment.team,
-            )
-            participant_data.data[key_name] = value
-            participant_data.save()
-
-        return set_particpant_data
-
-    def _get_participant_data(self, state: PipelineState):
-        def get_particpant_data(key_name: str):
-            session = state["experiment_session"]
-            participant_data: ParticipantData = ParticipantData.objects.for_experiment(session.experiment).get(
-                participant=session.participant
-            )
-            return participant_data.data.get(key_name)
-
-        return get_particpant_data
 
     def _get_custom_builtins(self):
         allowed_modules = {

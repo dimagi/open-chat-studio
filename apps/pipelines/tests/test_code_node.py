@@ -133,7 +133,7 @@ def test_get_participant_data(pipeline, experiment_session):
 
     code = """
 def main(input, **kwargs):
-    return get_participant_data("fun_facts")["body_type"]
+    return get_participant_data()["fun_facts"]["body_type"]
 """
     nodes = [
         start_node(),
@@ -161,10 +161,10 @@ def test_update_participant_data(pipeline, experiment_session):
 
     code = f"""
 def main(input, **kwargs):
-    facts = get_participant_data("fun_facts")
-    facts["personality"] = "{output}"
-    set_participant_data("fun_facts", facts)
-    return get_participant_data("fun_facts")["personality"]
+    data = get_participant_data()
+    data["fun_facts"]["personality"] = "{output}"
+    set_participant_data(data)
+    return get_participant_data()["fun_facts"]["personality"]
 """
     nodes = [
         start_node(),
