@@ -388,7 +388,7 @@ class TestConnectApis:
         httpx_mock.add_response(
             method="GET", url=settings.COMMCARE_CONNECT_GET_CONNECT_ID_URL, json={"sub": connect_id}
         )
-        response = self._make_request(client=client, data={"channel_id": commcare_connect_channel_id})
+        response = self._make_key_request(client=client, data={"channel_id": commcare_connect_channel_id})
 
         assert response.status_code == 200
         base64_key = response.json()["key"]
