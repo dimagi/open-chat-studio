@@ -121,7 +121,7 @@ export default function Pipeline() {
       e.preventDefault();
       (e as unknown as Event).stopImmediatePropagation();
       deleteNode(
-          lastSelection.nodes.filter((node) => nodeSchemas.get(node.data.type)!["ui:flow_node_type"] === "pipelineNode").map((node) => node.id)
+          lastSelection.nodes.filter((node) => nodeSchemas.get(node.data.type)!["ui:can_delete"]).map((node) => node.id)
       );
       deleteEdge(lastSelection.edges.map((edge) => edge.id));
     }

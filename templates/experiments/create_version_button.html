@@ -11,6 +11,11 @@
       </button>
     </div>
   </div>
+  <div id="version-status-badge" hx-swap-oob="innerHTML">
+    <div class="tooltip" data-tip="Version build in progress">
+      <div class="badge badge-warning badge-sm">Building new version</div>
+    </div>
+  </div>
 {% else %}
   <a class="btn btn-sm btn-outline btn-success" href="{% url 'experiments:create_version' experiment.team.slug experiment.id %}"
      {% if trigger_refresh %}x-init='htmx.trigger(".watchVersionChange", "version-changed")'{% endif %}

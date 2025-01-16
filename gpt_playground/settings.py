@@ -516,10 +516,14 @@ TAGGIT_CASE_INSENSITIVE = True
 
 # Documentation links
 DOCUMENTATION_LINKS = {
+    # Try to make these keys grep-able so that usages are easy to find
     "consent": "https://dimagi.atlassian.net/wiki/spaces/OCS/pages/2144305304/Consent+Forms+on+OCS",
     "survey": "https://dimagi.atlassian.net/wiki/spaces/OCS/pages/2144305308/Surveys",
     "experiment": "https://dimagi.atlassian.net/wiki/spaces/OCS/pages/2144305312/Creating+a+Chatbot+Experiment",
+    "concepts.prompt_variables": "/concepts/prompt_variables/",
+    "concepts.experiments": "/concepts/experiment/",
 }
+DOCUMENTATION_BASE_URL = env("DOCUMENTATION_BASE_URL", default="https://dimagi.github.io/open-chat-studio-docs")
 
 # Django rest framework config
 API_KEY_CUSTOM_HEADER = "HTTP_X_API_KEY"

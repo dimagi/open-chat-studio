@@ -6,7 +6,7 @@ from functools import cached_property
 from typing import Annotated, Any, Literal, Self
 
 from langchain_core.runnables import RunnableConfig
-from pydantic import BaseModel, ConfigDict
+from pydantic import BaseModel, ConfigDict, model_validator
 from pydantic.config import JsonDict
 
 from apps.experiments.models import ExperimentSession
@@ -165,7 +165,44 @@ class UiSchema(BaseModel):
 class NodeSchema(BaseModel):
     label: str
     flow_node_type: Literal["pipelineNode", "startNode", "endNode"] = "pipelineNode"
+    can_delete: bool = None
+    can_add: bool = None
+    deprecated: bool = False
+    deprecation_message: str = None
+
+    @model_validator(mode="after")
+    def update_metadata_fields(self) -> Self:
+        is_pipeline_node = self.flow_node_type == "pipelineNode"
+        if self.can_delete is None:
+            self.can_delete = is_pipeline_node
+        if self.can_add is None:
+            self.can_add = is_pipeline_node
+
+        if self.deprecated:
+            self.can_add = False
+        return self
 
     def __call__(self, schema: JsonDict):
         schema["ui:label"] = self.label
         schema["ui:flow_node_type"] = self.flow_node_type
+        schema["ui:can_delete"] = self.can_delete
+        schema["ui:can_add"] = self.can_add
+        schema["ui:deprecated"] = self.deprecated
+        if self.deprecated and self.deprecation_message:
+            schema["ui:deprecation_message"] = self.deprecation_message
+
+
+def deprecated_node(cls=None, *, message=None):
+    """Class decorator for deprecating a node"""
+
+    def _inner(cls):
+        schema = cls.model_config["json_schema_extra"]
+        schema.deprecated = True
+        schema.deprecation_message = message
+        schema.can_add = False
+        return cls
+
+    if cls is None:
+        return _inner
+
+    return _inner(cls)

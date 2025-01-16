@@ -2,11 +2,11 @@
 This test suite is designed to ensure that the base channel functionality is working as
 intended. It utilizes the Telegram channel subclass to serve as a testing framework.
 """
-
 import re
 from unittest.mock import Mock, patch
 
 import pytest
+from django.test import override_settings
 
 from apps.channels.models import ChannelPlatform, ExperimentChannel
 from apps.chat.channels import URL_REGEX, ChannelBase, TelegramChannel, strip_urls_and_emojis
@@ -434,6 +434,7 @@ def test_user_query_extracted_for_pre_conversation_flow(message_func, message_ty
 
 
 @pytest.mark.django_db()
+@override_settings(COMMCARE_CONNECT_SERVER_SECRET="123", COMMCARE_CONNECT_SERVER_ID="123")
 @pytest.mark.parametrize("platform", [platform for platform, _ in ChannelPlatform.choices])
 def test_all_channels_can_be_instantiated_from_a_session(platform, twilio_provider):
     """This test checks all channel types and makes sure that we can instantiate each one by calling

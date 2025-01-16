@@ -37,7 +37,7 @@ def pipeline(llm_provider, llm_provider_model):
             "id": "1",
             "data": {
                 "id": "1",
-                "label": "LLM Response with prompt",
+                "label": "LLM",
                 "type": "LLMResponseWithPrompt",
                 "params": {
                     "llm_provider_id": str(llm_provider.id),
