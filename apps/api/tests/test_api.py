@@ -360,8 +360,8 @@ def test_update_participant_data_and_setup_connect_channels(httpx_mock):
     # we expect only one call to the Connect servers to have been made
     request = httpx_mock.get_request()
     request_data = json.loads(request.read())
-    request_data["connectid"] == "connectid_2"
-    request_data["channel_source"] == f"{experiment1.team}-{experiment1.name}"
+    assert request_data["connectid"] == "connectid_2"
+    assert request_data["channel_source"] == f"{experiment1.team}-{experiment1.name}"
     assert Participant.objects.filter(identifier="connectid_2").exists()
     data = ParticipantData.objects.get(participant__identifier="connectid_2", object_id=experiment1.id)
     assert data.system_metadata["commcare_connect_channel_id"] == created_connect_channel_id
