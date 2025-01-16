@@ -61,7 +61,7 @@ export function PipelineNode(nodeProps: NodeProps<NodeData>) {
             {nodeSchema.description && (
               <div className="dropdown dropdown-top">
                   <button tabIndex={0} role="button" className="btn btn-xs join-item">
-                      <i className={"fa fa-circle-question"}></i>
+                      <i className={"fa-regular fa-circle-question"}></i>
                   </button>
                   <HelpContent><p>{nodeSchema.description}</p></HelpContent>
               </div>

@@ -16,6 +16,7 @@ from apps.custom_actions.form_utils import set_custom_actions
 from apps.custom_actions.mixins import CustomActionOperationMixin
 from apps.experiments.models import ExperimentSession, VersionsMixin, VersionsObjectManagerMixin
 from apps.pipelines.exceptions import PipelineBuildError
+from apps.pipelines.executor import patch_executor
 from apps.pipelines.flow import Flow, FlowNode, FlowNodeData
 from apps.pipelines.logging import PipelineLoggingCallbackHandler
 from apps.pipelines.nodes.base import PipelineState
@@ -183,11 +184,11 @@ class Pipeline(BaseTeamModel, VersionsMixin):
         """Invoke the pipeline without a session or the ability to save the run to history"""
         from apps.pipelines.graph import PipelineGraph
 
-        output = ""
         with temporary_session(self.team, user_id) as session:
             runnable = PipelineGraph.build_runnable_from_pipeline(self)
             input = PipelineState(messages=[input], experiment_session=session, pipeline_version=self.version_number)
-            output = runnable.invoke(input)
+            with patch_executor():
+                output = runnable.invoke(input, config={"max_concurrency": 1})
             output = PipelineState(**output).json_safe()
         return output
 
