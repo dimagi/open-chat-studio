@@ -17,7 +17,7 @@ from apps.teams.utils import set_current_team
 
 from .models import UserAPIKey
 
-logger = logging.getLogger("api")
+logger = logging.getLogger("ocs.api")
 
 
 class BaseKeyAuthentication(BaseAuthentication):
