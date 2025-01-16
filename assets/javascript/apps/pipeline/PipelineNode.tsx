@@ -1,6 +1,6 @@
 import {Node, NodeProps, NodeToolbar, Position} from "reactflow";
 import React, {ChangeEvent} from "react";
-import {getCachedData, nodeBorderClass} from "./utils";
+import {concatenate, getCachedData, nodeBorderClass} from "./utils";
 import usePipelineStore from "./stores/pipelineStore";
 import usePipelineManagerStore from "./stores/pipelineManagerStore";
 import useEditorStore from "./stores/editorStore";
@@ -68,7 +68,7 @@ export function PipelineNode(nodeProps: NodeProps<NodeData>) {
         </div>
       </NodeToolbar>
       <div className={nodeBorderClass(nodeErrors, selected)}>
-        <NodeHeader nodeSchema={nodeSchema} />
+        <NodeHeader nodeSchema={nodeSchema} nodeName={concatenate(data.params["name"])} />
 
         <NodeInput />
         <div className="px-4">
@@ -100,13 +100,23 @@ export function PipelineNode(nodeProps: NodeProps<NodeData>) {
   );
 }
 
-function NodeHeader({nodeSchema}: {nodeSchema: JsonSchema}) {
+function NodeHeader({nodeSchema, nodeName}: {nodeSchema: JsonSchema, nodeName: string}) {
   return (
     <div className="m-1 text-lg font-bold text-center">
       <DeprecationNotice nodeSchema={nodeSchema} />
       {nodeSchema["ui:label"]}
+      <NodeName nodeName={nodeName} />
     </div>
   );
+}
+
+
+function NodeName({nodeName}: {nodeName: string}) {
+  const defaultNodeNameRegex = /^[A-Za-z]+-[a-zA-Z0-9]{5}$/;
+  if (!defaultNodeNameRegex.test(nodeName)){
+    return <>: <div className="mr-2 inline-block text-sm">{nodeName}</div></>
+  }
+  return <></>
 }
 
 
