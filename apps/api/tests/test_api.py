@@ -374,7 +374,7 @@ class TestConnectApis:
             system_metadata={"commcare_connect_channel_id": channel_id},
         )
 
-    def _make_request(self, client, data):
+    def _make_key_request(self, client, data):
         token = uuid.uuid4()
         url = reverse("api:commcare-connect:generate_key")
         return client.post(
