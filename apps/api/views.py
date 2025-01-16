@@ -1,6 +1,4 @@
-import base64
 import json
-import secrets
 import textwrap
 
 import httpx
@@ -346,13 +344,10 @@ def generate_key(request: Request):
     except ParticipantData.DoesNotExist:
         raise Http404()
 
-    if participant_data.encryption_key:
-        return JsonResponse({"key": participant_data.encryption_key})
+    if not participant_data.encryption_key:
+        participant_data.generate_encryption_key()
 
-    key = base64.b64encode(secrets.token_bytes(32)).decode("utf-8")
-    participant_data.encryption_key = key
-    participant_data.save(update_fields=["encryption_key"])
-    return JsonResponse({"key": key})
+    return JsonResponse({"key": participant_data.encryption_key})
 
 
 @csrf_exempt
