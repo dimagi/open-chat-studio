@@ -101,22 +101,17 @@ export function PipelineNode(nodeProps: NodeProps<NodeData>) {
 }
 
 function NodeHeader({nodeSchema, nodeName}: {nodeSchema: JsonSchema, nodeName: string}) {
+  const defaultNodeNameRegex = /^[A-Za-z]+-[a-zA-Z0-9]{5}$/;
+  const hasCustomName = !defaultNodeNameRegex.test(nodeName);
+  const header = hasCustomName ? nodeName : nodeSchema["ui:label"];
+  const subheader = hasCustomName ? nodeSchema["ui:label"] : "";
   return (
     <div className="m-1 text-lg font-bold text-center">
       <DeprecationNotice nodeSchema={nodeSchema} />
-      {nodeSchema["ui:label"]}
-      <NodeName nodeName={nodeName} />
+      {header}
+      {subheader && <div className="text-sm">{subheader}</div>}
     </div>
   );
-}
-
-
-function NodeName({nodeName}: {nodeName: string}) {
-  const defaultNodeNameRegex = /^[A-Za-z]+-[a-zA-Z0-9]{5}$/;
-  if (!defaultNodeNameRegex.test(nodeName)){
-    return <>: <div className="mr-2 inline-block text-sm">{nodeName}</div></>
-  }
-  return <></>
 }
 
 
