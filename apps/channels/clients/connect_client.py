@@ -11,6 +11,10 @@ logger = logging.getLogger("connectid-api")
 
 class CommCareConnectClient:
     def __init__(self):
+        if not all(settings.COMMCARE_CONNECT_SERVER_ID, settings.COMMCARE_CONNECT_SERVER_SECRET):
+            raise ValueError(
+                "CONNECT_ID_SERVER_BASE_URL, COMMCARE_CONNECT_SERVER_ID, and COMMCARE_CONNECT_SERVER_SECRET must be set"
+            )
         self._base_url = settings.CONNECT_ID_SERVER_BASE_URL
         self.client = httpx.Client(
             auth=httpx.BasicAuth(settings.COMMCARE_CONNECT_SERVER_ID, settings.COMMCARE_CONNECT_SERVER_SECRET),
