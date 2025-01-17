@@ -64,8 +64,8 @@ const getWidgetsGeneric = (
       if (a === "name") return -1;
       if (b === "name") return 1;
 
-      const indexA = schema["ui:order"].indexOf(a);
-      const indexB = schema["ui:order"].indexOf(b);
+      const indexA = schema["ui:order"]!.indexOf(a);
+      const indexB = schema["ui:order"]!.indexOf(b);
       // If 'a' is not in the order list, it should be at the end
       if (indexA === -1) return 1;
       if (indexB === -1) return -1;
