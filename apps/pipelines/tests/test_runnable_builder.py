@@ -221,7 +221,7 @@ def test_branching_pipeline(pipeline, experiment_session):
         },
     ]
     user_input = "The Input"
-    output = create_runnable(pipeline, nodes, edges).invoke(
+    output = create_runnable(pipeline, nodes, edges, lenient=True).invoke(
         PipelineState(messages=[user_input], experiment_session=experiment_session)
     )["outputs"]
     expected_output = {
@@ -831,4 +831,38 @@ def test_cyclical_graph(pipeline):
     ]
 
     with pytest.raises(PipelineBuildError, match="A cycle was detected"):
-        create_runnable(pipeline, nodes, edges)
+        create_runnable(pipeline, nodes, edges, lenient=True)
+
+
+@django_db_with_data(available_apps=("apps.service_providers",))
+def test_parallel_nodes(pipeline):
+    start = start_node()
+    passthrough_1 = passthrough_node()
+    passthrough_2 = passthrough_node()
+    end = end_node()
+    nodes = [start, passthrough_1, passthrough_2, end]
+    edges = [
+        {
+            "id": "start -> passthrough 1",
+            "source": start["id"],
+            "target": passthrough_1["id"],
+        },
+        {
+            "id": "start -> passthrough 2",
+            "source": start["id"],
+            "target": passthrough_2["id"],
+        },
+        {
+            "id": "passthrough 1 -> end",
+            "source": passthrough_1["id"],
+            "target": end["id"],
+        },
+        {
+            "id": "passthrough 2 -> end",
+            "source": passthrough_2["id"],
+            "target": end["id"],
+        },
+    ]
+
+    with pytest.raises(PipelineBuildError, match="Multiple edges connected to the same output"):
+        create_runnable(pipeline, nodes, edges, lenient=False)

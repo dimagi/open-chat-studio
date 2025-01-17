@@ -17,7 +17,8 @@ export function PipelineNode(nodeProps: NodeProps<NodeData>) {
   const openEditorForNode = useEditorStore((state) => state.openEditorForNode)
   const setNode = usePipelineStore((state) => state.setNode);
   const deleteNode = usePipelineStore((state) => state.deleteNode);
-  const nodeErrors = usePipelineManagerStore((state) => state.errors[id]);
+  const hasErrors = usePipelineManagerStore((state) => state.nodeHasErrors(id));
+  const nodeError = usePipelineManagerStore((state) => state.getNodeFieldError(id, "root"));
   const nodeSchema = getCachedData().nodeSchemas.get(data.type)!;
 
   const updateParamValue = (
@@ -42,7 +43,7 @@ export function PipelineNode(nodeProps: NodeProps<NodeData>) {
 
   return (
     <>
-      <NodeToolbar position={Position.Top}>
+      <NodeToolbar position={Position.Top} isVisible={hasErrors}>
         <div className="border border-primary join">
             <button
               className="btn btn-xs join-item"
@@ -62,9 +63,17 @@ export function PipelineNode(nodeProps: NodeProps<NodeData>) {
                   <HelpContent><p>{nodeSchema.description}</p></HelpContent>
               </div>
             )}
+            {nodeError && (
+                <div className="dropdown dropdown-top">
+                    <button tabIndex={0} role="button" className="btn btn-xs join-item">
+                        <i className="fa-solid fa-exclamation-triangle text-warning"></i>
+                    </button>
+                    <HelpContent><p>{nodeError}</p></HelpContent>
+                </div>
+              )}
         </div>
       </NodeToolbar>
-      <div className={nodeBorderClass(nodeErrors, selected)}>
+      <div className={nodeBorderClass(hasErrors, selected)}>
         <NodeHeader nodeSchema={nodeSchema} nodeName={concatenate(data.params["name"])} />
 
         <NodeInput />

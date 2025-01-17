@@ -16,6 +16,7 @@ from apps.chat.models import ChatMessage, ChatMessageType
 from apps.custom_actions.form_utils import set_custom_actions
 from apps.custom_actions.mixins import CustomActionOperationMixin
 from apps.experiments.models import ExperimentSession, VersionsMixin, VersionsObjectManagerMixin
+from apps.pipelines.exceptions import PipelineBuildError
 from apps.pipelines.executor import patch_executor
 from apps.pipelines.flow import Flow, FlowNode, FlowNodeData
 from apps.pipelines.logging import PipelineLoggingCallbackHandler
@@ -133,6 +134,7 @@ class Pipeline(BaseTeamModel, VersionsMixin):
 
     def validate(self) -> dict:
         """Validate the pipeline nodes and return a dictionary of errors"""
+        from apps.pipelines.graph import PipelineGraph
         from apps.pipelines.nodes import nodes as pipeline_nodes
 
         errors = defaultdict(dict)
@@ -153,7 +155,15 @@ class Pipeline(BaseTeamModel, VersionsMixin):
                 for flow_id in flow_ids:
                     errors[flow_id].update({"name": "All node names must be unique"})
 
-        return errors
+        if errors:
+            return {"node": errors}
+
+        try:
+            PipelineGraph.build_runnable_from_pipeline(self)
+        except PipelineBuildError as e:
+            return e.to_json()
+
+        return {}
 
     @cached_property
     def flow_data(self) -> dict:
