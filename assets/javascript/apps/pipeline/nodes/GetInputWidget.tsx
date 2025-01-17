@@ -127,7 +127,7 @@ export const getInputWidget = (params: InputWidgetParams) => {
     return <></>;
   }
 
-  const getNodeFieldError = usePipelineManagerStore((state) => state.getFieldError);
+  const getNodeFieldError = usePipelineManagerStore((state) => state.getNodeFieldError);
   const Widget = getWidget(widgetOrType, params.schema)
   let fieldError = getNodeFieldError(params.id, params.name);
   const paramValue = params.params[params.name];
