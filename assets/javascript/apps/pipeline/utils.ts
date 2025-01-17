@@ -8,10 +8,36 @@ export function getNodeId(nodeType: string) {
   return nodeType + "-" + uid.rnd();
 }
 
+/**
+ * Combines multiple class names into a single string.
+ * 
+ * @param classes - A variable number of class names, which can include null or undefined values
+ * @returns A space-separated string of non-null class names
+ * 
+ * @remarks
+ * This utility function filters out falsy values (null, undefined) and joins the remaining class names.
+ * 
+ * @example
+ * classNames('btn', 'primary', null, 'active') // Returns 'btn primary active'
+ * classNames(undefined, 'disabled') // Returns 'disabled'
+ * classNames() // Returns an empty string
+ */
 export function classNames(...classes: Array<string | null | undefined>): string {
   return classes.filter(Boolean).join(" ");
 }
 
+/**
+ * Determines the CSS border class for a node based on its error and selection state.
+ *
+ * @param nodeErrors - Indicates whether the node has errors
+ * @param selected - Indicates whether the node is currently selected
+ * @returns A string of CSS classes defining the node's border styling
+ *
+ * @remarks
+ * The border class is determined by two factors:
+ * - If the node has errors, it uses an error border
+ * - If the node is selected, it uses a different border color
+ */
 export function nodeBorderClass(nodeErrors : boolean, selected : boolean ): string {
   const defaultBorder = nodeErrors ? "border-error " : ""
   const selectedBorder = nodeErrors ? "border-secondary" : "border-primary"

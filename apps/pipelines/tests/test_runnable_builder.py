@@ -178,6 +178,24 @@ def test_render_template(pipeline):
 @django_db_with_data(available_apps=("apps.service_providers",))
 @mock.patch("apps.pipelines.nodes.base.PipelineNode.logger", mock.Mock())
 def test_branching_pipeline(pipeline, experiment_session):
+    """
+    Test a pipeline with multiple branching paths to verify correct message processing and output generation.
+    
+    This test validates a pipeline that demonstrates branching behavior, where a single input can be processed through multiple paths simultaneously. It checks that:
+    - The input is correctly propagated through different template rendering nodes
+    - Branching paths can have different processing steps
+    - The end node collects outputs from multiple branches
+    
+    Parameters:
+        pipeline (Pipeline): The pipeline configuration factory
+        experiment_session (ExperimentSession): The current experiment session context
+    
+    Verifies:
+        - Branching pipeline creates multiple output paths
+        - Each branch processes the input through its specific template
+        - End node aggregates outputs from different branches
+        - Lenient mode allows complex graph structures
+    """
     start = start_node()
     template_a = render_template_node("A ({{input }})")
     template_b = render_template_node("B ({{ input}})")
@@ -703,6 +721,22 @@ def test_split_graphs_should_not_build(pipeline):
 @django_db_with_data(available_apps=("apps.service_providers",))
 def test_cyclical_graph(pipeline):
     # Ensure that cyclical graphs throw an error
+    """
+    Test the pipeline builder's handling of cyclical graph structures.
+    
+    This test verifies that the pipeline creation process correctly detects and prevents the creation of graphs with cyclic dependencies, even when using lenient mode.
+    
+    Parameters:
+        pipeline (Pipeline): A pytest fixture representing the pipeline configuration.
+    
+    Raises:
+        PipelineBuildError: An error indicating that a cycle was detected in the graph structure.
+    
+    Notes:
+        - Creates a graph with nodes that form a cycle between passthrough_1 and passthrough_2
+        - Uses lenient mode to allow more flexible graph validation
+        - Expects a specific error message when attempting to create a runnable with cyclic dependencies
+    """
     start = start_node()
     passthrough_1 = passthrough_node()
     passthrough_2 = passthrough_node()
@@ -737,6 +771,17 @@ def test_cyclical_graph(pipeline):
 
 @django_db_with_data(available_apps=("apps.service_providers",))
 def test_parallel_nodes(pipeline):
+    """
+    Test the pipeline's error handling when multiple edges are connected to the same output node.
+    
+    This test verifies that attempting to create a runnable pipeline with multiple edges connecting to the same end node raises a PipelineBuildError when lenient mode is disabled.
+    
+    Parameters:
+        pipeline (Pipeline): A pipeline fixture used for creating the runnable.
+    
+    Raises:
+        PipelineBuildError: An error indicating multiple edges are connected to the same output when lenient mode is False.
+    """
     start = start_node()
     passthrough_1 = passthrough_node()
     passthrough_2 = passthrough_node()

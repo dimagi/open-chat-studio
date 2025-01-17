@@ -132,7 +132,26 @@ class Pipeline(BaseTeamModel, VersionsMixin):
             created_node.update_from_params()
 
     def validate(self) -> dict:
-        """Validate the pipeline nodes and return a dictionary of errors"""
+        """
+        Validates the pipeline's nodes and their configurations.
+        
+        Performs comprehensive validation of all nodes in the pipeline by:
+        1. Checking individual node parameter configurations
+        2. Attempting to build a runnable pipeline graph
+        
+        Parameters:
+            None
+        
+        Returns:
+            dict: A dictionary containing validation errors, if any:
+                - Empty dictionary if validation succeeds
+                - Nested dictionary with node-specific validation errors
+                - JSON-formatted error if pipeline graph construction fails
+        
+        Raises:
+            pydantic.ValidationError: If node parameters fail validation
+            PipelineBuildError: If pipeline graph cannot be constructed
+        """
         from apps.pipelines.graph import PipelineGraph
         from apps.pipelines.nodes import nodes as pipeline_nodes
 
@@ -156,6 +175,22 @@ class Pipeline(BaseTeamModel, VersionsMixin):
 
     @cached_property
     def flow_data(self) -> dict:
+        """
+        Constructs and returns a flow data dictionary from the pipeline's nodes and data.
+        
+        This cached property method transforms the pipeline's raw data into a structured flow representation by:
+        1. Creating a base Flow object from the pipeline's data
+        2. Mapping existing nodes to their corresponding flow node definitions
+        3. Generating FlowNode instances with detailed node information
+        4. Updating the flow's nodes with the generated node list
+        5. Converting the flow object to a dictionary
+        
+        Parameters:
+            self (Pipeline): The current pipeline instance
+        
+        Returns:
+            dict: A dictionary representation of the flow, including nodes with their positions, types, and parameters
+        """
         flow = Flow(**self.data)
         flow_nodes_by_id = {node.id: node for node in flow.nodes}
         nodes = []

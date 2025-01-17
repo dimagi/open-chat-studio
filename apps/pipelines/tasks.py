@@ -20,6 +20,22 @@ def send_email_from_pipeline(recipient_list, subject, message):
 
 @shared_task
 def get_response_for_pipeline_test_message(pipeline_id: int, message_text: str, user_id: int):
+    """
+    Retrieve a response from a pipeline for a test message, with error handling.
+    
+    Attempts to invoke a pipeline with a given message and user, handling potential pipeline build errors.
+    
+    Parameters:
+        pipeline_id (int): Unique identifier of the pipeline to invoke
+        message_text (str): Text message to be processed by the pipeline
+        user_id (int): Identifier of the user invoking the pipeline
+    
+    Returns:
+        dict: Result of pipeline invocation or error details if pipeline build fails
+    
+    Raises:
+        Pipeline.DoesNotExist: If no pipeline is found with the given pipeline_id
+    """
     pipeline = Pipeline.objects.get(id=pipeline_id)
     try:
         return pipeline.simple_invoke(message_text, user_id)

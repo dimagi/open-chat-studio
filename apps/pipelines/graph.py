@@ -48,6 +48,12 @@ class PipelineGraph(pydantic.BaseModel):
 
     @cached_property
     def nodes_by_id(self) -> dict[str, Node]:
+        """
+        Generates a mapping of node IDs to their corresponding Node instances.
+        
+        Returns:
+            dict[str, Node]: A dictionary where keys are node IDs and values are the corresponding Node objects from the graph's nodes.
+        """
         return {node.id: node for node in self.nodes}
 
     @cached_property
@@ -100,6 +106,29 @@ class PipelineGraph(pydantic.BaseModel):
         return cls(nodes=node_data, edges=edge_data)
 
     def build_runnable(self) -> CompiledStateGraph:
+        """
+        Build a runnable state graph from the pipeline graph.
+        
+        Validates the graph structure and compiles a state graph for execution. This method performs several key steps:
+        - Checks for the presence of nodes
+        - Validates start and end nodes
+        - Optionally validates parallel nodes
+        - Checks for graph cycles
+        - Constructs a state graph with entry and finish points
+        - Identifies reachable nodes
+        - Adds nodes and edges to the graph
+        - Compiles the graph into a runnable state
+        
+        Raises:
+            PipelineBuildError: If the graph is invalid due to:
+                - No nodes present
+                - Cycle detected
+                - Invalid start or end nodes
+                - Compilation errors
+        
+        Returns:
+            CompiledStateGraph: A compiled state graph ready for execution
+        """
         from apps.pipelines.nodes.base import PipelineState
 
         if not self.nodes:
@@ -127,8 +156,23 @@ class PipelineGraph(pydantic.BaseModel):
         return compiled_graph
 
     def _validate_no_parallel_nodes(self):
-        """This is a simple check to ensure that no two edges are connected to the same output
-        which serves as a proxy for parallel nodes."""
+        """
+        Validate that no multiple edges are connected to the same output handle for a source node.
+        
+        This method checks for parallel nodes by ensuring no source node has multiple edges
+        connecting to the same output handle. If such a condition is detected, it raises
+        a PipelineBuildError with details about the conflicting edges.
+        
+        Raises:
+            PipelineBuildError: If more than one edge is found connected to the same output handle
+                for a single source node. The error includes the source node ID and the conflicting
+                edge IDs.
+        
+        Notes:
+            - Uses a Counter to track the frequency of source handles
+            - Identifies the most common handle and checks if it appears more than once
+            - Helps prevent ambiguous graph structures with parallel node connections
+        """
         outgoing_edges = defaultdict(list)
         for edge in self.edges:
             outgoing_edges[edge.source].append(edge)
@@ -143,7 +187,20 @@ class PipelineGraph(pydantic.BaseModel):
                 )
 
     def _check_for_cycles(self):
-        """Detect cycles in a directed graph."""
+        """
+        Detect cycles in the directed pipeline graph using depth-first search (DFS).
+        
+        This method checks for the presence of cycles in the graph by traversing nodes and tracking their visit states.
+        A cycle is detected if a node is revisited during the depth-first search before being fully processed.
+        
+        Returns:
+            bool: True if a cycle is detected in the graph, False otherwise.
+        
+        Notes:
+            - Uses a three-state tracking system: 'unvisited', 'visiting', and 'visited'
+            - Implements a recursive depth-first search algorithm
+            - Checks all nodes to ensure complete graph traversal
+        """
         adjacency_list = defaultdict(list)
         for edge in self.edges:
             adjacency_list[edge.source].append(edge.target)
@@ -181,6 +238,22 @@ class PipelineGraph(pydantic.BaseModel):
         return list(self.nodes_by_id[node_id] for node_id in visited)
 
     def _add_nodes_to_graph(self, state_graph: StateGraph, nodes: list[Node]):
+        """
+        Add nodes to the state graph with their processing functions, ensuring the end node is reachable and handling potential validation errors.
+        
+        Parameters:
+            state_graph (StateGraph): The state graph to which nodes will be added
+            nodes (list[Node]): List of nodes to be added to the graph
+        
+        Raises:
+            PipelineBuildError: If the end node is not reachable from the start node
+            PipelineNodeBuildError: If node validation fails during graph construction
+        
+        Notes:
+            - Checks that the end node is present in the provided nodes
+            - Adds each node to the state graph with a partial function for processing
+            - Captures and re-raises validation errors with a more specific exception
+        """
         if self.end_node not in nodes:
             raise PipelineBuildError(
                 f"{EndNode.model_config['json_schema_extra'].label} node is not reachable "

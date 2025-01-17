@@ -24,6 +24,25 @@ def _make_edges(nodes) -> list[dict]:
 def create_runnable(
     pipeline: Pipeline, nodes: list[dict], edges: list[dict] | None = None, lenient=False
 ) -> CompiledStateGraph:
+    """
+    Create a runnable graph from a pipeline with specified nodes and optional edges.
+    
+    Constructs a pipeline graph by populating the pipeline's data with nodes and edges, 
+    and optionally enabling lenient validation mode.
+    
+    Parameters:
+        pipeline (Pipeline): The pipeline to transform into a runnable graph
+        nodes (list[dict]): List of node configurations to include in the graph
+        edges (list[dict], optional): List of edge connections between nodes. 
+            If not provided, edges are automatically generated using _make_edges()
+        lenient (bool, optional): Flag to enable lenient validation mode. Defaults to False.
+    
+    Returns:
+        CompiledStateGraph: A compiled and runnable state graph constructed from the pipeline
+    
+    Raises:
+        Potential exceptions from PipelineGraph.build_from_pipeline() or graph.build_runnable()
+    """
     if edges is None:
         edges = _make_edges(nodes)
     flow_nodes = []
@@ -37,6 +56,12 @@ def create_runnable(
 
 
 def start_node():
+    """
+    Create a start node for a pipeline graph with a unique identifier.
+    
+    Returns:
+        dict: A dictionary representing a start node with a unique UUID and type.
+    """
     return {"id": str(uuid4()), "type": nodes.StartNode.__name__}
 
 

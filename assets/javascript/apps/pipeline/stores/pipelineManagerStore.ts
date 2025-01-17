@@ -93,6 +93,18 @@ const usePipelineManagerStore = create<PipelineManagerStoreType>((set, get) => (
 }));
 
 
+/**
+ * Updates the class names of edges in a pipeline based on error status.
+ *
+ * @remarks
+ * This function modifies the edge classes to visually indicate error states. Edges with errors 
+ * receive an "edge-error" class, while error-free edges have their class name removed.
+ *
+ * @param pipeline - The pipeline containing edges to be checked
+ * @param errors - An object containing error information for different pipeline components
+ *
+ * @returns Void. Modifies edges in-place by adding or removing "edge-error" class.
+ */
 function updateEdgeClasses(pipeline: PipelineType, errors: ErrorsType) {
   if (!pipeline.data) {
     return;
