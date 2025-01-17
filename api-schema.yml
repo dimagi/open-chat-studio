@@ -130,10 +130,9 @@ paths:
               schema:
                 $ref: '#/components/schemas/CreateChatCompletionResponse'
           description: ''
-  /api/participants/:
+  /api/participants:
     post:
       operationId: update_participant_data
-      description: Upsert participant data for all specified experiments in the payload
       summary: Update Participant Data
       tags:
       - Participants
@@ -264,7 +263,7 @@ paths:
               schema:
                 $ref: '#/components/schemas/ExperimentSessionWithMessages'
           description: ''
-  /api/trigger_bot/:
+  /api/trigger_bot:
     post:
       operationId: trigger_bot_message
       description: Trigger the bot to send a message to the user

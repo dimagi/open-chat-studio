@@ -44,11 +44,21 @@ def setup_connect_channels_for_bots(self, connect_id: UUID, experiment_data_map:
 
     connect_client = CommCareConnectClient()
 
+    # TODO: Refactor when experiment_id is directly on the ParticipantData table
+    # https://github.com/dimagi/open-chat-studio/issues/1046
+    channels = ExperimentChannel.objects.filter(
+        platform=ChannelPlatform.COMMCARE_CONNECT,
+        experiment_id__in=[participant_data.object_id for participant_data in participant_data],
+    )
+
+    channels = {ch.experiment_id: ch for ch in channels}
+
     for participant_datum in participant_data:
         try:
             experiment = participant_datum.content_object
+            channel = channels[experiment.id]
             commcare_connect_channel_id = connect_client.create_channel(
-                connect_id=connect_id, channel_source=f"{experiment.team}-{experiment.name}"
+                connect_id=connect_id, channel_source=channel.extra_data["commcare_connect_bot_name"]
             )
             participant_datum.system_metadata["commcare_connect_channel_id"] = commcare_connect_channel_id
             participant_datum.save(update_fields=["system_metadata"])

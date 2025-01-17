@@ -1,4 +1,5 @@
 import json
+import logging
 import textwrap
 
 import httpx
@@ -33,6 +34,8 @@ from apps.channels.models import ChannelPlatform, ExperimentChannel
 from apps.events.models import ScheduledMessage, TimePeriod
 from apps.experiments.models import Experiment, ExperimentSession, Participant, ParticipantData
 from apps.files.models import File
+
+logger = logging.getLogger(__name__)
 
 
 @extend_schema_view(
@@ -122,6 +125,18 @@ class ExperimentViewSet(mixins.ListModelMixin, mixins.RetrieveModelMixin, Generi
 @api_view(["POST"])
 @permission_required("experiments.change_participantdata")
 def update_participant_data(request):
+    return _update_participant_data(request)
+
+
+@extend_schema(exclude=True)
+@api_view(["POST"])
+@permission_required("experiments.change_participantdata")
+def update_participant_data_old(request):
+    # This endpoint is kept for backwards compatibility of the path with a trailing "/"
+    return _update_participant_data(request)
+
+
+def _update_participant_data(request):
     """
     Upsert participant data for all specified experiments in the payload
     """
@@ -329,14 +344,14 @@ def file_content_view(request, pk: int):
 def generate_key(request: Request):
     """Generates a key for a specific channel to use for secure communication"""
     token = request.META.get("HTTP_AUTHORIZATION")
-    if not (token and request.body):
+    if not (token and "channel_id" in request.POST):
         return HttpResponse("Missing token or data", status=400)
 
+    commcare_connect_channel_id = request.POST["channel_id"]
     response = httpx.get(settings.COMMCARE_CONNECT_GET_CONNECT_ID_URL, headers={"AUTHORIZATION": token})
     response.raise_for_status()
     connect_id = response.json().get("sub")
-    request_data = json.loads(request.body)
-    commcare_connect_channel_id = request_data.get("channel_id")
+
     try:
         participant_data = ParticipantData.objects.defer("data").get(
             participant__identifier=connect_id, system_metadata__commcare_connect_channel_id=commcare_connect_channel_id

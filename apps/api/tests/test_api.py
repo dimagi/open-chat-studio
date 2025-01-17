@@ -297,14 +297,19 @@ def test_update_participant_data_and_setup_connect_channels(httpx_mock):
     created_connect_channel_id = str(uuid.uuid4())
     httpx_mock.add_response(
         method="POST",
-        url=f"{settings.COMMCARE_CONNECT_SERVER_URL}/messaging/create_channel",
+        url=f"{settings.COMMCARE_CONNECT_SERVER_URL}/messaging/create_channel/",
         json={"channel_id": created_connect_channel_id},
     )
 
     team = TeamWithUsersFactory()
     experiment1 = ExperimentFactory(team=team)
     ExperimentChannelFactory(team=team, experiment=experiment1, platform=ChannelPlatform.TELEGRAM)
-    ExperimentChannelFactory(team=team, experiment=experiment1, platform=ChannelPlatform.COMMCARE_CONNECT)
+    ExperimentChannelFactory(
+        team=team,
+        experiment=experiment1,
+        platform=ChannelPlatform.COMMCARE_CONNECT,
+        extra_data={"commcare_connect_bot_name": "bot1"},
+    )
     experiment2 = ExperimentFactory(team=team)
     experiment3 = ExperimentFactory(team=team)
 
@@ -363,7 +368,7 @@ def test_update_participant_data_and_setup_connect_channels(httpx_mock):
     request = httpx_mock.get_request()
     request_data = json.loads(request.read())
     assert request_data["connectid"] == "connectid_2"
-    assert request_data["channel_source"] == f"{experiment1.team}-{experiment1.name}"
+    assert request_data["channel_source"] == "bot1"
     assert Participant.objects.filter(identifier="connectid_2").exists()
     data = ParticipantData.objects.get(participant__identifier="connectid_2", object_id=experiment1.id)
     assert data.system_metadata["commcare_connect_channel_id"] == created_connect_channel_id
@@ -374,9 +379,7 @@ class TestConnectApis:
     def _make_key_request(self, client, data):
         token = uuid.uuid4()
         url = reverse("api:commcare-connect:generate_key")
-        return client.post(
-            url, data=data, headers={"Authorization": f"Bearer {token}"}, content_type="application/json"
-        )
+        return client.post(url, data=data, headers={"Authorization": f"Bearer {token}"})
 
     def test_generate_key_success(self, client, experiment, httpx_mock):
         connect_id = uuid.uuid4().hex
@@ -416,7 +419,7 @@ class TestConnectApis:
         httpx_mock.add_response(method="GET", url=settings.COMMCARE_CONNECT_GET_CONNECT_ID_URL, status_code=401)
 
         with pytest.raises(httpx.HTTPStatusError):
-            self._make_key_request(client=client, data={})
+            self._make_key_request(client=client, data={"channel_id": "123"})
 
     @override_settings(COMMCARE_CONNECT_SERVER_SECRET="123123")
     def test_user_consented(self, client, experiment):

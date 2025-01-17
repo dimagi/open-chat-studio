@@ -224,7 +224,10 @@ class LLMChat(RunnableSerializable[str, ChainOutput]):
 class SimpleLLMChat(LLMChat):
     def get_input_messages(self, input: str):
         chain = self._input_chain(with_history=False).with_config(run_name="compute_input_for_compression")
-        return chain.invoke(self._get_input(input)).to_messages()
+        try:
+            return chain.invoke(self._get_input(input)).to_messages()
+        except KeyError as e:
+            raise GenerationError(str(e)) from e
 
     def _build_chain(self):
         return self._input_chain() | self.adapter.get_chat_model() | StrOutputParser()
