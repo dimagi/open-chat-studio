@@ -217,3 +217,11 @@ class SlackChannelForm(ExtraFormBase):
                 service.join_channel(channel_id)
             except Exception as e:
                 raise ExperimentChannelException("Failed to join the channel") from e
+
+
+class CommCareConnectChannelForm(ExtraFormBase):
+    commcare_connect_bot_name = forms.CharField(
+        label="Bot Name",
+        help_text="This is the name of the chatbot that will be displayed to users on CommCare Connect",
+        max_length=100,
+    )

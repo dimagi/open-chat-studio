@@ -2,11 +2,11 @@
 This test suite is designed to ensure that the base channel functionality is working as
 intended. It utilizes the Telegram channel subclass to serve as a testing framework.
 """
-
 import re
 from unittest.mock import Mock, patch
 
 import pytest
+from django.test import override_settings
 
 from apps.channels.models import ChannelPlatform, ExperimentChannel
 from apps.chat.channels import URL_REGEX, ChannelBase, TelegramChannel, strip_urls_and_emojis
@@ -112,6 +112,7 @@ def test_different_sessions_created_for_different_users(telegram_channel):
 
     # Calling new_user_message added an experiment_session, so we should remove it before reusing the instance
     telegram_channel.experiment_session = None
+    telegram_channel._participant_identifier = None
 
     # Second user's message
     user_2_message = telegram_messages.text_message(chat_id=user_2_chat_id)
@@ -433,6 +434,7 @@ def test_user_query_extracted_for_pre_conversation_flow(message_func, message_ty
 
 
 @pytest.mark.django_db()
+@override_settings(COMMCARE_CONNECT_SERVER_SECRET="123", COMMCARE_CONNECT_SERVER_ID="123")
 @pytest.mark.parametrize("platform", [platform for platform, _ in ChannelPlatform.choices])
 def test_all_channels_can_be_instantiated_from_a_session(platform, twilio_provider):
     """This test checks all channel types and makes sure that we can instantiate each one by calling
@@ -786,14 +788,21 @@ class TestChannel(ChannelBase):
 class TestBaseChannelMethods:
     """Unit tests for the methods of the ChannelBase class"""
 
-    def test_participant_identifier(self):
-        """Fetching the participant data"""
+    def test_participant_identifier_determination(self):
+        """
+        Test participant identifier is fetched from the cached value, otherwise from the session, and lastly from the
+        user message
+        """
         session = ExperimentSessionFactory(participant__identifier="Alpha")
         exp_channel = ExperimentChannelFactory(experiment=session.experiment)
         channel_base = TestChannel(experiment=session.experiment, experiment_channel=exp_channel)
         channel_base.message = telegram_messages.text_message(chat_id="Beta")
 
         assert channel_base.participant_identifier == "Beta"
+        assert channel_base._participant_identifier == "Beta"
+        # Reset cached value
+        channel_base._participant_identifier = None
+        # Set the session and check that the identifier is fetched from the session
         channel_base.experiment_session = session
         assert channel_base.participant_identifier == "Alpha"
 

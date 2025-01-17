@@ -617,6 +617,9 @@ class CreateExperimentVersion(LoginAndTeamRequiredMixin, CreateView):
         if not experiment.assistant:
             return False
 
+        if not experiment.assistant.assistant_id:
+            return True
+
         if len(get_diff_with_openai_assistant(experiment.assistant)) > 0:
             return True
 

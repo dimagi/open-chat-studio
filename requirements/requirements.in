@@ -60,3 +60,6 @@ whitenoise[brotli]
 phonenumberslite
 emoji
 python-magic
+requests>=2.32.3
+urllib3>=2.3.0
+pycryptodome

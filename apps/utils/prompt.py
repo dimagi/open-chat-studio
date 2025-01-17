@@ -88,13 +88,12 @@ class OcsPromptTemplate(ChatPromptTemplate):
         missing = root_vars.difference(inner_input)
         if missing:
             msg = (
-                f"Input to {self.__class__.__name__} is missing variables {missing}. "
-                f" Expected: {self.input_variables}"
-                f" Received: {list(inner_input.keys())}"
+                f"Prompt contains variables {missing} that are not provided. "
+                f"Available variables are: {list(inner_input.keys())}."
             )
             example_key = missing.pop()
             msg += (
-                f"\nNote: if you intended {{{example_key}}} to be part of the string"
+                f" Note: if you intended '{{{example_key}}}' to be part of the string"
                 " and not a variable, please escape it with double curly braces like: "
                 f"'{{{{{example_key}}}}}'."
             )

@@ -4,7 +4,7 @@ import {getCachedData, nodeBorderClass} from "./utils";
 import usePipelineStore from "./stores/pipelineStore";
 import usePipelineManagerStore from "./stores/pipelineManagerStore";
 import useEditorStore from "./stores/editorStore";
-import {NodeData} from "./types/nodeParams";
+import {JsonSchema, NodeData} from "./types/nodeParams";
 import {getNodeInputWidget, showAdvancedButton} from "./nodes/GetInputWidget";
 import NodeInput from "./nodes/NodeInput";
 import NodeOutputs from "./nodes/NodeOutputs";
@@ -77,7 +77,7 @@ export function PipelineNode(nodeProps: NodeProps<NodeData>) {
         </div>
       </NodeToolbar>
       <div className={nodeBorderClass(hasErrors, selected)}>
-        <div className="m-1 text-lg font-bold text-center">{nodeSchema["ui:label"]}</div>
+        <NodeHeader nodeSchema={nodeSchema} />
 
         <NodeInput />
         <div className="px-4">
@@ -109,4 +109,27 @@ export function PipelineNode(nodeProps: NodeProps<NodeData>) {
       </div>
     </>
   );
+}
+
+function NodeHeader({nodeSchema}: {nodeSchema: JsonSchema}) {
+  return (
+    <div className="m-1 text-lg font-bold text-center">
+      <DeprecationNotice nodeSchema={nodeSchema} />
+      {nodeSchema["ui:label"]}
+    </div>
+  );
+}
+
+
+function DeprecationNotice({nodeSchema}: {nodeSchema: JsonSchema}) {
+  if (!nodeSchema["ui:deprecated"]) {
+    return <></>;
+  }
+  const customMessage = nodeSchema["ui:deprecation_message"] || "";
+  return (
+    <div className="mr-2 text-warning inline-block tooltip"
+         data-tip={`This node type has been deprecated and will be removed in future. ${customMessage}`}>
+      <i className="fa-solid fa-exclamation-triangle"></i>
+    </div>
+  )
 }

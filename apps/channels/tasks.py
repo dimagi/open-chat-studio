@@ -7,9 +7,18 @@ from taskbadger.celery import Task as TaskbadgerTask
 from telebot import types
 from twilio.request_validator import RequestValidator
 
+from apps.channels.clients.connect_client import CommCareConnectClient, Message
 from apps.channels.datamodels import BaseMessage, SureAdhereMessage, TelegramMessage, TurnWhatsappMessage, TwilioMessage
 from apps.channels.models import ChannelPlatform, ExperimentChannel
-from apps.chat.channels import ApiChannel, FacebookMessengerChannel, SureAdhereChannel, TelegramChannel, WhatsappChannel
+from apps.chat.channels import (
+    ApiChannel,
+    CommCareConnectChannel,
+    FacebookMessengerChannel,
+    SureAdhereChannel,
+    TelegramChannel,
+    WhatsappChannel,
+)
+from apps.experiments.models import ParticipantData
 from apps.service_providers.models import MessagingProviderType
 from apps.teams.utils import current_team
 from apps.utils.taskbadger import update_taskbadger_data
@@ -146,3 +155,29 @@ def handle_api_message(
         user=user,
     )
     return channel.new_user_message(message)
+
+
+@shared_task(bind=True, base=TaskbadgerTask, ignore_result=True)
+def handle_commcare_connect_message(
+    self, experiment_channel_id: int, participant_data_id: int, messages: list[Message]
+):
+    participant_data = ParticipantData.objects.prefetch_related("participant").get(id=participant_data_id)
+    experiment_channel = ExperimentChannel.objects.prefetch_related("experiment").get(id=experiment_channel_id)
+
+    # Ensure the messages are in the correct order according to timestamp
+    messages.sort(key=lambda x: x["timestamp"])
+
+    connect_client = CommCareConnectClient()
+    decrypted_messages = connect_client.decrypt_messages(participant_data.get_encryption_key_bytes(), messages=messages)
+
+    # If the user sent multiple messages, we should append it together instead of the bot replying to each one
+    user_message = "\n\n".join(decrypted_messages)
+
+    message = BaseMessage(participant_id=participant_data.participant.identifier, message_text=user_message)
+    channel = CommCareConnectChannel(
+        experiment=experiment_channel.experiment.default_version, experiment_channel=experiment_channel
+    )
+
+    update_taskbadger_data(self, channel, message)
+    with current_team(experiment_channel.team):
+        channel.new_user_message(message)

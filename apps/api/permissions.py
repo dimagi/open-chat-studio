@@ -1,4 +1,11 @@
+import base64
+import hashlib
+import hmac
+import logging
+from functools import wraps
+
 from django.conf import settings
+from django.http import HttpResponse
 from django.utils.translation import gettext as _
 from rest_framework import exceptions
 from rest_framework.authentication import BaseAuthentication
@@ -9,6 +16,8 @@ from apps.teams.helpers import get_team_membership_for_request
 from apps.teams.utils import set_current_team
 
 from .models import UserAPIKey
+
+logger = logging.getLogger("ocs.api")
 
 
 class BaseKeyAuthentication(BaseAuthentication):
@@ -67,3 +76,40 @@ class DjangoModelPermissionsWithView(DjangoModelPermissions):
         "PATCH": ["%(app_label)s.change_%(model_name)s"],
         "DELETE": ["%(app_label)s.delete_%(model_name)s"],
     }
+
+
+def verify_hmac(view_func):
+    """Match the HMAC signature in the request to the calculated HMAC using the request payload."""
+
+    # Based on https://github.com/dimagi/commcare-hq/blob/master/corehq/util/hmac_request.py
+    @wraps(view_func)
+    def _inner(request, *args, **kwargs):
+        expected_digest = convert_to_bytestring_if_unicode(request.headers.get("X-Mac-Digest"))
+        secret_key_bytes = convert_to_bytestring_if_unicode(settings.COMMCARE_CONNECT_SERVER_SECRET)
+
+        if not (expected_digest and secret_key_bytes):
+            logger.exception(
+                "Request rejected reason=%s request=%s",
+                "hmac:missing_key" if not secret_key_bytes else "hmac:missing_header",
+                request.path,
+            )
+            return HttpResponse(_("Missing HMAC signature or shared key"), status=401)
+
+        data_digest = get_hmac_digest(key=secret_key_bytes, data_bytes=request.body)
+
+        if not hmac.compare_digest(data_digest, expected_digest):
+            logger.exception("Calculated HMAC does not match expected HMAC")
+            return HttpResponse(_("Invalid payload"), status=401)
+        return view_func(request, *args, **kwargs)
+
+    return _inner
+
+
+def get_hmac_digest(key: bytes, data_bytes: bytes) -> bytes:
+    digest = hmac.new(key, data_bytes, hashlib.sha256).digest()
+    digest_base64 = base64.b64encode(digest)
+    return digest_base64
+
+
+def convert_to_bytestring_if_unicode(shared_key):
+    return shared_key.encode("utf-8") if isinstance(shared_key, str) else shared_key
