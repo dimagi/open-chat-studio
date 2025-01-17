@@ -82,6 +82,8 @@ class TestHandleConnectMessageTask:
     def test_bot_generate_and_sends_message(self, process_input, experiment):
         process_input.return_value = "Hi human"
         commcare_connect_channel_id, encryption_key, experiment_channel, data, payload = _setup(experiment)
+        # The version will be used when chatting to the bot
+        experiment.create_new_version(make_default=True)
 
         with patch("apps.chat.channels.CommCareConnectClient") as ConnectClientMock:
             client_mock = ConnectClientMock.return_value
