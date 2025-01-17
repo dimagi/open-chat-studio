@@ -5,6 +5,7 @@ import time
 from typing import Literal
 
 import tiktoken
+from django.contrib.contenttypes.models import ContentType
 from django.core.exceptions import ValidationError
 from django.core.validators import validate_email
 from jinja2 import meta
@@ -24,10 +25,18 @@ from apps.channels.datamodels import Attachment
 from apps.chat.agent.tools import get_node_tools
 from apps.chat.conversation import compress_chat_history, compress_pipeline_chat_history
 from apps.chat.models import ChatMessageType
-from apps.experiments.models import ExperimentSession, ParticipantData
+from apps.experiments.models import Experiment, ExperimentSession, ParticipantData
 from apps.pipelines.exceptions import PipelineNodeBuildError, PipelineNodeRunError
 from apps.pipelines.models import Node, PipelineChatHistory, PipelineChatHistoryTypes
-from apps.pipelines.nodes.base import NodeSchema, OptionsSource, PipelineNode, PipelineState, UiSchema, Widgets
+from apps.pipelines.nodes.base import (
+    NodeSchema,
+    OptionsSource,
+    PipelineNode,
+    PipelineState,
+    UiSchema,
+    Widgets,
+    deprecated_node,
+)
 from apps.pipelines.tasks import send_email_from_pipeline
 from apps.service_providers.exceptions import ServiceProviderConfigError
 from apps.service_providers.llm_service.adapters import AssistantAdapter, ChatAdapter
@@ -167,6 +176,7 @@ class HistoryMixin(LLMResponseMixin):
         return message
 
 
+@deprecated_node(message="Use the 'LLM' node instead.")
 class LLMResponse(PipelineNode, LLMResponseMixin):
     """Calls an LLM with the given input"""
 
@@ -179,9 +189,9 @@ class LLMResponse(PipelineNode, LLMResponseMixin):
 
 
 class LLMResponseWithPrompt(LLMResponse, HistoryMixin):
-    """Calls an LLM with a prompt"""
+    """Uses and LLM to respond to the input."""
 
-    model_config = ConfigDict(json_schema_extra=NodeSchema(label="LLM response with prompt"))
+    model_config = ConfigDict(json_schema_extra=NodeSchema(label="LLM"))
 
     source_material_id: int | None = Field(
         None, json_schema_extra=UiSchema(widget=Widgets.select, options_source=OptionsSource.source_material)
@@ -279,7 +289,7 @@ class SendEmail(PipelineNode):
 class Passthrough(PipelineNode):
     """Returns the input without modification"""
 
-    model_config = ConfigDict(json_schema_extra=NodeSchema(label="Do Nothing"))
+    model_config = ConfigDict(json_schema_extra=NodeSchema(label="Do Nothing", can_add=False))
 
     def _process(self, input, state: PipelineState, node_id: str) -> PipelineState:
         if self.logger:
@@ -299,6 +309,7 @@ class EndNode(Passthrough):
     model_config = ConfigDict(json_schema_extra=NodeSchema(label="End", flow_node_type="endNode"))
 
 
+@deprecated_node(message="Use the 'Router' node instead.")
 class BooleanNode(Passthrough):
     """Branches based whether the input matches a certain value"""
 
@@ -646,6 +657,11 @@ class AssistantNode(PipelineNode):
 
 DEFAULT_FUNCTION = """# You must define a main function, which takes the node input as a string.
 # Return a string to pass to the next node.
+
+# Available functions:
+# - get_participant_data() -> dict
+# - set_participant_data(data: Any) -> None
+
 def main(input: str, **kwargs) -> str:
     return input
 """
@@ -702,7 +718,7 @@ class CodeNode(PipelineNode):
         )
 
         custom_locals = {}
-        custom_globals = self._get_custom_globals()
+        custom_globals = self._get_custom_globals(state)
         try:
             exec(byte_code, custom_globals, custom_locals)
             result = str(custom_locals[function_name](input))
@@ -710,13 +726,42 @@ class CodeNode(PipelineNode):
             raise PipelineNodeRunError(exc) from exc
         return PipelineState.from_node_output(node_id=node_id, output=result)
 
-    def _get_custom_globals(self):
+    def _get_custom_globals(self, state: PipelineState):
         from RestrictedPython.Eval import (
             default_guarded_getitem,
             default_guarded_getiter,
         )
 
         custom_globals = safe_globals.copy()
+
+        class ParticipantDataProxy:
+            """Allows multiple access without needing to re-fetch from the DB"""
+
+            def __init__(self, state):
+                self.state = state
+                self._participant_data = None
+
+            def _get_db_object(self):
+                if not self._participant_data:
+                    content_type = ContentType.objects.get_for_model(Experiment)
+                    session = state["experiment_session"]
+                    self._participant_data, _ = ParticipantData.objects.get_or_create(
+                        participant_id=session.participant_id,
+                        content_type=content_type,
+                        object_id=session.experiment_id,
+                        team_id=session.experiment.team_id,
+                    )
+                return self._participant_data
+
+            def get(self):
+                return self._get_db_object().data
+
+            def set(self, data):
+                participant_data = self._get_db_object()
+                participant_data.data = data
+                participant_data.save(update_fields=["data"])
+
+        participant_data_proxy = ParticipantDataProxy(state)
         custom_globals.update(
             {
                 "__builtins__": self._get_custom_builtins(),
@@ -726,6 +771,8 @@ class CodeNode(PipelineNode):
                 "_getitem_": default_guarded_getitem,
                 "_getiter_": default_guarded_getiter,
                 "_write_": lambda x: x,
+                "get_participant_data": participant_data_proxy.get,
+                "set_participant_data": participant_data_proxy.set,
             }
         )
         return custom_globals

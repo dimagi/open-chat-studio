@@ -516,10 +516,14 @@ TAGGIT_CASE_INSENSITIVE = True
 
 # Documentation links
 DOCUMENTATION_LINKS = {
+    # Try to make these keys grep-able so that usages are easy to find
     "consent": "https://dimagi.atlassian.net/wiki/spaces/OCS/pages/2144305304/Consent+Forms+on+OCS",
     "survey": "https://dimagi.atlassian.net/wiki/spaces/OCS/pages/2144305308/Surveys",
     "experiment": "https://dimagi.atlassian.net/wiki/spaces/OCS/pages/2144305312/Creating+a+Chatbot+Experiment",
+    "concepts.prompt_variables": "/concepts/prompt_variables/",
+    "concepts.experiments": "/concepts/experiment/",
 }
+DOCUMENTATION_BASE_URL = env("DOCUMENTATION_BASE_URL", default="https://dimagi.github.io/open-chat-studio-docs")
 
 # Django rest framework config
 API_KEY_CUSTOM_HEADER = "HTTP_X_API_KEY"
@@ -577,3 +581,11 @@ HEALTH_CHECK = {
 CRYPTOGRAPHY_SALT = env("CRYPTOGRAPHY_SALT", default="")
 
 PUBLIC_CHAT_LINK_MAX_AGE = 5  # 5 minutes
+
+
+# Connect Messaging
+COMMCARE_CONNECT_SERVER_SECRET = env("COMMCARE_CONNECT_SERVER_SECRET", default="")
+COMMCARE_CONNECT_SERVER_ID = env("COMMCARE_CONNECT_SERVER_ID", default="")
+COMMCARE_CONNECT_ENABLED = COMMCARE_CONNECT_SERVER_SECRET and COMMCARE_CONNECT_SERVER_ID
+COMMCARE_CONNECT_SERVER_URL = env("COMMCARE_CONNECT_SERVER_URL", default="https://connectid.dimagi.com")
+COMMCARE_CONNECT_GET_CONNECT_ID_URL = f"{COMMCARE_CONNECT_SERVER_URL}/o/userinfo/"

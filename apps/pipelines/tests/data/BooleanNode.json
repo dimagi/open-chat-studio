@@ -11,6 +11,10 @@
   ],
   "title": "BooleanNode",
   "type": "object",
+  "ui:can_add": false,
+  "ui:can_delete": true,
+  "ui:deprecated": true,
+  "ui:deprecation_message": "Use the 'Router' node instead.",
   "ui:flow_node_type": "pipelineNode",
   "ui:label": "Conditional Node"
 }

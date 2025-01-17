@@ -88,6 +88,7 @@ from apps.files.forms import get_file_formset
 from apps.files.models import File
 from apps.files.views import BaseAddFileHtmxView, BaseDeleteFileView
 from apps.generics.chips import Chip
+from apps.generics.help import render_help_with_link
 from apps.service_providers.utils import get_llm_provider_choices
 from apps.teams.decorators import login_and_team_required
 from apps.teams.mixins import LoginAndTeamRequiredMixin
@@ -186,16 +187,10 @@ class ExperimentVersionsTableView(SingleTableView, PermissionRequiredMixin):
 
 class ExperimentForm(forms.ModelForm):
     PROMPT_HELP_TEXT = """
-        <div class="tooltip" data-tip="
-            Available variables to include in your prompt: {source_material}, {participant_data}, and
-            {current_datetime}.
-            {source_material} should be included when there is source material linked to the experiment.
-            {participant_data} is optional.
-            {current_datetime} is only required when the bot is using a tool.
-        ">
-            <i class="text-xs fa fa-circle-question">
-            </i>
-        </div>
+        <p>Available variables to include in your prompt:</p>
+        <p>{source_material}: Must be included when there is source material linked to the experiment.</p>
+        <p>{participant_data}: Optional</p>
+        <p>{current_datetime}: Only required when the bot is using a tool</p>
     """
     type = forms.ChoiceField(
         choices=[
@@ -206,7 +201,7 @@ class ExperimentForm(forms.ModelForm):
         widget=forms.RadioSelect(attrs={"x-model": "type"}),
     )
     description = forms.CharField(widget=forms.Textarea(attrs={"rows": 2}), required=False)
-    prompt_text = forms.CharField(widget=forms.Textarea(attrs={"rows": 6}), required=False, help_text=PROMPT_HELP_TEXT)
+    prompt_text = forms.CharField(widget=forms.Textarea(attrs={"rows": 6}), required=False)
     input_formatter = forms.CharField(widget=forms.Textarea(attrs={"rows": 2}), required=False)
     seed_message = forms.CharField(widget=forms.Textarea(attrs={"rows": 2}), required=False)
     tools = forms.MultipleChoiceField(widget=forms.CheckboxSelectMultiple, choices=AgentTools.choices, required=False)
@@ -296,6 +291,9 @@ class ExperimentForm(forms.ModelForm):
         self.fields["synthetic_voice"].widget.template_name = "django/forms/widgets/select_dynamic.html"
         self.fields["llm_provider_model"].widget.template_name = "django/forms/widgets/select_dynamic.html"
 
+        self.fields["prompt_text"].help_text = render_help_with_link(self.PROMPT_HELP_TEXT, "concepts.prompt_variables")
+        self.fields["type"].help_text = render_help_with_link("", "concepts.experiments")
+
     def clean_participant_allowlist(self):
         cleaned_identifiers = []
         for identifier in self.cleaned_data["participant_allowlist"]:
@@ -374,12 +372,11 @@ class BaseExperimentView(LoginAndTeamRequiredMixin, PermissionRequiredMixin):
         team_participant_identifiers = list(
             self.request.team.participant_set.filter(user=None).values_list("identifier", flat=True)
         )
+        disable_version_button = False
         if self.object:
             team_participant_identifiers.extend(self.object.participant_allowlist)
             team_participant_identifiers = set(team_participant_identifiers)
-            fields_changed = self.object.compare_with_latest()
-        else:
-            fields_changed = []
+            disable_version_button = self.object.create_version_task_id
 
         return {
             **{
@@ -389,7 +386,7 @@ class BaseExperimentView(LoginAndTeamRequiredMixin, PermissionRequiredMixin):
                 "experiment_type": experiment_type,
                 "available_tools": AgentTools.choices,
                 "team_participant_identifiers": team_participant_identifiers,
-                "disable_version_button": (not bool(fields_changed)) or self.object.create_version_task_id,
+                "disable_version_button": disable_version_button,
             },
             **_get_voice_provider_alpine_context(self.request),
         }
@@ -468,12 +465,11 @@ class CreateExperiment(BaseExperimentView, CreateView):
             files = file_formset.save(self.request)
             self.object.files.set(files)
 
-        if flag_is_active(self.request, "experiment_versions"):
-            task_id = async_create_experiment_version.delay(
-                experiment_id=self.object.id, version_description="", make_default=True
-            )
-            self.object.create_version_task_id = task_id
-            self.object.save(update_fields=["create_version_task_id"])
+        task_id = async_create_experiment_version.delay(
+            experiment_id=self.object.id, version_description="", make_default=True
+        )
+        self.object.create_version_task_id = task_id
+        self.object.save(update_fields=["create_version_task_id"])
 
         return HttpResponseRedirect(self.get_success_url())
 
@@ -553,9 +549,8 @@ class DeleteFileFromExperiment(BaseDeleteFileView):
     pass
 
 
-# TODO: complete form
 class ExperimentVersionForm(forms.ModelForm):
-    version_description = forms.CharField(widget=forms.Textarea(attrs={"rows": 2}))
+    version_description = forms.CharField(widget=forms.Textarea(attrs={"rows": 2}), required=False)
     is_default_version = forms.BooleanField(required=False, label="Set as Published Version")
 
     class Meta:
@@ -621,6 +616,9 @@ class CreateExperimentVersion(LoginAndTeamRequiredMixin, CreateView):
         experiment = self.get_object()
         if not experiment.assistant:
             return False
+
+        if not experiment.assistant.assistant_id:
+            return True
 
         if len(get_diff_with_openai_assistant(experiment.assistant)) > 0:
             return True

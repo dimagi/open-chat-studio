@@ -25,6 +25,7 @@ def project_meta(request):
         "use_i18n": getattr(settings, "USE_I18N", False) and len(getattr(settings, "LANGUAGES", [])) > 1,
         "signup_enabled": settings.SIGNUP_ENABLED,
         "temporary_superuser_access": get_temporary_superuser_access(request),
+        "docs_base_url": settings.DOCUMENTATION_BASE_URL,
     }
 
 

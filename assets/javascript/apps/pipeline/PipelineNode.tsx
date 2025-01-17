@@ -4,7 +4,7 @@ import {getCachedData, nodeBorderClass} from "./utils";
 import usePipelineStore from "./stores/pipelineStore";
 import usePipelineManagerStore from "./stores/pipelineManagerStore";
 import useEditorStore from "./stores/editorStore";
-import {NodeData} from "./types/nodeParams";
+import {JsonSchema, NodeData} from "./types/nodeParams";
 import {getNodeInputWidget, showAdvancedButton} from "./nodes/GetInputWidget";
 import NodeInput from "./nodes/NodeInput";
 import NodeOutputs from "./nodes/NodeOutputs";
@@ -17,7 +17,8 @@ export function PipelineNode(nodeProps: NodeProps<NodeData>) {
   const openEditorForNode = useEditorStore((state) => state.openEditorForNode)
   const setNode = usePipelineStore((state) => state.setNode);
   const deleteNode = usePipelineStore((state) => state.deleteNode);
-  const nodeErrors = usePipelineManagerStore((state) => state.errors[id]);
+  const hasErrors = usePipelineManagerStore((state) => state.nodeHasErrors(id));
+  const nodeError = usePipelineManagerStore((state) => state.getNodeFieldError(id, "root"));
   const {nodeSchemas} = getCachedData();
   const nodeSchema = nodeSchemas.get(data.type)!;
   const schemaProperties = Object.getOwnPropertyNames(nodeSchema.properties);
@@ -45,7 +46,7 @@ export function PipelineNode(nodeProps: NodeProps<NodeData>) {
 
   return (
     <>
-      <NodeToolbar position={Position.Top}>
+      <NodeToolbar position={Position.Top} isVisible={hasErrors}>
         <div className="border border-primary join">
             <button
               className="btn btn-xs join-item"
@@ -60,15 +61,23 @@ export function PipelineNode(nodeProps: NodeProps<NodeData>) {
             {nodeSchema.description && (
               <div className="dropdown dropdown-top">
                   <button tabIndex={0} role="button" className="btn btn-xs join-item">
-                      <i className={"fa fa-circle-question"}></i>
+                      <i className={"fa-regular fa-circle-question"}></i>
                   </button>
                   <HelpContent><p>{nodeSchema.description}</p></HelpContent>
               </div>
             )}
+            {nodeError && (
+                <div className="dropdown dropdown-top">
+                    <button tabIndex={0} role="button" className="btn btn-xs join-item">
+                        <i className="fa-solid fa-exclamation-triangle text-warning"></i>
+                    </button>
+                    <HelpContent><p>{nodeError}</p></HelpContent>
+                </div>
+              )}
         </div>
       </NodeToolbar>
-      <div className={nodeBorderClass(nodeErrors, selected)}>
-        <div className="m-1 text-lg font-bold text-center">{nodeSchema["ui:label"]}</div>
+      <div className={nodeBorderClass(hasErrors, selected)}>
+        <NodeHeader nodeSchema={nodeSchema} />
 
         <NodeInput />
         <div className="px-4">
@@ -100,4 +109,27 @@ export function PipelineNode(nodeProps: NodeProps<NodeData>) {
       </div>
     </>
   );
+}
+
+function NodeHeader({nodeSchema}: {nodeSchema: JsonSchema}) {
+  return (
+    <div className="m-1 text-lg font-bold text-center">
+      <DeprecationNotice nodeSchema={nodeSchema} />
+      {nodeSchema["ui:label"]}
+    </div>
+  );
+}
+
+
+function DeprecationNotice({nodeSchema}: {nodeSchema: JsonSchema}) {
+  if (!nodeSchema["ui:deprecated"]) {
+    return <></>;
+  }
+  const customMessage = nodeSchema["ui:deprecation_message"] || "";
+  return (
+    <div className="mr-2 text-warning inline-block tooltip"
+         data-tip={`This node type has been deprecated and will be removed in future. ${customMessage}`}>
+      <i className="fa-solid fa-exclamation-triangle"></i>
+    </div>
+  )
 }

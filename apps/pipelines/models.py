@@ -15,6 +15,8 @@ from apps.chat.models import ChatMessage, ChatMessageType
 from apps.custom_actions.form_utils import set_custom_actions
 from apps.custom_actions.mixins import CustomActionOperationMixin
 from apps.experiments.models import ExperimentSession, VersionsMixin, VersionsObjectManagerMixin
+from apps.pipelines.exceptions import PipelineBuildError
+from apps.pipelines.executor import patch_executor
 from apps.pipelines.flow import Flow, FlowNode, FlowNodeData
 from apps.pipelines.logging import PipelineLoggingCallbackHandler
 from apps.pipelines.nodes.base import PipelineState
@@ -129,8 +131,9 @@ class Pipeline(BaseTeamModel, VersionsMixin):
             )
             created_node.update_from_params()
 
-    def validate(self) -> dict:
+    def validate(self, full=True) -> dict:
         """Validate the pipeline nodes and return a dictionary of errors"""
+        from apps.pipelines.graph import PipelineGraph
         from apps.pipelines.nodes import nodes as pipeline_nodes
 
         errors = {}
@@ -141,7 +144,16 @@ class Pipeline(BaseTeamModel, VersionsMixin):
                 node_class.model_validate(node.params)
             except pydantic.ValidationError as e:
                 errors[node.flow_id] = {err["loc"][0]: err["msg"] for err in e.errors()}
-        return errors
+        if errors:
+            return {"node": errors}
+
+        if full:
+            try:
+                PipelineGraph.build_runnable_from_pipeline(self)
+            except PipelineBuildError as e:
+                return e.to_json()
+
+        return {}
 
     @cached_property
     def flow_data(self) -> dict:
@@ -173,11 +185,11 @@ class Pipeline(BaseTeamModel, VersionsMixin):
         """Invoke the pipeline without a session or the ability to save the run to history"""
         from apps.pipelines.graph import PipelineGraph
 
-        output = ""
         with temporary_session(self.team, user_id) as session:
             runnable = PipelineGraph.build_runnable_from_pipeline(self)
             input = PipelineState(messages=[input], experiment_session=session, pipeline_version=self.version_number)
-            output = runnable.invoke(input)
+            with patch_executor():
+                output = runnable.invoke(input, config={"max_concurrency": 1})
             output = PipelineState(**output).json_safe()
         return output
 

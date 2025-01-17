@@ -3,6 +3,9 @@
   "properties": {},
   "title": "StartNode",
   "type": "object",
+  "ui:can_add": false,
+  "ui:can_delete": false,
+  "ui:deprecated": false,
   "ui:flow_node_type": "startNode",
   "ui:label": "Start"
 }

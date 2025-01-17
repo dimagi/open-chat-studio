@@ -201,7 +201,7 @@ class PipelineHistoryManager(BaseHistoryManager):
 
         try:
             history: PipelineChatHistory = self.session.pipeline_chat_history.get(
-                type=self.history_type, name=self._get_history_name(self.node_id)
+                type=self.history_type, name=self._get_history_name()
             )
         except PipelineChatHistory.DoesNotExist:
             return []
@@ -212,10 +212,10 @@ class PipelineHistoryManager(BaseHistoryManager):
             input_messages=input_messages,
         )
 
-    def _get_history_name(self, node_id):
+    def _get_history_name(self):
         if self.history_type == PipelineChatHistoryTypes.NAMED:
             return self.history_name
-        return node_id
+        return self.node_id
 
     def add_messages_to_history(
         self, input: str, input_message_metadata: dict, output: str, output_message_metadata: dict, *args, **kwargs
@@ -231,9 +231,9 @@ class PipelineHistoryManager(BaseHistoryManager):
             return
 
         history, _ = self.session.pipeline_chat_history.get_or_create(
-            type=self.history_type, name=self._get_history_name(self.node_id)
+            type=self.history_type, name=self._get_history_name()
         )
 
+        output = output or ""  # generation likely errored resulting in a None output
         message = history.messages.create(human_message=input, ai_message=output, node_id=self.node_id)
-        # TODO: Save normal session history here as well
         return message

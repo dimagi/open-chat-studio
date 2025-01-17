@@ -79,6 +79,12 @@ def get_logger(name, pipeline_run):
     return log
 
 
+def noop_logger():
+    log = logger.bind(name=uuid.uuid4().hex)
+    log.remove()
+    return log
+
+
 class LogHandler:
     def __init__(self, pipeline_run):
         self.pipeline_run = pipeline_run

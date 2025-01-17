@@ -12,7 +12,7 @@ export function classNames(...classes: Array<string | null | undefined>): string
   return classes.filter(Boolean).join(" ");
 }
 
-export function nodeBorderClass(nodeErrors : Record<string, string>, selected : boolean ): string {
+export function nodeBorderClass(nodeErrors : boolean, selected : boolean ): string {
   const defaultBorder = nodeErrors ? "border-error " : ""
   const selectedBorder = nodeErrors ? "border-secondary" : "border-primary"
   const border = selected ? selectedBorder : defaultBorder
