@@ -20,7 +20,7 @@ export default function NodeOutputs({data}: {
         </span>
       );
     }
-    return output_label;
+    return <>{output_label}</>;
   }
   return (
     <>
@@ -30,7 +30,7 @@ export default function NodeOutputs({data}: {
           <LabeledHandle
             id={generateOutputHandle(index)}
             key={index}
-            title={generateOutputLabel(index, output.label)}
+            label={generateOutputLabel(index, output.label)}
             type="source"
             position={Position.Right}
             labelClassName={output.isError ? "text-error" : "text-foreground"}

@@ -5,7 +5,7 @@ import usePipelineStore from "./stores/pipelineStore";
 import usePipelineManagerStore from "./stores/pipelineManagerStore";
 import useEditorStore from "./stores/editorStore";
 import {JsonSchema, NodeData} from "./types/nodeParams";
-import {getNodeInputWidget} from "./nodes/GetInputWidget";
+import {getWidgetsForNode} from "./nodes/GetInputWidget";
 import NodeInput from "./nodes/NodeInput";
 import NodeOutputs from "./nodes/NodeOutputs";
 import {HelpContent} from "./panel/ComponentHelp";
@@ -18,10 +18,7 @@ export function PipelineNode(nodeProps: NodeProps<NodeData>) {
   const setNode = usePipelineStore((state) => state.setNode);
   const deleteNode = usePipelineStore((state) => state.deleteNode);
   const nodeErrors = usePipelineManagerStore((state) => state.errors[id]);
-  const {nodeSchemas} = getCachedData();
-  const nodeSchema = nodeSchemas.get(data.type)!;
-  const schemaProperties = Object.getOwnPropertyNames(nodeSchema.properties);
-  const requiredProperties = nodeSchema.required || [];
+  const nodeSchema = getCachedData().nodeSchemas.get(data.type)!;
 
   const updateParamValue = (
     event: ChangeEvent<HTMLTextAreaElement | HTMLSelectElement | HTMLInputElement>,
@@ -73,19 +70,7 @@ export function PipelineNode(nodeProps: NodeProps<NodeData>) {
         <NodeInput />
         <div className="px-4">
           <div>
-            {schemaProperties.map((name) => (
-              <React.Fragment key={name}>
-                {getNodeInputWidget({
-                  id: id,
-                  name: name,
-                  schema: nodeSchema.properties[name],
-                  params: data.params,
-                  updateParamValue: updateParamValue,
-                  nodeType: data.type,
-                  required: requiredProperties.includes(name),
-                })}
-              </React.Fragment>
-            ))}
+            {getWidgetsForNode({schema: nodeSchema, nodeId: id, nodeData: data, updateParamValue: updateParamValue})}
           </div>
           <div className="mt-2">
             <button className="btn btn-sm btn-ghost w-full"

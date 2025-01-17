@@ -362,7 +362,12 @@ class RouterMixin(BaseModel):
 class RouterNode(RouterMixin, Passthrough, HistoryMixin):
     """Routes the input to one of the linked nodes using an LLM"""
 
-    model_config = ConfigDict(json_schema_extra=NodeSchema(label="LLM Router"))
+    model_config = ConfigDict(
+        json_schema_extra=NodeSchema(
+            label="LLM Router",
+            field_order=["llm_provider_id", "llm_temperature", "history_type", "prompt", "keywords"],
+        )
+    )
 
     prompt: str = Field(
         default="You are an extremely helpful router",
@@ -399,7 +404,12 @@ class StaticRouterNode(RouterMixin, Passthrough):
         participant_data = "participant_data", "Participant Data"
         shared_state = "shared_state", "Shared State"
 
-    model_config = ConfigDict(json_schema_extra=NodeSchema(label="Static Router"))
+    model_config = ConfigDict(
+        json_schema_extra=NodeSchema(
+            label="Static Router",
+            field_order=["data_source", "route_key", "keywords"],
+        )
+    )
 
     data_source: DataSource = Field(
         DataSource.participant_data,

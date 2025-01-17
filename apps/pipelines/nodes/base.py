@@ -186,6 +186,14 @@ class NodeSchema(BaseModel):
     can_add: bool = None
     deprecated: bool = False
     deprecation_message: str = None
+    field_order: list[str] = Field(
+        None,
+        description=(
+            "The order of the fields in the UI. "
+            "Any field not in this list will be appended to the end. "
+            "The 'name' field is always displayed first regardless of its position in this list."
+        ),
+    )
 
     @model_validator(mode="after")
     def update_metadata_fields(self) -> Self:
@@ -207,6 +215,8 @@ class NodeSchema(BaseModel):
         schema["ui:deprecated"] = self.deprecated
         if self.deprecated and self.deprecation_message:
             schema["ui:deprecation_message"] = self.deprecation_message
+        if self.field_order:
+            schema["ui:order"] = self.field_order
 
 
 def deprecated_node(cls=None, *, message=None):

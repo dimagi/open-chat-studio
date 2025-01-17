@@ -1,7 +1,18 @@
 import React from "react";
-import {NodeParams, PropertySchema} from "../types/nodeParams";
+import {JsonSchema, NodeParams, PropertySchema} from "../types/nodeParams";
 import usePipelineManagerStore from "../stores/pipelineManagerStore";
 import {getWidget} from "./widgets";
+
+type GetWidgetsParams = {
+  schema: JsonSchema;
+  nodeId: string;
+  nodeData: any;
+  updateParamValue: (event: React.ChangeEvent<HTMLTextAreaElement | HTMLSelectElement | HTMLInputElement>) => any;
+}
+
+type GetWidgetParamsGeneric = GetWidgetsParams & {
+  widgetGenerator: (params: InputWidgetParams) => React.ReactElement;
+}
 
 
 type InputWidgetParams = {
@@ -24,6 +35,66 @@ const nodeTypeToInputParamsMap: Record<string, string[]> = {
   "AssistantNode": ["assistant_id", "citations_enabled"],
 };
 
+/**
+ * Retrieves the full list of widgets for the given schema
+ */
+export const getWidgets = (
+  {schema, nodeId, nodeData, updateParamValue}: GetWidgetsParams
+) => {
+  return getWidgetsGeneric({schema, nodeId, nodeData, updateParamValue, widgetGenerator: getInputWidget});
+}
+
+/**
+ * Retrieves the list of widgets for the given schema which should be displayed ona node
+ */
+export const getWidgetsForNode = (
+  {schema, nodeId, nodeData, updateParamValue}: GetWidgetsParams
+) => {
+  return getWidgetsGeneric({schema, nodeId, nodeData, updateParamValue, widgetGenerator: getNodeInputWidget});
+}
+
+const getWidgetsGeneric = (
+  {schema, nodeId, nodeData, updateParamValue, widgetGenerator}: GetWidgetParamsGeneric
+) => {
+  const schemaProperties = Object.getOwnPropertyNames(schema.properties);
+  const requiredProperties = schema.required || [];
+  if (schema["ui:order"]) {
+    schemaProperties.sort((a, b) => {
+      // 'name' should always be first
+      if (a === "name") return -1;
+      if (b === "name") return 1;
+
+      const indexA = schema["ui:order"].indexOf(a);
+      const indexB = schema["ui:order"].indexOf(b);
+      // If 'a' is not in the order list, it should be at the end
+      if (indexA === -1) return 1;
+      if (indexB === -1) return -1;
+      return indexA - indexB;
+    });
+  }
+  return schemaProperties.map((name) => (
+    <React.Fragment key={name}>
+      {widgetGenerator({
+        id: nodeId,
+        name: name,
+        schema: schema.properties[name],
+        params: nodeData.params,
+        updateParamValue: updateParamValue,
+        nodeType: nodeData.type,
+        required: requiredProperties.includes(name),
+      })}
+    </React.Fragment>
+  ));
+}
+
+/**
+ * Retrieves the appropriate input widget for the specified node type and parameter.
+ *
+ * This calls `getInputWidget` under the hood but also filters the parameters to only those which
+ * should be shown on the node.
+ *
+ * @returns The input widget for the specified node type and parameter.
+ */
 export const getNodeInputWidget = (param: InputWidgetParams) => {
   if (!param.nodeType) {
     return <></>;
@@ -39,11 +110,6 @@ export const getNodeInputWidget = (param: InputWidgetParams) => {
 
 /**
  * Generates the appropriate input widget based on the input parameter type.
- * @param id - The node ID
- * @param inputParam - The input parameter to generate the widget for.
- * @param params - The parameters for the node.
- * @param setParams - The function to update the node parameters.
- * @param updateParamValue - The function to update the value of the input parameter.
  * @returns The input widget for the specified parameter type.
  */
 export const getInputWidget = (params: InputWidgetParams) => {
@@ -53,15 +119,15 @@ export const getInputWidget = (params: InputWidgetParams) => {
        During the migration, we kept the data in llm_model as a safeguard. This check can safely be deleted once a second migration to delete all instances of llm_model has been run.
        TODO: Remove this check once there are no instances of llm_model or max_token_limit in the node definitions.
      */
-    return
+    return <></>
   }
 
-  const getFieldError = usePipelineManagerStore((state) => state.getFieldError);
   const widgetOrType = params.schema["ui:widget"] || params.schema.type;
   if (widgetOrType == 'none') {
     return <></>;
   }
 
+  const getFieldError = usePipelineManagerStore((state) => state.getFieldError);
   const Widget = getWidget(widgetOrType, params.schema)
   let fieldError = getFieldError(params.id, params.name);
   const paramValue = params.params[params.name];

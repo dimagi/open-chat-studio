@@ -3,7 +3,7 @@ import useEditorStore from "../stores/editorStore";
 import OverlayPanel from "../components/OverlayPanel";
 import {classNames, getCachedData} from "../utils";
 import usePipelineStore from "../stores/pipelineStore";
-import {getInputWidget} from "../nodes/GetInputWidget";
+import {getWidgets} from "../nodes/GetInputWidget";
 
 export default function EditPanel({nodeId}: { nodeId: string }) {
   const closeEditor = useEditorStore((state) => state.closeEditor);
@@ -14,10 +14,8 @@ export default function EditPanel({nodeId}: { nodeId: string }) {
 
   const {id, data} = getNode(nodeId)!;
 
-  const {nodeSchemas} = getCachedData();
-  const nodeSchema = nodeSchemas.get(data.type)!;
+  const nodeSchema = getCachedData().nodeSchemas.get(data.type)!;
   const schemaProperties = Object.getOwnPropertyNames(nodeSchema.properties);
-  const requiredProperties = nodeSchema.required || [];
 
   const updateParamValue = (
     event: ChangeEvent<HTMLTextAreaElement | HTMLSelectElement | HTMLInputElement>,
@@ -69,19 +67,7 @@ export default function EditPanel({nodeId}: { nodeId: string }) {
             {schemaProperties.length === 0 && (
               <p className="pg-text-muted">No parameters to edit</p>
             )}
-            {schemaProperties.map((name) => (
-              <React.Fragment key={name}>
-                {getInputWidget({
-                  id: id,
-                  name: name,
-                  schema: nodeSchema.properties[name],
-                  params: data.params,
-                  updateParamValue: updateParamValue,
-                  nodeType: data.type,
-                  required: requiredProperties.includes(name),
-                })}
-              </React.Fragment>
-            ))}
+            {getWidgets({schema: nodeSchema, nodeId: id!, nodeData: data, updateParamValue})}
           </div>
         </>
       </OverlayPanel>
