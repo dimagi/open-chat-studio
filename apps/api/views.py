@@ -125,6 +125,18 @@ class ExperimentViewSet(mixins.ListModelMixin, mixins.RetrieveModelMixin, Generi
 @api_view(["POST"])
 @permission_required("experiments.change_participantdata")
 def update_participant_data(request):
+    return _update_participant_data(request)
+
+
+@extend_schema(exclude=True)
+@api_view(["POST"])
+@permission_required("experiments.change_participantdata")
+def update_participant_data_old(request):
+    # This endpoint is kept for backwards compatibility of the path with a trailing "/"
+    return _update_participant_data(request)
+
+
+def _update_participant_data(request):
     """
     Upsert participant data for all specified experiments in the payload
     """
