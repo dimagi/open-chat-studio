@@ -12,6 +12,16 @@ export default function NodeOutputs({data}: {
   const generateOutputHandle = (outputIndex: number) => {
     return multipleOutputs ? `output_${outputIndex}` : "output";
   };
+  const generateOutputLabel = (outputIndex: number, output_label:string) => {
+    if (multipleOutputs && outputIndex === 0) {
+      return (
+        <span className="tooltip" data-tip="This is the default output if there are no matches">
+          <i className="fa-solid fa-asterisk fa-2xs mr-1 text-accent"></i>{output_label}
+        </span>
+      );
+    }
+    return output_label;
+  }
   return (
     <>
       {multipleOutputs && <div className="divider">Outputs</div>}
@@ -20,7 +30,7 @@ export default function NodeOutputs({data}: {
           <LabeledHandle
             id={generateOutputHandle(index)}
             key={index}
-            title={output.label}
+            title={generateOutputLabel(index, output.label)}
             type="source"
             position={Position.Right}
             labelClassName={output.isError ? "text-error" : "text-foreground"}

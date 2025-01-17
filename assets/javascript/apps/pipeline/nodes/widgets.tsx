@@ -566,6 +566,11 @@ export function KeywordsWidget(props: WidgetParams) {
   const length = parseInt(concatenate(props.nodeParams.num_outputs)) || 1;
   const keywords = Array.isArray(props.nodeParams.keywords) ? props.nodeParams["keywords"] : []
   const canDelete = length > 1;
+  const defaultMarker = (
+    <span className="tooltip normal-case" data-tip="This is the default output if there are no matches">
+      <i className="fa-solid fa-asterisk fa-2xs ml-1 text-accent"></i>
+    </span>
+  )
   return (
     <>
       <div className="form-control w-full capitalize">
@@ -586,7 +591,7 @@ export function KeywordsWidget(props: WidgetParams) {
           return (
             <div className="form-control w-full capitalize" key={index}>
               <div className="flex justify-between items-center">
-                <label className="label">{label}</label>
+                <label className="label">{label}{index === 0 && defaultMarker}</label>
                 <div className="tooltip tooltip-left" data-tip={`Delete Keyword ${index + 1}`}>
                   <button className="btn btn-xs btn-ghost" onClick={() => deleteKeyword(index)} disabled={!canDelete}>
                     <i className="fa-solid fa-minus"></i>
