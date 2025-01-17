@@ -264,7 +264,7 @@ paths:
               schema:
                 $ref: '#/components/schemas/ExperimentSessionWithMessages'
           description: ''
-  /api/trigger_bot/:
+  /api/trigger_bot:
     post:
       operationId: trigger_bot_message
       description: Trigger the bot to send a message to the user
