@@ -1,7 +1,7 @@
 import {Edge, Node} from "reactflow";
 import {create} from "zustand";
 import {PipelineType} from "../types/pipeline";
-import {PipelineManagerStoreType} from "../types/pipelineManagerStore";
+import {ErrorsType, PipelineManagerStoreType} from "../types/pipelineManagerStore";
 import {apiClient} from "../api/api";
 
 let saveTimeoutId: NodeJS.Timeout | null = null;
@@ -17,6 +17,7 @@ const usePipelineManagerStore = create<PipelineManagerStoreType>((set, get) => (
     set({isLoading: true});
     apiClient.getPipeline(pipelineId).then((pipeline) => {
       if (pipeline) {
+        updateEdgeClasses(pipeline, pipeline.errors);
         set({currentPipeline: pipeline, currentPipelineId: pipelineId});
         set({errors: pipeline.errors});
         set({isLoading: false});
@@ -58,6 +59,7 @@ const usePipelineManagerStore = create<PipelineManagerStoreType>((set, get) => (
         .then((response) => {
           if (response) {
             pipeline.data = response.data;
+            updateEdgeClasses(pipeline, response.errors);
             set({currentPipeline: pipeline, dirty: false});
             set({errors: response.errors});
             resolve();
@@ -71,10 +73,50 @@ const usePipelineManagerStore = create<PipelineManagerStoreType>((set, get) => (
       });
     });
   },
-  getFieldError: (nodeId: string, fieldName: string) => {
-    const nodeError = get().errors[nodeId];
-    return nodeError ? nodeError[fieldName] : "";
+  nodeHasErrors: (nodeId: string) => {
+    return !!get().errors["node"] && !!get().errors["node"]![nodeId];
+  },
+  getNodeFieldError: (nodeId: string, fieldName: string) => {
+    const errors = get().errors;
+    if (!errors["node"]) {
+      return "";
+    }
+    const nodeErrors = errors["node"][nodeId];
+    return nodeErrors ? nodeErrors[fieldName] : "";
+  },
+  edgeHasErrors: (edgeId: string) => {
+    return !!get().errors["edge"] && get().errors["edge"]!.includes(edgeId);
+  },
+  getPipelineError: () => {
+    return get().errors["pipeline"];
   },
 }));
+
+
+/**
+ * Updates the class names of edges in a pipeline based on error status.
+ *
+ * @remarks
+ * This function modifies the edge classes to visually indicate error states. Edges with errors
+ * receive an "edge-error" class, while error-free edges have their class name removed.
+ *
+ * @param pipeline - The pipeline containing edges to be checked
+ * @param errors - An object containing error information for different pipeline components
+ *
+ * @returns Void. Modifies edges in-place by adding or removing "edge-error" class.
+ */
+function updateEdgeClasses(pipeline: PipelineType, errors: ErrorsType) {
+  if (!pipeline.data) {
+    return;
+  }
+  const edgeErrors = errors["edge"] || [];
+  for (const edge of pipeline.data!.edges) {
+    if (edgeErrors.includes(edge["id"])) {
+      edge["className"] = "edge-error";
+    } else {
+      delete edge["className"];
+    }
+  }
+}
 
 export default usePipelineManagerStore;

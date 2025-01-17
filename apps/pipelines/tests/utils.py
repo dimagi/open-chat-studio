@@ -21,7 +21,9 @@ def _make_edges(nodes) -> list[dict]:
     ]
 
 
-def create_runnable(pipeline: Pipeline, nodes: list[dict], edges: list[dict] | None = None) -> CompiledStateGraph:
+def create_runnable(
+    pipeline: Pipeline, nodes: list[dict], edges: list[dict] | None = None, lenient=False
+) -> CompiledStateGraph:
     if edges is None:
         edges = _make_edges(nodes)
     flow_nodes = []
@@ -29,7 +31,9 @@ def create_runnable(pipeline: Pipeline, nodes: list[dict], edges: list[dict] | N
         flow_nodes.append({"id": node["id"], "data": node})
     pipeline.data = {"edges": edges, "nodes": flow_nodes}
     pipeline.update_nodes_from_data()
-    return PipelineGraph.build_runnable_from_pipeline(pipeline)
+    graph = PipelineGraph.build_from_pipeline(pipeline)
+    graph.lenient_validation = lenient
+    return graph.build_runnable()
 
 
 def start_node():

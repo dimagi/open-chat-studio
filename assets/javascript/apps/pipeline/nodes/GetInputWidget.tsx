@@ -58,14 +58,14 @@ export const getInputWidget = (params: InputWidgetParams) => {
     return
   }
 
-  const getFieldError = usePipelineManagerStore((state) => state.getFieldError);
+  const getNodeFieldError = usePipelineManagerStore((state) => state.getNodeFieldError);
   const widgetOrType = params.schema["ui:widget"] || params.schema.type;
   if (widgetOrType == 'none') {
     return <></>;
   }
 
   const Widget = getWidget(widgetOrType)
-  let fieldError = getFieldError(params.id, params.name);
+  let fieldError = getNodeFieldError(params.id, params.name);
   const paramValue = params.params[params.name];
   if (params.required && (paramValue === null || paramValue === undefined)) {
     fieldError = "This field is required";
@@ -82,7 +82,7 @@ export const getInputWidget = (params: InputWidgetParams) => {
       schema={params.schema}
       nodeParams={params.params}
       required={params.required}
-      getFieldError={getFieldError}
+      getNodeFieldError={getNodeFieldError}
     />
   )
 };

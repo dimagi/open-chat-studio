@@ -55,7 +55,7 @@ interface WidgetParams {
   schema: PropertySchema
   nodeParams: NodeParams
   required: boolean,
-  getFieldError: (nodeId: string, fieldName: string) => string | undefined;
+  getNodeFieldError: (nodeId: string, fieldName: string) => string | undefined;
 }
 
 function DefaultWidget(props: WidgetParams) {
@@ -625,7 +625,7 @@ export function HistoryTypeWidget(props: WidgetParams) {
   const options = getSelectOptions(props.schema);
   const historyType = concatenate(props.paramValue);
   const historyName = concatenate(props.nodeParams["history_name"]);
-  const historyNameError = props.getFieldError(props.nodeId, "history_name");
+  const historyNameError = props.getNodeFieldError(props.nodeId, "history_name");
   return (
     <>
       <div className="flex join">

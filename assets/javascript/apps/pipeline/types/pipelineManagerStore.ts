@@ -16,6 +16,15 @@ export type PipelineManagerStoreType = {
     edges: Edge[],
   ) => void;
   // Errors
-  errors: {[nodeId: string]: {[name: string]: string}},
-  getFieldError: (nodeId: string, fieldName: string) => string | undefined;
+  errors: ErrorsType;
+  nodeHasErrors: (nodeId: string) => boolean;
+  getNodeFieldError: (nodeId: string, fieldName: string) => string | undefined;
+  edgeHasErrors: (edgeId: string) => boolean;
+  getPipelineError: () => string | undefined;
+};
+
+export type ErrorsType = {
+  node?: {[nodeId: string]: {[field: string]: string}};
+  edge?: string[];
+  pipeline?: string;
 };
