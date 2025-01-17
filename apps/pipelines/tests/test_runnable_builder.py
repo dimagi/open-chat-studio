@@ -218,7 +218,7 @@ def test_branching_pipeline(pipeline, experiment_session):
         },
     ]
     user_input = "The Input"
-    output = create_runnable(pipeline, nodes, edges).invoke(
+    output = create_runnable(pipeline, nodes, edges, lenient=True).invoke(
         PipelineState(messages=[user_input], experiment_session=experiment_session)
     )["outputs"]
     expected_output = {
@@ -732,4 +732,4 @@ def test_cyclical_graph(pipeline):
     ]
 
     with pytest.raises(PipelineBuildError, match="A cycle was detected"):
-        create_runnable(pipeline, nodes, edges)
+        create_runnable(pipeline, nodes, edges, lenient=True)

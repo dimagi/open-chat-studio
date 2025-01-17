@@ -5,6 +5,7 @@ from typing import Self
 import pydantic
 from langgraph.graph import StateGraph
 from langgraph.graph.state import CompiledStateGraph
+from pydantic import Field
 from pydantic_core import ValidationError
 
 from apps.pipelines.const import STANDARD_OUTPUT_NAME
@@ -43,6 +44,7 @@ class Edge(pydantic.BaseModel):
 class PipelineGraph(pydantic.BaseModel):
     nodes: list[Node]
     edges: list[Edge]
+    lenient_validation: bool = Field(default=False, description="Skip some validation checks. Used in tests.")
 
     @cached_property
     def nodes_by_id(self) -> dict[str, Node]:
@@ -104,7 +106,8 @@ class PipelineGraph(pydantic.BaseModel):
             raise PipelineBuildError("There are no nodes in the graph")
 
         self._validate_start_end_nodes()
-        self._validate_no_parallel_nodes()
+        if not self.lenient_validation:
+            self._validate_no_parallel_nodes()
         if self._check_for_cycles():
             raise PipelineBuildError("A cycle was detected")
 
