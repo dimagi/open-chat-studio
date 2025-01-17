@@ -7,7 +7,7 @@ import {LabeledHandle} from "./LabeledHandle";
 export default function NodeOutputs({data}: {
   data: NodeData,
 }) {
-    const multipleOutputs = data.type === "RouterNode" || data.type === "BooleanNode" || data.type == "StaticRouterNode";
+  const multipleOutputs = data.type === "RouterNode" || data.type === "BooleanNode" || data.type == "StaticRouterNode";
   const outputNames = getOutputNames(data.type, data.params);
   const generateOutputHandle = (outputIndex: number) => {
     return multipleOutputs ? `output_${outputIndex}` : "output";
