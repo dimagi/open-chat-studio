@@ -251,7 +251,7 @@ def main(input, **kwargs):
         code_node(code_set),
         end_node(),
     ]
-    with pytest.raises(PipelineNodeRunError, match="Cannot set the outputs key of the shared state"):
+    with pytest.raises(PipelineNodeRunError, match="Cannot set the 'outputs' key of the shared state"):
         create_runnable(pipeline, nodes).invoke(PipelineState(experiment_session=experiment_session, messages=[input]))[
             "messages"
         ][-1]
