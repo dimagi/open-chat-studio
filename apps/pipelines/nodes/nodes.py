@@ -742,7 +742,6 @@ class CodeNode(PipelineNode):
             custom_locals = {}
             exec(byte_code, {}, custom_locals)
 
-            print(custom_locals)
             try:
                 main = custom_locals["main"]
             except KeyError:
