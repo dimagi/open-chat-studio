@@ -1,4 +1,7 @@
-export type NodeParams = Record<string, string | string[]>;
+export type NodeParams = {
+  name: string;
+  [key: string]: any;
+}
 
 export type PropertySchema = {
   type: string;

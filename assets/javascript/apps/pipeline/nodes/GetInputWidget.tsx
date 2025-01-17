@@ -140,7 +140,7 @@ export const getInputWidget = (params: InputWidgetParams) => {
       name={params.name}
       label={params.schema.title || params.name.replace(/_/g, " ")}
       helpText={params.schema.description || ""}
-      paramValue={paramValue || ""}
+      paramValue={paramValue ?? ""}
       inputError={fieldError}
       updateParamValue={params.updateParamValue}
       schema={params.schema}
