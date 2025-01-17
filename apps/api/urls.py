@@ -17,6 +17,8 @@ connect_patterns = [
 
 urlpatterns = [
     path("participants/", views.update_participant_data, name="update-participant-data"),
+    # Duplicate update-participant-data without a trailing "/" for backwards compatibility
+    path("participants", views.update_participant_data, name="update-participant-data"),
     path("openai/<uuid:experiment_id>/chat/completions", openai.chat_completions, name="openai-chat-completions"),
     path("files/<int:pk>/content", views.file_content_view, name="file-content"),
     path("commcare_connect/", include((connect_patterns, "commcare-connect"))),
