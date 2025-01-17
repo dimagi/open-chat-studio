@@ -143,7 +143,7 @@ def main(input, **kwargs):
         end_node(),
     ]
     assert (
-        create_runnable(pipeline, nodes).invoke(PipelineState(experiment_session=experiment_session, messages=[input]))[
+        create_runnable(pipeline, nodes).invoke(PipelineState(experiment_session=experiment_session, messages=["hi"]))[
             "messages"
         ][-1]
         == "robot"
@@ -174,7 +174,7 @@ def main(input, **kwargs):
         end_node(),
     ]
     assert (
-        create_runnable(pipeline, nodes).invoke(PipelineState(experiment_session=experiment_session, messages=[input]))[
+        create_runnable(pipeline, nodes).invoke(PipelineState(experiment_session=experiment_session, messages=["hi"]))[
             "messages"
         ][-1]
         == output
@@ -202,7 +202,7 @@ def main(input, **kwargs):
         end_node(),
     ]
     assert (
-        create_runnable(pipeline, nodes).invoke(PipelineState(experiment_session=experiment_session, messages=[input]))[
+        create_runnable(pipeline, nodes).invoke(PipelineState(experiment_session=experiment_session, messages=["hi"]))[
             "messages"
         ][-1]
         == output

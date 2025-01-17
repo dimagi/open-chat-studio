@@ -40,7 +40,8 @@ class ParticipantDataProxy:
 
     @classmethod
     def from_state(cls, pipeline_state) -> Self:
-        return cls(pipeline_state["experiment_session"])
+        # using `.get` here for the sake of tests. In practice the session should always be present
+        return cls(pipeline_state.get("experiment_session"))
 
     def __init__(self, experiment_session):
         self.session = experiment_session
