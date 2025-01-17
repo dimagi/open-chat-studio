@@ -131,7 +131,7 @@ class Pipeline(BaseTeamModel, VersionsMixin):
             )
             created_node.update_from_params()
 
-    def validate(self) -> dict:
+    def validate(self, full=True) -> dict:
         """Validate the pipeline nodes and return a dictionary of errors"""
         from apps.pipelines.graph import PipelineGraph
         from apps.pipelines.nodes import nodes as pipeline_nodes
@@ -147,10 +147,11 @@ class Pipeline(BaseTeamModel, VersionsMixin):
         if errors:
             return {"node": errors}
 
-        try:
-            PipelineGraph.build_runnable_from_pipeline(self)
-        except PipelineBuildError as e:
-            return e.to_json()
+        if full:
+            try:
+                PipelineGraph.build_runnable_from_pipeline(self)
+            except PipelineBuildError as e:
+                return e.to_json()
 
         return {}
 
