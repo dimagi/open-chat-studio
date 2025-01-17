@@ -127,13 +127,13 @@ export default function TestMessageBox({
   return (
     <div className="relative">
       <button
-        className="absolute top-4 left-16 z-10 text-4xl text-primary"
+        className="btn btn-circle btn-ghost absolute top-4 left-16 z-10 text-primary"
         onClick={togglePanel}
         title="Test Pipeline"
       >
         <i
           className={`fas ${
-            isOpen ? "fa-circle-minus" : "fa-circle-play"
+            isOpen ? "fa-circle-stop" : "fa-circle-play"
           } text-4xl shadow-md rounded-full`}
         />
       </button>

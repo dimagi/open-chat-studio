@@ -131,7 +131,7 @@ export default function ComponentList({isOpen, setIsOpen}: ComponentListParams) 
   return (
     <div className="relative">
       <button
-        className="absolute top-4 left-4 z-10 text-4xl text-primary"
+        className="btn btn-circle btn-ghost absolute top-4 left-4 z-10 text-primary"
         onClick={togglePanel}
         title="Add Node"
       >
