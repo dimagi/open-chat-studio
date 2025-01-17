@@ -10,7 +10,7 @@ from pydantic import BaseModel, ConfigDict, model_validator
 from pydantic.config import JsonDict
 
 from apps.experiments.models import ExperimentSession
-from apps.pipelines.logging import PipelineLoggingCallbackHandler
+from apps.pipelines.logging import PipelineLoggingCallbackHandler, noop_logger
 
 
 def add_messages(left: dict, right: dict):
@@ -118,6 +118,7 @@ class PipelineNode(BaseModel, ABC):
         for handler in self._config["callbacks"].handlers:
             if isinstance(handler, PipelineLoggingCallbackHandler):
                 return handler.logger
+        return noop_logger()
 
 
 class Widgets(StrEnum):
