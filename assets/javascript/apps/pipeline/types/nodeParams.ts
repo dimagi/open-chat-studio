@@ -21,7 +21,13 @@ export type JsonSchema = {
   title: string;
   description?: string | undefined;
   required?: string[] | undefined;
+  "ui:flow_node_type": string;
   "ui:label": string;
+  "ui:can_add": boolean;
+  "ui:can_delete": boolean;
+  "ui:deprecated": boolean;
+  "ui:deprecation_message"?: string;
+  "ui:order"?: string[];
   properties: Record<string, PropertySchema>;
   [k: string]: any;
 }
