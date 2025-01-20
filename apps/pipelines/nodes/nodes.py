@@ -786,31 +786,6 @@ class CodeNode(PipelineNode):
 
         custom_globals = safe_globals.copy()
 
-        class ParticipantDataProxy:
-            """Allows multiple access without needing to re-fetch from the DB"""
-
-            def __init__(self, state):
-                self.state = state
-                self._participant_data = None
-
-            def _get_db_object(self):
-                if not self._participant_data:
-                    session = state["experiment_session"]
-                    self._participant_data, _ = ParticipantData.objects.get_or_create(
-                        participant_id=session.participant_id,
-                        experiment_id=session.experiment_id,
-                        team_id=session.experiment.team_id,
-                    )
-                return self._participant_data
-
-            def get(self):
-                return self._get_db_object().data
-
-            def set(self, data):
-                participant_data = self._get_db_object()
-                participant_data.data = data
-                participant_data.save(update_fields=["data"])
-
         participant_data_proxy = ParticipantDataProxy(state)
         custom_globals.update(
             {
