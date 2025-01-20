@@ -10,7 +10,7 @@
   {% endif %}
 
   {% if pipeline_nodes %}
-    <h2 class="font-semibold my-2">Pipelines</h2>
+    <h2 class="font-semibold my-2">Experiments referencing Pipelines</h2>
     <ul class="list-disc list-inside">
       {% for node in pipeline_nodes %}
         <li>{% include "generic/chip.html" with chip=node %}</li>
