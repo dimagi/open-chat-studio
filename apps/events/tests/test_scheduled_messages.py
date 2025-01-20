@@ -267,8 +267,8 @@ def test_schedule_update():
 def test_update_schedule_to_minute_perdiod():
     """
     This test reproduces an exception that was raised when the user updates the schedule to use TimePeriod.MINUTES. The
-    exception is due to a mismatch between the value of `TimePeriod.MINUTES` and that which Postgres expects in the
-    MakeInterval function i.e. postgres expects `mins` and the value is `minutes`.
+    exception was caused because of a mismatch between the value of `TimePeriod.MINUTES` and that which Postgres expects
+    in the MakeInterval function i.e. postgres expects `mins` and the value is `minutes`.
     """
     session = ExperimentSessionFactory()
     event_action, _params = _construct_event_action(
