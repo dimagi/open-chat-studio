@@ -164,7 +164,7 @@ class UpdateParticipantDataTool(CustomBaseTool):
         except ParticipantData.DoesNotExist:
             ParticipantData.objects.create(
                 participant=self.experiment_session.participant,
-                content_object=self.experiment_session.experiment,
+                experiment=self.experiment_session.experiment,
                 team=self.experiment_session.team,
                 data={key: value},
             )

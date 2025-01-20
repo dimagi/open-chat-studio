@@ -36,7 +36,7 @@ def _setup(experiment, message_spec: dict | None = None) -> tuple:
         team=team,
         participant=participant,
         system_metadata={"commcare_connect_channel_id": commcare_connect_channel_id, "consent": True},
-        content_object=experiment,
+        experiment=experiment,
         encryption_key=base64.b64encode(encryption_key).decode("utf-8"),
     )
     experiment_channel = ExperimentChannelFactory(

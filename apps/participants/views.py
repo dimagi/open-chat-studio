@@ -93,8 +93,7 @@ class EditParticipantData(LoginAndTeamRequiredMixin, TemplateView, PermissionReq
         new_data = json.loads(request.POST["participant-data"])
         ParticipantData.objects.update_or_create(
             participant=participant,
-            content_type__model="experiment",
-            object_id=experiment_id,
+            experiment_id=experiment_id,
             team=request.team,
             defaults={"team": experiment.team, "data": new_data, "content_object": experiment},
         )
