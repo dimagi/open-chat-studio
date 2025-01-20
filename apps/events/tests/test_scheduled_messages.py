@@ -264,7 +264,7 @@ def test_schedule_update():
 
 
 @pytest.mark.django_db()
-def test_update_schedule_to_minute_perdiod():
+def test_update_schedule_to_minute_period():
     """
     This test reproduces an exception that was raised when the user updates the schedule to use TimePeriod.MINUTES. The
     exception was caused because of a mismatch between the value of `TimePeriod.MINUTES` and that which Postgres expects
