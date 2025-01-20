@@ -10,6 +10,7 @@ from apps.channels.clients.connect_client import CommCareConnectClient
 from apps.channels.models import ChannelPlatform, ExperimentChannel
 from apps.chat.channels import ChannelBase
 from apps.experiments.models import Experiment, ParticipantData
+from apps.teams.utils import current_team
 
 logger = logging.getLogger(__name__)
 
@@ -83,5 +84,6 @@ def trigger_bot_message_task(data):
     ChannelClass = ChannelBase.get_channel_class_for_platform(platform)
     channel = ChannelClass(experiment=published_experiment, experiment_channel=experiment_channel)
 
-    channel.ensure_session_exists_for_participant(identifier)
-    channel.experiment_session.ad_hoc_bot_message(prompt_text, use_experiment=published_experiment)
+    with current_team(experiment.team):
+        channel.ensure_session_exists_for_participant(identifier)
+        channel.experiment_session.ad_hoc_bot_message(prompt_text, use_experiment=published_experiment)
