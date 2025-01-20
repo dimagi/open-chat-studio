@@ -5,9 +5,9 @@ import time
 from typing import Literal
 
 import tiktoken
-from django.contrib.contenttypes.models import ContentType
 from django.core.exceptions import ValidationError
 from django.core.validators import validate_email
+from django.db.models import TextChoices
 from jinja2 import meta
 from jinja2.sandbox import SandboxedEnvironment
 from langchain_core.messages import BaseMessage
@@ -25,7 +25,7 @@ from apps.channels.datamodels import Attachment
 from apps.chat.agent.tools import get_node_tools
 from apps.chat.conversation import compress_chat_history, compress_pipeline_chat_history
 from apps.chat.models import ChatMessageType
-from apps.experiments.models import Experiment, ExperimentSession, ParticipantData
+from apps.experiments.models import ExperimentSession, ParticipantData
 from apps.pipelines.exceptions import PipelineNodeBuildError, PipelineNodeRunError
 from apps.pipelines.models import Node, PipelineChatHistory, PipelineChatHistoryTypes
 from apps.pipelines.nodes.base import (
@@ -37,6 +37,7 @@ from apps.pipelines.nodes.base import (
     Widgets,
     deprecated_node,
 )
+from apps.pipelines.nodes.helpers import ParticipantDataProxy
 from apps.pipelines.tasks import send_email_from_pipeline
 from apps.service_providers.exceptions import ServiceProviderConfigError
 from apps.service_providers.llm_service.adapters import AssistantAdapter, ChatAdapter
@@ -82,7 +83,7 @@ class RenderTemplate(PipelineNode):
             content = all_variables(input)
         template = SandboxedEnvironment().from_string(self.template_string)
         output = template.render(content)
-        return PipelineState.from_node_output(node_id=node_id, output=output)
+        return PipelineState.from_node_output(node_name=self.name, node_id=node_id, output=output)
 
 
 class LLMResponseMixin(BaseModel):
@@ -185,7 +186,7 @@ class LLMResponse(PipelineNode, LLMResponseMixin):
     def _process(self, input, node_id: str, **kwargs) -> PipelineState:
         llm = self.get_chat_model()
         output = llm.invoke(input, config=self._config)
-        return PipelineState.from_node_output(node_id=node_id, output=output.content)
+        return PipelineState.from_node_output(node_name=self.name, node_id=node_id, output=output.content)
 
 
 class LLMResponseWithPrompt(LLMResponse, HistoryMixin):
@@ -255,7 +256,7 @@ class LLMResponseWithPrompt(LLMResponse, HistoryMixin):
 
         # Invoke runnable
         result = chat.invoke(input=input)
-        return PipelineState.from_node_output(node_id=node_id, output=result.output)
+        return PipelineState.from_node_output(node_name=self.name, node_id=node_id, output=result.output)
 
     def tools_enabled(self) -> bool:
         return len(self.tools) > 0 or len(self.custom_actions) > 0
@@ -283,7 +284,7 @@ class SendEmail(PipelineNode):
         send_email_from_pipeline.delay(
             recipient_list=self.recipient_list.split(","), subject=self.subject, message=input
         )
-        return PipelineState.from_node_output(node_id=node_id, output=None)
+        return PipelineState.from_node_output(node_name=self.name, node_id=node_id, output=None)
 
 
 class Passthrough(PipelineNode):
@@ -294,18 +295,20 @@ class Passthrough(PipelineNode):
     def _process(self, input, state: PipelineState, node_id: str) -> PipelineState:
         if self.logger:
             self.logger.debug(f"Returning input: '{input}' without modification", input=input, output=input)
-        return PipelineState.from_node_output(node_id=node_id, output=input)
+        return PipelineState.from_node_output(node_name=self.name, node_id=node_id, output=input)
 
 
 class StartNode(Passthrough):
     """The start of the pipeline"""
 
+    name: str = "start"
     model_config = ConfigDict(json_schema_extra=NodeSchema(label="Start", flow_node_type="startNode"))
 
 
 class EndNode(Passthrough):
     """The end of the pipeline"""
 
+    name: str = "end"
     model_config = ConfigDict(json_schema_extra=NodeSchema(label="End", flow_node_type="endNode"))
 
 
@@ -327,16 +330,7 @@ class BooleanNode(Passthrough):
         return {"output_0": "true", "output_1": "false"}
 
 
-class RouterNode(Passthrough, HistoryMixin):
-    """Routes the input to one of the linked nodes"""
-
-    model_config = ConfigDict(json_schema_extra=NodeSchema(label="Router"))
-
-    prompt: str = Field(
-        default="You are an extremely helpful router",
-        min_length=1,
-        json_schema_extra=UiSchema(widget=Widgets.expandable_text),
-    )
+class RouterMixin(BaseModel):
     num_outputs: int = Field(2, json_schema_extra=UiSchema(widget=Widgets.none))
     keywords: list[str] = Field(default_factory=list, json_schema_extra=UiSchema(widget=Widgets.keywords))
 
@@ -350,6 +344,36 @@ class RouterNode(Passthrough, HistoryMixin):
             raise PydanticCustomError("invalid_keywords", "Keywords must be unique")
 
         return value[:num_outputs]  # Ensure the number of keywords matches the number of outputs
+
+    def _get_keyword(self, result: str):
+        keyword = result.lower().strip()
+        if keyword in [k.lower() for k in self.keywords]:
+            return keyword.lower()
+        else:
+            return self.keywords[0].lower()
+
+    def get_output_map(self):
+        """Returns a mapping of the form:
+        {"output_1": "keyword 1", "output_2": "keyword_2", ...} where keywords are defined by the user
+        """
+        return {f"output_{output_num}": keyword.lower() for output_num, keyword in enumerate(self.keywords)}
+
+
+class RouterNode(RouterMixin, Passthrough, HistoryMixin):
+    """Routes the input to one of the linked nodes using an LLM"""
+
+    model_config = ConfigDict(
+        json_schema_extra=NodeSchema(
+            label="LLM Router",
+            field_order=["llm_provider_id", "llm_temperature", "history_type", "prompt", "keywords"],
+        )
+    )
+
+    prompt: str = Field(
+        default="You are an extremely helpful router",
+        min_length=1,
+        json_schema_extra=UiSchema(widget=Widgets.expandable_text),
+    )
 
     def _process_conditional(self, state: PipelineState, node_id=None):
         prompt = OcsPromptTemplate.from_messages(
@@ -367,23 +391,48 @@ class RouterNode(Passthrough, HistoryMixin):
         chain = prompt | self.get_chat_model()
 
         result = chain.invoke(context, config=self._config)
-        keyword = self._get_keyword(result)
+        keyword = self._get_keyword(result.content)
         if session:
             self._save_history(session, node_id, node_input, keyword)
         return keyword
 
-    def _get_keyword(self, result):
-        keyword = result.content.lower().strip()
-        if keyword in [k.lower() for k in self.keywords]:
-            return keyword.lower()
-        else:
-            return self.keywords[0].lower()
 
-    def get_output_map(self):
-        """Returns a mapping of the form:
-        {"output_1": "keyword 1", "output_2": "keyword_2", ...} where keywords are defined by the user
-        """
-        return {f"output_{output_num}": keyword.lower() for output_num, keyword in enumerate(self.keywords)}
+class StaticRouterNode(RouterMixin, Passthrough):
+    """Routes the input to a linked node using the shared state of the pipeline"""
+
+    class DataSource(TextChoices):
+        participant_data = "participant_data", "Participant Data"
+        shared_state = "shared_state", "Shared State"
+
+    model_config = ConfigDict(
+        json_schema_extra=NodeSchema(
+            label="Static Router",
+            field_order=["data_source", "route_key", "keywords"],
+        )
+    )
+
+    data_source: DataSource = Field(
+        DataSource.participant_data,
+        description="The source of the data to use for routing",
+        json_schema_extra=UiSchema(enum_labels=DataSource.labels),
+    )
+    route_key: str = Field(..., description="The key in the data to use for routing")
+
+    def _process_conditional(self, state: PipelineState, node_id=None):
+        from apps.service_providers.llm_service.prompt_context import SafeAccessWrapper
+
+        if self.data_source == self.DataSource.participant_data:
+            data = ParticipantDataProxy.from_state(state).get()
+        else:
+            data = state["shared_state"]
+
+        formatted_key = f"{{data.{self.route_key}}}"
+        try:
+            result = formatted_key.format(data=SafeAccessWrapper(data))
+        except KeyError:
+            result = ""
+
+        return self._get_keyword(result)
 
 
 class ExtractStructuredDataNodeMixin:
@@ -425,7 +474,7 @@ class ExtractStructuredDataNodeMixin:
 
         self.post_extraction_hook(new_reference_data, state)
         output = json.dumps(new_reference_data)
-        return PipelineState.from_node_output(node_id=node_id, output=output)
+        return PipelineState.from_node_output(node_name=self.name, node_id=node_id, output=output)
 
     def post_extraction_hook(self, output, state):
         pass
@@ -638,6 +687,7 @@ class AssistantNode(PipelineNode):
         output = chain_output.output
 
         return PipelineState.from_node_output(
+            node_name=self.name,
             node_id=node_id,
             output=output,
             message_metadata={
@@ -661,6 +711,8 @@ DEFAULT_FUNCTION = """# You must define a main function, which takes the node in
 # Available functions:
 # - get_participant_data() -> dict
 # - set_participant_data(data: Any) -> None
+# - get_state_key(key_name: str) -> str | None
+# - set_state_key(key_name: str, data: Any) -> None
 
 def main(input: str, **kwargs) -> str:
     return input
@@ -724,7 +776,7 @@ class CodeNode(PipelineNode):
             result = str(custom_locals[function_name](input))
         except Exception as exc:
             raise PipelineNodeRunError(exc) from exc
-        return PipelineState.from_node_output(node_id=node_id, output=result)
+        return PipelineState.from_node_output(node_name=self.name, node_id=node_id, output=result)
 
     def _get_custom_globals(self, state: PipelineState):
         from RestrictedPython.Eval import (
@@ -734,34 +786,7 @@ class CodeNode(PipelineNode):
 
         custom_globals = safe_globals.copy()
 
-        class ParticipantDataProxy:
-            """Allows multiple access without needing to re-fetch from the DB"""
-
-            def __init__(self, state):
-                self.state = state
-                self._participant_data = None
-
-            def _get_db_object(self):
-                if not self._participant_data:
-                    content_type = ContentType.objects.get_for_model(Experiment)
-                    session = state["experiment_session"]
-                    self._participant_data, _ = ParticipantData.objects.get_or_create(
-                        participant_id=session.participant_id,
-                        content_type=content_type,
-                        object_id=session.experiment_id,
-                        team_id=session.experiment.team_id,
-                    )
-                return self._participant_data
-
-            def get(self):
-                return self._get_db_object().data
-
-            def set(self, data):
-                participant_data = self._get_db_object()
-                participant_data.data = data
-                participant_data.save(update_fields=["data"])
-
-        participant_data_proxy = ParticipantDataProxy(state)
+        participant_data_proxy = ParticipantDataProxy.from_state(state)
         custom_globals.update(
             {
                 "__builtins__": self._get_custom_builtins(),
@@ -773,9 +798,25 @@ class CodeNode(PipelineNode):
                 "_write_": lambda x: x,
                 "get_participant_data": participant_data_proxy.get,
                 "set_participant_data": participant_data_proxy.set,
+                "get_state_key": self._get_state_key(state),
+                "set_state_key": self._set_state_key(state),
             }
         )
         return custom_globals
+
+    def _get_state_key(self, state: PipelineState):
+        def get_state_key(key_name: str):
+            return state["shared_state"].get(key_name)
+
+        return get_state_key
+
+    def _set_state_key(self, state: PipelineState):
+        def set_state_key(key_name: str, value):
+            if key_name in {"user_input", "outputs"}:
+                raise PipelineNodeRunError(f"Cannot set the '{key_name}' key of the shared state")
+            state["shared_state"][key_name] = value
+
+        return set_state_key
 
     def _get_custom_builtins(self):
         allowed_modules = {

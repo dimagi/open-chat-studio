@@ -6,7 +6,7 @@ from functools import cached_property
 from typing import Annotated, Any, Literal, Self
 
 from langchain_core.runnables import RunnableConfig
-from pydantic import BaseModel, ConfigDict, model_validator
+from pydantic import BaseModel, ConfigDict, Field, model_validator
 from pydantic.config import JsonDict
 
 from apps.experiments.models import ExperimentSession
@@ -27,11 +27,25 @@ def add_messages(left: dict, right: dict):
     return output
 
 
+def add_shared_state_messages(left: dict, right: dict):
+    output = {**left}
+    try:
+        output["outputs"].update(right["outputs"])
+    except KeyError:
+        output["outputs"] = right.get("outputs", {})
+    for key, value in right.items():
+        if key != "outputs":
+            output[key] = value
+
+    return output
+
+
 class PipelineState(dict):
     messages: Annotated[Sequence[Any], operator.add]
     outputs: Annotated[dict, add_messages]
     experiment_session: ExperimentSession
     pipeline_version: int
+    shared_state: Annotated[dict, add_shared_state_messages]
     ai_message_id: int | None = None
     message_metadata: dict | None = None
     attachments: list | None = None
@@ -44,8 +58,9 @@ class PipelineState(dict):
         return copy
 
     @classmethod
-    def from_node_output(cls, node_id: str, output: Any = None, **kwargs) -> Self:
+    def from_node_output(cls, node_name: str, node_id: str, output: Any = None, **kwargs) -> Self:
         kwargs["outputs"] = {node_id: {"message": output}}
+        kwargs["shared_state"] = {"outputs": {node_name: output}}
         if output is not None:
             kwargs["messages"] = [output]
         return cls(**kwargs)
@@ -77,6 +92,7 @@ class PipelineNode(BaseModel, ABC):
     model_config = ConfigDict(arbitrary_types_allowed=True)
 
     _config: RunnableConfig | None = None
+    name: str = Field(title="Node Name", json_schema_extra={"ui:widget": "node_name"})
 
     def process(self, node_id: str, incoming_edges: list, state: PipelineState, config) -> PipelineState:
         self._config = config
@@ -92,6 +108,7 @@ class PipelineNode(BaseModel, ABC):
                 break
         else:  # This is the first node in the graph
             input = state["messages"][-1]
+            state["shared_state"]["user_input"] = input
         return self._process(input=input, state=state, node_id=node_id)
 
     def process_conditional(self, state: PipelineState, node_id: str | None = None) -> str:
@@ -101,7 +118,7 @@ class PipelineNode(BaseModel, ABC):
         state["outputs"][node_id]["output_handle"] = output_handle
         return conditional_branch
 
-    def _process(self, input: str, state: PipelineState, node_id: str) -> str:
+    def _process(self, input: str, state: PipelineState, node_id: str) -> PipelineState:
         """The method that executes node specific functionality"""
         raise NotImplementedError
 
@@ -170,6 +187,14 @@ class NodeSchema(BaseModel):
     can_add: bool = None
     deprecated: bool = False
     deprecation_message: str = None
+    field_order: list[str] = Field(
+        None,
+        description=(
+            "The order of the fields in the UI. "
+            "Any field not in this list will be appended to the end. "
+            "The 'name' field is always displayed first regardless of its position in this list."
+        ),
+    )
 
     @model_validator(mode="after")
     def update_metadata_fields(self) -> Self:
@@ -191,6 +216,8 @@ class NodeSchema(BaseModel):
         schema["ui:deprecated"] = self.deprecated
         if self.deprecated and self.deprecation_message:
             schema["ui:deprecation_message"] = self.deprecation_message
+        if self.field_order:
+            schema["ui:order"] = self.field_order
 
 
 def deprecated_node(cls=None, *, message=None):

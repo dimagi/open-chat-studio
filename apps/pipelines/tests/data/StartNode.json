@@ -1,6 +1,12 @@
 {
   "description": "The start of the pipeline",
-  "properties": {},
+  "properties": {
+    "name": {
+      "default": "start",
+      "title": "Name",
+      "type": "string"
+    }
+  },
   "title": "StartNode",
   "type": "object",
   "ui:can_add": false,

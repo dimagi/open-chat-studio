@@ -19,6 +19,11 @@
       "type": "number",
       "ui:widget": "range"
     },
+    "name": {
+      "title": "Node Name",
+      "type": "string",
+      "ui:widget": "node_name"
+    },
     "data_schema": {
       "default": "{\"name\": \"the name of the user\"}",
       "description": "A JSON object structure where the key is the name of the field and the value the description",
@@ -34,7 +39,8 @@
   },
   "required": [
     "llm_provider_id",
-    "llm_provider_model_id"
+    "llm_provider_model_id",
+    "name"
   ],
   "title": "ExtractParticipantData",
   "type": "object",
