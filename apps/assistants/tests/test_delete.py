@@ -105,7 +105,6 @@ class TestAssistantArchival:
         assistant = OpenAiAssistantFactory()
         v2_assistant = assistant.create_new_version()
         experiment = ExperimentFactory(assistant=v2_assistant)
-        experiment.is_default = True
         experiment.save()
 
         assistant.archive()
