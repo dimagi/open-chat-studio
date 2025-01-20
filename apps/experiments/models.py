@@ -684,6 +684,9 @@ class Experiment(BaseTeamModel, VersionsMixin, CustomActionOperationMixin):
         """Returns the default experiment, or if there is none, the working experiment"""
         return Experiment.objects.get_default_or_working(self)
 
+    def as_chip(self) -> Chip:
+        return Chip(label=self.name, url=self.get_absolute_url())
+
     def get_chat_model(self):
         service = self.get_llm_service()
         provider_model_name = self.get_llm_provider_model_name()
