@@ -1,3 +1,6 @@
+import json
+
+from django import forms
 from django.contrib import admin
 
 from .models import Node, Pipeline, PipelineChatHistory, PipelineChatMessages, PipelineRun
@@ -13,8 +16,18 @@ class PipelineNodeInline(admin.TabularInline):
     extra = 0
 
 
+class PrettyJSONEncoder(json.JSONEncoder):
+    def __init__(self, *args, indent, sort_keys, **kwargs):
+        super().__init__(*args, indent=4, sort_keys=True, **kwargs)
+
+
+class PipelineAdminForm(forms.ModelForm):
+    data = forms.JSONField(encoder=PrettyJSONEncoder)
+
+
 @admin.register(Pipeline)
 class PipelineAdmin(admin.ModelAdmin):
+    form = PipelineAdminForm
     inlines = [PipelineNodeInline, PipelineRunInline]
 
 

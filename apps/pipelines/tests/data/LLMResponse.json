@@ -18,11 +18,17 @@
       "title": "Temperature",
       "type": "number",
       "ui:widget": "range"
+    },
+    "name": {
+      "title": "Node Name",
+      "type": "string",
+      "ui:widget": "node_name"
     }
   },
   "required": [
     "llm_provider_id",
-    "llm_provider_model_id"
+    "llm_provider_model_id",
+    "name"
   ],
   "title": "LLMResponse",
   "type": "object",

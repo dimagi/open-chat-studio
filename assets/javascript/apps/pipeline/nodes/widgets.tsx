@@ -1,23 +1,16 @@
-import React, {
-  ChangeEvent,
-  ChangeEventHandler,
-  ReactNode,
-  useId,
-  useEffect,
-} from "react";
-import { useState } from "react";
+import React, {ChangeEvent, ChangeEventHandler, ReactNode, useEffect, useId, useState,} from "react";
 import CodeMirror from '@uiw/react-codemirror';
-import { python } from "@codemirror/lang-python";
-import { githubLight, githubDark } from "@uiw/codemirror-theme-github";
-import { CompletionContext, snippetCompletion as snip } from '@codemirror/autocomplete'
-import { TypedOption } from "../types/nodeParameterValues";
+import {python} from "@codemirror/lang-python";
+import {githubDark, githubLight} from "@uiw/codemirror-theme-github";
+import {CompletionContext, snippetCompletion as snip} from '@codemirror/autocomplete'
+import {TypedOption} from "../types/nodeParameterValues";
 import usePipelineStore from "../stores/pipelineStore";
-import { classNames, concatenate, getCachedData, getSelectOptions } from "../utils";
-import { NodeParams, PropertySchema } from "../types/nodeParams";
-import { Node, useUpdateNodeInternals } from "reactflow";
+import {classNames, concatenate, getCachedData, getSelectOptions} from "../utils";
+import {NodeParams, PropertySchema} from "../types/nodeParams";
+import {Node, useUpdateNodeInternals} from "reactflow";
 import DOMPurify from 'dompurify';
 
-export function getWidget(name: string) {
+export function getWidget(name: string, params: PropertySchema) {
   switch (name) {
     case "toggle":
       return ToggleWidget
@@ -39,7 +32,12 @@ export function getWidget(name: string) {
       return HistoryTypeWidget
     case "keywords":
       return KeywordsWidget
+    case "node_name":
+      return NodeNameWidget
     default:
+      if (params.enum) {
+        return SelectWidget
+      }
       return DefaultWidget
   }
 }
@@ -66,6 +64,37 @@ function DefaultWidget(props: WidgetParams) {
         name={props.name}
         onChange={props.updateParamValue}
         value={props.paramValue}
+        type="text"
+        required={props.required}
+      ></input>
+    </InputField>
+  );
+}
+
+/**
+ * A widget component for displaying and editing the name of a node.
+ *
+ * Will display a blank input field if the current value matches the node ID.
+ */
+function NodeNameWidget(props: WidgetParams) {
+  const value = concatenate(props.paramValue);
+  const [inputValue, setInputValue] = React.useState(value === props.nodeId ? "" : value);
+
+  const handleInputChange = (event: React.ChangeEvent<HTMLInputElement>) => {
+    setInputValue(event.target.value);
+    if (!event.target.value) {
+      event.target.value = props.nodeId;
+    }
+    props.updateParamValue(event);
+  };
+
+  return (
+    <InputField label={props.label} help_text={props.helpText} inputError={props.inputError}>
+      <input
+        className="input input-bordered w-full"
+        name={props.name}
+        onChange={handleInputChange}
+        value={inputValue}
         type="text"
         required={props.required}
       ></input>
@@ -323,6 +352,18 @@ export function CodeModal(
       detail: "Overwrites the participant data with the value provided",
       boost: 1
     }),
+    set_state_key: snip("set_state_key(\"${key_name}\", ${data})", {
+      label: "set_state_key",
+      type: "keyword",
+      detail: "Sets the shared state to the given key. Overwrites the current value",
+      boost: 1
+    }),
+    get_state_key: snip("get_state_key(\"${key_name}\")", {
+        label: "get_state_key",
+        type: "keyword",
+        detail: "Gets the shared state for the given key",
+        boost: 1
+    }),
   }
   function pythonCompletions(context: CompletionContext) {
     const word = context.matchBefore(/\w*/)
@@ -363,6 +404,11 @@ export function CodeModal(
                 autocomplete: pythonCompletions
               })
             ]}
+            basicSetup={{
+                lineNumbers: true,
+                tabSize: 4,
+                indentOnInput: true,
+            }}
           />
         </div>
         <div className="flex flex-col">
@@ -520,6 +566,11 @@ export function KeywordsWidget(props: WidgetParams) {
   const length = parseInt(concatenate(props.nodeParams.num_outputs)) || 1;
   const keywords = Array.isArray(props.nodeParams.keywords) ? props.nodeParams["keywords"] : []
   const canDelete = length > 1;
+  const defaultMarker = (
+    <span className="tooltip normal-case" data-tip="This is the default output if there are no matches">
+      <i className="fa-solid fa-asterisk fa-2xs ml-1 text-accent"></i>
+    </span>
+  )
   return (
     <>
       <div className="form-control w-full capitalize">
@@ -540,7 +591,7 @@ export function KeywordsWidget(props: WidgetParams) {
           return (
             <div className="form-control w-full capitalize" key={index}>
               <div className="flex justify-between items-center">
-                <label className="label">{label}</label>
+                <label className="label">{label}{index === 0 && defaultMarker}</label>
                 <div className="tooltip tooltip-left" data-tip={`Delete Keyword ${index + 1}`}>
                   <button className="btn btn-xs btn-ghost" onClick={() => deleteKeyword(index)} disabled={!canDelete}>
                     <i className="fa-solid fa-minus"></i>

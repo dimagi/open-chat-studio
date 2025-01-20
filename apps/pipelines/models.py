@@ -1,3 +1,4 @@
+from collections import defaultdict
 from collections.abc import Iterator
 from datetime import datetime
 from functools import cached_property
@@ -88,14 +89,14 @@ class Pipeline(BaseTeamModel, VersionsMixin):
                 "x": -200,
                 "y": 200,
             },
-            data=FlowNodeData(id=start_id, type=StartNode.__name__),
+            data=FlowNodeData(id=start_id, type=StartNode.__name__, params={"name": "start"}),
         )
         end_id = str(uuid4())
         end_node = FlowNode(
             id=end_id,
             type="endNode",
             position={"x": 1000, "y": 200},
-            data=FlowNodeData(id=end_id, type=EndNode.__name__),
+            data=FlowNodeData(id=end_id, type=EndNode.__name__, params={"name": "end"}),
         )
         default_nodes = [start_node.model_dump(), end_node.model_dump()]
         new_pipeline = cls.objects.create(
@@ -136,14 +137,24 @@ class Pipeline(BaseTeamModel, VersionsMixin):
         from apps.pipelines.graph import PipelineGraph
         from apps.pipelines.nodes import nodes as pipeline_nodes
 
-        errors = {}
-
-        for node in self.node_set.all():
+        errors = defaultdict(dict)
+        nodes = self.node_set.all()
+        for node in nodes:
             node_class = getattr(pipeline_nodes, node.type)
             try:
                 node_class.model_validate(node.params)
             except pydantic.ValidationError as e:
                 errors[node.flow_id] = {err["loc"][0]: err["msg"] for err in e.errors()}
+
+        name_to_flow_id = defaultdict(list)
+        for node in nodes:
+            name_to_flow_id[node.params.get("name")].append(node.flow_id)
+
+        for name, flow_ids in name_to_flow_id.items():
+            if len(flow_ids) > 1:
+                for flow_id in flow_ids:
+                    errors[flow_id].update({"name": "All node names must be unique"})
+
         if errors:
             return {"node": errors}
 

@@ -1,6 +1,11 @@
 {
   "description": "Calls an OpenAI assistant",
   "properties": {
+    "name": {
+      "title": "Node Name",
+      "type": "string",
+      "ui:widget": "node_name"
+    },
     "assistant_id": {
       "title": "Assistant Id",
       "type": "integer",
@@ -22,6 +27,7 @@
     }
   },
   "required": [
+    "name",
     "assistant_id"
   ],
   "title": "AssistantNode",

@@ -3,7 +3,7 @@ import Component from "./Component";
 import OverlayPanel from "../components/OverlayPanel";
 import {getCachedData} from "../utils";
 import ComponentHelp from "./ComponentHelp";
-import {NodeData} from "../types/nodeParams";
+import {JsonSchema, NodeData, NodeParams} from "../types/nodeParams";
 import usePipelineStore from "../stores/pipelineStore";
 
 type ComponentListParams = {
@@ -16,8 +16,8 @@ export default function ComponentList({isOpen, setIsOpen}: ComponentListParams) 
   const {defaultValues, nodeSchemas} = getCachedData();
   const schemaList = Array.from(nodeSchemas.values()).sort((a, b) => a["ui:label"].localeCompare(b["ui:label"]));
 
-  function getDefaultParamValues(schema: any): Record<string, any> {
-    const defaults: Record<string, any> = {};
+  function getDefaultParamValues(schema: JsonSchema): NodeParams {
+    const defaults: NodeParams = {name: ""};
     for (const name in schema.properties) {
       const property = schema.properties[name];
       defaults[name] = [property.default, defaultValues[name]].find((value) => value !== undefined && value !== null) ?? null;
@@ -57,7 +57,7 @@ export default function ComponentList({isOpen, setIsOpen}: ComponentListParams) 
 
   function onDragStart(
     event: React.DragEvent<any>,
-    schema: any
+    schema: JsonSchema
   ): void {
     hideHelp();
     const nodeData: NodeData = {
@@ -71,7 +71,7 @@ export default function ComponentList({isOpen, setIsOpen}: ComponentListParams) 
 
   function onClick(
       event: React.MouseEvent<any>,
-      schema: any
+      schema: JsonSchema
   ): void {
       hideHelp();
       const newNode = {

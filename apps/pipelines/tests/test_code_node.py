@@ -10,6 +10,8 @@ from apps.pipelines.tests.utils import (
     code_node,
     create_runnable,
     end_node,
+    passthrough_node,
+    render_template_node,
     start_node,
 )
 from apps.utils.factories.experiment import ExperimentSessionFactory
@@ -141,7 +143,7 @@ def main(input, **kwargs):
         end_node(),
     ]
     assert (
-        create_runnable(pipeline, nodes).invoke(PipelineState(experiment_session=experiment_session, messages=[input]))[
+        create_runnable(pipeline, nodes).invoke(PipelineState(experiment_session=experiment_session, messages=["hi"]))[
             "messages"
         ][-1]
         == "robot"
@@ -172,10 +174,107 @@ def main(input, **kwargs):
         end_node(),
     ]
     assert (
-        create_runnable(pipeline, nodes).invoke(PipelineState(experiment_session=experiment_session, messages=[input]))[
+        create_runnable(pipeline, nodes).invoke(PipelineState(experiment_session=experiment_session, messages=["hi"]))[
             "messages"
         ][-1]
         == output
     )
     participant_data.refresh_from_db()
     assert participant_data.data["fun_facts"]["personality"] == output
+
+
+@django_db_with_data(available_apps=("apps.service_providers",))
+@mock.patch("apps.pipelines.nodes.base.PipelineNode.logger", mock.Mock())
+def test_shared_state(pipeline, experiment_session):
+    output = "['fun loving', 'likes puppies']"
+    code_set = f"""
+def main(input, **kwargs):
+    return set_state_key("fun_facts", {output})
+"""
+    code_get = """
+def main(input, **kwargs):
+    return str(get_state_key("fun_facts"))
+"""
+    nodes = [
+        start_node(),
+        code_node(code_set),
+        code_node(code_get),
+        end_node(),
+    ]
+    assert (
+        create_runnable(pipeline, nodes).invoke(PipelineState(experiment_session=experiment_session, messages=["hi"]))[
+            "messages"
+        ][-1]
+        == output
+    )
+
+
+@django_db_with_data(available_apps=("apps.service_providers",))
+@mock.patch("apps.pipelines.nodes.base.PipelineNode.logger", mock.Mock())
+def test_shared_state_get_outputs(pipeline, experiment_session):
+    # Shared state contains the outputs of the previous nodes
+
+    input = "hello"
+    code_get = """
+def main(input, **kwargs):
+    return str(get_state_key("outputs"))
+"""
+    nodes = [
+        start_node(),
+        passthrough_node(),
+        render_template_node("<b>The input is: {{ input }}</b>"),
+        code_node(code_get),
+        end_node(),
+    ]
+    assert create_runnable(pipeline, nodes).invoke(
+        PipelineState(experiment_session=experiment_session, messages=[input])
+    )["messages"][-1] == str(
+        {
+            "start": input,
+            "passthrough": input,
+            "render template": f"<b>The input is: {input}</b>",
+        }
+    )
+
+
+@django_db_with_data(available_apps=("apps.service_providers",))
+@mock.patch("apps.pipelines.nodes.base.PipelineNode.logger", mock.Mock())
+def test_shared_state_set_outputs(pipeline, experiment_session):
+    input = "hello"
+    code_set = """
+def main(input, **kwargs):
+    set_state_key("outputs", "foobar")
+    return input
+"""
+    nodes = [
+        start_node(),
+        code_node(code_set),
+        end_node(),
+    ]
+    with pytest.raises(PipelineNodeRunError, match="Cannot set the 'outputs' key of the shared state"):
+        create_runnable(pipeline, nodes).invoke(PipelineState(experiment_session=experiment_session, messages=[input]))[
+            "messages"
+        ][-1]
+
+
+@django_db_with_data(available_apps=("apps.service_providers",))
+@mock.patch("apps.pipelines.nodes.base.PipelineNode.logger", mock.Mock())
+def test_shared_state_user_input(pipeline, experiment_session):
+    # Shared state contains the user input
+
+    input = "hello"
+    code_get = """
+def main(input, **kwargs):
+    return str(get_state_key("user_input"))
+"""
+    nodes = [
+        start_node(),
+        code_node(code_get),
+        end_node(),
+    ]
+    assert (
+        create_runnable(pipeline, nodes).invoke(PipelineState(experiment_session=experiment_session, messages=[input]))[
+            "messages"
+        ][-1]
+        == input
+    )

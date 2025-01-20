@@ -1,11 +1,11 @@
 import {Node, NodeProps, NodeToolbar, Position} from "reactflow";
 import React, {ChangeEvent} from "react";
-import {getCachedData, nodeBorderClass} from "./utils";
+import {concatenate, getCachedData, nodeBorderClass} from "./utils";
 import usePipelineStore from "./stores/pipelineStore";
 import usePipelineManagerStore from "./stores/pipelineManagerStore";
 import useEditorStore from "./stores/editorStore";
 import {JsonSchema, NodeData} from "./types/nodeParams";
-import {getNodeInputWidget, showAdvancedButton} from "./nodes/GetInputWidget";
+import {getWidgetsForNode} from "./nodes/GetInputWidget";
 import NodeInput from "./nodes/NodeInput";
 import NodeOutputs from "./nodes/NodeOutputs";
 import {HelpContent} from "./panel/ComponentHelp";
@@ -19,10 +19,7 @@ export function PipelineNode(nodeProps: NodeProps<NodeData>) {
   const deleteNode = usePipelineStore((state) => state.deleteNode);
   const hasErrors = usePipelineManagerStore((state) => state.nodeHasErrors(id));
   const nodeError = usePipelineManagerStore((state) => state.getNodeFieldError(id, "root"));
-  const {nodeSchemas} = getCachedData();
-  const nodeSchema = nodeSchemas.get(data.type)!;
-  const schemaProperties = Object.getOwnPropertyNames(nodeSchema.properties);
-  const requiredProperties = nodeSchema.required || [];
+  const nodeSchema = getCachedData().nodeSchemas.get(data.type)!;
 
   const updateParamValue = (
     event: ChangeEvent<HTMLTextAreaElement | HTMLSelectElement | HTMLInputElement>,
@@ -77,33 +74,19 @@ export function PipelineNode(nodeProps: NodeProps<NodeData>) {
         </div>
       </NodeToolbar>
       <div className={nodeBorderClass(hasErrors, selected)}>
-        <NodeHeader nodeSchema={nodeSchema} />
+        <NodeHeader nodeSchema={nodeSchema} nodeName={concatenate(data.params["name"])} />
 
         <NodeInput />
         <div className="px-4">
           <div>
-            {schemaProperties.map((name) => (
-              <React.Fragment key={name}>
-                {getNodeInputWidget({
-                  id: id,
-                  name: name,
-                  schema: nodeSchema.properties[name],
-                  params: data.params,
-                  updateParamValue: updateParamValue,
-                  nodeType: data.type,
-                  required: requiredProperties.includes(name),
-                })}
-              </React.Fragment>
-            ))}
+            {getWidgetsForNode({schema: nodeSchema, nodeId: id, nodeData: data, updateParamValue: updateParamValue})}
           </div>
-          {showAdvancedButton(data.type) && (
-            <div className="mt-2">
-              <button className="btn btn-sm btn-ghost w-full"
-                      onClick={() => editNode()}>
-                Advanced
-              </button>
-            </div>
-          )}
+          <div className="mt-2">
+            <button className="btn btn-sm btn-ghost w-full"
+                    onClick={() => editNode()}>
+              Advanced
+            </button>
+          </div>
         </div>
         <NodeOutputs data={data} />
       </div>
@@ -111,11 +94,16 @@ export function PipelineNode(nodeProps: NodeProps<NodeData>) {
   );
 }
 
-function NodeHeader({nodeSchema}: {nodeSchema: JsonSchema}) {
+function NodeHeader({nodeSchema, nodeName}: {nodeSchema: JsonSchema, nodeName: string}) {
+  const defaultNodeNameRegex = /^[A-Za-z]+-[a-zA-Z0-9]{5}$/;
+  const hasCustomName = !defaultNodeNameRegex.test(nodeName);
+  const header = hasCustomName ? nodeName : nodeSchema["ui:label"];
+  const subheader = hasCustomName ? nodeSchema["ui:label"] : "";
   return (
     <div className="m-1 text-lg font-bold text-center">
       <DeprecationNotice nodeSchema={nodeSchema} />
-      {nodeSchema["ui:label"]}
+      {header}
+      {subheader && <div className="text-sm">{subheader}</div>}
     </div>
   );
 }

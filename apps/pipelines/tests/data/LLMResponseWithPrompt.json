@@ -43,6 +43,11 @@
       "ui:widget": "none",
       "type": "string"
     },
+    "name": {
+      "title": "Node Name",
+      "type": "string",
+      "ui:widget": "node_name"
+    },
     "source_material_id": {
       "default": null,
       "title": "Source Material Id",
@@ -79,7 +84,8 @@
   },
   "required": [
     "llm_provider_id",
-    "llm_provider_model_id"
+    "llm_provider_model_id",
+    "name"
   ],
   "title": "LLMResponseWithPrompt",
   "type": "object",
