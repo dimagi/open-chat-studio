@@ -14,6 +14,7 @@ from apps.events import actions
 from apps.events.const import TOTAL_FAILURES
 from apps.experiments.models import Experiment, ExperimentSession, VersionsMixin, VersionsObjectManagerMixin
 from apps.teams.models import BaseTeamModel
+from apps.teams.utils import current_team
 from apps.utils.models import BaseModel
 from apps.utils.slug import get_next_unique_id
 from apps.utils.time import pretty_date
@@ -357,9 +358,12 @@ class ScheduledMessage(BaseTeamModel):
             # Schedules probably created by the API
             return
 
-        experiment_session.ad_hoc_bot_message(
-            self.params["prompt_text"], fail_silently=False, use_experiment=self._get_experiment_to_generate_response()
-        )
+        with current_team(experiment_session.team):
+            experiment_session.ad_hoc_bot_message(
+                self.params["prompt_text"],
+                fail_silently=False,
+                use_experiment=self._get_experiment_to_generate_response(),
+            )
 
         utc_now = timezone.now()
         self.last_triggered_at = utc_now
