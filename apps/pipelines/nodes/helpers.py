@@ -1,7 +1,6 @@
 from contextlib import contextmanager
 from typing import Self
 
-from django.contrib.contenttypes.models import ContentType
 from django.db import transaction
 
 from apps.channels.models import ChannelPlatform, ExperimentChannel
@@ -49,11 +48,9 @@ class ParticipantDataProxy:
 
     def _get_db_object(self):
         if not self._participant_data:
-            content_type = ContentType.objects.get_for_model(Experiment)
             self._participant_data, _ = ParticipantData.objects.get_or_create(
                 participant_id=self.session.participant_id,
-                content_type=content_type,
-                object_id=self.session.experiment_id,
+                experiment_id=self.session.experiment_id,
                 team_id=self.session.experiment.team_id,
             )
         return self._participant_data
