@@ -227,16 +227,16 @@ class LocalDeleteOpenAiAssistant(LoginAndTeamRequiredMixin, View, PermissionRequ
                 Chip(label=experiment.name, url=experiment.get_absolute_url())
                 for experiment in assistant.get_related_experiments_queryset(query=version_query)
             ]
-            pipeline_nodes = [
-                Chip(label=node.pipeline.name, url=node.pipeline.get_absolute_url())
-                for node in assistant.get_related_pipeline_node_queryset(query=version_query).select_related("pipeline")
+            experiments_with_pipeline_nodes = [
+                Chip(label=experiment.name, url=experiment.get_absolute_url())
+                for experiment in assistant.get_related_pipeline_node_queryset(query=version_query)
             ]
             response = render_to_string(
                 "assistants/partials/referenced_objects.html",
                 context={
                     "object_name": "assistant",
                     "experiments": experiments,
-                    "pipeline_nodes": pipeline_nodes,
+                    "pipeline_nodes": experiments_with_pipeline_nodes,
                 },
             )
             return HttpResponse(response, headers={"HX-Reswap": "none"}, status=400)

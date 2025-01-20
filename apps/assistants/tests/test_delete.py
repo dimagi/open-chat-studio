@@ -147,7 +147,6 @@ class TestAssistantArchival:
         assert assistant.is_archived is False  # archiving failed
 
         exp_v1.archive()
-        pipeline.archive()
         assistant.archive()
 
         assert pipeline.is_archived is True

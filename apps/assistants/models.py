@@ -205,17 +205,24 @@ class OpenAiAssistant(BaseTeamModel, VersionsMixin, CustomActionOperationMixin):
         from apps.pipelines.models import Node
 
         if assistant_ids:
-            return Node.objects.filter(type="AssistantNode").filter(
+            nodes = Node.objects.filter(type="AssistantNode").filter(
                 Q(pipeline__working_version_id=None),
                 params__assistant_id__in=assistant_ids,
                 pipeline__is_archived=False,
             )
-
-        return Node.objects.filter(type="AssistantNode").filter(
-            Q(pipeline__working_version_id=None),
-            params__assistant_id=str(self.id),
-            pipeline__is_archived=False,
-        )
+        else:
+            nodes = Node.objects.filter(type="AssistantNode").filter(
+                Q(pipeline__working_version_id=None),
+                params__assistant_id=str(self.id),
+                pipeline__is_archived=False,
+            )
+        if nodes.exists():
+            pipeline_ids = nodes.values_list("pipeline_id", flat=True)
+            return Experiment.objects.filter(
+                pipeline_id__in=pipeline_ids,
+                is_archived=False,
+            )
+        return nodes
 
 
 @audit_fields(
