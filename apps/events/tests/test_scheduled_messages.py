@@ -76,7 +76,7 @@ def test_get_messages_to_fire():
 
 
 @pytest.mark.django_db()
-@pytest.mark.parametrize("period", ["hours", "days", "weeks", "months"])
+@pytest.mark.parametrize("period", ["minutes", "hours", "days", "weeks", "months"])
 @patch("apps.experiments.models.ExperimentSession.ad_hoc_bot_message")
 def test_poll_scheduled_messages(ad_hoc_bot_message, period):
     scheduled_message = None
@@ -261,6 +261,28 @@ def test_schedule_update():
     _assert_next_trigger_date(message3, message3_next_trigger_data)
     assert message1.next_trigger_date < message1_prev_trigger_date
     assert message2.next_trigger_date < message2_prev_trigger_date
+
+
+@pytest.mark.django_db()
+def test_update_schedule_to_minute_perdiod():
+    """
+    This test reproduces an exception that was raised when the user updates the schedule to use TimePeriod.MINUTES. The
+    exception is due to a mismatch between the value of `TimePeriod.MINUTES` and that which Postgres expects in the
+    MakeInterval function i.e. postgres expects `mins` and the value is `minutes`.
+    """
+    session = ExperimentSessionFactory()
+    event_action, _params = _construct_event_action(
+        frequency=1, time_period=TimePeriod.HOURS, repetitions=1, experiment_id=session.experiment.id
+    )
+
+    scheduled_message = ScheduledMessage.objects.create(
+        participant=session.participant, team=session.team, action=event_action, experiment=session.experiment
+    )
+
+    event_action.params["time_period"] = TimePeriod.MINUTES
+    # An error would was thrown previously when saving
+    event_action.save()
+    assert scheduled_message.action.params["time_period"] == "minutes"
 
 
 @pytest.mark.django_db()
