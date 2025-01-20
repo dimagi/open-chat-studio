@@ -280,7 +280,7 @@ def test_update_schedule_to_minute_perdiod():
     )
 
     event_action.params["time_period"] = TimePeriod.MINUTES
-    # An error would was thrown previously when saving
+    # An error was previously thrown when saving
     event_action.save()
     assert scheduled_message.action.params["time_period"] == "minutes"
 
