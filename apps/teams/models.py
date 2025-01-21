@@ -190,7 +190,7 @@ class Flag(AbstractUserFlag):
                 cache = get_cache()
                 cache.set(self._cache_key(self.name), self)
 
-            return get_setting('FLAG_DEFAULT')
+            return get_setting("FLAG_DEFAULT")
 
         team_ids = self._get_team_ids()
         return team.pk in team_ids
