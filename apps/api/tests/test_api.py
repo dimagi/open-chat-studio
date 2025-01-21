@@ -330,12 +330,12 @@ def test_update_participant_data_and_setup_connect_channels(httpx_mock):
     # Experiment 3: The participant already have a connect channel set up
     # Expectation: Only 1 channel needs to be set up for this participant
     _setup_channel_participant(
-        experiment1, identifier="connectid_2", channel_platform=ChannelPlatform.COMMCARE_CONNECT, system_metadata={}
+        experiment1, identifier="CONNECTID_2", channel_platform=ChannelPlatform.COMMCARE_CONNECT, system_metadata={}
     )
 
     _setup_channel_participant(
         experiment3,
-        identifier="connectid_2",
+        identifier="CONNECTID_2",
         channel_platform=ChannelPlatform.COMMCARE_CONNECT,
         system_metadata={"commcare_connect_channel_id": "7d6a-fdc93-4e9c"},
     )
@@ -344,6 +344,7 @@ def test_update_participant_data_and_setup_connect_channels(httpx_mock):
     client = ApiTestClient(user, team)
 
     data = {
+        # lower-case identifier is used to ensure we're converting it to upper-case
         "identifier": "connectid_2",
         "platform": "commcare_connect",
         "data": [
@@ -367,10 +368,10 @@ def test_update_participant_data_and_setup_connect_channels(httpx_mock):
     # we expect only one call to the Connect servers to have been made
     request = httpx_mock.get_request()
     request_data = json.loads(request.read())
-    assert request_data["connectid"] == "connectid_2"
+    assert request_data["connectid"] == "CONNECTID_2"
     assert request_data["channel_source"] == "bot1"
-    assert Participant.objects.filter(identifier="connectid_2").exists()
-    data = ParticipantData.objects.get(participant__identifier="connectid_2", object_id=experiment1.id)
+    assert Participant.objects.filter(identifier="CONNECTID_2").exists()
+    data = ParticipantData.objects.get(participant__identifier="CONNECTID_2", object_id=experiment1.id)
     assert data.system_metadata["commcare_connect_channel_id"] == created_connect_channel_id
 
 
@@ -514,7 +515,7 @@ def test_generate_bot_message_and_send(ConnectClient, get_llm_service, experimen
     encryption_key = os.urandom(32).hex()
     participant_data = _setup_participant_data(
         experiment,
-        connect_id=connect_id,
+        connect_id=connect_id.upper(),
         system_metadata={"commcare_connect_channel_id": commcare_connect_channel_id, "consent": True},
         encryption_key=encryption_key,
     )
