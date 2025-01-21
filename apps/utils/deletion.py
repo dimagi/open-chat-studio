@@ -62,21 +62,22 @@ def _perform_updates_for_delete(updates_not_part_of_delete):
     for (field, value), instances_list in updates_not_part_of_delete.items():
         updates = []
         objs = []
-        for instances in instances_list:
-            if isinstance(instances, models.QuerySet) and instances._result_cache is None:
-                updates.append(instances)
-            else:
-                objs.extend(instances)
-        if updates:
-            combined_updates = reduce(or_, updates)
+        for queryset in instances_list:
+            for instances in queryset:
+                if isinstance(instances, models.QuerySet) and instances._result_cache is None:
+                    updates.append(instances)
+                else:
+                    objs.extend(instances)
+            if updates:
+                combined_updates = reduce(or_, updates)
 
-            # hack to give the queryset the auditing update method
-            combined_updates.update = field.model.objects.update
-            combined_updates.update(**{field.name: value}, audit_action=AuditAction.AUDIT)
-        if objs:
-            model = objs[0].__class__
-            objects_filter = model.objects.filter(list({obj.pk for obj in objs}))
-            objects_filter.update(**{field.name: value}, audit_action=AuditAction.AUDIT)
+                # hack to give the queryset the auditing update method
+                combined_updates.update = field.model.objects.update
+                combined_updates.update(**{field.name: value}, audit_action=AuditAction.AUDIT)
+            if objs:
+                model = objs[0].__class__
+                objects_filter = model.objects.filter(list({obj.pk for obj in objs}))
+                objects_filter.update(**{field.name: value}, audit_action=AuditAction.AUDIT)
 
 
 def get_related_m2m_objects(objs, exclude: list | None = None) -> dict[Any, list[Any]]:
