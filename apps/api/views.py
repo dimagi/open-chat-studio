@@ -145,6 +145,10 @@ def _update_participant_data(request):
 
     identifier = serializer.data["identifier"]
     platform = serializer.data["platform"]
+    if platform == ChannelPlatform.COMMCARE_CONNECT:
+        # CommCare Connect identifiers are case-sensitive
+        identifier = identifier.upper()
+
     team = request.team
     participant, _ = Participant.objects.get_or_create(identifier=identifier, team=team, platform=platform)
 
@@ -443,9 +447,14 @@ def trigger_bot_message(request):
     serializer = TriggerBotMessageRequest(data=request.data)
     serializer.is_valid(raise_exception=True)
 
-    identifier = serializer.data["identifier"]
-    platform = serializer.data["platform"]
-    experiment_public_id = serializer.data["experiment"]
+    data = serializer.data
+    platform = data["platform"]
+    if platform == ChannelPlatform.COMMCARE_CONNECT:
+        # CommCare Connect identifiers are case-sensitive
+        data["identifier"] = data["identifier"].upper()
+
+    identifier = data["identifier"]
+    experiment_public_id = data["experiment"]
 
     experiment = get_object_or_404(Experiment, public_id=experiment_public_id, team=request.team)
 
@@ -469,6 +478,6 @@ def trigger_bot_message(request):
     if platform == ChannelPlatform.COMMCARE_CONNECT and not participant_data.has_consented():
         return Response({"detail": "User has not given consent"}, status=status.HTTP_400_BAD_REQUEST)
 
-    trigger_bot_message_task.delay(serializer.data)
+    trigger_bot_message_task.delay(data)
 
     return Response(status=status.HTTP_200_OK)
