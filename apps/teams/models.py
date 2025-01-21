@@ -180,7 +180,15 @@ class Flag(AbstractUserFlag):
         if not team:
             return False
 
-        if not self.pk:
+        if not self.pk and get_setting("CREATE_MISSING_FLAGS"):
+            flag, _created = Flag.objects.get_or_create(
+                name=self.name, defaults={"everyone": get_setting("FLAG_DEFAULT")}
+            )
+            self.id = flag.id
+            self.refresh_from_db()
+            cache = get_cache()
+            cache.set(self._cache_key(self.name), self)
+        else:
             # flag not created
             return False
 
