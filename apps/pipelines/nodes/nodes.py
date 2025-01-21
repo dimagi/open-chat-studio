@@ -786,7 +786,7 @@ class CodeNode(PipelineNode):
 
         custom_globals = safe_globals.copy()
 
-        participant_data_proxy = ParticipantDataProxy(state)
+        participant_data_proxy = ParticipantDataProxy.from_state(state)
         custom_globals.update(
             {
                 "__builtins__": self._get_custom_builtins(),
