@@ -12,7 +12,7 @@ from apps.experiments.models import (
     SourceMaterial,
     Survey,
 )
-from apps.generics import actions
+from apps.generics import actions, chips
 
 
 class ExperimentTable(tables.Table):
@@ -136,10 +136,7 @@ class ConsentFormTable(tables.Table):
 
 
 class ExperimentSessionsTable(tables.Table):
-    participant = actions.chip_column(
-        accessor="participant", align="left", orderable=True, order_by="participant__identifier"
-    )
-    started = columns.Column(accessor="created_at", verbose_name="Started", orderable=True)
+    participant = columns.Column(accessor="participant", verbose_name="Participant", order_by="participant__identifier")
     last_message = columns.Column(accessor="last_message_created_at", verbose_name="Last Message", orderable=True)
     tags = columns.TemplateColumn(
         verbose_name="Tags",
@@ -151,6 +148,14 @@ class ExperimentSessionsTable(tables.Table):
     def render_tags(self, record, bound_column):
         template = get_template(bound_column.column.template_name)
         return template.render({"object": record.chat})
+
+    def render_participant(self, record):
+        template = get_template("generic/chip.html")
+        participant = record.participant
+        chip = chips.Chip(
+            label=participant.identifier, url=participant.get_link_to_experiment_data(experiment=record.experiment)
+        )
+        return template.render({"chip": chip})
 
     class Meta:
         model = ExperimentSession

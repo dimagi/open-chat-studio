@@ -16,7 +16,9 @@
         x-bind:class="experimentsRow === {{ forloop.counter }} ? 'bg-gray-300' : ''"
         x-on:click="experimentsRow = (experimentsRow === {{ forloop.counter }} ? null : {{ forloop.counter }})"
         hx-get="{% url 'participants:experiment_data' participant.team.slug participant.id experiment.id %}"
-        {% if forloop.counter == 1 %}
+
+        {% if active_experiment_id == experiment.id or forloop.counter == 1 %}
+          x-init="experimentsRow={{ forloop.counter }}"
           hx-trigger="load"
         {% else %}
           hx-trigger="click once"

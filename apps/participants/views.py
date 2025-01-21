@@ -81,6 +81,7 @@ class SingleParticipantHome(LoginAndTeamRequiredMixin, TemplateView, PermissionR
         context["active_tab"] = "participants"
         context["participant"] = participant
         context["experiments"] = participant.get_experiments_for_display()
+        context["active_experiment_id"] = self.kwargs.get("experiment_id")
         return context
 
 
