@@ -108,7 +108,10 @@ class PipelineNode(BaseModel, ABC):
                 break
         else:  # This is the first node in the graph
             input = state["messages"][-1]
+
+            # init shared state here to avoid having to do it in each place the pipeline is invoked
             state["shared_state"]["user_input"] = input
+            state["shared_state"]["attachments"] = [{"id": att["file_id"]} for att in state.get("attachments", [])]
         return self._process(input=input, state=state, node_id=node_id)
 
     def process_conditional(self, state: PipelineState, node_id: str | None = None) -> str:
