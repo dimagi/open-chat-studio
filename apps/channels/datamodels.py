@@ -1,3 +1,5 @@
+from typing import Literal
+
 import phonenumbers
 from pydantic import BaseModel, ConfigDict, Field, field_validator
 
@@ -7,7 +9,7 @@ from apps.chat.channels import MESSAGE_TYPES
 
 class Attachment(BaseModel):
     file_id: int
-    type: str
+    type: Literal["code_interpreter", "file_search"]
 
 
 class BaseMessage(BaseModel):
