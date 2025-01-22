@@ -43,7 +43,7 @@ export function PipelineNode(nodeProps: NodeProps<NodeData>) {
 
   return (
     <>
-      <NodeToolbar position={Position.Top} isVisible={hasErrors}>
+      <NodeToolbar position={Position.Top} isVisible={hasErrors || selected}>
         <div className="border border-primary join">
             <button
               className="btn btn-xs join-item"
