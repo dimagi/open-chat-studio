@@ -67,8 +67,7 @@ def get_response_for_webchat_task(
         )
         message_attachments = []
         for file_entry in attachments:
-            type, file_id = file_entry.values()
-            message_attachments.append(Attachment(file_id=file_id, type=type))
+            message_attachments.append(Attachment.model_validate(file_entry))
 
         message = BaseMessage(
             participant_id=experiment_session.participant.identifier,
