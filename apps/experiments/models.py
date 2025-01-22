@@ -167,6 +167,14 @@ class VersionsMixin:
     def has_versions(self):
         return self.versions.exists()
 
+    @property
+    def version_family_ids(self) -> list[int]:
+        """Returns the ids of records in this version family, including the working version"""
+        working_version = self.get_working_version()
+        version_family_ids = [working_version.id]
+        version_family_ids.extend(working_version.versions.values_list("id", flat=True))
+        return version_family_ids
+
     def get_fields_to_exclude(self):
         """Returns a list of fields that should be excluded when comparing two versions."""
         return self.DEFAULT_EXCLUDED_KEYS

@@ -104,7 +104,8 @@ class TestVersion:
         queryset = Experiment.objects.filter(id=experiment.id)
         # Compare with itself
         version_field = VersionField(queryset=queryset)
-        version_field._compare_queryset(queryset)
+        version_field.previous_field_version = VersionField(queryset=queryset)
+        version_field._compare_querysets(queryset)
         assert version_field.changed is False
         assert len(version_field.queryset_results) == 1
         queryset_result_version = version_field.queryset_results[0]
@@ -119,7 +120,8 @@ class TestVersion:
         experiment.prompt_text = "This now changed"
         experiment.save()
         version_field = VersionField(queryset=queryset)
-        version_field._compare_queryset(Experiment.objects.filter(id=new_version.id))
+        version_field.previous_field_version = VersionField(queryset=Experiment.objects.filter(id=new_version.id))
+        version_field._compare_querysets()
         assert version_field.changed is True
         assert len(version_field.queryset_results) == 1
         queryset_result_version = version_field.queryset_results[0]
@@ -137,7 +139,10 @@ class TestVersion:
         # Compare with a totally different queryset
         another_experiment = ExperimentFactory()
         version_field = VersionField(queryset=queryset)
-        version_field._compare_queryset(Experiment.objects.filter(id=another_experiment.id))
+        version_field.previous_field_version = VersionField(
+            queryset=Experiment.objects.filter(id=another_experiment.id)
+        )
+        version_field._compare_querysets()
         assert version_field.changed is True
 
         assert len(version_field.queryset_results) == 2
@@ -202,5 +207,6 @@ class TestVersion:
         version_field = VersionField(queryset=new_queryset)
         # another sanity check
         assert version_field.is_queryset is True
-        version_field._compare_queryset(previous_queryset)
+        version_field.previous_field_version = VersionField(queryset=previous_queryset)
+        version_field._compare_querysets()
         assert version_field.changed is True

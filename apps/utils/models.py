@@ -30,6 +30,10 @@ class VersioningMixin:
                     return changed_fields
         return changed_fields
 
+    def is_versioned(self) -> bool:
+        """A simple check to see if the model is versioned"""
+        return hasattr(self, "working_version")
+
 
 class BaseModel(models.Model, VersioningMixin):
     """
