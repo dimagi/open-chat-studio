@@ -1,5 +1,6 @@
 import pytest
 from django.urls import reverse
+from field_audit.models import AuditEvent
 
 from apps.teams.backends import SUPER_ADMIN_GROUP
 from apps.teams.helpers import create_default_team_for_user
@@ -67,25 +68,25 @@ def test_group_owner_assignment_on_team_creation(client):
     assert permission_group.name == SUPER_ADMIN_GROUP
 
 
-# @pytest.mark.django_db()
-# def test_delete_team(client, team_with_users):
-#     client.force_login(team_with_users.members.first())
-#     response = client.post(reverse("single_team:delete_team", args=[team_with_users.slug]))
-#     assert response.status_code == 302
-#     assert not Team.objects.filter(slug=team_with_users.slug).exists()
+@pytest.mark.django_db()
+def test_delete_team(client, team_with_users):
+    client.force_login(team_with_users.members.first())
+    response = client.post(reverse("single_team:delete_team", args=[team_with_users.slug]))
+    assert response.status_code == 302
+    assert not Team.objects.filter(slug=team_with_users.slug).exists()
 
-#     audit_events = AuditEvent.objects.by_model(Team).filter(object_pk=team_with_users.id).order_by("event_date")
-#     assert len(audit_events) == 2
-#     assert audit_events[0].is_create
-#     assert audit_events[1].is_delete
+    audit_events = AuditEvent.objects.by_model(Team).filter(object_pk=team_with_users.id).order_by("event_date")
+    assert len(audit_events) == 2
+    assert audit_events[0].is_create
+    assert audit_events[1].is_delete
 
-#     # make sure there are audit events for related models
-#     assert AuditEvent.objects.by_model(Membership).filter(is_delete=True).count() == 2
+    # make sure there are audit events for related models
+    assert AuditEvent.objects.by_model(Membership).filter(is_delete=True).count() == 2
 
-#     # make sure that all events have the same transaction ID
-#     transaction_ids = {
-#         context["transaction_id"]
-#         for context in AuditEvent.objects.filter(is_delete=True).values_list("change_context", flat=True)
-#     }
-#     assert len(transaction_ids) == 1
-#     assert all(transaction_id is not None for transaction_id in transaction_ids)
+    # make sure that all events have the same transaction ID
+    transaction_ids = {
+        context["transaction_id"]
+        for context in AuditEvent.objects.filter(is_delete=True).values_list("change_context", flat=True)
+    }
+    assert len(transaction_ids) == 1
+    assert all(transaction_id is not None for transaction_id in transaction_ids)
