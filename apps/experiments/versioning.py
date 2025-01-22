@@ -29,7 +29,7 @@ def differs(original: Any, new: Any, exclude_model_fields: list[str] | None = No
 class FieldGroup:
     name: str
     fields: list["VersionField"] = data_field(default_factory=list)
-    show: bool = data_field(default=False)
+    has_fields_with_values: bool = data_field(default=False)
     # Indicates whether a field in this group changed
     has_changed_fields: bool = data_field(default=False)
 
@@ -187,8 +187,11 @@ class Version:
         for field in self.fields:
             group_name = field.group_name
             group_info = groups.setdefault(group_name, FieldGroup(name=group_name))
-            group_info.show = (
-                group_info.show or bool(field.raw_value) or bool(field.changed) or bool(field.queryset_result_versions)
+            group_info.has_fields_with_values = (
+                group_info.has_fields_with_values
+                or bool(field.raw_value)
+                or bool(field.changed)
+                or bool(field.queryset_result_versions)
             )
             group_info.has_changed_fields = group_info.has_changed_fields or field.changed
             group_info.fields.append(field)
