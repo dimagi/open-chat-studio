@@ -639,7 +639,7 @@ class ExtractParticipantData(ExtractStructuredDataNodeMixin, LLMResponse, Struct
         except ParticipantData.DoesNotExist:
             ParticipantData.objects.create(
                 participant=session.participant,
-                content_object=session.experiment,
+                experiment=session.experiment,
                 team=session.team,
                 data=output,
             )

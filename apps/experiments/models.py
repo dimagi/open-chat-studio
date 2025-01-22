@@ -1356,37 +1356,35 @@ class Participant(BaseTeamModel):
             Create a new record for this experiment if one does not exist
         """
         # Update all existing records
-        experiment_content_type = ContentType.objects.get_for_model(Experiment)
-        participant_data = ParticipantData.objects.filter(
-            participant=self, content_type=experiment_content_type
-        ).select_for_update()
+        participant_data = ParticipantData.objects.filter(participant=self).select_for_update()
         experiments = set()
         with transaction.atomic():
             for record in participant_data:
-                experiments.add(record.object_id)
+                experiments.add(record.experiment_id)
                 record.data = record.data | data
             ParticipantData.objects.bulk_update(participant_data, fields=["data"])
 
         if experiment.id not in experiments:
-            ParticipantData.objects.create(team=self.team, content_object=experiment, data=data, participant=self)
+            ParticipantData.objects.create(team=self.team, experiment=experiment, data=data, participant=self)
 
 
 class ParticipantDataObjectManager(models.Manager):
     def for_experiment(self, experiment: Experiment):
-        return (
-            super()
-            .get_queryset()
-            .filter(content_type__model="experiment", object_id=experiment.id, team=experiment.team)
-        )
+        experiment_id = experiment.id
+        if experiment.is_a_version:
+            experiment_id = experiment.working_version_id
+        return super().get_queryset().filter(experiment_id=experiment_id, team=experiment.team)
 
 
 class ParticipantData(BaseTeamModel):
     objects = ParticipantDataObjectManager()
     participant = models.ForeignKey(Participant, on_delete=models.CASCADE, related_name="data_set")
     data = encrypt(models.JSONField(default=dict))
-    content_type = models.ForeignKey(ContentType, on_delete=models.CASCADE)
-    object_id = models.PositiveIntegerField()
+    content_type = models.ForeignKey(ContentType, on_delete=models.CASCADE, null=True)
+    # TODO. Remove object_id and content_object once production is stable
+    object_id = models.PositiveIntegerField(null=True)
     content_object = GenericForeignKey("content_type", "object_id")
+    experiment = models.ForeignKey(Experiment, on_delete=models.CASCADE)
     system_metadata = models.JSONField(default=dict)
     encryption_key = encrypt(
         models.CharField(max_length=255, blank=True, help_text="The base64 encoded encryption key")
@@ -1409,12 +1407,12 @@ class ParticipantData(BaseTeamModel):
 
     class Meta:
         indexes = [
-            models.Index(fields=["content_type", "object_id"]),
+            models.Index(fields=["experiment"]),
         ]
         # A bot cannot have a link to multiple data entries for the same Participant
         # Multiple bots can have a link to the same ParticipantData record
         # A participant can have many participant data records
-        unique_together = ("participant", "content_type", "object_id")
+        unique_together = ("participant", "experiment")
 
 
 class SessionStatus(models.TextChoices):
@@ -1599,7 +1597,7 @@ class ExperimentSession(BaseTeamModel):
     @cached_property
     def participant_data_from_experiment(self) -> dict:
         try:
-            return self.experiment.participant_data.get(participant=self.participant).data
+            return self.experiment.participantdata_set.get(participant=self.participant).data
         except ParticipantData.DoesNotExist:
             return {}
 

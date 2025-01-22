@@ -128,7 +128,7 @@ def test_code_node_runtime_errors(pipeline, code, input, error):
 def test_get_participant_data(pipeline, experiment_session):
     ParticipantData.objects.create(
         team=experiment_session.team,
-        content_object=experiment_session.experiment,
+        experiment=experiment_session.experiment,
         participant=experiment_session.participant,
         data={"fun_facts": {"personality": "fun loving", "body_type": "robot"}},
     )
@@ -156,7 +156,7 @@ def test_update_participant_data(pipeline, experiment_session):
     output = "moody"
     participant_data = ParticipantData.objects.create(
         team=experiment_session.team,
-        content_object=experiment_session.experiment,
+        experiment=experiment_session.experiment,
         participant=experiment_session.participant,
         data={"fun_facts": {"personality": "fun loving", "body_type": "robot"}},
     )

@@ -137,7 +137,7 @@ def test_llm_with_prompt_response(
     user_input = "The User Input"
     participant_data = ParticipantData.objects.create(
         team=experiment_session.team,
-        content_object=experiment_session.experiment,
+        experiment=experiment_session.experiment,
         participant=experiment_session.participant,
         data={"name": "A"},
     )
@@ -505,7 +505,7 @@ def test_extract_structured_data_with_chunking(provider, provider_model, pipelin
     session = ExperimentSessionFactory()
     ParticipantData.objects.create(
         team=session.team,
-        content_object=session.experiment,
+        experiment=session.experiment,
         data={"drink": "martini"},
         participant=session.participant,
     )

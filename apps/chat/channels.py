@@ -828,7 +828,7 @@ class CommCareConnectChannel(ChannelBase):
         experiment = self.experiment
         if self.experiment.is_a_version:
             experiment = self.experiment.working_version
-        return experiment.participant_data.defer("data").get(participant__identifier=self.participant_identifier)
+        return experiment.participantdata_set.defer("data").get(participant__identifier=self.participant_identifier)
 
     @cached_property
     def connect_channel_id(self) -> str:
