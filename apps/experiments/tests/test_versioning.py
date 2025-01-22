@@ -106,8 +106,8 @@ class TestVersion:
         version_field = VersionField(queryset=queryset)
         version_field._compare_queryset(queryset)
         assert version_field.changed is False
-        assert len(version_field.queryset_result_versions) == 1
-        queryset_result_version = version_field.queryset_result_versions[0]
+        assert len(version_field.queryset_results) == 1
+        queryset_result_version = version_field.queryset_results[0]
         assert queryset_result_version.raw_value == experiment
         assert queryset_result_version.previous_field_version.raw_value == experiment
 
@@ -121,8 +121,8 @@ class TestVersion:
         version_field = VersionField(queryset=queryset)
         version_field._compare_queryset(Experiment.objects.filter(id=new_version.id))
         assert version_field.changed is True
-        assert len(version_field.queryset_result_versions) == 1
-        queryset_result_version = version_field.queryset_result_versions[0]
+        assert len(version_field.queryset_results) == 1
+        queryset_result_version = version_field.queryset_results[0]
         assert queryset_result_version.raw_value == experiment
         assert queryset_result_version.previous_field_version.raw_value == new_version
 
@@ -140,12 +140,12 @@ class TestVersion:
         version_field._compare_queryset(Experiment.objects.filter(id=another_experiment.id))
         assert version_field.changed is True
 
-        assert len(version_field.queryset_result_versions) == 2
-        first_result_version = version_field.queryset_result_versions[0]
+        assert len(version_field.queryset_results) == 2
+        first_result_version = version_field.queryset_results[0]
         assert first_result_version.raw_value == experiment
         assert first_result_version.previous_field_version is None
 
-        second_result_version = version_field.queryset_result_versions[1]
+        second_result_version = version_field.queryset_results[1]
         assert second_result_version.raw_value is None
         assert second_result_version.previous_field_version.raw_value == another_experiment
 

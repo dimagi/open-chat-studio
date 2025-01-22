@@ -53,7 +53,7 @@ class VersionField:
     changed: bool = False
     label: str = data_field(default="")
     queryset: QuerySet | None = None
-    queryset_result_versions: list["VersionField"] = data_field(default_factory=list)
+    queryset_results: list["VersionField"] = data_field(default_factory=list)
     text_diffs: list[TextDiff] = data_field(default_factory=list)
 
     def __post_init__(self):
@@ -63,7 +63,7 @@ class VersionField:
 
         if self.queryset:
             for record in self.queryset.all():
-                self.queryset_result_versions.append(VersionField(raw_value=record, to_display=self.to_display))
+                self.queryset_results.append(VersionField(raw_value=record, to_display=self.to_display))
 
     @property
     def is_queryset(self) -> bool:
@@ -71,7 +71,7 @@ class VersionField:
 
     def display_value(self) -> Any:
         if self.queryset:
-            return self.queryset_result_versions
+            return self.queryset_results
         if self.to_display:
             return self.to_display(self.raw_value)
         return self.raw_value or ""
@@ -119,7 +119,7 @@ class VersionField:
         which is expected to be present on each result.
         """
         previous_record_version_ids = []
-        for version_field in self.queryset_result_versions:
+        for version_field in self.queryset_results:
             record = version_field.raw_value
             working_version = record.get_working_version()
             version_family_ids = [working_version.id]
@@ -145,7 +145,7 @@ class VersionField:
                 return
             prev_version_field = VersionField(raw_value=previous_record, to_display=self.to_display)
             version_field = VersionField(raw_value=None, previous_field_version=prev_version_field, changed=True)
-            self.queryset_result_versions.append(version_field)
+            self.queryset_results.append(version_field)
 
     def _compute_character_level_diff(self):
         differ = Differ()
@@ -191,7 +191,7 @@ class Version:
                 group_info.has_fields_with_values
                 or bool(field.raw_value)
                 or bool(field.changed)
-                or bool(field.queryset_result_versions)
+                or bool(field.queryset_results)
             )
             group_info.has_changed_fields = group_info.has_changed_fields or field.changed
             group_info.fields.append(field)
