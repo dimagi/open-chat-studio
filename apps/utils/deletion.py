@@ -5,8 +5,9 @@ from typing import Any
 
 from django.contrib.admin.utils import NestedObjects
 from django.db import models, router, transaction
-from django.db.models import Q
+from django.db.models import Expression, Q
 from django.db.models.deletion import get_candidate_relations_to_delete
+from field_audit import field_audit
 from field_audit.field_audit import get_audited_models
 
 
@@ -69,14 +70,60 @@ def _perform_updates_for_delete(updates_not_part_of_delete):
                 objs.extend(instances)
         if updates:
             combined_updates = reduce(or_, updates)
-
-            # hack to give the queryset the auditing update method
-            combined_updates.update = field.model.objects.update
-            combined_updates.update(**{field.name: value}, audit_action=AuditAction.AUDIT)
+            _queryset_update_with_auditing(combined_updates, **{field.name: value})
         if objs:
             model = objs[0].__class__
             objects_filter = model.objects.filter(list({obj.pk for obj in objs}))
             objects_filter.update(**{field.name: value}, audit_action=AuditAction.AUDIT)
+
+
+def _queryset_update_with_auditing(queryset, **kw):
+    """
+    Copied from `field_audit.models.AuditingQuerySet.update` so that it can be called with querysets
+    that are not AuditingQuerySets.
+    """
+    from field_audit.models import AuditEvent
+
+    fields_to_update = set(kw.keys())
+    audited_fields = set(AuditEvent.field_names(queryset.model))
+    fields_to_audit = fields_to_update & audited_fields
+    if not fields_to_audit:
+        # no audited fields are changing
+        return queryset.update(**kw)
+
+    new_values = {field: kw[field] for field in fields_to_audit}
+    uses_expressions = any([isinstance(val, Expression) for val in new_values.values()])
+
+    old_values = {}
+    values_to_fetch = fields_to_update | {"pk"}
+    for value in queryset.values(*values_to_fetch):
+        pk = value.pop("pk")
+        old_values[pk] = value
+
+    with transaction.atomic(using=queryset.db):
+        rows = queryset.update(**kw)
+        if uses_expressions:
+            # fetch updated values to ensure audit event deltas are accurate
+            # after update is performed with expressions
+            new_values = {}
+            for value in queryset.values(*values_to_fetch):
+                pk = value.pop("pk")
+                new_values[pk] = value
+        else:
+            new_values = {pk: new_values for pk in old_values.keys()}
+
+        # create and write the audit events _after_ the update succeeds
+        request = field_audit.request.get()
+        audit_events = []
+        for pk, old_values_for_pk in old_values.items():
+            audit_event = AuditEvent.make_audit_event_from_values(
+                old_values_for_pk, new_values[pk], pk, queryset.model, request
+            )
+            if audit_event:
+                audit_events.append(audit_event)
+        if audit_events:
+            AuditEvent.objects.bulk_create(audit_events)
+        return rows
 
 
 def get_related_m2m_objects(objs, exclude: list | None = None) -> dict[Any, list[Any]]:
