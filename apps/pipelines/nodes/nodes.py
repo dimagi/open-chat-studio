@@ -683,6 +683,8 @@ class AssistantNode(PipelineNode):
         session: ExperimentSession | None = state.get("experiment_session")
         runnable = self._get_assistant_runnable(assistant, session=session, node_id=node_id)
         attachments = [Attachment.model_validate(params) for params in state.get("attachments", [])]
+        if for_upload := state.get("shared_state", {}).get("attachments_to_upload", []):
+            attachments = [att for att in attachments if att["file_id"] in for_upload]
         chain_output: ChainOutput = runnable.invoke(input, config={}, attachments=attachments)
         output = chain_output.output
 
