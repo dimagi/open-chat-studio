@@ -12,6 +12,7 @@ from apps.chat.agent.tools import get_assistant_tools
 from apps.custom_actions.mixins import CustomActionOperationMixin
 from apps.experiments.models import Experiment, VersionsMixin, VersionsObjectManagerMixin
 from apps.experiments.versioning import VersionField
+from apps.pipelines.models import Node
 from apps.teams.models import BaseTeamModel
 from apps.utils.models import BaseModel
 
@@ -172,7 +173,11 @@ class OpenAiAssistant(BaseTeamModel, VersionsMixin, CustomActionOperationMixin):
     def archive(self):
         from apps.assistants.tasks import delete_openai_assistant_task
 
-        if self.get_related_experiments_queryset().exists() or self.get_related_pipeline_node_queryset().exists():
+        if (
+            self.get_related_experiments_queryset().exists()
+            or self.get_related_pipeline_node_queryset().exists()
+            or self.get_related_experiments_with_pipeline_queryset().exists()
+        ):
             return False
         if self.is_working_version:
             for (
@@ -181,6 +186,7 @@ class OpenAiAssistant(BaseTeamModel, VersionsMixin, CustomActionOperationMixin):
                 if (
                     version.get_related_experiments_queryset().exists()
                     or version.get_related_pipeline_node_queryset().exists()
+                    or self.get_related_experiments_with_pipeline_queryset().exists()
                 ):
                     return False
             for version in self.versions.all():
@@ -202,17 +208,24 @@ class OpenAiAssistant(BaseTeamModel, VersionsMixin, CustomActionOperationMixin):
         return self.experiment_set.filter(Q(working_version_id=None) | Q(is_default_version=True), is_archived=False)
 
     def get_related_pipeline_node_queryset(self, assistant_ids: list = None):
-        from apps.pipelines.models import Node
+        assistant_ids = assistant_ids if assistant_ids else [str(self.id)]
+        return Node.objects.filter(type="AssistantNode").filter(
+            pipeline__working_version_id=None,
+            params__assistant_id__in=assistant_ids,
+            pipeline__is_archived=False,
+        )
 
+    def get_related_experiments_with_pipeline_queryset(self, assistant_ids: list = None):
         assistant_ids = assistant_ids if assistant_ids else [str(self.id)]
         nodes = Node.objects.filter(type="AssistantNode").filter(
-            Q(pipeline__working_version_id=None),
+            pipeline__working_version_id__isnull=False,
             params__assistant_id__in=assistant_ids,
             pipeline__is_archived=False,
         )
         if nodes.exists():
             pipeline_ids = nodes.values_list("pipeline_id", flat=True)
             return Experiment.objects.filter(
+                is_default_version=True,
                 pipeline_id__in=pipeline_ids,
                 is_archived=False,
             )
