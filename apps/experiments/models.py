@@ -388,6 +388,20 @@ class ConsentForm(BaseTeamModel, VersionsMixin):
     def get_fields_to_exclude(self):
         return super().get_fields_to_exclude() + ["is_default"]
 
+    @property
+    def version(self) -> Version:
+        return Version(
+            instance=self,
+            fields=[
+                VersionField(name="name", raw_value=self.name),
+                VersionField(name="consent_text", raw_value=self.consent_text),
+                VersionField(name="capture_identifier", raw_value=self.capture_identifier),
+                VersionField(name="identifier_label", raw_value=self.identifier_label),
+                VersionField(name="identifier_type", raw_value=self.identifier_type),
+                VersionField(name="confirmation_text", raw_value=self.confirmation_text),
+            ],
+        )
+
 
 @audit_fields(*model_audit_fields.SYNTHETIC_VOICE_FIELDS, audit_special_queryset_writes=True)
 class SyntheticVoice(BaseModel):
