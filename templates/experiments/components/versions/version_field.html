@@ -2,7 +2,7 @@
     {% if field.changed %}
         {% if field.is_a_version %}
             <div class="col-span-2">
-                {% include 'experiments/components/versions/compare.html' with version_details=field.raw_value_version %}
+                {% include 'experiments/components/versions/compare.html' with version_details=field.raw_value_version level=level|add:"1" %}
             </div>
         {% else %}
             {% include 'experiments/components/versions/diff_field.html' with version_field=field.previous_field_version bg_classes="bg-red-400 bg-opacity-20" text_highlight_classes="bg-red-600 bg-opacity-40" %}

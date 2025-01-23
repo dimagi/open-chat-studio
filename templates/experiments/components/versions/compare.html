@@ -1,7 +1,7 @@
 <div class="my-2">
     {% for group in version_details.fields_grouped %}
         {% if group.has_fields_with_values %}
-            <div class="collapse collapse-arrow bg-base-200 mb-2">
+            <div class="collapse collapse-arrow {% if level|default_if_none:'0'|divisibleby:'2' %}bg-base-200{% else %}bg-base-100{% endif %} mb-2">
                 <input type="checkbox" {% if group.has_changed_fields or not version_details.fields_changed %}checked{% endif %}/>
                 <div class="collapse-title text-xl font-medium">{{ group.name }}</div>
                 <div class="collapse-content">
