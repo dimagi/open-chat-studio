@@ -204,18 +204,12 @@ class OpenAiAssistant(BaseTeamModel, VersionsMixin, CustomActionOperationMixin):
     def get_related_pipeline_node_queryset(self, assistant_ids: list = None):
         from apps.pipelines.models import Node
 
-        if assistant_ids:
-            nodes = Node.objects.filter(type="AssistantNode").filter(
-                Q(pipeline__working_version_id=None),
-                params__assistant_id__in=assistant_ids,
-                pipeline__is_archived=False,
-            )
-        else:
-            nodes = Node.objects.filter(type="AssistantNode").filter(
-                Q(pipeline__working_version_id=None),
-                params__assistant_id=str(self.id),
-                pipeline__is_archived=False,
-            )
+        assistant_ids = assistant_ids if assistant_ids else [str(self.id)]
+        nodes = Node.objects.filter(type="AssistantNode").filter(
+            Q(pipeline__working_version_id=None),
+            params__assistant_id__in=assistant_ids,
+            pipeline__is_archived=False,
+        )
         if nodes.exists():
             pipeline_ids = nodes.values_list("pipeline_id", flat=True)
             return Experiment.objects.filter(
