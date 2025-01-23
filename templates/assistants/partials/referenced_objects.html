@@ -10,13 +10,23 @@
   {% endif %}
 
   {% if pipeline_nodes %}
-    <h2 class="font-semibold my-2">Experiments referencing Pipelines</h2>
+    <h2 class="font-semibold my-2">Pipelines</h2>
     <ul class="list-disc list-inside">
       {% for node in pipeline_nodes %}
         <li>{% include "generic/chip.html" with chip=node %}</li>
       {% endfor %}
     </ul>
   {% endif %}
+
+  {% if pipeline_nodes %}
+    <h2 class="font-semibold my-2">Experiments referencing Pipeline</h2>
+    <ul class="list-disc list-inside">
+      {% for experiment in experiments_with_pipeline_nodes %}
+        <li>{% include "generic/chip.html" with chip=experiment %}</li>
+      {% endfor %}
+    </ul>
+  {% endif %}
+
 
   {% if static_trigger_experiments %}
     <h2 class="font-semibold my-2">Static Trigger Experiments</h2>
