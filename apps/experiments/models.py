@@ -333,6 +333,17 @@ class Survey(BaseTeamModel, VersionsMixin):
         self.experiments_pre.update(pre_survey=None, audit_action=AuditAction.AUDIT)
         self.experiments_post.update(post_survey=None, audit_action=AuditAction.AUDIT)
 
+    @property
+    def version(self) -> Version:
+        return Version(
+            instance=self,
+            fields=[
+                VersionField(name="name", raw_value=self.name),
+                VersionField(name="url", raw_value=self.url),
+                VersionField(name="confirmation_text", raw_value=self.confirmation_text),
+            ],
+        )
+
 
 @audit_fields(*model_audit_fields.CONSENT_FORM_FIELDS, audit_special_queryset_writes=True)
 class ConsentForm(BaseTeamModel, VersionsMixin):
