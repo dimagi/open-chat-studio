@@ -221,6 +221,17 @@ class SourceMaterial(BaseTeamModel, VersionsMixin):
         super().archive()
         self.experiment_set.update(source_material=None, audit_action=AuditAction.AUDIT)
 
+    @property
+    def version(self) -> Version:
+        return Version(
+            instance=self,
+            fields=[
+                VersionField(name="topic", raw_value=self.topic),
+                VersionField(name="description", raw_value=self.description),
+                VersionField(name="material", raw_value=self.material),
+            ],
+        )
+
 
 @audit_fields(*model_audit_fields.SAFETY_LAYER_FIELDS, audit_special_queryset_writes=True)
 class SafetyLayer(BaseTeamModel, VersionsMixin):
