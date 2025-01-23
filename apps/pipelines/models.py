@@ -16,6 +16,7 @@ from apps.chat.models import ChatMessage, ChatMessageType
 from apps.custom_actions.form_utils import set_custom_actions
 from apps.custom_actions.mixins import CustomActionOperationMixin
 from apps.experiments.models import ExperimentSession, VersionsMixin, VersionsObjectManagerMixin
+from apps.experiments.versioning import Version, VersionField
 from apps.pipelines.exceptions import PipelineBuildError
 from apps.pipelines.executor import patch_executor
 from apps.pipelines.flow import Flow, FlowNode, FlowNodeData
@@ -325,6 +326,23 @@ class Pipeline(BaseTeamModel, VersionsMixin):
             .values("trigger_experiment_id")
         )
 
+    @property
+    def version(self) -> Version:
+        def _format_nodes(node):
+            return node.params["name"]
+
+        reserved_types = ["StartNode", "EndNode"]
+
+        return Version(
+            instance=self,
+            fields=[
+                VersionField(name="name", raw_value=self.name),
+                VersionField(
+                    name="nodes", queryset=self.node_set.exclude(type__in=reserved_types), to_display=_format_nodes
+                ),
+            ],
+        )
+
 
 class Node(BaseModel, VersionsMixin, CustomActionOperationMixin):
     flow_id = models.CharField(max_length=128, db_index=True)  # The ID assigned by react-flow
@@ -394,6 +412,16 @@ class Node(BaseModel, VersionsMixin, CustomActionOperationMixin):
             if assistant_id:
                 assistant = OpenAiAssistant.objects.get(id=assistant_id)
                 assistant.archive()
+
+    @property
+    def version(self) -> Version:
+        return Version(
+            instance=self,
+            fields=[
+                VersionField(name="label", raw_value=self.label),
+                VersionField(name="params", raw_value=str(self.params)),
+            ],
+        )
 
 
 class PipelineRunStatus(models.TextChoices):
