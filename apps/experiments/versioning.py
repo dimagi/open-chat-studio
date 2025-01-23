@@ -2,7 +2,7 @@ from collections import defaultdict
 from dataclasses import dataclass
 from dataclasses import field as data_field
 from difflib import Differ
-from typing import TYPE_CHECKING, Any
+from typing import TYPE_CHECKING, Any, Self
 
 from django.db.models import QuerySet
 
@@ -48,17 +48,30 @@ class VersionField:
     name: str = ""
     raw_value: Any | None = None
     to_display: callable = None
-    group_name: str = data_field(default="")
+    group_name: str = data_field(default="General")
     previous_field_version: "VersionField" = data_field(default=None)
     changed: bool = False
     label: str = data_field(default="")
     queryset: QuerySet | None = None
     queryset_results: list["VersionField"] = data_field(default_factory=list)
     text_diffs: list[TextDiff] = data_field(default_factory=list)
+    raw_value_version: Self | None = None
+
+    @property
+    def current_value(self):
+        return self.raw_value
+
+    @property
+    def previous_value(self):
+        return self.previous_field_version.raw_value
+
+    @property
+    def is_a_version(self):
+        return self.raw_value_version is not None
 
     def __post_init__(self):
         self.label = self.name.replace("_", " ").title()
-        if self.raw_value and not hasattr(self.raw_value, "version"):
+        if self.current_value and not hasattr(self.current_value, "version"):
             return
 
         if self.queryset:
@@ -69,8 +82,13 @@ class VersionField:
         if self.queryset:
             return self.queryset_results
         if self.to_display:
-            return self.to_display(self.raw_value)
-        return self.raw_value or ""
+            return self.to_display(self.current_value)
+        return self.current_value or ""
+
+    def _get_fields_to_exclude(self) -> list[str]:
+        if self.current_value:
+            return self.current_value.get_fields_to_exclude()
+        return self.previous_value.get_fields_to_exclude()
 
     def compare(self, previous_field_version: "VersionField", early_abort=False):
         """
@@ -83,27 +101,41 @@ class VersionField:
         match self._get_field_type():
             case "unversioned_model":
                 # Simply comparing unversioned models by id is enough
-                self.changed = self.raw_value.id != self.previous_field_version.raw_value.id
+                self.changed = self.current_value.id != self.previous_value.id
             case "versioned_model":
-                original = self.raw_value
-                new = self.previous_field_version.raw_value
-                exclude_model_fields = self.raw_value.get_fields_to_exclude()
-                changed_fields = original.compare_with_model(new, exclude_model_fields, early_abort=early_abort)
-                self.changed = bool(changed_fields)
+                # Versioned models should be explored in order to determine what changed
+                if hasattr(self.current_value, "version"):
+                    # Compare only the fields specified in the returned version
+                    current_version = self.current_value.version if self.current_value else None
+                    previous_version = self.previous_value.version if self.previous_value else None
+                    if current_version and previous_version:
+                        # Only when there is a previous and current version can we compare
+                        current_version.compare(previous_version, early_abort=early_abort)
+                        self.changed = current_version.fields_changed
+                        self.raw_value_version = current_version
+                        self.previous_field_version.raw_value_version = previous_version
+                    else:
+                        self.changed = True
+                else:
+                    # Compare all fields
+                    changed_fields = self.current_value.compare_with_model(
+                        self.previous_value, self._get_fields_to_exclude(), early_abort=early_abort
+                    )
+                    self.changed = bool(changed_fields)
             case "queryset":
                 self._compare_querysets(early_abort)
             case "primitive":
-                self.changed = self.raw_value != self.previous_field_version.raw_value
-                if isinstance(self.raw_value, str):
+                self.changed = self.current_value != self.previous_value
+                if isinstance(self.current_value, str):
                     self._compute_character_level_diff()
 
     def _get_field_type(self):
-        if isinstance(self.raw_value, VersioningMixin):
-            if hasattr(self.raw_value, "working_version"):
+        if isinstance(self.current_value, VersioningMixin):
+            if hasattr(self.current_value, "working_version"):
                 return "versioned_model"
             else:
                 return "unversioned_model"
-        elif isinstance(self.raw_value, QuerySet):
+        elif self.queryset:
             return "queryset"
         else:
             return "primitive"
@@ -158,7 +190,7 @@ class VersionField:
 
     def _compute_character_level_diff(self):
         differ = Differ()
-        difflines = list(differ.compare(self.previous_field_version.raw_value, self.raw_value))
+        difflines = list(differ.compare(self.previous_value, self.current_value))
 
         for line in difflines:
             operation, character = line[0], line[2:]
