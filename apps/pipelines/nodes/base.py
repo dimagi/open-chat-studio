@@ -48,7 +48,7 @@ class PipelineState(dict):
     shared_state: Annotated[dict, add_shared_state_messages]
     ai_message_id: int | None = None
     message_metadata: dict | None = None
-    attachments: list | None = None
+    attachments: list = Field(default=[])
 
     def json_safe(self):
         # We need to make a copy of `self` so as to not change the actual value of `experiment_session` forever
@@ -95,6 +95,8 @@ class PipelineNode(BaseModel, ABC):
     name: str = Field(title="Node Name", json_schema_extra={"ui:widget": "node_name"})
 
     def process(self, node_id: str, incoming_edges: list, state: PipelineState, config) -> PipelineState:
+        from apps.channels.datamodels import Attachment
+
         self._config = config
 
         for incoming_edge in reversed(incoming_edges):
@@ -111,7 +113,9 @@ class PipelineNode(BaseModel, ABC):
 
             # init shared state here to avoid having to do it in each place the pipeline is invoked
             state["shared_state"]["user_input"] = input
-            state["shared_state"]["attachments"] = [{"id": att["file_id"]} for att in state.get("attachments", [])]
+            state["shared_state"]["attachments"] = [
+                Attachment.model_validate(att) for att in state.get("attachments", [])
+            ]
         return self._process(input=input, state=state, node_id=node_id)
 
     def process_conditional(self, state: PipelineState, node_id: str | None = None) -> str:

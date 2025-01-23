@@ -26,6 +26,10 @@ class Attachment(BaseModel):
             content_type=file.content_type,
         )
 
+    @property
+    def id(self):
+        return self.file_id
+
 
 class BaseMessage(BaseModel):
     model_config = ConfigDict(arbitrary_types_allowed=True)

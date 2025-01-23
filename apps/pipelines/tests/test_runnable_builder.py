@@ -5,9 +5,12 @@ from unittest.mock import Mock, patch
 import pytest
 from django.core import mail
 from django.test import override_settings
+from langchain_core.runnables import RunnableConfig
 
+from apps.channels.datamodels import Attachment
 from apps.experiments.models import ParticipantData
 from apps.pipelines.exceptions import PipelineBuildError, PipelineNodeBuildError
+from apps.pipelines.logging import LoggingCallbackHandler
 from apps.pipelines.nodes.base import PipelineState
 from apps.pipelines.nodes.helpers import ParticipantDataProxy
 from apps.pipelines.nodes.nodes import EndNode, StartNode, StaticRouterNode
@@ -465,6 +468,36 @@ def test_static_router_participant_data(pipeline, experiment_session):
     ParticipantDataProxy(experiment_session).set({})
     output = runnable.invoke(PipelineState(messages=["Hi"], experiment_session=experiment_session))
     assert output["messages"][-1] == "A Hi"
+
+
+@django_db_with_data(available_apps=("apps.service_providers",))
+def test_attachments_in_code_node(pipeline, experiment_session):
+    code_set = """
+def main(input, **kwargs):
+    attachments = get_state_key("attachments")
+    kwargs["logger"].info([att.model_dump() for att in attachments])
+    return ",".join([att.name for att in attachments])
+"""
+    start = start_node()
+    code = code_node(code_set)
+    end = end_node()
+    nodes = [start, code, end]
+    runnable = create_runnable(pipeline, nodes)
+    callback = LoggingCallbackHandler()
+    attachments = [
+        Attachment(file_id=123, type="code_interpreter", name="test.py", size=10),
+        Attachment(file_id=456, type="file_search", name="blog.md", size=20),
+    ]
+    serialized_attachments = [att.model_dump() for att in attachments]
+    output = runnable.invoke(
+        PipelineState(
+            messages=["log attachments"], experiment_session=experiment_session, attachments=serialized_attachments
+        ),
+        config=RunnableConfig(callbacks=[callback]),
+    )
+    assert output["messages"][-1] == "test.py,blog.md"
+    log_entry = [e for e in callback.log_entries if e.level == "INFO"][0]
+    assert log_entry.message == str(serialized_attachments)
 
 
 @contextmanager

@@ -815,7 +815,7 @@ class CodeNode(PipelineNode):
 
     def _set_state_key(self, state: PipelineState):
         def set_state_key(key_name: str, value):
-            if key_name in {"user_input", "outputs"}:
+            if key_name in {"user_input", "outputs", "attachments"}:
                 raise PipelineNodeRunError(f"Cannot set the '{key_name}' key of the shared state")
             state["shared_state"][key_name] = value
 
