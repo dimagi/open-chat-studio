@@ -773,9 +773,10 @@ class CodeNode(PipelineNode):
 
         custom_locals = {}
         custom_globals = self._get_custom_globals(state)
+        kwargs = {"logger": self.logger}
         try:
             exec(byte_code, custom_globals, custom_locals)
-            result = str(custom_locals[function_name](input))
+            result = str(custom_locals[function_name](input, **kwargs))
         except Exception as exc:
             raise PipelineNodeRunError(exc) from exc
         return PipelineState.from_node_output(node_name=self.name, node_id=node_id, output=result)
