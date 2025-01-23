@@ -135,18 +135,40 @@ class TestAssistantArchival:
         assert assistant.is_archived is True  # archiving successful
 
     @patch("apps.assistants.sync.push_assistant_to_openai", Mock())
+    def test_archive_assistant_fails_with_working_related_versioned_pipeline_and_working_experiment(self):
+        pipeline_v1 = PipelineFactory()
+        assistant = OpenAiAssistantFactory()
+        pipeline_v2 = pipeline_v1.create_new_version()
+        NodeFactory(pipeline=pipeline_v2, type="AssistantNode", params={"assistant_id": assistant.id})
+        exp_v1 = ExperimentFactory()
+        exp_v2 = exp_v1.create_new_version()
+        exp_v2.pipeline = pipeline_v2
+        exp_v2.is_default_version = True
+        exp_v2.save()
+
+        assert pipeline_v2.is_working_version is False
+        assert exp_v2.is_default_version is True
+        assert exp_v2.is_working_version is False
+        assistant.archive()
+        assert assistant.is_archived is False  # archiving failed
+
+        exp_v2.archive()
+        assistant.archive()
+
+        assert exp_v2.is_archived is True
+        assert assistant.is_archived is True  # archiving successful
+
+    @patch("apps.assistants.sync.push_assistant_to_openai", Mock())
     def test_archive_assistant_fails_with_working_related_pipeline(self):
         pipeline = PipelineFactory()
         assistant = OpenAiAssistantFactory()
         NodeFactory(pipeline=pipeline, type="AssistantNode", params={"assistant_id": assistant.id})
-        exp_v1 = ExperimentFactory(pipeline=pipeline)
-        exp_v1.save()
 
         assert pipeline.is_working_version is True
         assistant.archive()
         assert assistant.is_archived is False  # archiving failed
 
-        exp_v1.archive()
+        pipeline.archive()
         assistant.archive()
 
         assert pipeline.is_archived is True
