@@ -22,8 +22,6 @@ class ExperimentTable(tables.Table):
     description = columns.Column(verbose_name="Description")
     owner = columns.Column(accessor="owner__username", verbose_name="Created By")
     type = columns.Column(orderable=False, empty_values=())
-    is_public = columns.BooleanColumn(verbose_name="Publically accessible", orderable=False, yesno="✓,")
-    is_archived = columns.BooleanColumn(verbose_name="Archived", yesno="✓,")
     actions = columns.TemplateColumn(
         template_name="experiments/components/experiment_actions_column.html",
     )
@@ -39,6 +37,11 @@ class ExperimentTable(tables.Table):
         }
         orderable = False
         empty_text = "No experiments found."
+
+    def render_name(self, record):
+        if record.is_archived:
+            return f"{record.name} (archived)"
+        return record.name
 
     def render_type(self, record):
         if record.assistant_id:
