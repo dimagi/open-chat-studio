@@ -6,10 +6,25 @@ from pydantic import BaseModel, ConfigDict, Field, field_validator
 from apps.channels.models import ChannelPlatform
 from apps.chat.channels import MESSAGE_TYPES
 
+AttachmentType = Literal["code_interpreter", "file_search"]
+
 
 class Attachment(BaseModel):
     file_id: int
-    type: Literal["code_interpreter", "file_search"]
+    type: AttachmentType
+    name: str
+    size: int
+    content_type: str = Field(default="application/octet-stream")
+
+    @classmethod
+    def from_file(cls, file, type: AttachmentType):
+        return cls(
+            file_id=file.id,
+            type=type,
+            name=file.name,
+            size=file.content_size,
+            content_type=file.content_type,
+        )
 
 
 class BaseMessage(BaseModel):
@@ -18,7 +33,7 @@ class BaseMessage(BaseModel):
     participant_id: str
     message_text: str
     content_type: MESSAGE_TYPES | None = Field(default=MESSAGE_TYPES.TEXT)
-    attachments: list[Attachment] = Field(default={})
+    attachments: list[Attachment] = Field(default=[])
 
 
 class TelegramMessage(BaseMessage):
