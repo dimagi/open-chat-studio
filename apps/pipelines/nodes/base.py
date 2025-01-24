@@ -3,11 +3,12 @@ from abc import ABC
 from collections.abc import Sequence
 from enum import StrEnum
 from functools import cached_property
-from typing import Annotated, Any, Literal, Self, TypedDict
+from typing import Annotated, Any, Literal, Self
 
 from langchain_core.runnables import RunnableConfig
 from pydantic import BaseModel, ConfigDict, Field, model_validator
 from pydantic.config import JsonDict
+from typing_extensions import TypedDict
 
 from apps.experiments.models import ExperimentSession
 from apps.pipelines.logging import LoggingCallbackHandler, noop_logger
