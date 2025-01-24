@@ -119,12 +119,11 @@ class Pipeline(BaseTeamModel, VersionsMixin):
         new_ids = set(node.id for node in nodes)
         to_remove = current_ids - new_ids
 
-        nodes_to_archive = Node.objects.annotate(versions_count=models.Count("versions")).filter(
-            pipeline=self, flow_id__in=to_remove, versions_count__gt=0
+        pipeline_nodes = Node.objects.annotate(versions_count=models.Count("versions")).filter(
+            pipeline=self, flow_id__in=to_remove
         )
-        Node.objects.annotate(versions_count=models.Count("versions")).filter(
-            pipeline=self, flow_id__in=to_remove, versions_count=0
-        ).delete()
+        nodes_to_archive = pipeline_nodes.filter(versions_count__gt=0)
+        pipeline_nodes.filter(versions_count=0).delete()
 
         for node in nodes_to_archive:
             # Preserve the node if it has versions, otherwise we tamper with previous versions

@@ -157,7 +157,7 @@ class VersionField:
         which is expected to be present on each result.
         """
         previous_queryset = self.previous_field_version.queryset
-        previous_records_not_used = list(previous_queryset.values_list("id", flat=True))
+        previous_records = list(previous_queryset.values_list("id", flat=True))
         for version_field in self.queryset_results:
             record = version_field.raw_value
             previous_record = previous_queryset.filter(id__in=record.version_family_ids).first()
@@ -165,7 +165,7 @@ class VersionField:
             if previous_record:
                 # A version of the current record exists in the previous queryset
                 # TODO: When comparing static trigger versions and only the action changed, it is not being picked up.
-                previous_records_not_used.remove(previous_record.id)
+                previous_records.remove(previous_record.id)
                 prev_version_field = VersionField(raw_value=previous_record, to_display=self.to_display)
                 version_field.compare(prev_version_field, early_abort=early_abort)
                 self.changed = self.changed or version_field.changed
@@ -176,7 +176,7 @@ class VersionField:
             if early_abort and self.changed:
                 return
 
-        records_removed_queryset = previous_queryset.filter(id__in=previous_records_not_used)
+        records_removed_queryset = previous_queryset.filter(id__in=previous_records)
         if records_removed_queryset.exists():
             self.changed = True
             if early_abort:
