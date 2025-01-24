@@ -415,12 +415,14 @@ class Node(BaseModel, VersionsMixin, CustomActionOperationMixin):
 
     @property
     def version(self) -> Version:
+        node_name = self.params.get("name", self.flow_id)
+        param_versions = []
+        for name, value in self.params.items():
+            param_versions.append(VersionField(group_name=node_name, name=name, raw_value=value))
+
         return Version(
             instance=self,
-            fields=[
-                VersionField(name="label", raw_value=self.label),
-                VersionField(name="params", raw_value=str(self.params)),
-            ],
+            fields=[VersionField(group_name=node_name, name="label", raw_value=self.label), *param_versions],
         )
 
 
