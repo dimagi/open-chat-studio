@@ -183,9 +183,7 @@ class ExperimentVersionsTable(tables.Table):
         return record.created_at if record.working_version_id else ""
 
     def render_version_number(self, record):
-        if record.is_working_version:
-            return f"{record.version_number} (unreleased)"
-        return record.version_number
+        return "(unreleased)" if record.is_working_version else record.version_number
 
 
 def _get_route_url(url_name, request, record, value):
