@@ -338,8 +338,7 @@ class Pipeline(BaseTeamModel, VersionsMixin):
 
     @property
     def version(self) -> Version:
-        def _format_nodes(node):
-            return node.params["name"]
+        from apps.experiments.models import VersionFieldDisplayFormatters
 
         reserved_types = ["StartNode", "EndNode"]
 
@@ -348,7 +347,9 @@ class Pipeline(BaseTeamModel, VersionsMixin):
             fields=[
                 VersionField(name="name", raw_value=self.name),
                 VersionField(
-                    name="nodes", queryset=self.node_set.exclude(type__in=reserved_types), to_display=_format_nodes
+                    name="nodes",
+                    queryset=self.node_set.exclude(type__in=reserved_types),
+                    to_display=VersionFieldDisplayFormatters.format_nodes,
                 ),
             ],
         )
@@ -425,10 +426,20 @@ class Node(BaseModel, VersionsMixin, CustomActionOperationMixin):
 
     @property
     def version(self) -> Version:
+        from apps.experiments.models import VersionFieldDisplayFormatters
+
         node_name = self.params.get("name", self.flow_id)
         param_versions = []
         for name, value in self.params.items():
-            param_versions.append(VersionField(group_name=node_name, name=name, raw_value=value))
+            display_formatter = None
+            match name:
+                case "tools":
+                    display_formatter = VersionFieldDisplayFormatters.format_tools
+                case "custom_actions":
+                    display_formatter = VersionFieldDisplayFormatters.format_custom_action_operation
+            param_versions.append(
+                VersionField(group_name=node_name, name=name, raw_value=value, to_display=display_formatter)
+            )
 
         return Version(
             instance=self,

@@ -38,6 +38,75 @@ from apps.web.meta import absolute_url
 log = logging.getLogger("ocs.experiments")
 
 
+class VersionFieldDisplayFormatters:
+    """A collection of formatters that are used for displaying version fields"""
+
+    @staticmethod
+    def format_tools(tools: set) -> str:
+        return ", ".join([AgentTools(tool).label for tool in tools])
+
+    @staticmethod
+    def yes_no(value: bool) -> str:
+        return "Yes" if value else "No"
+
+    @staticmethod
+    def format_array_field(arr: list) -> str:
+        return ", ".join([entry for entry in arr])
+
+    @staticmethod
+    def format_trigger(trigger) -> str:
+        string = "If"
+        if trigger.trigger_type == "TimeoutTrigger":
+            seconds = seconds_to_human(trigger.delay)
+            string = f"{string} no response for {seconds}"
+        else:
+            string = f"{string} {trigger.get_type_display().lower()}"
+
+        trigger_action = trigger.action.get_action_type_display().lower()
+        return f"{string} then {trigger_action}"
+
+    @staticmethod
+    def format_route(route) -> str:
+        if route.type == ExperimentRouteType.PROCESSOR:
+            string = f'Route to "{route.child}" using the "{route.keyword}" keyword.'
+            if route.is_default:
+                string = f"{string} (default)"
+            return string
+        elif route.type == ExperimentRouteType.TERMINAL:
+            string = f"Use {route.child} as the terminal bot"
+        else:
+            string = "Unknown route type"
+        return string
+
+    @staticmethod
+    def format_custom_action_operation(op) -> str:
+        action = op.custom_action
+        op_details = action.get_operations_by_id().get(op.operation_id)
+        return f"{action.name}: {op_details}"
+
+    @staticmethod
+    def format_assistant(assistant) -> str:
+        if not assistant:
+            return ""
+        name = assistant.name.split(f" v{assistant.version_number}")[0]
+        template = get_template("generic/chip.html")
+        url = (
+            assistant.get_absolute_url()
+            if assistant.is_working_version
+            else assistant.working_version.get_absolute_url()
+        )
+        return template.render({"chip": Chip(label=name, url=url)})
+
+    @staticmethod
+    def format_builtin_tools(tools: set) -> str:
+        """code_interpreter, file_search -> Code Interpreter, File Search"""
+        return ", ".join([tool.replace("_", " ").capitalize() for tool in tools])
+
+    @staticmethod
+    def format_nodes(node):
+        return node.params["name"]
+
+
 class VersionsObjectManagerMixin:
     def get_all(self):
         """A method to return all experiments whether it is deprecated or not"""
@@ -911,55 +980,6 @@ class Experiment(BaseTeamModel, VersionsMixin, CustomActionOperationMixin):
         Returns a `Version` instance representing the experiment version.
         """
 
-        def yes_no(value: bool) -> str:
-            return "Yes" if value else "No"
-
-        def format_tools(tools: set) -> str:
-            return ", ".join([AgentTools(tool).label for tool in tools])
-
-        def format_array_field(arr: list) -> str:
-            return ", ".join([entry for entry in arr])
-
-        def format_trigger(trigger) -> str:
-            string = "If"
-            if trigger.trigger_type == "TimeoutTrigger":
-                seconds = seconds_to_human(trigger.delay)
-                string = f"{string} no response for {seconds}"
-            else:
-                string = f"{string} {trigger.get_type_display().lower()}"
-
-            trigger_action = trigger.action.get_action_type_display().lower()
-            return f"{string} then {trigger_action}"
-
-        def format_route(route) -> str:
-            if route.type == ExperimentRouteType.PROCESSOR:
-                string = f'Route to "{route.child}" using the "{route.keyword}" keyword.'
-                if route.is_default:
-                    string = f"{string} (default)"
-                return string
-            elif route.type == ExperimentRouteType.TERMINAL:
-                string = f"Use {route.child} as the terminal bot"
-            else:
-                string = "Unknown route type"
-            return string
-
-        def format_custom_action_operation(op) -> str:
-            action = op.custom_action
-            op_details = action.get_operations_by_id().get(op.operation_id)
-            return f"{action.name}: {op_details}"
-
-        def _format_assistant(assistant) -> str:
-            if not assistant:
-                return ""
-            name = assistant.name.split(f" v{assistant.version_number}")[0]
-            template = get_template("generic/chip.html")
-            url = (
-                assistant.get_absolute_url()
-                if assistant.is_working_version
-                else assistant.working_version.get_absolute_url()
-            )
-            return template.render({"chip": Chip(label=name, url=url)})
-
         return Version(
             instance=self,
             fields=[
@@ -970,7 +990,7 @@ class Experiment(BaseTeamModel, VersionsMixin, CustomActionOperationMixin):
                     group_name="General",
                     name="allowlist",
                     raw_value=self.participant_allowlist,
-                    to_display=format_array_field,
+                    to_display=VersionFieldDisplayFormatters.format_array_field,
                 ),
                 # Language Model
                 VersionField(group_name="Language Model", name="prompt_text", raw_value=self.prompt_text),
@@ -999,7 +1019,7 @@ class Experiment(BaseTeamModel, VersionsMixin, CustomActionOperationMixin):
                     group_name="Consent",
                     name="conversational_consent_enabled",
                     raw_value=self.conversational_consent_enabled,
-                    to_display=yes_no,
+                    to_display=VersionFieldDisplayFormatters.yes_no,
                 ),
                 # Surveys
                 VersionField(group_name="Surveys", name="pre-survey", raw_value=self.pre_survey),
@@ -1016,13 +1036,13 @@ class Experiment(BaseTeamModel, VersionsMixin, CustomActionOperationMixin):
                     group_name="Voice",
                     name="echo_transcript",
                     raw_value=self.echo_transcript,
-                    to_display=yes_no,
+                    to_display=VersionFieldDisplayFormatters.yes_no,
                 ),
                 VersionField(
                     group_name="Voice",
                     name="use_processor_bot_voice",
                     raw_value=self.use_processor_bot_voice,
-                    to_display=yes_no,
+                    to_display=VersionFieldDisplayFormatters.yes_no,
                 ),
                 # Source material
                 VersionField(
@@ -1035,16 +1055,19 @@ class Experiment(BaseTeamModel, VersionsMixin, CustomActionOperationMixin):
                     group_name="Tools",
                     name="tools",
                     raw_value=set(self.tools),
-                    to_display=format_tools,
+                    to_display=VersionFieldDisplayFormatters.format_tools,
                 ),
                 VersionField(
                     group_name="Tools",
                     name="custom_actions",
                     queryset=self.get_custom_action_operations(),
-                    to_display=format_custom_action_operation,
+                    to_display=VersionFieldDisplayFormatters.format_custom_action_operation,
                 ),
                 VersionField(
-                    group_name="Assistant", name="assistant", raw_value=self.assistant, to_display=_format_assistant
+                    group_name="Assistant",
+                    name="assistant",
+                    raw_value=self.assistant,
+                    to_display=VersionFieldDisplayFormatters.format_assistant,
                 ),
                 VersionField(group_name="Pipeline", name="pipeline", raw_value=self.pipeline),
                 VersionField(group_name="Tracing", name="tracing_provider", raw_value=self.trace_provider),
@@ -1053,26 +1076,26 @@ class Experiment(BaseTeamModel, VersionsMixin, CustomActionOperationMixin):
                     group_name="Triggers",
                     name="static_triggers",
                     queryset=self.static_triggers,
-                    to_display=format_trigger,
+                    to_display=VersionFieldDisplayFormatters.format_trigger,
                 ),
                 VersionField(
                     group_name="Triggers",
                     name="timeout_triggers",
                     queryset=self.timeout_triggers,
-                    to_display=format_trigger,
+                    to_display=VersionFieldDisplayFormatters.format_trigger,
                 ),
                 # Routing
                 VersionField(
                     group_name="Routing",
                     name="routes",
                     queryset=self.child_links.filter(type=ExperimentRouteType.PROCESSOR),
-                    to_display=format_route,
+                    to_display=VersionFieldDisplayFormatters.format_route,
                 ),
                 VersionField(
                     group_name="Routing",
                     name="terminal_bot",
                     queryset=self.child_links.filter(type=ExperimentRouteType.TERMINAL),
-                    to_display=format_route,
+                    to_display=VersionFieldDisplayFormatters.format_route,
                 ),
             ],
         )

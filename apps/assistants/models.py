@@ -200,14 +200,7 @@ class OpenAiAssistant(BaseTeamModel, VersionsMixin, CustomActionOperationMixin):
 
     @property
     def version(self) -> Version:
-        from apps.experiments.models import AgentTools
-
-        def format_tools(tools: set) -> str:
-            return ", ".join([AgentTools(tool).label for tool in tools])
-
-        def format_builtin_tools(tools: set) -> str:
-            """code_interpreter, file_search -> Code Interpreter, File Search"""
-            return ", ".join([tool.replace("_", " ").capitalize() for tool in tools])
+        from apps.experiments.models import VersionFieldDisplayFormatters
 
         return Version(
             instance=self,
@@ -223,9 +216,14 @@ class OpenAiAssistant(BaseTeamModel, VersionsMixin, CustomActionOperationMixin):
                     group_name="Tools",
                     name="builtin_tools",
                     raw_value=self.builtin_tools,
-                    to_display=format_builtin_tools,
+                    to_display=VersionFieldDisplayFormatters.format_builtin_tools,
                 ),
-                VersionField(group_name="Tools", name="tools", raw_value=self.tools, to_display=format_tools),
+                VersionField(
+                    group_name="Tools",
+                    name="tools",
+                    raw_value=self.tools,
+                    to_display=VersionFieldDisplayFormatters.format_tools,
+                ),
                 VersionField(
                     group_name="Tools",
                     name="allow_file_search_attachments",
