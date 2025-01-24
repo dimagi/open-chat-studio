@@ -1,3 +1,4 @@
+from functools import cached_property
 from typing import Literal
 
 import phonenumbers
@@ -33,6 +34,23 @@ class Attachment(BaseModel):
     @property
     def id(self):
         return self.file_id
+
+    @cached_property
+    def _file(self):
+        from apps.files.models import File
+
+        try:
+            return File.objects.get(id=self.file_id)
+        except File.DoesNotExist:
+            return None
+
+    def read_bytes(self):
+        if not self._file:
+            return b""
+        return self._file.file.read()
+
+    def read_string(self):
+        return self.read_bytes().decode("utf-8")
 
 
 class BaseMessage(BaseModel):

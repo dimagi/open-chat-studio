@@ -3,7 +3,9 @@ from unittest import mock
 
 import pytest
 
+from apps.channels.datamodels import Attachment
 from apps.experiments.models import ParticipantData
+from apps.files.models import File
 from apps.pipelines.exceptions import PipelineNodeBuildError, PipelineNodeRunError
 from apps.pipelines.nodes.base import PipelineState
 from apps.pipelines.tests.utils import (
@@ -87,6 +89,11 @@ def main(input, **kwargs):
             "def main(input, others, **kwargs):\n\treturn input",
             "",
             r"The main function should have the signature main\(input, \*\*kwargs\) only\.",
+        ),
+        (
+            """def main(intput, **kwargs):\n\tget_state_key("attachments")[0]._file.delete()\n\treturn input""",
+            "",
+            """"_file" is an invalid attribute name because it starts with "_".""",
         ),
     ],
 )
@@ -278,3 +285,25 @@ def main(input, **kwargs):
         ][-1]
         == input
     )
+
+
+@django_db_with_data(available_apps=("apps.service_providers",))
+def test_read_attachments(pipeline, experiment_session):
+    file = File.from_content("foo.txt", b"from file", "text/plain", experiment_session.team.id)
+
+    code_get = """
+def main(input, **kwargs):
+    return f'content {get_state_key("attachments")[0].read_string()}'
+"""
+    nodes = [
+        start_node(),
+        code_node(code_get),
+        end_node(),
+    ]
+    state = PipelineState(
+        experiment_session=experiment_session,
+        messages=["hi"],
+        attachments=[Attachment.from_file(file, "code_interpreter")],
+    )
+    assert create_runnable(pipeline, nodes).invoke(state)["messages"][-1] == "content from file"
+    File.objects.get(id=file.id)
