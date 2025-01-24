@@ -17,7 +17,7 @@ class Attachment(BaseModel):
     file_id: int
     type: AttachmentType
     name: str
-    size: int
+    size: int = Field(..., ge=0)
     content_type: str = "application/octet-stream"
 
     upload_to_assistant: bool = False
