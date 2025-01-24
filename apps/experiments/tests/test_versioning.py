@@ -206,7 +206,7 @@ class TestVersion:
 
         version_field = VersionField(queryset=new_queryset)
         # another sanity check
-        assert version_field.value_is_a_queryset() is True
+        assert version_field.queryset is not None
         version_field.previous_field_version = VersionField(queryset=previous_queryset)
         version_field._compare_querysets()
         assert version_field.changed is True
