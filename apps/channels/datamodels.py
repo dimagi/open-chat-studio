@@ -55,6 +55,7 @@ class Attachment(BaseModel):
 
     def read_string(self):
         # TODO: error handling for read errors or decode errors
+        # TODO: large file handling (maybe limit file size?)
         content = self.read_bytes()
         return content.decode("utf-8")
 
