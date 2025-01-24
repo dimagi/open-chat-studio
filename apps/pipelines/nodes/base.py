@@ -3,7 +3,7 @@ from abc import ABC
 from collections.abc import Sequence
 from enum import StrEnum
 from functools import cached_property
-from typing import Annotated, Any, Literal, Self
+from typing import Annotated, Any, Literal, Self, TypedDict
 
 from langchain_core.runnables import RunnableConfig
 from pydantic import BaseModel, ConfigDict, Field, model_validator
@@ -40,12 +40,18 @@ def add_shared_state_messages(left: dict, right: dict):
     return output
 
 
+class SharedState(TypedDict):
+    user_input: str
+    outputs: dict
+    attachments: list
+
+
 class PipelineState(dict):
     messages: Annotated[Sequence[Any], operator.add]
     outputs: Annotated[dict, add_messages]
     experiment_session: ExperimentSession
     pipeline_version: int
-    shared_state: Annotated[dict, add_shared_state_messages]
+    shared_state: Annotated[SharedState, add_shared_state_messages]
     ai_message_id: int | None = None
     message_metadata: dict | None = None
     attachments: list = Field(default=[])
