@@ -135,7 +135,7 @@ class VersionField:
                 return "versioned_model"
             else:
                 return "unversioned_model"
-        elif self.queryset:
+        elif self.queryset is not None:
             return "queryset"
         else:
             return "primitive"
