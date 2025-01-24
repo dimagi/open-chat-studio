@@ -138,6 +138,16 @@ class ConsentFormTable(tables.Table):
         empty_text = "No consent forms found."
 
 
+def session_chat_url(url_name, request, record, value):
+    return reverse(
+        url_name, args=[request.team.slug, record.experiment.id, record.get_experiment_version_number(), record.id]
+    )
+
+
+def _show_chat_button(request, record):
+    return record.participant.user == request.user and not record.is_complete() and record.experiment.is_editable()
+
+
 class ExperimentSessionsTable(tables.Table):
     participant = actions.chip_column(
         accessor="participant", align="left", orderable=True, order_by="participant__identifier"
@@ -149,7 +159,21 @@ class ExperimentSessionsTable(tables.Table):
         template_name="annotations/tag_ui.html",
     )
     versions = columns.Column(verbose_name="Versions", accessor="experiment_version_for_display")
-    actions = actions.chip_column(label="Session Details", align="center", verbose_name="")
+    actions = actions.ActionsColumn(
+        actions=[
+            actions.Action(
+                url_name="experiments:experiment_chat_session",
+                url_factory=session_chat_url,
+                icon_class="fa-solid fa-comment",
+                title="Continue Chat",
+                display_condition=_show_chat_button,
+            ),
+            actions.chip_action(
+                label="Session Details",
+            ),
+        ],
+        align="right",
+    )
 
     def render_tags(self, record, bound_column):
         template = get_template(bound_column.column.template_name)
