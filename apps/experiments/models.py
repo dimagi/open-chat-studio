@@ -1272,20 +1272,20 @@ class Participant(BaseTeamModel):
             message_type="human",
             chat__experiment_session__experiment__id=OuterRef("id"),
         )
-        joined_on = exp_scoped_human_message.order_by("created_at")[:1].values("created_at")
         last_message = exp_scoped_human_message.order_by("-created_at")[:1].values("created_at")
+        joined_on = self.experimentsession_set.order_by("created_at")[:1].values("created_at")
         return (
             Experiment.objects.annotate(
                 joined_on=Subquery(joined_on),
                 last_message=Subquery(last_message),
             )
-            .filter(Q(sessions__participant=self) | Q(participant_data__participant=self))
+            .filter(Q(sessions__participant=self) | Q(id__in=Subquery(self.data_set.values("experiment"))))
             .distinct()
         )
 
     def get_data_for_experiment(self, experiment) -> dict:
         try:
-            return self.data_set.get(bots=experiment).data
+            return self.data_set.get(experiment=experiment).data
         except ParticipantData.DoesNotExist:
             return {}
 
