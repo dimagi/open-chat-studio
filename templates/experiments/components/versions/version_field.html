@@ -1,21 +1,21 @@
 <div class="grid grid-cols-2 gap-1">
-    {% if field.changed %}
-        {% if field.is_a_version %}
-            <div class="col-span-2">
-                {% include 'experiments/components/versions/compare.html' with version_details=field.raw_value_version level=level|add:"1" %}
-            </div>
-        {% else %}
+    {% if field.is_a_version %}
+        <div class="col-span-2">
+            {% include 'experiments/components/versions/compare.html' with version_details=field.raw_value_version level=level|add:"1" %}
+        </div>
+    {% else %}
+        {% if field.changed %}
             {% include 'experiments/components/versions/diff_field.html' with version_field=field.previous_field_version bg_classes="bg-red-400 bg-opacity-20" text_highlight_classes="bg-red-600 bg-opacity-40" %}
             {% include 'experiments/components/versions/diff_field.html' with version_field=field bg_classes="bg-green-400 bg-opacity-20" text_highlight_classes="bg-green-600 bg-opacity-40" %}
-        {% endif %}
-    {% else %}
-        {% if field.previous_field_version %}
+        {% else %}
+            {% if field.previous_field_version %}
+                <div class="text-sm col-span-1 px-1">
+                    {{ field.previous_field_version.display_value }}
+                </div>
+            {% endif %}
             <div class="text-sm col-span-1 px-1">
-                {{ field.previous_field_version.display_value }}
+                {{ field.display_value }}
             </div>
         {% endif %}
-        <div class="text-sm col-span-1 px-1">
-            {{ field.display_value }}
-        </div>
     {% endif %}
 </div>
