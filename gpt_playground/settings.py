@@ -517,9 +517,9 @@ TAGGIT_CASE_INSENSITIVE = True
 # Documentation links
 DOCUMENTATION_LINKS = {
     # Try to make these keys grep-able so that usages are easy to find
-    "consent": "https://dimagi.atlassian.net/wiki/spaces/OCS/pages/2144305304/Consent+Forms+on+OCS",
+    "consent": "/concepts/consent/",
     "survey": "https://dimagi.atlassian.net/wiki/spaces/OCS/pages/2144305308/Surveys",
-    "experiment": "https://dimagi.atlassian.net/wiki/spaces/OCS/pages/2144305312/Creating+a+Chatbot+Experiment",
+    "experiment": "/concepts/experiment/",
     "concepts.prompt_variables": "/concepts/prompt_variables/",
     "concepts.experiments": "/concepts/experiment/",
 }
