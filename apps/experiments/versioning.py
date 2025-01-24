@@ -190,7 +190,7 @@ class VersionField:
 
     def _compute_character_level_diff(self):
         differ = Differ()
-        difflines = list(differ.compare(self.previous_value, self.current_value))
+        difflines = list(differ.compare(self.previous_value or "", self.current_value))
 
         for line in difflines:
             operation, character = line[0], line[2:]
