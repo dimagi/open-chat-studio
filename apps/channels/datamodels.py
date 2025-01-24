@@ -1,3 +1,4 @@
+import logging
 from functools import cached_property
 from typing import Literal
 
@@ -6,6 +7,8 @@ from pydantic import BaseModel, ConfigDict, Field, field_validator
 
 from apps.channels.models import ChannelPlatform
 from apps.chat.channels import MESSAGE_TYPES
+
+logger = logging.getLogger("ocs.channels")
 
 AttachmentType = Literal["code_interpreter", "file_search"]
 
@@ -42,6 +45,7 @@ class Attachment(BaseModel):
         try:
             return File.objects.get(id=self.file_id)
         except File.DoesNotExist:
+            logger.error(f"Attachment with id {self.file_id} not found", exc_info=True, extra=self.model_dump())
             return None
 
     def read_bytes(self):
@@ -50,7 +54,9 @@ class Attachment(BaseModel):
         return self._file.file.read()
 
     def read_string(self):
-        return self.read_bytes().decode("utf-8")
+        # TODO: error handling for read errors or decode errors
+        content = self.read_bytes()
+        return content.decode("utf-8")
 
 
 class BaseMessage(BaseModel):
