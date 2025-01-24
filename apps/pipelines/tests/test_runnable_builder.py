@@ -702,6 +702,32 @@ def test_assistant_node(get_assistant_runnable, tools_enabled):
 
 @pytest.mark.django_db()
 @patch("apps.pipelines.nodes.nodes.AssistantNode._get_assistant_runnable")
+def test_assistant_node_attachments(get_assistant_runnable):
+    runnable_mock = Mock()
+    runnable_mock.invoke.return_value = ChainOutput(output="Hi there human", prompt_tokens=30, completion_tokens=20)
+    get_assistant_runnable.return_value = runnable_mock
+
+    pipeline = PipelineFactory()
+    assistant = OpenAiAssistantFactory()
+    nodes = [start_node(), assistant_node(str(assistant.id)), end_node()]
+    runnable = create_runnable(pipeline, nodes)
+    attachments = [
+        Attachment(file_id=123, type="code_interpreter", name="test.py", size=10),
+        Attachment(file_id=456, type="code_interpreter", name="demo.py", size=10, upload_to_assistant=True),
+    ]
+    state = PipelineState(
+        messages=["Hi there bot"],
+        experiment_session=ExperimentSessionFactory(),
+        attachments=[att.model_dump() for att in attachments],
+    )
+    output_state = runnable.invoke(state)
+    assert output_state["messages"][-1] == "Hi there human"
+    args, kwargs = runnable_mock.invoke.call_args
+    assert kwargs["attachments"] == [attachments[1]]
+
+
+@pytest.mark.django_db()
+@patch("apps.pipelines.nodes.nodes.AssistantNode._get_assistant_runnable")
 def test_assistant_node_raises(get_assistant_runnable):
     runnable_mock = Mock()
     runnable_mock.invoke = lambda *args, **kwargs: ChainOutput(

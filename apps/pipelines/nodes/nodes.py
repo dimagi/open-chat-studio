@@ -21,7 +21,6 @@ from pydantic_core.core_schema import FieldValidationInfo
 from RestrictedPython import compile_restricted, safe_builtins, safe_globals
 
 from apps.assistants.models import OpenAiAssistant
-from apps.channels.datamodels import Attachment
 from apps.chat.agent.tools import get_node_tools
 from apps.chat.conversation import compress_chat_history, compress_pipeline_chat_history
 from apps.chat.models import ChatMessageType
@@ -682,9 +681,7 @@ class AssistantNode(PipelineNode):
 
         session: ExperimentSession | None = state.get("experiment_session")
         runnable = self._get_assistant_runnable(assistant, session=session, node_id=node_id)
-        attachments = [Attachment.model_validate(params) for params in state.get("attachments", [])]
-        if for_upload := state.get("shared_state", {}).get("attachments_to_upload", []):
-            attachments = [att for att in attachments if att["file_id"] in for_upload]
+        attachments = self._get_attachments(state)
         chain_output: ChainOutput = runnable.invoke(input, config={}, attachments=attachments)
         output = chain_output.output
 
@@ -697,6 +694,9 @@ class AssistantNode(PipelineNode):
                 "output": runnable.adapter.get_message_metadata(ChatMessageType.AI),
             },
         )
+
+    def _get_attachments(self, state) -> list:
+        return [att for att in state.get("shared_state", {}).get("attachments", []) if att.upload_to_assistant]
 
     def _get_assistant_runnable(self, assistant: OpenAiAssistant, session: ExperimentSession, node_id: str):
         history_manager = PipelineHistoryManager.for_assistant()

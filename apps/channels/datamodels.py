@@ -14,7 +14,11 @@ class Attachment(BaseModel):
     type: AttachmentType
     name: str
     size: int
-    content_type: str = Field(default="application/octet-stream")
+    content_type: str = "application/octet-stream"
+
+    upload_to_assistant: bool = False
+    """Setting this to True will cause the Assistant Node to send the attachment
+    as a file attachment with the message."""
 
     @classmethod
     def from_file(cls, file, type: AttachmentType):
