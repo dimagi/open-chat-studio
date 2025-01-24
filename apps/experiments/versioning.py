@@ -81,7 +81,7 @@ class VersionField:
     def display_value(self) -> Any:
         if self.queryset:
             return self.queryset_results
-        if self.to_display:
+        if self.to_display and self.current_value:
             return self.to_display(self.current_value)
         return self.current_value or ""
 
