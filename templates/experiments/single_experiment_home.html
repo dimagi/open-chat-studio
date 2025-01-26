@@ -213,7 +213,7 @@
 
   <div role="tablist" class="tabs tabs-bordered">
     {% if perms.chat.view_chat %}
-      <input type="radio" name="tab_group" role="tab" class="tab" aria-label="All Sessions" id="tab-allsessions" checked/>
+      <input type="radio" name="tab_group" role="tab" class="tab" aria-label="Sessions" id="tab-allsessions" checked/>
       <div role="tabpanel" class="tab-content" id="content-allsessions">
         <div class="app-card">
           <div x-data="{tags: '', participant: null}">
@@ -257,46 +257,6 @@
         </div>
       </div>
     {% endif %}
-
-    <input type="radio" name="tab_group" role="tab" class="tab" aria-label="My Sessions" id="tab-mysessions" />
-    <div role="tabpanel" class="tab-content" id="content-mysessions">
-      <div class="app-card">
-        <div class="overflow-x-auto">
-          <table class="w-full table-fixed">
-            <thead class="bg-base-200 base-content uppercase text-sm leading-normal">
-              <tr>
-                <th class="px-3 py-3 text-left">Started</th>
-                <th class="px-3 py-3 text-left">Last Message</th>
-                <th class="px-3 py-3 text-left">Version</th>
-                <th class="px-3 py-3 text-left">Actions</th>
-              </tr>
-            </thead>
-            <tbody>
-              {% for session in user_sessions %}
-                <tr class="text-sm">
-                  <td class="overflow-hidden px-3 py-3 text-left">{{ session.created_at }}</td>
-                  <td class="overflow-hidden px-3 py-3 text-left">{{ session.last_message_created_at }}</td>
-                  <td class="overflow-hidden px-3 py-3 text-left">{{session.experiment_version_for_display }}</td>
-                  <td class="overflow-hidden px-3 py-3 text-left">
-                    {% if session.is_complete or not experiment.is_editable %}
-                      <a class="btn btn-sm btn-outline btn-primary"
-                         href="{% url 'experiments:experiment_session_view' team.slug experiment.public_id session.external_id %}"
-                         class="link">Review Chat</a>
-                    {% else %}
-                      <a class="btn btn-sm btn-outline btn-primary"
-                         href="{% url 'experiments:experiment_chat_session' team.slug experiment.id session.get_experiment_version_number session.id %}" class="link"
-                      >
-                        Continue Chat
-                      </a>
-                    {% endif %}
-                  </td>
-                </tr>
-              {% endfor %}
-            </tbody>
-          </table>
-        </div>
-      </div>
-    </div>
 
     <input type="radio" name="tab_group" role="tab" class="tab" aria-label="Versions" id="tab-versions" />
     <div role="tabpanel" class="tab-content" id="content-versions">

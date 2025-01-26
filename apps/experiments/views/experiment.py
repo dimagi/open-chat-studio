@@ -159,9 +159,12 @@ class ExperimentSessionsTableView(SingleTableView, PermissionRequiredMixin):
     permission_required = "annotations.view_customtaggeditem"
 
     def get_queryset(self):
-        query_set = ExperimentSession.objects.with_last_message_created_at().filter(
-            team=self.request.team, experiment__id=self.kwargs["experiment_id"]
+        query_set = (
+            ExperimentSession.objects.with_last_message_created_at()
+            .filter(team=self.request.team, experiment__id=self.kwargs["experiment_id"])
+            .select_related("participant__user")
         )
+
         if not self.request.GET.get("show-all"):
             query_set = query_set.exclude(experiment_channel__platform=ChannelPlatform.API)
 
