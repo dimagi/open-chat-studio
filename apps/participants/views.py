@@ -88,7 +88,7 @@ class SingleParticipantHome(LoginAndTeamRequiredMixin, TemplateView, PermissionR
             experiment = participant_experiments.first()
 
         context["experiments"] = participant_experiments
-        context["active_experiment"] = experiment
+        context["selected_experiment"] = experiment
         context["session_table"] = ExperimentSessionsTable(
             participant.experimentsession_set.filter(experiment=experiment).all(),
             extra_columns=[("participant", None)],  # remove participant column
