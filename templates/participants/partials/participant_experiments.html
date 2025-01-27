@@ -9,25 +9,16 @@
       <th scope="col" class=""></th>
     </tr>
   </thead>
-  <tbody class="divide-y divide-gray-200" x-data="{experimentsRow: 1}">
+  <tbody class="divide-y divide-gray-200" x-data="changeHandler">
     {% for experiment in experiments %}
       <tr
-        class="cursor-pointer"
-        x-bind:class="experimentsRow === {{ forloop.counter }} ? 'bg-gray-300' : ''"
-        x-on:click="experimentsRow = (experimentsRow === {{ forloop.counter }} ? null : {{ forloop.counter }})"
-        hx-get="{% url 'participants:experiment_data' participant.team.slug participant.id experiment.id %}"
-
-        {% if active_experiment_id == experiment.id %}
-          x-init="experimentsRow={{ forloop.counter }}"
-          hx-trigger="load"
-        {% elif active_experiment_id is None and forloop.counter == 1 %}
-          hx-trigger="load"
+        {% if experiment.id == active_experiment.id %}
+          class="cursor-pointer bg-gray-300"
         {% else %}
-          hx-trigger="click once"
+          class="cursor-pointer"
         {% endif %}
-        load
-        hx-target="#row-{{ forloop.counter }}"
-        hx-swap="innerHTML"
+
+        x-on:click="window.location.href = new URL('{% url 'participants:single-participant-home-for-experiment' participant.team.slug participant.id experiment.id %}', window.location.origin)"
       >
         <td class="whitespace-nowrap px-3 py-4 text-sm text-gray-500">
           {% include 'generic/chip.html' with chip=experiment.as_chip %}
@@ -35,11 +26,16 @@
         <td class="whitespace-nowrap px-3 py-4 text-sm text-gray-500">{{ experiment.joined_on|default:"" }}</td>
         <td class="px-3 py-4 text-sm text-gray-500">{{ experiment.last_message|default:"" }}</td>
         <td class="">
-          <i class="fa-solid fa-chevron-down" x-show="experimentsRow !== {{ forloop.counter }}"></i>
-          <i class="fa-solid fa-chevron-up" x-show="experimentsRow === {{ forloop.counter }}" x-cloak></i>
+          {% if experiment.id == active_experiment.id %}
+            <i class="fa-solid fa-chevron-down"></i>
+          {% else %}
+            <i class="fa-solid fa-chevron-up"></i>
+          {% endif %}
         </td>
       </tr>
-      <tr id="row-{{ forloop.counter }}" x-show="experimentsRow === {{ forloop.counter }}" x-cloak></tr>
+      {% if experiment.id == active_experiment.id %}
+        {% include 'participants/partials/experiment_data.html' with experiment=active_experiment %}
+      {% endif %}
     {% endfor %}
   </tbody>
 </table>
@@ -65,5 +61,14 @@
         this.selectionStart = this.selectionEnd = start + 1;
       }
     });
+  })
+
+  document.addEventListener('alpine:init', () => {
+    Alpine.data('changeHandler', () => ({
+      experimentsRow: 1,
+      changeExperiment(redirectUrl) {
+        window.location.href = redirectUrl;
+      }
+    }))
   })
 </script>
