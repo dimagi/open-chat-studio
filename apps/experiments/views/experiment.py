@@ -2,6 +2,7 @@ import json
 import logging
 import uuid
 from datetime import datetime
+from typing import cast
 from urllib.parse import quote
 
 import jwt
@@ -32,6 +33,7 @@ from waffle import flag_is_active
 
 from apps.annotations.models import Tag
 from apps.assistants.sync import get_diff_with_openai_assistant, get_out_of_sync_files
+from apps.channels.datamodels import Attachment, AttachmentType
 from apps.channels.exceptions import ExperimentChannelException
 from apps.channels.forms import ChannelForm
 from apps.channels.models import ChannelPlatform, ExperimentChannel
@@ -920,7 +922,7 @@ def experiment_session_message(request, team_slug: str, experiment_id: uuid.UUID
         )
         for uploaded_file in uploaded_files.getlist(resource_type):
             new_file = File.objects.create(name=uploaded_file.name, file=uploaded_file, team=request.team)
-            attachments.append({"type": resource_type, "file_id": new_file.id})
+            attachments.append(Attachment.from_file(new_file, cast(AttachmentType, resource_type)))
             created_files.append(new_file)
 
         tool_resource.files.add(*created_files)
@@ -932,7 +934,7 @@ def experiment_session_message(request, team_slug: str, experiment_id: uuid.UUID
         experiment_session_id=session.id,
         experiment_id=experiment_version.id,
         message_text=message_text,
-        attachments=attachments,
+        attachments=[att.model_dump() for att in attachments],
     )
     version_specific_vars = {
         "assistant": experiment_version.get_assistant(),
