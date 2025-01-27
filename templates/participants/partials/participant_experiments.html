@@ -18,7 +18,7 @@
           class="cursor-pointer"
         {% endif %}
 
-        x-on:click="window.location.href = new URL('{% url 'participants:single-participant-home-for-experiment' participant.team.slug participant.id experiment.id %}', window.location.origin)"
+        x-on:click="window.location.href = new URL('{% url 'participants:single-participant-home' participant.team.slug participant.id experiment.id %}', window.location.origin)"
       >
         <td class="whitespace-nowrap px-3 py-4 text-sm text-gray-500">
           {% include 'generic/chip.html' with chip=experiment.as_chip %}

@@ -114,7 +114,11 @@ class EditParticipantData(LoginAndTeamRequiredMixin, TemplateView, PermissionReq
             team=request.team,
             defaults={"team": experiment.team, "data": new_data},
         )
-        return redirect(reverse("participants:single-participant-home", args=[self.request.team.slug, participant_id]))
+        return redirect(
+            reverse(
+                "participants:single-participant-home", args=[self.request.team.slug, participant_id, experiment.id]
+            )
+        )
 
 
 @login_and_team_required

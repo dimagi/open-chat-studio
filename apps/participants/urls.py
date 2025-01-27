@@ -6,11 +6,10 @@ from apps.participants import views
 app_name = "participants"
 
 urlpatterns = [
-    path("<int:participant_id>/", views.SingleParticipantHome.as_view(), name="single-participant-home"),
     path(
         "<int:participant_id>/e/<int:experiment_id>",
         views.SingleParticipantHome.as_view(),
-        name="single-participant-home-for-experiment",
+        name="single-participant-home",
     ),
     path(
         "<int:participant_id>/data/<int:experiment_id>/update",

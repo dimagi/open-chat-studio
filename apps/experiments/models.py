@@ -1266,12 +1266,11 @@ class Participant(BaseTeamModel):
         )
 
     def get_absolute_url(self):
-        return reverse("participants:single-participant-home", args=[self.team.slug, self.id])
+        experiment = self.get_experiments_for_display().first()
+        return self.get_link_to_experiment_data(experiment)
 
     def get_link_to_experiment_data(self, experiment: Experiment) -> str:
-        return reverse(
-            "participants:single-participant-home-for-experiment", args=[self.team.slug, self.id, experiment.id]
-        )
+        return reverse("participants:single-participant-home", args=[self.team.slug, self.id, experiment.id])
 
     def get_experiments_for_display(self):
         """Used by the html templates to display various stats about the participant's participation."""
