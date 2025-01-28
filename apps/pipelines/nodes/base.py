@@ -103,7 +103,9 @@ class PipelineNode(BaseModel, ABC):
     _config: RunnableConfig | None = None
     name: str = Field(title="Node Name", json_schema_extra={"ui:widget": "node_name"})
 
-    def process(self, node_id: str, incoming_edges: list, state: PipelineState, config) -> PipelineState:
+    def process(
+        self, node_id: str, incoming_edges: list, state: PipelineState, config: RunnableConfig
+    ) -> PipelineState:
         from apps.channels.datamodels import Attachment
 
         self._config = config
