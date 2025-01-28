@@ -1,7 +1,11 @@
+import logging
+
 import pypdf
 from pydantic import BaseModel, Field
 
 from apps.files.models import File
+
+logger = logging.getLogger("ocs.documents")
 
 
 class FileReadException(Exception):
@@ -45,6 +49,7 @@ def get_file_content_reader(content_type) -> callable:
     if mime_class in READERS:
         return READERS[mime_class]
 
+    logger.warning(f"No reader found for content type {content_type}. Using default text reader.")
     return read_text
 
 
