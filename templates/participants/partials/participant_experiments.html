@@ -62,13 +62,4 @@
       }
     });
   })
-
-  document.addEventListener('alpine:init', () => {
-    Alpine.data('changeHandler', () => ({
-      experimentsRow: 1,
-      changeExperiment(redirectUrl) {
-        window.location.href = redirectUrl;
-      }
-    }))
-  })
 </script>
