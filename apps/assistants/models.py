@@ -186,7 +186,7 @@ class OpenAiAssistant(BaseTeamModel, VersionsMixin, CustomActionOperationMixin):
                 if (
                     version.get_related_experiments_queryset().exists()
                     or version.get_related_pipeline_node_queryset().exists()
-                    or self.get_related_experiments_with_pipeline_queryset().exists()
+                    or version.get_related_experiments_with_pipeline_queryset().exists()
                 ):
                     return False
             for version in self.versions.all():
@@ -198,6 +198,7 @@ class OpenAiAssistant(BaseTeamModel, VersionsMixin, CustomActionOperationMixin):
         return True
 
     def get_related_experiments_queryset(self, assistant_ids: list = None):
+        """Returns working versions and published experiments containing the assistant ids"""
         if assistant_ids:
             return Experiment.objects.filter(
                 Q(working_version_id=None) | Q(is_default_version=True),
@@ -208,6 +209,7 @@ class OpenAiAssistant(BaseTeamModel, VersionsMixin, CustomActionOperationMixin):
         return self.experiment_set.filter(Q(working_version_id=None) | Q(is_default_version=True), is_archived=False)
 
     def get_related_pipeline_node_queryset(self, assistant_ids: list = None):
+        """Returns working version pipelines with assistant nodes containing the assistant ids"""
         assistant_ids = assistant_ids if assistant_ids else [str(self.id)]
         return Node.objects.filter(type="AssistantNode").filter(
             pipeline__working_version_id=None,
@@ -216,20 +218,22 @@ class OpenAiAssistant(BaseTeamModel, VersionsMixin, CustomActionOperationMixin):
         )
 
     def get_related_experiments_with_pipeline_queryset(self, assistant_ids: list = None):
+        """Returns published experiment versions referenced by versioned pipelines with assistant nodes
+        containing the assistant ids"""
         assistant_ids = assistant_ids if assistant_ids else [str(self.id)]
         nodes = Node.objects.filter(type="AssistantNode").filter(
             pipeline__working_version_id__isnull=False,
             params__assistant_id__in=assistant_ids,
             pipeline__is_archived=False,
         )
-        if nodes.exists():
-            pipeline_ids = nodes.values_list("pipeline_id", flat=True)
+
+        if pipeline_ids := nodes.values_list("pipeline_id", flat=True):
             return Experiment.objects.filter(
                 is_default_version=True,
                 pipeline_id__in=pipeline_ids,
                 is_archived=False,
             )
-        return nodes
+        return Experiment.objects.none()
 
 
 @audit_fields(
