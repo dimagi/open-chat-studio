@@ -47,7 +47,7 @@ class VersionField:
 
     name: str = ""
     raw_value: Any | None = None
-    to_display: callable = None
+    to_display: callable = data_field(default=lambda x: x)
     group_name: str = data_field(default="General")
     previous_field_version: "VersionField" = data_field(default=None)
     changed: bool = False
@@ -80,10 +80,10 @@ class VersionField:
 
     def display_value(self) -> Any:
         if self.queryset:
-            return self.queryset_results
-        if self.to_display and self.current_value:
+            return self.to_display(self.queryset_results)
+        if self.current_value:
             return self.to_display(self.current_value)
-        return self.current_value or ""
+        return ""
 
     def _get_fields_to_exclude(self) -> list[str]:
         if self.current_value:
