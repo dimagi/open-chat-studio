@@ -62,6 +62,8 @@ class PipelineState(dict):
         copy = self.copy()
         if "experiment_session" in copy:
             copy["experiment_session"] = copy["experiment_session"].id
+        if "attachments" in copy.get("shared_state", {}):
+            copy["shared_state"]["attachments"] = [att.model_dump() for att in copy["shared_state"]["attachments"]]
         return copy
 
     @classmethod
