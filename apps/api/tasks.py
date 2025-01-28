@@ -43,8 +43,6 @@ def setup_connect_channels_for_bots(self, connect_id: UUID, experiment_data_map:
 
     connect_client = CommCareConnectClient()
 
-    # TODO: Refactor when experiment_id is directly on the ParticipantData table
-    # https://github.com/dimagi/open-chat-studio/issues/1046
     channels = ExperimentChannel.objects.filter(
         platform=ChannelPlatform.COMMCARE_CONNECT,
         experiment_id__in=[participant_data.experiment_id for participant_data in participant_data],

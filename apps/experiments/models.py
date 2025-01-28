@@ -684,6 +684,9 @@ class Experiment(BaseTeamModel, VersionsMixin, CustomActionOperationMixin):
         """Returns the default experiment, or if there is none, the working experiment"""
         return Experiment.objects.get_default_or_working(self)
 
+    def as_chip(self) -> Chip:
+        return Chip(label=self.name, url=self.get_absolute_url())
+
     def get_chat_model(self):
         service = self.get_llm_service()
         provider_model_name = self.get_llm_provider_model_name()
@@ -1263,7 +1266,12 @@ class Participant(BaseTeamModel):
         )
 
     def get_absolute_url(self):
-        return reverse("participants:single-participant-home", args=[self.team.slug, self.id])
+        experiment = self.get_experiments_for_display().first()
+        return self.get_link_to_experiment_data(experiment)
+
+    def get_link_to_experiment_data(self, experiment: Experiment) -> str:
+        url = reverse("participants:single-participant-home", args=[self.team.slug, self.id, experiment.id])
+        return f"{url}#{experiment.id}"
 
     def get_experiments_for_display(self):
         """Used by the html templates to display various stats about the participant's participation."""
@@ -1489,7 +1497,10 @@ class ExperimentSession(BaseTeamModel):
 
     def get_participant_chip(self) -> Chip:
         if self.participant:
-            return Chip(label=str(self.participant), url=self.participant.get_absolute_url())
+            return Chip(
+                label=str(self.participant),
+                url=self.participant.get_link_to_experiment_data(experiment=self.experiment),
+            )
         else:
             return Chip(label="Anonymous", url="")
 

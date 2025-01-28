@@ -80,7 +80,24 @@ class SingleParticipantHome(LoginAndTeamRequiredMixin, TemplateView, PermissionR
         participant = Participant.objects.get(id=self.kwargs["participant_id"])
         context["active_tab"] = "participants"
         context["participant"] = participant
-        context["experiments"] = participant.get_experiments_for_display()
+        participant_experiments = participant.get_experiments_for_display()
+
+        if experiment_id := self.kwargs.get("experiment_id"):
+            experiment = participant_experiments.get(id=experiment_id)
+        else:
+            experiment = participant_experiments.first()
+
+        context["experiments"] = participant_experiments
+        context["selected_experiment"] = experiment
+        context["session_table"] = ExperimentSessionsTable(
+            participant.experimentsession_set.filter(experiment=experiment).all(),
+            extra_columns=[("participant", None)],  # remove participant column
+        )
+        data = participant.get_data_for_experiment(experiment)
+        context["participant_data"] = json.dumps(data, indent=4)
+        context["participant_schedules"] = participant.get_schedules_for_experiment(
+            experiment, as_dict=True, include_complete=True
+        )
         return context
 
 
@@ -97,29 +114,12 @@ class EditParticipantData(LoginAndTeamRequiredMixin, TemplateView, PermissionReq
             team=request.team,
             defaults={"team": experiment.team, "data": new_data},
         )
-        return redirect(reverse("participants:single-participant-home", args=[self.request.team.slug, participant_id]))
-
-
-class ExperimentData(LoginAndTeamRequiredMixin, TemplateView, PermissionRequiredMixin):
-    permission_required = "experiments.view_participant"
-    template_name = "participants/partials/experiment_data.html"
-
-    def get_context_data(self, *args, **kwargs):
-        context = super().get_context_data(*args, **kwargs)
-        experiment = get_object_or_404(Experiment, id=self.kwargs["experiment_id"])
-        participant = Participant.objects.get(id=self.kwargs["participant_id"])
-        context["participant"] = participant
-        context["experiment"] = experiment
-        context["session_table"] = ExperimentSessionsTable(
-            participant.experimentsession_set.filter(experiment=experiment).all(),
-            extra_columns=[("participant", None)],  # remove participant column
+        return redirect(
+            reverse(
+                "participants:single-participant-home", args=[self.request.team.slug, participant_id, experiment.id]
+            )
+            + f"#{experiment.id}"
         )
-        data = participant.get_data_for_experiment(experiment)
-        context["participant_data"] = json.dumps(data, indent=4)
-        context["participant_schedules"] = participant.get_schedules_for_experiment(
-            experiment, as_dict=True, include_complete=True
-        )
-        return context
 
 
 @login_and_team_required
