@@ -179,6 +179,9 @@ class VersionsMixin:
         return not self.is_archived
 
     def get_version_name(self):
+        """Returns version name in form of v + version number, or unreleased if working version."""
+        if self.is_working_version:
+            return "unreleased"
         return f"v{self.version_number}"
 
 
