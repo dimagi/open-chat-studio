@@ -102,10 +102,6 @@ class VersionFieldDisplayFormatters:
         """code_interpreter, file_search -> Code Interpreter, File Search"""
         return ", ".join([tool.replace("_", " ").capitalize() for tool in tools])
 
-    @staticmethod
-    def format_nodes(node):
-        return node.params["name"]
-
 
 class VersionsObjectManagerMixin:
     def get_all(self):

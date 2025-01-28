@@ -337,8 +337,6 @@ class Pipeline(BaseTeamModel, VersionsMixin):
 
     @property
     def version_details(self) -> VersionDetails:
-        from apps.experiments.models import VersionFieldDisplayFormatters
-
         reserved_types = ["StartNode", "EndNode"]
 
         return VersionDetails(
@@ -348,7 +346,6 @@ class Pipeline(BaseTeamModel, VersionsMixin):
                 VersionField(
                     name="nodes",
                     queryset=self.node_set.exclude(type__in=reserved_types),
-                    to_display=VersionFieldDisplayFormatters.format_nodes,
                 ),
             ],
         )
