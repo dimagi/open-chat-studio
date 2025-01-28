@@ -682,7 +682,7 @@ class AssistantNode(PipelineNode):
         session: ExperimentSession | None = state.get("experiment_session")
         runnable = self._get_assistant_runnable(assistant, session=session, node_id=node_id)
         attachments = self._get_attachments(state)
-        chain_output: ChainOutput = runnable.invoke(input, config={}, attachments=attachments)
+        chain_output: ChainOutput = runnable.invoke(input, config=self._config, attachments=attachments)
         output = chain_output.output
 
         return PipelineState.from_node_output(
@@ -699,8 +699,11 @@ class AssistantNode(PipelineNode):
         return [att for att in state.get("shared_state", {}).get("attachments", []) if att.upload_to_assistant]
 
     def _get_assistant_runnable(self, assistant: OpenAiAssistant, session: ExperimentSession, node_id: str):
+        trace_service = session.experiment.trace_service
+        trace_service.from_callback_manager(self._config.get("callbacks"))
+
         history_manager = PipelineHistoryManager.for_assistant()
-        adapter = AssistantAdapter.for_pipeline(session=session, node=self)
+        adapter = AssistantAdapter.for_pipeline(session=session, node=self, trace_service=trace_service)
         if assistant.tools_enabled:
             return AgentAssistantChat(adapter=adapter, history_manager=history_manager)
         else:
