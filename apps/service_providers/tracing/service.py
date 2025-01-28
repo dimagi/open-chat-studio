@@ -30,7 +30,7 @@ class TraceService:
     def get_current_trace_info(self) -> TraceInfo | None:
         return None
 
-    def from_callback_manager(self, callback_manager: CallbackManager):
+    def initialize_from_callback_manager(self, callback_manager: CallbackManager):
         pass
 
 
@@ -55,7 +55,7 @@ class LangFuseTraceService(TraceService):
         self._callback = CallbackHandler(user_id=participant_id, session_id=session_id, **self.config)
         return self._callback
 
-    def from_callback_manager(self, callback_manager: CallbackManager):
+    def initialize_from_callback_manager(self, callback_manager: CallbackManager):
         """
         Populates the callback from the callback handler already configured in `callback_manager`. This allows the trace
         service to reuse existing callbacks.
