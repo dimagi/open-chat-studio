@@ -90,36 +90,42 @@ class TestAssistantArchival:
         assert assistant.is_archived is True  # archiving succeeded
 
     @patch("apps.assistants.sync.push_assistant_to_openai", Mock())
-    def test_asistant_archive_blocked_by_working_related_experiment(self):
+    def test_assistant_archive_blocked_by_working_related_experiment(self):
         assistant = OpenAiAssistantFactory()
         experiment = ExperimentFactory(assistant=assistant)
         experiment.save()
 
         assert experiment.is_working_version is True
-        assistant.archive()
-        assistant.refresh_from_db()
-        assert assistant.is_archived is False  # archiving blocked
+        assert not assistant.archive()  # archiving blocked
 
     @patch("apps.assistants.sync.push_assistant_to_openai", Mock())
-    def test_asistant_archive_blocked_by_published_related_experiment(self):
+    def test_assistant_archive_blocked_by_published_related_experiment(self):
+        assistant = OpenAiAssistantFactory()
+        exp_v1 = ExperimentFactory()
+        exp_v2 = exp_v1.create_new_version(make_default=True)
+        exp_v2.assistant = assistant
+        exp_v2.save()
+
+        assert not assistant.archive()  # archiving blocked
+
+    @patch("apps.assistants.sync.push_assistant_to_openai", Mock())
+    def test_assistant_blocked_by_assistant_version_referenced_by_unpublished_related_experiment(self):
         assistant = OpenAiAssistantFactory()
         v2_assistant = assistant.create_new_version()
         experiment = ExperimentFactory(assistant=v2_assistant)
         experiment.save()
 
-        assistant.archive()
-        assert assistant.is_archived is False  # archiving failed
-        assert v2_assistant.is_archived is False
+        assert experiment.is_working_version is True
+
+        assert not assistant.archive()  # archiving failed
+        assert not v2_assistant.archive()  # archiving failed
 
         experiment.archive()  # first archive related experiment through v2_assistant
-        assistant.archive()
-        v2_assistant.refresh_from_db()
-
-        assert assistant.is_archived is True  # archiving successful
-        assert v2_assistant.is_archived is True
+        assert assistant.archive()  # archiving successful
+        assert v2_assistant.archive()  # archiving successful
 
     @patch("apps.assistants.sync.push_assistant_to_openai", Mock())
-    def test_archive_assistant_succeeds_with_released_related_pipeline(self):
+    def test_archive_assistant_succeeds_with_unpublished_related_pipeline(self):
         pipeline = PipelineFactory()
         exp_v1 = ExperimentFactory(pipeline=pipeline)
         exp_v2 = exp_v1.create_new_version()
@@ -129,10 +135,7 @@ class TestAssistantArchival:
         exp_v2.save()
 
         assert exp_v2.pipeline.is_working_version is False
-        assistant.archive()
-        assistant.refresh_from_db()
-
-        assert assistant.is_archived is True  # archiving successful
+        assert assistant.archive()  # archiving successful
 
     @patch("apps.assistants.sync.push_assistant_to_openai", Mock())
     def test_archive_assistant_fails_with_working_related_versioned_pipeline_and_working_experiment(self):
@@ -150,13 +153,12 @@ class TestAssistantArchival:
         assert exp_v2.is_default_version is True
         assert exp_v2.is_working_version is False
         assistant.archive()
-        assert assistant.is_archived is False  # archiving failed
+        assert not assistant.archive()  # archiving failed
 
         exp_v2.archive()
-        assistant.archive()
 
         assert exp_v2.is_archived is True
-        assert assistant.is_archived is True  # archiving successful
+        assert assistant.archive()  # archiving successful
 
     @patch("apps.assistants.sync.push_assistant_to_openai", Mock())
     def test_archive_assistant_fails_with_working_related_pipeline(self):
@@ -166,10 +168,9 @@ class TestAssistantArchival:
 
         assert pipeline.is_working_version is True
         assistant.archive()
-        assert assistant.is_archived is False  # archiving failed
+        assert not assistant.archive()  # archiving failed
 
         pipeline.archive()
-        assistant.archive()
 
         assert pipeline.is_archived is True
-        assert assistant.is_archived is True  # archiving successful
+        assert assistant.archive()  # archiving successful
