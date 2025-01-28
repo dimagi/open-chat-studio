@@ -58,20 +58,22 @@ const getWidgetsGeneric = (
 ) => {
   const schemaProperties = Object.getOwnPropertyNames(schema.properties);
   const requiredProperties = schema.required || [];
-  if (schema["ui:order"]) {
-    schemaProperties.sort((a, b) => {
-      // 'name' should always be first
-      if (a === "name") return -1;
-      if (b === "name") return 1;
+  schemaProperties.sort((a, b) => {
+    // 'name' should always be first
+    if (a === "name") return -1;
+    if (b === "name") return 1;
 
+    if (schema["ui:order"]) {
       const indexA = schema["ui:order"]!.indexOf(a);
       const indexB = schema["ui:order"]!.indexOf(b);
       // If 'a' is not in the order list, it should be at the end
       if (indexA === -1) return 1;
       if (indexB === -1) return -1;
       return indexA - indexB;
-    });
-  }
+    } else {
+      return 0;
+    }
+  });
   return schemaProperties.map((name) => (
     <React.Fragment key={name}>
       {widgetGenerator({
