@@ -713,8 +713,8 @@ DEFAULT_FUNCTION = """# You must define a main function, which takes the node in
 # Available functions:
 # - get_participant_data() -> dict
 # - set_participant_data(data: Any) -> None
-# - get_state_key(key_name: str) -> str | None
-# - set_state_key(key_name: str, data: Any) -> None
+# - get_temp_state_key(key_name: str) -> str | None
+# - set_temp_state_key(key_name: str, data: Any) -> None
 
 def main(input: str, **kwargs) -> str:
     return input
@@ -801,25 +801,25 @@ class CodeNode(PipelineNode):
                 "_write_": lambda x: x,
                 "get_participant_data": participant_data_proxy.get,
                 "set_participant_data": participant_data_proxy.set,
-                "get_state_key": self._get_state_key(state),
-                "set_state_key": self._set_state_key(state),
+                "get_temp_state_key": self._get_temp_state_key(state),
+                "set_temp_state_key": self._set_temp_state_key(state),
             }
         )
         return custom_globals
 
-    def _get_state_key(self, state: PipelineState):
-        def get_state_key(key_name: str):
+    def _get_temp_state_key(self, state: PipelineState):
+        def get_temp_state_key(key_name: str):
             return state["temp_state"].get(key_name)
 
-        return get_state_key
+        return get_temp_state_key
 
-    def _set_state_key(self, state: PipelineState):
-        def set_state_key(key_name: str, value):
+    def _set_temp_state_key(self, state: PipelineState):
+        def set_temp_state_key(key_name: str, value):
             if key_name in {"user_input", "outputs", "attachments"}:
                 raise PipelineNodeRunError(f"Cannot set the '{key_name}' key of the temporary state")
             state["temp_state"][key_name] = value
 
-        return set_state_key
+        return set_temp_state_key
 
     def _get_custom_builtins(self):
         allowed_modules = {

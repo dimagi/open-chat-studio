@@ -352,14 +352,14 @@ export function CodeModal(
       detail: "Overwrites the participant data with the value provided",
       boost: 1
     }),
-    set_state_key: snip("set_state_key(\"${key_name}\", ${data})", {
-      label: "set_state_key",
+    set_temp_state_key: snip("set_temp_state_key(\"${key_name}\", ${data})", {
+      label: "set_temp_state_key",
       type: "keyword",
       detail: "Sets the given key in the temporary state. Overwrites the current value",
       boost: 1
     }),
-    get_state_key: snip("get_state_key(\"${key_name}\")", {
-        label: "get_state_key",
+    get_temp_state_key: snip("get_temp_state_key(\"${key_name}\")", {
+        label: "get_temp_state_key",
         type: "keyword",
         detail: "Gets the value for the given key from the temporary state",
         boost: 1

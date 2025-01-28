@@ -382,9 +382,9 @@ def test_static_router_temp_state(pipeline, experiment_session):
     code_set = """
 def main(input, **kwargs):
     if "go to first" in input.lower():
-        set_state_key("route_to", "first")
+        set_temp_state_key("route_to", "first")
     elif "go to second" in input.lower():
-        set_state_key("route_to", "second")
+        set_temp_state_key("route_to", "second")
     return input
 """
     start = start_node()
@@ -472,7 +472,7 @@ def test_static_router_participant_data(pipeline, experiment_session):
 def test_attachments_in_code_node(pipeline, experiment_session):
     code_set = """
 def main(input, **kwargs):
-    attachments = get_state_key("attachments")
+    attachments = get_temp_state_key("attachments")
     kwargs["logger"].info([att.model_dump() for att in attachments])
     return ",".join([att.name for att in attachments])
 """
