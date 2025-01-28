@@ -71,7 +71,7 @@ class VersionField:
 
     def __post_init__(self):
         self.label = self.name.replace("_", " ").title()
-        if self.current_value and not hasattr(self.current_value, "version"):
+        if self.current_value and not hasattr(self.current_value, "version_details"):
             return
 
         if self.queryset:
@@ -104,10 +104,10 @@ class VersionField:
                 self.changed = self.current_value.id != self.previous_value.id
             case "versioned_model":
                 # Versioned models should be explored in order to determine what changed
-                if hasattr(self.current_value, "version"):
+                if hasattr(self.current_value, "version_details"):
                     # Compare only the fields specified in the returned version
-                    current_version = self.current_value.version if self.current_value else None
-                    previous_version = self.previous_value.version if self.previous_value else None
+                    current_version = self.current_value.version_details if self.current_value else None
+                    previous_version = self.previous_value.version_details if self.previous_value else None
                     if current_version and previous_version:
                         # Only when there is a previous and current version can we compare
                         current_version.compare(previous_version, early_abort=early_abort)
@@ -208,7 +208,7 @@ class VersionField:
 
 
 @dataclass
-class Version:
+class VersionDetails:
     instance: Any
     fields: list[VersionField]
     fields_changed: bool = False
@@ -238,7 +238,7 @@ class Version:
             group_info.fields.append(field)
         return list(groups.values())
 
-    def compare(self, previous_version_details: "Version", early_abort: bool = False):
+    def compare(self, previous_version_details: "VersionDetails", early_abort: bool = False):
         """
         Compares the current instance with the previous version and updates the changed status of fields.
 

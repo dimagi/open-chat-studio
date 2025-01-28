@@ -10,7 +10,7 @@ from field_audit.models import AuditAction, AuditingManager
 from apps.chat.agent.tools import get_assistant_tools
 from apps.custom_actions.mixins import CustomActionOperationMixin
 from apps.experiments.models import VersionsMixin, VersionsObjectManagerMixin
-from apps.experiments.versioning import Version, VersionField
+from apps.experiments.versioning import VersionDetails, VersionField
 from apps.teams.models import BaseTeamModel
 from apps.utils.models import BaseModel
 
@@ -199,10 +199,10 @@ class OpenAiAssistant(BaseTeamModel, VersionsMixin, CustomActionOperationMixin):
         )
 
     @property
-    def version(self) -> Version:
+    def version_details(self) -> VersionDetails:
         from apps.experiments.models import VersionFieldDisplayFormatters
 
-        return Version(
+        return VersionDetails(
             instance=self,
             fields=[
                 VersionField(group_name="General", name="name", raw_value=self.name.split(" v")[0]),

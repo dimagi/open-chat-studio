@@ -1,7 +1,7 @@
 import pytest
 
 from apps.experiments.models import Experiment, VersionsMixin
-from apps.experiments.versioning import Version, VersionField, differs
+from apps.experiments.versioning import VersionDetails, VersionField, differs
 from apps.utils.factories.experiment import ExperimentFactory, ExperimentSessionFactory
 
 
@@ -44,21 +44,21 @@ def test_differs():
 class TestVersion:
     def test_compare(self):
         instance1 = ExperimentFactory.build(temperature=0.1)
-        version1 = Version(
+        version1 = VersionDetails(
             instance=instance1,
             fields=[
                 VersionField(group_name="G1", name="the_temperature", raw_value=instance1.temperature),
             ],
         )
         similar_instance = instance1
-        similar_version2 = Version(
+        similar_version2 = VersionDetails(
             instance=similar_instance,
             fields=[
                 VersionField(group_name="G1", name="the_temperature", raw_value=similar_instance.temperature),
             ],
         )
         different_instance = ExperimentFactory.build(temperature=0.2)
-        different_version2 = Version(
+        different_version2 = VersionDetails(
             instance=different_instance,
             fields=[
                 VersionField(group_name="G1", name="the_temperature", raw_value=different_instance.temperature),
@@ -85,16 +85,16 @@ class TestVersion:
         experiment.temperature = 1
         experiment.save()
 
-        working_version = experiment.version
-        version_version = exp_version.version
+        working_version = experiment.version_details
+        version_version = exp_version.version_details
 
         working_version.compare(version_version)
         changed_fields = [field.name for field in working_version.fields if field.changed]
         assert len(changed_fields) == 2
 
         # Early abort should only detect one change
-        working_version = experiment.version
-        version_version = exp_version.version
+        working_version = experiment.version_details
+        version_version = exp_version.version_details
         working_version.compare(version_version, early_abort=True)
         changed_fields = [field.name for field in working_version.fields if field.changed]
         assert len(changed_fields) == 1
@@ -157,12 +157,12 @@ class TestVersion:
     def test_type_error_raised(self):
         """A type error should be raised when comparing versions of differing types"""
         instance1 = ExperimentFactory.build()
-        version1 = Version(
+        version1 = VersionDetails(
             instance=instance1,
             fields=[],
         )
 
-        version2 = Version(
+        version2 = VersionDetails(
             instance=ExperimentSessionFactory.build(),
             fields=[],
         )
@@ -172,9 +172,9 @@ class TestVersion:
 
     def test_fields_grouped(self, experiment):
         new_version = experiment.create_new_version()
-        original_version = experiment.version
-        original_version.compare(new_version.version)
-        all_groups = set([field.group_name for field in experiment.version.fields])
+        original_version = experiment.version_details
+        original_version.compare(new_version.version_details)
+        all_groups = set([field.group_name for field in experiment.version_details.fields])
         collected_group_names = []
         for group in original_version.fields_grouped:
             collected_group_names.append(group.name)
@@ -185,7 +185,7 @@ class TestVersion:
         # Let's change something
         new_version.temperature = new_version.temperature + 0.1
 
-        original_version.compare(new_version.version)
+        original_version.compare(new_version.version_details)
         temerature_group_name = original_version.get_field("temperature").group_name
         # Find the temperature group and check that it reports a change
         for group in original_version.fields_grouped:

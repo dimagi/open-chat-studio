@@ -16,7 +16,7 @@ from apps.chat.models import ChatMessage, ChatMessageType
 from apps.custom_actions.form_utils import set_custom_actions
 from apps.custom_actions.mixins import CustomActionOperationMixin
 from apps.experiments.models import ExperimentSession, VersionsMixin, VersionsObjectManagerMixin
-from apps.experiments.versioning import Version, VersionField
+from apps.experiments.versioning import VersionDetails, VersionField
 from apps.pipelines.exceptions import PipelineBuildError
 from apps.pipelines.executor import patch_executor
 from apps.pipelines.flow import Flow, FlowNode, FlowNodeData
@@ -336,12 +336,12 @@ class Pipeline(BaseTeamModel, VersionsMixin):
         )
 
     @property
-    def version(self) -> Version:
+    def version_details(self) -> VersionDetails:
         from apps.experiments.models import VersionFieldDisplayFormatters
 
         reserved_types = ["StartNode", "EndNode"]
 
-        return Version(
+        return VersionDetails(
             instance=self,
             fields=[
                 VersionField(name="name", raw_value=self.name),
@@ -424,7 +424,7 @@ class Node(BaseModel, VersionsMixin, CustomActionOperationMixin):
                 assistant.archive()
 
     @property
-    def version(self) -> Version:
+    def version_details(self) -> VersionDetails:
         from apps.experiments.models import VersionFieldDisplayFormatters
 
         node_name = self.params.get("name", self.flow_id)
@@ -440,7 +440,7 @@ class Node(BaseModel, VersionsMixin, CustomActionOperationMixin):
                 VersionField(group_name=node_name, name=name, raw_value=value, to_display=display_formatter)
             )
 
-        return Version(
+        return VersionDetails(
             instance=self,
             fields=[VersionField(group_name=node_name, name="label", raw_value=self.label), *param_versions],
         )

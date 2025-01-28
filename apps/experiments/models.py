@@ -28,7 +28,7 @@ from apps.annotations.models import Tag
 from apps.chat.models import Chat, ChatMessage, ChatMessageType
 from apps.custom_actions.mixins import CustomActionOperationMixin
 from apps.experiments import model_audit_fields
-from apps.experiments.versioning import Version, VersionField, differs
+from apps.experiments.versioning import VersionDetails, VersionField, differs
 from apps.generics.chips import Chip
 from apps.teams.models import BaseTeamModel, Team
 from apps.utils.models import BaseModel
@@ -291,8 +291,8 @@ class SourceMaterial(BaseTeamModel, VersionsMixin):
         self.experiment_set.update(source_material=None, audit_action=AuditAction.AUDIT)
 
     @property
-    def version(self) -> Version:
-        return Version(
+    def version_details(self) -> VersionDetails:
+        return VersionDetails(
             instance=self,
             fields=[
                 VersionField(name="topic", raw_value=self.topic),
@@ -403,8 +403,8 @@ class Survey(BaseTeamModel, VersionsMixin):
         self.experiments_post.update(post_survey=None, audit_action=AuditAction.AUDIT)
 
     @property
-    def version(self) -> Version:
-        return Version(
+    def version_details(self) -> VersionDetails:
+        return VersionDetails(
             instance=self,
             fields=[
                 VersionField(name="name", raw_value=self.name),
@@ -480,8 +480,8 @@ class ConsentForm(BaseTeamModel, VersionsMixin):
         return super().get_fields_to_exclude() + ["is_default"]
 
     @property
-    def version(self) -> Version:
-        return Version(
+    def version_details(self) -> VersionDetails:
+        return VersionDetails(
             instance=self,
             fields=[
                 VersionField(name="name", raw_value=self.name),
@@ -879,9 +879,9 @@ class Experiment(BaseTeamModel, VersionsMixin, CustomActionOperationMixin):
         """
         Returns a boolean if the experiment differs from the lastest version
         """
-        version = self.version
+        version = self.version_details
         if prev_version := self.latest_version:
-            version.compare(prev_version.version, early_abort=True)
+            version.compare(prev_version.version_details, early_abort=True)
         return version.fields_changed
 
     @transaction.atomic()
@@ -975,12 +975,12 @@ class Experiment(BaseTeamModel, VersionsMixin, CustomActionOperationMixin):
         return identifier in self.participant_allowlist or self.team.members.filter(email=identifier).exists()
 
     @property
-    def version(self) -> Version:
+    def version_details(self) -> VersionDetails:
         """
         Returns a `Version` instance representing the experiment version.
         """
 
-        return Version(
+        return VersionDetails(
             instance=self,
             fields=[
                 VersionField(group_name="General", name="name", raw_value=self.name),
@@ -1202,8 +1202,8 @@ class ExperimentRoute(BaseTeamModel, VersionsMixin):
 
             if latest_child_version:
                 # Compare experimens using their `version` instances for a comprehensive comparison
-                child_version = self.child.version
-                latest_version = latest_child_version.version
+                child_version = self.child.version_details
+                latest_version = latest_child_version.version_details
                 child_version.compare(latest_version)
 
                 if not child_version.fields_changed:
@@ -1257,8 +1257,8 @@ class ExperimentRoute(BaseTeamModel, VersionsMixin):
             return set(results)
 
         # Now compare the children
-        version1 = self.child.version
-        version2 = route.child.version
+        version1 = self.child.version_details
+        version2 = route.child.version_details
         version1.compare(version2, early_abort=early_abort)
         child_changes = [field.name for field in version1.fields if field.changed]
 
