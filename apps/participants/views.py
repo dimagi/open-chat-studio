@@ -118,6 +118,7 @@ class EditParticipantData(LoginAndTeamRequiredMixin, TemplateView, PermissionReq
             reverse(
                 "participants:single-participant-home", args=[self.request.team.slug, participant_id, experiment.id]
             )
+            + f"#{experiment.id}"
         )
 
 

@@ -1270,7 +1270,8 @@ class Participant(BaseTeamModel):
         return self.get_link_to_experiment_data(experiment)
 
     def get_link_to_experiment_data(self, experiment: Experiment) -> str:
-        return reverse("participants:single-participant-home", args=[self.team.slug, self.id, experiment.id])
+        url = reverse("participants:single-participant-home", args=[self.team.slug, self.id, experiment.id])
+        return f"{url}#{experiment.id}"
 
     def get_experiments_for_display(self):
         """Used by the html templates to display various stats about the participant's participation."""
