@@ -149,7 +149,7 @@ def router_node(provider_id: str, provider_model_id: str, keywords: list[str]):
     }
 
 
-def state_key_router_node(route_key: str, keywords: list[str], data_source="shared_state"):
+def state_key_router_node(route_key: str, keywords: list[str], data_source="temp_state"):
     return {
         "id": str(uuid4()),
         "type": nodes.StaticRouterNode.__name__,

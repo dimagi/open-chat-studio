@@ -376,7 +376,7 @@ def test_router_node(get_llm_service, provider, provider_model, pipeline, experi
 
 @django_db_with_data(available_apps=("apps.service_providers",))
 @mock.patch("apps.pipelines.nodes.base.PipelineNode.logger", mock.Mock())
-def test_static_router_shared_state(pipeline, experiment_session):
+def test_static_router_temp_state(pipeline, experiment_session):
     # The static router will switch based on a state key, and pass its input through
 
     code_set = """
@@ -389,9 +389,7 @@ def main(input, **kwargs):
 """
     start = start_node()
     code = code_node(code_set)
-    router = state_key_router_node(
-        "route_to", ["first", "second"], data_source=StaticRouterNode.DataSource.shared_state
-    )
+    router = state_key_router_node("route_to", ["first", "second"], data_source=StaticRouterNode.DataSource.temp_state)
     template_a = render_template_node("A {{ input }}")
     template_b = render_template_node("B {{ input }}")
     end = end_node()

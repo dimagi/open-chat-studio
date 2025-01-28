@@ -44,7 +44,7 @@ def test_running_pipeline_creates_run(pipeline: Pipeline, session: ExperimentSes
             pipeline.node_ids[0]: {"message": "foo"},
             pipeline.node_ids[1]: {"message": "foo"},
         },
-        shared_state={"outputs": {"end": "foo", "start": "foo"}, "user_input": "foo", "attachments": []},
+        temp_state={"outputs": {"end": "foo", "start": "foo"}, "user_input": "foo", "attachments": []},
     )
 
     assert len(run.log["entries"]) == 8
