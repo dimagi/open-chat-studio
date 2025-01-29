@@ -28,8 +28,6 @@ anyio==4.4.0
     #   openai
 asgiref==3.8.1
     # via django
-async-timeout==5.0.1
-    # via redis
 attrs==23.1.0
     # via
     #   aiohttp
@@ -352,6 +350,8 @@ pyjwt[crypto]==2.8.0
     # via
     #   django-allauth
     #   twilio
+pypdf==5.2.0
+    # via -r requirements.in
 pypng==0.20220715.0
     # via qrcode
 pytelegrambotapi==4.12.0

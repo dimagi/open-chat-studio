@@ -92,6 +92,7 @@ PROJECT_APPS = [
     "apps.web.apps.WebConfig",
     "apps.teams",
     "apps.channels",
+    "apps.documents",
     "apps.service_providers",
     "apps.analysis",
     "apps.generics",

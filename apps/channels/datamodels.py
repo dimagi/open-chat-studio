@@ -48,16 +48,19 @@ class Attachment(BaseModel):
             logger.error(f"Attachment with id {self.file_id} not found", exc_info=True, extra=self.model_dump())
             return None
 
+    @cached_property
+    def document(self):
+        from apps.documents.readers import Document
+
+        return Document.from_file(self._file)
+
     def read_bytes(self):
         if not self._file:
             return b""
         return self._file.file.read()
 
     def read_string(self):
-        # TODO: error handling for read errors or decode errors
-        # TODO: large file handling (maybe limit file size?)
-        content = self.read_bytes()
-        return content.decode("utf-8")
+        return self.document.get_contents_as_string()
 
 
 class BaseMessage(BaseModel):
