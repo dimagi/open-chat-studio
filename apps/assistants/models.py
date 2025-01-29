@@ -214,6 +214,7 @@ class OpenAiAssistant(BaseTeamModel, VersionsMixin, CustomActionOperationMixin):
         return Node.objects.filter(type="AssistantNode").filter(
             pipeline__working_version_id=None,
             params__assistant_id__in=assistant_ids,
+            is_archived=False,
             pipeline__is_archived=False,
         )
 
@@ -224,6 +225,7 @@ class OpenAiAssistant(BaseTeamModel, VersionsMixin, CustomActionOperationMixin):
         nodes = Node.objects.filter(type="AssistantNode").filter(
             pipeline__working_version_id__isnull=False,
             params__assistant_id__in=assistant_ids,
+            is_archived=False,
             pipeline__is_archived=False,
         )
 
