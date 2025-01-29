@@ -1,5 +1,5 @@
 {
-  "description": "Routes the input to a linked node using the shared state of the pipeline",
+  "description": "Routes the input to a linked node using the temp state of the pipeline or participant data",
   "properties": {
     "name": {
       "title": "Node Name",
@@ -23,7 +23,7 @@
     "data_source": {
       "enum": [
         "participant_data",
-        "shared_state"
+        "temp_state"
       ],
       "title": "DataSource",
       "type": "string",
@@ -31,7 +31,7 @@
       "description": "The source of the data to use for routing",
       "ui:enumLabels": [
         "Participant Data",
-        "Shared State"
+        "Temporary State"
       ]
     },
     "route_key": {

@@ -28,7 +28,7 @@ def add_messages(left: dict, right: dict):
     return output
 
 
-def add_shared_state_messages(left: dict, right: dict):
+def add_temp_state_messages(left: dict, right: dict):
     output = {**left}
     try:
         output["outputs"].update(right["outputs"])
@@ -41,7 +41,7 @@ def add_shared_state_messages(left: dict, right: dict):
     return output
 
 
-class SharedState(TypedDict):
+class TempState(TypedDict):
     user_input: str
     outputs: dict
     attachments: list
@@ -52,7 +52,7 @@ class PipelineState(dict):
     outputs: Annotated[dict, add_messages]
     experiment_session: ExperimentSession
     pipeline_version: int
-    shared_state: Annotated[SharedState, add_shared_state_messages]
+    temp_state: Annotated[TempState, add_temp_state_messages]
     ai_message_id: int | None = None
     message_metadata: dict | None = None
     attachments: list = Field(default=[])
@@ -69,7 +69,7 @@ class PipelineState(dict):
     @classmethod
     def from_node_output(cls, node_name: str, node_id: str, output: Any = None, **kwargs) -> Self:
         kwargs["outputs"] = {node_id: {"message": output}}
-        kwargs["shared_state"] = {"outputs": {node_name: output}}
+        kwargs["temp_state"] = {"outputs": {node_name: output}}
         if output is not None:
             kwargs["messages"] = [output]
         return cls(**kwargs)
@@ -122,9 +122,9 @@ class PipelineNode(BaseModel, ABC):
         else:  # This is the first node in the graph
             input = state["messages"][-1]
 
-            # init shared state here to avoid having to do it in each place the pipeline is invoked
-            state["shared_state"]["user_input"] = input
-            state["shared_state"]["attachments"] = [
+            # init temp state here to avoid having to do it in each place the pipeline is invoked
+            state["temp_state"]["user_input"] = input
+            state["temp_state"]["attachments"] = [
                 Attachment.model_validate(att) for att in state.get("attachments", [])
             ]
         return self._process(input=input, state=state, node_id=node_id)

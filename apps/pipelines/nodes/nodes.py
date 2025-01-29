@@ -397,11 +397,11 @@ class RouterNode(RouterMixin, Passthrough, HistoryMixin):
 
 
 class StaticRouterNode(RouterMixin, Passthrough):
-    """Routes the input to a linked node using the shared state of the pipeline"""
+    """Routes the input to a linked node using the temp state of the pipeline or participant data"""
 
     class DataSource(TextChoices):
         participant_data = "participant_data", "Participant Data"
-        shared_state = "shared_state", "Shared State"
+        temp_state = "temp_state", "Temporary State"
 
     model_config = ConfigDict(
         json_schema_extra=NodeSchema(
@@ -423,7 +423,7 @@ class StaticRouterNode(RouterMixin, Passthrough):
         if self.data_source == self.DataSource.participant_data:
             data = ParticipantDataProxy.from_state(state).get()
         else:
-            data = state["shared_state"]
+            data = state["temp_state"]
 
         formatted_key = f"{{data.{self.route_key}}}"
         try:
@@ -696,7 +696,7 @@ class AssistantNode(PipelineNode):
         )
 
     def _get_attachments(self, state) -> list:
-        return [att for att in state.get("shared_state", {}).get("attachments", []) if att.upload_to_assistant]
+        return [att for att in state.get("temp_state", {}).get("attachments", []) if att.upload_to_assistant]
 
     def _get_assistant_runnable(self, assistant: OpenAiAssistant, session: ExperimentSession, node_id: str):
         trace_service = session.experiment.trace_service
@@ -717,8 +717,8 @@ DEFAULT_FUNCTION = """# You must define a main function, which takes the node in
 # Available functions:
 # - get_participant_data() -> dict
 # - set_participant_data(data: Any) -> None
-# - get_state_key(key_name: str) -> str | None
-# - set_state_key(key_name: str, data: Any) -> None
+# - get_temp_state_key(key_name: str) -> str | None
+# - set_temp_state_key(key_name: str, data: Any) -> None
 
 def main(input: str, **kwargs) -> str:
     return input
@@ -805,25 +805,25 @@ class CodeNode(PipelineNode):
                 "_write_": lambda x: x,
                 "get_participant_data": participant_data_proxy.get,
                 "set_participant_data": participant_data_proxy.set,
-                "get_state_key": self._get_state_key(state),
-                "set_state_key": self._set_state_key(state),
+                "get_temp_state_key": self._get_temp_state_key(state),
+                "set_temp_state_key": self._set_temp_state_key(state),
             }
         )
         return custom_globals
 
-    def _get_state_key(self, state: PipelineState):
-        def get_state_key(key_name: str):
-            return state["shared_state"].get(key_name)
+    def _get_temp_state_key(self, state: PipelineState):
+        def get_temp_state_key(key_name: str):
+            return state["temp_state"].get(key_name)
 
-        return get_state_key
+        return get_temp_state_key
 
-    def _set_state_key(self, state: PipelineState):
-        def set_state_key(key_name: str, value):
+    def _set_temp_state_key(self, state: PipelineState):
+        def set_temp_state_key(key_name: str, value):
             if key_name in {"user_input", "outputs", "attachments"}:
-                raise PipelineNodeRunError(f"Cannot set the '{key_name}' key of the shared state")
-            state["shared_state"][key_name] = value
+                raise PipelineNodeRunError(f"Cannot set the '{key_name}' key of the temporary state")
+            state["temp_state"][key_name] = value
 
-        return set_state_key
+        return set_temp_state_key
 
     def _get_custom_builtins(self):
         allowed_modules = {
