@@ -98,6 +98,17 @@ class VersionFieldDisplayFormatters:
         return template.render({"chip": Chip(label=name, url=url)})
 
     @staticmethod
+    def format_pipeline(pipeline) -> str:
+        if not pipeline:
+            return ""
+        name = pipeline.name.split(f" v{pipeline.version_number}")[0]
+        template = get_template("generic/chip.html")
+        url = (
+            pipeline.get_absolute_url() if pipeline.is_working_version else pipeline.working_version.get_absolute_url()
+        )
+        return template.render({"chip": Chip(label=name, url=url)})
+
+    @staticmethod
     def format_builtin_tools(tools: set) -> str:
         """code_interpreter, file_search -> Code Interpreter, File Search"""
         return ", ".join([tool.replace("_", " ").capitalize() for tool in tools])
@@ -1068,7 +1079,12 @@ class Experiment(BaseTeamModel, VersionsMixin, CustomActionOperationMixin):
                     raw_value=self.assistant,
                     to_display=VersionFieldDisplayFormatters.format_assistant,
                 ),
-                VersionField(group_name="Pipeline", name="pipeline", raw_value=self.pipeline),
+                VersionField(
+                    group_name="Pipeline",
+                    name="pipeline",
+                    raw_value=self.pipeline,
+                    to_display=VersionFieldDisplayFormatters.format_pipeline,
+                ),
                 VersionField(group_name="Tracing", name="tracing_provider", raw_value=self.trace_provider),
                 # Triggers
                 VersionField(
