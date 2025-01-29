@@ -98,7 +98,7 @@ distro==1.8.0
     # via
     #   anthropic
     #   openai
-django==5.1.2
+django==5.1.5
     # via
     #   -r requirements.in
     #   django-allauth
