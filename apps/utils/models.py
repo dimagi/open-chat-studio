@@ -18,7 +18,7 @@ class VersioningMixin:
             if field.many_to_many or field.one_to_many:
                 current_values = getattr(self, field.attname)
                 if new:
-                    new_values = getattr(new, field.attname) if new else None
+                    new_values = getattr(new, field.attname)
                     new_value = set(new_values.values_list("id", flat=True))
                 else:
                     new_value = set([])
