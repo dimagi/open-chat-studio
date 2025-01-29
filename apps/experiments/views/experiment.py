@@ -2,6 +2,7 @@ import json
 import logging
 import uuid
 from datetime import datetime
+from typing import cast
 from urllib.parse import quote
 
 import jwt
@@ -32,6 +33,7 @@ from waffle import flag_is_active
 
 from apps.annotations.models import Tag
 from apps.assistants.sync import get_diff_with_openai_assistant, get_out_of_sync_files
+from apps.channels.datamodels import Attachment, AttachmentType
 from apps.channels.exceptions import ExperimentChannelException
 from apps.channels.forms import ChannelForm
 from apps.channels.models import ChannelPlatform, ExperimentChannel
@@ -157,9 +159,12 @@ class ExperimentSessionsTableView(SingleTableView, PermissionRequiredMixin):
     permission_required = "annotations.view_customtaggeditem"
 
     def get_queryset(self):
-        query_set = ExperimentSession.objects.with_last_message_created_at().filter(
-            team=self.request.team, experiment__id=self.kwargs["experiment_id"]
+        query_set = (
+            ExperimentSession.objects.with_last_message_created_at()
+            .filter(team=self.request.team, experiment__id=self.kwargs["experiment_id"])
+            .select_related("participant__user")
         )
+
         if not self.request.GET.get("show-all"):
             query_set = query_set.exclude(experiment_channel__platform=ChannelPlatform.API)
 
@@ -578,10 +583,10 @@ class CreateExperimentVersion(LoginAndTeamRequiredMixin, CreateView):
     def get_context_data(self, *args, **kwargs):
         context = super().get_context_data(*args, **kwargs)
         working_experiment = self.get_object()
-        version = working_experiment.version
+        version = working_experiment.version_details
         if prev_version := working_experiment.latest_version:
             # Populate diffs
-            version.compare(prev_version.version)
+            version.compare(prev_version.version_details)
 
         context["version_details"] = version
         context["experiment"] = working_experiment
@@ -917,7 +922,7 @@ def experiment_session_message(request, team_slug: str, experiment_id: uuid.UUID
         )
         for uploaded_file in uploaded_files.getlist(resource_type):
             new_file = File.objects.create(name=uploaded_file.name, file=uploaded_file, team=request.team)
-            attachments.append({"type": resource_type, "file_id": new_file.id})
+            attachments.append(Attachment.from_file(new_file, cast(AttachmentType, resource_type)))
             created_files.append(new_file)
 
         tool_resource.files.add(*created_files)
@@ -929,7 +934,7 @@ def experiment_session_message(request, team_slug: str, experiment_id: uuid.UUID
         experiment_session_id=session.id,
         experiment_id=experiment_version.id,
         message_text=message_text,
-        attachments=attachments,
+        attachments=[att.model_dump() for att in attachments],
     )
     version_specific_vars = {
         "assistant": experiment_version.get_assistant(),
@@ -1524,7 +1529,7 @@ def experiment_version_details(request, team_slug: str, experiment_id: int, vers
     except Experiment.DoesNotExist:
         raise Http404
 
-    context = {"version_details": experiment_version.version, "experiment": experiment_version}
+    context = {"version_details": experiment_version.version_details, "experiment": experiment_version}
     return render(request, "experiments/components/experiment_version_details_content.html", context)
 
 

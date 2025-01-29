@@ -1,3 +1,4 @@
+{% load i18n %}
 {% load django_tables2 %}
 <div class="app-card">
   <div class="grid grid-cols-6">
@@ -7,7 +8,10 @@
           <a href="#{{ title|slugify }}">{{ title }}</a>
         </h1>
         {% if info_link %}
-          <a class="mx-2 text-xs text-neutral-500" href="{{ info_link }}" target="_blank">Learn more <i class="text-xs fa-regular fa-circle-question"></i></a>
+          {% blocktranslate asvar help_text %}
+            <p><a class="link" href="{{ info_link }}" target="_blank">Learn more</a></p>
+          {% endblocktranslate %}
+          {% include "generic/help.html" with help_content=help_text %}
         {% endif %}
       </div>
       <span class="text-neutral-500">{{ subtitle }}</span>

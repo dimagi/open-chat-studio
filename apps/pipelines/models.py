@@ -16,6 +16,7 @@ from apps.chat.models import ChatMessage, ChatMessageType
 from apps.custom_actions.form_utils import set_custom_actions
 from apps.custom_actions.mixins import CustomActionOperationMixin
 from apps.experiments.models import ExperimentSession, VersionsMixin, VersionsObjectManagerMixin
+from apps.experiments.versioning import VersionDetails, VersionField
 from apps.pipelines.exceptions import PipelineBuildError
 from apps.pipelines.executor import patch_executor
 from apps.pipelines.flow import Flow, FlowNode, FlowNodeData
@@ -116,8 +117,17 @@ class Pipeline(BaseTeamModel, VersionsMixin):
         # Delete old nodes
         current_ids = set(self.node_ids)
         new_ids = set(node.id for node in nodes)
-        to_delete = current_ids - new_ids
-        Node.objects.filter(pipeline=self, flow_id__in=to_delete).delete()
+        to_remove = current_ids - new_ids
+
+        pipeline_nodes = Node.objects.annotate(versions_count=models.Count("versions")).filter(
+            pipeline=self, flow_id__in=to_remove
+        )
+        nodes_to_archive = pipeline_nodes.filter(versions_count__gt=0)
+        pipeline_nodes.filter(versions_count=0).delete()
+
+        for node in nodes_to_archive:
+            # Preserve the node if it has versions, otherwise we tamper with previous versions
+            node.archive()
 
         # Set new nodes or update existing ones
         for node in nodes:
@@ -325,6 +335,28 @@ class Pipeline(BaseTeamModel, VersionsMixin):
             .values("trigger_experiment_id")
         )
 
+    @property
+    def version_details(self) -> VersionDetails:
+        reserved_types = ["StartNode", "EndNode"]
+
+        def node_name(node):
+            name = node.params.get("name")
+            if name == node.flow_id:
+                return node.type
+            return name
+
+        return VersionDetails(
+            instance=self,
+            fields=[
+                VersionField(name="name", raw_value=self.name),
+                VersionField(
+                    name="nodes",
+                    queryset=self.node_set.exclude(type__in=reserved_types),
+                    to_display=node_name,
+                ),
+            ],
+        )
+
 
 class Node(BaseModel, VersionsMixin, CustomActionOperationMixin):
     flow_id = models.CharField(max_length=128, db_index=True)  # The ID assigned by react-flow
@@ -394,6 +426,34 @@ class Node(BaseModel, VersionsMixin, CustomActionOperationMixin):
             if assistant_id:
                 assistant = OpenAiAssistant.objects.get(id=assistant_id)
                 assistant.archive()
+
+    @property
+    def version_details(self) -> VersionDetails:
+        from apps.experiments.models import VersionFieldDisplayFormatters
+
+        node_name = self.params.get("name", self.type)
+        if node_name == self.flow_id:
+            node_name = self.type
+
+        param_versions = []
+        for name, value in self.params.items():
+            if name == "name":
+                value = node_name
+
+            display_formatter = None
+            match name:
+                case "tools":
+                    display_formatter = VersionFieldDisplayFormatters.format_tools
+                case "custom_actions":
+                    display_formatter = VersionFieldDisplayFormatters.format_custom_action_operation
+            param_versions.append(
+                VersionField(group_name=node_name, name=name, raw_value=value, to_display=display_formatter)
+            )
+
+        return VersionDetails(
+            instance=self,
+            fields=param_versions,
+        )
 
 
 class PipelineRunStatus(models.TextChoices):

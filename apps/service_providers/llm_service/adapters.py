@@ -180,15 +180,14 @@ class AssistantAdapter(BaseAdapter):
         )
 
     @staticmethod
-    def for_pipeline(session: ExperimentSession, node: "AssistantNode") -> Self:
+    def for_pipeline(session: ExperimentSession, node: "AssistantNode", trace_service=None) -> Self:
         assistant = OpenAiAssistant.objects.get(id=node.assistant_id)
-        experiment = session.experiment
         return AssistantAdapter(
             session=session,
             assistant=assistant,
             citations_enabled=node.citations_enabled,
             input_formatter=node.input_formatter,
-            trace_service=experiment.trace_service,
+            trace_service=trace_service,
             save_message_metadata_only=True,
         )
 

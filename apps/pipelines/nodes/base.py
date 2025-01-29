@@ -8,9 +8,10 @@ from typing import Annotated, Any, Literal, Self
 from langchain_core.runnables import RunnableConfig
 from pydantic import BaseModel, ConfigDict, Field, model_validator
 from pydantic.config import JsonDict
+from typing_extensions import TypedDict
 
 from apps.experiments.models import ExperimentSession
-from apps.pipelines.logging import PipelineLoggingCallbackHandler, noop_logger
+from apps.pipelines.logging import LoggingCallbackHandler, noop_logger
 
 
 def add_messages(left: dict, right: dict):
@@ -27,7 +28,7 @@ def add_messages(left: dict, right: dict):
     return output
 
 
-def add_shared_state_messages(left: dict, right: dict):
+def add_temp_state_messages(left: dict, right: dict):
     output = {**left}
     try:
         output["outputs"].update(right["outputs"])
@@ -40,27 +41,35 @@ def add_shared_state_messages(left: dict, right: dict):
     return output
 
 
+class TempState(TypedDict):
+    user_input: str
+    outputs: dict
+    attachments: list
+
+
 class PipelineState(dict):
     messages: Annotated[Sequence[Any], operator.add]
     outputs: Annotated[dict, add_messages]
     experiment_session: ExperimentSession
     pipeline_version: int
-    shared_state: Annotated[dict, add_shared_state_messages]
+    temp_state: Annotated[TempState, add_temp_state_messages]
     ai_message_id: int | None = None
     message_metadata: dict | None = None
-    attachments: list | None = None
+    attachments: list = Field(default=[])
 
     def json_safe(self):
         # We need to make a copy of `self` so as to not change the actual value of `experiment_session` forever
         copy = self.copy()
         if "experiment_session" in copy:
             copy["experiment_session"] = copy["experiment_session"].id
+        if "attachments" in copy.get("shared_state", {}):
+            copy["shared_state"]["attachments"] = [att.model_dump() for att in copy["shared_state"]["attachments"]]
         return copy
 
     @classmethod
     def from_node_output(cls, node_name: str, node_id: str, output: Any = None, **kwargs) -> Self:
         kwargs["outputs"] = {node_id: {"message": output}}
-        kwargs["shared_state"] = {"outputs": {node_name: output}}
+        kwargs["temp_state"] = {"outputs": {node_name: output}}
         if output is not None:
             kwargs["messages"] = [output]
         return cls(**kwargs)
@@ -94,7 +103,11 @@ class PipelineNode(BaseModel, ABC):
     _config: RunnableConfig | None = None
     name: str = Field(title="Node Name", json_schema_extra={"ui:widget": "node_name"})
 
-    def process(self, node_id: str, incoming_edges: list, state: PipelineState, config) -> PipelineState:
+    def process(
+        self, node_id: str, incoming_edges: list, state: PipelineState, config: RunnableConfig
+    ) -> PipelineState:
+        from apps.channels.datamodels import Attachment
+
         self._config = config
 
         for incoming_edge in reversed(incoming_edges):
@@ -108,7 +121,12 @@ class PipelineNode(BaseModel, ABC):
                 break
         else:  # This is the first node in the graph
             input = state["messages"][-1]
-            state["shared_state"]["user_input"] = input
+
+            # init temp state here to avoid having to do it in each place the pipeline is invoked
+            state["temp_state"]["user_input"] = input
+            state["temp_state"]["attachments"] = [
+                Attachment.model_validate(att) for att in state.get("attachments", [])
+            ]
         return self._process(input=input, state=state, node_id=node_id)
 
     def process_conditional(self, state: PipelineState, node_id: str | None = None) -> str:
@@ -133,9 +151,9 @@ class PipelineNode(BaseModel, ABC):
     @cached_property
     def logger(self):
         for handler in self._config["callbacks"].handlers:
-            if isinstance(handler, PipelineLoggingCallbackHandler):
+            if isinstance(handler, LoggingCallbackHandler):
                 return handler.logger
-        return noop_logger()
+        return noop_logger()[0]
 
 
 class Widgets(StrEnum):

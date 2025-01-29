@@ -5,7 +5,6 @@ import textwrap
 import httpx
 from django.conf import settings
 from django.contrib.auth.decorators import permission_required
-from django.contrib.contenttypes.models import ContentType
 from django.db import transaction
 from django.http import FileResponse, Http404, HttpResponse, JsonResponse
 from django.shortcuts import get_object_or_404
@@ -145,6 +144,10 @@ def _update_participant_data(request):
 
     identifier = serializer.data["identifier"]
     platform = serializer.data["platform"]
+    if platform == ChannelPlatform.COMMCARE_CONNECT:
+        # CommCare Connect identifiers are case-sensitive
+        identifier = identifier.upper()
+
     team = request.team
     participant, _ = Participant.objects.get_or_create(identifier=identifier, team=team, platform=platform)
 
@@ -156,15 +159,13 @@ def _update_participant_data(request):
     experiment_data = serializer.data["data"]
     experiment_map = _get_participant_experiments(team, experiment_data)
 
-    content_type = ContentType.objects.get_for_model(Experiment)
     experiment_data_map = {}
     for data in experiment_data:
         experiment = experiment_map[data["experiment"]]
 
         participant_data, _created = ParticipantData.objects.update_or_create(
             participant=participant,
-            content_type=content_type,
-            object_id=experiment.id,
+            experiment=experiment,
             team=team,
             defaults={"data": data["data"]} if data.get("data") else {},
         )
@@ -443,9 +444,14 @@ def trigger_bot_message(request):
     serializer = TriggerBotMessageRequest(data=request.data)
     serializer.is_valid(raise_exception=True)
 
-    identifier = serializer.data["identifier"]
-    platform = serializer.data["platform"]
-    experiment_public_id = serializer.data["experiment"]
+    data = serializer.data
+    platform = data["platform"]
+    if platform == ChannelPlatform.COMMCARE_CONNECT:
+        # CommCare Connect identifiers are case-sensitive
+        data["identifier"] = data["identifier"].upper()
+
+    identifier = data["identifier"]
+    experiment_public_id = data["experiment"]
 
     experiment = get_object_or_404(Experiment, public_id=experiment_public_id, team=request.team)
 
@@ -453,8 +459,7 @@ def trigger_bot_message(request):
         participant_data = ParticipantData.objects.defer("data").get(
             participant__identifier=identifier,
             participant__platform=platform,
-            object_id=experiment.id,
-            content_type=ContentType.objects.get_for_model(Experiment),
+            experiment=experiment.id,
         )
 
     except ParticipantData.DoesNotExist:
@@ -469,6 +474,6 @@ def trigger_bot_message(request):
     if platform == ChannelPlatform.COMMCARE_CONNECT and not participant_data.has_consented():
         return Response({"detail": "User has not given consent"}, status=status.HTTP_400_BAD_REQUEST)
 
-    trigger_bot_message_task.delay(serializer.data)
+    trigger_bot_message_task.delay(data)
 
     return Response(status=status.HTTP_200_OK)

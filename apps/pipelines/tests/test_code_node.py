@@ -3,7 +3,9 @@ from unittest import mock
 
 import pytest
 
+from apps.channels.datamodels import Attachment
 from apps.experiments.models import ParticipantData
+from apps.files.models import File
 from apps.pipelines.exceptions import PipelineNodeBuildError, PipelineNodeRunError
 from apps.pipelines.nodes.base import PipelineState
 from apps.pipelines.tests.utils import (
@@ -88,6 +90,11 @@ def main(input, **kwargs):
             "",
             r"The main function should have the signature main\(input, \*\*kwargs\) only\.",
         ),
+        (
+            """def main(intput, **kwargs):\n\tget_temp_state_key("attachments")[0]._file.delete()\n\treturn input""",
+            "",
+            """"_file" is an invalid attribute name because it starts with "_".""",
+        ),
     ],
 )
 def test_code_node_build_errors(pipeline, code, input, error):
@@ -128,7 +135,7 @@ def test_code_node_runtime_errors(pipeline, code, input, error):
 def test_get_participant_data(pipeline, experiment_session):
     ParticipantData.objects.create(
         team=experiment_session.team,
-        content_object=experiment_session.experiment,
+        experiment=experiment_session.experiment,
         participant=experiment_session.participant,
         data={"fun_facts": {"personality": "fun loving", "body_type": "robot"}},
     )
@@ -156,7 +163,7 @@ def test_update_participant_data(pipeline, experiment_session):
     output = "moody"
     participant_data = ParticipantData.objects.create(
         team=experiment_session.team,
-        content_object=experiment_session.experiment,
+        experiment=experiment_session.experiment,
         participant=experiment_session.participant,
         data={"fun_facts": {"personality": "fun loving", "body_type": "robot"}},
     )
@@ -185,15 +192,15 @@ def main(input, **kwargs):
 
 @django_db_with_data(available_apps=("apps.service_providers",))
 @mock.patch("apps.pipelines.nodes.base.PipelineNode.logger", mock.Mock())
-def test_shared_state(pipeline, experiment_session):
+def test_temp_state(pipeline, experiment_session):
     output = "['fun loving', 'likes puppies']"
     code_set = f"""
 def main(input, **kwargs):
-    return set_state_key("fun_facts", {output})
+    return set_temp_state_key("fun_facts", {output})
 """
     code_get = """
 def main(input, **kwargs):
-    return str(get_state_key("fun_facts"))
+    return str(get_temp_state_key("fun_facts"))
 """
     nodes = [
         start_node(),
@@ -211,13 +218,13 @@ def main(input, **kwargs):
 
 @django_db_with_data(available_apps=("apps.service_providers",))
 @mock.patch("apps.pipelines.nodes.base.PipelineNode.logger", mock.Mock())
-def test_shared_state_get_outputs(pipeline, experiment_session):
-    # Shared state contains the outputs of the previous nodes
+def test_temp_state_get_outputs(pipeline, experiment_session):
+    # Temp state contains the outputs of the previous nodes
 
     input = "hello"
     code_get = """
 def main(input, **kwargs):
-    return str(get_state_key("outputs"))
+    return str(get_temp_state_key("outputs"))
 """
     nodes = [
         start_node(),
@@ -239,11 +246,11 @@ def main(input, **kwargs):
 
 @django_db_with_data(available_apps=("apps.service_providers",))
 @mock.patch("apps.pipelines.nodes.base.PipelineNode.logger", mock.Mock())
-def test_shared_state_set_outputs(pipeline, experiment_session):
+def test_temp_state_set_outputs(pipeline, experiment_session):
     input = "hello"
     code_set = """
 def main(input, **kwargs):
-    set_state_key("outputs", "foobar")
+    set_temp_state_key("outputs", "foobar")
     return input
 """
     nodes = [
@@ -251,7 +258,7 @@ def main(input, **kwargs):
         code_node(code_set),
         end_node(),
     ]
-    with pytest.raises(PipelineNodeRunError, match="Cannot set the 'outputs' key of the shared state"):
+    with pytest.raises(PipelineNodeRunError, match="Cannot set the 'outputs' key of the temporary state"):
         create_runnable(pipeline, nodes).invoke(PipelineState(experiment_session=experiment_session, messages=[input]))[
             "messages"
         ][-1]
@@ -259,13 +266,13 @@ def main(input, **kwargs):
 
 @django_db_with_data(available_apps=("apps.service_providers",))
 @mock.patch("apps.pipelines.nodes.base.PipelineNode.logger", mock.Mock())
-def test_shared_state_user_input(pipeline, experiment_session):
-    # Shared state contains the user input
+def test_temp_state_user_input(pipeline, experiment_session):
+    # Temp state contains the user input
 
     input = "hello"
     code_get = """
 def main(input, **kwargs):
-    return str(get_state_key("user_input"))
+    return str(get_temp_state_key("user_input"))
 """
     nodes = [
         start_node(),
@@ -278,3 +285,25 @@ def main(input, **kwargs):
         ][-1]
         == input
     )
+
+
+@django_db_with_data(available_apps=("apps.service_providers",))
+def test_read_attachments(pipeline, experiment_session):
+    file = File.from_content("foo.txt", b"from file", "text/plain", experiment_session.team.id)
+
+    code_get = """
+def main(input, **kwargs):
+    return f'content {get_temp_state_key("attachments")[0].read_string()}'
+"""
+    nodes = [
+        start_node(),
+        code_node(code_get),
+        end_node(),
+    ]
+    state = PipelineState(
+        experiment_session=experiment_session,
+        messages=["hi"],
+        attachments=[Attachment.from_file(file, "code_interpreter")],
+    )
+    assert create_runnable(pipeline, nodes).invoke(state)["messages"][-1] == "content from file"
+    File.objects.get(id=file.id)

@@ -358,7 +358,7 @@ class TestExperimentSession:
         participant = ParticipantFactory()
         session = ExperimentSessionFactory(participant=participant, team=participant.team)
         participant_data = ParticipantData.objects.create(
-            content_object=session.experiment,
+            experiment=session.experiment,
             participant=participant,
             team=participant.team,
             data={"first_name": "Jimmy"},
@@ -394,7 +394,7 @@ class TestExperimentSession:
             action=event_action,
         )
         ParticipantData.objects.create(
-            content_object=session.experiment,
+            experiment=session.experiment,
             participant=participant,
             team=participant.team,
             data={"name": "Tester", "timezone": "Africa/Johannesburg"},
@@ -487,7 +487,7 @@ class TestParticipant:
         ExperimentSessionFactory(participant=participant)
         existing_data_obj = ParticipantData.objects.create(
             team=team,
-            content_object=sessions[0].experiment,
+            experiment=sessions[0].experiment,
             data={"first_name": "Jack", "last_name": "Turner"},
             participant=participant,
         )

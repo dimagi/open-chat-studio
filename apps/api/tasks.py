@@ -2,7 +2,6 @@ import logging
 from uuid import UUID
 
 from celery.app import shared_task
-from django.contrib.contenttypes.models import ContentType
 from django.db.models import Subquery
 from taskbadger.celery import Task as TaskbadgerTask
 
@@ -35,28 +34,25 @@ def setup_connect_channels_for_bots(self, connect_id: UUID, experiment_data_map:
     participant_data = (
         ParticipantData.objects.filter(
             id__in=participant_data_ids,
-            object_id__in=Subquery(experiments_using_connect),
-            content_type=ContentType.objects.get_for_model(Experiment),
+            experiment_id__in=Subquery(experiments_using_connect),
         )
         .exclude(system_metadata__has_key="commcare_connect_channel_id")
-        .prefetch_related("content_object")
+        .prefetch_related("experiment")
         .all()
     )
 
     connect_client = CommCareConnectClient()
 
-    # TODO: Refactor when experiment_id is directly on the ParticipantData table
-    # https://github.com/dimagi/open-chat-studio/issues/1046
     channels = ExperimentChannel.objects.filter(
         platform=ChannelPlatform.COMMCARE_CONNECT,
-        experiment_id__in=[participant_data.object_id for participant_data in participant_data],
+        experiment_id__in=[participant_data.experiment_id for participant_data in participant_data],
     )
 
     channels = {ch.experiment_id: ch for ch in channels}
 
     for participant_datum in participant_data:
         try:
-            experiment = participant_datum.content_object
+            experiment = participant_datum.experiment
             channel = channels[experiment.id]
             commcare_connect_channel_id = connect_client.create_channel(
                 connect_id=connect_id, channel_source=channel.extra_data["commcare_connect_bot_name"]

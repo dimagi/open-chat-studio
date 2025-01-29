@@ -11,7 +11,7 @@ from field_audit.models import AuditAction, AuditingManager
 from apps.chat.agent.tools import get_assistant_tools
 from apps.custom_actions.mixins import CustomActionOperationMixin
 from apps.experiments.models import Experiment, VersionsMixin, VersionsObjectManagerMixin
-from apps.experiments.versioning import VersionField
+from apps.experiments.versioning import VersionDetails, VersionField
 from apps.pipelines.models import Node
 from apps.teams.models import BaseTeamModel
 from apps.utils.models import BaseModel
@@ -236,6 +236,45 @@ class OpenAiAssistant(BaseTeamModel, VersionsMixin, CustomActionOperationMixin):
                 is_archived=False,
             )
         return Experiment.objects.none()
+
+    @property
+    def version_details(self) -> VersionDetails:
+        from apps.experiments.models import VersionFieldDisplayFormatters
+
+        return VersionDetails(
+            instance=self,
+            fields=[
+                VersionField(group_name="General", name="name", raw_value=self.name.split(" v")[0]),
+                VersionField(group_name="General", name="include_file_info", raw_value=self.include_file_info),
+                VersionField(group_name="Language Model", name="llm_provider", raw_value=self.llm_provider),
+                VersionField(group_name="Language Model", name="llm_provider_model", raw_value=self.llm_provider_model),
+                VersionField(group_name="Language Model", name="temperature", raw_value=self.temperature),
+                VersionField(group_name="Language Model", name="top_p", raw_value=self.top_p),
+                VersionField(group_name="Language Model", name="instructions", raw_value=self.instructions),
+                VersionField(
+                    group_name="Tools",
+                    name="builtin_tools",
+                    raw_value=self.builtin_tools,
+                    to_display=VersionFieldDisplayFormatters.format_builtin_tools,
+                ),
+                VersionField(
+                    group_name="Tools",
+                    name="tools",
+                    raw_value=self.tools,
+                    to_display=VersionFieldDisplayFormatters.format_tools,
+                ),
+                VersionField(
+                    group_name="Tools",
+                    name="allow_file_search_attachments",
+                    raw_value=self.allow_file_search_attachments,
+                ),
+                VersionField(
+                    group_name="Tools",
+                    name="allow_code_interpreter_attachments",
+                    raw_value=self.allow_code_interpreter_attachments,
+                ),
+            ],
+        )
 
 
 @audit_fields(

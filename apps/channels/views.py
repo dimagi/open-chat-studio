@@ -2,7 +2,6 @@ import json
 import uuid
 
 from django.conf import settings
-from django.contrib.contenttypes.models import ContentType
 from django.http import Http404, HttpRequest, HttpResponse, HttpResponseBadRequest, JsonResponse
 from django.shortcuts import get_object_or_404
 from django.views.decorators.csrf import csrf_exempt
@@ -140,12 +139,11 @@ def new_connect_message(request: HttpRequest):
     connect_channel_id = serializer.data["channel_id"]
     try:
         participant_data = ParticipantData.objects.get(
-            content_type=ContentType.objects.get_for_model(Experiment),
             system_metadata__commcare_connect_channel_id=connect_channel_id,
         )
 
         channel = ExperimentChannel.objects.get(
-            platform=ChannelPlatform.COMMCARE_CONNECT, experiment__id=participant_data.object_id
+            platform=ChannelPlatform.COMMCARE_CONNECT, experiment__id=participant_data.experiment_id
         )
     except ParticipantData.DoesNotExist:
         return JsonResponse({"detail": "No participant data found"}, status=404)

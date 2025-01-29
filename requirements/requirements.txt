@@ -100,7 +100,7 @@ distro==1.8.0
     # via
     #   anthropic
     #   openai
-django==5.1.2
+django==5.1.5
     # via
     #   -r requirements.in
     #   django-allauth
@@ -215,7 +215,7 @@ idna==3.7
     #   yarl
 inflection==0.5.1
     # via drf-spectacular
-jinja2==3.1.4
+jinja2==3.1.5
     # via -r requirements.in
 jiter==0.6.1
     # via
@@ -352,6 +352,8 @@ pyjwt[crypto]==2.8.0
     # via
     #   django-allauth
     #   twilio
+pypdf==5.2.0
+    # via -r requirements.in
 pypng==0.20220715.0
     # via qrcode
 pytelegrambotapi==4.12.0
@@ -417,7 +419,7 @@ requests-oauthlib==1.3.1
     # via django-allauth
 requests-toolbelt==1.0.0
     # via langsmith
-restrictedpython==7.4
+restrictedpython==8.0
     # via -r requirements.in
 rich==13.6.0
     # via typer

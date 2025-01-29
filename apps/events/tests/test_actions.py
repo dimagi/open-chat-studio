@@ -65,7 +65,11 @@ def test_end_conversation_runs_pipeline(session, pipeline):
                 "end": {"message": f"human: {input}"},
             },
             "experiment_session": session.id,
-            "shared_state": {"user_input": output_message, "outputs": {"start": output_message, "end": output_message}},
+            "temp_state": {
+                "user_input": output_message,
+                "attachments": [],
+                "outputs": {"start": output_message, "end": output_message},
+            },
         }
     )
     assert pipeline.runs.count() == 1

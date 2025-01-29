@@ -300,6 +300,10 @@ def test_assistant_runnable_cancels_existing_run(save_response_annotations, resp
 @patch("openai.resources.beta.threads.messages.Messages.list")
 @patch("openai.resources.beta.threads.runs.Runs.retrieve")
 @patch("openai.resources.beta.Threads.create_and_run")
+@patch(
+    "apps.service_providers.llm_service.runnables.AssistantChat._get_output_with_annotations",
+    new=Mock(return_value=("ai response", {})),
+)
 def test_assistant_uploads_new_file(create_and_run, retrieve_run, list_messages, create_files_remote, db_session):
     """Test that attachments are uploaded to OpenAI and that its remote file ids are stored on the chat message"""
     session = db_session
@@ -318,8 +322,8 @@ def test_assistant_uploads_new_file(create_and_run, retrieve_run, list_messages,
 
     assistant = create_experiment_runnable(session.experiment, session)
     attachments = [
-        Attachment(type="code_interpreter", file_id=files[0].id),
-        Attachment(type="file_search", file_id=files[1].id),
+        Attachment.from_file(files[0], "code_interpreter"),
+        Attachment.from_file(files[1], "file_search"),
     ]
 
     result = assistant.invoke("test", attachments=attachments)
