@@ -3,6 +3,7 @@ import pytest
 from apps.experiments.models import Experiment, VersionsMixin
 from apps.experiments.versioning import VersionDetails, VersionField, differs
 from apps.utils.factories.experiment import ExperimentFactory, ExperimentSessionFactory
+from apps.utils.factories.service_provider_factories import TraceProviderFactory
 
 
 @pytest.mark.django_db()
@@ -210,3 +211,11 @@ class TestVersion:
         version_field.previous_field_version = VersionField(queryset=previous_queryset)
         version_field._compare_querysets()
         assert version_field.changed is True
+
+    def test_compare_unversioned_models(self):
+        trace_provider = TraceProviderFactory()
+        experiment = ExperimentFactory()
+        experiment_version = experiment.create_new_version()
+        experiment.trace_provider = trace_provider
+        experiment.save()
+        experiment.version_details.compare(experiment_version.version_details)
