@@ -101,7 +101,9 @@ class VersionField:
         match self._get_field_type():
             case "unversioned_model":
                 # Simply comparing unversioned models by id is enough
-                self.changed = self.current_value.id != self.previous_value.id
+                current_id = self.current_value.id if self.current_value else None
+                previous_id = self.previous_value.id if self.previous_value else None
+                self.changed = current_id != previous_id
             case "versioned_model":
                 # Versioned models should be explored in order to determine what changed
                 if hasattr(self.current_value, "version_details"):
