@@ -5,6 +5,7 @@ import time
 from typing import Literal
 
 import tiktoken
+from django.conf import settings
 from django.core.exceptions import ValidationError
 from django.core.validators import validate_email
 from django.db.models import TextChoices
@@ -55,7 +56,11 @@ from apps.utils.prompt import OcsPromptTemplate, PromptVars, validate_prompt_var
 class RenderTemplate(PipelineNode):
     """Renders a Jinja template"""
 
-    model_config = ConfigDict(json_schema_extra=NodeSchema(label="Render a template"))
+    model_config = ConfigDict(
+        json_schema_extra=NodeSchema(
+            label="Render a template", documentation_link=settings.DOCUMENTATION_LINKS["node_template"]
+        )
+    )
 
     template_string: str = Field(
         description="Use {{your_variable_name}} to refer to designate input",
@@ -191,7 +196,9 @@ class LLMResponse(PipelineNode, LLMResponseMixin):
 class LLMResponseWithPrompt(LLMResponse, HistoryMixin):
     """Uses and LLM to respond to the input."""
 
-    model_config = ConfigDict(json_schema_extra=NodeSchema(label="LLM"))
+    model_config = ConfigDict(
+        json_schema_extra=NodeSchema(label="LLM", documentation_link=settings.DOCUMENTATION_LINKS["node_llm"])
+    )
 
     source_material_id: int | None = Field(
         None, json_schema_extra=UiSchema(widget=Widgets.select, options_source=OptionsSource.source_material)
@@ -264,7 +271,11 @@ class LLMResponseWithPrompt(LLMResponse, HistoryMixin):
 class SendEmail(PipelineNode):
     """Send the input to the node to the list of addresses provided"""
 
-    model_config = ConfigDict(json_schema_extra=NodeSchema(label="Send an email"))
+    model_config = ConfigDict(
+        json_schema_extra=NodeSchema(
+            label="Send an email", documentation_link=settings.DOCUMENTATION_LINKS["node_email"]
+        )
+    )
 
     recipient_list: str = Field(description="A comma-separated list of email addresses")
     subject: str
@@ -364,6 +375,7 @@ class RouterNode(RouterMixin, Passthrough, HistoryMixin):
     model_config = ConfigDict(
         json_schema_extra=NodeSchema(
             label="LLM Router",
+            documentation_link=settings.DOCUMENTATION_LINKS["node_llm_router"],
             field_order=["llm_provider_id", "llm_temperature", "history_type", "prompt", "keywords"],
         )
     )
@@ -406,6 +418,7 @@ class StaticRouterNode(RouterMixin, Passthrough):
     model_config = ConfigDict(
         json_schema_extra=NodeSchema(
             label="Static Router",
+            documentation_link=settings.DOCUMENTATION_LINKS["node_static_router"],
             field_order=["data_source", "route_key", "keywords"],
         )
     )
@@ -572,7 +585,12 @@ class StructuredDataSchemaValidatorMixin:
 class ExtractStructuredData(ExtractStructuredDataNodeMixin, LLMResponse, StructuredDataSchemaValidatorMixin):
     """Extract structured data from the input"""
 
-    model_config = ConfigDict(json_schema_extra=NodeSchema(label="Extract Structured Data"))
+    model_config = ConfigDict(
+        json_schema_extra=NodeSchema(
+            label="Extract Structured Data",
+            documentation_link=settings.DOCUMENTATION_LINKS["node_extract_structured_data"],
+        )
+    )
 
     data_schema: str = Field(
         default='{"name": "the name of the user"}',
@@ -584,7 +602,12 @@ class ExtractStructuredData(ExtractStructuredDataNodeMixin, LLMResponse, Structu
 class ExtractParticipantData(ExtractStructuredDataNodeMixin, LLMResponse, StructuredDataSchemaValidatorMixin):
     """Extract structured data and saves it as participant data"""
 
-    model_config = ConfigDict(json_schema_extra=NodeSchema(label="Update Participant Data"))
+    model_config = ConfigDict(
+        json_schema_extra=NodeSchema(
+            label="Update Participant Data",
+            documentation_link=settings.DOCUMENTATION_LINKS["node_update_participant_data"],
+        )
+    )
 
     data_schema: str = Field(
         default='{"name": "the name of the user"}',
@@ -647,7 +670,11 @@ class ExtractParticipantData(ExtractStructuredDataNodeMixin, LLMResponse, Struct
 class AssistantNode(PipelineNode):
     """Calls an OpenAI assistant"""
 
-    model_config = ConfigDict(json_schema_extra=NodeSchema(label="OpenAI Assistant"))
+    model_config = ConfigDict(
+        json_schema_extra=NodeSchema(
+            label="OpenAI Assistant", documentation_link=settings.DOCUMENTATION_LINKS["node_assistant"]
+        )
+    )
 
     assistant_id: int = Field(
         ..., json_schema_extra=UiSchema(widget=Widgets.select, options_source=OptionsSource.assistant)
@@ -728,7 +755,9 @@ def main(input: str, **kwargs) -> str:
 class CodeNode(PipelineNode):
     """Runs python"""
 
-    model_config = ConfigDict(json_schema_extra=NodeSchema(label="Python Node"))
+    model_config = ConfigDict(
+        json_schema_extra=NodeSchema(label="Python Node", documentation_link=settings.DOCUMENTATION_LINKS["node_code"])
+    )
     code: str = Field(
         default=DEFAULT_FUNCTION,
         description="The code to run",

@@ -1,6 +1,13 @@
+import React from "react"
 import ShortUniqueId from "short-unique-id";
 import {NodeParameterValues, Option} from "./types/nodeParameterValues";
 import {JsonSchema, PropertySchema} from "./types/nodeParams";
+
+declare global {
+  interface Window {
+    DOCUMENTATION_BASE_URL: string;
+  }
+}
 
 const uid = new ShortUniqueId({ length: 5 });
 
@@ -35,6 +42,23 @@ export const getCachedData: () => typeof localCache = () => {
   }
   return localCache;
 };
+
+
+export function formatDocsForSchema(schema: JsonSchema)  {
+  const description = schema.description || "";
+  let documentation_link = schema["ui:documentation_link"];
+  if (!description && !documentation_link) {
+    return null;
+  }
+  if (documentation_link && !documentation_link.startsWith("http")) {
+    documentation_link = `${window.DOCUMENTATION_BASE_URL}${documentation_link}`;
+  }
+  return <>
+    <p>{description}</p>
+    {documentation_link && <p><a className="link" href={documentation_link} target="_blank">Learn more</a></p>}
+  </>;
+}
+
 
 export function concatenate(value: string | string[] | null | undefined): string {
   if (!value) return "";

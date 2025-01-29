@@ -1,6 +1,6 @@
 import {Node, NodeProps, NodeToolbar, Position} from "reactflow";
 import React, {ChangeEvent} from "react";
-import {concatenate, getCachedData, nodeBorderClass} from "./utils";
+import {concatenate, formatDocsForSchema, getCachedData, nodeBorderClass} from "./utils";
 import usePipelineStore from "./stores/pipelineStore";
 import usePipelineManagerStore from "./stores/pipelineManagerStore";
 import useEditorStore from "./stores/editorStore";
@@ -41,6 +41,8 @@ export function PipelineNode(nodeProps: NodeProps<NodeData>) {
     openEditorForNode(nodeProps);
   }
 
+  const nodeDocs = formatDocsForSchema(nodeSchema);
+
   return (
     <>
       <NodeToolbar position={Position.Top} isVisible={hasErrors || selected}>
@@ -55,12 +57,12 @@ export function PipelineNode(nodeProps: NodeProps<NodeData>) {
                   <i className="fa fa-pencil"></i>
               </button>
             )}
-            {nodeSchema.description && (
+            {nodeDocs && (
               <div className="dropdown dropdown-top">
                   <button tabIndex={0} role="button" className="btn btn-xs join-item">
                       <i className={"fa-regular fa-circle-question"}></i>
                   </button>
-                  <HelpContent><p>{nodeSchema.description}</p></HelpContent>
+                  <HelpContent>{nodeDocs}</HelpContent>
               </div>
             )}
             {nodeError && (

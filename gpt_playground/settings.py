@@ -524,6 +524,15 @@ DOCUMENTATION_LINKS = {
     "pipelines": "/concepts/pipelines/",
     "concepts.prompt_variables": "/concepts/prompt_variables/",
     "concepts.experiments": "/concepts/experiment/",
+    "node_llm": "/concepts/pipelines/nodes/#llm",
+    "node_llm_router": "/concepts/pipelines/nodes/#llm-router",
+    "node_static_router": "/concepts/pipelines/nodes/#static-router",
+    "node_assistant": "/concepts/pipelines/nodes/#assistant",
+    "node_code": "/concepts/pipelines/nodes/#python-node",
+    "node_template": "/concepts/pipelines/nodes/#template",
+    "node_email": "/concepts/pipelines/nodes/#email",
+    "node_extract_structured_data": "/concepts/pipelines/nodes/#extract-structured-data",
+    "node_update_participant_data": "/concepts/pipelines/nodes/#update-participant-data",
 }
 DOCUMENTATION_BASE_URL = env("DOCUMENTATION_BASE_URL", default="https://dimagi.github.io/open-chat-studio-docs")
 
