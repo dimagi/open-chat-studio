@@ -700,7 +700,8 @@ class AssistantNode(PipelineNode):
 
     def _get_assistant_runnable(self, assistant: OpenAiAssistant, session: ExperimentSession, node_id: str):
         trace_service = session.experiment.trace_service
-        trace_service.initialize_from_callback_manager(self._config.get("callbacks"))
+        if trace_service:
+            trace_service.initialize_from_callback_manager(self._config.get("callbacks"))
 
         history_manager = PipelineHistoryManager.for_assistant()
         adapter = AssistantAdapter.for_pipeline(session=session, node=self, trace_service=trace_service)
