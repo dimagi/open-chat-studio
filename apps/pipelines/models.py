@@ -437,15 +437,20 @@ class Node(BaseModel, VersionsMixin, CustomActionOperationMixin):
 
         param_versions = []
         for name, value in self.params.items():
-            if name == "name":
-                value = node_name
-
             display_formatter = None
             match name:
                 case "tools":
                     display_formatter = VersionFieldDisplayFormatters.format_tools
                 case "custom_actions":
                     display_formatter = VersionFieldDisplayFormatters.format_custom_action_operation
+                case "name":
+                    value = node_name
+                case "assistant_id":
+                    from apps.assistants.models import OpenAiAssistant
+
+                    name = "assistant"
+                    value = OpenAiAssistant.objects.get(id=value)
+
             param_versions.append(
                 VersionField(group_name=node_name, name=name, raw_value=value, to_display=display_formatter)
             )
