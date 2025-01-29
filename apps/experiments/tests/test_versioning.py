@@ -1,7 +1,7 @@
 import pytest
 
 from apps.experiments.models import Experiment, VersionsMixin
-from apps.experiments.versioning import Version, VersionField, differs
+from apps.experiments.versioning import VersionDetails, VersionField, differs
 from apps.utils.factories.experiment import ExperimentFactory, ExperimentSessionFactory
 
 
@@ -44,21 +44,21 @@ def test_differs():
 class TestVersion:
     def test_compare(self):
         instance1 = ExperimentFactory.build(temperature=0.1)
-        version1 = Version(
+        version1 = VersionDetails(
             instance=instance1,
             fields=[
                 VersionField(group_name="G1", name="the_temperature", raw_value=instance1.temperature),
             ],
         )
         similar_instance = instance1
-        similar_version2 = Version(
+        similar_version2 = VersionDetails(
             instance=similar_instance,
             fields=[
                 VersionField(group_name="G1", name="the_temperature", raw_value=similar_instance.temperature),
             ],
         )
         different_instance = ExperimentFactory.build(temperature=0.2)
-        different_version2 = Version(
+        different_version2 = VersionDetails(
             instance=different_instance,
             fields=[
                 VersionField(group_name="G1", name="the_temperature", raw_value=different_instance.temperature),
@@ -85,16 +85,16 @@ class TestVersion:
         experiment.temperature = 1
         experiment.save()
 
-        working_version = experiment.version
-        version_version = exp_version.version
+        working_version = experiment.version_details
+        version_version = exp_version.version_details
 
         working_version.compare(version_version)
         changed_fields = [field.name for field in working_version.fields if field.changed]
         assert len(changed_fields) == 2
 
         # Early abort should only detect one change
-        working_version = experiment.version
-        version_version = exp_version.version
+        working_version = experiment.version_details
+        version_version = exp_version.version_details
         working_version.compare(version_version, early_abort=True)
         changed_fields = [field.name for field in working_version.fields if field.changed]
         assert len(changed_fields) == 1
@@ -104,10 +104,11 @@ class TestVersion:
         queryset = Experiment.objects.filter(id=experiment.id)
         # Compare with itself
         version_field = VersionField(queryset=queryset)
-        version_field._compare_queryset(queryset)
+        version_field.previous_field_version = VersionField(queryset=queryset)
+        version_field._compare_querysets(queryset)
         assert version_field.changed is False
-        assert len(version_field.queryset_result_versions) == 1
-        queryset_result_version = version_field.queryset_result_versions[0]
+        assert len(version_field.queryset_results) == 1
+        queryset_result_version = version_field.queryset_results[0]
         assert queryset_result_version.raw_value == experiment
         assert queryset_result_version.previous_field_version.raw_value == experiment
 
@@ -119,10 +120,11 @@ class TestVersion:
         experiment.prompt_text = "This now changed"
         experiment.save()
         version_field = VersionField(queryset=queryset)
-        version_field._compare_queryset(Experiment.objects.filter(id=new_version.id))
+        version_field.previous_field_version = VersionField(queryset=Experiment.objects.filter(id=new_version.id))
+        version_field._compare_querysets()
         assert version_field.changed is True
-        assert len(version_field.queryset_result_versions) == 1
-        queryset_result_version = version_field.queryset_result_versions[0]
+        assert len(version_field.queryset_results) == 1
+        queryset_result_version = version_field.queryset_results[0]
         assert queryset_result_version.raw_value == experiment
         assert queryset_result_version.previous_field_version.raw_value == new_version
 
@@ -137,27 +139,30 @@ class TestVersion:
         # Compare with a totally different queryset
         another_experiment = ExperimentFactory()
         version_field = VersionField(queryset=queryset)
-        version_field._compare_queryset(Experiment.objects.filter(id=another_experiment.id))
+        version_field.previous_field_version = VersionField(
+            queryset=Experiment.objects.filter(id=another_experiment.id)
+        )
+        version_field._compare_querysets()
         assert version_field.changed is True
 
-        assert len(version_field.queryset_result_versions) == 2
-        first_result_version = version_field.queryset_result_versions[0]
+        assert len(version_field.queryset_results) == 2
+        first_result_version = version_field.queryset_results[0]
         assert first_result_version.raw_value == experiment
         assert first_result_version.previous_field_version is None
 
-        second_result_version = version_field.queryset_result_versions[1]
+        second_result_version = version_field.queryset_results[1]
         assert second_result_version.raw_value is None
         assert second_result_version.previous_field_version.raw_value == another_experiment
 
     def test_type_error_raised(self):
         """A type error should be raised when comparing versions of differing types"""
         instance1 = ExperimentFactory.build()
-        version1 = Version(
+        version1 = VersionDetails(
             instance=instance1,
             fields=[],
         )
 
-        version2 = Version(
+        version2 = VersionDetails(
             instance=ExperimentSessionFactory.build(),
             fields=[],
         )
@@ -167,9 +172,9 @@ class TestVersion:
 
     def test_fields_grouped(self, experiment):
         new_version = experiment.create_new_version()
-        original_version = experiment.version
-        original_version.compare(new_version.version)
-        all_groups = set([field.group_name for field in experiment.version.fields])
+        original_version = experiment.version_details
+        original_version.compare(new_version.version_details)
+        all_groups = set([field.group_name for field in experiment.version_details.fields])
         collected_group_names = []
         for group in original_version.fields_grouped:
             collected_group_names.append(group.name)
@@ -180,7 +185,7 @@ class TestVersion:
         # Let's change something
         new_version.temperature = new_version.temperature + 0.1
 
-        original_version.compare(new_version.version)
+        original_version.compare(new_version.version_details)
         temerature_group_name = original_version.get_field("temperature").group_name
         # Find the temperature group and check that it reports a change
         for group in original_version.fields_grouped:
@@ -201,6 +206,7 @@ class TestVersion:
 
         version_field = VersionField(queryset=new_queryset)
         # another sanity check
-        assert version_field.is_queryset is True
-        version_field._compare_queryset(previous_queryset)
+        assert version_field.queryset is not None
+        version_field.previous_field_version = VersionField(queryset=previous_queryset)
+        version_field._compare_querysets()
         assert version_field.changed is True

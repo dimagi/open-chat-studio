@@ -1,3 +1,5 @@
+import pytest
+
 from apps.pipelines.migrations.utils.migrate_start_end_nodes import (
     add_missing_start_end_nodes,
     remove_all_start_end_nodes,
@@ -265,3 +267,87 @@ def test_remove_start_end_nodes(team):
         "sourceHandle": "output",
         "targetHandle": "input",
     }
+
+
+@django_db_transactional()
+@pytest.mark.parametrize("version_before_removing_node", [True, False])
+def test_remove_nodes(version_before_removing_node, team):
+    """
+    Nodes that doesn't yet have versions should be deleted whereas nodes with versions should be archived
+    """
+    start = start_node()
+    end = end_node()
+    passthrough_1 = passthrough_node()
+    passthrough_2 = passthrough_node()
+    pipeline = Pipeline.objects.create(
+        team=team,
+        data={
+            "nodes": [
+                {"id": start["id"], "data": start},
+                {"id": passthrough_1["id"], "data": passthrough_1},
+                {"id": passthrough_2["id"], "data": passthrough_2},
+                {"id": end["id"], "data": end},
+            ],
+            "edges": [
+                {
+                    "id": "start->1",
+                    "source": start["id"],
+                    "target": passthrough_1["id"],
+                    "sourceHandle": "output",
+                    "targetHandle": "input",
+                },
+                {
+                    "id": "1->2",
+                    "source": passthrough_1["id"],
+                    "target": passthrough_2["id"],
+                    "sourceHandle": "output",
+                    "targetHandle": "input",
+                },
+                {
+                    "id": "2->end",
+                    "source": passthrough_2["id"],
+                    "target": end["id"],
+                    "sourceHandle": "output",
+                    "targetHandle": "input",
+                },
+            ],
+        },
+    )
+    pipeline.update_nodes_from_data()
+
+    if version_before_removing_node:
+        pipeline.create_new_version()
+
+    # User removes passthough node 2
+    pipeline.data = {
+        "nodes": [
+            {"id": start["id"], "data": start},
+            {"id": passthrough_1["id"], "data": passthrough_1},
+            {"id": end["id"], "data": end},
+        ],
+        "edges": [
+            {
+                "id": "start->1",
+                "source": start["id"],
+                "target": passthrough_1["id"],
+                "sourceHandle": "output",
+                "targetHandle": "input",
+            },
+            {
+                "id": "2->end",
+                "source": passthrough_1["id"],
+                "target": end["id"],
+                "sourceHandle": "output",
+                "targetHandle": "input",
+            },
+        ],
+    }
+    pipeline.save()
+    pipeline.update_nodes_from_data()
+
+    if version_before_removing_node:
+        node = Node.objects.get_all().get(flow_id=passthrough_2["id"], working_version_id=None)
+        assert node.is_archived is True
+        assert node.versions.count() == 1
+    else:
+        assert Node.objects.get_all().filter(flow_id=passthrough_2["id"]).count() == 0
