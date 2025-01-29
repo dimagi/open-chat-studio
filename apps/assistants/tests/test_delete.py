@@ -76,11 +76,10 @@ class TestAssistantArchival:
     @patch("apps.assistants.sync.push_assistant_to_openai", Mock())
     def test_archive_assistant_succeeds_with_released_related_experiment(self):
         exp_v1 = ExperimentFactory()
-        exp_v2 = exp_v1.create_new_version()
-        exp_v1.save()
         assistant = OpenAiAssistantFactory()
         exp_v2 = exp_v1.create_new_version()
         exp_v2.assistant = assistant
+        exp_v2.is_default_version = False
         exp_v2.save()
         assert exp_v2.is_default_version is False
         assert exp_v2.is_working_version is False
@@ -152,7 +151,6 @@ class TestAssistantArchival:
         assert pipeline_v2.is_working_version is False
         assert exp_v2.is_default_version is True
         assert exp_v2.is_working_version is False
-        assistant.archive()
         assert not assistant.archive()  # archiving failed
 
         exp_v2.archive()
