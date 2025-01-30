@@ -141,7 +141,7 @@ class TestAssistantArchival:
         pipeline_v1 = PipelineFactory()
         assistant = OpenAiAssistantFactory()
         pipeline_v2 = pipeline_v1.create_new_version()
-        NodeFactory(pipeline=pipeline_v2, type="AssistantNode", params={"assistant_id": assistant.id})
+        NodeFactory(pipeline=pipeline_v2, type="AssistantNode", params={"assistant_id": str(assistant.id)})
         exp_v1 = ExperimentFactory()
         exp_v2 = exp_v1.create_new_version()
         exp_v2.pipeline = pipeline_v2
@@ -162,7 +162,7 @@ class TestAssistantArchival:
     def test_archive_assistant_fails_with_working_related_pipeline(self):
         pipeline = PipelineFactory()
         assistant = OpenAiAssistantFactory()
-        NodeFactory(pipeline=pipeline, type="AssistantNode", params={"assistant_id": assistant.id})
+        NodeFactory(pipeline=pipeline, type="AssistantNode", params={"assistant_id": str(assistant.id)})
 
         assert pipeline.is_working_version is True
         assistant.archive()
