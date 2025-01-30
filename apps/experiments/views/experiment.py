@@ -111,7 +111,7 @@ def experiments_home(request, team_slug: str):
         {
             "active_tab": "experiments",
             "title": "Experiments",
-            "info_link": settings.DOCUMENTATION_LINKS["experiment"],
+            "title_help_content": render_help_with_link("", "experiment"),
             "new_object_url": reverse("experiments:new", args=[team_slug]),
             "table_url": reverse("experiments:table", args=[team_slug]),
             "enable_search": True,

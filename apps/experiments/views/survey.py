@@ -1,4 +1,3 @@
-from django.conf import settings
 from django.contrib import messages
 from django.http import HttpResponse
 from django.shortcuts import get_object_or_404
@@ -10,6 +9,7 @@ from django_tables2 import SingleTableView
 from apps.experiments.forms import SurveyForm
 from apps.experiments.models import Survey
 from apps.experiments.tables import SurveyTable
+from apps.generics.help import render_help_with_link
 from apps.teams.mixins import LoginAndTeamRequiredMixin
 
 
@@ -20,7 +20,7 @@ class SurveyHome(LoginAndTeamRequiredMixin, TemplateView):
         return {
             "active_tab": "survey",
             "title": "Survey",
-            "info_link": settings.DOCUMENTATION_LINKS["survey"],
+            "title_help_content": render_help_with_link("", "survey"),
             "new_object_url": reverse("experiments:survey_new", args=[team_slug]),
             "table_url": reverse("experiments:survey_table", args=[team_slug]),
         }

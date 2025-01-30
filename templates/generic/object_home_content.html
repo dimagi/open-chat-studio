@@ -7,11 +7,8 @@
         <h1 id="{{ title|slugify }}" class="{{ title_class|default:"pg-title" }} hover:cursor-pointer">
           <a href="#{{ title|slugify }}">{{ title }}</a>
         </h1>
-        {% if info_link %}
-          {% blocktranslate asvar help_text %}
-            <p><a class="link" href="{{ info_link }}" target="_blank">Learn more</a></p>
-          {% endblocktranslate %}
-          {% include "generic/help.html" with help_content=help_text %}
+        {% if title_help_content %}
+          {% include "generic/help.html" with help_content=title_help_content %}
         {% endif %}
       </div>
       <span class="text-neutral-500">{{ subtitle }}</span>
