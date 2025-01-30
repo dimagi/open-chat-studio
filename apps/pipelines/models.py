@@ -449,7 +449,7 @@ class Node(BaseModel, VersionsMixin, CustomActionOperationMixin):
                 case "assistant_id":
                     name = "assistant"
                     # Load the assistant, since it is being versioned
-                    value = OpenAiAssistant.objects.get(id=value)
+                    value = OpenAiAssistant.objects.filter(id=value).first()
 
             param_versions.append(
                 VersionField(group_name=node_name, name=name, raw_value=value, to_display=display_formatter)
