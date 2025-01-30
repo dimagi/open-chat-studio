@@ -98,6 +98,17 @@ class VersionFieldDisplayFormatters:
         return template.render({"chip": Chip(label=name, url=url)})
 
     @staticmethod
+    def format_pipeline(pipeline) -> str:
+        if not pipeline:
+            return ""
+        name = pipeline.name.split(f" v{pipeline.version_number}")[0]
+        template = get_template("generic/chip.html")
+        url = (
+            pipeline.get_absolute_url() if pipeline.is_working_version else pipeline.working_version.get_absolute_url()
+        )
+        return template.render({"chip": Chip(label=name, url=url)})
+
+    @staticmethod
     def format_builtin_tools(tools: set) -> str:
         """code_interpreter, file_search -> Code Interpreter, File Search"""
         return ", ".join([tool.replace("_", " ").capitalize() for tool in tools])
@@ -1068,7 +1079,12 @@ class Experiment(BaseTeamModel, VersionsMixin, CustomActionOperationMixin):
                     raw_value=self.assistant,
                     to_display=VersionFieldDisplayFormatters.format_assistant,
                 ),
-                VersionField(group_name="Pipeline", name="pipeline", raw_value=self.pipeline),
+                VersionField(
+                    group_name="Pipeline",
+                    name="pipeline",
+                    raw_value=self.pipeline,
+                    to_display=VersionFieldDisplayFormatters.format_pipeline,
+                ),
                 VersionField(group_name="Tracing", name="tracing_provider", raw_value=self.trace_provider),
                 # Triggers
                 VersionField(
@@ -1180,43 +1196,35 @@ class ExperimentRoute(BaseTeamModel, VersionsMixin):
     @transaction.atomic()
     def create_new_version(self, new_parent: Experiment) -> "ExperimentRoute":
         """
-        Strategy for handling child versions:
-
-        1. If the child is already a version:
-        - Do not create a new child version.
-
-        2. If the child is a working version, verify whether the latest version of the child:
-        - Is identical to the current one, and
-        - Belongs to the same version family.
-
-        - If both conditions are met, reuse the latest version of the child.
-        - Otherwise, proceed to create a new version.
+        Strategy:
+        - If the current child doesn't have any versions, create a new child version for the new route version
+        - If the current child have versions and there are changes between the current child and its latest version,
+            a new child version should be created for the new route version
+        - Alternatively, if there are were changes made since the last child version were made, use the latest version
+            for the new route version
         """
 
-        new_instance = super().create_new_version(save=False)
-        new_instance.parent = new_parent
-        if not new_instance.child.is_a_version:
-            # TODO: The user must be notified and give consent to us doing this. Ignore for now
-            latest_child_version: ExperimentRoute | None = new_instance.child.latest_version
+        new_route = super().create_new_version(save=False)
+        new_route.parent = new_parent
+        new_route.child = None
+        working_child = self.child
 
-            if latest_child_version:
-                # Compare experimens using their `version` instances for a comprehensive comparison
-                child_version = self.child.version_details
-                latest_version = latest_child_version.version_details
-                child_version.compare(latest_version)
+        if latest_child_version := working_child.latest_version:
+            # Compare experimens using their `version` instances for a comprehensive comparison
+            current_version_details: VersionDetails = working_child.version_details
+            current_version_details.compare(latest_child_version.version_details)
 
-                if not child_version.fields_changed:
-                    new_child = latest_child_version
-                else:
-                    fields_changed = [f.name for f in child_version.fields if f.changed]
-                    description = self._generate_version_description(fields_changed)
-                    new_child = new_instance.child.create_new_version(version_description=description)
+            if current_version_details.fields_changed:
+                fields_changed = [f.name for f in current_version_details.fields if f.changed]
+                description = self._generate_version_description(fields_changed)
+                new_route.child = working_child.create_new_version(version_description=description)
             else:
-                new_child = new_instance.child.create_new_version(self._generate_version_description())
+                new_route.child = latest_child_version
+        else:
+            new_route.child = working_child.create_new_version()
 
-            new_instance.child = new_child
-        new_instance.save()
-        return new_instance
+        new_route.save()
+        return new_route
 
     def _generate_version_description(self, changed_fields: set | None = None) -> str:
         description = "Auto created when the parent experiment was versioned"
@@ -1225,44 +1233,15 @@ class ExperimentRoute(BaseTeamModel, VersionsMixin):
             description = f"{description} since {changed_fields} changed."
         return description
 
-    def compare_with_model(self, route: "ExperimentRoute", exclude_fields, early_abort=False):
-        """
-        When comparing two ExperimentRoute versions (with the same parents), consider the following:
-
-        1. The child of one version may belong to a different family than the child of the other version.
-
-        2. If both children belong to the same family:
-        - 2.1. If the version numbers are the same, the child has not changed.
-        - 2.2. If the version numbers differ:
-            - 2.2.1. If both are versions, then they are considered different.
-            - 2.2.2. If one of them is a working version, verify if any changes have occurred in the working version
-                    since the version was created. Some fields are not applicable to the child and can be ignored
-                    when calculating changes.
-        """
-        is_same_family = self.get_working_version() == route.get_working_version()
-        if not is_same_family:
-            return super().compare_with_model(route, exclude_fields, early_abort=early_abort)
-
-        fields_to_exclude = exclude_fields.copy()
-        fields_to_exclude.extend(["parent"])
-
-        if not (self.child == route.child.get_working_version() or self.child.get_working_version() == route.child):
-            return super().compare_with_model(route, fields_to_exclude, early_abort=early_abort)
-
-        fields_to_exclude.append("child")
-        # Compare all other fields first
-        results = list(super().compare_with_model(route, fields_to_exclude, early_abort=early_abort))
-        if early_abort and results:
-            return set(results)
-
-        # Now compare the children
-        version1 = self.child.version_details
-        version2 = route.child.version_details
-        version1.compare(version2, early_abort=early_abort)
-        child_changes = [field.name for field in version1.fields if field.changed]
-
-        results.extend(list(child_changes))
-        return set(results)
+    @property
+    def version_details(self) -> VersionDetails:
+        return VersionDetails(
+            instance=self,
+            fields=[
+                VersionField(group_name=self.keyword, name="keyword", raw_value=self.keyword),
+                VersionField(group_name=self.keyword, name="child", raw_value=self.child),
+            ],
+        )
 
     class Meta:
         constraints = [
