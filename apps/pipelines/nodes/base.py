@@ -205,6 +205,7 @@ class NodeSchema(BaseModel):
     can_add: bool = None
     deprecated: bool = False
     deprecation_message: str = None
+    documentation_link: str = None
     field_order: list[str] = Field(
         None,
         description=(
@@ -236,6 +237,8 @@ class NodeSchema(BaseModel):
             schema["ui:deprecation_message"] = self.deprecation_message
         if self.field_order:
             schema["ui:order"] = self.field_order
+        if self.documentation_link:
+            schema["ui:documentation_link"] = self.documentation_link
 
 
 def deprecated_node(cls=None, *, message=None):

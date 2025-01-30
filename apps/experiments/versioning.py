@@ -25,6 +25,11 @@ def differs(original: Any, new: Any, exclude_model_fields: list[str] | None = No
     return original != new
 
 
+def default_to_display(value):
+    """The default function to use to display the value of a field or queryset"""
+    return value
+
+
 @dataclass
 class FieldGroup:
     name: str
@@ -47,7 +52,7 @@ class VersionField:
 
     name: str = ""
     raw_value: Any | None = None
-    to_display: callable = data_field(default=lambda x: x)
+    to_display: callable = None
     group_name: str = data_field(default="General")
     previous_field_version: "VersionField" = data_field(default=None)
     changed: bool = False
@@ -79,10 +84,11 @@ class VersionField:
                 self.queryset_results.append(VersionField(raw_value=record, to_display=self.to_display))
 
     def display_value(self) -> Any:
+        to_display = self.to_display or default_to_display
         if self.queryset:
-            return self.to_display(self.queryset_results)
+            return to_display(self.queryset_results)
         if self.current_value:
-            return self.to_display(self.current_value)
+            return to_display(self.current_value)
         return ""
 
     def _get_fields_to_exclude(self) -> list[str]:
@@ -166,7 +172,6 @@ class VersionField:
 
             if previous_record:
                 # A version of the current record exists in the previous queryset
-                # TODO: When comparing static trigger versions and only the action changed, it is not being picked up.
                 previous_records.remove(previous_record.id)
                 prev_version_field = VersionField(raw_value=previous_record, to_display=self.to_display)
                 version_field.compare(prev_version_field, early_abort=early_abort)
@@ -222,7 +227,7 @@ class VersionDetails:
             self._fields_dict[version_field.name] = version_field
 
     def get_field(self, field_name: str) -> VersionField:
-        return self._fields_dict[field_name]
+        return self._fields_dict.get(field_name)
 
     @property
     def fields_grouped(self):
@@ -260,7 +265,33 @@ class VersionDetails:
 
         for field in self.fields:
             previous_field_version = previous_version_details.get_field(field.name)
+            if not previous_field_version:
+                # When a new field was added to the new version, we need to compare it to a None value in the previous
+                # version
+                previous_field_version = VersionField(
+                    name=field.name,
+                    raw_value=None,
+                    queryset=None,
+                    to_display=field.to_display,
+                    group_name=field.group_name,
+                )
+
             field.compare(previous_field_version, early_abort=early_abort)
             self.fields_changed = self.fields_changed or field.changed
             if field.changed and early_abort:
                 return
+
+        for previous_field in previous_version_details.fields:
+            # When a field was totally removed from the new instance, we still need to track an empty value for it
+            current_field_version = self.get_field(previous_field.name)
+            if not current_field_version:
+                missing_field = VersionField(
+                    name=previous_field.name,
+                    raw_value=None,
+                    queryset=None,
+                    to_display=previous_field.to_display,
+                    group_name=previous_field.group_name,
+                )
+                self.fields.append(missing_field)
+                self._fields_dict[missing_field.name] = missing_field
+                missing_field.compare(previous_field, early_abort=early_abort)
