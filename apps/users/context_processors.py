@@ -14,6 +14,6 @@ def user_teams(request):
                 (membership.team.name, membership.team.dashboard_url)
                 for membership in other_membership.select_related("team")
             ],
-            key=lambda x: x[0],
+            key=lambda x: x[0].lower(),
         ),
     }
