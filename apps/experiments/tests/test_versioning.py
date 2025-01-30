@@ -248,4 +248,4 @@ class TestVersion:
         # We expect the missing field(s) from the previous version details to be added to the current version details
         assert "pipeline_id" in [f.name for f in curr_version_details.fields]
         # Since the field is missing, the value should be None
-        assert curr_version_details.get_field("pipeline_id") is None
+        assert curr_version_details.get_field("pipeline_id").raw_value is None

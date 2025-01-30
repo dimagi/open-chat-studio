@@ -293,4 +293,5 @@ class VersionDetails:
                     group_name=previous_field.group_name,
                 )
                 self.fields.append(missing_field)
+                self._fields_dict[missing_field.name] = missing_field
                 missing_field.compare(previous_field, early_abort=early_abort)
