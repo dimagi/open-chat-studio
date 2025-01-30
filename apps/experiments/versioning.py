@@ -25,6 +25,11 @@ def differs(original: Any, new: Any, exclude_model_fields: list[str] | None = No
     return original != new
 
 
+def default_to_display(value):
+    """The default function to use to display the value of a field or queryset"""
+    return value
+
+
 @dataclass
 class FieldGroup:
     name: str
@@ -79,9 +84,6 @@ class VersionField:
                 self.queryset_results.append(VersionField(raw_value=record, to_display=self.to_display))
 
     def display_value(self) -> Any:
-        def default_to_display(value):
-            return value
-
         to_display = self.to_display or default_to_display
         if self.queryset:
             return to_display(self.queryset_results)
