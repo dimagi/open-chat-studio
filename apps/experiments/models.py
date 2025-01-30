@@ -1238,8 +1238,8 @@ class ExperimentRoute(BaseTeamModel, VersionsMixin):
         return VersionDetails(
             instance=self,
             fields=[
-                VersionField(group_name="General", name="keyword", raw_value=self.keyword),
-                VersionField(group_name="General", name="child", raw_value=self.child),
+                VersionField(group_name=self.keyword, name="keyword", raw_value=self.keyword),
+                VersionField(group_name=self.keyword, name="child", raw_value=self.child),
             ],
         )
 
