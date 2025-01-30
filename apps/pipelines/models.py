@@ -429,6 +429,7 @@ class Node(BaseModel, VersionsMixin, CustomActionOperationMixin):
 
     @property
     def version_details(self) -> VersionDetails:
+        from apps.assistants.models import OpenAiAssistant
         from apps.experiments.models import VersionFieldDisplayFormatters
 
         node_name = self.params.get("name", self.type)
@@ -446,9 +447,8 @@ class Node(BaseModel, VersionsMixin, CustomActionOperationMixin):
                 case "name":
                     value = node_name
                 case "assistant_id":
-                    from apps.assistants.models import OpenAiAssistant
-
                     name = "assistant"
+                    # Load the assistant, since it is being versioned
                     value = OpenAiAssistant.objects.get(id=value)
 
             param_versions.append(
