@@ -315,7 +315,6 @@ class TimeoutTrigger(BaseModel, VersionsMixin):
     @property
     def version_details(self) -> VersionDetails:
         event_action_type = EventActionType(self.action.action_type).label
-        event_action_type = EventActionType(self.action.action_type).label
         group_name = event_action_type
 
         action_param_versions = [VersionField(group_name=group_name, name="action", raw_value=event_action_type)]
