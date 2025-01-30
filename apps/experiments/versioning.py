@@ -222,7 +222,7 @@ class VersionDetails:
             self._fields_dict[version_field.name] = version_field
 
     def get_field(self, field_name: str) -> VersionField:
-        return self._fields_dict[field_name]
+        return self._fields_dict.get(field_name)
 
     @property
     def fields_grouped(self):
@@ -260,7 +260,32 @@ class VersionDetails:
 
         for field in self.fields:
             previous_field_version = previous_version_details.get_field(field.name)
+            if not previous_field_version:
+                # When a new field was added to the new version, we need to compare it to a None value in the previous
+                # version
+                previous_field_version = VersionField(
+                    name=field.name,
+                    raw_value=None,
+                    queryset=None,
+                    to_display=field.to_display,
+                    group_name=field.group_name,
+                )
+
             field.compare(previous_field_version, early_abort=early_abort)
             self.fields_changed = self.fields_changed or field.changed
             if field.changed and early_abort:
                 return
+
+        for previous_field in previous_version_details.fields:
+            # When a field was totally removed from the new instance, we still need to track an empty value for it
+            current_field_version = self.get_field(previous_field.name)
+            if not current_field_version:
+                missing_field = VersionField(
+                    name=previous_field.name,
+                    raw_value=None,
+                    queryset=None,
+                    to_display=previous_field.to_display,
+                    group_name=previous_field.group_name,
+                )
+                self.fields.append(missing_field)
+                missing_field.compare(previous_field, early_abort=early_abort)

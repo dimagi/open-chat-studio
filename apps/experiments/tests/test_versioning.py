@@ -2,6 +2,7 @@ import pytest
 
 from apps.experiments.models import Experiment, VersionsMixin
 from apps.experiments.versioning import VersionDetails, VersionField, differs
+from apps.utils.factories.events import EventActionFactory, EventActionType, StaticTriggerFactory
 from apps.utils.factories.experiment import ExperimentFactory, ExperimentSessionFactory
 from apps.utils.factories.service_provider_factories import TraceProviderFactory
 
@@ -219,3 +220,32 @@ class TestVersion:
         experiment.trace_provider = trace_provider
         experiment.save()
         experiment.version_details.compare(experiment_version.version_details)
+
+    def test_action_params_expanded_into_fields(self):
+        """
+        Non-model fields that are considered part of a version (e.g. static trigger action params) are be expanded
+        into separate versioned fields. If some of those parameters are removed in a new version, they should still
+        show up as a versioned field in `version_details`, but only with an empty value.
+        """
+        experiment = ExperimentFactory()
+        first_version_params = {"pipeline_id": 1}
+        start_pipeline_action = EventActionFactory(
+            action_type=EventActionType.PIPELINE_START,
+            params=first_version_params,
+        )
+        static_trigger = StaticTriggerFactory(experiment=experiment, action=start_pipeline_action)
+        experiment.create_new_version()
+
+        # Now change the params
+        action = static_trigger.action
+        action.params = {"some_other_param": "a value"}
+        action.save()
+
+        curr_version_details = static_trigger.version_details
+        # Since the params changed, we expect pipeline_id to be missing from the version details
+        assert "pipeline_id" not in [f.name for f in curr_version_details.fields]
+        curr_version_details.compare(static_trigger.latest_version.version_details)
+        # We expect the missing field(s) from the previous version details to be added to the current version details
+        assert "pipeline_id" in [f.name for f in curr_version_details.fields]
+        # Since the field is missing, the value should be None
+        assert curr_version_details.get_field("pipeline_id") is None
