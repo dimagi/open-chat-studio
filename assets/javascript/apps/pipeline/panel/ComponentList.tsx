@@ -1,7 +1,7 @@
 import React, {useEffect, useState} from "react";
 import Component from "./Component";
 import OverlayPanel from "../components/OverlayPanel";
-import {getCachedData} from "../utils";
+import {formatDocsForSchema, getCachedData} from "../utils";
 import ComponentHelp from "./ComponentHelp";
 import {JsonSchema, NodeData, NodeParams} from "../types/nodeParams";
 import usePipelineStore from "../stores/pipelineStore";
@@ -109,7 +109,8 @@ export default function ComponentList({isOpen, setIsOpen}: ComponentListParams) 
 
   // Help bubbles need to be outside the overlay container to avoid clipping
   const helps = schemaList.map((schema) => {
-    if (!schema.description) {
+    const helpContent = formatDocsForSchema(schema);
+    if (!helpContent) {
       return null;
     }
     return <ComponentHelp
@@ -119,7 +120,7 @@ export default function ComponentList({isOpen, setIsOpen}: ComponentListParams) 
       scrollPosition={scrollPosition}
       showHelp={showHelp.show.get(schema.title)}
     >
-      <p>{schema.description}</p>
+      {helpContent}
     </ComponentHelp>;
   })
 

@@ -35,6 +35,7 @@
   "ui:can_add": true,
   "ui:can_delete": true,
   "ui:deprecated": false,
+  "ui:documentation_link": "/concepts/pipelines/nodes/#assistant",
   "ui:flow_node_type": "pipelineNode",
   "ui:label": "OpenAI Assistant"
 }

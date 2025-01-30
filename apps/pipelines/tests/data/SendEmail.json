@@ -26,6 +26,7 @@
   "ui:can_add": true,
   "ui:can_delete": true,
   "ui:deprecated": false,
+  "ui:documentation_link": "/concepts/pipelines/nodes/#email",
   "ui:flow_node_type": "pipelineNode",
   "ui:label": "Send an email"
 }

@@ -31,6 +31,7 @@ from apps.teams.decorators import login_and_team_required
 from apps.teams.mixins import LoginAndTeamRequiredMixin
 
 from ..generics.chips import Chip
+from ..generics.help import render_help_with_link
 
 
 class PipelineHome(LoginAndTeamRequiredMixin, TemplateView, PermissionRequiredMixin):
@@ -43,6 +44,9 @@ class PipelineHome(LoginAndTeamRequiredMixin, TemplateView, PermissionRequiredMi
             "title": "Pipelines",
             "new_object_url": reverse("pipelines:new", args=[team_slug]),
             "table_url": reverse("pipelines:table", args=[team_slug]),
+            "title_help_content": render_help_with_link(
+                "Pipelines allow you to create more complex bots by combining one or more steps together.", "pipelines"
+            ),
         }
 
 

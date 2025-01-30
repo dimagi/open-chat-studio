@@ -27,6 +27,7 @@ export type JsonSchema = {
   "ui:can_delete": boolean;
   "ui:deprecated": boolean;
   "ui:deprecation_message"?: string;
+  "ui:documentation_link"?: string;
   "ui:order"?: string[];
   properties: Record<string, PropertySchema>;
   [k: string]: any;
