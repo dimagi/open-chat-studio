@@ -312,6 +312,25 @@ class TimeoutTrigger(BaseModel, VersionsMixin):
     def get_fields_to_exclude(self):
         return super().get_fields_to_exclude() + ["action", "experiment", "event_logs"]
 
+    @property
+    def version_details(self) -> VersionDetails:
+        event_action_type = EventActionType(self.action.action_type).label
+        event_action_type = EventActionType(self.action.action_type).label
+        group_name = event_action_type
+
+        action_param_versions = [VersionField(group_name=group_name, name="action", raw_value=event_action_type)]
+        for name, value in self.action.params.items():
+            action_param_versions.append(VersionField(group_name=group_name, name=name, raw_value=value))
+
+        return VersionDetails(
+            instance=self,
+            fields=[
+                VersionField(group_name=group_name, name="delay", raw_value=self.delay),
+                VersionField(group_name=group_name, name="total_num_triggers", raw_value=self.total_num_triggers),
+                *action_param_versions,
+            ],
+        )
+
 
 class TimePeriod(models.TextChoices):
     MINUTES = ("minutes", "Minutes")

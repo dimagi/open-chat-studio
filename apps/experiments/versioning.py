@@ -166,7 +166,6 @@ class VersionField:
 
             if previous_record:
                 # A version of the current record exists in the previous queryset
-                # TODO: When comparing static trigger versions and only the action changed, it is not being picked up.
                 previous_records.remove(previous_record.id)
                 prev_version_field = VersionField(raw_value=previous_record, to_display=self.to_display)
                 version_field.compare(prev_version_field, early_abort=early_abort)
