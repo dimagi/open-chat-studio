@@ -294,7 +294,7 @@ class SendEmail(PipelineNode):
         send_email_from_pipeline.delay(
             recipient_list=self.recipient_list.split(","), subject=self.subject, message=input
         )
-        return PipelineState.from_node_output(node_name=self.name, node_id=node_id, output=None)
+        return PipelineState.from_node_output(node_name=self.name, node_id=node_id, output=input)
 
 
 class Passthrough(PipelineNode):
