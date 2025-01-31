@@ -172,8 +172,9 @@ class ExperimentSessionsTableView(SingleTableView, PermissionRequiredMixin):
             tags = tags_query.split("&")
             query_set = query_set.filter(chat__tags__name__in=tags).distinct()
 
-        if participant := self.request.GET.get("participant"):
-            query_set = query_set.filter(participant__identifier=participant)
+        if participant_identifiers := self.request.GET.get("participants"):
+            participant_identifiers = participant_identifiers.split(",")
+            query_set = query_set.filter(participant__identifier__in=participant_identifiers)
         return query_set
 
 
@@ -1178,7 +1179,12 @@ def generate_chat_export(request, team_slug: str, experiment_id: str):
     experiment = get_object_or_404(Experiment, id=experiment_id)
     tags = request.POST.get("tags", [])
     tags = tags.split(",") if tags else []
-    task_id = async_export_chat.delay(experiment_id, tags=tags, participant=request.POST.get("participant"))
+
+    participant_identifiers = request.POST.get("participants")
+    if participant_identifiers:
+        participant_identifiers = participant_identifiers.split(",")
+
+    task_id = async_export_chat.delay(experiment_id, tags=tags, participants=participant_identifiers)
     return TemplateResponse(
         request, "experiments/components/exports.html", {"experiment": experiment, "task_id": task_id}
     )
