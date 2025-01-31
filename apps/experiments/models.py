@@ -262,6 +262,12 @@ class VersionsMixin:
     def is_editable(self) -> bool:
         return not self.is_archived
 
+    def get_version_name(self):
+        """Returns version name in form of v + version number, or unreleased if working version."""
+        if self.is_working_version:
+            return "unreleased"
+        return f"v{self.version_number}"
+
 
 @audit_fields(*model_audit_fields.SOURCE_MATERIAL_FIELDS, audit_special_queryset_writes=True)
 class SourceMaterial(BaseTeamModel, VersionsMixin):

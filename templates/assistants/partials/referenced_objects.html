@@ -18,6 +18,16 @@
     </ul>
   {% endif %}
 
+  {% if experiments_with_pipeline_nodes %}
+    <h2 class="font-semibold my-2">Experiments referencing Pipeline</h2>
+    <ul class="list-disc list-inside">
+      {% for experiment in experiments_with_pipeline_nodes %}
+        <li>{% include "generic/chip.html" with chip=experiment %}</li>
+      {% endfor %}
+    </ul>
+  {% endif %}
+
+
   {% if static_trigger_experiments %}
     <h2 class="font-semibold my-2">Static Trigger Experiments</h2>
     <ul class="list-disc list-inside">

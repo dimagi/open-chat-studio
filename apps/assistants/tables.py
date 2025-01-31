@@ -28,7 +28,7 @@ class OpenAiAssistantTable(tables.Table):
                 title="Archive",
                 icon_class="fa-solid fa-box-archive",
                 required_permissions=["assistants.delete_openaiassistant"],
-                confirm_message="This will not delete the assistant from OpenAI.",
+                confirm_message="This will delete the assistant from OpenAI.",
                 hx_method="delete",
             ),
             actions.AjaxAction(
