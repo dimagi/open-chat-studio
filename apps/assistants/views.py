@@ -128,6 +128,9 @@ class CreateOpenAiAssistant(BaseOpenAiAssistantView, CreateView):
         except OpenAiSyncError as e:
             messages.error(self.request, f"Error syncing assistant to OpenAI: {e}")
             return self.form_invalid(form)
+        except Exception as e:
+            logger.exception(f"Could not push assistant to OpenAI. {e}")
+            messages.error(self.request, "Could not create the assistant at OpenAI. Pleas try again later")
         return HttpResponseRedirect(self.get_success_url())
 
 
@@ -149,6 +152,9 @@ class EditOpenAiAssistant(BaseOpenAiAssistantView, UpdateView):
             messages.error(self.request, f"Error syncing changes to OpenAI: {e}")
             form.add_error(None, str(e))
             return self.form_invalid(form)
+        except Exception as e:
+            logger.exception(f"Could not push assistant to OpenAI. {e}")
+            messages.error(self.request, "Could not create the assistant at OpenAI. Pleas try again later")
         return response
 
 
