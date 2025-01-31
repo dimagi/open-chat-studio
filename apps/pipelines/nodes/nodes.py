@@ -485,7 +485,7 @@ class ExtractStructuredDataNodeMixin:
             new_reference_data = self.update_reference_data(output, reference_data)
 
         self.post_extraction_hook(new_reference_data, state)
-        output = json.dumps(new_reference_data)
+        output = input if self.is_passthrough else json.dumps(new_reference_data)
         return PipelineState.from_node_output(node_name=self.name, node_id=node_id, output=output)
 
     def post_extraction_hook(self, output, state):
@@ -598,6 +598,10 @@ class ExtractStructuredData(ExtractStructuredDataNodeMixin, LLMResponse, Structu
         json_schema_extra=UiSchema(widget=Widgets.expandable_text),
     )
 
+    @property
+    def is_passthrough(self) -> bool:
+        return False
+
 
 class ExtractParticipantData(ExtractStructuredDataNodeMixin, LLMResponse, StructuredDataSchemaValidatorMixin):
     """Extract structured data and saves it as participant data"""
@@ -615,6 +619,10 @@ class ExtractParticipantData(ExtractStructuredDataNodeMixin, LLMResponse, Struct
         json_schema_extra=UiSchema(widget=Widgets.expandable_text),
     )
     key_name: str = ""
+
+    @property
+    def is_passthrough(self) -> bool:
+        return True
 
     def get_reference_data(self, state) -> dict:
         """Returns the participant data as reference. If there is a `key_name`, the value in the participant data
