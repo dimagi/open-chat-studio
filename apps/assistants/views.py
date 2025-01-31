@@ -1,3 +1,5 @@
+import logging
+
 from django.contrib import messages
 from django.contrib.auth.mixins import PermissionRequiredMixin
 from django.db import transaction
@@ -34,6 +36,8 @@ from .sync import (
 )
 from .tables import OpenAiAssistantTable
 from .utils import get_llm_providers_for_assistants
+
+logger = logging.getLogger(__name__)
 
 
 class OpenAiAssistantHome(LoginAndTeamRequiredMixin, TemplateView, PermissionRequiredMixin):
@@ -180,6 +184,9 @@ class SyncEditingOpenAiAssistant(BaseOpenAiAssistantView, View):
             sync_from_openai(assistant)
         except OpenAiSyncError as e:
             messages.error(request, f"Error syncing assistant: {e}")
+        except Exception as e:
+            logger.exception(f"Error syncing assistant. {e}")
+            messages.error(request, "Could not sync assistant. Please try again later")
         return HttpResponse(headers={"HX-Refresh": "true"})
 
 
@@ -268,6 +275,9 @@ class SyncOpenAiAssistant(LoginAndTeamRequiredMixin, View, PermissionRequiredMix
             sync_from_openai(assistant)
         except OpenAiSyncError as e:
             messages.error(request, f"Error syncing assistant: {e}")
+        except Exception as e:
+            logger.exception(f"Error syncing assistant. {e}")
+            messages.error(request, "Could not sync assistant. Please try again later")
         return render_table_row(request, OpenAiAssistantTable, assistant)
 
 
