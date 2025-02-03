@@ -746,14 +746,11 @@ class AssistantNode(PipelineNode):
             return AssistantChat(adapter=adapter, history_manager=history_manager)
 
 
-DEFAULT_FUNCTION = """# You must define a main function, which takes the node input as a string.
+CODE_NODE_DOCS = f"{settings.DOCUMENTATION_BASE_URL}{settings.DOCUMENTATION_LINKS['node_code']}"
+DEFAULT_FUNCTION = f"""# You must define a main function, which takes the node input as a string.
 # Return a string to pass to the next node.
 
-# Available functions:
-# - get_participant_data() -> dict
-# - set_participant_data(data: Any) -> None
-# - get_temp_state_key(key_name: str) -> str | None
-# - set_temp_state_key(key_name: str, data: Any) -> None
+# Learn more about Python nodes at {CODE_NODE_DOCS}
 
 def main(input: str, **kwargs) -> str:
     return input
