@@ -1333,7 +1333,8 @@ class Participant(BaseTeamModel):
         last_message = exp_scoped_human_message.order_by("-created_at")[:1].values("created_at")
         joined_on = self.experimentsession_set.order_by("created_at")[:1].values("created_at")
         return (
-            Experiment.objects.annotate(
+            Experiment.objects.get_all()
+            .annotate(
                 joined_on=Subquery(joined_on),
                 last_message=Subquery(last_message),
             )
