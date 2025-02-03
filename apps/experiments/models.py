@@ -1285,6 +1285,8 @@ class Participant(BaseTeamModel):
     def __str__(self):
         if self.name:
             return f"{self.name} ({self.identifier})"
+        elif self.user and self.user.get_full_name():
+            return f"{self.user.get_full_name()} ({self.identifier})"
         return self.identifier
 
     def get_platform_display(self):
