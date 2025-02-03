@@ -9,5 +9,5 @@ Include technical details required to understand the change. -->
 <!-- If relevent, include screenshots or a loom video to demonstrate the new behavior
 **Include step-by-step instructions to enable functionality of the change-->
 
-### Docs
+### Docs and Changelog
 <!--Link to documentation that has been updated.-->
