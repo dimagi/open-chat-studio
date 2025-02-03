@@ -811,7 +811,10 @@ class Experiment(BaseTeamModel, VersionsMixin, CustomActionOperationMixin):
         return Experiment.objects.get_default_or_working(self)
 
     def as_chip(self) -> Chip:
-        return Chip(label=self.name, url=self.get_absolute_url())
+        label = self.name
+        if self.is_archived:
+            label = f"{label} (archived)"
+        return Chip(label=label, url=self.get_absolute_url())
 
     def get_chat_model(self):
         service = self.get_llm_service()
