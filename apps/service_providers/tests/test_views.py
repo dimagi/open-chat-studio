@@ -29,7 +29,7 @@ def factory_for_model(model):
 def test_table_view(provider, team_with_users, client):
     factory = factory_for_model(provider.model)
     factory.create_batch(5, team=team_with_users)
-    assert provider.model.objects.count() == 5
+    assert provider.model.objects.filter(team=team_with_users).count() == 5
 
     response = client.get(
         reverse("service_providers:table", kwargs={"team_slug": team_with_users.slug, "provider_type": provider.slug})
@@ -75,4 +75,4 @@ def test_delete_view(provider, team_with_users, client):
         )
     )
     assert response.status_code == 200
-    assert provider.model.objects.count() == 0
+    assert provider.model.objects.filter(team=team_with_users).count() == 0
