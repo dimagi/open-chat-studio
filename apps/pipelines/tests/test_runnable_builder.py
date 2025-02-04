@@ -927,6 +927,15 @@ def test_parallel_nodes(pipeline):
 
 @django_db_with_data(available_apps=("apps.service_providers",))
 def test_multiple_valid_inputs(pipeline):
+    """This tests the case where a node has multiple valid inputs to make sure it selects the correct one.
+
+    start --> router -+-> template --> end
+                      |                 ^
+                      +---------- ------+
+
+    In this graph, the end node can have valid input from 'router' and 'template' (if the router routes
+    to the template node). The end node should select the input from the 'template' and not the 'router'.
+    """
     start = start_node()
     router = boolean_node()
     template = render_template_node("T: {{ input }}")
