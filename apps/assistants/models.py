@@ -276,6 +276,10 @@ class OpenAiAssistant(BaseTeamModel, VersionsMixin, CustomActionOperationMixin):
             ],
         )
 
+    @property
+    def versioned_fields(self):
+        return [field.name for field in self.version_details.fields]
+
 
 @audit_fields(
     "assistant_id",

@@ -142,21 +142,28 @@ class StaticTrigger(BaseModel, VersionsMixin):
         new_instance.save()
         return new_instance
 
+    # @property
+    # def version_details(self):
+    #     action_param_versions = []
+    #     static_trigger_type = StaticTriggerType(self.type).label.lower()
+    #     event_action_type = EventActionType(self.action.action_type).label
+    #     # Static trigger group names should be user friendly
+    #     group_name = f"When {static_trigger_type} then {event_action_type}"
+
+    #     for name, value in self.action.params.items():
+    #         action_param_versions.append(VersionField(group_name=group_name, name=name, raw_value=value))
+
+    #     return VersionDetails(
+    #         instance=self,
+    #         fields=action_param_versions,
+    #     )
+
     @property
-    def version_details(self):
-        action_param_versions = []
+    def versioned_fields(self):
         static_trigger_type = StaticTriggerType(self.type).label.lower()
         event_action_type = EventActionType(self.action.action_type).label
-        # Static trigger group names should be user friendly
-        group_name = f"When {static_trigger_type} then {event_action_type}"
-
-        for name, value in self.action.params.items():
-            action_param_versions.append(VersionField(group_name=group_name, name=name, raw_value=value))
-
-        return VersionDetails(
-            instance=self,
-            fields=action_param_versions,
-        )
+        # for name, value in self.action.params.items():
+        #     action_param_versions.append(VersionField(group_name=group_name, name=name, raw_value=value))
 
 
 class TimeoutTrigger(BaseModel, VersionsMixin):
