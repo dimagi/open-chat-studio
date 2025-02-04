@@ -1,7 +1,9 @@
 import pytest
 from django.core.exceptions import ValidationError
+from django.urls import reverse
 
 from apps.service_providers.models import LlmProviderModel
+from apps.service_providers.views import matches_blocking_deletion_condition
 from apps.utils.factories.assistants import OpenAiAssistantFactory
 from apps.utils.factories.experiment import ExperimentFactory
 from apps.utils.factories.pipelines import PipelineFactory
@@ -103,3 +105,54 @@ class TestServiceProviderModel:
 
         experiment.llm_provider_model.max_token_limit = 100
         assert experiment.max_token_limit == 100
+
+    @pytest.mark.parametrize(
+        ("obj", "expected"),
+        [
+            (type("MockObj", (), {"working_version_id": None}), True),
+            (type("MockObj", (), {"is_default_version": True}), True),
+            (type("MockObj", (), {"working_version_id": 1, "is_default_version": False}), False),
+        ],
+    )
+    def test_matches_blocking_deletion_condition(self, obj, expected):
+        assert matches_blocking_deletion_condition(obj) == expected
+
+    @pytest.mark.parametrize("fixture_name", ["experiment", "assistant"])
+    @django_db_with_data()
+    def test_delete_service_provider_with_associated_models(self, client, request, fixture_name):
+        associated_object = request.getfixturevalue(fixture_name)
+        service_config = associated_object.llm_provider_model
+
+        related_objects = [
+            ExperimentFactory(llm_provider_model=service_config)
+            if fixture_name == "experiment"
+            else OpenAiAssistantFactory(llm_provider_model=service_config)
+        ]
+
+        url = reverse(
+            "service_providers:delete", args=[service_config.team.slug, service_config.type, service_config.pk]
+        )
+        response = client.delete(url)
+
+        assert response.status_code == 400  # Assert deletion is blocked
+
+    @pytest.mark.django_db()
+    def test_delete_service_provider_without_associated_models(self, client):
+        from apps.utils.factories.team import TeamWithUsersFactory
+
+        team = TeamWithUsersFactory()
+        user = team.members.first()
+        client.force_login(user)
+        service_provider = LlmProviderModelFactory()
+        print(f"Team: {team}, User: {user}, Service Provider: {service_provider}")
+
+        url = reverse(
+            "service_providers:delete", args=[service_provider.team.slug, service_provider.type, service_provider.pk]
+        )
+        print(f"URL: {url}")
+
+        response = client.delete(url)
+        print(f"Response Status Code: {response.status_code}")
+        print(f"Response Content: {response.content}")
+
+        assert response.status_code == 200
