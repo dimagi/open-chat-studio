@@ -663,7 +663,9 @@ class Experiment(BaseTeamModel, VersionsMixin, CustomActionOperationMixin):
     public_id = models.UUIDField(default=uuid.uuid4, unique=True)
     consent_form = models.ForeignKey(
         ConsentForm,
-        on_delete=models.CASCADE,
+        null=True,
+        blank=True,
+        on_delete=models.SET_NULL,
         related_name="experiments",
         help_text="Consent form content to show to users before participation in experiments.",
     )

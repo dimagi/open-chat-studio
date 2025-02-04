@@ -272,7 +272,7 @@ class ChannelBase(ABC):
                 # Webchats' statuses are updated through an "external" flow
                 return ""
 
-            if self.experiment.conversational_consent_enabled:
+            if self.experiment.conversational_consent_enabled and self.experiment.consent_form_id:
                 if self._should_handle_pre_conversation_requirements():
                     self._handle_pre_conversation_requirements()
                     return ""

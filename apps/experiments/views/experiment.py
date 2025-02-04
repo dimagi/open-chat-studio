@@ -337,6 +337,9 @@ class ExperimentForm(forms.ModelForm):
             if not cleaned_data.get("pipeline"):
                 errors["pipeline"] = "Pipeline is required when creating a pipeline experiment"
 
+        if cleaned_data["conversational_consent_enabled"] and not cleaned_data["consent_form"]:
+            errors["consent_form"] = "Consent form is required when conversational consent is enabled"
+
         if errors:
             raise forms.ValidationError(errors)
 
@@ -1035,6 +1038,16 @@ def start_session_public(request, team_slug: str, experiment_id: uuid.UUID):
 
     consent = experiment_version.consent_form
     user = get_real_user_or_none(request.user)
+    if not consent:
+        identifier = user.email if user else str(uuid.uuid4())
+        session = WebChannel.start_new_session(
+            working_experiment=experiment,
+            participant_user=user,
+            participant_identifier=identifier,
+            timezone=request.session.get("detected_tz", None),
+        )
+        return _record_consent_and_redirect(request, team_slug, session)
+
     if request.method == "POST":
         form = ConsentForm(consent, request.POST, initial={"identifier": user.email if user else None})
         if form.is_valid():
