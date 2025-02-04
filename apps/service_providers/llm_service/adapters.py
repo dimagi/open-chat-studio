@@ -130,7 +130,7 @@ class ChatAdapter(BaseAdapter):
     def get_chat_model(self):
         return self.get_llm_service().get_chat_model(self.provider_model_name, self.temperature)
 
-    def get_template_context(self, variables: list[str]):
+    def get_template_context(self, variables: list[str]) -> dict:
         return self.template_context.get_context(variables)
 
     def get_prompt(self):

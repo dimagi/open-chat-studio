@@ -7,19 +7,14 @@ import openai
 from django.db import models, transaction
 from langchain.agents import AgentExecutor, create_tool_calling_agent
 from langchain.agents.openai_assistant.base import OpenAIAssistantFinish
-from langchain.memory import ConversationBufferMemory
 from langchain_core.agents import AgentFinish
 from langchain_core.load import Serializable
-from langchain_core.memory import BaseMemory
 from langchain_core.messages import BaseMessage
 from langchain_core.messages.tool import ToolMessage, tool_call
 from langchain_core.output_parsers import StrOutputParser
-from langchain_core.prompt_values import PromptValue
-from langchain_core.prompts import MessagesPlaceholder
 from langchain_core.runnables import (
     Runnable,
     RunnableConfig,
-    RunnableLambda,
     RunnableSerializable,
     ensure_config,
 )
@@ -116,7 +111,7 @@ class LLMChat(RunnableSerializable[str, ChainOutput]):
     adapter: ChatAdapter
     history_manager: ExperimentHistoryManager | PipelineHistoryManager
     experiment: Experiment | None = None
-    memory: BaseMemory = ConversationBufferMemory(return_messages=True, output_key="output", input_key="input")
+    history: list[BaseMessage] = []
     cancelled: bool = False
     last_cancel_check: float | None = None
     check_every_ms: int = 1000
@@ -167,7 +162,8 @@ class LLMChat(RunnableSerializable[str, ChainOutput]):
         chain = self._build_chain().with_config(run_name="get_llm_response")
 
         output = ""
-        for token in chain.stream(self._get_input(input), config):
+        context = self._get_input_chain_context()
+        for token in chain.stream({**self._get_input(input), **context}, config):
             output += self._parse_output(token)
             if self._chat_is_cancelled():
                 return output
@@ -192,82 +188,61 @@ class LLMChat(RunnableSerializable[str, ChainOutput]):
     def _build_chain(self) -> Runnable[dict[str, Any], Any]:
         raise NotImplementedError
 
-    def _get_input_chain_context(self, with_history=True):
+    def _get_input_chain_context(self, with_history=True) -> dict:
         prompt = self.prompt
         context = self.adapter.get_template_context(prompt.input_variables)
         if with_history:
-            context.update(self.memory.load_memory_variables({}))
+            context.update({"history": self.history})
 
-        return RunnableLambda(lambda inputs: context | inputs, name="add_prompt_context")
+        return context
 
     @property
     def prompt(self):
         return OcsPromptTemplate.from_messages(
             [
                 ("system", self.adapter.get_prompt()),
-                MessagesPlaceholder("history", optional=True),
+                ("placeholder", "{history}"),
                 ("human", "{input}"),
             ]
         )
 
     def _populate_memory(self, input: str):
         input_messages = self.get_input_messages(input)
-        self.memory.chat_memory.messages = self.history_manager.get_chat_history(input_messages)
+        self.history = self.history_manager.get_chat_history(input_messages)
 
     def get_input_messages(self, input: str) -> list[BaseMessage]:
         """Return a list of messages which represent the fully populated LLM input.
         This will be used during history compression.
         """
-        raise NotImplementedError
-
-
-class SimpleLLMChat(LLMChat):
-    def get_input_messages(self, input: str):
-        chain = self._input_chain(with_history=False).with_config(run_name="compute_input_for_compression")
+        context = self._get_input_chain_context(with_history=False)
         try:
-            return chain.invoke(self._get_input(input)).to_messages()
+            return self.prompt.format_messages({**self._get_input(input), **context})
         except KeyError as e:
             raise GenerationError(str(e)) from e
 
-    def _build_chain(self):
-        return self._input_chain() | self.adapter.get_chat_model() | StrOutputParser()
 
-    def _input_chain(self, with_history=True) -> Runnable[dict, PromptValue]:
-        context = self._get_input_chain_context(with_history=with_history)
-        return context | self.prompt
+class SimpleLLMChat(LLMChat):
+    def _build_chain(self) -> Runnable[dict[str, Any], Any]:
+        return self.prompt | self.adapter.get_chat_model() | StrOutputParser()
 
 
 class AgentLLMChat(LLMChat):
     def _parse_output(self, output):
         return output.get("output", "")
 
-    def _input_chain(self, with_history=True) -> Runnable[dict[str, Any], dict]:
-        return self._get_input_chain_context(with_history=with_history)
-
-    def _build_chain(self):
+    def _build_chain(self) -> Runnable[dict[str, Any], dict]:
         tools = self.adapter.get_tools()
-        agent = self._input_chain() | create_tool_calling_agent(
-            llm=self.adapter.get_chat_model(), tools=tools, prompt=self.prompt
-        )
-        executor = AgentExecutor.from_agent_and_tools(
+        agent = create_tool_calling_agent(llm=self.adapter.get_chat_model(), tools=tools, prompt=self.prompt)
+        return AgentExecutor.from_agent_and_tools(
             agent=agent,
             tools=tools,
-            memory=self.memory,
             max_execution_time=120,
         )
-        return executor
 
     @property
     def prompt(self):
         prompt = super().prompt
-        return OcsPromptTemplate.from_messages(
-            prompt.messages + [MessagesPlaceholder("agent_scratchpad", optional=True)]
-        )
-
-    def get_input_messages(self, input: str):
-        chain = self._input_chain(with_history=False) | self.prompt
-        chain = chain.with_config(run_name="compute_input_for_compression")
-        return chain.invoke(self._get_input(input)).to_messages()
+        return OcsPromptTemplate.from_messages(prompt.messages + [("placeholder", "{agent_scratchpad}")])
 
 
 class AssistantChat(RunnableSerializable[dict, ChainOutput]):
