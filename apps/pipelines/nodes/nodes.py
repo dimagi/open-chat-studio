@@ -396,7 +396,7 @@ class RouterNode(RouterMixin, Passthrough, HistoryMixin):
         session: ExperimentSession | None = state.get("experiment_session")
 
         if self.history_type != PipelineChatHistoryTypes.NONE and session:
-            input_messages = prompt.format_messages(context)
+            input_messages = prompt.format_messages(**context)
             context["history"] = self._get_history(session, node_id, input_messages)
 
         chain = prompt | self.get_chat_model()

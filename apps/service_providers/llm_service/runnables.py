@@ -216,7 +216,7 @@ class LLMChat(RunnableSerializable[str, ChainOutput]):
         """
         context = self._get_input_chain_context(with_history=False)
         try:
-            return self.prompt.format_messages({**self._get_input(input), **context})
+            return self.prompt.format_messages(**{**self._get_input(input), **context})
         except KeyError as e:
             raise GenerationError(str(e)) from e
 
