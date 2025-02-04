@@ -923,3 +923,45 @@ def test_parallel_nodes(pipeline):
 
     with pytest.raises(PipelineBuildError, match="Multiple edges connected to the same output"):
         create_runnable(pipeline, nodes, edges, lenient=False)
+
+
+@django_db_with_data(available_apps=("apps.service_providers",))
+def test_multiple_valid_inputs(pipeline):
+    start = start_node()
+    router = boolean_node()
+    template = render_template_node("T: {{ input }}")
+    end = end_node()
+    nodes = [start, router, template, end]
+    # ordering of edges is significant
+    edges = [
+        {
+            "id": "start -> router",
+            "source": start["id"],
+            "target": router["id"],
+        },
+        {
+            "id": "router -> template",
+            "source": router["id"],
+            "target": template["id"],
+            "sourceHandle": "output_1",
+        },
+        {
+            "id": "template -> end",
+            "source": template["id"],
+            "target": end["id"],
+        },
+        {
+            "id": "router -> end",
+            "source": router["id"],
+            "target": end["id"],
+            "sourceHandle": "output_0",
+        },
+    ]
+
+    state = PipelineState(
+        messages=["not hello"],
+        experiment_session=ExperimentSessionFactory.build(),
+        pipeline_version=1,
+    )
+    output = create_runnable(pipeline, nodes, edges, lenient=False).invoke(state)
+    assert output["messages"][-1] == "T: not hello"
