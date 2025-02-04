@@ -464,12 +464,12 @@ class CreateExperiment(BaseExperimentView, CreateView):
         else:
             return self.form_invalid(form, file_formset)
 
-    @transaction.atomic()
     def form_valid(self, form, file_formset):
-        self.object = form.save()
-        if file_formset:
-            files = file_formset.save(self.request)
-            self.object.files.set(files)
+        with transaction.atomic():
+            self.object = form.save()
+            if file_formset:
+                files = file_formset.save(self.request)
+                self.object.files.set(files)
 
         task_id = async_create_experiment_version.delay(
             experiment_id=self.object.id, version_description="", make_default=True

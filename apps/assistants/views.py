@@ -37,7 +37,7 @@ from .sync import (
 from .tables import OpenAiAssistantTable
 from .utils import get_llm_providers_for_assistants
 
-logger = logging.getLogger(__name__)
+logger = logging.getLogger("ocs.assistants")
 
 
 class OpenAiAssistantHome(LoginAndTeamRequiredMixin, TemplateView, PermissionRequiredMixin):
