@@ -35,6 +35,8 @@ from apps.experiments.models import Experiment, ExperimentSession, Participant, 
 from apps.files.models import File
 
 logger = logging.getLogger(__name__)
+generate_key_logger = logging.getLogger("api.commcare_connect.generate_key")
+consent_logger = logging.getLogger("api.commcare_connect.consent")
 
 
 @extend_schema_view(
@@ -345,11 +347,14 @@ def file_content_view(request, pk: int):
 def generate_key(request: Request):
     """Generates a key for a specific channel to use for secure communication"""
     token = request.META.get("HTTP_AUTHORIZATION")
+    generate_key_logger.info(f"token is there? {bool(token)}")
+    generate_key_logger.info(f"POST params {request.POST}")
     if not (token and "channel_id" in request.POST):
         return HttpResponse("Missing token or data", status=400)
 
     commcare_connect_channel_id = request.POST["channel_id"]
     response = httpx.get(settings.COMMCARE_CONNECT_GET_CONNECT_ID_URL, headers={"AUTHORIZATION": token})
+    generate_key_logger.info(f"Response status from commcare connect: {response.status_code}")
     response.raise_for_status()
     connect_id = response.json().get("sub")
 
@@ -358,6 +363,7 @@ def generate_key(request: Request):
             participant__identifier=connect_id, system_metadata__commcare_connect_channel_id=commcare_connect_channel_id
         )
     except ParticipantData.DoesNotExist:
+        generate_key_logger.info("participant data not found")
         raise Http404()
 
     if not participant_data.encryption_key:
@@ -380,6 +386,7 @@ def callback(request: Request):
 @verify_hmac
 def consent(request: Request):
     """The user gave consent to the bot to message them"""
+    consent_logger.info(f"Request body: {request.body}")
     if not request.body:
         return HttpResponse("Missing data", status=400)
     request_data = json.loads(request.body)
@@ -389,6 +396,7 @@ def consent(request: Request):
     participant_data = get_object_or_404(
         ParticipantData, system_metadata__commcare_connect_channel_id=request_data["channel_id"]
     )
+    consent_logger.info("Participant was found")
     participant_data.update_consent(request_data["consent"])
 
     return HttpResponse()
