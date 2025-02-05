@@ -59,6 +59,7 @@ def test_incoming_message_adds_channel_info(telegram_channel):
 @patch("apps.chat.channels.TelegramChannel.send_text_to_user", Mock())
 @patch("apps.chat.channels.TelegramChannel._get_bot_response", Mock())
 def test_channel_added_for_experiment_session(telegram_channel):
+    """Ensure that the experiment session gets a link to the experimentt channel that this is using"""
     chat_id = 123123
     message = telegram_messages.text_message(chat_id=chat_id)
     _send_user_message_on_channel(telegram_channel, message)
@@ -98,6 +99,32 @@ def test_incoming_message_uses_existing_experiment_session(telegram_channel):
     assert experiment_sessions_count == 1
 
     telegram_channel._create_new_experiment_session.assert_not_called()
+
+
+@pytest.mark.django_db()
+@patch("apps.chat.channels.TelegramChannel.send_text_to_user", Mock())
+@patch("apps.chat.channels.TelegramChannel._get_bot_response", Mock())
+def test_non_active_sessions_are_not_resused(telegram_channel):
+    """
+    Sessions that were ended should not be reused when the user sends a new message. Rather, a new session should be
+    created
+    """
+    chat_id = 12312331
+    experiment = telegram_channel.experiment
+
+    message = telegram_messages.text_message(chat_id=chat_id)
+    _send_user_message_on_channel(telegram_channel, message)
+    # End the session. This could have been done using a timeout trigger for instance
+    telegram_channel.experiment_session.end()
+
+    # Remove the session from telegram_channel to simulate a new instance
+    telegram_channel.experiment_session = None
+
+    # When the user sends another message, a new session should be created
+    message = telegram_messages.text_message(chat_id=chat_id)
+    _send_user_message_on_channel(telegram_channel, message)
+    assert experiment.sessions.filter(participant__identifier=chat_id, status=SessionStatus.ACTIVE).count() == 1
+    assert experiment.sessions.filter(participant__identifier=chat_id, status=SessionStatus.PENDING_REVIEW).count() == 1
 
 
 @pytest.mark.django_db()
