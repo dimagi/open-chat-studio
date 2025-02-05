@@ -417,6 +417,18 @@ def consent(request: Request):
             status_codes=[200],
         ),
         OpenApiExample(
+            name="GenerateBotMessageAndSendUsingANewSession",
+            summary="Generates a bot message and sends it to the user using a new session",
+            value={
+                "identifier": "part1",
+                "experiment": "exp1",
+                "platform": "connect_messaging",
+                "prompt_text": "Tell the user to do something",
+                "start_new_session": "true",
+            },
+            status_codes=[200],
+        ),
+        OpenApiExample(
             name="ParticipantNotFound",
             summary="Participant not found",
             value={"detail": "Participant not found"},
