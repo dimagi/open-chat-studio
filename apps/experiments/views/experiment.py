@@ -25,6 +25,7 @@ from django.utils import timezone
 from django.utils.html import format_html
 from django.utils.safestring import mark_safe
 from django.utils.translation import gettext
+from django.views.decorators.clickjacking import xframe_options_exempt
 from django.views.decorators.http import require_POST
 from django.views.generic import CreateView, UpdateView
 from django_tables2 import SingleTableView
@@ -337,6 +338,9 @@ class ExperimentForm(forms.ModelForm):
             cleaned_data["assistant"] = None
             if not cleaned_data.get("pipeline"):
                 errors["pipeline"] = "Pipeline is required when creating a pipeline experiment"
+
+        if cleaned_data["conversational_consent_enabled"] and not cleaned_data["consent_form"]:
+            errors["consent_form"] = "Consent form is required when conversational consent is enabled"
 
         if errors:
             raise forms.ValidationError(errors)
@@ -1023,6 +1027,7 @@ def poll_messages(request, team_slug: str, experiment_id: int, session_id: int):
     )
 
 
+@xframe_options_exempt
 def start_session_public(request, team_slug: str, experiment_id: uuid.UUID):
     try:
         experiment = get_object_or_404(Experiment, public_id=experiment_id, team=request.team)
@@ -1036,6 +1041,16 @@ def start_session_public(request, team_slug: str, experiment_id: uuid.UUID):
 
     consent = experiment_version.consent_form
     user = get_real_user_or_none(request.user)
+    if not consent:
+        identifier = user.email if user else str(uuid.uuid4())
+        session = WebChannel.start_new_session(
+            working_experiment=experiment,
+            participant_user=user,
+            participant_identifier=identifier,
+            timezone=request.session.get("detected_tz", None),
+        )
+        return _record_consent_and_redirect(request, team_slug, session)
+
     if request.method == "POST":
         form = ConsentForm(consent, request.POST, initial={"identifier": user.email if user else None})
         if form.is_valid():
@@ -1316,6 +1331,7 @@ def experiment_pre_survey(request, team_slug: str, experiment_id: uuid.UUID, ses
 
 @experiment_session_view(allowed_states=[SessionStatus.ACTIVE, SessionStatus.SETUP])
 @verify_session_access_cookie
+@xframe_options_exempt
 def experiment_chat(request, team_slug: str, experiment_id: uuid.UUID, session_id: str):
     experiment_version = request.experiment.default_version
     version_specific_vars = {
