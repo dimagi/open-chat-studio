@@ -478,12 +478,15 @@ class ChannelBase(ABC):
                 self.experiment_session.experiment_channel = self.experiment_channel
                 self.experiment_session.save()
 
-    def ensure_session_exists_for_participant(self, identifier: str):
+    def ensure_session_exists_for_participant(self, identifier: str, new_session: bool = False):
         """
         Ensures an experiment session exists for the participant specied with `identifier`. This is useful for creating
         a session outside of the normal flow where a participant initiates the interaction and where we'll have the
         participant identifier from the incoming messasge. When the bot initiates the conversation, this is not true
         anymore, so we'll need to get the identifier from the params.
+
+        If `new_session` is `True`, the current session will be ended (if one exists) and a new one will be
+        created.
 
         Raises:
             ChannelException when there is an existing session, but with another participant.
@@ -494,7 +497,10 @@ class ChannelBase(ABC):
         else:
             self._participant_identifier = identifier
 
-        self._ensure_sessions_exists()
+        if new_session and self._get_latest_session():
+            self._reset_session()
+        else:
+            self._ensure_sessions_exists()
 
     def _get_latest_session(self):
         return (
@@ -509,7 +515,9 @@ class ChannelBase(ABC):
 
     def _reset_session(self):
         """Resets the session by ending the current `experiment_session` and creating a new one"""
-        self.experiment_session.end()
+        if not self.experiment_session:
+            if session := self._get_latest_session():
+                session.end()
         self._create_new_experiment_session()
 
     def _create_new_experiment_session(self):
