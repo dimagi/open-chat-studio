@@ -27,7 +27,6 @@ from .models import OpenAiAssistant, ToolResources
 from .sync import (
     OpenAiSyncError,
     delete_file_from_openai,
-    delete_openai_assistant,
     get_diff_with_openai_assistant,
     get_out_of_sync_files,
     import_openai_assistant,
@@ -194,25 +193,6 @@ class SyncEditingOpenAiAssistant(BaseOpenAiAssistantView, View):
             logger.exception(f"Error syncing assistant. {e}")
             messages.error(request, "Could not sync assistant. Please try again later")
         return HttpResponse(headers={"HX-Refresh": "true"})
-
-
-class DeleteOpenAiAssistant(LoginAndTeamRequiredMixin, View, PermissionRequiredMixin):
-    permission_required = "assistants.delete_openaiassistant"
-
-    @transaction.atomic()
-    def delete(self, request, team_slug: str, pk: int):
-        assistant = get_object_or_404(OpenAiAssistant, team=request.team, pk=pk)
-        if assistant.working_version_id is None and not assistant.is_archived:
-            messages.warning(request, "Cannot delete a versioned assistant without first archiving.")
-            return HttpResponse(status=400)
-        try:
-            delete_openai_assistant(assistant)
-        except OpenAiSyncError as e:
-            messages.error(request, f"Error deleting assistant from OpenAI: {e}")
-            return HttpResponse(status=500)
-        assistant.delete()
-        messages.success(request, "Assistant Deleted")
-        return HttpResponse()
 
 
 class LocalDeleteOpenAiAssistant(LoginAndTeamRequiredMixin, View, PermissionRequiredMixin):
