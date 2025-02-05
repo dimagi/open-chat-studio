@@ -1267,6 +1267,17 @@ class Participant(BaseTeamModel):
         ordering = ["platform", "identifier"]
         unique_together = [("team", "platform", "identifier")]
 
+    @classmethod
+    def create_anonymous(cls, team: Team, platform: str) -> "Participant":
+        public_id = str(uuid.uuid4())
+        return cls.objects.create(
+            team=team, platform=platform, identifier=f"anon:{public_id}", public_id=public_id, name="Anonymous"
+        )
+
+    @property
+    def is_anonymous(self):
+        return self.identifier == f"anon:{self.public_id}"
+
     @property
     def email(self):
         validate_email(self.identifier)
