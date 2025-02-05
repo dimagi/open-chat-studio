@@ -425,18 +425,6 @@ def consent(request: Request):
             status_codes=[200],
         ),
         OpenApiExample(
-            name="GenerateBotMessageAndSendUsingANewSession",
-            summary="Generates a bot message and sends it to the user using a new session",
-            value={
-                "identifier": "part1",
-                "experiment": "exp1",
-                "platform": "connect_messaging",
-                "prompt_text": "Tell the user to do something",
-                "start_new_session": "true",
-            },
-            status_codes=[200],
-        ),
-        OpenApiExample(
             name="ParticipantNotFound",
             summary="Participant not found",
             value={"detail": "Participant not found"},
@@ -481,6 +469,8 @@ def trigger_bot_message(request):
         experiment=experiment.id,
     ).first()
     if platform == ChannelPlatform.COMMCARE_CONNECT and not participant_data:
+        # The commcare_connect channel requires certain data from the participant_data in order to send messages to th
+        # user, which is why we need to check if the participant_data exists
         return Response({"detail": "Participant not found"}, status=status.HTTP_404_NOT_FOUND)
     elif not Participant.objects.filter(identifier=identifier, platform=platform).exists():
         return Response({"detail": "Participant not found"}, status=status.HTTP_404_NOT_FOUND)

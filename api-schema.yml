@@ -283,15 +283,6 @@ paths:
                   platform: connect_messaging
                   prompt_text: Tell the user to do something
                 summary: Generates a bot message and sends it to the user
-              GenerateBotMessageAndSendUsingANewSession:
-                value:
-                  identifier: part1
-                  experiment: exp1
-                  platform: connect_messaging
-                  prompt_text: Tell the user to do something
-                  start_new_session: 'true'
-                summary: Generates a bot message and sends it to the user using a
-                  new session
               ParticipantNotFound:
                 value:
                   detail: Participant not found
