@@ -24,6 +24,7 @@ from apps.chat.exceptions import (
     VersionedExperimentSessionsNotAllowedException,
 )
 from apps.chat.models import Chat, ChatMessage, ChatMessageType
+from apps.chat.tasks import STATUSES_FOR_COMPLETE_CHATS
 from apps.events.models import StaticTriggerType
 from apps.events.tasks import enqueue_static_triggers
 from apps.experiments.models import (
@@ -501,6 +502,7 @@ class ChannelBase(ABC):
                 experiment=self.experiment.get_working_version(),
                 participant__identifier=str(self.participant_identifier),
             )
+            .exclude(status__in=STATUSES_FOR_COMPLETE_CHATS)
             .order_by("-created_at")
             .first()
         )
