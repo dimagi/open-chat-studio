@@ -35,8 +35,8 @@ from apps.experiments.models import Experiment, ExperimentSession, Participant, 
 from apps.files.models import File
 
 logger = logging.getLogger(__name__)
-generate_key_logger = logging.getLogger("api.commcare_connect.generate_key")
-consent_logger = logging.getLogger("api.commcare_connect.consent")
+generate_key_logger = logging.getLogger("ocs.api.commcare_connect.generate_key")
+consent_logger = logging.getLogger("ocs.api.commcare_connect.consent")
 
 
 @extend_schema_view(
