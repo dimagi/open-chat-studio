@@ -467,14 +467,14 @@ def trigger_bot_message(request):
 
     experiment = get_object_or_404(Experiment, public_id=experiment_public_id, team=request.team)
 
-    try:
-        participant_data = ParticipantData.objects.defer("data").get(
-            participant__identifier=identifier,
-            participant__platform=platform,
-            experiment=experiment.id,
-        )
-
-    except ParticipantData.DoesNotExist:
+    participant_data = ParticipantData.objects.filter(
+        participant__identifier=identifier,
+        participant__platform=platform,
+        experiment=experiment.id,
+    ).first()
+    if platform == ChannelPlatform.COMMCARE_CONNECT and not participant_data:
+        return Response({"detail": "Participant not found"}, status=status.HTTP_404_NOT_FOUND)
+    elif not Participant.objects.filter(identifier=identifier, platform=platform).exists():
         return Response({"detail": "Participant not found"}, status=status.HTTP_404_NOT_FOUND)
 
     if not ExperimentChannel.objects.filter(platform=platform, experiment=experiment).exists():
