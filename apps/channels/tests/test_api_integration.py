@@ -44,9 +44,9 @@ def test_new_message_creates_a_channel_and_participant(get_llm_response_mock, ex
 
 
 @pytest.mark.django_db()
-@patch("apps.chat.channels.ApiChannel._get_latest_session")
+@patch("apps.chat.channels.ApiChannel._load_latest_session")
 @patch("apps.chat.channels.ApiChannel._get_bot_response")
-def test_new_message_with_existing_session(get_llm_response_mock, _get_latest_session, experiment, client):
+def test_new_message_with_existing_session(get_llm_response_mock, _load_latest_session, experiment, client):
     get_llm_response_mock.return_value = "Hi user"
 
     user = experiment.team.members.first()
@@ -68,7 +68,7 @@ def test_new_message_with_existing_session(get_llm_response_mock, _get_latest_se
 
     # check that no new sessions were created
     assert not ExperimentSession.objects.exclude(id=session.id).exists()
-    _get_latest_session.assert_not_called()
+    _load_latest_session.assert_not_called()
 
 
 @pytest.mark.django_db()
