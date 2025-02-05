@@ -26,7 +26,7 @@
   {% endfor %}
 </div>
 {% include 'experiments/chat/input_bar.html' %}
-{% if experiment.consent_form %}
+{% if experiment.consent_form or experiment.post_survey %}
   <div class="w-full text-center bg-gray-300">
     <label for="end-experiment-modal" class="btn btn-warning btn-xs">End Experiment</label>
   </div>
