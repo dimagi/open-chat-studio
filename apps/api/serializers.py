@@ -191,3 +191,4 @@ class TriggerBotMessageRequest(serializers.Serializer):
     platform = serializers.ChoiceField(choices=ChannelPlatform.choices, label="Participant Platform")
     experiment = serializers.UUIDField(label="Experiment ID")
     prompt_text = serializers.CharField(label="Prompt to go to bot")
+    start_new_session = serializers.BooleanField(label="Starts a new session", required=False, default=False)

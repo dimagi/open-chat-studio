@@ -860,3 +860,18 @@ class TestBaseChannelMethods:
         assert new_version.is_a_version is True
         with pytest.raises(VersionedExperimentSessionsNotAllowedException):
             ChannelBase.start_new_session(new_version, channel, participant_identifier="testy-pie")
+
+    @pytest.mark.parametrize("new_session", [True, False])
+    def test_ensure_session_exists_for_participant(self, new_session, experiment):
+        experiment_channel = ExperimentChannelFactory(experiment=experiment)
+        if new_session:
+            ExperimentSessionFactory(
+                experiment=experiment, participant__identifier="testy-pie", experiment_channel=experiment_channel
+            )
+        channel_base = TestChannel(experiment=experiment, experiment_channel=experiment_channel)
+        channel_base.ensure_session_exists_for_participant(identifier="testy-pie", new_session=new_session)
+
+        if new_session:
+            assert ExperimentSession.objects.filter(participant__identifier="testy-pie").count() == 2
+        else:
+            assert ExperimentSession.objects.filter(participant__identifier="testy-pie").count() == 1
