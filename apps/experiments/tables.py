@@ -180,7 +180,7 @@ class ExperimentSessionsTable(tables.Table):
         template = get_template("generic/chip.html")
         participant = record.participant
         chip = chips.Chip(
-            label=participant.identifier, url=participant.get_link_to_experiment_data(experiment=record.experiment)
+            label=participant.label, url=participant.get_link_to_experiment_data(experiment=record.experiment)
         )
         return template.render({"chip": chip})
 
