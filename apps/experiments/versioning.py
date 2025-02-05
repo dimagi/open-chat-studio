@@ -1,4 +1,5 @@
 from collections import defaultdict
+from collections.abc import Callable
 from dataclasses import dataclass
 from dataclasses import field as data_field
 from difflib import Differ
@@ -103,7 +104,14 @@ class VersionField:
             early_abort (bool): If True, the comparison will stop as soon as the first difference is found.
         """
 
+        if not previous_field_version:
+            previous_field_version = VersionField(
+                name=self.name,
+                to_display=self.to_display,
+                group_name=self.group_name,
+            )
         self.previous_field_version = previous_field_version
+
         match self._get_field_type():
             case "unversioned_model":
                 # Simply comparing unversioned models by id is enough
@@ -245,53 +253,223 @@ class VersionDetails:
             group_info.fields.append(field)
         return list(groups.values())
 
-    def compare(self, previous_version_details: "VersionDetails", early_abort: bool = False):
-        """
-        Compares the current instance with the previous version and updates the changed status of fields.
+    # def compare(self, previous_version_details: Self, early_abort: bool = False):
+    #     """
+    #     Compares the current instance with the previous version and updates the changed status of fields.
 
-        Args:
-            previous_version_details (Version): The previous version details to compare against.
-            early_abort (bool): If True, the comparison will stop as soon as the first difference is found.
-        """
-        previous_instance = previous_version_details.instance
+    #     Args:
+    #         previous_version_details (Version): The previous version details to compare against.
+    #         early_abort (bool): If True, the comparison will stop as soon as the first difference is found.
+    #     """
+    #     previous_instance = previous_version_details.instance
 
-        if type(previous_instance) != type(self.instance):  # noqa: E721
-            prev_instance_type = type(self.previous_instance)
-            curr_instance_type = type(self.instance)
-            raise TypeError(
-                f"Cannot compare instances of different types: {curr_instance_type} and {prev_instance_type}."
+    #     if self.instance and previous_instance and type(self.instance) != type(previous_instance):  # noqa: E721
+    #         prev_instance_type = type(self.previous_instance)
+    #         curr_instance_type = type(self.instance)
+    #         raise TypeError(
+    #             f"Cannot compare instances of different types: {curr_instance_type} and {prev_instance_type}."
+    #         )
+    #     self.previous_instance = previous_instance
+
+    #     for field in self.fields:
+    #         previous_field_version = previous_version_details.get_field(field.name)
+    #         field.compare(previous_field_version, early_abort=early_abort)
+    #         self.fields_changed = self.fields_changed or field.changed
+    #         if field.changed and early_abort:
+    #             return
+
+    #     for previous_field in previous_version_details.fields:
+    #         # When a field was totally removed from the new instance, we still need to track an empty value for it
+    #         current_field_version = self.get_field(previous_field.name)
+    #         if not current_field_version:
+    #             missing_field = VersionField(
+    #                 name=previous_field.name,
+    #                 to_display=previous_field.to_display,
+    #                 group_name=previous_field.group_name,
+    #             )
+    #             self.fields.append(missing_field)
+    #             self._fields_dict[missing_field.name] = missing_field
+    #             missing_field.compare(previous_field, early_abort=early_abort)
+
+
+class VersionedField:
+    name: str
+    group_name: str = data_field(default="General")
+    to_display: Callable = None
+
+    def display_name(self):
+        return self.name.replace("_", " ").title()
+
+
+@dataclass
+class CharacterDiff:
+    current: list[TextDiff]
+    previous: list[TextDiff]
+    type: str = "character_diff"
+
+    @property
+    def changed(self):
+        for diff in self.current:
+            if diff.added or diff.removed:
+                return True
+
+        for diff in self.previous:
+            if diff.added or diff.removed:
+                return True
+
+        return False
+
+
+@dataclass
+class ValueDiff:
+    current: Any
+    previous: Any
+    type: str = "value_diff"
+
+    @property
+    def changed(self):
+        return self.current != self.previous
+
+
+@dataclass
+class QuerysetDiff:
+    current: Any = None
+    previous: Any = None
+    diffs: list["InstanceDiff"] = data_field(default_factory=list)
+    type: str = "queryset_diff"
+
+    @property
+    def changed(self):
+        for diff in self.diffs:
+            if diff.changed:
+                return True
+
+        return False
+
+
+@dataclass
+class InstanceDiff:
+    current: Any = None
+    previous: Any = None
+    diffs: list["FieldDiff"] = data_field(default_factory=list)
+    type: str = "instance_diff"
+
+    @property
+    def changed(self):
+        for diff in self.diffs:
+            if diff.changed:
+                return True
+
+        return False
+
+    def __post_init__(self) -> Self:
+        instance = self.current or self.previous
+        for field_name in instance.versioned_fields:
+            current_value = self.current.get_versioned_field_value(field_name) if self.current else None
+            previous_value = self.previous.get_versioned_field_value(field_name) if self.previous else None
+            field_diff = FieldDiff(field_name=field_name, current=current_value, previous=previous_value)
+            self.diffs.append(field_diff)
+
+
+@dataclass
+class FieldDiff:
+    # maybe store the parent diff here as well for easy traversal if we need to
+    field_name: str
+    current: Any = None
+    previous: Any = None
+    diff: QuerysetDiff | InstanceDiff | CharacterDiff | ValueDiff | None = None
+    type: str = "field_diff"
+
+    def current_display_value(self):
+        if self.field.to_display:
+            return self.field.to_display(self.current)
+        else:
+            return self.field.display_name()
+
+    def previous_display_value(self):
+        if self.field.to_display:
+            return self.field.to_display(self.previous)
+        else:
+            return self.field.display_name()
+
+    @property
+    def changed(self):
+        return self.diff.changed
+
+    def __post_init__(self):
+        value = self.current or self.previous
+        if hasattr(value, "working_version"):
+            self.diff = InstanceDiff(self.current, self.previous)
+        elif isinstance(value, QuerySet):
+            self.diff = QuerysetDiff(
+                current=self.current, previous=self.previous, diffs=self._get_instance_diffs_for_queryset()
             )
-        self.previous_instance = previous_instance
+        elif isinstance(value, str):
+            self.current = self.current or ""
+            self.previous = self.previous or ""
+            current, previous = self._compute_character_level_diff()
+            self.diff = CharacterDiff(current=current, previous=previous)
+        else:
+            self.diff = ValueDiff(current=self.current, previous=self.previous)
 
-        for field in self.fields:
-            previous_field_version = previous_version_details.get_field(field.name)
-            if not previous_field_version:
-                # When a new field was added to the new version, we need to compare it to a None value in the previous
-                # version
-                previous_field_version = VersionField(
-                    name=field.name,
-                    raw_value=None,
-                    queryset=None,
-                    to_display=field.to_display,
-                    group_name=field.group_name,
-                )
+    def _get_instance_diffs_for_queryset(self) -> list[InstanceDiff]:
+        """
+        We need to compare the instances in the current queryset with the instances in the previous queryset.
+        Instances can only be compared when they are versions of each other.
+        We need to consider the scenario where we add a new instance or remove a previous instance, in which case
+        they cannot be compared.
+        """
+        if self.current is None:
+            self.current = []
 
-            field.compare(previous_field_version, early_abort=early_abort)
-            self.fields_changed = self.fields_changed or field.changed
-            if field.changed and early_abort:
-                return
+        if self.previous:
+            instances_not_compared = list(self.previous.values_list("id", flat=True))
+        else:
+            instances_not_compared = []
+            self.previous = []
 
-        for previous_field in previous_version_details.fields:
-            # When a field was totally removed from the new instance, we still need to track an empty value for it
-            current_field_version = self.get_field(previous_field.name)
-            if not current_field_version:
-                missing_field = VersionField(
-                    name=previous_field.name,
-                    raw_value=None,
-                    queryset=None,
-                    to_display=previous_field.to_display,
-                    group_name=previous_field.group_name,
-                )
-                self.fields.append(missing_field)
-                self._fields_dict[missing_field.name] = missing_field
-                missing_field.compare(previous_field, early_abort=early_abort)
+        generated_instance_diffs = []
+        for current_instance in self.current:
+            previous_instance = None
+            if self.previous:
+                previous_instance = self.previous.filter(id__in=current_instance.version_family_ids).first()
+
+            if previous_instance:
+                # A version of the current instance exists in the previous queryset
+                instances_not_compared.remove(previous_instance.id)
+                instance_diff = InstanceDiff.compare(current_instance, previous_instance)
+                generated_instance_diffs.append(instance_diff)
+            else:
+                # This accounts for newly added instances
+                instance_diff = InstanceDiff(current=current_instance, previous=None)
+                generated_instance_diffs.append(instance_diff)
+
+        if self.previous:
+            for instance in self.previous.filter(id__in=instances_not_compared):
+                # This accounts for newly removed instances
+                instance_diff = InstanceDiff(current=None, previous=instance)
+                generated_instance_diffs.append(instance_diff)
+
+        return generated_instance_diffs
+
+    def _compute_character_level_diff(self):
+        differ = Differ()
+        difflines = list(differ.compare(self.previous, self.current))
+        current_diffs = []
+        previous_diffs = []
+
+        for line in difflines:
+            operation, character = line[0], line[2:]
+            match operation:
+                case " ":
+                    # line is same in both
+                    previous_diffs.append(TextDiff(character=character))
+                    current_diffs.append(TextDiff(character=character))
+                case "-":
+                    # line is only on the left
+                    previous_diffs.append(TextDiff(character=character, removed=True))
+                case "+":
+                    # line is only on the right
+                    current_diffs.append(TextDiff(character=character, added=True))
+
+        return current_diffs, previous_diffs

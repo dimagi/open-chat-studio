@@ -4,6 +4,7 @@ import secrets
 import uuid
 from datetime import datetime
 from functools import cached_property
+from typing import Self
 from uuid import uuid4
 
 import markdown
@@ -28,7 +29,7 @@ from apps.annotations.models import Tag
 from apps.chat.models import Chat, ChatMessage, ChatMessageType
 from apps.custom_actions.mixins import CustomActionOperationMixin
 from apps.experiments import model_audit_fields
-from apps.experiments.versioning import VersionDetails, VersionField, differs
+from apps.experiments.versioning import InstanceDiff, VersionDetails, VersionedField, differs
 from apps.generics.chips import Chip
 from apps.teams.models import BaseTeamModel, Team
 from apps.utils.models import BaseModel
@@ -268,6 +269,15 @@ class VersionsMixin:
             return "unreleased"
         return f"v{self.version_number}"
 
+    def compare_versions(self, prev_instance: Self, early_abort=False) -> InstanceDiff:
+        return InstanceDiff(current=self, previous=prev_instance)
+
+    def get_versioned_field_value(self, field_name):
+        value = getattr(self, field_name)
+        if isinstance(value, models.Manager):
+            return value.all()
+        return value
+
 
 @audit_fields(*model_audit_fields.SOURCE_MATERIAL_FIELDS, audit_special_queryset_writes=True)
 class SourceMaterial(BaseTeamModel, VersionsMixin):
@@ -303,16 +313,20 @@ class SourceMaterial(BaseTeamModel, VersionsMixin):
         super().archive()
         self.experiment_set.update(source_material=None, audit_action=AuditAction.AUDIT)
 
+    # @property
+    # def version_details(self) -> VersionDetails:
+    #     return VersionDetails(
+    #         instance=self,
+    #         fields=[
+    #             VersionField(name="topic", raw_value=self.topic),
+    #             VersionField(name="description", raw_value=self.description),
+    #             VersionField(name="material", raw_value=self.material),
+    #         ],
+    #     )
+
     @property
-    def version_details(self) -> VersionDetails:
-        return VersionDetails(
-            instance=self,
-            fields=[
-                VersionField(name="topic", raw_value=self.topic),
-                VersionField(name="description", raw_value=self.description),
-                VersionField(name="material", raw_value=self.material),
-            ],
-        )
+    def versioned_fields(self):
+        return ["topic", "description", "material"]
 
 
 @audit_fields(*model_audit_fields.SAFETY_LAYER_FIELDS, audit_special_queryset_writes=True)
@@ -415,16 +429,20 @@ class Survey(BaseTeamModel, VersionsMixin):
         self.experiments_pre.update(pre_survey=None, audit_action=AuditAction.AUDIT)
         self.experiments_post.update(post_survey=None, audit_action=AuditAction.AUDIT)
 
+    # @property
+    # def version_details(self) -> VersionDetails:
+    #     return VersionDetails(
+    #         instance=self,
+    #         fields=[
+    #             VersionField(name="name", raw_value=self.name),
+    #             VersionField(name="url", raw_value=self.url),
+    #             VersionField(name="confirmation_text", raw_value=self.confirmation_text),
+    #         ],
+    #     )
+
     @property
-    def version_details(self) -> VersionDetails:
-        return VersionDetails(
-            instance=self,
-            fields=[
-                VersionField(name="name", raw_value=self.name),
-                VersionField(name="url", raw_value=self.url),
-                VersionField(name="confirmation_text", raw_value=self.confirmation_text),
-            ],
-        )
+    def versioned_fields(self):
+        return ["name", "url", "confirmation_text"]
 
 
 @audit_fields(*model_audit_fields.CONSENT_FORM_FIELDS, audit_special_queryset_writes=True)
@@ -492,19 +510,30 @@ class ConsentForm(BaseTeamModel, VersionsMixin):
     def get_fields_to_exclude(self):
         return super().get_fields_to_exclude() + ["is_default"]
 
+    # @property
+    # def version_details(self) -> VersionDetails:
+    #     return VersionDetails(
+    #         instance=self,
+    #         fields=[
+    #             VersionField(name="name", raw_value=self.name),
+    #             VersionField(name="consent_text", raw_value=self.consent_text),
+    #             VersionField(name="capture_identifier", raw_value=self.capture_identifier),
+    #             VersionField(name="identifier_label", raw_value=self.identifier_label),
+    #             VersionField(name="identifier_type", raw_value=self.identifier_type),
+    #             VersionField(name="confirmation_text", raw_value=self.confirmation_text),
+    #         ],
+    #     )
+
     @property
-    def version_details(self) -> VersionDetails:
-        return VersionDetails(
-            instance=self,
-            fields=[
-                VersionField(name="name", raw_value=self.name),
-                VersionField(name="consent_text", raw_value=self.consent_text),
-                VersionField(name="capture_identifier", raw_value=self.capture_identifier),
-                VersionField(name="identifier_label", raw_value=self.identifier_label),
-                VersionField(name="identifier_type", raw_value=self.identifier_type),
-                VersionField(name="confirmation_text", raw_value=self.confirmation_text),
-            ],
-        )
+    def versioned_fields(self):
+        return [
+            "name",
+            "consent_text",
+            "capture_identifier",
+            "identifier_label",
+            "identifier_type",
+            "confirmation_text",
+        ]
 
 
 @audit_fields(*model_audit_fields.SYNTHETIC_VOICE_FIELDS, audit_special_queryset_writes=True)
@@ -894,14 +923,8 @@ class Experiment(BaseTeamModel, VersionsMixin, CustomActionOperationMixin):
     def get_fields_to_exclude(self):
         return super().get_fields_to_exclude() + ["is_default_version", "public_id", "version_description"]
 
-    def compare_with_latest(self):
-        """
-        Returns a boolean if the experiment differs from the lastest version
-        """
-        version = self.version_details
-        if prev_version := self.latest_version:
-            version.compare(prev_version.version_details, early_abort=True)
-        return version.fields_changed
+    def compare_with_latest(self, early_abort=False) -> InstanceDiff:
+        return self.compare_versions(self.latest_version, early_abort=early_abort)
 
     @transaction.atomic()
     def archive(self):
@@ -993,136 +1016,222 @@ class Experiment(BaseTeamModel, VersionsMixin, CustomActionOperationMixin):
     def is_participant_allowed(self, identifier: str):
         return identifier in self.participant_allowlist or self.team.members.filter(email=identifier).exists()
 
-    @property
-    def version_details(self) -> VersionDetails:
-        """
-        Returns a `Version` instance representing the experiment version.
-        """
+    # @property
+    # def version_details(self) -> VersionDetails:
+    #     """
+    #     Returns a `Version` instance representing the experiment version.
+    #     """
 
-        return VersionDetails(
-            instance=self,
-            fields=[
-                VersionField(group_name="General", name="name", raw_value=self.name),
-                VersionField(group_name="General", name="description", raw_value=self.description),
-                VersionField(group_name="General", name="seed_message", raw_value=self.seed_message),
-                VersionField(
-                    group_name="General",
-                    name="allowlist",
-                    raw_value=self.participant_allowlist,
-                    to_display=VersionFieldDisplayFormatters.format_array_field,
-                ),
-                # Language Model
-                VersionField(group_name="Language Model", name="prompt_text", raw_value=self.prompt_text),
-                VersionField(group_name="Language Model", name="llm_provider_model", raw_value=self.llm_provider_model),
-                VersionField(group_name="Language Model", name="llm_provider", raw_value=self.llm_provider),
-                VersionField(group_name="Language Model", name="temperature", raw_value=self.temperature),
-                # Safety
-                VersionField(
-                    group_name="Safety",
-                    name="safety_layers",
-                    queryset=self.safety_layers,
-                ),
-                VersionField(
-                    group_name="Safety",
-                    name="safety_violation_emails",
-                    raw_value=", ".join(self.safety_violation_notification_emails),
-                ),
-                VersionField(
-                    group_name="Safety",
-                    name="input_formatter",
-                    raw_value=self.input_formatter,
-                ),
-                # Consent
-                VersionField(group_name="Consent", name="consent_form", raw_value=self.consent_form),
-                VersionField(
-                    group_name="Consent",
-                    name="conversational_consent_enabled",
-                    raw_value=self.conversational_consent_enabled,
-                    to_display=VersionFieldDisplayFormatters.yes_no,
-                ),
-                # Surveys
-                VersionField(group_name="Surveys", name="pre-survey", raw_value=self.pre_survey),
-                VersionField(group_name="Surveys", name="post_survey", raw_value=self.post_survey),
-                # Voice
-                VersionField(group_name="Voice", name="voice_provider", raw_value=self.voice_provider),
-                VersionField(group_name="Voice", name="synthetic_voice", raw_value=self.synthetic_voice),
-                VersionField(
-                    group_name="Voice",
-                    name="voice_response_behaviour",
-                    raw_value=VoiceResponseBehaviours(self.voice_response_behaviour).label,
-                ),
-                VersionField(
-                    group_name="Voice",
-                    name="echo_transcript",
-                    raw_value=self.echo_transcript,
-                    to_display=VersionFieldDisplayFormatters.yes_no,
-                ),
-                VersionField(
-                    group_name="Voice",
-                    name="use_processor_bot_voice",
-                    raw_value=self.use_processor_bot_voice,
-                    to_display=VersionFieldDisplayFormatters.yes_no,
-                ),
-                # Source material
-                VersionField(
-                    group_name="Source Material",
-                    name="source_material",
-                    raw_value=self.source_material,
-                ),
-                # Tools
-                VersionField(
-                    group_name="Tools",
-                    name="tools",
-                    raw_value=set(self.tools),
-                    to_display=VersionFieldDisplayFormatters.format_tools,
-                ),
-                VersionField(
-                    group_name="Tools",
-                    name="custom_actions",
-                    queryset=self.get_custom_action_operations(),
-                    to_display=VersionFieldDisplayFormatters.format_custom_action_operation,
-                ),
-                VersionField(
-                    group_name="Assistant",
-                    name="assistant",
-                    raw_value=self.assistant,
-                    to_display=VersionFieldDisplayFormatters.format_assistant,
-                ),
-                VersionField(
-                    group_name="Pipeline",
-                    name="pipeline",
-                    raw_value=self.pipeline,
-                    to_display=VersionFieldDisplayFormatters.format_pipeline,
-                ),
-                VersionField(group_name="Tracing", name="tracing_provider", raw_value=self.trace_provider),
-                # Triggers
-                VersionField(
-                    group_name="Triggers",
-                    name="static_triggers",
-                    queryset=self.static_triggers,
-                    to_display=VersionFieldDisplayFormatters.format_trigger,
-                ),
-                VersionField(
-                    group_name="Triggers",
-                    name="timeout_triggers",
-                    queryset=self.timeout_triggers,
-                    to_display=VersionFieldDisplayFormatters.format_trigger,
-                ),
-                # Routing
-                VersionField(
-                    group_name="Routing",
-                    name="routes",
-                    queryset=self.child_links.filter(type=ExperimentRouteType.PROCESSOR),
-                    to_display=VersionFieldDisplayFormatters.format_route,
-                ),
-                VersionField(
-                    group_name="Routing",
-                    name="terminal_bot",
-                    queryset=self.child_links.filter(type=ExperimentRouteType.TERMINAL),
-                    to_display=VersionFieldDisplayFormatters.format_route,
-                ),
-            ],
-        )
+    #     return VersionDetails(
+    #         instance=self,
+    #         fields=[
+    #             VersionField(group_name="General", name="name", raw_value=self.name),
+    #             VersionField(group_name="General", name="description", raw_value=self.description),
+    #             VersionField(group_name="General", name="seed_message", raw_value=self.seed_message),
+    #             VersionField(
+    #                 group_name="General",
+    #                 name="allowlist",
+    #                 raw_value=self.participant_allowlist,
+    #                 to_display=VersionFieldDisplayFormatters.format_array_field,
+    #             ),
+    #             # Language Model
+    #             VersionField(group_name="Language Model", name="prompt_text", raw_value=self.prompt_text),
+    #             VersionField(group_name="Language Model", name="llm_provider_model", raw_value=self.llm_provider_model),
+    #             VersionField(group_name="Language Model", name="llm_provider", raw_value=self.llm_provider),
+    #             VersionField(group_name="Language Model", name="temperature", raw_value=self.temperature),
+    #             # Safety
+    #             VersionField(
+    #                 group_name="Safety",
+    #                 name="safety_layers",
+    #                 queryset=self.safety_layers,
+    #             ),
+    #             VersionField(
+    #                 group_name="Safety",
+    #                 name="safety_violation_emails",
+    #                 raw_value=", ".join(self.safety_violation_notification_emails),
+    #             ),
+    #             VersionField(
+    #                 group_name="Safety",
+    #                 name="input_formatter",
+    #                 raw_value=self.input_formatter,
+    #             ),
+    #             # Consent
+    #             VersionField(group_name="Consent", name="consent_form", raw_value=self.consent_form),
+    #             VersionField(
+    #                 group_name="Consent",
+    #                 name="conversational_consent_enabled",
+    #                 raw_value=self.conversational_consent_enabled,
+    #                 to_display=VersionFieldDisplayFormatters.yes_no,
+    #             ),
+    #             # Surveys
+    #             VersionField(group_name="Surveys", name="pre-survey", raw_value=self.pre_survey),
+    #             VersionField(group_name="Surveys", name="post_survey", raw_value=self.post_survey),
+    #             # Voice
+    #             VersionField(group_name="Voice", name="voice_provider", raw_value=self.voice_provider),
+    #             VersionField(group_name="Voice", name="synthetic_voice", raw_value=self.synthetic_voice),
+    #             VersionField(
+    #                 group_name="Voice",
+    #                 name="voice_response_behaviour",
+    #                 raw_value=VoiceResponseBehaviours(self.voice_response_behaviour).label,
+    #             ),
+    #             VersionField(
+    #                 group_name="Voice",
+    #                 name="echo_transcript",
+    #                 raw_value=self.echo_transcript,
+    #                 to_display=VersionFieldDisplayFormatters.yes_no,
+    #             ),
+    #             VersionField(
+    #                 group_name="Voice",
+    #                 name="use_processor_bot_voice",
+    #                 raw_value=self.use_processor_bot_voice,
+    #                 to_display=VersionFieldDisplayFormatters.yes_no,
+    #             ),
+    #             # Source material
+    #             VersionField(
+    #                 group_name="Source Material",
+    #                 name="source_material",
+    #                 raw_value=self.source_material,
+    #             ),
+    #             # Tools
+    #             VersionField(
+    #                 group_name="Tools",
+    #                 name="tools",
+    #                 raw_value=set(self.tools),
+    #                 to_display=VersionFieldDisplayFormatters.format_tools,
+    #             ),
+    #             VersionField(
+    #                 group_name="Tools",
+    #                 name="custom_actions",
+    #                 queryset=self.get_custom_action_operations(),
+    #                 to_display=VersionFieldDisplayFormatters.format_custom_action_operation,
+    #             ),
+    #             VersionField(
+    #                 group_name="Assistant",
+    #                 name="assistant",
+    #                 raw_value=self.assistant,
+    #                 to_display=VersionFieldDisplayFormatters.format_assistant,
+    #             ),
+    #             VersionField(
+    #                 group_name="Pipeline",
+    #                 name="pipeline",
+    #                 raw_value=self.pipeline,
+    #                 to_display=VersionFieldDisplayFormatters.format_pipeline,
+    #             ),
+    #             VersionField(group_name="Tracing", name="tracing_provider", raw_value=self.trace_provider),
+    #             # Triggers
+    #             VersionField(
+    #                 group_name="Triggers",
+    #                 name="static_triggers",
+    #                 queryset=self.static_triggers,
+    #                 to_display=VersionFieldDisplayFormatters.format_trigger,
+    #             ),
+    #             VersionField(
+    #                 group_name="Triggers",
+    #                 name="timeout_triggers",
+    #                 queryset=self.timeout_triggers,
+    #                 to_display=VersionFieldDisplayFormatters.format_trigger,
+    #             ),
+    #             # Routing
+    #             VersionField(
+    #                 group_name="Routing",
+    #                 name="routes",
+    #                 queryset=self.child_links.filter(type=ExperimentRouteType.PROCESSOR),
+    #                 to_display=VersionFieldDisplayFormatters.format_route,
+    #             ),
+    #             VersionField(
+    #                 group_name="Routing",
+    #                 name="terminal_bot",
+    #                 queryset=self.child_links.filter(type=ExperimentRouteType.TERMINAL),
+    #                 to_display=VersionFieldDisplayFormatters.format_route,
+    #             ),
+    #         ],
+    #     )
+
+    @property
+    def versioned_fields(self):
+        return [
+            "name",
+            "description",
+            "seed_message",
+            "participant_allowlist",
+            "prompt_text",
+            "llm_provider_model",
+            "llm_provider",
+            "temperature",
+            "safety_layers",
+            "safety_violation_notification_emails",
+            "input_formatter",
+            "consent_form",
+            "conversational_consent_enabled",
+            "pre_survey",
+            "post_survey",
+            "voice_provider",
+            "synthetic_voice",
+            "voice_response_behaviour",
+            "echo_transcript",
+            "use_processor_bot_voice",
+            "source_material",
+            "tools",
+            "custom_actions",
+            "assistant",
+            "pipeline",
+            "trace_provider",
+            "static_triggers",
+            "timeout_triggers",
+            "child_links",
+            "terminal_bot",
+        ]
+
+    def get_versioned_field_value(self, field_name):
+        match field_name:
+            case "child_links":
+                return self.child_links.filter(type=ExperimentRouteType.PROCESSOR)
+            case "terminal_bot":
+                return self.child_links.filter(type=ExperimentRouteType.TERMINAL)
+            case "safety_violation_notification_emails":
+                return ", ".join(self.safety_violation_notification_emails)
+            case "custom_actions":
+                return self.get_custom_action_operations()
+        return super().get_versioned_field_value(field_name)
+
+    def get_versioned_fields_for_display(self):
+        for field_name in self.versioned_fields:
+            match field_name:
+                case "participant_allowlist":
+                    return (
+                        VersionedField(
+                            name="participant_allowlist",
+                            display_formatter=VersionFieldDisplayFormatters.format_array_field,
+                        ),
+                    )
+                case "child_links":
+                    return (
+                        VersionedField(name="routes", display_formatter=VersionFieldDisplayFormatters.format_route),
+                    )
+                case "terminal_bot":
+                    return (
+                        VersionedField(name="routes", display_formatter=VersionFieldDisplayFormatters.format_route),
+                    )
+                case "safety_violation_notification_emails":
+                    return (
+                        VersionedField(
+                            name="safety_violation_emails",
+                            display_formatter=VersionFieldDisplayFormatters.format_array_field,
+                        ),
+                    )
+                case "custom_actions":
+                    return (
+                        VersionedField(
+                            name="custom_actions",
+                            display_formatter=VersionFieldDisplayFormatters.format_custom_action_operation,
+                        ),
+                    )
+                case _:
+                    return (
+                        VersionedField(
+                            name="allowlist", display_formatter=VersionFieldDisplayFormatters.format_array_field
+                        ),
+                    )
 
     def get_assistant(self):
         """
@@ -1242,15 +1351,19 @@ class ExperimentRoute(BaseTeamModel, VersionsMixin):
             description = f"{description} since {changed_fields} changed."
         return description
 
+    # @property
+    # def version_details(self) -> VersionDetails:
+    #     return VersionDetails(
+    #         instance=self,
+    #         fields=[
+    #             VersionField(group_name=self.keyword, name="keyword", raw_value=self.keyword),
+    #             VersionField(group_name=self.keyword, name="child", raw_value=self.child),
+    #         ],
+    #     )
+
     @property
-    def version_details(self) -> VersionDetails:
-        return VersionDetails(
-            instance=self,
-            fields=[
-                VersionField(group_name=self.keyword, name="keyword", raw_value=self.keyword),
-                VersionField(group_name=self.keyword, name="child", raw_value=self.child),
-            ],
-        )
+    def versioned_fields(self):
+        return ["keyword", "child"]
 
     class Meta:
         constraints = [
