@@ -1044,7 +1044,6 @@ def poll_messages(request, team_slug: str, experiment_id: int, session_id: int):
     )
 
 
-@xframe_options_exempt
 def start_session_public(request, team_slug: str, experiment_id: uuid.UUID):
     try:
         experiment = get_object_or_404(Experiment, public_id=experiment_id, team=request.team)
@@ -1369,7 +1368,6 @@ def experiment_pre_survey(request, team_slug: str, experiment_id: uuid.UUID, ses
 
 @experiment_session_view(allowed_states=[SessionStatus.ACTIVE, SessionStatus.SETUP])
 @verify_session_access_cookie
-@xframe_options_exempt
 def experiment_chat(request, team_slug: str, experiment_id: uuid.UUID, session_id: str):
     return _experiment_chat_ui(request)
 
