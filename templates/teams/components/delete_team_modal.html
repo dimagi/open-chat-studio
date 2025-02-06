@@ -9,6 +9,14 @@
         <strong>This action cannot be undone.</strong>
       {% endblocktranslate %}
     </p>
+    {% if related_assistants %}
+      <h4 class="font-semibold my-2">These OpenAI Assistants will also be deleted:</h4>
+      <ul class="list-disc list-inside">
+        {% for assistant in related_assistants %}
+          <li>{% include "generic/chip.html" with chip=assistant %}</li>
+        {% endfor %}
+      </ul>
+    {% endif %}
     <footer class="modal-card-foot">
       <div class="modal-action">
         <form action="{% url 'single_team:delete_team' request.team.slug %} " method="post">
