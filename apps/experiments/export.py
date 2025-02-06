@@ -66,7 +66,7 @@ def experiment_to_message_export_rows(experiment: Experiment, tags: list[str] = 
                 experiment.get_llm_provider_model_name(raises=False),
                 experiment.public_id,
                 experiment.name,
-                session.participant.label,
+                session.participant.name,
                 session.participant.identifier,
                 session.participant.public_id,
                 _format_tags(message.tags.all()),

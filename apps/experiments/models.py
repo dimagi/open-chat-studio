@@ -1284,15 +1284,6 @@ class Participant(BaseTeamModel):
         )
 
     @property
-    def label(self):
-        if self.is_anonymous:
-            suffix = str(self.public_id)[:6]
-            return f"Anonymous [{suffix}]"
-        if self.name:
-            return self.name
-        return self.identifier
-
-    @property
     def is_anonymous(self):
         return self.identifier == f"anon:{self.public_id}"
 
@@ -1308,9 +1299,12 @@ class Participant(BaseTeamModel):
         return {}
 
     def __str__(self):
+        if self.is_anonymous:
+            suffix = str(self.public_id)[:6]
+            return f"Anonymous [{suffix}]"
         if self.name:
             return f"{self.name} ({self.identifier})"
-        elif self.user and self.user.get_full_name():
+        if self.user and self.user.get_full_name():
             return f"{self.user.get_full_name()} ({self.identifier})"
         return self.identifier
 
