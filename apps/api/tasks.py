@@ -50,9 +50,6 @@ def setup_connect_channels_for_bots(self, connect_id: UUID, experiment_data_map:
 
     channels = {ch.experiment_id: ch for ch in channels}
 
-    # Temp logger
-    datas = [dp.id for dp in participant_data]
-    logger.info(f"Participant Data ids to loop through: {datas}")
     for participant_datum in participant_data:
         try:
             experiment = participant_datum.experiment
@@ -60,15 +57,8 @@ def setup_connect_channels_for_bots(self, connect_id: UUID, experiment_data_map:
             commcare_connect_channel_id = connect_client.create_channel(
                 connect_id=connect_id, channel_source=channel.extra_data["commcare_connect_bot_name"]
             )
-            # Temp logger
-            logger.info(
-                f"Participant ({participant_datum.participant.identifier}) channel id: {commcare_connect_channel_id}"
-            )
             participant_datum.system_metadata["commcare_connect_channel_id"] = commcare_connect_channel_id
             participant_datum.save(update_fields=["system_metadata"])
-            # Temp logging
-            participant_datum.refresh_from_db()
-            logger.info(f"Participant Data system metadata after refresh: {participant_datum.system_metadata}")
         except Exception as e:
             logger.exception(f"Failed to create channel for participant data {participant_datum.id}: {e}")
 
