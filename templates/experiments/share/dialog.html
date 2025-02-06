@@ -20,13 +20,19 @@
       <div class="w-full my-4">
         <p class="my-4">Use this HTML code to embed the chat window for your bot in a different site:</p>
         <script>
-          async function copyIframeEmbed(callee) {
-            const iframe = `{% include "experiments/share/iframe.html" %}`;
-            await SiteJS.app.copyTextToClipboard(callee, iframe)
+          async function copyEmbed(callee, type) {
+            const code = {
+              iframe: `{% include "experiments/share/iframe.html" %}`,
+              widget: `{% include "experiments/share/widget.html" %}`,
+            }[type]
+            await SiteJS.app.copyTextToClipboard(callee, code)
           }
         </script>
-        <button class="my-2 btn btn-sm justify-self-center" onclick="copyIframeEmbed(this)" title="Copy to clipboard">
-          <i class="fa-regular fa-copy"></i> Copy Embed Code
+        <button class="my-2 btn btn-sm btn-primary justify-self-center" onclick="copyEmbed(this, 'widget')" title="Copy to clipboard">
+          <i class="fa-regular fa-copy"></i> Copy Widget Embed Code (recommended)
+        </button>
+        <button class="my-2 btn btn-sm justify-self-center" onclick="copyEmbed(this, 'iframe')" title="Copy to clipboard">
+          <i class="fa-regular fa-copy"></i> Copy Raw Embed Code
         </button>
         <p class="my-2 text-sm"><a href="{{ docs_base_url }}{{ docs_links.embed }}" class="link">Learn more about embedding</a></p>
       </div>
