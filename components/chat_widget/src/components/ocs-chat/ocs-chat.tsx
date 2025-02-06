@@ -1,6 +1,6 @@
 import {Component, Host, h, Prop, State, Build} from '@stencil/core';
 
-const OCS_PROD_URL = "https://chatbots.dimagi.com";
+const allowedHosts = ["chatbots.dimagi.com"];
 
 
 @Component({
@@ -21,8 +21,15 @@ export class OcsChat {
 
   componentWillLoad() {
     this.loaded = this.visible;
-    if (!Build.isDev && !this.boturl.startsWith(OCS_PROD_URL)) {
-      this.error = `Invalid Bot URL: ${this.boturl}`;
+    if (!Build.isDev) {
+      try {
+        const url = new URL(this.boturl);
+        if (!allowedHosts.includes(url.host)) {
+          this.error = `Invalid Bot URL: ${this.boturl}`;
+        }
+      } catch {
+        this.error = `Invalid Bot URL: ${this.boturl}`;
+      }
     }
   }
 
