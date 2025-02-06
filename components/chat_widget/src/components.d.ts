@@ -6,38 +6,38 @@
  */
 import { HTMLStencilElement, JSXBase } from "@stencil/core/internal";
 export namespace Components {
-    interface OpenChatStudioChat {
+    interface OpenChatStudioWidget {
         "boturl": string;
         "buttonText": string;
         "visible": boolean;
     }
 }
 declare global {
-    interface HTMLOpenChatStudioChatElement extends Components.OpenChatStudioChat, HTMLStencilElement {
+    interface HTMLOpenChatStudioWidgetElement extends Components.OpenChatStudioWidget, HTMLStencilElement {
     }
-    var HTMLOpenChatStudioChatElement: {
-        prototype: HTMLOpenChatStudioChatElement;
-        new (): HTMLOpenChatStudioChatElement;
+    var HTMLOpenChatStudioWidgetElement: {
+        prototype: HTMLOpenChatStudioWidgetElement;
+        new (): HTMLOpenChatStudioWidgetElement;
     };
     interface HTMLElementTagNameMap {
-        "open-chat-studio-widget": HTMLOpenChatStudioChatElement;
+        "open-chat-studio-widget": HTMLOpenChatStudioWidgetElement;
     }
 }
 declare namespace LocalJSX {
-    interface OpenChatStudioChat {
+    interface OpenChatStudioWidget {
         "boturl": string;
         "buttonText"?: string;
         "visible"?: boolean;
     }
     interface IntrinsicElements {
-        "open-chat-studio-widget": OpenChatStudioChat;
+        "open-chat-studio-widget": OpenChatStudioWidget;
     }
 }
 export { LocalJSX as JSX };
 declare module "@stencil/core" {
     export namespace JSX {
         interface IntrinsicElements {
-            "open-chat-studio-widget": LocalJSX.OpenChatStudioChat & JSXBase.HTMLAttributes<HTMLOpenChatStudioChatElement>;
+            "open-chat-studio-widget": LocalJSX.OpenChatStudioWidget & JSXBase.HTMLAttributes<HTMLOpenChatStudioWidgetElement>;
         }
     }
 }
