@@ -46,6 +46,7 @@ class CommCareConnectClient:
     def create_channel(self, connect_id: UUID, channel_source: str) -> UUID:
         url = f"{self._base_url}/messaging/create_channel/"
         response = self.client.post(url, json={"connectid": str(connect_id), "channel_source": channel_source})
+        create_channel_logger.info(f"Response status:\n{response.status_code}\n")
         create_channel_logger.info(f"Response content:\n{response.content}\n")
         response.raise_for_status()
         return response.json()["channel_id"]
