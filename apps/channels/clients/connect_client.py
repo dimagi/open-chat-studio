@@ -10,6 +10,7 @@ from django.conf import settings
 from tenacity import before_sleep_log, retry, retry_if_exception_type, stop_after_attempt, wait_exponential
 
 logger = logging.getLogger("ocs.channels.connect")
+create_channel_logger = logging.getLogger("ocs.channels.connect.create_channel")
 
 
 class Message(TypedDict):
@@ -45,6 +46,7 @@ class CommCareConnectClient:
     def create_channel(self, connect_id: UUID, channel_source: str) -> UUID:
         url = f"{self._base_url}/messaging/create_channel/"
         response = self.client.post(url, json={"connectid": str(connect_id), "channel_source": channel_source})
+        create_channel_logger.info(f"Response content:\n{response.content}\n")
         response.raise_for_status()
         return response.json()["channel_id"]
 
