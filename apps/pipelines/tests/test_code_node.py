@@ -293,7 +293,7 @@ def test_read_attachments(pipeline, experiment_session):
 
     code_get = """
 def main(input, **kwargs):
-    return f'content {get_temp_state_key("attachments")[0].read_string()}'
+    return f'content {get_temp_state_key("attachments")[0].read_text()}'
 """
     nodes = [
         start_node(),

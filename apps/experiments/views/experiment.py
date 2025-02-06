@@ -174,8 +174,9 @@ class ExperimentSessionsTableView(SingleTableView, PermissionRequiredMixin):
             tags = tags_query.split("&")
             query_set = query_set.filter(chat__tags__name__in=tags).distinct()
 
-        if participant := self.request.GET.get("participant"):
-            query_set = query_set.filter(participant__identifier=participant)
+        if participant_identifiers := self.request.GET.get("participants"):
+            participant_identifiers = participant_identifiers.split(",")
+            query_set = query_set.filter(participant__identifier__in=participant_identifiers)
         return query_set
 
 
@@ -468,12 +469,12 @@ class CreateExperiment(BaseExperimentView, CreateView):
         else:
             return self.form_invalid(form, file_formset)
 
-    @transaction.atomic()
     def form_valid(self, form, file_formset):
-        self.object = form.save()
-        if file_formset:
-            files = file_formset.save(self.request)
-            self.object.files.set(files)
+        with transaction.atomic():
+            self.object = form.save()
+            if file_formset:
+                files = file_formset.save(self.request)
+                self.object.files.set(files)
 
         task_id = async_create_experiment_version.delay(
             experiment_id=self.object.id, version_description="", make_default=True
@@ -1236,7 +1237,12 @@ def generate_chat_export(request, team_slug: str, experiment_id: str):
     experiment = get_object_or_404(Experiment, id=experiment_id)
     tags = request.POST.get("tags", [])
     tags = tags.split(",") if tags else []
-    task_id = async_export_chat.delay(experiment_id, tags=tags, participant=request.POST.get("participant"))
+
+    participant_identifiers = request.POST.get("participants")
+    if participant_identifiers:
+        participant_identifiers = participant_identifiers.split(",")
+
+    task_id = async_export_chat.delay(experiment_id, tags=tags, participants=participant_identifiers)
     return TemplateResponse(
         request, "experiments/components/exports.html", {"experiment": experiment, "task_id": task_id}
     )

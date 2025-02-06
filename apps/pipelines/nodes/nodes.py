@@ -294,7 +294,7 @@ class SendEmail(PipelineNode):
         send_email_from_pipeline.delay(
             recipient_list=self.recipient_list.split(","), subject=self.subject, message=input
         )
-        return PipelineState.from_node_output(node_name=self.name, node_id=node_id, output=None)
+        return PipelineState.from_node_output(node_name=self.name, node_id=node_id, output=input)
 
 
 class Passthrough(PipelineNode):
@@ -396,7 +396,7 @@ class RouterNode(RouterMixin, Passthrough, HistoryMixin):
         session: ExperimentSession | None = state.get("experiment_session")
 
         if self.history_type != PipelineChatHistoryTypes.NONE and session:
-            input_messages = prompt.invoke(context).to_messages()
+            input_messages = prompt.format_messages(**context)
             context["history"] = self._get_history(session, node_id, input_messages)
 
         chain = prompt | self.get_chat_model()
@@ -485,7 +485,7 @@ class ExtractStructuredDataNodeMixin:
             new_reference_data = self.update_reference_data(output, reference_data)
 
         self.post_extraction_hook(new_reference_data, state)
-        output = json.dumps(new_reference_data)
+        output = input if self.is_passthrough else json.dumps(new_reference_data)
         return PipelineState.from_node_output(node_name=self.name, node_id=node_id, output=output)
 
     def post_extraction_hook(self, output, state):
@@ -598,6 +598,10 @@ class ExtractStructuredData(ExtractStructuredDataNodeMixin, LLMResponse, Structu
         json_schema_extra=UiSchema(widget=Widgets.expandable_text),
     )
 
+    @property
+    def is_passthrough(self) -> bool:
+        return False
+
 
 class ExtractParticipantData(ExtractStructuredDataNodeMixin, LLMResponse, StructuredDataSchemaValidatorMixin):
     """Extract structured data and saves it as participant data"""
@@ -615,6 +619,10 @@ class ExtractParticipantData(ExtractStructuredDataNodeMixin, LLMResponse, Struct
         json_schema_extra=UiSchema(widget=Widgets.expandable_text),
     )
     key_name: str = ""
+
+    @property
+    def is_passthrough(self) -> bool:
+        return True
 
     def get_reference_data(self, state) -> dict:
         """Returns the participant data as reference. If there is a `key_name`, the value in the participant data
@@ -738,14 +746,11 @@ class AssistantNode(PipelineNode):
             return AssistantChat(adapter=adapter, history_manager=history_manager)
 
 
-DEFAULT_FUNCTION = """# You must define a main function, which takes the node input as a string.
+CODE_NODE_DOCS = f"{settings.DOCUMENTATION_BASE_URL}{settings.DOCUMENTATION_LINKS['node_code']}"
+DEFAULT_FUNCTION = f"""# You must define a main function, which takes the node input as a string.
 # Return a string to pass to the next node.
 
-# Available functions:
-# - get_participant_data() -> dict
-# - set_participant_data(data: Any) -> None
-# - get_temp_state_key(key_name: str) -> str | None
-# - set_temp_state_key(key_name: str, data: Any) -> None
+# Learn more about Python nodes at {CODE_NODE_DOCS}
 
 def main(input: str, **kwargs) -> str:
     return input

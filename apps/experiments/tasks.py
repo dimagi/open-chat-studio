@@ -24,9 +24,9 @@ logger = logging.getLogger("ocs.experiments")
 
 
 @shared_task(bind=True, base=TaskbadgerTask)
-def async_export_chat(self, experiment_id: int, tags: list[str] = None, participant: str = None) -> dict:
+def async_export_chat(self, experiment_id: int, tags: list[str] = None, participants: list[str] = None) -> dict:
     experiment = Experiment.objects.get(id=experiment_id)
-    csv_in_memory = experiment_to_csv(experiment, tags, participant)
+    csv_in_memory = experiment_to_csv(experiment, tags, participants)
     uploaded_file = ContentFile(content=csv_in_memory.getvalue().encode("utf-8"), name="chat_export.csv")
     file = File.objects.create(
         name=uploaded_file.name,

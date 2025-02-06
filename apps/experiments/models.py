@@ -262,6 +262,12 @@ class VersionsMixin:
     def is_editable(self) -> bool:
         return not self.is_archived
 
+    def get_version_name(self):
+        """Returns version name in form of v + version number, or unreleased if working version."""
+        if self.is_working_version:
+            return "unreleased"
+        return f"v{self.version_number}"
+
 
 @audit_fields(*model_audit_fields.SOURCE_MATERIAL_FIELDS, audit_special_queryset_writes=True)
 class SourceMaterial(BaseTeamModel, VersionsMixin):
@@ -807,7 +813,10 @@ class Experiment(BaseTeamModel, VersionsMixin, CustomActionOperationMixin):
         return Experiment.objects.get_default_or_working(self)
 
     def as_chip(self) -> Chip:
-        return Chip(label=self.name, url=self.get_absolute_url())
+        label = self.name
+        if self.is_archived:
+            label = f"{label} (archived)"
+        return Chip(label=label, url=self.get_absolute_url())
 
     def get_chat_model(self):
         service = self.get_llm_service()
@@ -1301,6 +1310,8 @@ class Participant(BaseTeamModel):
     def __str__(self):
         if self.name:
             return f"{self.name} ({self.identifier})"
+        elif self.user and self.user.get_full_name():
+            return f"{self.user.get_full_name()} ({self.identifier})"
         return self.identifier
 
     def get_platform_display(self):
@@ -1331,10 +1342,14 @@ class Participant(BaseTeamModel):
 
     def get_absolute_url(self):
         experiment = self.get_experiments_for_display().first()
-        return self.get_link_to_experiment_data(experiment)
+        if experiment:
+            return self.get_link_to_experiment_data(experiment)
+        return reverse("participants:single-participant-home", args=[self.team.slug, self.id])
 
     def get_link_to_experiment_data(self, experiment: Experiment) -> str:
-        url = reverse("participants:single-participant-home", args=[self.team.slug, self.id, experiment.id])
+        url = reverse(
+            "participants:single-participant-home-with-experiment", args=[self.team.slug, self.id, experiment.id]
+        )
         return f"{url}#{experiment.id}"
 
     def get_experiments_for_display(self):
@@ -1347,7 +1362,8 @@ class Participant(BaseTeamModel):
         last_message = exp_scoped_human_message.order_by("-created_at")[:1].values("created_at")
         joined_on = self.experimentsession_set.order_by("created_at")[:1].values("created_at")
         return (
-            Experiment.objects.annotate(
+            Experiment.objects.get_all()
+            .annotate(
                 joined_on=Subquery(joined_on),
                 last_message=Subquery(last_message),
             )

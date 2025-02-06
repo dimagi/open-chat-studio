@@ -20,7 +20,7 @@ class PromptTemplateContext:
             "current_datetime": self.get_current_datetime,
         }
 
-    def get_context(self, variables: list[str]):
+    def get_context(self, variables: list[str]) -> dict:
         context = {}
         for key, factory in self.factories.items():
             # allow partial matches to support format specifiers

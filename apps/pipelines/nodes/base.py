@@ -1,3 +1,4 @@
+import logging
 import operator
 from abc import ABC
 from collections.abc import Sequence
@@ -11,7 +12,10 @@ from pydantic.config import JsonDict
 from typing_extensions import TypedDict
 
 from apps.experiments.models import ExperimentSession
+from apps.pipelines.exceptions import PipelineNodeRunError
 from apps.pipelines.logging import LoggingCallbackHandler, noop_logger
+
+logger = logging.getLogger("ocs.pipelines")
 
 
 def add_messages(left: dict, right: dict):
@@ -110,24 +114,47 @@ class PipelineNode(BaseModel, ABC):
 
         self._config = config
 
-        for incoming_edge in reversed(incoming_edges):
-            # We assume there is only a single path that would be valid through
-            # the graph.
-            # If we wanted to have multiple parallel paths that end
-            # in a single node, we should give that node multiple inputs, and
-            # read the input from that particular input
-            if incoming_edge in state["outputs"]:
-                input = state["outputs"][incoming_edge]["message"]
-                break
-        else:  # This is the first node in the graph
-            input = state["messages"][-1]
+        if not incoming_edges:
+            # This is the first node in the graph
+            node_input = state["messages"][-1]
 
             # init temp state here to avoid having to do it in each place the pipeline is invoked
-            state["temp_state"]["user_input"] = input
+            state["temp_state"]["user_input"] = node_input
             state["temp_state"]["attachments"] = [
                 Attachment.model_validate(att) for att in state.get("attachments", [])
             ]
-        return self._process(input=input, state=state, node_id=node_id)
+        elif len(incoming_edges) == 1:
+            incoming_edge = incoming_edges[0]
+            node_input = state["outputs"][incoming_edge]["message"]
+        else:
+            # Here we use some internal langgraph state to determine which input to use
+            # The 'langgraph_triggers' key is set in the metadata of the pipeline by langgraph. Some examples:
+            #   - start:xyz
+            #   - xyz
+            #   - branch:xyz:condition:abc
+            #   - join:abc+def:xyz
+            node_triggers = config["metadata"]["langgraph_triggers"]
+            for incoming_edge in incoming_edges:
+                if any(incoming_edge in trigger for trigger in node_triggers):
+                    node_input = state["outputs"][incoming_edge]["message"]
+                    break
+            else:
+                # This shouldn't happen, but keeping it here for now to avoid breaking
+                logger.warning(f"Cannot determine which input to use for node {node_id}. Switching to fallback.")
+                for incoming_edge in reversed(incoming_edges):
+                    if incoming_edge in state["outputs"]:
+                        node_input = state["outputs"][incoming_edge]["message"]
+                        break
+                else:
+                    raise PipelineNodeRunError(
+                        f"Cannot determine which input to use for node {node_id}",
+                        {
+                            "node_id": node_id,
+                            "edge_ids": incoming_edges,
+                            "state_outputs": state["outputs"],
+                        },
+                    )
+        return self._process(input=node_input, state=state, node_id=node_id)
 
     def process_conditional(self, state: PipelineState, node_id: str | None = None) -> str:
         conditional_branch = self._process_conditional(state, node_id)
