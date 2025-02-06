@@ -516,9 +516,11 @@ SITE_URL_ROOT = env("SITE_URL_ROOT", default=None)
 TAGGIT_CASE_INSENSITIVE = True
 
 # Documentation links
+# Available in templates as `docs_links`. Also see `apps.generics.help` and `generics/help.html`
 DOCUMENTATION_LINKS = {
     # Try to make these keys grep-able so that usages are easy to find
     "consent": "/concepts/consent/",
+    "embed": "/how-to/embed/",
     "survey": "https://dimagi.atlassian.net/wiki/spaces/OCS/pages/2144305308/Surveys",
     "experiment": "/concepts/experiment/",
     "pipelines": "/concepts/pipelines/",
@@ -534,6 +536,7 @@ DOCUMENTATION_LINKS = {
     "node_extract_structured_data": "/concepts/pipelines/nodes/#extract-structured-data",
     "node_update_participant_data": "/concepts/pipelines/nodes/#update-participant-data",
 }
+# Available in templates as `docs_base_url`. Also see `apps.generics.help` and `generics/help.html`
 DOCUMENTATION_BASE_URL = env("DOCUMENTATION_BASE_URL", default="https://dimagi.github.io/open-chat-studio-docs")
 
 # Django rest framework config
