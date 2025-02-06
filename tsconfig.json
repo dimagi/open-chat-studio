@@ -17,5 +17,8 @@
     "skipLibCheck": true,
     "strict": true,
     "strictNullChecks": true
-  }
+  },
+  "exclude": [
+    "components/**/*",
+  ]
 }
