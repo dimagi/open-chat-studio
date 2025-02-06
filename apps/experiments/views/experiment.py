@@ -1518,9 +1518,9 @@ def experiment_session_pagination_view(request, team_slug: str, experiment_id: u
     experiment = request.experiment
     query = ExperimentSession.objects.exclude(external_id=session_id).filter(experiment=experiment)
     if request.GET.get("dir", "next") == "next":
-        next_session = query.filter(created_at__lte=session.created_at).first()
+        next_session = query.filter(created_at__gte=session.created_at).first()
     else:
-        next_session = query.filter(created_at__gte=session.created_at).last()
+        next_session = query.filter(created_at__lte=session.created_at).last()
 
     if not next_session:
         messages.warning(request, "No more sessions to paginate")
