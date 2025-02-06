@@ -669,7 +669,9 @@ class Experiment(BaseTeamModel, VersionsMixin, CustomActionOperationMixin):
     public_id = models.UUIDField(default=uuid.uuid4, unique=True)
     consent_form = models.ForeignKey(
         ConsentForm,
-        on_delete=models.CASCADE,
+        null=True,
+        blank=True,
+        on_delete=models.SET_NULL,
         related_name="experiments",
         help_text="Consent form content to show to users before participation in experiments.",
     )
@@ -1274,6 +1276,17 @@ class Participant(BaseTeamModel):
         ordering = ["platform", "identifier"]
         unique_together = [("team", "platform", "identifier")]
 
+    @classmethod
+    def create_anonymous(cls, team: Team, platform: str) -> "Participant":
+        public_id = str(uuid.uuid4())
+        return cls.objects.create(
+            team=team, platform=platform, identifier=f"anon:{public_id}", public_id=public_id, name="Anonymous"
+        )
+
+    @property
+    def is_anonymous(self):
+        return self.identifier == f"anon:{self.public_id}"
+
     @property
     def email(self):
         validate_email(self.identifier)
@@ -1286,9 +1299,12 @@ class Participant(BaseTeamModel):
         return {}
 
     def __str__(self):
+        if self.is_anonymous:
+            suffix = str(self.public_id)[:6]
+            return f"Anonymous [{suffix}]"
         if self.name:
             return f"{self.name} ({self.identifier})"
-        elif self.user and self.user.get_full_name():
+        if self.user and self.user.get_full_name():
             return f"{self.user.get_full_name()} ({self.identifier})"
         return self.identifier
 

@@ -99,10 +99,8 @@
           </div>
           <ul tabindex="0" class="dropdown-content menu bg-base-100 rounded-box z-[1] w-52 p-2 shadow border">
             {% if experiment.is_public %}
-              <li>
-                <a href="{% url 'experiments:start_session_public' team.slug experiment.public_id %}" target="_blank">
-                  <i class="fa-solid fa-link"></i> Public Link
-                </a>
+              <li onclick="sharing_modal.showModal()">
+                <span><i class="fa-solid fa-share-nodes"></i> Share</span>
               </li>
             {% endif %}
             {% if perms.experiments.invite_participants %}
@@ -114,6 +112,9 @@
             {% endif %}
           </ul>
         </div>
+        {% if experiment.is_public %}
+          {% include "experiments/share/dialog.html" %}
+        {% endif %}
       {#  Commented elements included for Tailwind processing #}
       {#  <i class="fa-brands fa-telegram"></i> #}
       {#  <i class="fa-brands fa-whatsapp"></i> #}

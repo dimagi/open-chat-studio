@@ -11,11 +11,14 @@ export async function copyToClipboard (callee, elementId) {
   } else {
     text = element.innerHTML;
   }
-  
+  await copyTextToClipboard(callee, text);
+}
+
+export async function copyTextToClipboard (callee, text) {
   try {
     await navigator.clipboard.writeText(text).then(() => {
       const prevHTML = callee.innerHTML
-      callee.innerHTML = '<i class="fa-solid fa-check"></i>Copied!'
+      callee.innerHTML = '<span><i class="fa-solid fa-check"></i>Copied!</span>'
       setTimeout(() => {
         callee.innerHTML = prevHTML;
       }, 2000);

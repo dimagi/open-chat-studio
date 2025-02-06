@@ -17,7 +17,7 @@ from django.contrib.postgres.search import TrigramSimilarity
 from django.core.exceptions import PermissionDenied, ValidationError
 from django.db import transaction
 from django.db.models import Case, Count, IntegerField, Q, When
-from django.http import FileResponse, Http404, HttpResponse, HttpResponseRedirect
+from django.http import FileResponse, Http404, HttpResponse, HttpResponseForbidden, HttpResponseRedirect
 from django.shortcuts import get_object_or_404, redirect, render
 from django.template.response import TemplateResponse
 from django.urls import reverse
@@ -25,6 +25,8 @@ from django.utils import timezone
 from django.utils.html import format_html
 from django.utils.safestring import mark_safe
 from django.utils.translation import gettext
+from django.views.decorators.clickjacking import xframe_options_exempt
+from django.views.decorators.csrf import csrf_exempt
 from django.views.decorators.http import require_POST
 from django.views.generic import CreateView, UpdateView
 from django_tables2 import SingleTableView
@@ -337,6 +339,9 @@ class ExperimentForm(forms.ModelForm):
             cleaned_data["assistant"] = None
             if not cleaned_data.get("pipeline"):
                 errors["pipeline"] = "Pipeline is required when creating a pipeline experiment"
+
+        if cleaned_data["conversational_consent_enabled"] and not cleaned_data["consent_form"]:
+            errors["consent_form"] = "Consent form is required when conversational consent is enabled"
 
         if errors:
             raise forms.ValidationError(errors)
@@ -898,6 +903,23 @@ def experiment_chat_session(request, team_slug: str, experiment_id: int, session
 @verify_session_access_cookie
 @require_POST
 def experiment_session_message(request, team_slug: str, experiment_id: uuid.UUID, session_id: str, version_number: int):
+    return _experiment_session_message(request, version_number)
+
+
+@experiment_session_view()
+@require_POST
+@xframe_options_exempt
+@csrf_exempt
+def experiment_session_message_embed(
+    request, team_slug: str, experiment_id: uuid.UUID, session_id: str, version_number: int
+):
+    if not request.experiment_session.participant.is_anonymous:
+        return HttpResponseForbidden()
+
+    return _experiment_session_message(request, version_number, embedded=True)
+
+
+def _experiment_session_message(request, version_number: int, embedded=False):
     working_experiment = request.experiment
     session = request.experiment_session
 
@@ -950,13 +972,13 @@ def experiment_session_message(request, team_slug: str, experiment_id: uuid.UUID
             "message_text": message_text,
             "task_id": result.task_id,
             "created_files": created_files,
+            "embedded": embedded,
             **version_specific_vars,
         },
     )
 
 
 @experiment_session_view()
-@verify_session_access_cookie
 def get_message_response(request, team_slug: str, experiment_id: uuid.UUID, session_id: str, task_id: str):
     experiment = request.experiment
     session = request.experiment_session
@@ -1036,6 +1058,16 @@ def start_session_public(request, team_slug: str, experiment_id: uuid.UUID):
 
     consent = experiment_version.consent_form
     user = get_real_user_or_none(request.user)
+    if not consent:
+        identifier = user.email if user else str(uuid.uuid4())
+        session = WebChannel.start_new_session(
+            working_experiment=experiment,
+            participant_user=user,
+            participant_identifier=identifier,
+            timezone=request.session.get("detected_tz", None),
+        )
+        return _record_consent_and_redirect(request, team_slug, session)
+
     if request.method == "POST":
         form = ConsentForm(consent, request.POST, initial={"identifier": user.email if user else None})
         if form.is_valid():
@@ -1044,8 +1076,11 @@ def start_session_public(request, team_slug: str, experiment_id: uuid.UUID):
                 identifier = form.cleaned_data.get("identifier", None)
             else:
                 # The identifier field will be disabled, so we must generate one
-                identifier = user.email if user else str(uuid.uuid4())
                 verify_user = False
+                if user:
+                    identifier = user.email
+                else:
+                    identifier = Participant.create_anonymous(request.team, ChannelPlatform.WEB).identifier
 
             session = WebChannel.start_new_session(
                 working_experiment=experiment,
@@ -1086,6 +1121,29 @@ def start_session_public(request, team_slug: str, experiment_id: uuid.UUID):
             **version_specific_vars,
         },
     )
+
+
+@xframe_options_exempt
+def start_session_public_embed(request, team_slug: str, experiment_id: uuid.UUID):
+    """Special view for starting sessions from embedded widgets. This will ignore consent and pre-surveys and
+    will ALWAYS create anonymous participants."""
+    try:
+        experiment = get_object_or_404(Experiment, public_id=experiment_id, team=request.team)
+    except ValidationError:
+        # old links dont have uuids
+        raise Http404
+
+    experiment_version = experiment.default_version
+    if not experiment_version.is_public:
+        raise Http404
+
+    participant = Participant.create_anonymous(request.team, ChannelPlatform.WEB)
+    session = WebChannel.start_new_session(
+        working_experiment=experiment,
+        participant_identifier=participant.identifier,
+        timezone=request.session.get("detected_tz", None),
+    )
+    return redirect("experiments:experiment_chat_embed", team_slug, experiment.public_id, session.external_id)
 
 
 def _verify_user_or_start_session(identifier, request, session):
@@ -1317,6 +1375,21 @@ def experiment_pre_survey(request, team_slug: str, experiment_id: uuid.UUID, ses
 @experiment_session_view(allowed_states=[SessionStatus.ACTIVE, SessionStatus.SETUP])
 @verify_session_access_cookie
 def experiment_chat(request, team_slug: str, experiment_id: uuid.UUID, session_id: str):
+    return _experiment_chat_ui(request)
+
+
+@experiment_session_view(allowed_states=[SessionStatus.ACTIVE, SessionStatus.SETUP])
+@xframe_options_exempt
+def experiment_chat_embed(request, team_slug: str, experiment_id: uuid.UUID, session_id: str):
+    """Special view for embedding that doesn't have the cookie security. This is OK because of the additional
+    checks to ensure the participant is 'anonymous'."""
+    session = request.experiment_session
+    if not session.participant.is_anonymous:
+        raise Http404
+    return _experiment_chat_ui(request, embedded=True)
+
+
+def _experiment_chat_ui(request, embedded=False):
     experiment_version = request.experiment.default_version
     version_specific_vars = {
         "assistant": experiment_version.get_assistant(),
@@ -1331,6 +1404,7 @@ def experiment_chat(request, team_slug: str, experiment_id: uuid.UUID, session_i
             "experiment": request.experiment,
             "session": request.experiment_session,
             "active_tab": "experiments",
+            "embedded": embedded,
             **version_specific_vars,
         },
     )
