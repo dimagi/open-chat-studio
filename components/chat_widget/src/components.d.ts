@@ -7,6 +7,7 @@
 import { HTMLStencilElement, JSXBase } from "@stencil/core/internal";
 export namespace Components {
     interface OpenChatStudioWidget {
+        "anchorPosition": 'left' | 'center' | 'right';
         "boturl": string;
         "buttonText": string;
         "visible": boolean;
@@ -25,6 +26,7 @@ declare global {
 }
 declare namespace LocalJSX {
     interface OpenChatStudioWidget {
+        "anchorPosition"?: 'left' | 'center' | 'right';
         "boturl": string;
         "buttonText"?: string;
         "visible"?: boolean;

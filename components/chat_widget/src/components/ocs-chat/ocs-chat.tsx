@@ -1,4 +1,5 @@
 import { Component, Host, h, Prop, State, Build } from '@stencil/core';
+import {ArrowLeftEndOnRectangleIcon, ArrowRightEndOnRectangleIcon, ViewfinderCircleIcon, XMarkIcon} from './heroicons';
 
 const allowedHosts = ["chatbots.dimagi.com"];
 
@@ -11,10 +12,10 @@ export class OcsChat {
   @Prop() boturl!: string;
   @Prop() buttonText: string = "Chat";
   @Prop({ mutable: true }) visible: boolean = false;
+  @Prop({ mutable: true }) anchorPosition: 'left' | 'center' | 'right' = 'right';
 
   @State() loaded: boolean = false;
   @State() error: string = "";
-  @State() anchorPosition: 'left' | 'center' | 'right' = 'right';
 
   componentWillLoad() {
     this.loaded = this.visible;
@@ -79,11 +80,7 @@ export class OcsChat {
                   aria-label="Dock to left"
                   title="Dock to left"
                 >
-                  <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5"
-                       stroke="currentColor" class="size-6">
-                    <path stroke-linecap="round" stroke-linejoin="round"
-                          d="M15.75 9V5.25A2.25 2.25 0 0 0 13.5 3h-6a2.25 2.25 0 0 0-2.25 2.25v13.5A2.25 2.25 0 0 0 7.5 21h6a2.25 2.25 0 0 0 2.25-2.25V15M12 9l-3 3m0 0 3 3m-3-3h12.75"/>
-                  </svg>
+                  <ArrowLeftEndOnRectangleIcon/>
                 </button>
                 <button
                   class={{
@@ -95,12 +92,7 @@ export class OcsChat {
                   aria-label="Center"
                   title="Center"
                 >
-                  <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5"
-                       stroke="currentColor" class="size-6">
-                    <path stroke-linecap="round" stroke-linejoin="round"
-                          d="M7.5 3.75H6A2.25 2.25 0 0 0 3.75 6v1.5M16.5 3.75H18A2.25 2.25 0 0 1 20.25 6v1.5m0 9V18A2.25 2.25 0 0 1 18 20.25h-1.5m-9 0H6A2.25 2.25 0 0 1 3.75 18v-1.5M15 12a3 3 0 1 1-6 0 3 3 0 0 1 6 0Z"/>
-                  </svg>
-
+                  <ViewfinderCircleIcon />
                 </button>
                 <button
                   class={{
@@ -112,12 +104,7 @@ export class OcsChat {
                   aria-label="Dock to right"
                   title="Dock to right"
                 >
-                  <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5"
-                       stroke="currentColor" class="size-6">
-                    <path stroke-linecap="round" stroke-linejoin="round"
-                          d="M8.25 9V5.25A2.25 2.25 0 0 1 10.5 3h6a2.25 2.25 0 0 1 2.25 2.25v13.5A2.25 2.25 0 0 1 16.5 21h-6a2.25 2.25 0 0 1-2.25-2.25V15M12 9l3 3m0 0-3 3m3-3H2.25"/>
-                  </svg>
-
+                 <ArrowRightEndOnRectangleIcon />
                 </button>
               </div>
               <button
@@ -125,11 +112,7 @@ export class OcsChat {
                 onClick={() => this.visible = false}
                 aria-label="Close"
               >
-                <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5"
-                     stroke="currentColor" class="size-6">
-                  <path stroke-linecap="round" stroke-linejoin="round" d="M6 18 18 6M6 6l12 12"/>
-                </svg>
-
+                <XMarkIcon />
               </button>
             </div>
             {this.loaded && (
