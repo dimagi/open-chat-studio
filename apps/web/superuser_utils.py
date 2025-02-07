@@ -33,7 +33,7 @@ def has_temporary_superuser_access(request, grant):
     now = int(timezone.now().timestamp())
     has_access = any(granted == grant and expire > now for granted, expire in elevated_privileges)
     if not has_access:
-        remove_temporary_superuser_access(request, grant)
+        remove_expired_temporary_superuser_access(request)
     return has_access
 
 
