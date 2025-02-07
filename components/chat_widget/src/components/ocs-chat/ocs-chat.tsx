@@ -16,10 +16,30 @@ const allowedHosts = ["chatbots.dimagi.com"];
   shadow: true,
 })
 export class OcsChat {
-  @Prop() boturl!: string;
+
+  /**
+   * The URL of the bot to connect to.
+   */
+  @Prop() botUrl!: string;
+
+  /**
+   * The text to display on the button.
+   */
   @Prop() buttonText: string = "Chat";
+
+  /**
+   * Whether the chat widget is visible on load.
+   */
   @Prop({ mutable: true }) visible: boolean = false;
+
+  /**
+   * The initial position of the chat widget on the screen.
+   */
   @Prop({ mutable: true }) position: 'left' | 'center' | 'right' = 'right';
+
+  /**
+   * Whether the chat widget is initially expanded.
+   */
   @Prop({ mutable: true }) expanded: boolean = false;
 
   @State() loaded: boolean = false;
@@ -29,12 +49,12 @@ export class OcsChat {
     this.loaded = this.visible;
     if (!Build.isDev) {
       try {
-        const url = new URL(this.boturl);
+        const url = new URL(this.botUrl);
         if (!allowedHosts.includes(url.host)) {
-          this.error = `Invalid Bot URL: ${this.boturl}`;
+          this.error = `Invalid Bot URL: ${this.botUrl}`;
         }
       } catch {
-        this.error = `Invalid Bot URL: ${this.boturl}`;
+        this.error = `Invalid Bot URL: ${this.botUrl}`;
       }
     }
   }
@@ -139,7 +159,7 @@ export class OcsChat {
             {this.loaded && (
               <iframe
                 class="flex-grow w-full border-none iframe-placeholder"
-                src={this.boturl}
+                src={this.botUrl}
               ></iframe>
             )}
           </div>
