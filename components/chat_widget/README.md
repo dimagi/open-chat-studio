@@ -50,13 +50,3 @@ Once you've set up your local npm account, can do this by running
 ```
 npm publish
 ```
-
-### Script tag
-
-- Put a script tag similar to this `<script type='module' src='https://unpkg.com/open-chat-studio-widget@0.0.1/dist/open-chat-studio-widget.esm.js'></script>` in the head of your index.html
-- Then you can use the element anywhere in your template, JSX, html etc
-
-### Node Modules
-- Run `npm install open-chat-studio-widget --save`
-- Put a script tag similar to this `<script type='module' src='node_modules/open-chat-studio-widget/dist/open-chat-studio-widget.esm.js'></script>` in the head of your index.html
-- Then you can use the element anywhere in your template, JSX, html etc

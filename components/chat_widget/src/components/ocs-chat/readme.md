@@ -1,4 +1,4 @@
-# open-chat-studio-widget
+# Open Chat Studio Chat Widget
 
 A chatbot component for Open Chat Studio.
 
