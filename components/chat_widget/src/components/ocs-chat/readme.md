@@ -18,6 +18,16 @@ For more information, see the [Open Chat Studio documentation](https://dimagi.gi
 | `visible`             | `visible`     | Whether the chat widget is visible on load.            | `boolean`                       | `false`     |
 
 
+## CSS Custom Properties
+
+| Name                              | Description                      |
+| --------------------------------- | -------------------------------- |
+| `--button-background-color`       | Button background color          |
+| `--button-background-color-hover` | Button background color on hover |
+| `--button-text-color`             | Button text color                |
+| `--button-text-color-hover`       | Button text color on hover       |
+
+
 ----------------------------------------------
 
 *Built with [StencilJS](https://stenciljs.com/)*

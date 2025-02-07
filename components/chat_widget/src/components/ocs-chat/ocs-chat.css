@@ -4,6 +4,12 @@
 
 :host {
   display: block;
+   /**
+   * @prop --button-background-color: Button background color
+   * @prop --button-background-color-hover: Button background color on hover
+   * @prop --button-text-color: Button text color
+   * @prop --button-text-color-hover: Button text color on hover
+   */
   --button-background-color: inherit;
   --button-background-color-hover: inherit;
   --button-text-color: inherit;
