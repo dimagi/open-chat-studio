@@ -46,6 +46,11 @@ Note: The AI review stage is optional but recommended for larger changes.
 - Focus on testing business logic and complex functionality
 - Generally, we don't test Django views unless they contain significant logic
   - When view logic becomes complex, extract it into separate functions and test those
+ 
+### Documentation
+- User facing changes should be accompanied by documentation updates in the [docs repo](https://github.com/dimagi/open-chat-studio-docs/)
+- Link the docs PR and the code PR
+- Merge the docs PR after the code PR
 
 ## Communication
 
