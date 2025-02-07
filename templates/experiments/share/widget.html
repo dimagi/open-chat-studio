@@ -2,6 +2,6 @@
 {# - escape script tags #}
 {% url 'experiments:start_session_public_embed' team.slug experiment.public_id as embed_url %}
 <!-- place this in the <head> section -->
-\<script type="module" src="https://unpkg.com/open-chat-studio-widget@0.1.0/dist/open-chat-studio-widget/open-chat-studio-widget.esm.js"\>\<\/script\>
+\<script type="module" src="https://unpkg.com/open-chat-studio-widget@0.2.0/dist/open-chat-studio-widget/open-chat-studio-widget.esm.js"\>\<\/script\>
     <!-- place this where you want the widget button to appear -->
-    <open-chat-studio-widget visible="false"  boturl="{% absolute_url embed_url %}" button-text="Let's Chat"></open-chat-studio-widget>
+    <open-chat-studio-widget visible="false"  bot-url="{% absolute_url embed_url %}" button-text="Let's Chat" position="right" expanded="false"></open-chat-studio-widget>

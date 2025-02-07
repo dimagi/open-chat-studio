@@ -7,8 +7,25 @@
 import { HTMLStencilElement, JSXBase } from "@stencil/core/internal";
 export namespace Components {
     interface OpenChatStudioWidget {
-        "boturl": string;
+        /**
+          * The URL of the bot to connect to.
+         */
+        "botUrl": string;
+        /**
+          * The text to display on the button.
+         */
         "buttonText": string;
+        /**
+          * Whether the chat widget is initially expanded.
+         */
+        "expanded": boolean;
+        /**
+          * The initial position of the chat widget on the screen.
+         */
+        "position": 'left' | 'center' | 'right';
+        /**
+          * Whether the chat widget is visible on load.
+         */
         "visible": boolean;
     }
 }
@@ -25,8 +42,25 @@ declare global {
 }
 declare namespace LocalJSX {
     interface OpenChatStudioWidget {
-        "boturl": string;
+        /**
+          * The URL of the bot to connect to.
+         */
+        "botUrl": string;
+        /**
+          * The text to display on the button.
+         */
         "buttonText"?: string;
+        /**
+          * Whether the chat widget is initially expanded.
+         */
+        "expanded"?: boolean;
+        /**
+          * The initial position of the chat widget on the screen.
+         */
+        "position"?: 'left' | 'center' | 'right';
+        /**
+          * Whether the chat widget is visible on load.
+         */
         "visible"?: boolean;
     }
     interface IntrinsicElements {
