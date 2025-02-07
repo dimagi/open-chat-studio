@@ -1,6 +1,5 @@
 import { newSpecPage } from '@stencil/core/testing';
 import { OcsChat } from '../ocs-chat';
-import {h} from "@stencil/core";
 
 describe('open-chat-studio-widget', () => {
   it('renders', async () => {
