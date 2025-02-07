@@ -234,13 +234,12 @@ def get_admin_emails(team):
     )
 
 
-def send_domain_deleted_notification(team):
-    admin_emails = get_admin_emails(team)
+def send_domain_deleted_notification(team_name, admin_emails):
     email_context = {
-        "team_name": team.name,
+        "team_name": team_name,
     }
     send_mail(
-        subject=_("Domain '{}' has been deleted").format(team.name),
+        subject=_("Domain '{}' has been deleted").format(team_name),
         message=render_to_string("teams/email/domain_deleted_notification.txt", context=email_context),
         from_email=settings.DEFAULT_FROM_EMAIL,
         recipient_list=admin_emails,
