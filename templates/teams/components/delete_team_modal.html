@@ -10,7 +10,7 @@
       {% endblocktranslate %}
     </p>
     {% if related_assistants %}
-      <h4 class="font-semibold my-2">These OpenAI Assistants will also be deleted:</h4>
+      <h4 class="font-semibold my-2">These OpenAI Assistants will also be deleted from Open Chat Studio and OpenAI:</h4>
       <ul class="list-disc list-inside">
         {% for assistant in related_assistants %}
           <li>{% include "generic/chip.html" with chip=assistant %}</li>

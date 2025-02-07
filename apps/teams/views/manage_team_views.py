@@ -21,7 +21,6 @@ from apps.web.forms import set_form_fields_disabled
 
 def get_related_assistants(team):
     related_assistants = OpenAiAssistant.objects.filter(team=team)
-    print(related_assistants)
     return [Chip(label=assistant.name, url=assistant.get_absolute_url()) for assistant in related_assistants]
 
 
