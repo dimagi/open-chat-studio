@@ -3,10 +3,14 @@ from functools import reduce
 from operator import or_
 from typing import Any
 
+from django.conf import settings
 from django.contrib.admin.utils import NestedObjects
+from django.core.mail import send_mail
 from django.db import models, router, transaction
 from django.db.models import Expression, Q
 from django.db.models.deletion import get_candidate_relations_to_delete
+from django.template.loader import render_to_string
+from django.utils.translation import gettext_lazy as _
 from field_audit import field_audit
 from field_audit.field_audit import get_audited_models
 
@@ -218,3 +222,28 @@ def get_related_pipelines_queryset(instance, pipeline_param_key: str = None):
         Q(**{f"params__{pipeline_param_key}": instance.id}) | Q(**{f"params__{pipeline_param_key}": str(instance.id)})
     )
     return pipelines
+
+
+def get_admin_emails(team):
+    from apps.teams.models import Membership
+
+    return list(
+        Membership.objects.filter(team__name=team.name, groups__permissions__codename="delete_team").values_list(
+            "user__email", flat=True
+        )
+    )
+
+
+def send_domain_deleted_notification(team):
+    admin_emails = get_admin_emails(team)
+    email_context = {
+        "team_name": team.name,
+    }
+    send_mail(
+        subject=_("Domain '{}' has been deleted").format(team.name),
+        message=render_to_string("teams/email/domain_deleted_notification.txt", context=email_context),
+        from_email=settings.DEFAULT_FROM_EMAIL,
+        recipient_list=admin_emails,
+        fail_silently=False,
+        html_message=render_to_string("teams/email/domain_deleted_notification.html", context=email_context),
+    )
