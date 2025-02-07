@@ -548,7 +548,7 @@ FIELD_AUDIT_TEAM_EXEMPT_VIEWS = [
     "account_reset_password_from_key",
     "teams:signup_after_invite",
     "account_login",
-    "teams:delete_team",
+    "single_team:delete_team",
 ]
 FIELD_AUDIT_REQUEST_ID_HEADERS = [
     "X-Request-ID",  # Heroku
