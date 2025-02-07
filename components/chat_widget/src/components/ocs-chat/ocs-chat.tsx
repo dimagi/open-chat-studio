@@ -1,5 +1,12 @@
 import { Component, Host, h, Prop, State, Build } from '@stencil/core';
-import {ArrowLeftEndOnRectangleIcon, ArrowRightEndOnRectangleIcon, ViewfinderCircleIcon, XMarkIcon} from './heroicons';
+import {
+  ArrowLeftEndOnRectangleIcon,
+  ArrowRightEndOnRectangleIcon,
+  ViewfinderCircleIcon,
+  XMarkIcon,
+  ChevronDownIcon,
+  ChevronUpIcon,
+} from './heroicons';
 
 const allowedHosts = ["chatbots.dimagi.com"];
 
@@ -12,7 +19,8 @@ export class OcsChat {
   @Prop() boturl!: string;
   @Prop() buttonText: string = "Chat";
   @Prop({ mutable: true }) visible: boolean = false;
-  @Prop({ mutable: true }) anchorPosition: 'left' | 'center' | 'right' = 'right';
+  @Prop({ mutable: true }) position: 'left' | 'center' | 'right' = 'right';
+  @Prop({ mutable: true }) expanded: boolean = false;
 
   @State() loaded: boolean = false;
   @State() error: string = "";
@@ -37,19 +45,22 @@ export class OcsChat {
   }
 
   setPosition(position: 'left' | 'center' | 'right') {
-    if (position === this.anchorPosition) return;
-    this.anchorPosition = position;
+    if (position === this.position) return;
+    this.position = position;
+  }
+
+  toggleSize() {
+    this.expanded = !this.expanded;
   }
 
   getPositionClasses() {
-    const baseClasses = 'fixed w-[450px] h-5/6 bg-white border border-gray-200 shadow-lg rounded-lg overflow-hidden flex flex-col';
+    const baseClasses = `fixed w-[450px] ${this.expanded ? 'h-5/6' : 'h-3/5'} bg-white border border-gray-200 shadow-lg rounded-lg overflow-hidden flex flex-col`;
 
-    // Position-specific classes
     const positionClasses = {
       left: 'left-5 bottom-5',
       right: 'right-5 bottom-5',
       center: 'left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2'
-    }[this.anchorPosition];
+    }[this.position];
 
     return `${baseClasses} ${positionClasses}`;
   }
@@ -73,8 +84,8 @@ export class OcsChat {
                 <button
                   class={{
                     'p-1.5 rounded-md transition-colors duration-200 hover:bg-gray-100': true,
-                    'text-blue-600': this.anchorPosition === 'left',
-                    'text-gray-500': this.anchorPosition !== 'left'
+                    'text-blue-600': this.position === 'left',
+                    'text-gray-500': this.position !== 'left'
                   }}
                   onClick={() => this.setPosition('left')}
                   aria-label="Dock to left"
@@ -85,35 +96,45 @@ export class OcsChat {
                 <button
                   class={{
                     'p-1.5 rounded-md transition-colors duration-200 hover:bg-gray-100': true,
-                    'text-blue-600': this.anchorPosition === 'center',
-                    'text-gray-500': this.anchorPosition !== 'center'
+                    'text-blue-600': this.position === 'center',
+                    'text-gray-500': this.position !== 'center'
                   }}
                   onClick={() => this.setPosition('center')}
                   aria-label="Center"
                   title="Center"
                 >
-                  <ViewfinderCircleIcon />
+                  <ViewfinderCircleIcon/>
                 </button>
                 <button
                   class={{
                     'p-1.5 rounded-md transition-colors duration-200 hover:bg-gray-100': true,
-                    'text-blue-600': this.anchorPosition === 'right',
-                    'text-gray-500': this.anchorPosition !== 'right'
+                    'text-blue-600': this.position === 'right',
+                    'text-gray-500': this.position !== 'right'
                   }}
                   onClick={() => this.setPosition('right')}
                   aria-label="Dock to right"
                   title="Dock to right"
                 >
-                 <ArrowRightEndOnRectangleIcon />
+                  <ArrowRightEndOnRectangleIcon/>
                 </button>
               </div>
-              <button
-                class="p-1.5 hover:bg-gray-100 rounded-md transition-colors duration-200 text-gray-500"
-                onClick={() => this.visible = false}
-                aria-label="Close"
-              >
-                <XMarkIcon />
-              </button>
+              <div class="flex gap-1">
+                <button
+                  class="p-1.5 rounded-md transition-colors duration-200 hover:bg-gray-100 text-gray-500"
+                  onClick={() => this.toggleSize()}
+                  aria-label={this.expanded ? "Collapse" : "Expand"}
+                  title={this.expanded ? "Collapse" : "Expand"}
+                >
+                  {this.expanded ? <ChevronDownIcon/> : <ChevronUpIcon/>}
+                </button>
+                <button
+                  class="p-1.5 hover:bg-gray-100 rounded-md transition-colors duration-200 text-gray-500"
+                  onClick={() => this.visible = false}
+                  aria-label="Close"
+                >
+                  <XMarkIcon/>
+                </button>
+              </div>
             </div>
             {this.loaded && (
               <iframe
