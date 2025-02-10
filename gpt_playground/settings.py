@@ -457,7 +457,8 @@ if TASKBADGER_ORG and TASKBADGER_PROJECT and TASKBADGER_API_KEY:
                     # ignore these since they execute often and fire other tasks that we already track
                     "apps.events.tasks.enqueue_static_triggers",
                     "apps.events.tasks.enqueue_timed_out_events",
-                ]
+                ],
+                record_task_args=True,
             )
         ],
     )
