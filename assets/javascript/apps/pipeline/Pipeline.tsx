@@ -1,6 +1,6 @@
 import "reactflow/dist/style.css";
 import "./styles.css"
-import React, {useCallback, useEffect, useState} from "react";
+import React, {useCallback, useState} from "react";
 import ReactFlow, {
   Background,
   BackgroundVariant,
@@ -46,14 +46,12 @@ export default function Pipeline() {
   const onNodesChange = usePipelineStore((state) => state.onNodesChange);
   const onEdgesChange = usePipelineStore((state) => state.onEdgesChange);
   const onConnect = usePipelineStore((state) => state.onConnect);
-  const resetFlow = usePipelineStore((state) => state.resetFlow);
   const setNodes = usePipelineStore((state) => state.setNodes);
   const addNode = usePipelineStore((state) => state.addNode);
   const deleteEdge = usePipelineStore((state) => state.deleteEdge);
   const deleteNode = usePipelineStore((state) => state.deleteNode);
   const reactFlowInstance = usePipelineStore((state) => state.reactFlowInstance);
   const setReactFlowInstance = usePipelineStore((state) => state.setReactFlowInstance);
-  const currentPipelineId = usePipelineStore((state) => state.currentPipelineId);
   const currentPipeline = usePipelineStore((state) => state.currentPipeline);
   const autoSaveCurrentPipline = usePipelineStore((state) => state.autoSaveCurrentPipline);
   const savePipeline = usePipelineStore((state) => state.savePipeline);
@@ -63,15 +61,6 @@ export default function Pipeline() {
 
   const [lastSelection, setLastSelection] = useState<OnSelectionChangeParams | null>(null);
   const [selectedOverlay, setSelectedOverlay] = useState<string | null>(null);
-
-  useEffect(() => {
-    if (reactFlowInstance) {
-      resetFlow({
-        nodes: currentPipeline?.data?.nodes ?? [],
-        edges: currentPipeline?.data?.edges ?? [],
-      });
-    }
-  }, [currentPipelineId, reactFlowInstance]);
 
   const onDragOver = useCallback((event: React.DragEvent) => {
     event.preventDefault();

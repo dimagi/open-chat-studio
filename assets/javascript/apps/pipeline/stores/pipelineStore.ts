@@ -30,6 +30,12 @@ const createPipelineStore: StateCreator<
   reactFlowInstance: null,
   setReactFlowInstance: (newState) => {
     set({reactFlowInstance: newState});
+    if (get().currentPipeline) {
+      get().resetFlow({
+        nodes: get().currentPipeline?.data?.nodes ?? [],
+        edges: get().currentPipeline?.data?.edges ?? [],
+      });
+    }
   },
   onNodesChange: (changes: NodeChange[]) => {
     set({
@@ -235,6 +241,12 @@ const createPipelineManagerStore: StateCreator<
         set({currentPipeline: pipeline, currentPipelineId: pipelineId});
         set({errors: pipeline.errors});
         set({isLoading: false});
+        if (get().reactFlowInstance) {
+          get().resetFlow({
+            nodes: pipeline?.data?.nodes ?? [],
+            edges: pipeline?.data?.edges ?? [],
+          });
+        }
       }
     }).catch((e) => {
       console.log(e);
@@ -276,6 +288,12 @@ const createPipelineManagerStore: StateCreator<
             updateEdgeClasses(pipeline, response.errors);
             set({currentPipeline: pipeline, dirty: false});
             set({errors: response.errors});
+            if (get().reactFlowInstance) {
+              get().resetFlow({
+                nodes: pipeline?.data?.nodes ?? [],
+                edges: pipeline?.data?.edges ?? [],
+              });
+            }
             resolve();
           }
         })
