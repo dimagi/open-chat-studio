@@ -1,6 +1,6 @@
 import React from "react";
 import {JsonSchema, NodeParams, PropertySchema} from "../types/nodeParams";
-import usePipelineManagerStore from "../stores/pipelineManagerStore";
+import usePipelineStore from "../stores/pipelineManagerStore";
 import {getWidget} from "./widgets";
 
 type GetWidgetsParams = {
@@ -129,7 +129,7 @@ export const getInputWidget = (params: InputWidgetParams) => {
     return <></>;
   }
 
-  const getNodeFieldError = usePipelineManagerStore((state) => state.getNodeFieldError);
+  const getNodeFieldError = usePipelineStore((state) => state.getNodeFieldError);
   const Widget = getWidget(widgetOrType, params.schema)
   let fieldError = getNodeFieldError(params.id, params.name);
   const paramValue = params.params[params.name];
