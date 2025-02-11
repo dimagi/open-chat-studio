@@ -16,20 +16,11 @@ import {cloneDeep} from "lodash";
 import {ErrorsType, PipelineManagerStoreType} from "../types/pipelineManagerStore";
 import {apiClient} from "../api/api";
 import {PipelineType} from "../types/pipeline";
-import usePipelineManagerStore from "./pipelineManagerStore";
 
 let saveTimeoutId: NodeJS.Timeout | null = null;
 
-
-const usePipelineStore = create<PipelineStoreType & PipelineManagerStoreType>((...a) => ({
-  ...createPipelineStore(...a),
-  ...createPipelineManagerStore(...a),
-}));
-
-export default usePipelineStore;
-
 const createPipelineStore: StateCreator<
-  PipelineStoreType,
+  PipelineStoreType & PipelineManagerStoreType,
   [],
   [],
   PipelineStoreType
@@ -59,9 +50,7 @@ const createPipelineStore: StateCreator<
       nodes: newChange,
     });
 
-    const flowsManager = usePipelineManagerStore.getState();
-
-    flowsManager.autoSaveCurrentPipline(
+    get().autoSaveCurrentPipline(
       newChange,
       newEdges,
     );
@@ -73,9 +62,7 @@ const createPipelineStore: StateCreator<
       edges: newChange,
     });
 
-    const flowsManager = usePipelineManagerStore.getState();
-
-    flowsManager.autoSaveCurrentPipline(
+    get().autoSaveCurrentPipline(
       get().nodes,
       newChange,
     );
@@ -168,9 +155,7 @@ const createPipelineStore: StateCreator<
       newEdges = addEdge(connection, oldEdges);
       return newEdges;
     });
-    usePipelineManagerStore
-      .getState()
-      .autoSaveCurrentPipline(
+    get().autoSaveCurrentPipline(
         get().nodes,
         newEdges,
       );
@@ -230,7 +215,12 @@ const createPipelineStore: StateCreator<
   },
 })
 
-const createPipelineManagerStore: StateCreator<PipelineManagerStoreType, [], [], PipelineManagerStoreType> = (set, get) => ({
+const createPipelineManagerStore: StateCreator<
+  PipelineManagerStoreType & PipelineStoreType,
+  [],
+  [],
+  PipelineManagerStoreType
+> = (set, get) => ({
   currentPipeline: undefined,
   currentPipelineId: undefined,
   dirty: false,
@@ -315,6 +305,14 @@ const createPipelineManagerStore: StateCreator<PipelineManagerStoreType, [], [],
     return get().errors["pipeline"];
   },
 })
+
+
+const usePipelineStore = create<PipelineStoreType & PipelineManagerStoreType>((...a) => ({
+  ...createPipelineStore(...a),
+  ...createPipelineManagerStore(...a),
+}));
+
+export default usePipelineStore;
 
 
 /**
