@@ -16,7 +16,6 @@ django-cryptography-django5
 django-environ
 django-field-audit>=1.2.7
 django-health-check
-django-hijack
 django-redis
 django-storages[s3]
 django-tables2
