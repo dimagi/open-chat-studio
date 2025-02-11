@@ -1,6 +1,6 @@
 import React from "react";
 import {JsonSchema, NodeParams, PropertySchema} from "../types/nodeParams";
-import usePipelineStore from "../stores/pipelineManagerStore";
+import usePipelineStore from "../stores/pipelineStore";
 import {getWidget} from "./widgets";
 
 type GetWidgetsParams = {
