@@ -1,7 +1,6 @@
 import React, { useState } from "react";
 import OverlayPanel from "../components/OverlayPanel";
 import { apiClient } from "../api/api";
-import usePipelineManagerStore from "../stores/pipelineManagerStore";
 import usePipelineStore from "../stores/pipelineStore";
 
 type TestMessageBoxParams = {
@@ -13,7 +12,7 @@ export default function TestMessageBox({
   isOpen,
   setIsOpen,
 }: TestMessageBoxParams) {
-  const currentPipelineId = usePipelineManagerStore(
+  const currentPipelineId = usePipelineStore(
     (state) => state.currentPipelineId,
   );
   const setEdgeLabel = usePipelineStore((state) => state.setEdgeLabel);
