@@ -273,7 +273,7 @@ const createPipelineManagerStore: StateCreator<
           true,
         );
       }
-    }, 2000); // Delay of 2s
+    }, 1000);
   },
   savePipeline: (pipeline: PipelineType,) => {
     set({isSaving: true});
