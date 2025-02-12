@@ -204,7 +204,6 @@ class ExperimentForm(forms.ModelForm):
         choices=[
             ("llm", gettext("Base Language Model")),
             ("assistant", gettext("OpenAI Assistant")),
-            ("pipeline", gettext("Pipeline")),
         ],
         widget=forms.RadioSelect(attrs={"x-model": "type"}),
     )
@@ -271,6 +270,9 @@ class ExperimentForm(forms.ModelForm):
         exclude_services = [SyntheticVoice.OpenAIVoiceEngine]
         if flag_is_active(request, "open_ai_voice_engine"):
             exclude_services = []
+
+        if flag_is_active(request, "pipelines-v2"):
+            self.fields["type"].choices += [("pipeline", gettext("Pipeline"))]
 
         # Limit to team's data
         self.fields["llm_provider"].queryset = team.llmprovider_set
@@ -1518,9 +1520,9 @@ def experiment_session_pagination_view(request, team_slug: str, experiment_id: u
     experiment = request.experiment
     query = ExperimentSession.objects.exclude(external_id=session_id).filter(experiment=experiment)
     if request.GET.get("dir", "next") == "next":
-        next_session = query.filter(created_at__gte=session.created_at).first()
+        next_session = query.filter(created_at__gte=session.created_at).order_by("created_at").first()
     else:
-        next_session = query.filter(created_at__lte=session.created_at).last()
+        next_session = query.filter(created_at__lte=session.created_at).order_by("created_at").last()
 
     if not next_session:
         messages.warning(request, "No more sessions to paginate")

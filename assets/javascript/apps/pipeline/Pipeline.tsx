@@ -1,6 +1,6 @@
 import "reactflow/dist/style.css";
 import "./styles.css"
-import React, {useCallback, useEffect, useState} from "react";
+import React, {useCallback, useState} from "react";
 import ReactFlow, {
   Background,
   BackgroundVariant,
@@ -16,7 +16,6 @@ import ReactFlow, {
 
 import {PipelineNode} from "./PipelineNode";
 import ComponentList from "./panel/ComponentList";
-import usePipelineManagerStore from "./stores/pipelineManagerStore";
 import usePipelineStore from "./stores/pipelineStore";
 import {getCachedData, getNodeId} from "./utils";
 import {useHotkeys} from "react-hotkeys-hook";
@@ -47,32 +46,21 @@ export default function Pipeline() {
   const onNodesChange = usePipelineStore((state) => state.onNodesChange);
   const onEdgesChange = usePipelineStore((state) => state.onEdgesChange);
   const onConnect = usePipelineStore((state) => state.onConnect);
-  const resetFlow = usePipelineStore((state) => state.resetFlow);
   const setNodes = usePipelineStore((state) => state.setNodes);
   const addNode = usePipelineStore((state) => state.addNode);
   const deleteEdge = usePipelineStore((state) => state.deleteEdge);
   const deleteNode = usePipelineStore((state) => state.deleteNode);
   const reactFlowInstance = usePipelineStore((state) => state.reactFlowInstance);
   const setReactFlowInstance = usePipelineStore((state) => state.setReactFlowInstance);
-  const currentPipelineId = usePipelineManagerStore((state) => state.currentPipelineId);
-  const currentPipeline = usePipelineManagerStore((state) => state.currentPipeline);
-  const autoSaveCurrentPipline = usePipelineManagerStore((state) => state.autoSaveCurrentPipline);
-  const savePipeline = usePipelineManagerStore((state) => state.savePipeline);
+  const currentPipeline = usePipelineStore((state) => state.currentPipeline);
+  const autoSaveCurrentPipline = usePipelineStore((state) => state.autoSaveCurrentPipline);
+  const savePipeline = usePipelineStore((state) => state.savePipeline);
   const { nodeSchemas } = getCachedData();
 
   const editingNode = useEditorStore((state) => state.currentNode);
 
   const [lastSelection, setLastSelection] = useState<OnSelectionChangeParams | null>(null);
   const [selectedOverlay, setSelectedOverlay] = useState<string | null>(null);
-
-  useEffect(() => {
-    if (reactFlowInstance) {
-      resetFlow({
-        nodes: currentPipeline?.data?.nodes ?? [],
-        edges: currentPipeline?.data?.edges ?? [],
-      });
-    }
-  }, [currentPipelineId, reactFlowInstance]);
 
   const onDragOver = useCallback((event: React.DragEvent) => {
     event.preventDefault();

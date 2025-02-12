@@ -1,18 +1,17 @@
 import React, {ChangeEvent, useState} from "react";
 import Pipeline from "./Pipeline";
-import usePipelineManagerStore from "./stores/pipelineManagerStore";
 import usePipelineStore from "./stores/pipelineStore";
 
 export default function Page() {
-  const currentPipeline = usePipelineManagerStore((state) => state.currentPipeline);
+  const currentPipeline = usePipelineStore((state) => state.currentPipeline);
   const nodes = usePipelineStore((state) => state.nodes);
   const edges = usePipelineStore((state) => state.edges);
 
-  const updatePipelineName = usePipelineManagerStore((state) => state.updatePipelineName);
-  const savePipeline = usePipelineManagerStore((state) => state.savePipeline);
-  const dirty = usePipelineManagerStore((state) => state.dirty);
-  const isSaving = usePipelineManagerStore((state) => state.isSaving);
-  const error = usePipelineManagerStore((state) => state.getPipelineError());
+  const updatePipelineName = usePipelineStore((state) => state.updatePipelineName);
+  const savePipeline = usePipelineStore((state) => state.savePipeline);
+  const dirty = usePipelineStore((state) => state.dirty);
+  const isSaving = usePipelineStore((state) => state.isSaving);
+  const error = usePipelineStore((state) => state.getPipelineError());
   const [name, setName] = useState(currentPipeline?.name);
   const [editingName, setEditingName] = useState(false);
   const handleNameChange = (event: ChangeEvent<HTMLInputElement>) => {

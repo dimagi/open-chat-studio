@@ -64,8 +64,6 @@ THIRD_PARTY_APPS = [
     "drf_spectacular",
     "rest_framework_api_key",
     "celery_progress",
-    "hijack",  # "login as" functionality
-    "hijack.contrib.admin",  # hijack buttons in the admin
     "whitenoise.runserver_nostatic",  # whitenoise runserver
     "waffle",
     "django_celery_beat",
@@ -126,7 +124,6 @@ MIDDLEWARE = [
     "apps.web.locale_middleware.UserLocaleMiddleware",
     "django.contrib.messages.middleware.MessageMiddleware",
     "django.middleware.clickjacking.XFrameOptionsMiddleware",
-    "hijack.middleware.HijackUserMiddleware",
     "waffle.middleware.WaffleMiddleware",
     "field_audit.middleware.FieldAuditMiddleware",
     "apps.audit.middleware.AuditTransactionMiddleware",
@@ -457,7 +454,8 @@ if TASKBADGER_ORG and TASKBADGER_PROJECT and TASKBADGER_API_KEY:
                     # ignore these since they execute often and fire other tasks that we already track
                     "apps.events.tasks.enqueue_static_triggers",
                     "apps.events.tasks.enqueue_timed_out_events",
-                ]
+                ],
+                record_task_args=True,
             )
         ],
     )
