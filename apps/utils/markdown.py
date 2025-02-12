@@ -12,6 +12,12 @@ class FileLinkInlineProcessor(LinkInlineProcessor):
             href = relative_url
         return href, title, index, handled
 
+    def handleMatch(self, m, data):
+        el, start, end = super().handleMatch(m, data)
+        # Add target="_blank" to ALL <a> tags
+        if el is not None:
+            el.set("target", "_blank")
+        return el, start, end
 
 class FileImageInlineProcessor(ImageInlineProcessor):
     def getLink(self, data, index):
