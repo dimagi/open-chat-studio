@@ -1,0 +1,46 @@
+<dialog id="sharing_modal" class="modal">
+  <div class="modal-box" x-data="{ tab: 'tab-link' }">
+    <div role="tablist" class="tabs tabs-bordered">
+      <a role="tab" class="tab" @click="tab = 'tab-link'" :class="{ 'tab-active': tab === 'tab-link' }">Public Link</a>
+      <a role="tab" class="tab" @click="tab = 'tab-embed'" :class="{ 'tab-active': tab === 'tab-embed' }">Embed</a>
+    </div>
+    <div x-cloak x-show="tab === 'tab-link'">
+      {% url 'experiments:start_session_public' team.slug experiment.public_id as public_link %}
+      <div class="w-full my-4">
+        <p class="my-4">Share this link with participants:</p>
+        <pre class="w-full max-w-min whitespace-pre-wrap overflow-x-scroll"><code>{% absolute_url public_link %}</code></pre>
+        <button class="my-2 btn btn-sm justify-self-center" onclick="SiteJS.app.copyToClipboard(this, 'public-link')"
+                title="Copy to clipboard">
+          <i class="fa-regular fa-copy"></i> Copy URL
+        </button>
+        <span class="hidden" id="public-link">{% absolute_url public_link %}</span>
+      </div>
+    </div>
+    <div x-cloak x-show="tab === 'tab-embed'">
+      <div class="w-full my-4">
+        <p class="my-4">Use this HTML code to embed the chat window for your bot in a different site:</p>
+        <script>
+          async function copyEmbed(callee, type) {
+            const code = {
+              iframe: `{% include "experiments/share/iframe.html" %}`,
+              widget: `{% include "experiments/share/widget.html" %}`,
+            }[type]
+            await SiteJS.app.copyTextToClipboard(callee, code)
+          }
+        </script>
+        <button class="my-2 btn btn-sm btn-primary justify-self-center" onclick="copyEmbed(this, 'widget')" title="Copy to clipboard">
+          <i class="fa-regular fa-copy"></i> Copy Widget Embed Code (recommended)
+        </button>
+        <button class="my-2 btn btn-sm justify-self-center" onclick="copyEmbed(this, 'iframe')" title="Copy to clipboard">
+          <i class="fa-regular fa-copy"></i> Copy Raw Embed Code
+        </button>
+        <p class="my-2 text-sm"><a href="{{ docs_base_url }}{{ docs_links.embed }}" class="link" target="_blank">Learn more about embedding</a></p>
+      </div>
+    </div>
+    <div class="modal-action">
+      <form method="dialog">
+        <button class="btn">Close</button>
+      </form>
+    </div>
+  </div>
+</dialog>

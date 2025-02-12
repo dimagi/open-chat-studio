@@ -622,5 +622,7 @@ def test_input_message_is_saved_on_chain_error(sync_messages_to_thread, db_sessi
 
     with pytest.raises(Exception, match="Error"):
         assistant.invoke("test", attachments=[])
-    assert ChatMessage.objects.count() == 1
-    assert ChatMessage.objects.filter(message_type=ChatMessageType.HUMAN).count() == 1
+    assert ChatMessage.objects.filter(chat__experiment_session=db_session).count() == 1
+    assert (
+        ChatMessage.objects.filter(chat__experiment_session=db_session, message_type=ChatMessageType.HUMAN).count() == 1
+    )

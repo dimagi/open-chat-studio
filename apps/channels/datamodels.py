@@ -59,7 +59,7 @@ class Attachment(BaseModel):
             return b""
         return self._file.file.read()
 
-    def read_string(self):
+    def read_text(self):
         return self.document.get_contents_as_string()
 
 

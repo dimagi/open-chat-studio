@@ -337,5 +337,5 @@ def test_input_message_is_saved_on_chain_error(populate_memory, runnable, sessio
     )
     with pytest.raises(Exception, match="Error"):
         chain.invoke("hi")
-    assert ChatMessage.objects.count() == 1
-    assert ChatMessage.objects.filter(message_type=ChatMessageType.HUMAN).count() == 1
+    assert ChatMessage.objects.filter(chat__experiment_session=session).count() == 1
+    assert ChatMessage.objects.filter(chat__experiment_session=session, message_type=ChatMessageType.HUMAN).count() == 1

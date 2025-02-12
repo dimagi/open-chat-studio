@@ -15,7 +15,7 @@ from django.urls import reverse
 from django.utils import timezone
 
 from apps.channels.models import ChannelPlatform
-from apps.experiments.models import ExperimentSession, Participant, ParticipantData
+from apps.experiments.models import ExperimentSession, Participant, ParticipantData, SessionStatus
 from apps.teams.backends import EXPERIMENT_ADMIN_GROUP, add_user_to_team
 from apps.utils.factories.channels import ExperimentChannelFactory
 from apps.utils.factories.experiment import ExperimentFactory, ParticipantFactory
@@ -553,5 +553,22 @@ def test_generate_bot_message_and_send(ConnectClient, get_llm_service, experimen
     session = ExperimentSession.objects.get(participant=participant_data.participant, experiment=experiment)
     assert session.chat.messages.count() == 2
     last_message = session.chat.messages.last()
+    assert last_message.message_type == "ai"
+    assert last_message.content == "Time to take a break an brew some coffee"
+
+    # Call it a third time, but this time we want to start a new session
+    first_session = session
+    data["start_new_session"] = True
+    response = client.post(url, json.dumps(data), content_type="application/json")
+    assert response.status_code == 200
+    first_session.refresh_from_db()
+    assert first_session.status == SessionStatus.PENDING_REVIEW
+    new_session = (
+        ExperimentSession.objects.filter(participant=participant_data.participant, experiment=experiment)
+        .order_by("-created_at")
+        .first()
+    )
+    assert new_session.chat.messages.count() == 1
+    last_message = new_session.chat.messages.last()
     assert last_message.message_type == "ai"
     assert last_message.content == "Time to take a break an brew some coffee"

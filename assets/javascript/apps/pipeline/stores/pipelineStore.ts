@@ -8,19 +8,34 @@ import {
   Node,
   NodeChange,
 } from "reactflow";
-import { create } from "zustand";
-import { PipelineStoreType } from "../types/pipelineStore";
-import usePipelineManagerStore from "./pipelineManagerStore";
+import {create, StateCreator} from "zustand";
+import {PipelineStoreType} from "../types/pipelineStore";
 import useEditorStore from "./editorStore";
-import { getNodeId } from "../utils";
-import { cloneDeep } from "lodash";
+import {getNodeId} from "../utils";
+import {cloneDeep} from "lodash";
+import {ErrorsType, PipelineManagerStoreType} from "../types/pipelineManagerStore";
+import {apiClient} from "../api/api";
+import {PipelineType} from "../types/pipeline";
 
-const usePipelineStore = create<PipelineStoreType>((set, get) => ({
+let saveTimeoutId: NodeJS.Timeout | null = null;
+
+const createPipelineStore: StateCreator<
+  PipelineStoreType & PipelineManagerStoreType,
+  [],
+  [],
+  PipelineStoreType
+> = (set, get) => ({
   nodes: [],
   edges: [],
   reactFlowInstance: null,
   setReactFlowInstance: (newState) => {
     set({reactFlowInstance: newState});
+    if (get().currentPipeline) {
+      get().resetFlow({
+        nodes: get().currentPipeline?.data?.nodes ?? [],
+        edges: get().currentPipeline?.data?.edges ?? [],
+      });
+    }
   },
   onNodesChange: (changes: NodeChange[]) => {
     set({
@@ -41,9 +56,7 @@ const usePipelineStore = create<PipelineStoreType>((set, get) => ({
       nodes: newChange,
     });
 
-    const flowsManager = usePipelineManagerStore.getState();
-
-    flowsManager.autoSaveCurrentPipline(
+    get().autoSaveCurrentPipline(
       newChange,
       newEdges,
     );
@@ -55,9 +68,7 @@ const usePipelineStore = create<PipelineStoreType>((set, get) => ({
       edges: newChange,
     });
 
-    const flowsManager = usePipelineManagerStore.getState();
-
-    flowsManager.autoSaveCurrentPipline(
+    get().autoSaveCurrentPipline(
       get().nodes,
       newChange,
     );
@@ -89,10 +100,10 @@ const usePipelineStore = create<PipelineStoreType>((set, get) => ({
 
     useEditorStore.getState().closeEditor();
     const nodes = get().nodes.filter((node) =>
-        typeof nodeId === "string"
-          ? node.id === nodeId
-          : nodeId.includes(node.id)
-      )
+      typeof nodeId === "string"
+        ? node.id === nodeId
+        : nodeId.includes(node.id)
+    )
     const connectedEdges = getConnectedEdges(nodes, get().edges);
     const remainingEdges = get().edges.filter(
       (edge) => !connectedEdges.includes(edge),
@@ -132,16 +143,16 @@ const usePipelineStore = create<PipelineStoreType>((set, get) => ({
     // Not calling setEdges so we don't autoSave
     set({
       edges: get().edges.map(
-          (edge) => {
-            if (sourceId == edge.source) {
-              if (!outputHandle || edge.sourceHandle === outputHandle) {
-                edge.label = label;
-                edge.type = 'annotatedEdge';
-              }
+        (edge) => {
+          if (sourceId == edge.source) {
+            if (!outputHandle || edge.sourceHandle === outputHandle) {
+              edge.label = label;
+              edge.type = 'annotatedEdge';
             }
-            return edge;
           }
-        )
+          return edge;
+        }
+      )
     });
   },
   onConnect: (connection) => {
@@ -150,9 +161,7 @@ const usePipelineStore = create<PipelineStoreType>((set, get) => ({
       newEdges = addEdge(connection, oldEdges);
       return newEdges;
     });
-    usePipelineManagerStore
-      .getState()
-      .autoSaveCurrentPipline(
+    get().autoSaveCurrentPipline(
         get().nodes,
         newEdges,
       );
@@ -204,12 +213,148 @@ const usePipelineStore = create<PipelineStoreType>((set, get) => ({
       .concat({...newNode, selected: false});
     get().setNodes(newNodes);
   },
-  resetFlow: ({ nodes, edges }) => {
+  resetFlow: ({nodes, edges}) => {
     set({
       nodes,
       edges,
     });
   },
+})
+
+const createPipelineManagerStore: StateCreator<
+  PipelineManagerStoreType & PipelineStoreType,
+  [],
+  [],
+  PipelineManagerStoreType
+> = (set, get) => ({
+  currentPipeline: undefined,
+  currentPipelineId: undefined,
+  dirty: false,
+  isSaving: false,
+  isLoading: true,
+  errors: {},
+  loadPipeline: async (pipelineId: number) => {
+    set({isLoading: true});
+    apiClient.getPipeline(pipelineId).then((pipeline) => {
+      if (pipeline) {
+        updateEdgeClasses(pipeline, pipeline.errors);
+        set({currentPipeline: pipeline, currentPipelineId: pipelineId});
+        set({errors: pipeline.errors});
+        set({isLoading: false});
+        if (get().reactFlowInstance) {
+          get().resetFlow({
+            nodes: pipeline?.data?.nodes ?? [],
+            edges: pipeline?.data?.edges ?? [],
+          });
+        }
+      }
+    }).catch((e) => {
+      console.log(e);
+    });
+  },
+  updatePipelineName: (name: string) => {
+    if (get().currentPipeline) {
+      set({currentPipeline: {...get().currentPipeline!, name}});
+    }
+  },
+  setIsLoading: (isLoading: boolean) => set({isLoading}),
+  autoSaveCurrentPipline: (nodes: Node[], edges: Edge[]) => {
+    set({dirty: true});
+    // Clear the previous timeout if it exists.
+    if (saveTimeoutId) {
+      clearTimeout(saveTimeoutId);
+    }
+
+    // Set up a new timeout.
+    saveTimeoutId = setTimeout(() => {
+      if (get().currentPipeline) {
+        get().savePipeline(
+          {...get().currentPipeline!, data: {nodes, edges}},
+          true,
+        );
+      }
+    }, 1000);
+  },
+  savePipeline: (pipeline: PipelineType,) => {
+    set({isSaving: true});
+    if (saveTimeoutId) {
+      clearTimeout(saveTimeoutId);
+    }
+    return new Promise<void>((resolve, reject) => {
+      apiClient.updatePipeline(get().currentPipelineId!, pipeline)
+        .then((response) => {
+          if (response) {
+            pipeline.data = response.data;
+            updateEdgeClasses(pipeline, response.errors);
+            set({currentPipeline: pipeline, dirty: false});
+            set({errors: response.errors});
+            if (get().reactFlowInstance) {
+              get().resetFlow({
+                nodes: pipeline?.data?.nodes ?? [],
+                edges: pipeline?.data?.edges ?? [],
+              });
+            }
+            resolve();
+          }
+        })
+        .catch((err) => {
+          alertify.error("There was an error saving");
+          reject(err);
+        }).finally(() => {
+        set({isSaving: false});
+      });
+    });
+  },
+  nodeHasErrors: (nodeId: string) => {
+    return !!get().errors["node"] && !!get().errors["node"]![nodeId];
+  },
+  getNodeFieldError: (nodeId: string, fieldName: string) => {
+    const errors = get().errors;
+    if (!errors["node"]) {
+      return "";
+    }
+    const nodeErrors = errors["node"][nodeId];
+    return nodeErrors ? nodeErrors[fieldName] : "";
+  },
+  edgeHasErrors: (edgeId: string) => {
+    return !!get().errors["edge"] && get().errors["edge"]!.includes(edgeId);
+  },
+  getPipelineError: () => {
+    return get().errors["pipeline"];
+  },
+})
+
+
+const usePipelineStore = create<PipelineStoreType & PipelineManagerStoreType>((...a) => ({
+  ...createPipelineStore(...a),
+  ...createPipelineManagerStore(...a),
 }));
 
 export default usePipelineStore;
+
+
+/**
+ * Updates the class names of edges in a pipeline based on error status.
+ *
+ * @remarks
+ * This function modifies the edge classes to visually indicate error states. Edges with errors
+ * receive an "edge-error" class, while error-free edges have their class name removed.
+ *
+ * @param pipeline - The pipeline containing edges to be checked
+ * @param errors - An object containing error information for different pipeline components
+ *
+ * @returns Void. Modifies edges in-place by adding or removing "edge-error" class.
+ */
+function updateEdgeClasses(pipeline: PipelineType, errors: ErrorsType) {
+  if (!pipeline.data) {
+    return;
+  }
+  const edgeErrors = errors["edge"] || [];
+  for (const edge of pipeline.data!.edges) {
+    if (edgeErrors.includes(edge["id"])) {
+      edge["className"] = "edge-error";
+    } else {
+      delete edge["className"];
+    }
+  }
+}

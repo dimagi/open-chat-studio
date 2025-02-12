@@ -88,6 +88,11 @@ urlpatterns = [
         name="experiment_session_message",
     ),
     path(
+        "e/<uuid:experiment_id>/v/<int:version_number>/session/<str:session_id>/embed/message/",
+        views.experiment_session_message_embed,
+        name="experiment_session_message_embed",
+    ),
+    path(
         "e/<uuid:experiment_id>/session/<str:session_id>/get_response/<slug:task_id>/",
         views.get_message_response,
         name="get_message_response",
@@ -125,6 +130,11 @@ urlpatterns = [
         name="experiment_chat",
     ),
     path(
+        "e/<uuid:experiment_id>/s/<str:session_id>/embed/chat/",
+        views.experiment_chat_embed,
+        name="experiment_chat_embed",
+    ),
+    path(
         "e/<uuid:experiment_id>/s/<str:session_id>/end/",
         views.end_experiment,
         name="end_experiment",
@@ -151,6 +161,7 @@ urlpatterns = [
     ),
     # public link
     path("e/<uuid:experiment_id>/start/", views.start_session_public, name="start_session_public"),
+    path("e/<uuid:experiment_id>/embed/start/", views.start_session_public_embed, name="start_session_public_embed"),
     # Experiment Routes
     path(
         "e/<int:experiment_id>/experiment_routes/<str:type>/new",

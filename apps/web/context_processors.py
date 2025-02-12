@@ -26,6 +26,7 @@ def project_meta(request):
         "signup_enabled": settings.SIGNUP_ENABLED,
         "temporary_superuser_access": get_temporary_superuser_access(request),
         "docs_base_url": settings.DOCUMENTATION_BASE_URL,
+        "docs_links": settings.DOCUMENTATION_LINKS,
     }
 
 

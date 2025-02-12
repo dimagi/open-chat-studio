@@ -17,7 +17,7 @@ def _format_comments(user_comments: list[UserComment]) -> str:
     return " | ".join([str(comment) for comment in user_comments])
 
 
-def experiment_to_message_export_rows(experiment: Experiment, tags: list[str] = None, participant: str = None):
+def experiment_to_message_export_rows(experiment: Experiment, tags: list[str] = None, participants: list[str] = None):
     queryset = experiment.sessions.prefetch_related(
         "chat",
         "chat__messages",
@@ -30,8 +30,8 @@ def experiment_to_message_export_rows(experiment: Experiment, tags: list[str] = 
     )
     if tags:
         queryset = queryset.filter(chat__tags__name__in=tags)
-    if participant:
-        queryset = queryset.filter(participant__identifier=participant)
+    if participants:
+        queryset = queryset.filter(participant__identifier__in=participants)
 
     yield [
         "Message ID",
@@ -39,7 +39,6 @@ def experiment_to_message_export_rows(experiment: Experiment, tags: list[str] = 
         "Message Type",
         "Message Content",
         "Platform",
-        "Chat User",
         "Chat Tags",
         "Chat Comments",
         "Session ID",
@@ -61,7 +60,6 @@ def experiment_to_message_export_rows(experiment: Experiment, tags: list[str] = 
                 message.message_type,
                 message.content,
                 session.get_platform_name(),
-                str(session.participant.user),
                 _format_tags(message.chat.tags.all()),
                 _format_comments(message.chat.comments.all()),
                 session.external_id,
@@ -76,9 +74,9 @@ def experiment_to_message_export_rows(experiment: Experiment, tags: list[str] = 
             ]
 
 
-def experiment_to_csv(experiment: Experiment, tags: list[str] = None, participant: str = None) -> io.StringIO:
+def experiment_to_csv(experiment: Experiment, tags: list[str] = None, participants: list[str] = None) -> io.StringIO:
     csv_in_memory = io.StringIO()
     writer = csv.writer(csv_in_memory, delimiter=",", quotechar='"', quoting=csv.QUOTE_MINIMAL)
-    for row in experiment_to_message_export_rows(experiment, tags=tags, participant=participant):
+    for row in experiment_to_message_export_rows(experiment, tags=tags, participants=participants):
         writer.writerow(row)
     return csv_in_memory
