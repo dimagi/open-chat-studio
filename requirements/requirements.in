@@ -53,7 +53,7 @@ slack-bolt
 taskbadger
 tenacity
 tiktoken
-transformers # this is required by the tokenizer that langchain uses
+transformers>=4.48.0 # this is required by the tokenizer that langchain uses
 turn-python>=0.2.0
 twilio
 whitenoise[brotli]
