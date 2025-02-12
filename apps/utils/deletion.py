@@ -224,7 +224,7 @@ def get_related_pipelines_queryset(instance, pipeline_param_key: str = None):
     return pipelines
 
 
-def get_admin_emails(team):
+def get_admin_emails_with_delete_permission(team):
     from apps.teams.models import Membership
 
     return list(
