@@ -204,7 +204,6 @@ class ExperimentForm(forms.ModelForm):
         choices=[
             ("llm", gettext("Base Language Model")),
             ("assistant", gettext("OpenAI Assistant")),
-            ("pipeline", gettext("Pipeline")),
         ],
         widget=forms.RadioSelect(attrs={"x-model": "type"}),
     )
@@ -271,6 +270,9 @@ class ExperimentForm(forms.ModelForm):
         exclude_services = [SyntheticVoice.OpenAIVoiceEngine]
         if flag_is_active(request, "open_ai_voice_engine"):
             exclude_services = []
+
+        if flag_is_active(request, "pipelines-v2"):
+            self.fields["type"].choices += [("pipeline", gettext("Pipeline"))]
 
         # Limit to team's data
         self.fields["llm_provider"].queryset = team.llmprovider_set
