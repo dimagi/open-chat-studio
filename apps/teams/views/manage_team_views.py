@@ -7,6 +7,8 @@ from django.urls import reverse
 from django.utils.translation import gettext_lazy as _
 from django.views.decorators.http import require_POST
 
+from apps.assistants.models import OpenAiAssistant
+from apps.generics.chips import Chip
 from apps.teams.backends import make_user_team_owner
 from apps.teams.decorators import login_and_team_required
 from apps.teams.forms import InvitationForm, TeamChangeForm
@@ -15,6 +17,11 @@ from apps.teams.models import Invitation
 from apps.teams.utils import current_team
 from apps.utils.deletion import delete_object_with_auditing_of_related_objects
 from apps.web.forms import set_form_fields_disabled
+
+
+def get_related_assistants(team):
+    related_assistants = OpenAiAssistant.objects.filter(team=team)
+    return [Chip(label=assistant.name, url=assistant.get_absolute_url()) for assistant in related_assistants]
 
 
 @login_and_team_required
@@ -47,6 +54,7 @@ def manage_team(request, team_slug):
             "team_form": team_form,
             "invitation_form": InvitationForm(team=request.team),
             "pending_invitations": Invitation.objects.filter(team=team, is_accepted=False).order_by("-created_at"),
+            "related_assistants": get_related_assistants(team),
         },
     )
 

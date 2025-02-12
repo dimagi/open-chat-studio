@@ -11,7 +11,7 @@ from apps.chat.channels import ChannelBase
 from apps.experiments.models import Experiment, ParticipantData
 from apps.teams.utils import current_team
 
-logger = logging.getLogger(__name__)
+logger = logging.getLogger("ocs.api.commcare_connect.setup_connect_channels_for_bots")
 
 
 @shared_task(bind=True, base=TaskbadgerTask, ignore_result=True)
@@ -72,6 +72,7 @@ def trigger_bot_message_task(data):
     experiment_public_id = data["experiment"]
     prompt_text = data["prompt_text"]
     identifier = data["identifier"]
+    start_new_session = data["start_new_session"]
 
     experiment = Experiment.objects.get(public_id=experiment_public_id)
     experiment_channel = ExperimentChannel.objects.get(platform=platform, experiment=experiment)
@@ -81,5 +82,5 @@ def trigger_bot_message_task(data):
     channel = ChannelClass(experiment=published_experiment, experiment_channel=experiment_channel)
 
     with current_team(experiment.team):
-        channel.ensure_session_exists_for_participant(identifier)
+        channel.ensure_session_exists_for_participant(identifier, new_session=start_new_session)
         channel.experiment_session.ad_hoc_bot_message(prompt_text, use_experiment=published_experiment)

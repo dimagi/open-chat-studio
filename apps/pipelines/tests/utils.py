@@ -126,11 +126,11 @@ def passthrough_node():
     }
 
 
-def boolean_node():
+def boolean_node(input_equals="hello"):
     return {
         "id": str(uuid4()),
         "type": nodes.BooleanNode.__name__,
-        "params": {"name": "boolean", "input_equals": "hello"},
+        "params": {"name": "boolean", "input_equals": input_equals},
     }
 
 

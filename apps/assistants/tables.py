@@ -31,14 +31,6 @@ class OpenAiAssistantTable(tables.Table):
                 confirm_message="This will delete the assistant from OpenAI.",
                 hx_method="delete",
             ),
-            actions.AjaxAction(
-                "assistants:delete",
-                title="Delete from OpenAI",
-                icon_class="fa-solid fa-trash-arrow-up",
-                required_permissions=["assistants.delete_openaiassistant"],
-                confirm_message="This will also delete the assistant from OpenAI. Are you sure?",
-                hx_method="delete",
-            ),
         ]
     )
 

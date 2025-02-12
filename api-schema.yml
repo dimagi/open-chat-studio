@@ -790,6 +790,10 @@ components:
         prompt_text:
           type: string
           title: Prompt to go to bot
+        start_new_session:
+          type: boolean
+          default: false
+          title: Starts a new session
       required:
       - experiment
       - identifier

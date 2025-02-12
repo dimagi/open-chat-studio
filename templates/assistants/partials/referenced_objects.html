@@ -36,4 +36,12 @@
       {% endfor %}
     </ul>
   {% endif %}
+  {% if assistants %}
+    <h2 class="font-semibold my-2">Assistants</h2>
+    <ul class="list-disc list-inside">
+      {% for assistant in assistants %}
+        <li>{% include "generic/chip.html" with chip=assistant %}</li>
+      {% endfor %}
+    </ul>
+  {% endif %}
 </div>

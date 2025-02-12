@@ -2,13 +2,11 @@ import logging
 import os
 
 from django.conf import settings
-from django.core.exceptions import ValidationError
 from field_audit.auditors import SystemUserAuditor
 from field_audit.models import USER_TYPE_REQUEST
 
 from apps.audit.transaction import get_audit_transaction_id
 from apps.teams.utils import get_current_team
-from apps.users.models import CustomUser
 
 log = logging.getLogger("ocs.audit")
 
@@ -47,7 +45,7 @@ class AuditContextProvider(SystemUserAuditor):
 
 
 def get_request_context(request):
-    username = get_request_username(request)
+    username = request.user.username
     context = {
         "user_type": USER_TYPE_REQUEST,
         "username": username,
@@ -55,23 +53,6 @@ def get_request_context(request):
     if username != request.user.username:
         context["as_username"] = request.user.username
     return context
-
-
-def get_request_username(request):
-    hijack_history = request.session.get("hijack_history", [])
-    if hijack_history:
-        if username := _get_hijack_username(hijack_history):
-            return username
-
-    return request.user.username
-
-
-def _get_hijack_username(hijack_history):
-    try:
-        pk = CustomUser._meta.pk.to_python(hijack_history[-1])
-        return CustomUser.objects.get(pk=pk).username
-    except (CustomUser.DoesNotExist, ValidationError) as e:
-        log.error("Error getting user from hijack history (%s): %s", hijack_history, str(e))
 
 
 def _report_missing_team(request):
