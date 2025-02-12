@@ -7,7 +7,7 @@ RUN pip wheel --no-cache-dir --no-deps --wheel-dir /wheels \
     -r /requirements/requirements.txt \
     -r /requirements/prod-requirements.txt
 
-FROM node:18-bullseye AS build-node
+FROM node:22 AS build-node
 RUN nodejs -v && npm -v
 WORKDIR /code
 
