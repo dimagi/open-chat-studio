@@ -29,7 +29,6 @@ def test_running_pipeline_creates_run(pipeline: Pipeline, session: ExperimentSes
     input = "foo"
     attachments = [
         Attachment(file_id=123, type="code_interpreter", name="test.py", size=10),
-        Attachment(file_id=456, type="file_search", name="blog.md", size=20),
     ]
     serialized_attachments = [att.model_dump() for att in attachments]
     pipeline.invoke(PipelineState(messages=[input], attachments=serialized_attachments), session)
@@ -37,10 +36,20 @@ def test_running_pipeline_creates_run(pipeline: Pipeline, session: ExperimentSes
     run = pipeline.runs.first()
     assert run.status == PipelineRunStatus.SUCCESS
 
-    assert run.input == PipelineState(messages=[input])
+    assert run.input == PipelineState(messages=[input], attachments=serialized_attachments)
     ai_message = ChatMessage.objects.filter(message_type=ChatMessageType.AI).last()
     assert run.output == PipelineState(
         ai_message_id=ai_message.id,
+        attachments=[
+            {
+                "content_type": "application/octet-stream",
+                "file_id": 123,
+                "name": "test.py",
+                "size": 10,
+                "type": "code_interpreter",
+                "upload_to_assistant": False,
+            }
+        ],
         messages=[
             input,  # the input to the graph
             input,  # The output of the start node
@@ -50,7 +59,11 @@ def test_running_pipeline_creates_run(pipeline: Pipeline, session: ExperimentSes
             pipeline.node_ids[0]: {"message": "foo"},
             pipeline.node_ids[1]: {"message": "foo"},
         },
-        temp_state={"outputs": {"end": "foo", "start": "foo"}, "user_input": "foo", "attachments": []},
+        temp_state={
+            "outputs": {"end": "foo", "start": "foo"},
+            "user_input": "foo",
+            "attachments": serialized_attachments,
+        },
     )
 
     assert len(run.log["entries"]) == 8
