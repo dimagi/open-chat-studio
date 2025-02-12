@@ -5,7 +5,7 @@ from apps.teams.models import Invitation, Team
 from apps.utils.deletion import (
     delete_object_with_auditing_of_related_objects,
     get_admin_emails,
-    send_domain_deleted_notification,
+    send_team_deleted_notification,
 )
 
 
@@ -23,4 +23,4 @@ def delete_team_async(team_id):
     team_name = team.name
     admin_emails = get_admin_emails(team)
     delete_object_with_auditing_of_related_objects(team)
-    send_domain_deleted_notification(team_name, admin_emails)
+    send_team_deleted_notification(team_name, admin_emails)
