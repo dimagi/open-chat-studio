@@ -3,6 +3,7 @@ from unittest.mock import patch
 import pytest
 from langchain_core.runnables import RunnableLambda
 
+from apps.channels.datamodels import Attachment
 from apps.chat.models import ChatMessage, ChatMessageType
 from apps.experiments.models import ExperimentSession
 from apps.pipelines.models import LogEntry, Pipeline, PipelineRunStatus
@@ -26,7 +27,12 @@ def session():
 @django_db_transactional()
 def test_running_pipeline_creates_run(pipeline: Pipeline, session: ExperimentSession):
     input = "foo"
-    pipeline.invoke(PipelineState(messages=[input]), session)
+    attachments = [
+        Attachment(file_id=123, type="code_interpreter", name="test.py", size=10),
+        Attachment(file_id=456, type="file_search", name="blog.md", size=20),
+    ]
+    serialized_attachments = [att.model_dump() for att in attachments]
+    pipeline.invoke(PipelineState(messages=[input], attachments=serialized_attachments), session)
     assert pipeline.runs.count() == 1
     run = pipeline.runs.first()
     assert run.status == PipelineRunStatus.SUCCESS
