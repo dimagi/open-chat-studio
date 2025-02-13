@@ -18,12 +18,6 @@ class RequestContextMiddleware:
         request.taskbadger_scope["view_kwargs"] = make_json_safe(view_kwargs)
         if request.user and not request.user.is_anonymous:
             request.taskbadger_scope["user"] = request.user.username
-        if request.team:
-            request.taskbadger_scope.tag(
-                {
-                    "team": request.team.slug,
-                }
-            )
 
 
 def make_json_safe(view_kwargs):
