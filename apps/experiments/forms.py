@@ -274,7 +274,7 @@ class ExperimentForm(forms.ModelForm):
 
 class ExperimentVersionForm(forms.ModelForm):
     version_description = forms.CharField(widget=forms.Textarea(attrs={"rows": 2}), required=False)
-    is_default_version = forms.BooleanField(initial=True, required=False, label="Set as Published Version")
+    is_default_version = forms.BooleanField(required=False, label="Set as Published Version")
 
     class Meta:
         model = Experiment
