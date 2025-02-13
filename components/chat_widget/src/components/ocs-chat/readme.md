@@ -2,7 +2,7 @@
 
 A chatbot component for Open Chat Studio.
 
-For more information, see the [Open Chat Studio documentation](https://dimagi.github.io/open-chat-studio-docs/how-to/embed/)
+For more information, see the [Open Chat Studio documentation](https://docs.openchatstudio.com/how-to/embed/)
 
 <!-- Auto Generated Below -->
 
