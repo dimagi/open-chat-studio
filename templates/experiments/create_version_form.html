@@ -22,7 +22,7 @@
         <form method="post">
           {% csrf_token %}
           {% render_form_fields form "version_description" %}
-          <div class="w-1/6">
+          <div class="w-full md:w-1/3 lg:w-1/6">
             {% render_form_fields form "is_default_version" %}
           </div>
 
