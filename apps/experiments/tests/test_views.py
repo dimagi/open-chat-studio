@@ -25,7 +25,6 @@ from apps.experiments.views.experiment import (
     ExperimentForm,
     ExperimentTableView,
     _verify_user_or_start_session,
-    validate_prompt_variables,
 )
 from apps.teams.backends import add_user_to_team
 from apps.utils.factories.assistants import OpenAiAssistantFactory
@@ -38,7 +37,7 @@ from apps.utils.factories.experiment import (
 )
 from apps.utils.factories.service_provider_factories import LlmProviderFactory, LlmProviderModelFactory
 from apps.utils.factories.team import TeamWithUsersFactory, UserFactory
-from apps.utils.prompt import get_root_var
+from apps.utils.prompt import get_root_var, validate_prompt_variables
 
 
 @pytest.mark.django_db()
@@ -196,7 +195,7 @@ def test_get_root_var_returns_correct_root_variable(input_var, expected_output):
 
 
 @pytest.mark.django_db()
-@mock.patch("apps.experiments.views.experiment.initialize_form_for_custom_actions", mock.Mock())
+@mock.patch("apps.experiments.forms.initialize_form_for_custom_actions", mock.Mock())
 @mock.patch("apps.experiments.models.SyntheticVoice.get_for_team", mock.Mock())
 def test_form_fields():
     path = settings.BASE_DIR / "templates" / "experiments" / "experiment_form.html"
