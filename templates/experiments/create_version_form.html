@@ -21,7 +21,11 @@
       {% if not version_details.instance.has_versions or version_details.fields_changed %}
         <form method="post">
           {% csrf_token %}
-          {% render_form_fields form %}
+          {% render_form_fields form "version_description" %}
+          <div class="w-1/6">
+            {% render_form_fields form "is_default_version" %}
+          </div>
+
           <div class="form-actions">
             <p class="buttons my-3">
               <button type="submit" class="btn btn-primary">Create</button>
