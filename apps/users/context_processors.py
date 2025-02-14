@@ -1,5 +1,5 @@
 def user_teams(request):
-    if not request.user.is_authenticated:
+    if not (hasattr(request, "user") and request.user.is_authenticated):
         return {}
 
     current_team = getattr(request, "team", None)
