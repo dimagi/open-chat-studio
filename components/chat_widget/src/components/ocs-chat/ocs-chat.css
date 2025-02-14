@@ -3,7 +3,6 @@
 @tailwind utilities;
 
 :host {
-  display: block;
    /**
    * @prop --button-background-color: Button background color
    * @prop --button-background-color-hover: Button background color on hover
@@ -23,6 +22,10 @@
   --button-border-color: #6b7280;
   /* gray-700 */
   --button-border-color-hover: #374151;
+  --chat-z-index: 50;
+
+  display: block;
+  z-index: var(--chat-z-index);
 }
 
 /* These custom button styles need to remain since they use CSS variables */
