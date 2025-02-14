@@ -444,6 +444,13 @@ if TASKBADGER_ORG and TASKBADGER_PROJECT and TASKBADGER_API_KEY:
     import taskbadger
     from taskbadger.systems.celery import CelerySystemIntegration
 
+    def _before_create(task: dict):
+        from apps.teams.utils import get_current_team
+
+        if team := get_current_team():
+            task.setdefault("tags", {})["team"] = team.slug
+        return task
+
     taskbadger.init(
         organization_slug=TASKBADGER_ORG,
         project_slug=TASKBADGER_PROJECT,
@@ -458,6 +465,7 @@ if TASKBADGER_ORG and TASKBADGER_PROJECT and TASKBADGER_API_KEY:
                 record_task_args=True,
             )
         ],
+        before_create=_before_create,
     )
 
 LOG_LEVEL = env("OCS_LOG_LEVEL", default="DEBUG" if DEBUG else "INFO")
