@@ -70,5 +70,7 @@
     {% include 'web/components/ajax_errors-js.html' %}
     {% load tz_detect %}
     {% tz_detect %}
+    {% load static %}
+  <script src="{% static 'js/theme-toggle.js' %}"></script>
   </body>
 </html>
