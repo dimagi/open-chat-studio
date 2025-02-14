@@ -3,28 +3,46 @@
 @tailwind utilities;
 
 :host {
-  display: block;
    /**
    * @prop --button-background-color: Button background color
    * @prop --button-background-color-hover: Button background color on hover
    * @prop --button-text-color: Button text color
    * @prop --button-text-color-hover: Button text color on hover
+   * @prop --button-border-color: Button border color
+   * @prop --button-border-color-hover: Button border color on hover
    */
-  --button-background-color: inherit;
-  --button-background-color-hover: inherit;
-  --button-text-color: inherit;
-  --button-text-color-hover: inherit;
+  --button-background-color: white;
+  /* gray-100 */
+  --button-background-color-hover: #f3f4f6;
+  /* gray-900 */
+  --button-text-color: #111827;
+  /* blue-700 */
+  --button-text-color-hover: #1d4ed8;
+  /* gray-500 */
+  --button-border-color: #6b7280;
+  /* gray-700 */
+  --button-border-color-hover: #374151;
+  --chat-z-index: 50;
+
+  display: block;
+  z-index: var(--chat-z-index);
 }
 
 /* These custom button styles need to remain since they use CSS variables */
-.btn {
-  background-color: var(--button-background-color);
-  color: var(--button-text-color);
-}
 
-.btn:hover {
-  background-color: var(--button-background-color-hover);
-  color: var(--button-text-color-hover);
+@layer components {
+  .btn {
+    @apply py-2.5 px-5 me-2 mb-2 text-sm font-medium focus:outline-none rounded-lg border;
+    background-color: var(--button-background-color);
+    color: var(--button-text-color);
+    border-color: var(--button-border-color);
+  }
+
+  .btn:hover {
+    background-color: var(--button-background-color-hover);
+    color: var(--button-text-color-hover);
+    border-color: var(--button-border-color-hover);
+  }
 }
 
 .iframe-placeholder {
