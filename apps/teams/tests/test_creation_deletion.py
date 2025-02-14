@@ -1,4 +1,5 @@
 import pytest
+from django.test import override_settings
 from django.urls import reverse
 from field_audit.models import AuditEvent
 
@@ -69,6 +70,7 @@ def test_group_owner_assignment_on_team_creation(client):
 
 
 @pytest.mark.django_db()
+@override_settings(CELERY_TASK_ALWAYS_EAGER=True)
 def test_delete_team(client, team_with_users):
     client.force_login(team_with_users.members.first())
     response = client.post(reverse("single_team:delete_team", args=[team_with_users.slug]))

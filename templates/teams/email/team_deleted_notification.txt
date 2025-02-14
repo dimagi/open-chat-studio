@@ -1,0 +1,1 @@
+Team '{{ team_name }}' has been successfully deleted.
