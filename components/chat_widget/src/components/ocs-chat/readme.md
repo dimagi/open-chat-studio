@@ -24,6 +24,8 @@ For more information, see the [Open Chat Studio documentation](https://docs.open
 | --------------------------------- | -------------------------------- |
 | `--button-background-color`       | Button background color          |
 | `--button-background-color-hover` | Button background color on hover |
+| `--button-border-color`           | Button border color              |
+| `--button-border-color-hover`     | Button border color on hover     |
 | `--button-text-color`             | Button text color                |
 | `--button-text-color-hover`       | Button text color on hover       |
 
