@@ -259,7 +259,7 @@ class TestVersion:
         [(True, False, False), ("true", False, False), ("true", "false", True)],
     )
     @patch("apps.experiments.versioning.VersionField._compute_character_level_diff")
-    def test_do_not_calculate_character_diffs_for_booleans(
+    def test_character_diffs_are_only_calculated_when_both_values_are_string(
         self, compute_character_level_diff, curr_value, prev_value, char_diff_calculated
     ):
         pipeline = PipelineFactory()
