@@ -24,13 +24,19 @@ export function PipelineNode(nodeProps: NodeProps<NodeData>) {
     event: ChangeEvent<HTMLTextAreaElement | HTMLSelectElement | HTMLInputElement>,
   ) => {
     const {name, value} = event.target;
+    let updateValue: string | boolean = value
+    if (event.target instanceof HTMLInputElement && event.target.type === "checkbox") {
+      updateValue = event.target.checked;
+    }
+    
+    
     setNode(id, (old) => ({
       ...old,
       data: {
         ...old.data,
         params: {
           ...old.data.params,
-          [name]: value,
+          [name]: updateValue,
         },
       },
     }));
