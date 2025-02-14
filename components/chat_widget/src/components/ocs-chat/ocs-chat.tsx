@@ -74,11 +74,11 @@ export class OcsChat {
   }
 
   getPositionClasses() {
-    const baseClasses = `fixed w-[450px] ${this.expanded ? 'h-5/6' : 'h-3/5'} bg-white border border-gray-200 shadow-lg rounded-lg overflow-hidden flex flex-col`;
+    const baseClasses = `fixed w-full sm:w-[450px] ${this.expanded ? 'h-5/6' : 'h-3/5'} bg-white border border-gray-200 shadow-lg rounded-lg overflow-hidden flex flex-col`;
 
     const positionClasses = {
-      left: 'left-5 bottom-5',
-      right: 'right-5 bottom-5',
+      left: 'left-0 sm:left-5 bottom-0 sm:bottom-5',
+      right: 'right-0 sm:right-5 bottom-0 sm:bottom-5',
       center: 'left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2'
     }[this.position];
 
