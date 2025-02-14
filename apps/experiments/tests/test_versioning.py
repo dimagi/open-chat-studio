@@ -1,9 +1,13 @@
+from unittest.mock import patch
+
 import pytest
 
 from apps.experiments.models import Experiment, VersionsMixin
 from apps.experiments.versioning import VersionDetails, VersionField, differs
+from apps.pipelines.models import Node
 from apps.utils.factories.events import EventActionFactory, EventActionType, StaticTriggerFactory
 from apps.utils.factories.experiment import ExperimentFactory, ExperimentSessionFactory
+from apps.utils.factories.pipelines import PipelineFactory
 from apps.utils.factories.service_provider_factories import TraceProviderFactory
 
 
@@ -249,3 +253,25 @@ class TestVersion:
         assert "pipeline_id" in [f.name for f in curr_version_details.fields]
         # Since the field is missing, the value should be None
         assert curr_version_details.get_field("pipeline_id").raw_value is None
+
+    @pytest.mark.parametrize(
+        ("curr_value", "prev_value", "char_diff_calculated"),
+        [(True, False, False), ("true", False, False), ("true", "false", True)],
+    )
+    @patch("apps.experiments.versioning.VersionField._compute_character_level_diff")
+    def test_do_not_calculate_character_diffs_for_booleans(
+        self, compute_character_level_diff, curr_value, prev_value, char_diff_calculated
+    ):
+        pipeline = PipelineFactory()
+        node = Node.objects.create(pipeline=pipeline, type="AssistantNode", params={"citations_enabled": prev_value})
+        new_version = node.create_new_version()
+        node.params["citations_enabled"] = curr_value
+        node.save()
+
+        version_details = node.version_details
+        version_details.compare(new_version.version_details)
+
+        if char_diff_calculated:
+            compute_character_level_diff.assert_called_once()
+        else:
+            compute_character_level_diff.assert_not_called()
