@@ -403,12 +403,7 @@ class CreateExperimentVersion(LoginAndTeamRequiredMixin, CreateView):
     def get_context_data(self, *args, **kwargs):
         context = super().get_context_data(*args, **kwargs)
         working_experiment = self.get_object()
-        version = working_experiment.version_details
-        if prev_version := working_experiment.latest_version:
-            # Populate diffs
-            version.compare(prev_version.version_details)
-
-        context["version_details"] = version
+        context["experiment_diff"] = working_experiment.compare_with_latest(early_abort=True)
         context["experiment"] = working_experiment
         return context
 
@@ -1430,5 +1425,6 @@ def experiment_version_details(request, team_slug: str, experiment_id: int, vers
 @login_and_team_required
 def get_release_status_badge(request, team_slug: str, experiment_id: int):
     experiment = get_object_or_404(Experiment, id=experiment_id, team=request.team)
-    context = {"has_changes": experiment.compare_with_latest(), "experiment": experiment}
+    diff = experiment.compare_with_latest(early_abort=True)
+    context = {"has_changes": diff.changes, "experiment": experiment}
     return render(request, "experiments/components/unreleased_badge.html", context)

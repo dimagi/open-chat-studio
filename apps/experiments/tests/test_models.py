@@ -699,9 +699,9 @@ class TestExperimentModel:
         versioned_child = ExperimentFactory(
             team=team, version_number=1, working_version=ExperimentFactory(version_number=2)
         )
-        ExperimentRoute(team=team, parent=experiment, child=versioned_child, keyword="versioned")
+        ExperimentRoute.objects.create(team=team, parent=experiment, child=versioned_child, keyword="versioned")
         working_child = ExperimentFactory(team=team)
-        ExperimentRoute(team=team, parent=experiment, child=working_child, keyword="working")
+        ExperimentRoute.objects.create(team=team, parent=experiment, child=working_child, keyword="working")
 
         # Setup Files
         experiment.files.set(FileFactory.create_batch(3))

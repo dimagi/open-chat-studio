@@ -1,7 +1,14 @@
-import pytest
+from unittest.mock import patch
 
-from apps.experiments.models import Experiment, VersionsMixin
-from apps.experiments.versioning import VersionDetails, VersionField, differs
+import pytest
+from django.test import override_settings
+
+from apps.experiments.models import (
+    Experiment,
+    ExperimentRoute,
+    VersionsMixin,
+)
+from apps.experiments.versioning import QuerysetDiff, VersionDetails, VersionField, differs
 from apps.utils.factories.events import EventActionFactory, EventActionType, StaticTriggerFactory
 from apps.utils.factories.experiment import ExperimentFactory, ExperimentSessionFactory
 from apps.utils.factories.service_provider_factories import TraceProviderFactory
@@ -249,3 +256,38 @@ class TestVersion:
         assert "pipeline_id" in [f.name for f in curr_version_details.fields]
         # Since the field is missing, the value should be None
         assert curr_version_details.get_field("pipeline_id").raw_value is None
+
+
+class TestVersioningRefactor:
+    def _setup_experiment(self):
+        experiment = ExperimentFactory()
+        return experiment, experiment.team
+
+    @override_settings(CELERY_TASK_ALWAYS_EAGER=True)
+    @pytest.mark.django_db()
+    @patch("apps.assistants.sync.push_assistant_to_openai", return_value=None)
+    def test_diff_with_experiment_routes(self, push_assistant_to_openai_mock):
+        experiment, team = self._setup_experiment()
+        child = ExperimentFactory(team=team)
+        route_1 = ExperimentRoute.objects.create(team=team, parent=experiment, child=child, keyword="route1")
+        new_version = experiment.create_new_version()
+
+        # Archive the route and add a new one. We expect two diffs to be present
+        # 1 for the current route that's missing, and one for the new route that was added
+        route_1.archive()
+        route_2 = ExperimentRoute.objects.create(team=team, parent=experiment, child=child, keyword="route2")
+        instance_diff = experiment.compare_versions(new_version)
+        assert instance_diff.changed
+        field_diff = [diff for diff in instance_diff.diffs if diff.field_name == "child_links"][0]
+        queryset_diff = field_diff.diff
+        assert isinstance(queryset_diff, QuerysetDiff)
+        assert len(queryset_diff.diffs) == 2
+
+        first_diff = queryset_diff.diffs[0]
+        assert first_diff.current == route_2
+        assert first_diff.previous is None
+
+        second_diff = queryset_diff.diffs[1]
+        assert second_diff.current is None
+        # It's the latest version, since the previous experiment version created a version of the route
+        assert second_diff.previous == route_1.latest_version
