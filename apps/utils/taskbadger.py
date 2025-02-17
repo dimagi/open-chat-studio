@@ -8,4 +8,7 @@ def update_taskbadger_data(celery_task, message_handler, message):
                 "identifier": message.participant_id,
             },
             data_merge_strategy="default",
+            tags={
+                "platform": message_handler.experiment_channel.platform
+            }
         )
