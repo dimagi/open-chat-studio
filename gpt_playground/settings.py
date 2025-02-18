@@ -535,7 +535,7 @@ DOCUMENTATION_LINKS = {
     "node_update_participant_data": "/concepts/pipelines/nodes/#update-participant-data",
 }
 # Available in templates as `docs_base_url`. Also see `apps.generics.help` and `generics/help.html`
-DOCUMENTATION_BASE_URL = env("DOCUMENTATION_BASE_URL", default="https://dimagi.github.io/open-chat-studio-docs")
+DOCUMENTATION_BASE_URL = env("DOCUMENTATION_BASE_URL", default="https://docs.openchatstudio.com")
 
 # Django rest framework config
 API_KEY_CUSTOM_HEADER = "HTTP_X_API_KEY"

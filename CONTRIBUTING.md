@@ -28,7 +28,7 @@ Thank you for your interest in contributing to Open Chat Studio! We are always l
 ### Improve Documentation
 
 - **Developer Documentation** needs improvement, and we welcome contributions.
-- **User Documentation** is maintained in the [open-chat-studio-docs repository](https://github.com/dimagi/open-chat-studio-docs) and published at [dimagi.github.io/open-chat-studio-docs](https://dimagi.github.io/open-chat-studio-docs/).
+- **User Documentation** is maintained in the [open-chat-studio-docs repository](https://github.com/dimagi/open-chat-studio-docs) and published at [docs.openchatstudio.com](https://docs.openchatstudio.com/).
 - The easiest way to contribute to documentation is by reviewing and providing feedback. If you notice errors or opportunities for improvement, reach out to documentation contributors or create a Pull Request directly.
 
 ## Technical Guide

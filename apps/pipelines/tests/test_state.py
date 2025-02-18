@@ -14,7 +14,7 @@ def test_pipline_state_json_serializable():
         outputs={"a": "a", "b": "b", "c": "c"},
         experiment_session=ExperimentSession(id=1),
         pipeline_version=1,
-        shared_state={
+        temp_state={
             "user_input": "input",
             "outputs": {"a": "a", "b": "b", "c": "c"},
             "attachments": [Attachment(file_id=1, type="code_interpreter", name="file1", size=5)],
