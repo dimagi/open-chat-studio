@@ -1356,8 +1356,6 @@ def experiment_session_pagination_view(request, team_slug: str, experiment_id: u
     return redirect("experiments:experiment_session_view", team_slug, experiment_id, next_session.external_id)
 
 
-@login_and_team_required
-@permission_required("chat.view_chatattachment")
 def download_file(request, team_slug: str, session_id: int, pk: int):
     resource = get_object_or_404(
         File, id=pk, team__slug=team_slug, chatattachment__chat__experiment_session__id=session_id
