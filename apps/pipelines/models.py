@@ -62,7 +62,7 @@ class Pipeline(BaseTeamModel, VersionsMixin):
     objects = PipelineManager()
 
     class Meta:
-        ordering = ["name"]
+        ordering = ["-created_at"]
 
     def __str__(self):
         if self.working_version is None:
