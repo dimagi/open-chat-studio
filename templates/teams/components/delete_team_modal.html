@@ -19,11 +19,14 @@
     {% endif %}
     <footer class="modal-card-foot">
       <div class="modal-action">
-        <form action="{% url 'single_team:delete_team' request.team.slug %} " method="post">
+        <form action="{% url 'single_team:delete_team' request.team.slug %}" method="post">
           {% csrf_token %}
-          <button class="btn btn-error" type="submit">{% translate "I understand, permanently delete this team" %}</button>
+          <div class="flex gap-1">
+            {{ notify_recipients_form.notification_recipients }}
+            <button class="btn btn-error" type="submit">{% translate "I understand, permanently delete this team" %}</button>
+            <label for="delete-modal" class="btn">{% translate "Cancel" %}</label>
+          </div>
         </form>
-        <label for="delete-modal" class="btn">{% translate "Cancel" %}</label>
       </div>
     </footer>
   </div>

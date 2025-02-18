@@ -11,7 +11,7 @@ from apps.assistants.models import OpenAiAssistant
 from apps.generics.chips import Chip
 from apps.teams.backends import make_user_team_owner
 from apps.teams.decorators import login_and_team_required
-from apps.teams.forms import InvitationForm, TeamChangeForm
+from apps.teams.forms import InvitationForm, NotifyRecipientsForm, TeamChangeForm
 from apps.teams.invitations import send_invitation
 from apps.teams.models import Invitation
 from apps.teams.tasks import delete_team_async
@@ -55,6 +55,7 @@ def manage_team(request, team_slug):
             "invitation_form": InvitationForm(team=request.team),
             "pending_invitations": Invitation.objects.filter(team=team, is_accepted=False).order_by("-created_at"),
             "related_assistants": get_related_assistants(team),
+            "notify_recipients_form": NotifyRecipientsForm,
         },
     )
 
@@ -85,7 +86,8 @@ def create_team(request):
 @require_POST
 @permission_required("teams.delete_team", raise_exception=True)
 def delete_team(request, team_slug):
-    delete_team_async.delay(request.team.id)
+    notify_recipients = request.POST.get("notify_recipients", "self")
+    delete_team_async.delay(request.team.id, notify_recipients)
     messages.success(
         request,
         _(
