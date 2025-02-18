@@ -244,5 +244,5 @@ def send_team_deleted_notification(team_name, admin_emails):
         from_email=settings.DEFAULT_FROM_EMAIL,
         recipient_list=admin_emails,
         fail_silently=False,
-        html_message=render_to_string("teams/email/domain_deleted_notification.html", context=email_context),
+        html_message=render_to_string("teams/email/team_deleted_notification.html", context=email_context),
     )
