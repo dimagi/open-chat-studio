@@ -86,8 +86,8 @@ def create_team(request):
 @require_POST
 @permission_required("teams.delete_team", raise_exception=True)
 def delete_team(request, team_slug):
-    notify_recipients = request.POST.get("notify_recipients", "self")
-    delete_team_async.delay(request.team.id, notify_recipients)
+    notify_recipients = request.POST.get("notification_recipients", "self")
+    delete_team_async.delay(request.team.id, request.user.email, notify_recipients)
     messages.success(
         request,
         _(
