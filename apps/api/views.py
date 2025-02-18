@@ -13,7 +13,7 @@ from django.views.decorators.http import require_POST
 from drf_spectacular.types import OpenApiTypes
 from drf_spectacular.utils import OpenApiExample, OpenApiParameter, extend_schema, extend_schema_view
 from rest_framework import filters, mixins, status
-from rest_framework.decorators import api_view, renderer_classes
+from rest_framework.decorators import api_view, renderer_classes, action
 from rest_framework.exceptions import NotFound
 from rest_framework.renderers import BaseRenderer
 from rest_framework.response import Response
@@ -29,6 +29,7 @@ from apps.api.serializers import (
     TriggerBotMessageRequest,
 )
 from apps.api.tasks import setup_connect_channels_for_bots, trigger_bot_message_task
+from apps.api.tests.test_session_api import session
 from apps.channels.models import ChannelPlatform, ExperimentChannel
 from apps.events.models import ScheduledMessage, TimePeriod
 from apps.experiments.models import Experiment, ExperimentSession, Participant, ParticipantData
@@ -318,6 +319,16 @@ class ExperimentSessionViewSet(mixins.ListModelMixin, mixins.RetrieveModelMixin,
         output = ExperimentSessionSerializer(instance=serializer.instance, context=self.get_serializer_context()).data
         headers = {"Location": str(output["url"])}
         return Response(output, status=status.HTTP_201_CREATED, headers=headers)
+
+    @action(detail=True, methods=['post'], authentication_classes=[], permission_classes=[])
+    def end_experiment_session(self, request, id=None):
+        try:
+            session = ExperimentSession.objects.get(external_id=id)
+        except ExperimentSession.DoesNotExist:
+            return Response({"error": "Session not found:{id}"}, status=status.HTTP_404_NOT_FOUND)
+        session.end()
+        session.save()
+        return Response(status=status.HTTP_200_OK)
 
 
 class BinaryRenderer(BaseRenderer):

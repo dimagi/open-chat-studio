@@ -263,6 +263,29 @@ paths:
               schema:
                 $ref: '#/components/schemas/ExperimentSessionWithMessages'
           description: ''
+  /api/sessions/{id}/end_experiment_session/:
+    post:
+      operationId: api_sessions_end_experiment_session_create
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: string
+        required: true
+      tags:
+      - api
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ExperimentSession'
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ExperimentSession'
+          description: ''
   /api/trigger_bot:
     post:
       operationId: trigger_bot_message
