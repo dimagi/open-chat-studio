@@ -67,3 +67,23 @@ class AnthropicTokenCounter(TokenCounter):
         tokenizer = sync_get_tokenizer()
         encoded_text = tokenizer.encode(text)
         return len(encoded_text.ids)
+
+class DeepSeekTokenCounter(TokenCounter):
+    def get_tokens_from_response(self, response: LLMResult) -> None | tuple[int, int]:
+        if response.llm_output is None:
+            return None
+
+        if "usage" not in response.llm_output:
+            return None
+
+        token_usage = response.llm_output["usage"]
+        output_tokens = token_usage.get("completion_tokens", 0)
+        input_tokens = token_usage.get("prompt_tokens", 0)
+
+        return input_tokens, output_tokens
+
+    def get_tokens_from_text(self, text) -> int:
+        tokenizer = sync_get_tokenizer()
+        encoded_text = tokenizer.encode(text)
+        return len(encoded_text.ids)
+

@@ -73,6 +73,10 @@ DEFAULT_LLM_PROVIDER_MODELS = {
         Model("llama-3.1-8b-instruct", 131072),
         Model("llama-3.1-70b-instruct", 131072),
     ],
+    "deepseek": [
+        Model("deepseek-v3", 128000),
+        Model("deepseek-r1", 128000)
+    ]
 }
 
 
