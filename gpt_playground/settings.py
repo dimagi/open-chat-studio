@@ -64,8 +64,6 @@ THIRD_PARTY_APPS = [
     "drf_spectacular",
     "rest_framework_api_key",
     "celery_progress",
-    "hijack",  # "login as" functionality
-    "hijack.contrib.admin",  # hijack buttons in the admin
     "whitenoise.runserver_nostatic",  # whitenoise runserver
     "waffle",
     "django_celery_beat",
@@ -126,7 +124,6 @@ MIDDLEWARE = [
     "apps.web.locale_middleware.UserLocaleMiddleware",
     "django.contrib.messages.middleware.MessageMiddleware",
     "django.middleware.clickjacking.XFrameOptionsMiddleware",
-    "hijack.middleware.HijackUserMiddleware",
     "waffle.middleware.WaffleMiddleware",
     "field_audit.middleware.FieldAuditMiddleware",
     "apps.audit.middleware.AuditTransactionMiddleware",
@@ -447,6 +444,13 @@ if TASKBADGER_ORG and TASKBADGER_PROJECT and TASKBADGER_API_KEY:
     import taskbadger
     from taskbadger.systems.celery import CelerySystemIntegration
 
+    def _before_create(task: dict):
+        from apps.teams.utils import get_current_team
+
+        if team := get_current_team():
+            task.setdefault("tags", {})["team"] = team.slug
+        return task
+
     taskbadger.init(
         organization_slug=TASKBADGER_ORG,
         project_slug=TASKBADGER_PROJECT,
@@ -457,9 +461,11 @@ if TASKBADGER_ORG and TASKBADGER_PROJECT and TASKBADGER_API_KEY:
                     # ignore these since they execute often and fire other tasks that we already track
                     "apps.events.tasks.enqueue_static_triggers",
                     "apps.events.tasks.enqueue_timed_out_events",
-                ]
+                ],
+                record_task_args=True,
             )
         ],
+        before_create=_before_create,
     )
 
 LOG_LEVEL = env("OCS_LOG_LEVEL", default="DEBUG" if DEBUG else "INFO")
@@ -537,7 +543,7 @@ DOCUMENTATION_LINKS = {
     "node_update_participant_data": "/concepts/pipelines/nodes/#update-participant-data",
 }
 # Available in templates as `docs_base_url`. Also see `apps.generics.help` and `generics/help.html`
-DOCUMENTATION_BASE_URL = env("DOCUMENTATION_BASE_URL", default="https://dimagi.github.io/open-chat-studio-docs")
+DOCUMENTATION_BASE_URL = env("DOCUMENTATION_BASE_URL", default="https://docs.openchatstudio.com")
 
 # Django rest framework config
 API_KEY_CUSTOM_HEADER = "HTTP_X_API_KEY"

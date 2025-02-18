@@ -56,6 +56,11 @@ interface WidgetParams {
   getNodeFieldError: (nodeId: string, fieldName: string) => string | undefined;
 }
 
+interface ToggleWidgetParams extends Omit<WidgetParams, 'paramValue'> {
+  paramValue: boolean;
+}
+
+
 function DefaultWidget(props: WidgetParams) {
   return (
     <InputField label={props.label} help_text={props.helpText} inputError={props.inputError}>
@@ -148,18 +153,14 @@ function RangeWidget(props: WidgetParams) {
   </InputField>
 }
 
-function ToggleWidget(props: WidgetParams) {
-  const onChangeCallback = (event: React.ChangeEvent<HTMLInputElement>) => {
-    event.target.value = event.target.checked ? "true" : "false";
-    props.updateParamValue(event);
-  };
+function ToggleWidget(props: ToggleWidgetParams) {
   return (
     <InputField label={props.label} help_text={props.helpText} inputError={props.inputError}>
       <input
         className="toggle"
         name={props.name}
-        onChange={onChangeCallback}
-        checked={props.paramValue === "true"}
+        onChange={props.updateParamValue}
+        checked={props.paramValue}
         type="checkbox"
       ></input>
     </InputField>

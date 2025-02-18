@@ -3,9 +3,9 @@ import React, { ReactNode } from "react";
 import { NodeProps, NodeToolbar, Position } from "reactflow";
 import { NodeData } from "./types/nodeParams";
 import { nodeBorderClass } from "./utils";
-import usePipelineManagerStore from "./stores/pipelineManagerStore";
 import { BaseHandle } from "./nodes/BaseHandle";
 import { HelpContent } from "./panel/ComponentHelp";
+import usePipelineStore from "./stores/pipelineStore";
 
 function BoundaryNode({
   nodeProps,
@@ -17,7 +17,7 @@ function BoundaryNode({
   children: ReactNode;
 }) {
   const { id, selected } = nodeProps;
-  const nodeError = usePipelineManagerStore((state) => state.getNodeFieldError(id, "root"));
+  const nodeError = usePipelineStore((state) => state.getNodeFieldError(id, "root"));
   return (
     <>
       <NodeToolbar position={Position.Top} isVisible={!!nodeError}>

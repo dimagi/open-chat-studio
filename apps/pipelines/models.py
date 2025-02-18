@@ -214,9 +214,7 @@ class Pipeline(BaseTeamModel, VersionsMixin):
             output = PipelineState(**output).json_safe()
         return output
 
-    def invoke(
-        self, input: PipelineState, session: ExperimentSession, save_run_to_history: bool = True
-    ) -> PipelineState:
+    def invoke(self, input: PipelineState, session: ExperimentSession, save_run_to_history: bool = True) -> dict:
         from apps.pipelines.graph import PipelineGraph
 
         runnable = PipelineGraph.build_runnable_from_pipeline(self)

@@ -2,6 +2,7 @@ import { Component, Host, h, Prop, State, Build } from '@stencil/core';
 import {
   ArrowLeftEndOnRectangleIcon,
   ArrowRightEndOnRectangleIcon,
+  ArrowDownOnSquareIcon,
   ViewfinderCircleIcon,
   XMarkIcon,
   ChevronDownIcon,
@@ -74,11 +75,11 @@ export class OcsChat {
   }
 
   getPositionClasses() {
-    const baseClasses = `fixed w-[450px] ${this.expanded ? 'h-5/6' : 'h-3/5'} bg-white border border-gray-200 shadow-lg rounded-lg overflow-hidden flex flex-col`;
+    const baseClasses = `fixed w-full sm:w-[450px] ${this.expanded ? 'h-5/6' : 'h-3/5'} bg-white border border-gray-200 shadow-lg rounded-lg overflow-hidden flex flex-col`;
 
     const positionClasses = {
-      left: 'left-5 bottom-5',
-      right: 'right-5 bottom-5',
+      left: 'left-0 sm:left-5 bottom-0 sm:bottom-5',
+      right: 'right-0 sm:right-5 bottom-0 sm:bottom-5',
       center: 'left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2'
     }[this.position];
 
@@ -103,7 +104,7 @@ export class OcsChat {
               <div class="flex gap-1">
                 <button
                   class={{
-                    'p-1.5 rounded-md transition-colors duration-200 hover:bg-gray-100': true,
+                    'hidden sm:block p-1.5 rounded-md transition-colors duration-200 hover:bg-gray-100': true,
                     'text-blue-600': this.position === 'left',
                     'text-gray-500': this.position !== 'left'
                   }}
@@ -135,7 +136,8 @@ export class OcsChat {
                   aria-label="Dock to right"
                   title="Dock to right"
                 >
-                  <ArrowRightEndOnRectangleIcon/>
+                  <span class="hidden sm:block"><ArrowRightEndOnRectangleIcon/></span>
+                  <span class="sm:hidden"><ArrowDownOnSquareIcon/></span>
                 </button>
               </div>
               <div class="flex gap-1">

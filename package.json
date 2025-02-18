@@ -56,7 +56,7 @@
     "axios": "^1.7.7",
     "chart.js": "^4.4.6",
     "daisyui": "^4.12.13",
-    "dompurify": "^3.2.2",
+    "dompurify": "^3.2.4",
     "htmx.org": "^1.9.12",
     "js-cookie": "^3.0.5",
     "js-tiktoken": "^1.0.16",
@@ -69,6 +69,6 @@
     "short-unique-id": "^5.2.0",
     "tailwindcss": "^3.4.17",
     "tom-select": "^2.3.1",
-    "zustand": "^4.5.5"
+    "zustand": "^5.0.3"
   }
 }
