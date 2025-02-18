@@ -424,9 +424,11 @@ class CreateExperimentVersion(LoginAndTeamRequiredMixin, CreateView):
             messages.error(self.request, "Version creation is already in progress.")
             return HttpResponseRedirect(self.get_success_url())
 
-        if self._is_assistant_out_of_sync():
-            messages.error(self.request, "Assistant is out of sync with OpenAI. Please update the assistant first.")
-            return HttpResponseRedirect(self.get_success_url())
+        error_msg = self._check_pipleline_and_assistant_for_errors()
+
+        if error_msg:
+            messages.error(self.request, error_msg)
+            return render(self.request, self.template_name, self.get_context_data(form=form))
 
         task_id = async_create_experiment_version.delay(
             experiment_id=working_version.id, version_description=description, make_default=is_default
@@ -437,8 +439,19 @@ class CreateExperimentVersion(LoginAndTeamRequiredMixin, CreateView):
 
         return HttpResponseRedirect(self.get_success_url())
 
-    def _is_assistant_out_of_sync(self) -> bool:
+    def _check_pipleline_and_assistant_for_errors(self) -> tuple:
+        """Checks if the pipeline or assistant has errors before creating a new version."""
         experiment = self.get_object()
+
+        if self._is_assistant_out_of_sync(experiment):
+            return "Assistant is out of sync with OpenAI. Please update the assistant first."
+
+        if pipeline := experiment.pipeline:
+            errors = pipeline.validate()
+            if errors:
+                return "Unable to create a new version when the pipeline has errors"
+
+    def _is_assistant_out_of_sync(self, experiment: Experiment) -> bool:
         if not experiment.assistant:
             return False
 

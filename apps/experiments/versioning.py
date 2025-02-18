@@ -134,7 +134,7 @@ class VersionField:
                 self._compare_querysets(early_abort)
             case "primitive":
                 self.changed = self.current_value != self.previous_value
-                if isinstance(self.current_value, str):
+                if isinstance(self.current_value, str) and isinstance(self.previous_value, str):
                     self._compute_character_level_diff()
 
     def _get_field_type(self):
@@ -197,9 +197,7 @@ class VersionField:
 
     def _compute_character_level_diff(self):
         differ = Differ()
-        previous_value_str = str(self.previous_value) if self.previous_value is not None else ""
-        # current_value_str = str(self.current_value) this should really be a string too to avoid mismatch type errors
-        difflines = list(differ.compare(previous_value_str, self.current_value))
+        difflines = list(differ.compare(self.previous_value, self.current_value))
 
         for line in difflines:
             operation, character = line[0], line[2:]
