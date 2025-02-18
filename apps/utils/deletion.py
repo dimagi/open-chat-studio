@@ -246,3 +246,8 @@ def send_team_deleted_notification(team_name, admin_emails):
         fail_silently=False,
         html_message=render_to_string("teams/email/team_deleted_notification.html", context=email_context),
     )
+
+
+def chunk_list(lst, chunk_size):
+    for i in range(0, len(lst), chunk_size):
+        yield lst[i : i + chunk_size]
