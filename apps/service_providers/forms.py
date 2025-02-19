@@ -131,6 +131,7 @@ class AnthropicConfigForm(ObfuscatingMixin, ProviderTypeConfigForm):
         initial="https://api.anthropic.com",
     )
 
+
 class DeepSeekConfigForm(ObfuscatingMixin, ProviderTypeConfigForm):
     obfuscate_fields = ["deepseek_api_key"]
 

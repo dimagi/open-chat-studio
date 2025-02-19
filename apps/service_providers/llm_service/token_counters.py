@@ -67,4 +67,3 @@ class AnthropicTokenCounter(TokenCounter):
         tokenizer = sync_get_tokenizer()
         encoded_text = tokenizer.encode(text)
         return len(encoded_text.ids)
-
