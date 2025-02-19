@@ -14,12 +14,50 @@
         <div>
             {% block pre_form %}
             {% endblock pre_form %}
-            <form method="post" class="my-2" {% include "generic/attrs.html" with attrs=form_attrs %} x-data="{ type: '{{ secondary_key }}' }">
+            <form method="post" class="my-2" {% include "generic/attrs.html" with attrs=form_attrs %}
+                  x-data="eventForm('{{ secondary_key }}', '{{ trigger_form.initial.type }}')"
+                  x-init="watchTriggerType()">
                 {% csrf_token %}
                 {% block form %}
                     <h1 class="pg-title">Event Details</h1>
                     {% render_form_fields trigger_form %}
                     {% render_form_fields action_form.primary %}
+                    <script>
+                        function eventForm(secondaryKey, initialTriggerType) {
+                            return {
+                                type: secondaryKey,
+                                triggerType: initialTriggerType,
+                                isActionDisabled(action) {
+                                    return this.triggerType === 'new_bot_message' &&
+                                    ['send_message_to_bot', 'pipeline_start', 'summarize'].includes(action);
+                                },
+                                watchTriggerType() {
+                                    this.$watch('triggerType', value => {
+                                        if (value === 'new_bot_message' &&
+                                            ['send_message_to_bot', 'pipeline_start', 'summarize'].includes(this.type)) {
+                                                this.type = 'log';
+                                            }
+                                    });
+                                },
+                                init() {
+                                    const triggerSelect = document.getElementById('{{ trigger_form.type.id_for_label }}');
+                                    if (triggerSelect) {
+                                        triggerSelect.setAttribute('x-model', 'triggerType');
+                                    }
+                                    const actionSelect = document.getElementById('{{ action_form.primary.action_type.id_for_label }}');
+                                    if (actionSelect) {
+                                        actionSelect.setAttribute('x-model', 'type');
+                                        actionSelect.querySelectorAll('option').forEach(option => {
+                                            const value = option.value;
+                                            option.setAttribute('x-bind:disabled', `isActionDisabled('${value}')`);
+                                            option.setAttribute('x-show', `!isActionDisabled('${value}')`);
+                                        });
+                                    }
+                                }
+                            }
+                        }
+                    </script>
+
                     {% for key, form in action_form.secondary.items %}
                         <div id="form_{{ key }}" x-show="type === '{{ key }}'" x-cloak>
                             {% render_form_fields form %}
