@@ -1,4 +1,11 @@
-from .main import AnthropicLlmService, AzureLlmService, LlmService, OpenAIGenericService, OpenAILlmService
+from .main import (
+    AnthropicLlmService,
+    AzureLlmService,
+    DeepSeekLlmService,
+    LlmService,
+    OpenAIGenericService,
+    OpenAILlmService,
+)
 
 __all__ = [
     "AnthropicLlmService",
@@ -6,4 +13,5 @@ __all__ = [
     "LlmService",
     "OpenAILlmService",
     "OpenAIGenericService",
+    "DeepSeekLlmService",
 ]

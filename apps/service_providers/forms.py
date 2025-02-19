@@ -132,6 +132,12 @@ class AnthropicConfigForm(ObfuscatingMixin, ProviderTypeConfigForm):
     )
 
 
+class DeepSeekConfigForm(ObfuscatingMixin, ProviderTypeConfigForm):
+    obfuscate_fields = ["deepseek_api_key"]
+
+    deepseek_api_key = forms.CharField(label=_("API Key"))
+
+
 def obfuscate_value(value):
     if value and isinstance(value, str):
         return value[:4] + "*" * (len(value) - 4)
