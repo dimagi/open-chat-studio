@@ -11,11 +11,11 @@ from apps.assistants.models import OpenAiAssistant
 from apps.generics.chips import Chip
 from apps.teams.backends import make_user_team_owner
 from apps.teams.decorators import login_and_team_required
-from apps.teams.forms import InvitationForm, TeamChangeForm
+from apps.teams.forms import InvitationForm, NotifyRecipientsForm, TeamChangeForm
 from apps.teams.invitations import send_invitation
 from apps.teams.models import Invitation
+from apps.teams.tasks import delete_team_async
 from apps.teams.utils import current_team
-from apps.utils.deletion import delete_object_with_auditing_of_related_objects
 from apps.web.forms import set_form_fields_disabled
 
 
@@ -55,6 +55,7 @@ def manage_team(request, team_slug):
             "invitation_form": InvitationForm(team=request.team),
             "pending_invitations": Invitation.objects.filter(team=team, is_accepted=False).order_by("-created_at"),
             "related_assistants": get_related_assistants(team),
+            "notify_recipients_form": NotifyRecipientsForm,
         },
     )
 
@@ -85,8 +86,17 @@ def create_team(request):
 @require_POST
 @permission_required("teams.delete_team", raise_exception=True)
 def delete_team(request, team_slug):
-    delete_object_with_auditing_of_related_objects(request.team)
-    messages.success(request, _('The "{team}" team was successfully deleted').format(team=request.team.name))
+    notify_recipients = request.POST.get("notification_recipients", "self")
+    delete_team_async.delay(request.team.id, request.user.email, notify_recipients)
+
+    notify_recipients_text = {"self": "you", "admins": "admins", "all": "all team members"}
+
+    messages.success(
+        request,
+        _(
+            'The "{team}" team deletion process has started. An email will be sent to {user} once it is complete.'
+        ).format(team=request.team.name, user=notify_recipients_text[notify_recipients]),
+    )
     return HttpResponseRedirect(reverse("web:home"))
 
 
