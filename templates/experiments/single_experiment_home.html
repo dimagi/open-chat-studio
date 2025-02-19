@@ -285,6 +285,7 @@
       </div>
     {% endflag %}
 
+    {% if not experiment.pipeline %}
     <input type="radio" name="tab_group" role="tab" class="tab" aria-label="Routes" id="tab-routes"/>
     <div role="tabpanel" class="tab-content" id="content-routes">
       <div class="app-card">
@@ -310,7 +311,10 @@
         {% render_table terminal_bots_table %}
       </div>
     </div>
+    {% endif %}
   </div>
+
+
   <script src="{% static 'js/app-bundle.js' %}"></script>
   <script>
     function showTabContent(tabId) {
