@@ -117,6 +117,7 @@ class EventActionForm(forms.ModelForm):
                 "send_message_to_bot",
                 "pipeline_start",
                 "summarize",
+                "schedule_trigger",
             ]:
                 raise forms.ValidationError("This action is not allowed when 'A new bot message is received'")
         return cleaned_data

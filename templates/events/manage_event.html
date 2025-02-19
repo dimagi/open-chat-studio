@@ -29,12 +29,12 @@
                                 triggerType: initialTriggerType,
                                 isActionDisabled(action) {
                                     return this.triggerType === 'new_bot_message' &&
-                                    ['send_message_to_bot', 'pipeline_start', 'summarize'].includes(action);
+                                    ['send_message_to_bot', 'pipeline_start', 'summarize', 'schedule_trigger'].includes(action);
                                 },
                                 watchTriggerType() {
                                     this.$watch('triggerType', value => {
                                         if (value === 'new_bot_message' &&
-                                            ['send_message_to_bot', 'pipeline_start', 'summarize'].includes(this.type)) {
+                                            ['send_message_to_bot', 'pipeline_start', 'summarize', 'schedule_trigger'].includes(this.type)) {
                                                 this.type = 'log';
                                             }
                                     });
