@@ -34,6 +34,7 @@
     "css-loader": "^6.11.0",
     "eslint": "^9.16.0",
     "eslint-plugin-react": "^7.37.2",
+    "globals": "^15.15.0",
     "mini-css-extract-plugin": "^2.9.1",
     "postcss": "^8.4.49",
     "postcss-import": "^16.1.0",
