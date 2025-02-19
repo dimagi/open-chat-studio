@@ -135,12 +135,6 @@ class DeepSeekConfigForm(ObfuscatingMixin, ProviderTypeConfigForm):
     obfuscate_fields = ["deepseek_api_key"]
 
     deepseek_api_key = forms.CharField(label=_("API Key"))
-    deepseek_api_base = forms.URLField(
-        label="API URL",
-        required=False,
-        help_text="Base URL path for API requests e.g. 'https://api.deepseek.com/v1/'",
-        initial="https://api.deepseek.com/v1/",
-    )
 
 
 def obfuscate_value(value):

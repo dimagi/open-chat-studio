@@ -4,32 +4,19 @@ from django.db import migrations
 
 logger = logging.getLogger(__name__)
 
-
-def _add_llm_provider_models(apps, schema_editor):
+def add_deepseek_models(apps, schema_editor):
+    from apps.service_providers.llm_service.default_models import _update_llm_provider_models
     LlmProviderModel = apps.get_model("service_providers", "LlmProviderModel")
-
     try:
-        LlmProviderModel.objects.create(
-            type='deepseek',
-            name='deepseek-v3',
-            max_token_limit=128000,
-        )
-
-        LlmProviderModel.objects.create(
-            type='deepseek',
-            name='deepseek-r1',
-            max_token_limit=128000
-        )
+        _update_llm_provider_models(LlmProviderModel)
     except Exception as e:
-        logger.error(f"Error while adding new rows to LlmProviderModel: {e}")
+        logger.error(f"Error updating LlmProviderModel: {e}")
         raise
-
 
 class Migration(migrations.Migration):
     dependencies = [
-        ('service_providers', '0024_add_deepseek_models'),
+        ('service_providers', '0023_remove_llmprovider_llm_models'),
     ]
-
     operations = [
-        migrations.RunPython(_add_llm_provider_models),
+        migrations.RunPython(add_deepseek_models),
     ]

@@ -15,8 +15,7 @@ from openai import OpenAI
 from openai._base_client import SyncAPIClient
 
 from apps.service_providers.llm_service.callbacks import TokenCountingCallbackHandler
-from apps.service_providers.llm_service.token_counters import AnthropicTokenCounter, OpenAITokenCounter, \
-    DeepSeekTokenCounter
+from apps.service_providers.llm_service.token_counters import AnthropicTokenCounter, OpenAITokenCounter
 
 class OpenAIAssistantRunnable(BrokenOpenAIAssistantRunnable):
     # This is a temporary solution to fix langchain's compatability with the assistants v2 API. This code is
@@ -210,4 +209,4 @@ class DeepSeekLlmService(LlmService):
         )
 
     def get_callback_handler(self, model: str) -> BaseCallbackHandler:
-        return TokenCountingCallbackHandler(DeepSeekTokenCounter())
+        return TokenCountingCallbackHandler(OpenAITokenCounter(model))
