@@ -4,8 +4,9 @@
 {% block body %}
   <div class="app-card max-w-5xl mx-auto">
     <h1 class="pg-title">{{ experiment_name }}</h1>
-    <h2 class="pg-subtitle">{{ experiment_description|render_markdown }}</h2>
+    <div class="mt-2 mb-4">{{ experiment_description|render_markdown }}</div>
     <div class="prose !max-w-none">
+      <h3>Survey</h3>
       <p>Before starting the experiment, we ask that you complete a short survey.</p>
       <p>
         Please click on <a href="{{ pre_survey_link }}" target="_blank">this survey link</a>, fill it out, and when you have finished,
