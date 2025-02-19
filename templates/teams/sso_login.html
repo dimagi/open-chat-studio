@@ -1,0 +1,6 @@
+<form method="post">
+  {% csrf_token %}
+  <input type="email" name="email" placeholder="Enter your email" required>
+  <button type="submit">Continue</button>
+  {% if error %}<p style="color: red;">{{ error }}</p>{% endif %}
+</form>

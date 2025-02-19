@@ -5,6 +5,7 @@ from . import views
 app_name = "teams"
 
 urlpatterns = [
+    path("accounts/login/", views.CustomLoginView.as_view(), name="sso_login"),
     path("create/", views.create_team, name="create_team"),
     # invitation acceptance views
     path("invitation/<uuid:invitation_id>/", views.accept_invitation, name="accept_invitation"),
