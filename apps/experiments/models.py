@@ -1590,6 +1590,8 @@ class ExperimentSession(BaseTeamModel):
         return ChatMessage.objects.filter(chat=self.chat, message_type=ChatMessageType.HUMAN).exists()
 
     def get_platform_name(self) -> str:
+        if not self.experiment_channel:
+            return self.participant.get_platform_display()
         return self.experiment_channel.get_platform_display()
 
     def get_pre_survey_link(self, experiment_version: Experiment):
