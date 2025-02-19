@@ -107,6 +107,20 @@ class EventActionForm(forms.ModelForm):
         fields = ["action_type"]
         labels = {"action_type": "Then..."}
 
+    def clean(self):
+        cleaned_data = super().clean()
+        action_type = cleaned_data.get("action_type")
+
+        if self.data and "type" in self.data:
+            trigger_type = self.data.get("type")
+            if trigger_type == "new_bot_message" and action_type in [
+                "send_message_to_bot",
+                "pipeline_start",
+                "summarize",
+            ]:
+                raise forms.ValidationError("This action is not allowed when 'A new bot message is received'")
+        return cleaned_data
+
     def save(self, commit=True, *args, **kwargs):
         experiment_id = kwargs.pop("experiment_id")
         instance = super().save(commit=False, *args, **kwargs)
