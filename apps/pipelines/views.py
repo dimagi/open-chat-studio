@@ -58,8 +58,10 @@ class PipelineTableView(SingleTableView, PermissionRequiredMixin):
     template_name = "table/single_table.html"
 
     def get_queryset(self):
-        return Pipeline.objects.filter(team=self.request.team, is_version=False, is_archived=False).annotate(
-            run_count=Count("runs")
+        return (
+            Pipeline.objects.filter(team=self.request.team, is_version=False, is_archived=False)
+            .annotate(run_count=Count("runs"))
+            .order_by("name")
         )
 
 

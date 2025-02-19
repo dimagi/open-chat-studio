@@ -105,6 +105,16 @@ class TeamChangeForm(forms.ModelForm):
         }
 
 
+class NotifyRecipientsForm(forms.Form):
+    NOTIFICATION_CHOICES = [
+        ("self", "Send email notification to myself"),
+        ("admins", "Send email notification to admins"),
+        ("all", "Send email notification to all members of the team"),
+    ]
+
+    notification_recipients = forms.ChoiceField(choices=NOTIFICATION_CHOICES, widget=forms.Select)
+
+
 class InvitationForm(forms.ModelForm):
     def __init__(self, team, *args, **kwargs):
         super().__init__(*args, **kwargs)
