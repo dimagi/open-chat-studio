@@ -1,10 +1,9 @@
 document.addEventListener("DOMContentLoaded", function () {
-
 // Function to set the theme
 function setTheme(theme) {
   document.body.setAttribute("data-theme", theme); // Apply to body
   localStorage.setItem("theme", theme);
-  const themeToggle = document.getElementById("theme-toggle-base");
+  const themeToggle = document.getElementById("theme-toggle");
   if (themeToggle) {
     themeToggle.checked = theme === "light"; // Sync checkbox state
   }
@@ -25,7 +24,6 @@ function initializeTheme() {
   setTheme(theme); // Set the theme and sync the checkbox
 }
 
-// Event delegation for theme toggle
 document.body.addEventListener('change', function (event) {
   if (event.target && event.target.id === 'theme-toggle') {
     toggleTheme();
