@@ -19,6 +19,7 @@ class FileLinkInlineProcessor(LinkInlineProcessor):
             el.set("target", "_blank")
         return el, start, end
 
+
 class FileImageInlineProcessor(ImageInlineProcessor):
     def getLink(self, data, index):
         href, title, index, handled = super().getLink(data, index)
