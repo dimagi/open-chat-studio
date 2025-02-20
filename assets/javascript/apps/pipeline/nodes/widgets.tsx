@@ -381,11 +381,14 @@ export function CodeModal(
   const [showGenerate, setShowGenerate] = useState(false);
   const [prompt, setPrompt] = useState("");
   const [generated, setGenerated] = useState("");
+  const [generating, setGenerating] = useState()
 
   const generateCode = () => {
+    setGenerating(true);
     apiClient.generateCode(prompt).then((generatedCode) => {
       setGenerated(generatedCode.response);
       setShowGenerate(false);
+      setGenerating(false);
     });
   }
   return (
@@ -410,7 +413,7 @@ export function CodeModal(
           </div>
           <div>
             {showGenerate &&
-              <div>
+              <div className={"my-2"}>
                 <textarea
                   className="textarea textarea-bordered resize-none textarea-sm w-full"
                   rows={2}
@@ -419,9 +422,12 @@ export function CodeModal(
                   value={prompt}
                   onChange={(e) => setPrompt(e.target.value)}
                 ></textarea>
-                <button className={"btn btn-sm btn-primary"} onClick={generateCode}>
-                  <i className="fa-solid fa-wand-magic-sparkles"></i>Create
-                </button>
+                <div>
+                  <button className={"btn btn-sm btn-primary"} onClick={generateCode}>
+                    <i className="fa-solid fa-wand-magic-sparkles"></i>Create
+                  </button>
+                  {generating && <span className="loading loading-bars loading-md"></span>}
+                </div>
               </div>}
             {generated &&
                 <div>
@@ -430,6 +436,7 @@ export function CodeModal(
                     value={generated}
                     className="textarea textarea-bordered w-full flex-grow"
                     theme={isDarkMode ? githubDark : githubLight}
+                    onChange={setGenerated}
                     extensions={[
                       python(),
                       python().language.data.of({
@@ -442,16 +449,16 @@ export function CodeModal(
                         indentOnInput: true,
                     }}
                   />
-                <div>
-                  <button className={"btn btn-sm btn-primary"} onClick={() => {
+                <div className={"my-2 join"}>
+                  <button className={"btn btn-sm btn-primary join-item"} onClick={() => {
                     onChange(generated)
                     setShowGenerate(false)
                     setGenerated("")
                   }}>
-                    <i className="fa-solid fa-check text-success"></i>
+                    <i className="fa-solid fa-check"></i>
                     Use Generated Code
                   </button>
-                  <button className={"btn btn-sm btn-secondary"} onClick={() => {
+                  <button className={"btn btn-sm btn-primary join-item"} onClick={() => {
                     setGenerated("")
                     setShowGenerate(true)
                   }}>
@@ -465,7 +472,7 @@ export function CodeModal(
           <CodeMirror
             value={value}
             onChange={onChange}
-            className="textarea textarea-bordered h-full w-full flex-grow"
+            className="textarea textarea-bordered h-full w-full flex-grow min-h-14"
             height="100%"
             width="100%"
             theme={isDarkMode ? githubDark : githubLight}
