@@ -5,7 +5,7 @@ from rest_framework.fields import DateTimeField
 
 from apps.annotations.models import Tag
 from apps.chat.models import ChatAttachment
-from apps.experiments.models import ExperimentSession
+from apps.experiments.models import ExperimentSession, Team
 from apps.utils.factories.experiment import ExperimentFactory, ExperimentSessionFactory
 from apps.utils.factories.files import FileFactory
 from apps.utils.factories.team import TeamWithUsersFactory
@@ -239,6 +239,9 @@ def test_create_session_new_participant(experiment):
 
 @pytest.mark.django_db()
 def test_end_experiment_session_success(client, session):
+    team = Team.objects.create(name="Test Team")
+    session.team = team
+    session.save()
     url = reverse("session-end-experiment-session", args=[session.external_id])
     response = client.post(url)
     assert response.status_code == status.HTTP_200_OK
