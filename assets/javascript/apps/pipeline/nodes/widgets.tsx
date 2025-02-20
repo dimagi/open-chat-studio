@@ -279,14 +279,18 @@ export function CodeWidget(props: WidgetParams) {
 
     useEffect(() => {
         // Set dark / light mode
-     const mediaQuery: MediaQueryList = window.matchMedia("(prefers-color-scheme: dark)");
-     const handleChange = (event: MediaQueryListEvent): void => {
-       setIsDarkMode(event.matches);
-     };
-    setIsDarkMode(mediaQuery.matches);
+      setIsDarkMode(document.body.getAttribute("data-theme") === 'dark')
+      const observer = new MutationObserver(function(mutations) {
+        mutations.forEach(function(mutation) {
+          if (mutation.type === "attributes") {
+            setIsDarkMode(document.body.getAttribute("data-theme") === 'dark')
+          }
+        });
+      });
 
-    mediaQuery.addEventListener("change", handleChange);
-    return () => mediaQuery.removeEventListener("change", handleChange);
+      observer.observe(document.body, {attributes: true});
+
+    return () => observer.disconnect()
   }, []);
 
   const modalId = useId();
