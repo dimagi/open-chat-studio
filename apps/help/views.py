@@ -1,5 +1,6 @@
 import json
 
+import pydantic
 from anthropic import Anthropic
 from django.conf import settings
 from django.http import JsonResponse
@@ -23,12 +24,14 @@ class AiHelper:
     """
 
     @staticmethod
-    def code_completion(user_query, current_context) -> str:
+    def code_completion(user_query, current_context, errors=None, iteration_count=0) -> str:
         """
         current_context should consist of
         - existing code
         - Available methods and how to use them
         """
+        if iteration_count > 3:
+            return current_context
 
         system_prompt = """
             You are an expert python coder. You will be asked to generate or update code in a sandboxed environment,
@@ -65,7 +68,19 @@ class AiHelper:
             
             Return only the Python code and nothing else. Do not enclose it in triple quotes or have any other
             explanations in the response.
+            
+            {current_context}
+            {error}
         """
+        prompt_context = {"current_context": "", "error": ""}
+
+        if current_context:
+            prompt_context["current_context"] = f"The current function definition is:\n{current_context}"
+        if errors:
+            prompt_context["error"] = f"Errors from parsing: {errors}"
+
+        system_prompt = system_prompt.format(**prompt_context)
+
         client = Anthropic(api_key=settings.API_HELPER_API_KEY)
         messages = [
             {"role": "user", "content": user_query},
@@ -76,4 +91,14 @@ class AiHelper:
             system=system_prompt, model="claude-3-sonnet-20240229", messages=messages, max_tokens=1000
         )
 
-        return f"def main(input: str, **kwargs) -> str:{response.content[0].text}"
+        response_code = f"def main(input: str, **kwargs) -> str:{response.content[0].text}"
+
+        from apps.pipelines.nodes.nodes import CodeNode
+
+        try:
+            CodeNode.model_validate({"code": response_code})
+        except pydantic.ValidationError as e:
+            error = str(e)
+            return AiHelper.code_completion(user_query, response_code, error, iteration_count=iteration_count + 1)
+
+        return response_code
