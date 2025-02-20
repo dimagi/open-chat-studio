@@ -239,7 +239,7 @@ def test_create_session_new_participant(experiment):
 
 @pytest.mark.django_db()
 def test_end_experiment_session_success(client, session):
-    url = reverse("experimentsession-end-experiment-session", args=[session.external_id])
+    url = reverse("session-end-experiment-session", args=[session.external_id])
     response = client.post(url)
     assert response.status_code == status.HTTP_200_OK
     session.refresh_from_db()
