@@ -344,57 +344,9 @@ export function CodeModal(
     isDarkMode: boolean;
     inputError: string | undefined;
   }) {
-  const customCompletions = {
-    get_participant_data: snip("get_participant_data()", {
-      label: "get_participant_data",
-      type: "keyword",
-      detail: "Gets participant data for the current participant",
-      boost: 1
-    }),
-    set_participant_data: snip("set_participant_data(${data})", {
-      label: "set_participant_data",
-      type: "keyword",
-      detail: "Overwrites the participant data with the value provided",
-      boost: 1
-    }),
-    set_temp_state_key: snip("set_temp_state_key(\"${key_name}\", ${data})", {
-      label: "set_temp_state_key",
-      type: "keyword",
-      detail: "Sets the given key in the temporary state. Overwrites the current value",
-      boost: 1
-    }),
-    get_temp_state_key: snip("get_temp_state_key(\"${key_name}\")", {
-        label: "get_temp_state_key",
-        type: "keyword",
-        detail: "Gets the value for the given key from the temporary state",
-        boost: 1
-    }),
-  }
-  function pythonCompletions(context: CompletionContext) {
-    const word = context.matchBefore(/\w*/)
-    if (!word || (word.from == word.to && !context.explicit))
-      return null
-    return {
-      from: word.from,
-      options: Object.values(customCompletions).filter(completion =>
-        completion.label.toLowerCase().startsWith(word.text.toLowerCase())
-      )
-    }
-  }
 
   const [showGenerate, setShowGenerate] = useState(false);
-  const [prompt, setPrompt] = useState("");
-  const [generated, setGenerated] = useState("");
-  const [generating, setGenerating] = useState()
 
-  const generateCode = () => {
-    setGenerating(true);
-    apiClient.generateCode(prompt).then((generatedCode) => {
-      setGenerated(generatedCode.response);
-      setShowGenerate(false);
-      setGenerating(false);
-    });
-  }
   return (
     <dialog
       id={modalId}
@@ -415,83 +367,17 @@ export function CodeModal(
               <i className="fa-solid fa-wand-magic-sparkles"></i>Generate
             </button>
           </div>
-          <div>
-            {showGenerate &&
-              <div className={"my-2"}>
-                <textarea
-                  className="textarea textarea-bordered resize-none textarea-sm w-full"
-                  rows={2}
-                  wrap="off"
-                  placeholder="Describe what you want the Python Node to do"
-                  value={prompt}
-                  onChange={(e) => setPrompt(e.target.value)}
-                ></textarea>
-                <div>
-                  <button className={"btn btn-sm btn-primary"} onClick={generateCode}>
-                    <i className="fa-solid fa-wand-magic-sparkles"></i>Create
-                  </button>
-                  {generating && <span className="loading loading-bars loading-md"></span>}
-                </div>
-              </div>}
-            {generated &&
-                <div>
-                  <h2 className="font-semibold">Generated Code</h2>
-                  <CodeMirror
-                    value={generated}
-                    className="textarea textarea-bordered w-full flex-grow"
-                    theme={isDarkMode ? githubDark : githubLight}
-                    onChange={setGenerated}
-                    extensions={[
-                      python(),
-                      python().language.data.of({
-                        autocomplete: pythonCompletions
-                      })
-                    ]}
-                    basicSetup={{
-                        lineNumbers: true,
-                        tabSize: 4,
-                        indentOnInput: true,
-                    }}
-                  />
-                <div className={"my-2 join"}>
-                  <button className={"btn btn-sm btn-primary join-item"} onClick={() => {
-                    onChange(generated)
-                    setShowGenerate(false)
-                    setGenerated("")
-                  }}>
-                    <i className="fa-solid fa-check"></i>
-                    Use Generated Code
-                  </button>
-                  <button className={"btn btn-sm btn-primary join-item"} onClick={() => {
-                    setGenerated("")
-                    setShowGenerate(true)
-                  }}>
-                    <i className="fa-solid fa-arrows-rotate"></i>
-                    Regenerate
-                  </button>
-                </div>
-              </div>
-            }
-          </div>
-          <CodeMirror
+          <GenerateCodeSection
+            showGenerate={showGenerate}
+            setShowGenerate={setShowGenerate}
+            isDarkMode={isDarkMode}
+            onAccept={onChange}
+          />
+          <CodeNodeEditor
             value={value}
             onChange={onChange}
-            className="textarea textarea-bordered h-full w-full flex-grow min-h-14"
-            height="100%"
-            width="100%"
-            theme={isDarkMode ? githubDark : githubLight}
-            extensions={[
-              python(),
-              python().language.data.of({
-                autocomplete: pythonCompletions
-              })
-            ]}
-            basicSetup={{
-                lineNumbers: true,
-                tabSize: 4,
-                indentOnInput: true,
-            }}
-          />
+            isDarkMode={isDarkMode}
+            />
         </div>
         <div className="flex flex-col">
             <span className="text-red-500">{inputError}</span>
@@ -503,6 +389,155 @@ export function CodeModal(
       </form>
     </dialog>
   );
+}
+
+function GenerateCodeSection({
+  showGenerate,
+  setShowGenerate,
+  isDarkMode,
+  onAccept,
+}: {
+  showGenerate: boolean;
+  setShowGenerate: (value: boolean) => void;
+  isDarkMode: boolean;
+  onAccept: (value: string) => void;
+}) {
+  const [prompt, setPrompt] = useState("")
+  const [generated, setGenerated] = useState("")
+  const [generating, setGenerating] = useState(false)
+
+  const generateCode = () => {
+    setGenerating(true);
+    apiClient.generateCode(prompt).then((generatedCode) => {
+      setGenerated(generatedCode.response);
+      setShowGenerate(false);
+      setGenerating(false);
+    });
+  }
+
+  const handleKeydown = (e: KeyboardEvent<HTMLTextAreaElement>) => {
+    if (e.ctrlKey && e.key === "Enter") {
+      generateCode();
+    }
+  }
+
+  return (
+    <div>
+      {showGenerate && (
+        <div className={"my-2"}>
+          <textarea
+            className="textarea textarea-bordered resize-none textarea-sm w-full"
+            rows={2}
+            wrap="off"
+            placeholder="Describe what you want the Python Node to do"
+            value={prompt}
+            onChange={(e) => setPrompt(e.target.value)}
+            onKeyDown={handleKeydown}
+          ></textarea>
+          <div className={"flex items-center gap-2"}>
+            <button className={"btn btn-sm btn-primary"} onClick={generateCode}>
+              <i className="fa-solid fa-wand-magic-sparkles"></i>Generate
+            </button>
+            {generating && <span className="loading loading-bars loading-md"></span>}
+          </div>
+        </div>
+      )}
+      {generated &&
+        <div>
+          <h2 className="font-semibold">Generated Code</h2>
+          <CodeNodeEditor
+            value={generated}
+            onChange={setGenerated}
+            isDarkMode={isDarkMode}
+            />
+        <div className={"my-2 join"}>
+          <button className={"btn btn-sm btn-success join-item"} onClick={() => {
+            onAccept(generated)
+            setShowGenerate(false)
+            setGenerated("")
+          }}>
+            <i className="fa-solid fa-check"></i>
+            Use Generated Code
+          </button>
+          <button className={"btn btn-sm btn-warning join-item"} onClick={() => {
+            setGenerated("")
+            setShowGenerate(true)
+          }}>
+            <i className="fa-solid fa-arrows-rotate"></i>
+            Regenerate
+          </button>
+        </div>
+      </div>
+    }
+    </div>
+  );
+}
+
+function CodeNodeEditor(
+  {value, onChange, isDarkMode}: {
+    value: string;
+    onChange: (value: string) => void;
+    isDarkMode: boolean;
+  }
+) {
+  const customCompletions = {
+    get_participant_data: snip("get_participant_data()", {
+      label: "get_participant_data",
+      type: "keyword",
+      detail: "Gets participant data for the current participant",
+      boost: 1
+    }),
+    set_participant_data: snip("set_participant_data(${data})", {
+      label: "set_participant_data",
+      type: "keyword",
+      detail: "Overwrites the participant data with the value provided",
+      boost: 1
+    }),
+    set_temp_state_key: snip("set_temp_state_key(\"${key_name}\", ${data})", {
+      label: "set_temp_state_key",
+      type: "keyword",
+      detail: "Sets the given key in the temporary state. Overwrites the current value",
+      boost: 1
+    }),
+    get_temp_state_key: snip("get_temp_state_key(\"${key_name}\")", {
+      label: "get_temp_state_key",
+      type: "keyword",
+      detail: "Gets the value for the given key from the temporary state",
+      boost: 1
+    }),
+  }
+
+  function pythonCompletions(context: CompletionContext) {
+    const word = context.matchBefore(/\w*/)
+    if (!word || (word.from == word.to && !context.explicit))
+      return null
+    return {
+      from: word.from,
+      options: Object.values(customCompletions).filter(completion =>
+        completion.label.toLowerCase().startsWith(word.text.toLowerCase())
+      )
+    }
+  }
+
+  return <CodeMirror
+    value={value}
+    onChange={onChange}
+    className="textarea textarea-bordered h-full w-full flex-grow min-h-14"
+    height="100%"
+    width="100%"
+    theme={isDarkMode ? githubDark : githubLight}
+    extensions={[
+      python(),
+      python().language.data.of({
+        autocomplete: pythonCompletions
+      })
+    ]}
+    basicSetup={{
+      lineNumbers: true,
+      tabSize: 4,
+      indentOnInput: true,
+    }}
+  />
 }
 
 
