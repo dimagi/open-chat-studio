@@ -380,11 +380,12 @@ export function CodeModal(
 
   const [showGenerate, setShowGenerate] = useState(false);
   const [prompt, setPrompt] = useState("");
+  const [generated, setGenerated] = useState("");
 
   const generateCode = () => {
-    console.log(prompt);
     apiClient.generateCode(prompt).then((generatedCode) => {
-      onChange(generatedCode.response);
+      setGenerated(generatedCode.response);
+      setShowGenerate(false);
     });
   }
   return (
@@ -404,23 +405,62 @@ export function CodeModal(
               {humanName}
             </h4>
             <button className="btn btn-sm btn-ghost" onClick={() => setShowGenerate(!showGenerate)}>
-              <i className="fa-regular fa-star"></i>
-              Generate
+              <i className="fa-solid fa-wand-magic-sparkles"></i>Generate
             </button>
           </div>
           <div>
             {showGenerate &&
               <div>
                 <textarea
-                  className="textarea textarea-bordered resize-none textarea-sm w-full overflow-x-auto overflow-y"
+                  className="textarea textarea-bordered resize-none textarea-sm w-full"
                   rows={2}
                   wrap="off"
                   placeholder="Describe what you want the Python Node to do"
                   value={prompt}
                   onChange={(e) => setPrompt(e.target.value)}
                 ></textarea>
-                <button className={"btn btn-sm btn-primary"} onClick={generateCode}>Create</button>
+                <button className={"btn btn-sm btn-primary"} onClick={generateCode}>
+                  <i className="fa-solid fa-wand-magic-sparkles"></i>Create
+                </button>
               </div>}
+            {generated &&
+                <div>
+                  <h2 className="font-semibold">Generated Code</h2>
+                  <CodeMirror
+                    value={generated}
+                    className="textarea textarea-bordered w-full flex-grow"
+                    theme={isDarkMode ? githubDark : githubLight}
+                    extensions={[
+                      python(),
+                      python().language.data.of({
+                        autocomplete: pythonCompletions
+                      })
+                    ]}
+                    basicSetup={{
+                        lineNumbers: true,
+                        tabSize: 4,
+                        indentOnInput: true,
+                    }}
+                  />
+                <div>
+                  <button className={"btn btn-sm btn-primary"} onClick={() => {
+                    onChange(generated)
+                    setShowGenerate(false)
+                    setGenerated("")
+                  }}>
+                    <i className="fa-solid fa-check text-success"></i>
+                    Use Generated Code
+                  </button>
+                  <button className={"btn btn-sm btn-secondary"} onClick={() => {
+                    setGenerated("")
+                    setShowGenerate(true)
+                  }}>
+                    <i className="fa-solid fa-arrows-rotate"></i>
+                    Regenerate
+                  </button>
+                </div>
+              </div>
+            }
           </div>
           <CodeMirror
             value={value}
