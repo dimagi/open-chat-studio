@@ -1,5 +1,8 @@
+import uuid
+
 import pytest
 from django.urls import reverse
+from rest_framework import status
 from rest_framework.fields import DateTimeField
 
 from apps.annotations.models import Tag
@@ -234,3 +237,11 @@ def test_create_session_new_participant(experiment):
     session = ExperimentSession.objects.get(external_id=response_json["id"])
     assert session.participant.identifier == "jack bean"
     assert response_json == get_session_json(session)
+
+
+@pytest.mark.django_db()
+def test_end_experiment_session_success(client):
+    session = ExperimentSession.objects.create(external_id=str(uuid.uuid4()))
+    url = reverse("experimentsession-end-experiment-session", args=[session.external_id])
+    response = client.post(url)
+    assert response.status_code == status.HTTP_200_OK
