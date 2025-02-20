@@ -59,6 +59,7 @@ class LlmProviderTypes(LlmProviderType, Enum):
     anthropic = "anthropic", _("Anthropic")
     groq = "groq", _("Groq"), {"openai_api_base": "https://api.groq.com/openai/v1/"}
     perplexity = "perplexity", _("Perplexity"), {"openai_api_base": "https://api.perplexity.ai/"}
+    deepseek = "deepseek", _("DeepSeek"), {"deepseek_api_base": "https://api.deepseek.com/v1/"}
 
     def __str__(self):
         return str(self.value)
@@ -89,6 +90,8 @@ class LlmProviderTypes(LlmProviderType, Enum):
                 return forms.AnthropicConfigForm
             case LlmProviderTypes.groq | LlmProviderTypes.perplexity:
                 return forms.OpenAIGenericConfigForm
+            case LlmProviderTypes.deepseek:
+                return forms.DeepSeekConfigForm
         raise Exception(f"No config form configured for {self}")
 
     def get_llm_service(self, config: dict):
@@ -103,6 +106,8 @@ class LlmProviderTypes(LlmProviderType, Enum):
                     return llm_service.AnthropicLlmService(**config)
                 case LlmProviderTypes.groq | LlmProviderTypes.perplexity:
                     return llm_service.OpenAIGenericService(**config)
+                case LlmProviderTypes.deepseek:
+                    return llm_service.DeepSeekLlmService(**config)
         except ValidationError as e:
             raise ServiceProviderConfigError(self.slug, str(e)) from e
         raise ServiceProviderConfigError(self.slug, "No chat model configured")
