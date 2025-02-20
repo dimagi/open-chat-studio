@@ -82,6 +82,7 @@ THIRD_PARTY_APPS = [
 PROJECT_APPS = [
     "apps.web.apps.OcsAdminConfig",
     "apps.audit",
+    "apps.help",
     "apps.users",
     "apps.api",
     "apps.chat",
@@ -612,4 +613,4 @@ COMMCARE_CONNECT_GET_CONNECT_ID_URL = f"{COMMCARE_CONNECT_SERVER_URL}/o/userinfo
 
 
 # API helper
-API_HELPER_API_KEY = env("ANTHROPIC_API_KEY", default="")
+API_HELPER_API_KEY = env("API_HELPER_API_KEY", default="")

@@ -2,6 +2,11 @@ import axios, { AxiosInstance } from "axios";
 import { PipelineType } from "../types/pipeline";
 import { SimplePipelineMessageResponse, TestMessageTaskResponse } from "../types/testMessage";
 
+type AiHelpResponse = {
+  response: string;
+}
+
+
 class ApiClient {
   private team: string | null;
   constructor() {
@@ -59,6 +64,10 @@ class ApiClient {
       "get",
       `/pipelines/${pipelineId}/message/get_response/${taskId}`,
     );
+  }
+
+  public async generateCode(prompt: string) {
+    return this.makeRequest<AiHelpResponse>("post", `/help/`, {query: prompt});
   }
 
   private createClient(): AxiosInstance {

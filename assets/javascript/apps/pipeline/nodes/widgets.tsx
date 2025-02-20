@@ -9,6 +9,7 @@ import {classNames, concatenate, getCachedData, getSelectOptions} from "../utils
 import {NodeParams, PropertySchema} from "../types/nodeParams";
 import {Node, useUpdateNodeInternals} from "reactflow";
 import DOMPurify from 'dompurify';
+import {apiClient} from "../api/api";
 
 export function getWidget(name: string, params: PropertySchema) {
   switch (name) {
@@ -330,7 +331,6 @@ export function CodeWidget(props: WidgetParams) {
   );
 }
 
-
 export function CodeModal(
   { modalId, humanName, value, onChange, isDarkMode, inputError }: {
     modalId: string;
@@ -377,6 +377,16 @@ export function CodeModal(
       )
     }
   }
+
+  const [showGenerate, setShowGenerate] = useState(false);
+  const [prompt, setPrompt] = useState("");
+
+  const generateCode = () => {
+    console.log(prompt);
+    apiClient.generateCode(prompt).then((generatedCode) => {
+      onChange(generatedCode.response);
+    });
+  }
   return (
     <dialog
       id={modalId}
@@ -389,9 +399,29 @@ export function CodeModal(
           </button>
         </form>
         <div className="flex-grow h-full w-full flex flex-col">
-          <h4 className="mb-4 font-bold text-lg bottom-2 capitalize">
-            {humanName}
-          </h4>
+          <div className="flex justify-between items-center">
+            <h4 className="mb-4 font-bold text-lg bottom-2 capitalize">
+              {humanName}
+            </h4>
+            <button className="btn btn-sm btn-ghost" onClick={() => setShowGenerate(!showGenerate)}>
+              <i className="fa-regular fa-star"></i>
+              Generate
+            </button>
+          </div>
+          <div>
+            {showGenerate &&
+              <div>
+                <textarea
+                  className="textarea textarea-bordered resize-none textarea-sm w-full overflow-x-auto overflow-y"
+                  rows={2}
+                  wrap="off"
+                  placeholder="Describe what you want the Python Node to do"
+                  value={prompt}
+                  onChange={(e) => setPrompt(e.target.value)}
+                ></textarea>
+                <button className={"btn btn-sm btn-primary"} onClick={generateCode}>Create</button>
+              </div>}
+          </div>
           <CodeMirror
             value={value}
             onChange={onChange}
