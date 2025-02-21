@@ -445,7 +445,7 @@ function GenerateCodeSection({
           ></textarea>
           {error && <small className="text-red-500">{error}</small>}
           <div className={"flex items-center gap-2"}>
-            <button className={"btn btn-sm btn-primary"} onClick={generateCode}>
+            <button className={"btn btn-sm btn-primary"} onClick={generateCode} disabled={!prompt}>
               <i className="fa-solid fa-wand-magic-sparkles"></i>Generate
             </button>
             {generating && <span className="loading loading-bars loading-md"></span>}
