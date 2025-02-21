@@ -217,45 +217,129 @@
       <input type="radio" name="tab_group" role="tab" class="tab" aria-label="Sessions" id="tab-allsessions" checked/>
       <div role="tabpanel" class="tab-content" id="content-allsessions">
         <div class="app-card">
-          <div x-data="{tags: '', participants: []}">
-            <div class="flex gap-x-2">
+          <div class="relative">
+          <!-- Top Row - Buttons and Toggle Side by Side -->
+            <div class="flex items-center gap-4">
               {% if perms.experiments.download_chats %}
                 {% include "experiments/components/exports.html" %}
               {% endif %}
-              <form
-                hx-trigger="load, change"
-                hx-target="#sessions-table"
-                hx-get="{% url 'experiments:sessions-list' request.team.slug experiment.id %}"
-                hx-swap="innerHTML"
-              >
-                <div class="flex gap-2">
-                  <div class="w-72 my-2">
-                    <input x-model="participants" name="participants" id="participants-filter" placeholder="Filter participants...">
-                  </div>
-                  {% if perms.annotations.view_customtaggeditem %}
-                    <div class="w-72 my-2">
-                      <select x-model="tags" id="tag-multiselect-filter" name="tags" multiple
-                              placeholder="Filter tags..."
-                              autocomplete="off">
-                        <option value="">Filter tags...</option>
-                        {% for tag in available_tags %}
-                          <option value="{{ tag.name }}">{{ tag.name }}</option>
-                        {% endfor %}
-                      </select>
-                    </div>
-                  {% endif %}
-                  <div class="form-control">
-                    <label class="label cursor-pointer">
-                      <span class="label-text mr-2">Include API Sessions</span>
-                      <input type="checkbox" name="show-all" class="toggle" />
-                    </label>
+              <div x-data="filterComponent">
+              <!-- Filter Button -->
+                <button @click="toggleFilters()" class="btn btn-sm btn-outline">
+                  <i class="fa-solid fa-filter"></i> Filter
+                </button>
+
+              <!-- Filters Panel -->
+                <div
+                  x-show="filterData.showFilters"
+                  class="absolute left-0 mt-2 p-4 bg-white border border-gray-200 rounded-lg shadow-lg z-10"
+                  style="width: fit-content;"
+                  hx-get="/sessions/"
+                  hx-trigger="filterChange"
+                  hx-target="#sessions-table"
+                >
+                  <div class="space-y-3">
+                    <template x-for="(filter, index) in filterData.filters" :key="index">
+                      <div class="flex items-center gap-3">
+                      <!-- Where Label -->
+                        <div class="text-gray-500 font-medium w-16">
+                          <span x-text="index === 0 ? 'Where' : 'AND'"></span>
+                        </div>
+
+                      <!-- Column Selector -->
+                        <div class="relative">
+                          <select
+                            x-model="filter.column"
+                            @change="filter.operator = ''; filter.value = ''; triggerFilterChange()"
+                            class="block w-40 py-2 px-3 border border-gray-200 rounded-lg bg-white text-sm"
+                          >
+                            <option value="">Column</option>
+                            <template x-for="(config, column) in filterData.columns" :key="column">
+                              <option :value="column" x-text="column"></option>
+                            </template>
+                          </select>
+                        </div>
+
+                      <!-- Operator Selector -->
+                        <div x-show="filter.column" class="relative">
+                          <select
+                            x-model="filter.operator"
+                            @change="triggerFilterChange()"
+                            class="block w-32 py-2 px-3 border border-gray-200 rounded-lg bg-white text-sm"
+                          >
+                            <option value=""> </option>
+                            <template x-for="operator in filterData.columns[filter.column]?.operators" :key="operator">
+                              <option :value="operator" x-text="operator"></option>
+                            </template>
+                          </select>
+                        </div>
+
+                      <!-- Value Input -->
+                        <div x-show="filter.operator" class="relative">
+                        <!-- String Input -->
+                          <input
+                            x-show="filterData.columns[filter.column]?.type === 'string'"
+                            type="text"
+                            x-model="filter.value"
+                            @input="triggerFilterChange()"
+                            class="block w-40 py-2 px-3 border border-gray-200 rounded-lg bg-white text-sm"
+                            placeholder="Enter value..."
+                          >
+
+                        <!-- Timestamp Input -->
+                          <input
+                            x-show="filterData.columns[filter.column]?.type === 'timestamp'"
+                            type="date"
+                            x-model="filter.value"
+                            @change="triggerFilterChange()"
+                            class="block w-40 py-2 px-3 border border-gray-200 rounded-lg bg-white text-sm"
+                          >
+
+                        <!-- Choice Input -->
+                          <select
+                            x-show="filterData.columns[filter.column]?.type === 'choice'"
+                            x-model="filter.value"
+                            @change="triggerFilterChange()"
+                            class="block w-40 py-2 px-3 border border-gray-200 rounded-lg bg-white text-sm"
+                          >
+                            <option value="">Select value</option>
+                            <template x-for="option in filterData.columns[filter.column]?.options" :key="option">
+                              <option :value="option" x-text="option"></option>
+                            </template>
+                          </select>
+                        </div>
+
+                      <!-- Remove Filter Button -->
+                        <button
+                          @click="removeFilter(index)"
+                          class="p-2 text-gray-400 hover:text-gray-600"
+                        >
+                          x
+                        </button>
+                      </div>
+                    </template>
+
+                  <!-- Add Filter Button -->
+                    <button
+                      @click="addFilter()"
+                      class="flex items-center gap-2 px-4 py-2 mt-3 text-gray-700 border border-gray-200 rounded-lg hover:bg-gray-50 text-sm"
+                    >
+                      + Add filter
+                    </button>
                   </div>
                 </div>
-              </form>
+              </div>
+              <label class="label cursor-pointer">
+                <span class="label-text mr-2">Include API Sessions</span>
+                <input type="checkbox" name="show-all" class="toggle" />
+              </label>
             </div>
           </div>
-          <div id="sessions-table"></div>
         </div>
+      </div>
+      </div>
+      <div id="sessions-table"></div>
+      </div>
       </div>
     {% endif %}
 
@@ -332,59 +416,100 @@
       }
     }
 
-    document.addEventListener('DOMContentLoaded', () => {
-      new TomSelect('#tag-multiselect-filter', {
-        plugins: ["remove_button", "caret_position", "input_autogrow"],
-        maxItems: null,
-        hidePlaceholder: true,
-      });
+    // document.addEventListener('DOMContentLoaded', () => {
+    //   new TomSelect('#tag-multiselect-filter', {
+    //     plugins: ["remove_button", "caret_position", "input_autogrow"],
+    //     maxItems: null,
+    //     hidePlaceholder: true,
+    //   });
 
-      new TomSelect('#participants-filter', {
-        plugins: ["remove_button", "caret_position", "input_autogrow"],
-        valueField: 'identifier',
-        searchField: ['name', 'identifier'],
-        hidePlaceholder: true,
-        load: function(query, callback) {
-          const url = '{% url "participants:search" request.team.slug %}?q=' + encodeURIComponent(query);
-          fetch(url)
-            .then(response => response.json())
-            .then(json => {
-              callback(json.results);
-            }).catch(()=>{
-              callback();
-            });
-        },
-        render: {
-          option: function(item, escape) {
-            return `<div class="">
-                      <span class="h4">
-                        ${ escape(item.name || 'No Name') }
-                      </span>
-                      <span class="text-muted"> (${ escape(item.identifier) })</span>
-                    </div>`;
-          },
-          item: function(item, escape) {
-            return `<div class="">
-                      <span class="h4">
-                        ${ escape(item.name || 'No Name') }
-                      </span>
-                      <span class="text-muted"> (${ escape(item.identifier) })</span>
-                    </div>`;
-          }
-        },
-      });
+      // new TomSelect('#participants-filter', {
+      //   plugins: ["remove_button", "caret_position", "input_autogrow"],
+      //   valueField: 'identifier',
+      //   searchField: ['name', 'identifier'],
+      //   hidePlaceholder: true,
+      //   load: function(query, callback) {
+      //     const url = '{% url "participants:search" request.team.slug %}?q=' + encodeURIComponent(query);
+      //     fetch(url)
+      //       .then(response => response.json())
+      //       .then(json => {
+      //         callback(json.results);
+      //       }).catch(()=>{
+      //         callback();
+      //       });
+      //   },
+      //   render: {
+      //     option: function(item, escape) {
+      //       return `<div class="">
+      //                 <span class="h4">
+      //                   ${ escape(item.name || 'No Name') }
+      //                 </span>
+      //                 <span class="text-muted"> (${ escape(item.identifier) })</span>
+      //               </div>`;
+      //     },
+      //     item: function(item, escape) {
+      //       return `<div class="">
+      //                 <span class="h4">
+      //                   ${ escape(item.name || 'No Name') }
+      //                 </span>
+      //                 <span class="text-muted"> (${ escape(item.identifier) })</span>
+      //               </div>`;
+      //     }
+      //   },
+      // });
 
-      const tabs = document.querySelectorAll('.tab');
-      tabs.forEach(tab => {
-        tab.addEventListener('change', (event) => {
-          const tabId = event.target.id.replace('tab-', '');
-          showTabContent(tabId);
-        });
-      });
+      // const tabs = document.querySelectorAll('.tab');
+      // tabs.forEach(tab => {
+      //   tab.addEventListener('change', (event) => {
+      //     const tabId = event.target.id.replace('tab-', '');
+      //     showTabContent(tabId);
+      //   });
+      // });
 
-      selectTabFromHash();
-    });
+    //   selectTabFromHash();
+    // });
 
     window.addEventListener('hashchange', selectTabFromHash);
+  </script>
+  <script>
+    document.addEventListener('alpine:init', () => {
+      Alpine.data('filterComponent', () => ({
+        filterData: {
+          showFilters: false,
+          filters: [],
+          columns: {
+            'participant': {type: 'string', operators: ['=', 'contains', 'starts_with', 'ends_with']},
+            'last_message': {type: 'timestamp', operators: ['>', '<', '<=', '>=']},
+            'tags': {type: 'choice', operators: ['=', '!='], options: ['tag1', 'tag2']},
+            'versions': {type: 'choice', operators: ['=', '!='], options: ['v1', 'v2']}
+          }
+        },
+        init() {
+          htmx.process(this.$el)
+        },
+        toggleFilters() {
+          this.filterData.showFilters = !this.filterData.showFilters
+          if (this.filterData.showFilters && this.filterData.filters.length === 0) {
+            this.addFilter()
+          }
+        },
+        addFilter() {
+          this.filterData.filters.push({
+            column: '',
+            operator: '',
+            value: '',
+            showOptions: false
+          });
+          this.triggerFilterChange();
+        },
+        removeFilter(index) {
+          this.filterData.filters.splice(index, 1);
+          this.triggerFilterChange();
+        },
+        triggerFilterChange() {
+          htmx.trigger('#sessions-table', 'filterChange')
+        }
+      }))
+    });
   </script>
 {% endblock %}
