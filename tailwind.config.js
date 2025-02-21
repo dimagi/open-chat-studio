@@ -1,12 +1,9 @@
 module.exports = {
   // keep in sync with Dockerfile
+  darkMode: ['selector', '[data-theme="dark"]'],
   content: [
     './apps/**/*.html',
-    './assets/**/*.js',
-    './assets/**/*.vue',
-    './assets/**/*.tsx',
-    './assets/**/*.jsx',
-    './assets/**/*.ts',
+    './assets/**/*.{js,jsx,ts,tsx,html}',
     './templates/**/*.html',
     './gpt_playground/settings.py',
   ],
