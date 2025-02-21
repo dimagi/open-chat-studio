@@ -2,6 +2,7 @@ from .main import (
     AnthropicLlmService,
     AzureLlmService,
     DeepSeekLlmService,
+    GoogleLlmService,
     LlmService,
     OpenAIGenericService,
     OpenAILlmService,
@@ -14,4 +15,5 @@ __all__ = [
     "OpenAILlmService",
     "OpenAIGenericService",
     "DeepSeekLlmService",
+    "GoogleLlmService",
 ]
