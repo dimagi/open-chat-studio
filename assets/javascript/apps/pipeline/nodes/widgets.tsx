@@ -5,8 +5,8 @@ import {githubDark, githubLight} from "@uiw/codemirror-theme-github";
 import {CompletionContext, snippetCompletion as snip} from '@codemirror/autocomplete'
 import {TypedOption} from "../types/nodeParameterValues";
 import usePipelineStore from "../stores/pipelineStore";
-import {classNames, concatenate, getCachedData, getSelectOptions} from "../utils";
-import {NodeParams, PropertySchema} from "../types/nodeParams";
+import {classNames, concatenate, getCachedData, getDocumentationLink, getSelectOptions} from "../utils";
+import {JsonSchema, NodeParams, PropertySchema} from "../types/nodeParams";
 import {Node, useUpdateNodeInternals} from "reactflow";
 import DOMPurify from 'dompurify';
 import {apiClient} from "../api/api";
@@ -53,6 +53,7 @@ interface WidgetParams {
   updateParamValue: (event: React.ChangeEvent<HTMLTextAreaElement | HTMLSelectElement | HTMLInputElement>) => any;
   schema: PropertySchema
   nodeParams: NodeParams
+  nodeSchema: JsonSchema
   required: boolean,
   getNodeFieldError: (nodeId: string, fieldName: string) => string | undefined;
 }
@@ -330,19 +331,21 @@ export function CodeWidget(props: WidgetParams) {
         onChange={onChangeCallback}
         isDarkMode={isDarkMode}
         inputError={props.inputError}
+        documentationLink={getDocumentationLink(props.nodeSchema)}
       />
     </>
   );
 }
 
 export function CodeModal(
-  { modalId, humanName, value, onChange, isDarkMode, inputError }: {
+  { modalId, humanName, value, onChange, isDarkMode, inputError, documentationLink }: {
     modalId: string;
     humanName: string;
     value: string;
     onChange: (value: string) => void;
     isDarkMode: boolean;
     inputError: string | undefined;
+    documentationLink: string | null;
   }) {
 
   const [showGenerate, setShowGenerate] = useState(false);
@@ -361,11 +364,14 @@ export function CodeModal(
         </form>
         <div className="flex-grow h-full w-full flex flex-col">
           <div className="flex justify-between items-center">
-            <h4 className="mb-4 font-bold text-lg bottom-2 capitalize">
+            <h4 className="font-bold text-lg bottom-2 capitalize">
               {humanName}
+              {documentationLink && <a href={documentationLink} target={"_blank"} className="ml-2 font-light text-info tooltip tooltip-right" data-tip="View Documentation">
+                <i className="fa-regular fa-circle-question fa-sm"></i>
+              </a>}
             </h4>
             <button className="btn btn-sm btn-ghost" onClick={() => setShowGenerate(!showGenerate)}>
-              <i className="fa-solid fa-wand-magic-sparkles"></i>Generate
+              <i className="fa-solid fa-wand-magic-sparkles"></i>Help
             </button>
           </div>
           <GenerateCodeSection
@@ -373,6 +379,7 @@ export function CodeModal(
             setShowGenerate={setShowGenerate}
             isDarkMode={isDarkMode}
             onAccept={onChange}
+            currentCode={value}
           />
           <CodeNodeEditor
             value={value}
@@ -397,11 +404,13 @@ function GenerateCodeSection({
   setShowGenerate,
   isDarkMode,
   onAccept,
+  currentCode,
 }: {
   showGenerate: boolean;
   setShowGenerate: (value: boolean) => void;
   isDarkMode: boolean;
   onAccept: (value: string) => void;
+  currentCode: string;
 }) {
   const [prompt, setPrompt] = useState("")
   const [generated, setGenerated] = useState("")
@@ -410,7 +419,7 @@ function GenerateCodeSection({
 
   const generateCode = () => {
     setGenerating(true);
-    apiClient.generateCode(prompt).then((generatedCode) => {
+    apiClient.generateCode(prompt, currentCode).then((generatedCode) => {
       setGenerating(false);
       if (generatedCode.error || generatedCode.response === "") {
         setError(generatedCode.error || "No code generated. Please provide more information.");
@@ -439,7 +448,7 @@ function GenerateCodeSection({
             className="textarea textarea-bordered resize-none textarea-sm w-full"
             rows={2}
             wrap="off"
-            placeholder="Describe what you want the Python Node to do"
+            placeholder="Describe what you want the Python Node to do or what issue you are facing"
             value={prompt}
             onChange={(e) => setPrompt(e.target.value)}
             onKeyDown={handleKeydown}
@@ -447,7 +456,7 @@ function GenerateCodeSection({
           {error && <small className="text-red-500">{error}</small>}
           <div className={"flex items-center gap-2"}>
             <button className={"btn btn-sm btn-primary"} onClick={generateCode} disabled={!prompt}>
-              <i className="fa-solid fa-wand-magic-sparkles"></i>Generate
+              <i className="fa-solid fa-wand-magic-sparkles"></i>Go
             </button>
             {generating && <span className="loading loading-bars loading-md"></span>}
           </div>

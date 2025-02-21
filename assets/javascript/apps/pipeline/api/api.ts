@@ -67,8 +67,8 @@ class ApiClient {
     );
   }
 
-  public async generateCode(prompt: string) {
-    return this.makeRequest<AiHelpResponse>("post", `/help/generate_code/`, {query: prompt});
+  public async generateCode(prompt: string, currentCode: string): Promise<AiHelpResponse> {
+    return this.makeRequest<AiHelpResponse>("post", `/help/generate_code/`, {query: prompt, context: currentCode});
   }
 
   private createClient(): AxiosInstance {

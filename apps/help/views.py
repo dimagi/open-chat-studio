@@ -9,6 +9,7 @@ from django.http import JsonResponse
 from django.views.decorators.csrf import csrf_exempt
 from django.views.decorators.http import require_POST
 
+from apps.pipelines.nodes.nodes import DEFAULT_FUNCTION
 from apps.teams.decorators import login_and_team_required
 
 logger = logging.getLogger("ocs.help")
@@ -18,9 +19,11 @@ logger = logging.getLogger("ocs.help")
 @login_and_team_required
 @csrf_exempt
 def pipeline_generate_code(request, team_slug: str):
-    user_query = json.loads(request.body)["query"]
+    body = json.loads(request.body)
+    user_query = body["query"]
+    current_code = body["context"]
     try:
-        completion = code_completion(user_query, "")
+        completion = code_completion(user_query, current_code)
     except (ValueError, TypeError, AnthropicError):
         logger.exception("An error occurred while generating code.")
         return JsonResponse({"error": "An error occurred while generating code."})
@@ -30,6 +33,9 @@ def pipeline_generate_code(request, team_slug: str):
 def code_completion(user_query, current_code, error=None, iteration_count=0) -> str:
     if iteration_count > 3:
         return current_code
+
+    if current_code == DEFAULT_FUNCTION:
+        current_code = ""
 
     system_prompt = textwrap.dedent(
         """
