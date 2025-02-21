@@ -99,7 +99,7 @@ def code_completion(user_query, current_code, error=None, iteration_count=0) -> 
 
     system_prompt = system_prompt.format(**prompt_context).strip()
 
-    client = Anthropic(api_key=settings.API_HELPER_API_KEY)
+    client = Anthropic(api_key=settings.AI_HELPER_API_KEY)
     messages = [
         {"role": "user", "content": user_query},
         {"role": "assistant", "content": "def main(input: str, **kwargs) -> str:"},
