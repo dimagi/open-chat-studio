@@ -115,8 +115,6 @@ class EventActionForm(forms.ModelForm):
             trigger_type = self.data.get("type")
             if trigger_type == "new_bot_message" and action_type in [
                 "send_message_to_bot",
-                "pipeline_start",
-                "summarize",
                 "schedule_trigger",
             ]:
                 raise forms.ValidationError("This action is not allowed when 'A new bot message is received'")
