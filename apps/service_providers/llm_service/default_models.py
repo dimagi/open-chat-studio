@@ -74,6 +74,7 @@ DEFAULT_LLM_PROVIDER_MODELS = {
         Model("llama-3.1-70b-instruct", 131072),
     ],
     "deepseek": [Model("deepseek-chat", 128000), Model("deepseek-reaoner", 128000)],
+    "google_gemini": [Model("gemini-1.5-pro", 128000), Model("gemini-1.5-flash", 128000)],
 }
 
 
