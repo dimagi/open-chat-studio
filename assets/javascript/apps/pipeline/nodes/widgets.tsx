@@ -475,6 +475,7 @@ function GenerateCodeSection({
             onAccept(generated)
             setShowGenerate(false)
             setGenerated("")
+            setPrompt("")
           }}>
             <i className="fa-solid fa-check"></i>
             Use Generated Code
