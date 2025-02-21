@@ -1,8 +1,9 @@
 import json
+import logging
 import textwrap
 
 import pydantic
-from anthropic import Anthropic
+from anthropic import Anthropic, AnthropicError
 from django.conf import settings
 from django.http import JsonResponse
 from django.views.decorators.csrf import csrf_exempt
@@ -10,13 +11,20 @@ from django.views.decorators.http import require_POST
 
 from apps.teams.decorators import login_and_team_required
 
+logger = logging.getLogger("ocs.help")
+
 
 @require_POST
 @login_and_team_required
 @csrf_exempt
 def pipeline_generate_code(request, team_slug: str):
     user_query = json.loads(request.body)["query"]
-    return JsonResponse({"response": code_completion(user_query, "")})
+    try:
+        completion = code_completion(user_query, "")
+    except (ValueError, TypeError, AnthropicError):
+        logger.exception("An error occurred while generating code.")
+        return JsonResponse({"error": "An error occurred while generating code."})
+    return JsonResponse({"response": completion})
 
 
 def code_completion(user_query, current_code, error=None, iteration_count=0) -> str:

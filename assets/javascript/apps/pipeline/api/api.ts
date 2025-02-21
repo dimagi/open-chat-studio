@@ -3,7 +3,8 @@ import { PipelineType } from "../types/pipeline";
 import { SimplePipelineMessageResponse, TestMessageTaskResponse } from "../types/testMessage";
 
 type AiHelpResponse = {
-  response: string;
+  response?: string;
+  error?: string;
 }
 
 
@@ -82,19 +83,21 @@ class ApiClient {
     data?: any,
   ): Promise<T> {
     const client = this.createClient();
+    let response;
     try {
-      const response =
+      response =
         method === "get"
           ? await client.get<T>(url)
           : await client.post<T>(url, data);
-      if (response.status !== 200) {
-        throw new Error(`HTTP error! status: ${response.status}`);
-      }
-      return response.data;
     } catch (error) {
       console.error(error);
-      throw error;
+      return Promise.reject();
     }
+    if (response.status !== 200) {
+      console.error(response);
+      return Promise.reject(response.data);
+    }
+    return response.data;
   }
 }
 

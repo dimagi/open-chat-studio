@@ -405,17 +405,26 @@ function GenerateCodeSection({
   const [prompt, setPrompt] = useState("")
   const [generated, setGenerated] = useState("")
   const [generating, setGenerating] = useState(false)
+  const [error, setError] = useState("")
 
   const generateCode = () => {
     setGenerating(true);
     apiClient.generateCode(prompt).then((generatedCode) => {
-      setGenerated(generatedCode.response);
-      setShowGenerate(false);
       setGenerating(false);
+      if (generatedCode.error || generatedCode.response === "") {
+        setError(generatedCode.error || "No code generated. Please provide more information.");
+        return;
+      } else if (generatedCode.response) {
+        setGenerated(generatedCode.response);
+        setShowGenerate(false);
+      }
+    }).catch(() => {
+      setGenerating(false);
+      setError("An error occurred while generating code. Please try again.");
     });
   }
 
-  const handleKeydown = (e: KeyboardEvent<HTMLTextAreaElement>) => {
+  const handleKeydown = (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
     if (e.ctrlKey && e.key === "Enter") {
       generateCode();
     }
@@ -434,6 +443,7 @@ function GenerateCodeSection({
             onChange={(e) => setPrompt(e.target.value)}
             onKeyDown={handleKeydown}
           ></textarea>
+          {error && <small className="text-red-500">{error}</small>}
           <div className={"flex items-center gap-2"}>
             <button className={"btn btn-sm btn-primary"} onClick={generateCode}>
               <i className="fa-solid fa-wand-magic-sparkles"></i>Generate
@@ -522,7 +532,7 @@ function CodeNodeEditor(
   return <CodeMirror
     value={value}
     onChange={onChange}
-    className="textarea textarea-bordered h-full w-full flex-grow min-h-14"
+    className="textarea textarea-bordered h-full w-full flex-grow min-h-48"
     height="100%"
     width="100%"
     theme={isDarkMode ? githubDark : githubLight}
