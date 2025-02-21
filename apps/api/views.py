@@ -334,7 +334,7 @@ class ExperimentSessionViewSet(mixins.ListModelMixin, mixins.RetrieveModelMixin,
         headers = {"Location": str(output["url"])}
         return Response(output, status=status.HTTP_201_CREATED, headers=headers)
 
-    @action(detail=True, methods=["post"], url_path="end-experiment-session")
+    @action(detail=True, methods=["post"])
     def end_experiment_session(self, request, id=None):
         try:
             session = ExperimentSession.objects.get(external_id=id)

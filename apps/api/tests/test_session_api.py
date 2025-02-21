@@ -242,7 +242,7 @@ def test_end_experiment_session_success(client, session):
     team = Team.objects.create(name="Test Team")
     session.team = team
     session.save()
-    url = reverse("session-end-experiment-session", kwargs={"pk": session.external_id})
+    url = f"/api/sessions/{session.external_id}/end_experiment_session/"
     response = client.post(url)
     assert response.status_code == status.HTTP_200_OK
     session.refresh_from_db()
