@@ -15,7 +15,7 @@
             {% block pre_form %}
             {% endblock pre_form %}
             <form method="post" class="my-2" {% include "generic/attrs.html" with attrs=form_attrs %}
-                  x-data="eventForm('{{ secondary_key }}', '{{ trigger_form.initial.type }}')"
+                  x-data="formData"
                   x-init="watchTriggerType()">
                 {% csrf_token %}
                 {% block form %}
@@ -24,7 +24,6 @@
                         {% render_field trigger_form.type xmodel="triggerType" %}
                     {% endif %}
                     {% render_form_fields action_form.primary %}
-
                     {% for key, form in action_form.secondary.items %}
                         <div id="form_{{ key }}" x-show="type === '{{ key }}'" x-cloak>
                             {% render_form_fields form %}
@@ -43,14 +42,16 @@
         </div>
     </div>
     <script>
-        function eventForm(secondaryKey, initialTriggerType) {
-            return {
-                type: secondaryKey,
-                triggerType: initialTriggerType,
+        document.addEventListener('alpine:init', () => {
+            Alpine.data('formData', () => ({
+                type: '{{ secondary_key }}',
+                triggerType: '{{ trigger_form.initial.type }}',
+
                 isActionDisabled(action) {
                     return this.triggerType === 'new_bot_message' &&
                     ['send_message_to_bot', 'schedule_trigger'].includes(action);
                 },
+
                 watchTriggerType() {
                     this.$watch('triggerType', value => {
                         if (value === 'new_bot_message' &&
@@ -59,6 +60,7 @@
                             }
                     });
                 },
+
                 init() {
                     const actionSelect = document.getElementById('{{ action_form.primary.action_type.id_for_label }}');
                     if (actionSelect) {
@@ -70,7 +72,7 @@
                         });
                     }
                 }
-            }
-        }
+            }))
+        });
     </script>
 {% endblock %}
