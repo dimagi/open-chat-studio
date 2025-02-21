@@ -263,6 +263,25 @@ paths:
               schema:
                 $ref: '#/components/schemas/ExperimentSessionWithMessages'
           description: ''
+  /api/sessions/{id}/end_experiment_session/:
+    post:
+      operationId: session_end
+      summary: End Experiment Session
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: string
+        description: ID of the session
+        required: true
+      tags:
+      - Experiment Sessions
+      security:
+      - apiKeyAuth: []
+      - tokenAuth: []
+      responses:
+        '200':
+          description: No response body
   /api/trigger_bot:
     post:
       operationId: trigger_bot_message
