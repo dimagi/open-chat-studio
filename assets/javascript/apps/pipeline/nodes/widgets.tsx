@@ -351,6 +351,7 @@ export function CodeModal(
     <dialog
       id={modalId}
       className="modal nopan nodelete nodrag noflow nowheel"
+      onClose={() => setShowGenerate(false)}
     >
       <div className="modal-box  min-w-[85vw] h-[80vh] flex flex-col">
         <form method="dialog">
