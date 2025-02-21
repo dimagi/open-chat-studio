@@ -46,8 +46,11 @@ class ActionsColumn(tables.Column):
 
 class ParamsColumn(tables.Column):
     def render(self, value, record):
-        items = format_html_join("", "<li><strong>{}</strong>: {}</li>", value.items())
-        return format_html(f"<ul>{items}</ul>")
+        try:
+            items = format_html_join("", "<li><strong>{}</strong>: {}</li>", value.items())
+            return format_html(f"<ul>{items}</ul>")
+        except KeyError:
+            return "—"
 
 
 class EventsTable(tables.Table):
