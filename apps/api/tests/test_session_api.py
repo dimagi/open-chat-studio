@@ -243,8 +243,8 @@ def test_end_experiment_session_success(client, session):
     session.team = team
     session.save()
     url = f"/api/sessions/{session.external_id}/end_experiment_session/"
-    user = experiment.team.members.first()
-    client = ApiTestClient(user, experiment.team)
+    user = session.experiment.team.members.first()
+    client = ApiTestClient(user, session.experiment.team)
     response = client.post(url)
     assert response.status_code == status.HTTP_200_OK
     session.refresh_from_db()
