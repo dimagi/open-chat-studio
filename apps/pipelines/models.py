@@ -192,6 +192,7 @@ class Pipeline(BaseTeamModel, VersionsMixin):
                         id=node.flow_id,
                         type=node.type,
                         params=node.params,
+                        label=node.label,
                     ),
                 )
             )
