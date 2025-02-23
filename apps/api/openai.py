@@ -87,7 +87,7 @@ from apps.channels.tasks import handle_api_message
     ],
 )
 @api_view(["POST"])
-def chat_completions(request, experiment_id: uuid.UUID):
+def chat_completions(request, experiment_id: uuid.UUID, version=None):
     try:
         messages = [_convert_message(message) for message in request.data.get("messages", [])]
     except APIException as e:
@@ -99,7 +99,6 @@ def chat_completions(request, experiment_id: uuid.UUID):
 
     if last_message.get("role") != "user":
         return _make_error_response(400, "Last message must be a user message")
-
     converted_data = {
         "experiment": experiment_id,
         "messages": messages,
@@ -111,9 +110,10 @@ def chat_completions(request, experiment_id: uuid.UUID):
         return _make_error_response(400, str(e))
 
     session = serializer.save()
+    experiment_version = session.experiment_version if version is None else session.fetch_experiment(experiment_id, version)
     response_message = handle_api_message(
         request.user,
-        session.experiment_version,
+        experiment_version,
         session.experiment_channel,
         last_message.get("content"),
         session.participant.identifier,

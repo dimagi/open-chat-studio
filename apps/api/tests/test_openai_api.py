@@ -1,6 +1,6 @@
 import json
 import os
-from unittest.mock import call, patch
+from unittest.mock import MagicMock, call, patch
 
 import pytest
 from django.urls import reverse
@@ -79,6 +79,52 @@ def test_chat_completion(mock_experiment_response, experiment, api_key, live_ser
     )
 
     assert ExperimentSession.objects.count() == 1
+    session = ExperimentSession.objects.first()
+    assert completion.id == session.external_id
+    assert completion.model == experiment.llm_provider_model.name
+    assert completion.choices[0].message.content == "So, this ain't the end, I saw you again today"
+    assert mock_experiment_response.call_args_list == [call(message="Sing a song for me Barracuda")]
+    assert [(m.message_type, m.content) for m in session.chat.messages.all()] == [
+        ("system", "You are a helpful assistant."),
+        ("human", "Hi, how are you?"),
+        ("ai", "Lekker!"),
+    ]
+
+
+@patch("apps.chat.channels.ApiChannel._get_bot_response")
+@patch("apps.experiments.models.ExperimentSession.fetch_experiment")
+@patch("apps.experiments.models.Experiment.objects.get")  # Mocking DB query
+def test_chat_completion_versioned(
+    mock_experiment_get, mock_fetch_experiment, mock_experiment_response, experiment, api_key, live_server
+):
+    """
+    Test OpenAI chat completion API with versioned endpoint (v2).
+    """
+    mock_experiment = MagicMock()
+    mock_experiment_get.return_value = mock_experiment  # Returning mock experiment instance
+
+    mock_experiment_response.return_value = "So, this ain't the end, I saw you again today"
+    mock_fetch_experiment.return_value = experiment
+    version = 2
+    base_url = f"{live_server.url}/api/openai/{experiment.public_id}/v{version}"
+    print(f"Testing versioned API: {base_url}")
+    client = OpenAI(api_key=api_key, base_url=base_url)
+
+    completion = client.chat.completions.create(
+        model="gpt-3.5-turbo",
+        messages=[
+            {"role": "system", "content": "You are a helpful assistant."},
+            {"role": "user", "content": "Hi, how are you?"},
+            {"role": "assistant", "content": "Lekker!"},
+            {
+                "role": "user",
+                "content": [
+                    {"type": "text", "text": "Sing a song for me"},
+                    {"type": "text", "text": "Barracuda"},
+                ],
+            },
+        ],
+    )
     session = ExperimentSession.objects.first()
     assert completion.id == session.external_id
     assert completion.model == experiment.llm_provider_model.name

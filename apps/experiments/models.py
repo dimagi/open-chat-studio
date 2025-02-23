@@ -848,8 +848,14 @@ class Experiment(BaseTeamModel, VersionsMixin, CustomActionOperationMixin):
         if self.trace_provider:
             return self.trace_provider.get_service()
 
-    def get_api_url(self):
+    def get_api_url(self, version_number=None):
+        if version_number:
+            return absolute_url(reverse("api:openai-chat-completions-versioned", args=[self.public_id, version_number]))
         return absolute_url(reverse("api:openai-chat-completions", args=[self.public_id]))
+
+    @property
+    def api_url(self):
+        return self.get_api_url(self.version_number)
 
     @transaction.atomic()
     def create_new_version(self, version_description: str | None = None, make_default: bool = False):
@@ -1680,6 +1686,9 @@ class ExperimentSession(BaseTeamModel):
             log.exception(f"Could not send message to experiment session {self.id}. Reason: {e}")
             if not fail_silently:
                 raise e
+
+    def fetch_experiment(self, experiment_id, version_number) -> Experiment:
+        return Experiment.objects.get(public_id=experiment_id, version_number=version_number)
 
     @cached_property
     def participant_data_from_experiment(self) -> dict:

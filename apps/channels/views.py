@@ -90,7 +90,7 @@ def new_turn_message(request, experiment_id: uuid):
     ],
 )
 @api_view(["POST"])
-def new_api_message(request, experiment_id: uuid):
+def new_api_message(request, experiment_id: uuid, version=None):
     """Chat with an experiment."""
     message_data = request.data.copy()
     participant_id = request.user.email
@@ -109,17 +109,19 @@ def new_api_message(request, experiment_id: uuid):
             )
         except ExperimentSession.DoesNotExist:
             raise Http404
-
         participant_id = session.participant.identifier
         experiment_channel = session.experiment_channel
         experiment = session.experiment
+        experiment_version = (
+            session.fetch_experiment(public_id=experiment_id, version_number=version) if version else experiment
+        )
     else:
         experiment = get_object_or_404(Experiment, public_id=experiment_id, team=request.team)
         experiment_channel = ExperimentChannel.objects.get_team_api_channel(request.team)
-
+        experiment_version = experiment
     response = tasks.handle_api_message(
         request.user,
-        experiment.default_version,
+        experiment_version,
         experiment_channel,
         message_data["message"],
         participant_id,
