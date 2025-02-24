@@ -259,7 +259,7 @@ def _get_new_summary(llm, pruned_memory, summary, max_token_limit):
     recursively call this function with the remaining memory."""
     tokens, context = _get_summary_tokens_with_context(llm, summary, pruned_memory)
     next_batch = []
-    while pruned_memory and tokens > max_token_limit and len(pruned_memory) > MAX_UNCOMPRESSED_MESSAGES:
+    while pruned_memory and tokens > max_token_limit or len(pruned_memory) > MAX_UNCOMPRESSED_MESSAGES:
         next_batch.insert(0, pruned_memory.pop())
         tokens, context = _get_summary_tokens_with_context(llm, summary, pruned_memory)
 
