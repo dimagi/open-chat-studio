@@ -46,6 +46,7 @@ IGNORE_APPS = {
     "forms",
     "generics",
     "health_check",
+    "help",
     "humanize",
     "messages",
     "otp_static",

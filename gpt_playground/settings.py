@@ -82,6 +82,7 @@ THIRD_PARTY_APPS = [
 PROJECT_APPS = [
     "apps.web.apps.OcsAdminConfig",
     "apps.audit",
+    "apps.help",
     "apps.users",
     "apps.api",
     "apps.chat",
@@ -609,3 +610,7 @@ COMMCARE_CONNECT_SERVER_ID = env("COMMCARE_CONNECT_SERVER_ID", default="")
 COMMCARE_CONNECT_ENABLED = COMMCARE_CONNECT_SERVER_SECRET and COMMCARE_CONNECT_SERVER_ID
 COMMCARE_CONNECT_SERVER_URL = env("COMMCARE_CONNECT_SERVER_URL", default="https://connectid.dimagi.com")
 COMMCARE_CONNECT_GET_CONNECT_ID_URL = f"{COMMCARE_CONNECT_SERVER_URL}/o/userinfo/"
+
+
+# AI helper
+AI_HELPER_API_KEY = env("AI_HELPER_API_KEY", default="")

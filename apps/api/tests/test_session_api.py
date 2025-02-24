@@ -1,10 +1,11 @@
 import pytest
 from django.urls import reverse
+from rest_framework import status
 from rest_framework.fields import DateTimeField
 
 from apps.annotations.models import Tag
 from apps.chat.models import ChatAttachment
-from apps.experiments.models import ExperimentSession
+from apps.experiments.models import ExperimentSession, Team
 from apps.utils.factories.experiment import ExperimentFactory, ExperimentSessionFactory
 from apps.utils.factories.files import FileFactory
 from apps.utils.factories.team import TeamWithUsersFactory
@@ -234,3 +235,17 @@ def test_create_session_new_participant(experiment):
     session = ExperimentSession.objects.get(external_id=response_json["id"])
     assert session.participant.identifier == "jack bean"
     assert response_json == get_session_json(session)
+
+
+@pytest.mark.django_db()
+def test_end_experiment_session_success(client, session):
+    team = Team.objects.create(name="Test Team")
+    session.team = team
+    session.save()
+    url = f"/api/sessions/{session.external_id}/end_experiment_session/"
+    user = session.experiment.team.members.first()
+    client = ApiTestClient(user, session.experiment.team)
+    response = client.post(url)
+    assert response.status_code == status.HTTP_200_OK
+    session.refresh_from_db()
+    assert session.status == "pending-review"

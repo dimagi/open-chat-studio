@@ -5,10 +5,11 @@ import {githubDark, githubLight} from "@uiw/codemirror-theme-github";
 import {CompletionContext, snippetCompletion as snip} from '@codemirror/autocomplete'
 import {TypedOption} from "../types/nodeParameterValues";
 import usePipelineStore from "../stores/pipelineStore";
-import {classNames, concatenate, getCachedData, getSelectOptions} from "../utils";
-import {NodeParams, PropertySchema} from "../types/nodeParams";
+import {classNames, concatenate, getCachedData, getDocumentationLink, getSelectOptions} from "../utils";
+import {JsonSchema, NodeParams, PropertySchema} from "../types/nodeParams";
 import {Node, useUpdateNodeInternals} from "reactflow";
 import DOMPurify from 'dompurify';
+import {apiClient} from "../api/api";
 
 export function getWidget(name: string, params: PropertySchema) {
   switch (name) {
@@ -52,6 +53,7 @@ interface WidgetParams {
   updateParamValue: (event: React.ChangeEvent<HTMLTextAreaElement | HTMLSelectElement | HTMLInputElement>) => any;
   schema: PropertySchema
   nodeParams: NodeParams
+  nodeSchema: JsonSchema
   required: boolean,
   getNodeFieldError: (nodeId: string, fieldName: string) => string | undefined;
 }
@@ -278,14 +280,18 @@ export function CodeWidget(props: WidgetParams) {
 
     useEffect(() => {
         // Set dark / light mode
-     const mediaQuery: MediaQueryList = window.matchMedia("(prefers-color-scheme: dark)");
-     const handleChange = (event: MediaQueryListEvent): void => {
-       setIsDarkMode(event.matches);
-     };
-    setIsDarkMode(mediaQuery.matches);
+      setIsDarkMode(document.body.getAttribute("data-theme") === 'dark')
+      const observer = new MutationObserver(function(mutations) {
+        mutations.forEach(function(mutation) {
+          if (mutation.type === "attributes") {
+            setIsDarkMode(document.body.getAttribute("data-theme") === 'dark')
+          }
+        });
+      });
 
-    mediaQuery.addEventListener("change", handleChange);
-    return () => mediaQuery.removeEventListener("change", handleChange);
+      observer.observe(document.body, {attributes: true});
+
+    return () => observer.disconnect()
   }, []);
 
   const modalId = useId();
@@ -325,21 +331,176 @@ export function CodeWidget(props: WidgetParams) {
         onChange={onChangeCallback}
         isDarkMode={isDarkMode}
         inputError={props.inputError}
+        documentationLink={getDocumentationLink(props.nodeSchema)}
       />
     </>
   );
 }
 
-
 export function CodeModal(
-  { modalId, humanName, value, onChange, isDarkMode, inputError }: {
+  { modalId, humanName, value, onChange, isDarkMode, inputError, documentationLink }: {
     modalId: string;
     humanName: string;
     value: string;
     onChange: (value: string) => void;
     isDarkMode: boolean;
     inputError: string | undefined;
+    documentationLink: string | null;
   }) {
+
+  const [showGenerate, setShowGenerate] = useState(false);
+
+  return (
+    <dialog
+      id={modalId}
+      className="modal nopan nodelete nodrag noflow nowheel"
+      onClose={() => setShowGenerate(false)}
+    >
+      <div className="modal-box  min-w-[85vw] h-[80vh] flex flex-col">
+        <form method="dialog">
+          <button className="btn btn-sm btn-circle btn-ghost absolute right-2 top-2">
+            ✕
+          </button>
+        </form>
+        <div className="flex-grow h-full w-full flex flex-col">
+          <div className="flex justify-between items-center">
+            <h4 className="font-bold text-lg bottom-2 capitalize">
+              {humanName}
+              {documentationLink && <a href={documentationLink} target={"_blank"} className="ml-2 font-light text-info tooltip tooltip-right" data-tip="View Documentation">
+                <i className="fa-regular fa-circle-question fa-sm"></i>
+              </a>}
+            </h4>
+            <button className="btn btn-sm btn-ghost" onClick={() => setShowGenerate(!showGenerate)}>
+              <i className="fa-solid fa-wand-magic-sparkles"></i>Help
+            </button>
+          </div>
+          <GenerateCodeSection
+            showGenerate={showGenerate}
+            setShowGenerate={setShowGenerate}
+            isDarkMode={isDarkMode}
+            onAccept={onChange}
+            currentCode={value}
+          />
+          <CodeNodeEditor
+            value={value}
+            onChange={onChange}
+            isDarkMode={isDarkMode}
+            />
+        </div>
+        <div className="flex flex-col">
+            <span className="text-red-500">{inputError}</span>
+        </div>
+      </div>
+      <form method="dialog" className="modal-backdrop">
+        {/* Allows closing the modal by clicking outside of it */}
+        <button>close</button>
+      </form>
+    </dialog>
+  );
+}
+
+function GenerateCodeSection({
+  showGenerate,
+  setShowGenerate,
+  isDarkMode,
+  onAccept,
+  currentCode,
+}: {
+  showGenerate: boolean;
+  setShowGenerate: (value: boolean) => void;
+  isDarkMode: boolean;
+  onAccept: (value: string) => void;
+  currentCode: string;
+}) {
+  const [prompt, setPrompt] = useState("")
+  const [generated, setGenerated] = useState("")
+  const [generating, setGenerating] = useState(false)
+  const [error, setError] = useState("")
+
+  const generateCode = () => {
+    setGenerating(true);
+    apiClient.generateCode(prompt, currentCode).then((generatedCode) => {
+      setGenerating(false);
+      if (generatedCode.error || generatedCode.response === "") {
+        setError(generatedCode.error || "No code generated. Please provide more information.");
+        return;
+      } else if (generatedCode.response) {
+        setGenerated(generatedCode.response);
+        setShowGenerate(false);
+      }
+    }).catch(() => {
+      setGenerating(false);
+      setError("An error occurred while generating code. Please try again.");
+    });
+  }
+
+  const handleKeydown = (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
+    if (e.ctrlKey && e.key === "Enter") {
+      generateCode();
+    }
+  }
+
+  return (
+    <div>
+      {showGenerate && (
+        <div className={"my-2"}>
+          <textarea
+            className="textarea textarea-bordered resize-none textarea-sm w-full"
+            rows={2}
+            wrap="off"
+            placeholder="Describe what you want the Python Node to do or what issue you are facing"
+            value={prompt}
+            onChange={(e) => setPrompt(e.target.value)}
+            onKeyDown={handleKeydown}
+          ></textarea>
+          {error && <small className="text-red-500">{error}</small>}
+          <div className={"flex items-center gap-2"}>
+            <button className={"btn btn-sm btn-primary"} onClick={generateCode} disabled={!prompt}>
+              <i className="fa-solid fa-wand-magic-sparkles"></i>Go
+            </button>
+            {generating && <span className="loading loading-bars loading-md"></span>}
+          </div>
+        </div>
+      )}
+      {generated &&
+        <div>
+          <h2 className="font-semibold">Generated Code</h2>
+          <CodeNodeEditor
+            value={generated}
+            onChange={setGenerated}
+            isDarkMode={isDarkMode}
+            />
+        <div className={"my-2 join"}>
+          <button className={"btn btn-sm btn-success join-item"} onClick={() => {
+            onAccept(generated)
+            setShowGenerate(false)
+            setGenerated("")
+            setPrompt("")
+          }}>
+            <i className="fa-solid fa-check"></i>
+            Use Generated Code
+          </button>
+          <button className={"btn btn-sm btn-warning join-item"} onClick={() => {
+            setGenerated("")
+            setShowGenerate(true)
+          }}>
+            <i className="fa-solid fa-arrows-rotate"></i>
+            Regenerate
+          </button>
+        </div>
+      </div>
+    }
+    </div>
+  );
+}
+
+function CodeNodeEditor(
+  {value, onChange, isDarkMode}: {
+    value: string;
+    onChange: (value: string) => void;
+    isDarkMode: boolean;
+  }
+) {
   const customCompletions = {
     get_participant_data: snip("get_participant_data()", {
       label: "get_participant_data",
@@ -360,12 +521,13 @@ export function CodeModal(
       boost: 1
     }),
     get_temp_state_key: snip("get_temp_state_key(\"${key_name}\")", {
-        label: "get_temp_state_key",
-        type: "keyword",
-        detail: "Gets the value for the given key from the temporary state",
-        boost: 1
+      label: "get_temp_state_key",
+      type: "keyword",
+      detail: "Gets the value for the given key from the temporary state",
+      boost: 1
     }),
   }
+
   function pythonCompletions(context: CompletionContext) {
     const word = context.matchBefore(/\w*/)
     if (!word || (word.from == word.to && !context.explicit))
@@ -377,51 +539,26 @@ export function CodeModal(
       )
     }
   }
-  return (
-    <dialog
-      id={modalId}
-      className="modal nopan nodelete nodrag noflow nowheel"
-    >
-      <div className="modal-box  min-w-[85vw] h-[80vh] flex flex-col">
-        <form method="dialog">
-          <button className="btn btn-sm btn-circle btn-ghost absolute right-2 top-2">
-            ✕
-          </button>
-        </form>
-        <div className="flex-grow h-full w-full flex flex-col">
-          <h4 className="mb-4 font-bold text-lg bottom-2 capitalize">
-            {humanName}
-          </h4>
-          <CodeMirror
-            value={value}
-            onChange={onChange}
-            className="textarea textarea-bordered h-full w-full flex-grow"
-            height="100%"
-            width="100%"
-            theme={isDarkMode ? githubDark : githubLight}
-            extensions={[
-              python(),
-              python().language.data.of({
-                autocomplete: pythonCompletions
-              })
-            ]}
-            basicSetup={{
-                lineNumbers: true,
-                tabSize: 4,
-                indentOnInput: true,
-            }}
-          />
-        </div>
-        <div className="flex flex-col">
-            <span className="text-red-500">{inputError}</span>
-        </div>
-      </div>
-      <form method="dialog" className="modal-backdrop">
-        {/* Allows closing the modal by clicking outside of it */}
-        <button>close</button>
-      </form>
-    </dialog>
-  );
+
+  return <CodeMirror
+    value={value}
+    onChange={onChange}
+    className="textarea textarea-bordered h-full w-full flex-grow min-h-48"
+    height="100%"
+    width="100%"
+    theme={isDarkMode ? githubDark : githubLight}
+    extensions={[
+      python(),
+      python().language.data.of({
+        autocomplete: pythonCompletions
+      })
+    ]}
+    basicSetup={{
+      lineNumbers: true,
+      tabSize: 4,
+      indentOnInput: true,
+    }}
+  />
 }
 
 
