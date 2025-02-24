@@ -230,7 +230,6 @@
       <div role="tabpanel" class="tab-content" id="content-allsessions">
         <div class="app-card">
           <div class="relative">
-          <!-- Top Row - Buttons and Toggle Side by Side -->
             <div class="flex items-center gap-4">
               {% if perms.experiments.download_chats %}
                 {% include "experiments/components/exports.html" %}
@@ -253,16 +252,15 @@
                   <div class="space-y-3">
                     <template x-for="(filter, index) in filterData.filters" :key="index">
                       <div class="flex items-center gap-3">
-                      <!-- Where Label -->
+                      <!-- Where/AND Label -->
                         <div class="text-gray-500 font-medium w-16">
                           <span x-text="index === 0 ? 'Where' : 'AND'"></span>
                         </div>
-
                       <!-- Column Selector -->
                         <div class="relative">
                           <select
                             x-model="filter.column"
-                            @change="filter.operator = ''; filter.value = ''; triggerFilterChange()"
+                            @change="updateOperatorsByColumn(index)"
                             class="block w-40 py-2 px-3 border border-gray-200 rounded-lg bg-white text-sm"
                           >
                             <option value="">Column</option>
@@ -271,7 +269,6 @@
                             </template>
                           </select>
                         </div>
-
                       <!-- Operator Selector -->
                         <div x-show="filter.column" class="relative">
                           <select
@@ -279,58 +276,91 @@
                             @change="triggerFilterChange()"
                             class="block w-32 py-2 px-3 border border-gray-200 rounded-lg bg-white text-sm"
                           >
-                            <option value=""> </option>
-                            <template x-for="operator in filterData.columns[filter.column]?.operators" :key="operator">
+                            <template x-for="operator in filter.availableOperators" :key="operator">
                               <option :value="operator" x-text="operator"></option>
                             </template>
                           </select>
                         </div>
+                        <template x-if="filter.operator">
+                          <div class="relative">
+                          <!-- Multi-select dropdown-->
+                            <template x-if="['tags', 'versions'].includes(filter.column) && ['any of', 'all of'].includes(filter.operator)">
+                              <div class="relative">
+                                <div
+                                  @click="filter.showOptions = !filter.showOptions"
+                                  class="block w-40 py-2 px-3 border border-gray-200 rounded-lg bg-white text-sm cursor-pointer flex justify-between items-center"
+                                >
+                                  <span x-text="filter.selectedValues.length ? `${filter.selectedValues.length} selected` : 'Select'"></span>
+                                  <i class="fa-solid fa-caret-down fa-sm"></i>
+                                </div>
 
-                      <!-- Value Input -->
-                        <div x-show="filter.operator" class="relative">
-                        <!-- String Input -->
-                          <input
-                            x-show="filterData.columns[filter.column]?.type === 'string'"
-                            type="text"
-                            x-model="filter.value"
-                            @input="triggerFilterChange()"
-                            class="block w-40 py-2 px-3 border border-gray-200 rounded-lg bg-white text-sm"
-                            placeholder="Enter value..."
-                          >
-
-                        <!-- Timestamp Input -->
-                          <input
-                            x-show="filterData.columns[filter.column]?.type === 'timestamp'"
-                            type="date"
-                            x-model="filter.value"
-                            @change="triggerFilterChange()"
-                            class="block w-40 py-2 px-3 border border-gray-200 rounded-lg bg-white text-sm"
-                          >
-
-                        <!-- Choice Input -->
-                          <select
-                            x-show="filterData.columns[filter.column]?.type === 'choice'"
-                            x-model="filter.value"
-                            @change="triggerFilterChange()"
-                            class="block w-40 py-2 px-3 border border-gray-200 rounded-lg bg-white text-sm"
-                          >
-                            <option value="">Select value</option>
-                            <template x-for="option in filterData.columns[filter.column]?.options" :key="option">
-                              <option :value="option" x-text="option"></option>
+                                <div
+                                  x-show="filter.showOptions"
+                                  @click.outside="filter.showOptions = false"
+                                  class="absolute mt-1 bg-white border border-gray-200 rounded-lg shadow-lg z-30 max-h-64 overflow-y-auto w-40"
+                                >
+                                  <div class="py-1">
+                                    <template x-for="option in filterData.columns[filter.column]?.options" :key="option">
+                                      <div class="flex items-center px-4 py-2 hover:bg-gray-50">
+                                        <input
+                                          type="checkbox"
+                                          :id="`option-${index}-${option}`"
+                                          :value="option"
+                                          x-model="filter.selectedValues"
+                                          @change="updateFilterValue(index)"
+                                          class="mr-2"
+                                        >
+                                        <label :for="`option-${index}-${option}`" x-text="option" class="cursor-pointer"></label>
+                                      </div>
+                                    </template>
+                                  </div>
+                                </div>
+                              </div>
                             </template>
-                          </select>
-                        </div>
-
-                      <!-- Remove Filter Button -->
+                          <!-- String Input for string type -->
+                            <template x-if="filterData.columns[filter.column]?.type === 'string'">
+                              <input
+                                type="text"
+                                x-model="filter.value"
+                                @input="triggerFilterChange()"
+                                class="block w-40 py-2 px-3 border border-gray-200 rounded-lg bg-white text-sm"
+                                placeholder="Enter value..."
+                              >
+                            </template>
+                          <!-- Timestamp Input -->
+                            <template x-if="filterData.columns[filter.column]?.type === 'timestamp'">
+                              <input
+                                type="date"
+                                x-model="filter.value"
+                                @change="triggerFilterChange()"
+                                class="block w-40 py-2 px-3 border border-gray-200 rounded-lg bg-white text-sm"
+                              >
+                            </template>
+                          <!-- Regular select dropdown for choice type with non-multiselect operators -->
+                            <template x-if="filterData.columns[filter.column]?.type === 'choice' && !['any of', 'all of'].includes(filter.operator)">
+                              <select
+                                x-model="filter.value"
+                                @change="triggerFilterChange()"
+                                class="block w-40 py-2 px-3 border border-gray-200 rounded-lg bg-white text-sm"
+                              >
+                                <option value="">Select value</option>
+                                <template x-for="option in filterData.columns[filter.column]?.options" :key="option">
+                                  <option :value="option" x-text="option"></option>
+                                </template>
+                              </select>
+                            </template>
+                          </div>
+                        </template>
+                      <!-- Remove Filter Button-->
                         <button
                           @click="removeFilter(index)"
-                          class="p-2 text-gray-400 hover:text-gray-600"
+                          class="p-2 text-gray-400 hover:text-gray-600 h-10 w-10 flex items-center justify-center"
+                          aria-label="Remove filter"
                         >
-                          x
+                          <span class="text-lg">×</span>
                         </button>
                       </div>
                     </template>
-
                   <!-- Add Filter Button -->
                     <button
                       @click="addFilter()"
@@ -484,17 +514,17 @@
           columns: {
             'participant': {type: 'string', operators: ['=', 'contains', 'starts_with', 'ends_with']},
             'last_message': {type: 'timestamp', operators: ['>', '<', '<=', '>=']},
-            'tags': {type: 'choice', operators: ['=', '!='], options: ['tag1', 'tag2']},
-            'versions': {type: 'choice', operators: ['=', '!='], options: ['v1', 'v2']}
+            'tags': {type: 'choice', operators: ['any of', 'all of'], options: ['user', 'system','👍', '👎']},
+            'versions': {type: 'choice', operators: ['any of', 'all of'], options: ['v0', 'v1', 'v2', 'v3', 'v4', 'v5', 'v6']}
           }
         },
         init() {
-          htmx.process(this.$el)
+          htmx.process(this.$el);
         },
         toggleFilters() {
-          this.filterData.showFilters = !this.filterData.showFilters
+          this.filterData.showFilters = !this.filterData.showFilters;
           if (this.filterData.showFilters && this.filterData.filters.length === 0) {
-            this.addFilter()
+            this.addFilter();
           }
         },
         addFilter() {
@@ -502,18 +532,63 @@
             column: '',
             operator: '',
             value: '',
+            selectedValues: [],
+            availableOperators: [],
             showOptions: false
           });
+        },
+        updateOperatorsByColumn(index) {
+          const filter = this.filterData.filters[index];
+          const column = filter.column;
+
+          if (column && this.filterData.columns[column]) {
+            filter.availableOperators = this.filterData.columns[column].operators;
+          // Set the first available operator as default
+            filter.operator = filter.availableOperators[0] || '';
+            filter.value = '';
+            filter.selectedValues = [];
+          } else {
+            filter.availableOperators = [];
+            filter.operator = '';
+          }
+
           this.triggerFilterChange();
         },
         removeFilter(index) {
           this.filterData.filters.splice(index, 1);
           this.triggerFilterChange();
         },
+        updateFilterValue(index) {
+          const filter = this.filterData.filters[index];
+          if (['any of', 'all of'].includes(filter.operator)) {
+          // Serialize the selected values into a string format for the backend
+            filter.value = JSON.stringify(filter.selectedValues);
+          }
+          this.triggerFilterChange();
+        },
         triggerFilterChange() {
-          htmx.trigger('#sessions-table', 'filterChange')
+          const params = new URLSearchParams();
+
+          this.filterData.filters.forEach((filter, i) => {
+            if (filter.column && filter.operator && (filter.value || filter.selectedValues.length > 0)) {
+              params.append(`filter_${i}_column`, filter.column);
+              params.append(`filter_${i}_operator`, filter.operator);
+
+              if (['any of', 'all of'].includes(filter.operator)) {
+              // For multi-select, pass the values as a JSON array
+                params.append(`filter_${i}_value`, JSON.stringify(filter.selectedValues));
+              } else {
+                params.append(`filter_${i}_value`, filter.value);
+              }
+            }
+          });
+
+        // Trigger the HTMX request with the filter parameters
+          htmx.trigger('#sessions-table', 'filterChange', {
+            parameters: params.toString()
+          });
         }
-      }))
+      }));
     });
   </script>
 {% endblock %}
