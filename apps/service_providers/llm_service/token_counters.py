@@ -3,6 +3,7 @@ import dataclasses
 import google.generativeai as genai
 import tiktoken
 from anthropic._tokenizers import sync_get_tokenizer
+from google.generativeai import GenerativeModel
 from langchain_core.messages import get_buffer_string
 from langchain_core.outputs import LLMResult
 
@@ -79,8 +80,8 @@ class GeminiTokenCounter(TokenCounter):
         if not self.google_api_key:
             raise ValueError("KEY not found!")
 
-        genai.configure(api_key=self.google_api_key)
-        self.model = genai.GenerativeModel(self.model)
+        self.client = genai.Client(api_key=self.google_api_key)
+        self.model = GenerativeModel(self.model)
 
     def get_tokens_from_response(self, response: LLMResult) -> None | tuple[int, int]:
         if response.llm_output is None:
@@ -97,8 +98,8 @@ class GeminiTokenCounter(TokenCounter):
     def get_tokens_from_text(self, text: str) -> int:
         if not text:
             return 0
-        response = self.model.count_tokens(text)
 
+        response = self.client.count_tokens(model=self.model, contents=text)
         return response.total_tokens
 
     def get_tokens_from_messages(self, messages) -> int:
