@@ -290,7 +290,12 @@
                                   @click="filter.showOptions = !filter.showOptions"
                                   class="block w-40 py-2 px-3 border border-gray-200 rounded-lg bg-white text-sm cursor-pointer flex justify-between items-center"
                                 >
-                                  <span x-text="filter.selectedValues.length ? `${filter.selectedValues.length} selected` : 'Select'"></span>
+                                <!-- Display selected items up to char length of 18 -->
+                                  <span x-text="filter.selectedValues.length ?
+                                                (filter.selectedValues.join(', ').length > 18 ?
+                                                filter.selectedValues.join(', ').substring(0, 18) + '...' :
+                                                filter.selectedValues.join(', ')) :
+                                                'Select'"></span>
                                   <i class="fa-solid fa-caret-down fa-sm"></i>
                                 </div>
 
