@@ -396,6 +396,28 @@ def test_failed_transcription_informs_the_user(
 
 
 @pytest.mark.django_db()
+@patch("apps.chat.channels.TelegramChannel._generate_response_for_user")
+@patch("apps.chat.channels.TelegramChannel._inform_user_of_error")
+@patch("apps.chat.channels.TelegramChannel.is_message_type_supported")
+def test_any_failure_informs_users(
+    is_message_type_supported, _inform_user_of_error, _generate_response_for_user, telegram_channel
+):
+    """
+    Any failure should try and inform the user that something went wrong. The method that does the informing should
+    not fail.
+    """
+
+    is_message_type_supported.side_effect = Exception("This is an error")
+    # Set up _inform_user_of_error to fail, which should be caught
+    _generate_response_for_user.side_effect = Exception("This is another error")
+
+    with pytest.raises(Exception, match="This is an error"):
+        telegram_channel.new_user_message(telegram_messages.audio_message())
+
+    _inform_user_of_error.assert_called()
+
+
+@pytest.mark.django_db()
 @patch("apps.chat.channels.TelegramChannel._get_voice_transcript")
 @patch("apps.chat.channels.TelegramChannel.send_text_to_user")
 @patch("apps.chat.channels.TelegramChannel._reply_voice_message")

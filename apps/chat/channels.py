@@ -40,6 +40,8 @@ from apps.service_providers.speech_service import SynthesizedAudio
 from apps.slack.utils import parse_session_external_id
 from apps.users.models import CustomUser
 
+logger = logging.getLogger("ocs.channels")
+
 USER_CONSENT_TEXT = "1"
 UNSUPPORTED_MESSAGE_BOT_PROMPT = """
 Tell the user (in the language being spoken) that they sent an unsupported message.
@@ -262,29 +264,32 @@ class ChannelBase(ABC):
     def _new_user_message(self, message) -> str:
         try:
             self._add_message(message)
+
+            if not self.is_message_type_supported():
+                return self._handle_unsupported_message()
+
+            if self.experiment_channel.platform != ChannelPlatform.WEB:
+                if self._is_reset_conversation_request():
+                    # Webchats' statuses are updated through an "external" flow
+                    return ""
+
+                if self.experiment.conversational_consent_enabled and self.experiment.consent_form_id:
+                    if self._should_handle_pre_conversation_requirements():
+                        self._handle_pre_conversation_requirements()
+                        return ""
+                else:
+                    # If `conversational_consent_enabled` is not enabled, we should just make sure that the session's
+                    # status is ACTIVE
+                    self.experiment_session.update_status(SessionStatus.ACTIVE)
+
+            enqueue_static_triggers.delay(self.experiment_session.id, StaticTriggerType.NEW_HUMAN_MESSAGE)
+            response = self._handle_supported_message()
+            return response
         except ParticipantNotAllowedException:
             return self.send_message_to_user("Sorry, you are not allowed to chat to this bot")
-
-        if not self.is_message_type_supported():
-            return self._handle_unsupported_message()
-
-        if self.experiment_channel.platform != ChannelPlatform.WEB:
-            if self._is_reset_conversation_request():
-                # Webchats' statuses are updated through an "external" flow
-                return ""
-
-            if self.experiment.conversational_consent_enabled and self.experiment.consent_form_id:
-                if self._should_handle_pre_conversation_requirements():
-                    self._handle_pre_conversation_requirements()
-                    return ""
-            else:
-                # If `conversational_consent_enabled` is not enabled, we should just make sure that the session's status
-                # is ACTIVE
-                self.experiment_session.update_status(SessionStatus.ACTIVE)
-
-        enqueue_static_triggers.delay(self.experiment_session.id, StaticTriggerType.NEW_HUMAN_MESSAGE)
-        response = self._handle_supported_message()
-        return response
+        except Exception as e:
+            self._inform_user_of_error()
+            raise e
 
     def _handle_pre_conversation_requirements(self):
         """Since external channels doesn't have nice UI, we need to ask users' consent and get them to fill in the
@@ -361,11 +366,7 @@ class ChannelBase(ABC):
 
     def _extract_user_query(self) -> str:
         if self.message.content_type == MESSAGE_TYPES.VOICE:
-            try:
-                return self._get_voice_transcript()
-            except Exception as e:
-                self._inform_user_of_error()
-                raise e
+            return self._get_voice_transcript()
         return self.message.message_text
 
     def send_message_to_user(self, bot_message: str):
@@ -409,7 +410,7 @@ class ChannelBase(ABC):
             synthetic_voice_audio = speech_service.synthesize_voice(text, synthetic_voice)
             self.send_voice_to_user(synthetic_voice_audio)
         except AudioSynthesizeException as e:
-            logging.exception(e)
+            logger.exception(e)
             self.send_text_to_user(text)
 
         if extracted_urls:
@@ -551,14 +552,19 @@ class ChannelBase(ABC):
         )
 
     def _inform_user_of_error(self):
-        """Simply tells the user that something went wrong to keep them in the loop"""
-        bot_message = self._generate_response_for_user(
-            """
-            Tell the user that something went wrong while processing their message and that they should
-            try again later
-            """
-        )
-        self.send_message_to_user(bot_message)
+        """Simply tells the user that something went wrong to keep them in the loop. This method wil not raise an error
+        if something went wrong during this operation.
+        """
+        try:
+            bot_message = self._generate_response_for_user(
+                """
+                Tell the user that something went wrong while processing their message and that they should
+                try again later
+                """
+            )
+            self.send_message_to_user(bot_message)
+        except Exception as e:
+            logger.exception(f"Something went wrong while trying to inform the user of an error.\{e}")
 
     def _generate_response_for_user(self, prompt: str) -> str:
         """Generates a response based on the `prompt`."""
@@ -614,6 +620,10 @@ class WebChannel(ChannelBase):
             ).task_id
             session.save()
         return session
+
+    def _inform_user_of_error():
+        # Web channel's errors are optionally rendered in the UI, so no need to send a message
+        pass
 
 
 class TelegramChannel(ChannelBase):
