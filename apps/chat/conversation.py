@@ -20,8 +20,9 @@ from apps.pipelines.models import PipelineChatHistory, PipelineChatMessages
 from apps.utils.prompt import OcsPromptTemplate
 
 SUMMARY_TOO_LARGE_ERROR_MESSAGE = "Unable to compress chat history: existing summary too large"
-
 INITIAL_SUMMARY_TOKENS_ESTIMATE = 20
+# The maximum number of messages that can be uncompressed
+MAX_UNCOMPRESSED_MESSAGES = 1000
 
 log = logging.getLogger("ocs.bots")
 
@@ -180,7 +181,7 @@ def _compress_chat_history(
     total_messages = history.copy()
     total_messages.extend(input_messages)
     current_token_count = llm.get_num_tokens_from_messages(total_messages)
-    if current_token_count <= max_token_limit:
+    if current_token_count <= max_token_limit and len(total_messages) <= MAX_UNCOMPRESSED_MESSAGES:
         log.info("Skipping chat history compression: %s <= %s", current_token_count, max_token_limit)
         return history, None, None
 
@@ -208,9 +209,18 @@ def compress_chat_history_from_messages(
     input_message_tokens = llm.get_num_tokens_from_messages(input_messages)
     history_tokens = llm.get_num_tokens_from_messages(history)
     first_pass_done = False  # ensure we do at least one loop
-    while not first_pass_done or (history and history_tokens + summary_tokens + input_message_tokens > max_token_limit):
+
+    while (
+        not first_pass_done
+        # Check `_tokens_exceeds_limit` here, since the generated summary can cause a token limit breach
+        or _tokens_exceeds_limit(
+            history, token_count=(history_tokens + summary_tokens + input_message_tokens), limit=max_token_limit
+        )
+    ):
         first_pass_done = True
-        while history and history_tokens + summary_tokens + input_message_tokens > max_token_limit:
+        while _tokens_exceeds_limit(
+            history, token_count=(history_tokens + summary_tokens + input_message_tokens), limit=max_token_limit
+        ) or _messages_exceeds_limit(history, input_messages):
             pruned_memory.append(history.pop(0))
             history_tokens = llm.get_num_tokens_from_messages(history)
 
@@ -236,12 +246,20 @@ def compress_chat_history_from_messages(
     return history, last_message, summary
 
 
+def _tokens_exceeds_limit(history, token_count, limit) -> bool:
+    return history and token_count > limit
+
+
+def _messages_exceeds_limit(history, input_messages) -> bool:
+    return history and len(history) + len(input_messages) > MAX_UNCOMPRESSED_MESSAGES
+
+
 def _get_new_summary(llm, pruned_memory, summary, max_token_limit):
-    """Get a new summary from the pruned memory. If the prune memory is still too long, prune it further and
+    """Get a new summary from the pruned memory. If the pruned memory is still too long, prune it further and
     recursively call this function with the remaining memory."""
     tokens, context = _get_summary_tokens_with_context(llm, summary, pruned_memory)
     next_batch = []
-    while pruned_memory and tokens > max_token_limit:
+    while pruned_memory and tokens > max_token_limit and len(pruned_memory) > MAX_UNCOMPRESSED_MESSAGES:
         next_batch.insert(0, pruned_memory.pop())
         tokens, context = _get_summary_tokens_with_context(llm, summary, pruned_memory)
 
