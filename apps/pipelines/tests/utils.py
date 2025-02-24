@@ -142,7 +142,6 @@ def router_node(provider_id: str, provider_model_id: str, keywords: list[str]):
             "name": "router",
             "prompt": "You are a router",
             "keywords": keywords,
-            "num_outputs": len(keywords),
             "llm_provider_id": provider_id,
             "llm_provider_model_id": provider_model_id,
         },
@@ -153,13 +152,7 @@ def state_key_router_node(route_key: str, keywords: list[str], data_source="temp
     return {
         "id": str(uuid4()),
         "type": nodes.StaticRouterNode.__name__,
-        "params": {
-            "name": "static router",
-            "data_source": data_source,
-            "route_key": route_key,
-            "keywords": keywords,
-            "num_outputs": len(keywords),
-        },
+        "params": {"name": "static router", "data_source": data_source, "route_key": route_key, "keywords": keywords},
     }
 
 
