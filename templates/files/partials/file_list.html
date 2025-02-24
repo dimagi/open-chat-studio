@@ -3,9 +3,9 @@
 {#  - upload_url: URL to upload a file #}
 {#  - nested: boolean indicating whether this form is nested withing another form #}
 {#  - See also "files/partials/file_item.html" #}
-<div x-data="{}">
+<div x-data="{{ prefix|default:"" }}Data">
   <div class="flex flex-row justify-between mb-4">
-    <h3 class="text-lg font-medium">{{ files_title|default:"FILES" }}</h3>
+    <h3 class="text-lg font-medium">{{ files_title|default:"FILES" }} <span class="text-md">(<span x-text="file_count"></span>)</span></h3>
     <button type="button" class="btn btn-sm" @click="document.getElementById('{{ prefix|default:"" }}fileInput').click()">
       <i class="fa-solid fa-paperclip"></i> Add
     </button>
@@ -26,3 +26,21 @@
   {% endfor %}
 </ul>
 </div>
+
+<script>
+  document.addEventListener('alpine:init', () => {
+    Alpine.data("{{ prefix|default:"" }}Data", () => ({
+      file_count: 0,
+      updateFileCount() {
+        let fileListEle = document.getElementById("{{ prefix|default:"" }}fileList")
+        this.file_count = fileListEle.children.length;
+      },
+      init() {
+        this.updateFileCount();
+        const observer = new MutationObserver(() => this.updateFileCount());
+        let fileListEle = document.getElementById("{{ prefix|default:"" }}fileList")
+        observer.observe(fileListEle, { childList: true });
+      }
+    }))
+  })
+</script>
