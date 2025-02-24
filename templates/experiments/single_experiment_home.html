@@ -212,9 +212,21 @@
   </div>
 
 
-  <div role="tablist" class="tabs tabs-bordered">
+  <div class="tabs-container">
+    <div role="tablist" class="tabs tabs-bordered flex justify-start">
+      {% if perms.chat.view_chat %}
+        <input type="radio" name="tab_group" role="tab" class="tab" aria-label="Sessions" id="tab-allsessions" checked/>
+      {% endif %}
+      <input type="radio" name="tab_group" role="tab" class="tab" aria-label="Versions" id="tab-versions" />
+      {% flag "events" %}
+        <input type="radio" name="tab_group" role="tab" class="tab" aria-label="Events" id="tab-events" />
+      {% endflag %}
+      <input type="radio" name="tab_group" role="tab" class="tab" aria-label="Routes" id="tab-routes"/>
+      <input type="radio" name="tab_group" role="tab" class="tab" aria-label="Terminal Bot" id="tab-terminal_bots"/>
+    </div>
+
+
     {% if perms.chat.view_chat %}
-      <input type="radio" name="tab_group" role="tab" class="tab" aria-label="Sessions" id="tab-allsessions" checked/>
       <div role="tabpanel" class="tab-content" id="content-allsessions">
         <div class="app-card">
           <div class="relative">
@@ -339,11 +351,8 @@
       </div>
       </div>
       <div id="sessions-table"></div>
-      </div>
-      </div>
     {% endif %}
 
-    <input type="radio" name="tab_group" role="tab" class="tab" aria-label="Versions" id="tab-versions" />
     <div role="tabpanel" class="tab-content" id="content-versions">
       <div class="app-card">
         <div id="versions-table"
@@ -357,7 +366,6 @@
     </div>
 
     {% flag "events" %}
-      <input type="radio" name="tab_group" role="tab" class="tab" aria-label="Events" id="tab-events" />
       <div role="tabpanel" class="tab-content" id="content-events">
         <div class="app-card">
           <a class="btn btn-sm btn-outline btn-primary" href="{% url 'experiments:events:static_event_new' team.slug experiment.id %}"><i class="fa-regular fa-plus"></i> Create Static Event</a>
@@ -368,8 +376,6 @@
         </div>
       </div>
     {% endflag %}
-
-    <input type="radio" name="tab_group" role="tab" class="tab" aria-label="Routes" id="tab-routes"/>
     <div role="tabpanel" class="tab-content" id="content-routes">
       <div class="app-card">
         {% if experiment.assistant %}
@@ -384,8 +390,6 @@
         {% endif %}
       </div>
     </div>
-
-    <input type="radio" name="tab_group" role="tab" class="tab" aria-label="Terminal Bot" id="tab-terminal_bots"/>
     <div role="tabpanel" class="tab-content" id="content-terminal_bots">
       <div class="app-card">
         {% if terminal_bots_table.data|length == 0 and experiment.is_editable%}
@@ -416,7 +420,7 @@
       }
     }
 
-    // document.addEventListener('DOMContentLoaded', () => {
+    document.addEventListener('DOMContentLoaded', () => {
     //   new TomSelect('#tag-multiselect-filter', {
     //     plugins: ["remove_button", "caret_position", "input_autogrow"],
     //     maxItems: null,
@@ -457,17 +461,17 @@
       //     }
       //   },
       // });
+      showTabContent('allsessions');
+      const tabs = document.querySelectorAll('.tab');
+      tabs.forEach(tab => {
+        tab.addEventListener('change', (event) => {
+          const tabId = event.target.id.replace('tab-', '');
+          showTabContent(tabId);
+        });
+      });
 
-      // const tabs = document.querySelectorAll('.tab');
-      // tabs.forEach(tab => {
-      //   tab.addEventListener('change', (event) => {
-      //     const tabId = event.target.id.replace('tab-', '');
-      //     showTabContent(tabId);
-      //   });
-      // });
-
-    //   selectTabFromHash();
-    // });
+      selectTabFromHash();
+    });
 
     window.addEventListener('hashchange', selectTabFromHash);
   </script>
