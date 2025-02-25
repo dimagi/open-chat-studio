@@ -234,7 +234,6 @@ def test_summarization_is_forced_when_too_many_messages(_get_new_summary, _token
     # The result length should be equal to MAX_UNCOMPRESSED_MESSAGES
     assert len(result) == 5
 
-    # _tokens_exceeds_limit should have been called 8 times
-    # 2 calls before pruning + 1 call until message count == MAX_UNCOMPRESSED_MESSAGES + 1 final call to exit the loop
-    # := 2 + 5 + 1 = 8
-    _tokens_exceeds_limit.call_count = 8
+    # _tokens_exceeds_limit should have been called 3 times. 2 calls before pruning and 1 final call to exit the loop,
+    # since we're removing the number of messages needed to get below the limit
+    assert _tokens_exceeds_limit.call_count == 3
