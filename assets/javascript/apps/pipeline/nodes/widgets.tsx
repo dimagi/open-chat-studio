@@ -639,6 +639,19 @@ export function KeywordsWidget(props: WidgetParams) {
   const setEdges = usePipelineStore((state) => state.setEdges);
   const updateNodeInternals = useUpdateNodeInternals()
 
+  function getNewNodeData(old: Node, keywords: any[]) {
+    return {
+      ...old,
+      data: {
+        ...old.data,
+        params: {
+          ...old.data.params,
+          ["keywords"]: keywords,
+        },
+      },
+    };
+  }
+
   const addKeyword = () => {
     setNode(props.nodeId, (old) => {
       const updatedList = [...(old.data.params["keywords"] || []), ""];
