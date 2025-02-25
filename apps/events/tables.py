@@ -5,6 +5,7 @@ from django.urls import reverse
 from django.utils.html import format_html, format_html_join
 
 from apps.events.models import EventActionType, StaticTriggerType
+from apps.events.utils import truncate_dict_items
 from apps.utils.time import seconds_to_human
 
 
@@ -46,7 +47,8 @@ class ActionsColumn(tables.Column):
 
 class ParamsColumn(tables.Column):
     def render(self, value, record):
-        items = format_html_join("", "<li><strong>{}</strong>: {}</li>", value.items())
+        formatted_items = truncate_dict_items(value)
+        items = format_html_join("", "<li><strong>{}</strong>: {}</li>", formatted_items)
         return format_html("<ul>{}</ul>", items)
 
 
