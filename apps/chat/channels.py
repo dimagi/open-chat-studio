@@ -264,7 +264,10 @@ class ChannelBase(ABC):
     def _new_user_message(self, message) -> str:
         try:
             self._add_message(message)
+        except ParticipantNotAllowedException:
+            return self.send_message_to_user("Sorry, you are not allowed to chat to this bot")
 
+        try:
             if not self.is_message_type_supported():
                 return self._handle_unsupported_message()
 
@@ -285,8 +288,6 @@ class ChannelBase(ABC):
             enqueue_static_triggers.delay(self.experiment_session.id, StaticTriggerType.NEW_HUMAN_MESSAGE)
             response = self._handle_supported_message()
             return response
-        except ParticipantNotAllowedException:
-            return self.send_message_to_user("Sorry, you are not allowed to chat to this bot")
         except Exception as e:
             self._inform_user_of_error()
             raise e
