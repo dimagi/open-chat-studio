@@ -74,13 +74,11 @@ DEFAULT_LLM_PROVIDER_MODELS = {
         Model("llama-3.1-70b-instruct", 131072),
     ],
     "deepseek": [Model("deepseek-chat", 128000), Model("deepseek-reaoner", 128000)],
-    "google_gemini": [
-        Model("gemini-2.0-flash-001", 1048576),
-        Model("gemini-1.5-pro-002", 2097152),
-        Model("gemini-1.5-flash-002", 1048576),
-        Model("gemini-2.0-pro-exp-02-05", 2097152),
-        Model("gemini-2.0-flash-lite-preview-02-05", 1048576),
-        Model("gemini-2.0-flash-thinking-exp-01-21", 1048576),
+    "google": [
+        Model("gemini-2.0-flash", 1048576),
+        Model("gemini-1.5-flash", 1048576),
+        Model("gemini-1.5-flash-8b", 1048576),
+        Model("gemini-1.5-pro", 2097152),
     ],
 }
 
