@@ -47,6 +47,7 @@ UNSUPPORTED_MESSAGE_BOT_PROMPT = """
 Tell the user (in the language being spoken) that they sent an unsupported message.
 You only support {supported_types} messages types. Respond only with the message for the user
 """
+DEFAULT_ERROR_RESPONSE_TEXT = "Sorry, something went wrong while processing your message. Please try again later"
 
 # The regex from https://stackoverflow.com/a/6041965 is used, but tweaked to remove capturing groups
 URL_REGEX = r"(?:http|ftp|https):\/\/(?:[\w_-]+(?:(?:\.[\w_-]+)+))(?:[\w.,@?^=%&:\/~+#-]*[\w@?^=%&\/~+#-])"
@@ -556,6 +557,7 @@ class ChannelBase(ABC):
         """Simply tells the user that something went wrong to keep them in the loop. This method wil not raise an error
         if something went wrong during this operation.
         """
+
         try:
             bot_message = self._generate_response_for_user(
                 """
@@ -563,9 +565,16 @@ class ChannelBase(ABC):
                 try again later
                 """
             )
+        except Exception as e:
+            logger.exception(
+                f"Something went wrong while trying to generate an appropriate error message for the user\n\n{e}"
+            )
+            bot_message = DEFAULT_ERROR_RESPONSE_TEXT
+
+        try:
             self.send_message_to_user(bot_message)
         except Exception as e:
-            logger.exception(f"Something went wrong while trying to inform the user of an error.\{e}")
+            logger.exception(f"Something went wrong while trying to inform the user of an error\n\n{e}")
 
     def _generate_response_for_user(self, prompt: str) -> str:
         """Generates a response based on the `prompt`."""
