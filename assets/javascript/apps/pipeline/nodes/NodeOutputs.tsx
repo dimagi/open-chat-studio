@@ -1,7 +1,6 @@
 import {Position} from "reactflow";
 import React from "react";
 import {NodeData, NodeParams} from "../types/nodeParams";
-import {concatenate} from "../utils";
 import {LabeledHandle} from "./LabeledHandle";
 
 export default function NodeOutputs({data}: {
