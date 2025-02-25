@@ -89,7 +89,7 @@ class ExperimentHistoryManager(BaseHistoryManager):
         self.max_token_limit = max_token_limit
         self.chat_model = chat_model
         self.trace_service = trace_service
-        self.ai_message = ""
+        self.ai_message = None
 
         # TODO: Think about passing this in as context metadata rather
         self.experiment_version_number = experiment.version_number
@@ -161,7 +161,7 @@ class PipelineHistoryManager(BaseHistoryManager):
         self.max_token_limit = max_token_limit
         self.chat_model = chat_model
         self.trace_service = session.experiment.trace_service if session else None
-        self.ai_message = ""
+        self.ai_message = None
 
         self.input_message_metadata = None
         self.output_message_metadata = None
