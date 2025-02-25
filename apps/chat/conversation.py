@@ -185,7 +185,13 @@ def _compress_chat_history(
         log.info("Skipping chat history compression: %s <= %s", current_token_count, max_token_limit)
         return history, None, None
 
-    log.debug("Compressing chat history: current length %s > max %s", current_token_count, max_token_limit)
+    log.debug(
+        "Compressing chat history: %s/%s(max) tokens and %d/%d(max) messages",
+        current_token_count,
+        max_token_limit,
+        len(total_messages),
+        MAX_UNCOMPRESSED_MESSAGES,
+    )
 
     history, last_message, summary = compress_chat_history_from_messages(
         llm, history, keep_history_len, max_token_limit, input_messages
@@ -221,7 +227,13 @@ def compress_chat_history_from_messages(
         while _tokens_exceeds_limit(
             history, token_count=(history_tokens + summary_tokens + input_message_tokens), limit=max_token_limit
         ) or _messages_exceeds_limit(history, input_messages):
-            pruned_memory.append(history.pop(0))
+            prune_count = 1
+            if _messages_exceeds_limit(history, input_messages):
+                # Remove the number of messages needed to get to the limit
+                prune_count = len(history) + len(input_messages) - MAX_UNCOMPRESSED_MESSAGES
+
+            pruned_messages, history = history[:prune_count], history[prune_count:]
+            pruned_memory.extend(pruned_messages)
             history_tokens = llm.get_num_tokens_from_messages(history)
 
         summary = _get_new_summary(llm, pruned_memory, summary, max_token_limit)
