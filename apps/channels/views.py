@@ -112,13 +112,10 @@ def new_api_message(request, experiment_id: uuid, version=None):
         participant_id = session.participant.identifier
         experiment_channel = session.experiment_channel
         experiment = session.experiment
-        experiment_version = (
-            session.fetch_experiment(public_id=experiment_id, version_number=version) if version else experiment
-        )
     else:
         experiment = get_object_or_404(Experiment, public_id=experiment_id, team=request.team)
         experiment_channel = ExperimentChannel.objects.get_team_api_channel(request.team)
-        experiment_version = experiment
+    experiment_version = experiment.get_version(version) if version is not None else experiment.default_version
     response = tasks.handle_api_message(
         request.user,
         experiment_version,

@@ -110,7 +110,7 @@ def chat_completions(request, experiment_id: uuid.UUID, version=None):
         return _make_error_response(400, str(e))
 
     session = serializer.save()
-    experiment_version = session.experiment_version if version is None else session.fetch_experiment(experiment_id, version)
+    experiment_version = session.experiment.get_version(version) if version is not None else session.experiment_version
     response_message = handle_api_message(
         request.user,
         experiment_version,
