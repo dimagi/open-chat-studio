@@ -14,7 +14,7 @@ def add_google_gemini_models(apps, schema_editor):
 
 class Migration(migrations.Migration):
     dependencies = [
-        ('service_providers', '0024_add_deepseek_models'),  # Ensure it runs after DeepSeek migration
+        ('service_providers', '0025_alter_llmprovider_type_alter_llmprovidermodel_type'),  # Ensure it runs after DeepSeek migration
     ]
     operations = [
         migrations.RunPython(add_google_gemini_models),
