@@ -423,7 +423,7 @@ def test_any_failure_informs_users(
     assert send_message_to_user.call_args[0][0] == DEFAULT_ERROR_RESPONSE_TEXT
 
     assert caplog.records[0].msg == (
-        "Something went wrong while trying to generate an appropriate error message for the user\n\nGeneration error"
+        "Something went wrong while trying to generate an appropriate error message for the user"
     )
 
 

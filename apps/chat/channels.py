@@ -565,16 +565,14 @@ class ChannelBase(ABC):
                 try again later
                 """
             )
-        except Exception as e:
-            logger.exception(
-                f"Something went wrong while trying to generate an appropriate error message for the user\n\n{e}"
-            )
+        except Exception:
+            logger.exception("Something went wrong while trying to generate an appropriate error message for the user")
             bot_message = DEFAULT_ERROR_RESPONSE_TEXT
 
         try:
             self.send_message_to_user(bot_message)
-        except Exception as e:
-            logger.exception(f"Something went wrong while trying to inform the user of an error\n\n{e}")
+        except Exception:
+            logger.exception("Something went wrong while trying to inform the user of an error")
 
     def _generate_response_for_user(self, prompt: str) -> str:
         """Generates a response based on the `prompt`."""
