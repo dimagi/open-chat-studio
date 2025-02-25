@@ -1,5 +1,6 @@
 import logging
 
+import docx
 import pypdf
 from pydantic import BaseModel, Field
 
@@ -68,8 +69,13 @@ def read_pdf(file_obj) -> Document:
     return Document(parts=pages)
 
 
+def read_docx(file_obj) -> Document:
+    return Document(parts=[DocumentPart(content=paragraph.text) for paragraph in docx.Document(file_obj).paragraphs])
+
+
 READERS = {
     "application/pdf": read_pdf,
     "text": read_text,
+    "application/vnd.openxmlformats-officedocument.wordprocessingml.document": read_docx,
     None: read_text,
 }
