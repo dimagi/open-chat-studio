@@ -237,7 +237,7 @@
               <div x-data="filterComponent">
               <!-- Filter Button -->
                 <button @click="toggleFilters()" class="btn btn-sm btn-outline">
-                  <i class="fa-solid fa-filter"></i> Filter
+                  <i class="fa-solid fa-filter"></i> Filter <span x-show="getActiveFilterCount() > 0">(<span x-text="getActiveFilterCount()"></span>)</span>
                 </button>
 
               <!-- Filters Panel -->
@@ -570,6 +570,14 @@
             filter.value = JSON.stringify(filter.selectedValues);
           }
           this.triggerFilterChange();
+        },
+        getActiveFilterCount() {
+          return this.filterData.filters.filter(filter => {
+            return filter.column && filter.operator && (
+              filter.value ||
+              (Array.isArray(filter.selectedValues) && filter.selectedValues.length > 0)
+            );
+          }).length;
         },
         triggerFilterChange() {
           const params = new URLSearchParams();
