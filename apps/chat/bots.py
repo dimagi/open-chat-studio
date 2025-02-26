@@ -292,7 +292,7 @@ class PipelineBot:
     def process_input(self, user_input: str, save_input_to_history=True, attachments: list["Attachment"] | None = None):
         attachments = attachments or []
         serializable_attachments = [attachment.model_dump() for attachment in attachments]
-        output: PipelineState = self.experiment.pipeline.invoke(
+        output = self.experiment.pipeline.invoke(
             PipelineState(
                 messages=[user_input],
                 experiment_session=self.session,
@@ -300,6 +300,7 @@ class PipelineBot:
                 pipeline_version=self.experiment.pipeline.version_number,
             ),
             self.session,
+            save_input_to_history=save_input_to_history,
         )
         self.ai_message_id = output["ai_message_id"]
         return output["messages"][-1]
