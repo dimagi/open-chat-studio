@@ -74,6 +74,9 @@ const getWidgetsGeneric = (
       return 0;
     }
   });
+   if (!Array.isArray(nodeData.params.keywords)) {
+    nodeData.params.keywords = [""]; // initialize keywords with size 1
+  }
   return schemaProperties.map((name) => (
     <React.Fragment key={name}>
       {widgetGenerator({
