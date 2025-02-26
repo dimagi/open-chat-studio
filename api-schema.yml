@@ -130,6 +130,68 @@ paths:
               schema:
                 $ref: '#/components/schemas/CreateChatCompletionResponse'
           description: ''
+  /api/openai/{experiment_id}/v{version}/chat/completions:
+    post:
+      operationId: openai_chat_completions_2
+      description: |2
+
+        Use OpenAI's client to send messages to the experiment and get responses. This will
+        create a new session in the experiment with all the provided messages
+        and return the response from the experiment.
+
+        The last message must be a 'user' message.
+
+        Example (Python):
+
+        ```python
+        experiment_id = "your experiment ID"
+
+        client = OpenAI(
+            api_key="your API key",
+            base_url=f"https://chatbots.dimagi.com/api/openai/{experiment_id}",
+        )
+
+        completion = client.chat.completions.create(
+            model="anything",
+            messages=[
+                {"role": "assistant", "content": "How can I help you today?"},
+                {"role": "user", "content": "I need help with something."},
+            ],
+        )
+
+        reply = completion.choices[0].message
+        ```
+      summary: Chat Completions API for Experiments
+      parameters:
+      - in: path
+        name: experiment_id
+        schema:
+          type: string
+        description: Experiment ID
+        required: true
+      - in: path
+        name: version
+        schema:
+          type: integer
+        required: true
+      tags:
+      - OpenAI
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateChatCompletionRequest'
+        required: true
+      security:
+      - apiKeyAuth: []
+      - tokenAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CreateChatCompletionResponse'
+          description: ''
   /api/participants:
     post:
       operationId: update_participant_data
@@ -360,6 +422,41 @@ paths:
         schema:
           type: string
         description: Experiment ID
+        required: true
+      tags:
+      - Channels
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/NewAPIMessage'
+        required: true
+      security:
+      - apiKeyAuth: []
+      - tokenAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/NewAPIMessageResponse'
+          description: ''
+  /channels/api/{experiment_id}/v{version}/incoming_message:
+    post:
+      operationId: new_api_message_2
+      description: Chat with an experiment.
+      summary: New API Message
+      parameters:
+      - in: path
+        name: experiment_id
+        schema:
+          type: string
+        description: Experiment ID
+        required: true
+      - in: path
+        name: version
+        schema:
+          type: integer
         required: true
       tags:
       - Channels

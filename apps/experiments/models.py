@@ -853,7 +853,9 @@ class Experiment(BaseTeamModel, VersionsMixin, CustomActionOperationMixin):
             return absolute_url(reverse("api:openai-chat-completions", args=[self.public_id]))
         else:
             working_version = self.working_version
-            return absolute_url(reverse("api:openai-chat-completions-versioned", args=[working_version.public_id, self.version_number]))
+            return absolute_url(
+                reverse("api:openai-chat-completions-versioned", args=[working_version.public_id, self.version_number])
+            )
 
     @property
     def api_url(self):
