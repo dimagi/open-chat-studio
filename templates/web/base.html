@@ -1,7 +1,7 @@
 {% load static %}
 {% load meta_tags %}
 <!DOCTYPE html>
-<html lang="en">
+<html lang="en" {% if dark_mode %}class="dark" data-theme="dark"{% endif %}>
   <head>
     <meta charset="utf-8">
     <!--IE compatibility-->
