@@ -9,7 +9,13 @@ import pytest
 from django.test import override_settings
 
 from apps.channels.models import ChannelPlatform, ExperimentChannel
-from apps.chat.channels import URL_REGEX, ChannelBase, TelegramChannel, strip_urls_and_emojis
+from apps.chat.channels import (
+    DEFAULT_ERROR_RESPONSE_TEXT,
+    URL_REGEX,
+    ChannelBase,
+    TelegramChannel,
+    strip_urls_and_emojis,
+)
 from apps.chat.exceptions import VersionedExperimentSessionsNotAllowedException
 from apps.chat.models import ChatMessageType
 from apps.experiments.models import (
@@ -393,6 +399,32 @@ def test_failed_transcription_informs_the_user(
 
     assert _reply_voice_message.called == voice_response_expected
     assert send_text_to_user.called == (not voice_response_expected)
+
+
+@pytest.mark.django_db()
+@patch("apps.chat.channels.TelegramChannel._generate_response_for_user")
+@patch("apps.chat.channels.TelegramChannel.send_message_to_user")
+@patch("apps.chat.channels.TelegramChannel.is_message_type_supported")
+def test_any_failure_informs_users(
+    is_message_type_supported, send_message_to_user, _generate_response_for_user, telegram_channel, caplog
+):
+    """
+    Any failure should try and inform the user that something went wrong. The method that does the informing should
+    not fail.
+    """
+
+    is_message_type_supported.side_effect = Exception("Random error")
+    # The generate response should fail, causing the default error message to be sent
+    _generate_response_for_user.side_effect = Exception("Generation error")
+
+    with pytest.raises(Exception, match="Random error"):
+        telegram_channel.new_user_message(telegram_messages.text_message())
+
+    assert send_message_to_user.call_args[0][0] == DEFAULT_ERROR_RESPONSE_TEXT
+
+    assert caplog.records[0].msg == (
+        "Something went wrong while trying to generate an appropriate error message for the user"
+    )
 
 
 @pytest.mark.django_db()

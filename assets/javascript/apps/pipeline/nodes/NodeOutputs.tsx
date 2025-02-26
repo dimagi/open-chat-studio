@@ -1,7 +1,6 @@
 import {Position} from "reactflow";
 import React from "react";
 import {NodeData, NodeParams} from "../types/nodeParams";
-import {concatenate} from "../utils";
 import {LabeledHandle} from "./LabeledHandle";
 
 export default function NodeOutputs({data}: {
@@ -46,7 +45,7 @@ function getOutputNames(nodeType: string, params: NodeParams) {
   if (nodeType === "BooleanNode") {
     return [new Output("Output True"), new Output("Output False")];
   } else if (nodeType === "RouterNode" || nodeType == "StaticRouterNode") {
-    const numberOfOutputs = Math.max(1, parseInt(concatenate(params.num_outputs)) || 1);
+    const numberOfOutputs = Math.max(1, params.keywords?.length || 1);
     return Array.from({length: numberOfOutputs}, (_, i) => {
       if (params.keywords?.[i]) {
         return new Output(params.keywords[i])

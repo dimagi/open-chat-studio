@@ -99,7 +99,7 @@ export class OcsChat {
       <Host>
         <button class="btn" onClick={() => this.load()}>{this.buttonText}</button>
         {this.visible && (
-          <div class={this.getPositionClasses()}>
+          <div id="ocs-chat-window" class={this.getPositionClasses()}>
             <div class="flex justify-between items-center px-2 py-2 border-b border-gray-100">
               <div class="flex gap-1">
                 <button

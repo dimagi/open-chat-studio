@@ -400,11 +400,11 @@ WAFFLE_CREATE_MISSING_FLAGS = True
 
 # replace any values below with specifics for your project
 PROJECT_METADATA = {
-    "NAME": gettext_lazy("Dimagi Chatbots"),
+    "NAME": gettext_lazy("Open Chat Studio"),
     "URL": "http://localhost:8000",
-    "DESCRIPTION": gettext_lazy("Experiments with AI, GPT and LLMs"),
+    "DESCRIPTION": gettext_lazy("Build Chatbots and deploy them to WhatsApp, Telegram, Slack and more"),
     "CONTACT_EMAIL": "devops+openchatstudio@dimagi.com",
-    "IMAGE": "https://chatbots.dimagi.com/static/images/dimagi-logo.png",
+    "IMAGE": "https://chatbots.dimagi.com/static/images/logo.png",
     "TERMS_URL": env("TERMS_URL", default=""),
     "PRIVACY_POLICY_URL": env("PRIVACY_POLICY_URL", default=""),
 }

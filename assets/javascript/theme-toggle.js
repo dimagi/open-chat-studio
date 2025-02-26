@@ -1,35 +1,40 @@
-document.addEventListener("DOMContentLoaded", function () {
-// Function to set the theme
+const darkTheme = 'dark';
+const lightTheme = 'light';
+const systemTheme = 'system';
+
+function syncDarkMode() {
+  const theme = localStorage.getItem('theme') || systemTheme;
+  setTheme(theme);
+}
+
 function setTheme(theme) {
-  document.body.setAttribute("data-theme", theme); // Apply to body
-  localStorage.setItem("theme", theme);
-  const themeToggle = document.getElementById("theme-toggle");
-  if (themeToggle) {
-    themeToggle.checked = theme === "light"; // Sync checkbox state
-  }
- }
+  const prefersDark = window.matchMedia('(prefers-color-scheme: dark)').matches;
 
-// Function to toggle the theme
-function toggleTheme() {
-  const currentTheme = localStorage.getItem("theme") || "light";
-  const newTheme = currentTheme === "light" ? "dark" : "light";
-  setTheme(newTheme);
+  if (theme === darkTheme || (theme === systemTheme && prefersDark)) {
+    document.documentElement.classList.add('dark');
+    document.documentElement.setAttribute('data-theme', darkTheme);
+    // set a cookie and use it during server rendering to avoid a flicker across page loads
+    document.cookie = `theme=${darkTheme};path=/;max-age=31536000`;
+  } else {
+    document.documentElement.classList.remove('dark');
+    document.documentElement.setAttribute('data-theme', lightTheme);
+    document.cookie = `theme=${lightTheme};path=/;max-age=31536000`;
+  }
 }
 
-// Function to initialize the theme
-function initializeTheme() {
-  const savedTheme = localStorage.getItem("theme");
-  const systemTheme = window.matchMedia("(prefers-color-scheme: dark)").matches ? "dark" : "light";
-  const theme = savedTheme || systemTheme;
-  setTheme(theme); // Set the theme and sync the checkbox
-}
+document.addEventListener('DOMContentLoaded', () => {
 
-document.body.addEventListener('change', function (event) {
-  if (event.target && event.target.id === 'theme-toggle') {
-    toggleTheme();
-  }
+  document.getElementsByName("theme-dropdown").forEach((element) => {
+    element.addEventListener('change', (event) => {
+      const theme = event.target.value;
+      localStorage.setItem('theme', theme);
+      setTheme(theme);
+    })
+  })
+
+  // Watch for changes in the prefers-color-scheme
+  const mediaQuery = window.matchMedia('(prefers-color-scheme: dark)');
+  mediaQuery.addEventListener("change", syncDarkMode);
 });
 
-// Initialize the theme when the page loads
-initializeTheme();
-});
+syncDarkMode();

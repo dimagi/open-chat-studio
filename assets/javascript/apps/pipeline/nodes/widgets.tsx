@@ -639,7 +639,7 @@ export function KeywordsWidget(props: WidgetParams) {
   const setEdges = usePipelineStore((state) => state.setEdges);
   const updateNodeInternals = useUpdateNodeInternals()
 
-  function getNewNodeData(old: Node, keywords: any[], numOutputs: number) {
+  function getNewNodeData(old: Node, keywords: any[]) {
     return {
       ...old,
       data: {
@@ -647,7 +647,6 @@ export function KeywordsWidget(props: WidgetParams) {
         params: {
           ...old.data.params,
           ["keywords"]: keywords,
-          ["num_outputs"]: numOutputs,
         },
       },
     };
@@ -656,7 +655,7 @@ export function KeywordsWidget(props: WidgetParams) {
   const addKeyword = () => {
     setNode(props.nodeId, (old) => {
       const updatedList = [...(old.data.params["keywords"] || []), ""];
-      return getNewNodeData(old, updatedList, old.data.params.num_outputs + 1);
+      return getNewNodeData(old, updatedList);
     });
     updateNodeInternals(props.nodeId);
   }
@@ -665,7 +664,7 @@ export function KeywordsWidget(props: WidgetParams) {
     setNode(props.nodeId, (old) => {
         const updatedList = [...(old.data.params["keywords"] || [])];
         updatedList[index] = value;
-        return getNewNodeData(old, updatedList, old.data.params.num_outputs);
+        return getNewNodeData(old, updatedList);
       }
     );
   };
@@ -674,7 +673,7 @@ export function KeywordsWidget(props: WidgetParams) {
     setNode(props.nodeId, (old) => {
       const updatedList = [...(old.data.params["keywords"] || [])];
       updatedList.splice(index, 1);
-      return getNewNodeData(old, updatedList, old.data.params.num_outputs - 1);
+      return getNewNodeData(old, updatedList);
     });
     updateNodeInternals(props.nodeId);
     const handleName = `output_${index}`;
@@ -701,7 +700,7 @@ export function KeywordsWidget(props: WidgetParams) {
     });
   }
 
-  const length = parseInt(concatenate(props.nodeParams.num_outputs)) || 1;
+  const length = (Array.isArray(props.nodeParams.keywords) ? props.nodeParams.keywords.length : 1);
   const keywords = Array.isArray(props.nodeParams.keywords) ? props.nodeParams["keywords"] : []
   const canDelete = length > 1;
   const defaultMarker = (

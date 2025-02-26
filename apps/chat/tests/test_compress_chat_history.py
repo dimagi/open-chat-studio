@@ -213,3 +213,27 @@ def test_get_new_summary_with_large_summary(caplog):
     assert new_summary == "Summary"
     assert len(llm.get_calls()) == 1
     assert caplog.record_tuples == [("ocs.bots", logging.ERROR, SUMMARY_TOO_LARGE_ERROR_MESSAGE)]
+
+
+@mock.patch("apps.chat.conversation.MAX_UNCOMPRESSED_MESSAGES", 5)
+@mock.patch("apps.chat.conversation._tokens_exceeds_limit")
+@mock.patch("apps.chat.conversation._get_new_summary")
+def test_summarization_is_forced_when_too_many_messages(_get_new_summary, _tokens_exceeds_limit, chat):
+    """Summarization should be forced when the amount of messages exceed the `MAX_UNCOMPRESSED_MESSAGES` limit, even
+    though the max token count is not reached
+    """
+    _tokens_exceeds_limit.return_value = False
+    _get_new_summary.return_value = "Summary"
+
+    for i in range(15):
+        ChatMessage.objects.create(chat=chat, content=f"Hello {i}", message_type=ChatMessageType.HUMAN)
+
+    llm = FakeLlmSimpleTokenCount(responses=[])
+    result = compress_chat_history(chat, llm, max_token_limit=250000, input_messages=[HumanMessage("Hi")])
+
+    # The result length should be equal to MAX_UNCOMPRESSED_MESSAGES
+    assert len(result) == 5
+
+    # _tokens_exceeds_limit should have been called 3 times. 2 calls before pruning and 1 final call to exit the loop,
+    # since we're removing the number of messages needed to get below the limit
+    assert _tokens_exceeds_limit.call_count == 3
