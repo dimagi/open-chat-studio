@@ -236,9 +236,19 @@
               {% endif %}
               <div x-data="filterComponent">
               <!-- Filter Button -->
-                <button @click="toggleFilters()" class="btn btn-sm btn-outline">
-                  <i class="fa-solid fa-filter"></i> Filter <span x-show="getActiveFilterCount() > 0">(<span x-text="getActiveFilterCount()"></span>)</span>
-                </button>
+                <div class="flex items-center">
+                  <button @click="toggleFilters()" class="btn btn-sm btn-outline">
+                    <i class="fa-solid fa-filter"></i> Filter <span x-show="getActiveFilterCount() > 0">(<span x-text="getActiveFilterCount()"></span>)</span>
+                  </button>
+
+                  <button
+                    x-show="getActiveFilterCount() > 0"
+                    @click="clearAllFilters()"
+                    class="p-2 text-gray-400 hover:text-gray-600 h-10 w-10 flex items-center justify-center"
+                    title="Clear all filters">
+                    <span class="text-lg font-bold">×</span>
+                  </button>
+                </div>
 
               <!-- Filters Panel -->
                 <div
@@ -385,7 +395,11 @@
         </div>
       </div>
       </div>
-      <div id="sessions-table"></div>
+      <div id="sessions-table"
+           hx-get="{% url 'experiments:sessions-list' request.team.slug experiment.id %}"
+           hx-trigger="load, filterChange"
+           hx-swap="innerHTML">
+      </div>
     {% endif %}
 
     <div role="tabpanel" class="tab-content" id="content-versions">
@@ -578,6 +592,13 @@
               (Array.isArray(filter.selectedValues) && filter.selectedValues.length > 0)
             );
           }).length;
+        },
+        clearAllFilters() {
+          this.filterData.filters = [];
+          // Add a single empty filter
+          this.addFilter();
+          this.filterData.showFilters = false;
+          this.triggerFilterChange();
         },
         triggerFilterChange() {
           const params = new URLSearchParams();
