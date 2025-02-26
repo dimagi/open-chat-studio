@@ -1,0 +1,27 @@
+{# Generic template to render a list of objects with a 'new' button #}
+{% extends 'web/app/app_base.html' %}
+{% block app %}
+    {% load i18n %}
+    <div class="app-card">
+        <div class="grid grid-cols-6">
+            <div class="col-span-5">
+                <div class="flex">
+                    <h1 id="{{ title|slugify }}" class="{{ title_class|default:"pg-title" }} hover:cursor-pointer">
+                        <a href="#{{ title|slugify }}">{{ title }}</a>
+                    </h1>
+                </div>
+            </div>
+        </div>
+
+        <div role="tablist" class="tabs tabs-bordered">
+            <input type="radio" name="repository" role="tab" class="tab" aria-label="Files" checked="checked" />
+            <div role="tabpanel" class="tab-content p-10">
+                {% include 'documents/tab_content.html' with object_type="files" object_list_url=files_list_url %}
+            </div>
+
+            <!-- <input type="radio" name="repository" role="tab" class="tab" aria-label="Collections" />
+            <div role="tabpanel" class="tab-content p-10">
+                {% include 'documents/tab_content.html' with object_type="collections" object_list_url=collections_list_url %}
+            </div> -->
+        </div>
+{% endblock %}

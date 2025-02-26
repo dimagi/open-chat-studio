@@ -1,0 +1,19 @@
+<div class="my-2 flex flex-row gap-2 border-t border-base-300">
+    <div class="w-2/5 border-r border-base-300">
+        <div class="flex flex-row my-2">
+            <input class="input input-bordered join-item" type="search"
+                   name="{{ search_param_name|default:"search" }}"
+                   placeholder="Search {{ object_type }}..."
+                   hx-get="{{ object_list_url }}"
+                   hx-trigger="keyup[this.value.length === 0 || this.value.length > 2] changed delay:500ms, search"
+                   hx-target="#{{ object_type }}_list"
+                   hx-indicator=".htmx-indicator"/>
+            <i class="mx-2 htmx-indicator fa fa-spinner fa-pulse"></i>
+        </div>
+        <div id="{{ object_type }}_list" hx-get="{{ object_list_url }}{% querystring %}" hx-trigger="load">
+        </div>
+    </div>
+    <div class="w-3/5">
+        <div id="{{ object_type }}_details"></div>
+    </div>
+</div>
