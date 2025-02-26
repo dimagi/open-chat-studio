@@ -2,12 +2,12 @@ import json
 import logging
 import uuid
 from datetime import datetime
+from typing import cast
 from urllib.parse import quote
 
 import jwt
 from celery.result import AsyncResult
 from celery_progress.backend import Progress
-from django import forms
 from django.conf import settings
 from django.contrib import messages
 from django.contrib.auth.decorators import permission_required
@@ -16,7 +16,7 @@ from django.contrib.postgres.search import TrigramSimilarity
 from django.core.exceptions import PermissionDenied, ValidationError
 from django.db import transaction
 from django.db.models import Case, Count, IntegerField, Q, When
-from django.http import FileResponse, Http404, HttpResponse, HttpResponseRedirect
+from django.http import FileResponse, Http404, HttpResponse, HttpResponseForbidden, HttpResponseRedirect
 from django.shortcuts import get_object_or_404, redirect, render
 from django.template.response import TemplateResponse
 from django.urls import reverse
@@ -24,6 +24,8 @@ from django.utils import timezone
 from django.utils.html import format_html
 from django.utils.safestring import mark_safe
 from django.utils.translation import gettext
+from django.views.decorators.clickjacking import xframe_options_exempt
+from django.views.decorators.csrf import csrf_exempt
 from django.views.decorators.http import require_POST
 from django.views.generic import CreateView, UpdateView
 from django_tables2 import SingleTableView
@@ -32,16 +34,12 @@ from waffle import flag_is_active
 
 from apps.annotations.models import Tag
 from apps.assistants.sync import get_diff_with_openai_assistant, get_out_of_sync_files
+from apps.channels.datamodels import Attachment, AttachmentType
 from apps.channels.exceptions import ExperimentChannelException
 from apps.channels.forms import ChannelForm
 from apps.channels.models import ChannelPlatform, ExperimentChannel
 from apps.chat.channels import WebChannel
 from apps.chat.models import ChatAttachment, ChatMessage, ChatMessageType
-from apps.custom_actions.form_utils import (
-    clean_custom_action_operations,
-    initialize_form_for_custom_actions,
-    set_custom_actions,
-)
 from apps.events.models import (
     EventLogStatusChoices,
     StaticTrigger,
@@ -60,7 +58,9 @@ from apps.experiments.email import send_chat_link_email, send_experiment_invitat
 from apps.experiments.exceptions import ChannelAlreadyUtilizedException
 from apps.experiments.forms import (
     ConsentForm,
+    ExperimentForm,
     ExperimentInvitationForm,
+    ExperimentVersionForm,
     SurveyCompletedForm,
 )
 from apps.experiments.helpers import get_real_user_or_none
@@ -88,10 +88,10 @@ from apps.files.forms import get_file_formset
 from apps.files.models import File
 from apps.files.views import BaseAddFileHtmxView, BaseDeleteFileView
 from apps.generics.chips import Chip
+from apps.generics.help import render_help_with_link
 from apps.service_providers.utils import get_llm_provider_choices
 from apps.teams.decorators import login_and_team_required
 from apps.teams.mixins import LoginAndTeamRequiredMixin
-from apps.utils.prompt import PromptVars, validate_prompt_variables
 
 DEFAULT_ERROR_MESSAGE = (
     "Sorry something went wrong. This was likely an intermittent error related to load."
@@ -108,7 +108,7 @@ def experiments_home(request, team_slug: str):
         {
             "active_tab": "experiments",
             "title": "Experiments",
-            "info_link": settings.DOCUMENTATION_LINKS["experiment"],
+            "title_help_content": render_help_with_link("", "experiment"),
             "new_object_url": reverse("experiments:new", args=[team_slug]),
             "table_url": reverse("experiments:table", args=[team_slug]),
             "enable_search": True,
@@ -156,9 +156,12 @@ class ExperimentSessionsTableView(SingleTableView, PermissionRequiredMixin):
     permission_required = "annotations.view_customtaggeditem"
 
     def get_queryset(self):
-        query_set = ExperimentSession.objects.with_last_message_created_at().filter(
-            team=self.request.team, experiment__id=self.kwargs["experiment_id"]
+        query_set = (
+            ExperimentSession.objects.with_last_message_created_at()
+            .filter(team=self.request.team, experiment__id=self.kwargs["experiment_id"])
+            .select_related("participant__user")
         )
+
         if not self.request.GET.get("show-all"):
             query_set = query_set.exclude(experiment_channel__platform=ChannelPlatform.API)
 
@@ -166,8 +169,9 @@ class ExperimentSessionsTableView(SingleTableView, PermissionRequiredMixin):
             tags = tags_query.split("&")
             query_set = query_set.filter(chat__tags__name__in=tags).distinct()
 
-        if participant := self.request.GET.get("participant"):
-            query_set = query_set.filter(participant__identifier=participant)
+        if participant_identifiers := self.request.GET.get("participants"):
+            participant_identifiers = participant_identifiers.split(",")
+            query_set = query_set.filter(participant__identifier__in=participant_identifiers)
         return query_set
 
 
@@ -182,177 +186,6 @@ class ExperimentVersionsTableView(SingleTableView, PermissionRequiredMixin):
         experiment_row = Experiment.objects.get_all().filter(id=self.kwargs["experiment_id"])
         other_versions = Experiment.objects.get_all().filter(working_version=self.kwargs["experiment_id"]).all()
         return (experiment_row | other_versions).order_by("-version_number")
-
-
-class ExperimentForm(forms.ModelForm):
-    PROMPT_HELP_TEXT = """
-        <div class="tooltip" data-tip="
-            Available variables to include in your prompt: {source_material}, {participant_data}, and
-            {current_datetime}.
-            {source_material} should be included when there is source material linked to the experiment.
-            {participant_data} is optional.
-            {current_datetime} is only required when the bot is using a tool.
-        ">
-            <i class="text-xs fa fa-circle-question">
-            </i>
-        </div>
-    """
-    type = forms.ChoiceField(
-        choices=[
-            ("llm", gettext("Base Language Model")),
-            ("assistant", gettext("OpenAI Assistant")),
-            ("pipeline", gettext("Pipeline")),
-        ],
-        widget=forms.RadioSelect(attrs={"x-model": "type"}),
-    )
-    description = forms.CharField(widget=forms.Textarea(attrs={"rows": 2}), required=False)
-    prompt_text = forms.CharField(widget=forms.Textarea(attrs={"rows": 6}), required=False, help_text=PROMPT_HELP_TEXT)
-    input_formatter = forms.CharField(widget=forms.Textarea(attrs={"rows": 2}), required=False)
-    seed_message = forms.CharField(widget=forms.Textarea(attrs={"rows": 2}), required=False)
-    tools = forms.MultipleChoiceField(widget=forms.CheckboxSelectMultiple, choices=AgentTools.choices, required=False)
-    custom_action_operations = forms.MultipleChoiceField(widget=forms.CheckboxSelectMultiple, required=False)
-
-    class Meta:
-        model = Experiment
-        fields = [
-            "name",
-            "description",
-            "llm_provider",
-            "llm_provider_model",
-            "assistant",
-            "pipeline",
-            "temperature",
-            "prompt_text",
-            "input_formatter",
-            "safety_layers",
-            "conversational_consent_enabled",
-            "source_material",
-            "seed_message",
-            "pre_survey",
-            "post_survey",
-            "consent_form",
-            "voice_provider",
-            "synthetic_voice",
-            "safety_violation_notification_emails",
-            "voice_response_behaviour",
-            "tools",
-            "echo_transcript",
-            "use_processor_bot_voice",
-            "trace_provider",
-            "participant_allowlist",
-            "debug_mode_enabled",
-            "citations_enabled",
-        ]
-        labels = {"source_material": "Inline Source Material", "participant_allowlist": "Participant allowlist"}
-        help_texts = {
-            "source_material": "Use the '{source_material}' tag to inject source material directly into your prompt.",
-            "assistant": "If you have an OpenAI assistant, you can select it here to use it for this experiment.",
-            "use_processor_bot_voice": (
-                "In a multi-bot setup, use the configured voice of the bot that generated the output. If it doesn't "
-                "have one, the router bot's voice will be used."
-            ),
-            "participant_allowlist": (
-                "Separate identifiers with a comma. Phone numbers should be in E164 format e.g. +27123456789"
-            ),
-            "debug_mode_enabled": (
-                "Enabling this tags each AI message in the web UI with the bot responsible for generating it. "
-                "This is applicable only for router bots."
-            ),
-            "citations_enabled": "Whether to include cited sources in responses",
-        }
-
-    def __init__(self, request, *args, **kwargs):
-        super().__init__(*args, **kwargs)
-        self.request = request
-        team = request.team
-        exclude_services = [SyntheticVoice.OpenAIVoiceEngine]
-        if flag_is_active(request, "open_ai_voice_engine"):
-            exclude_services = []
-
-        # Limit to team's data
-        self.fields["llm_provider"].queryset = team.llmprovider_set
-        self.fields["assistant"].queryset = team.openaiassistant_set.exclude(is_version=True)
-        self.fields["pipeline"].queryset = team.pipeline_set.exclude(is_version=True)
-        self.fields["voice_provider"].queryset = team.voiceprovider_set.exclude(
-            syntheticvoice__service__in=exclude_services
-        )
-        self.fields["safety_layers"].queryset = team.safetylayer_set.exclude(is_version=True)
-        self.fields["source_material"].queryset = team.sourcematerial_set.exclude(is_version=True)
-        self.fields["pre_survey"].queryset = team.survey_set.exclude(is_version=True)
-        self.fields["post_survey"].queryset = team.survey_set.exclude(is_version=True)
-        self.fields["consent_form"].queryset = team.consentform_set.exclude(is_version=True)
-        self.fields["synthetic_voice"].queryset = SyntheticVoice.get_for_team(team, exclude_services)
-        self.fields["trace_provider"].queryset = team.traceprovider_set
-        initialize_form_for_custom_actions(team, self)
-
-        # Alpine.js bindings
-        self.fields["voice_provider"].widget.attrs = {
-            "x-model.fill": "voiceProvider",
-        }
-        self.fields["llm_provider"].widget.attrs = {
-            "x-model.number.fill": "llmProviderId",
-        }
-        # special template for dynamic select options
-        self.fields["synthetic_voice"].widget.template_name = "django/forms/widgets/select_dynamic.html"
-        self.fields["llm_provider_model"].widget.template_name = "django/forms/widgets/select_dynamic.html"
-
-    def clean_participant_allowlist(self):
-        cleaned_identifiers = []
-        for identifier in self.cleaned_data["participant_allowlist"]:
-            cleaned_identifiers.append(identifier.replace(" ", ""))
-        return cleaned_identifiers
-
-    def clean_custom_action_operations(self):
-        return clean_custom_action_operations(self)
-
-    def clean(self):
-        cleaned_data = super().clean()
-
-        errors = {}
-        bot_type = cleaned_data["type"]
-        if bot_type == "llm":
-            cleaned_data["assistant"] = None
-            cleaned_data["pipeline"] = None
-            if not cleaned_data.get("prompt_text"):
-                errors["prompt_text"] = "Prompt text is required unless you select an OpenAI Assistant"
-            if not cleaned_data.get("llm_provider"):
-                errors["llm_provider"] = "LLM Provider is required unless you select an OpenAI Assistant"
-            if not cleaned_data.get("llm_provider_model"):
-                errors["llm_provider_model"] = "LLM Model is required unless you select an OpenAI Assistant"
-            if cleaned_data.get("llm_provider") and cleaned_data.get("llm_provider_model"):
-                if not cleaned_data["llm_provider"].type == cleaned_data["llm_provider_model"].type:
-                    errors[
-                        "llm_provider_model"
-                    ] = "You must select a provider model that is the same type as the provider"
-
-        elif bot_type == "assistant":
-            cleaned_data["pipeline"] = None
-            if not cleaned_data.get("assistant"):
-                errors["assistant"] = "Assistant is required when creating an assistant experiment"
-        elif bot_type == "pipeline":
-            cleaned_data["assistant"] = None
-            if not cleaned_data.get("pipeline"):
-                errors["pipeline"] = "Pipeline is required when creating a pipeline experiment"
-
-        if errors:
-            raise forms.ValidationError(errors)
-
-        validate_prompt_variables(
-            form_data=cleaned_data,
-            prompt_key="prompt_text",
-            known_vars=set(PromptVars.values),
-        )
-        return cleaned_data
-
-    def save(self, commit=True):
-        experiment = super().save(commit=False)
-        experiment.team = self.request.team
-        experiment.owner = self.request.user
-        if commit:
-            experiment.save()
-            set_custom_actions(experiment, self.cleaned_data.get("custom_action_operations"))
-            self.save_m2m()
-        return experiment
 
 
 class BaseExperimentView(LoginAndTeamRequiredMixin, PermissionRequiredMixin):
@@ -374,9 +207,11 @@ class BaseExperimentView(LoginAndTeamRequiredMixin, PermissionRequiredMixin):
         team_participant_identifiers = list(
             self.request.team.participant_set.filter(user=None).values_list("identifier", flat=True)
         )
+        disable_version_button = False
         if self.object:
             team_participant_identifiers.extend(self.object.participant_allowlist)
             team_participant_identifiers = set(team_participant_identifiers)
+            disable_version_button = self.object.create_version_task_id
 
         return {
             **{
@@ -386,7 +221,7 @@ class BaseExperimentView(LoginAndTeamRequiredMixin, PermissionRequiredMixin):
                 "experiment_type": experiment_type,
                 "available_tools": AgentTools.choices,
                 "team_participant_identifiers": team_participant_identifiers,
-                "disable_version_button": self.object.create_version_task_id,
+                "disable_version_button": disable_version_button,
             },
             **_get_voice_provider_alpine_context(self.request),
         }
@@ -458,12 +293,12 @@ class CreateExperiment(BaseExperimentView, CreateView):
         else:
             return self.form_invalid(form, file_formset)
 
-    @transaction.atomic()
     def form_valid(self, form, file_formset):
-        self.object = form.save()
-        if file_formset:
-            files = file_formset.save(self.request)
-            self.object.files.set(files)
+        with transaction.atomic():
+            self.object = form.save()
+            if file_formset:
+                files = file_formset.save(self.request)
+                self.object.files.set(files)
 
         task_id = async_create_experiment_version.delay(
             experiment_id=self.object.id, version_description="", make_default=True
@@ -549,16 +384,6 @@ class DeleteFileFromExperiment(BaseDeleteFileView):
     pass
 
 
-class ExperimentVersionForm(forms.ModelForm):
-    version_description = forms.CharField(widget=forms.Textarea(attrs={"rows": 2}), required=False)
-    is_default_version = forms.BooleanField(required=False, label="Set as Published Version")
-
-    class Meta:
-        model = Experiment
-        fields = ["version_description", "is_default_version"]
-        help_texts = {"version_description": "A description of this version, or what changed from the previous version"}
-
-
 class CreateExperimentVersion(LoginAndTeamRequiredMixin, CreateView):
     model = Experiment
     form_class = ExperimentVersionForm
@@ -578,10 +403,10 @@ class CreateExperimentVersion(LoginAndTeamRequiredMixin, CreateView):
     def get_context_data(self, *args, **kwargs):
         context = super().get_context_data(*args, **kwargs)
         working_experiment = self.get_object()
-        version = working_experiment.version
+        version = working_experiment.version_details
         if prev_version := working_experiment.latest_version:
             # Populate diffs
-            version.compare(prev_version.version)
+            version.compare(prev_version.version_details)
 
         context["version_details"] = version
         context["experiment"] = working_experiment
@@ -599,9 +424,11 @@ class CreateExperimentVersion(LoginAndTeamRequiredMixin, CreateView):
             messages.error(self.request, "Version creation is already in progress.")
             return HttpResponseRedirect(self.get_success_url())
 
-        if self._is_assistant_out_of_sync():
-            messages.error(self.request, "Assistant is out of sync with OpenAI. Please update the assistant first.")
-            return HttpResponseRedirect(self.get_success_url())
+        error_msg = self._check_pipleline_and_assistant_for_errors()
+
+        if error_msg:
+            messages.error(self.request, error_msg)
+            return render(self.request, self.template_name, self.get_context_data(form=form))
 
         task_id = async_create_experiment_version.delay(
             experiment_id=working_version.id, version_description=description, make_default=is_default
@@ -612,10 +439,24 @@ class CreateExperimentVersion(LoginAndTeamRequiredMixin, CreateView):
 
         return HttpResponseRedirect(self.get_success_url())
 
-    def _is_assistant_out_of_sync(self) -> bool:
+    def _check_pipleline_and_assistant_for_errors(self) -> tuple:
+        """Checks if the pipeline or assistant has errors before creating a new version."""
         experiment = self.get_object()
+
+        if self._is_assistant_out_of_sync(experiment):
+            return "Assistant is out of sync with OpenAI. Please update the assistant first."
+
+        if pipeline := experiment.pipeline:
+            errors = pipeline.validate()
+            if errors:
+                return "Unable to create a new version when the pipeline has errors"
+
+    def _is_assistant_out_of_sync(self, experiment: Experiment) -> bool:
         if not experiment.assistant:
             return False
+
+        if not experiment.assistant.assistant_id:
+            return True
 
         if len(get_diff_with_openai_assistant(experiment.assistant)) > 0:
             return True
@@ -889,6 +730,23 @@ def experiment_chat_session(request, team_slug: str, experiment_id: int, session
 @verify_session_access_cookie
 @require_POST
 def experiment_session_message(request, team_slug: str, experiment_id: uuid.UUID, session_id: str, version_number: int):
+    return _experiment_session_message(request, version_number)
+
+
+@experiment_session_view()
+@require_POST
+@xframe_options_exempt
+@csrf_exempt
+def experiment_session_message_embed(
+    request, team_slug: str, experiment_id: uuid.UUID, session_id: str, version_number: int
+):
+    if not request.experiment_session.participant.is_anonymous:
+        return HttpResponseForbidden()
+
+    return _experiment_session_message(request, version_number, embedded=True)
+
+
+def _experiment_session_message(request, version_number: int, embedded=False):
     working_experiment = request.experiment
     session = request.experiment_session
 
@@ -914,7 +772,7 @@ def experiment_session_message(request, team_slug: str, experiment_id: uuid.UUID
         )
         for uploaded_file in uploaded_files.getlist(resource_type):
             new_file = File.objects.create(name=uploaded_file.name, file=uploaded_file, team=request.team)
-            attachments.append({"type": resource_type, "file_id": new_file.id})
+            attachments.append(Attachment.from_file(new_file, cast(AttachmentType, resource_type)))
             created_files.append(new_file)
 
         tool_resource.files.add(*created_files)
@@ -926,7 +784,7 @@ def experiment_session_message(request, team_slug: str, experiment_id: uuid.UUID
         experiment_session_id=session.id,
         experiment_id=experiment_version.id,
         message_text=message_text,
-        attachments=attachments,
+        attachments=[att.model_dump() for att in attachments],
     )
     version_specific_vars = {
         "assistant": experiment_version.get_assistant(),
@@ -941,13 +799,13 @@ def experiment_session_message(request, team_slug: str, experiment_id: uuid.UUID
             "message_text": message_text,
             "task_id": result.task_id,
             "created_files": created_files,
+            "embedded": embedded,
             **version_specific_vars,
         },
     )
 
 
 @experiment_session_view()
-@verify_session_access_cookie
 def get_message_response(request, team_slug: str, experiment_id: uuid.UUID, session_id: str, task_id: str):
     experiment = request.experiment
     session = request.experiment_session
@@ -1027,6 +885,16 @@ def start_session_public(request, team_slug: str, experiment_id: uuid.UUID):
 
     consent = experiment_version.consent_form
     user = get_real_user_or_none(request.user)
+    if not consent:
+        identifier = user.email if user else str(uuid.uuid4())
+        session = WebChannel.start_new_session(
+            working_experiment=experiment,
+            participant_user=user,
+            participant_identifier=identifier,
+            timezone=request.session.get("detected_tz", None),
+        )
+        return _record_consent_and_redirect(request, team_slug, session)
+
     if request.method == "POST":
         form = ConsentForm(consent, request.POST, initial={"identifier": user.email if user else None})
         if form.is_valid():
@@ -1035,8 +903,11 @@ def start_session_public(request, team_slug: str, experiment_id: uuid.UUID):
                 identifier = form.cleaned_data.get("identifier", None)
             else:
                 # The identifier field will be disabled, so we must generate one
-                identifier = user.email if user else str(uuid.uuid4())
                 verify_user = False
+                if user:
+                    identifier = user.email
+                else:
+                    identifier = Participant.create_anonymous(request.team, ChannelPlatform.WEB).identifier
 
             session = WebChannel.start_new_session(
                 working_experiment=experiment,
@@ -1077,6 +948,29 @@ def start_session_public(request, team_slug: str, experiment_id: uuid.UUID):
             **version_specific_vars,
         },
     )
+
+
+@xframe_options_exempt
+def start_session_public_embed(request, team_slug: str, experiment_id: uuid.UUID):
+    """Special view for starting sessions from embedded widgets. This will ignore consent and pre-surveys and
+    will ALWAYS create anonymous participants."""
+    try:
+        experiment = get_object_or_404(Experiment, public_id=experiment_id, team=request.team)
+    except ValidationError:
+        # old links dont have uuids
+        raise Http404
+
+    experiment_version = experiment.default_version
+    if not experiment_version.is_public:
+        raise Http404
+
+    participant = Participant.create_anonymous(request.team, ChannelPlatform.WEB)
+    session = WebChannel.start_new_session(
+        working_experiment=experiment,
+        participant_identifier=participant.identifier,
+        timezone=request.session.get("detected_tz", None),
+    )
+    return redirect("experiments:experiment_chat_embed", team_slug, experiment.public_id, session.external_id)
 
 
 def _verify_user_or_start_session(identifier, request, session):
@@ -1170,7 +1064,12 @@ def generate_chat_export(request, team_slug: str, experiment_id: str):
     experiment = get_object_or_404(Experiment, id=experiment_id)
     tags = request.POST.get("tags", [])
     tags = tags.split(",") if tags else []
-    task_id = async_export_chat.delay(experiment_id, tags=tags, participant=request.POST.get("participant"))
+
+    participant_identifiers = request.POST.get("participants")
+    if participant_identifiers:
+        participant_identifiers = participant_identifiers.split(",")
+
+    task_id = async_export_chat.delay(experiment_id, tags=tags, participants=participant_identifiers)
     return TemplateResponse(
         request, "experiments/components/exports.html", {"experiment": experiment, "task_id": task_id}
     )
@@ -1303,6 +1202,21 @@ def experiment_pre_survey(request, team_slug: str, experiment_id: uuid.UUID, ses
 @experiment_session_view(allowed_states=[SessionStatus.ACTIVE, SessionStatus.SETUP])
 @verify_session_access_cookie
 def experiment_chat(request, team_slug: str, experiment_id: uuid.UUID, session_id: str):
+    return _experiment_chat_ui(request)
+
+
+@experiment_session_view(allowed_states=[SessionStatus.ACTIVE, SessionStatus.SETUP])
+@xframe_options_exempt
+def experiment_chat_embed(request, team_slug: str, experiment_id: uuid.UUID, session_id: str):
+    """Special view for embedding that doesn't have the cookie security. This is OK because of the additional
+    checks to ensure the participant is 'anonymous'."""
+    session = request.experiment_session
+    if not session.participant.is_anonymous:
+        raise Http404
+    return _experiment_chat_ui(request, embedded=True)
+
+
+def _experiment_chat_ui(request, embedded=False):
     experiment_version = request.experiment.default_version
     version_specific_vars = {
         "assistant": experiment_version.get_assistant(),
@@ -1317,6 +1231,7 @@ def experiment_chat(request, team_slug: str, experiment_id: uuid.UUID, session_i
             "experiment": request.experiment,
             "session": request.experiment_session,
             "active_tab": "experiments",
+            "embedded": embedded,
             **version_specific_vars,
         },
     )
@@ -1430,9 +1345,9 @@ def experiment_session_pagination_view(request, team_slug: str, experiment_id: u
     experiment = request.experiment
     query = ExperimentSession.objects.exclude(external_id=session_id).filter(experiment=experiment)
     if request.GET.get("dir", "next") == "next":
-        next_session = query.filter(created_at__lte=session.created_at).first()
+        next_session = query.filter(created_at__gte=session.created_at).order_by("created_at").first()
     else:
-        next_session = query.filter(created_at__gte=session.created_at).last()
+        next_session = query.filter(created_at__lte=session.created_at).order_by("created_at").last()
 
     if not next_session:
         messages.warning(request, "No more sessions to paginate")
@@ -1441,8 +1356,6 @@ def experiment_session_pagination_view(request, team_slug: str, experiment_id: u
     return redirect("experiments:experiment_session_view", team_slug, experiment_id, next_session.external_id)
 
 
-@login_and_team_required
-@permission_required("chat.view_chatattachment")
 def download_file(request, team_slug: str, session_id: int, pk: int):
     resource = get_object_or_404(
         File, id=pk, team__slug=team_slug, chatattachment__chat__experiment_session__id=session_id
@@ -1521,7 +1434,7 @@ def experiment_version_details(request, team_slug: str, experiment_id: int, vers
     except Experiment.DoesNotExist:
         raise Http404
 
-    context = {"version_details": experiment_version.version, "experiment": experiment_version}
+    context = {"version_details": experiment_version.version_details, "experiment": experiment_version}
     return render(request, "experiments/components/experiment_version_details_content.html", context)
 
 

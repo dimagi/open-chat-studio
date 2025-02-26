@@ -130,7 +130,7 @@ class ChatAdapter(BaseAdapter):
     def get_chat_model(self):
         return self.get_llm_service().get_chat_model(self.provider_model_name, self.temperature)
 
-    def get_template_context(self, variables: list[str]):
+    def get_template_context(self, variables: list[str]) -> dict:
         return self.template_context.get_context(variables)
 
     def get_prompt(self):
@@ -180,15 +180,14 @@ class AssistantAdapter(BaseAdapter):
         )
 
     @staticmethod
-    def for_pipeline(session: ExperimentSession, node: "AssistantNode") -> Self:
+    def for_pipeline(session: ExperimentSession, node: "AssistantNode", trace_service=None) -> Self:
         assistant = OpenAiAssistant.objects.get(id=node.assistant_id)
-        experiment = session.experiment
         return AssistantAdapter(
             session=session,
             assistant=assistant,
             citations_enabled=node.citations_enabled,
             input_formatter=node.input_formatter,
-            trace_service=experiment.trace_service,
+            trace_service=trace_service,
             save_message_metadata_only=True,
         )
 

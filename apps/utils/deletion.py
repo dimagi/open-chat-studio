@@ -3,10 +3,15 @@ from functools import reduce
 from operator import or_
 from typing import Any
 
+from django.conf import settings
 from django.contrib.admin.utils import NestedObjects
+from django.core.mail import send_mail
 from django.db import models, router, transaction
-from django.db.models import Q
+from django.db.models import Expression, Q
 from django.db.models.deletion import get_candidate_relations_to_delete
+from django.template.loader import render_to_string
+from django.utils.translation import gettext_lazy as _
+from field_audit import field_audit
 from field_audit.field_audit import get_audited_models
 
 
@@ -69,14 +74,60 @@ def _perform_updates_for_delete(updates_not_part_of_delete):
                 objs.extend(instances)
         if updates:
             combined_updates = reduce(or_, updates)
-
-            # hack to give the queryset the auditing update method
-            combined_updates.update = field.model.objects.update
-            combined_updates.update(**{field.name: value}, audit_action=AuditAction.AUDIT)
+            _queryset_update_with_auditing(combined_updates, **{field.name: value})
         if objs:
             model = objs[0].__class__
             objects_filter = model.objects.filter(list({obj.pk for obj in objs}))
             objects_filter.update(**{field.name: value}, audit_action=AuditAction.AUDIT)
+
+
+def _queryset_update_with_auditing(queryset, **kw):
+    """
+    Copied from `field_audit.models.AuditingQuerySet.update` so that it can be called with querysets
+    that are not AuditingQuerySets.
+    """
+    from field_audit.models import AuditEvent
+
+    fields_to_update = set(kw.keys())
+    audited_fields = set(AuditEvent.field_names(queryset.model))
+    fields_to_audit = fields_to_update & audited_fields
+    if not fields_to_audit:
+        # no audited fields are changing
+        return queryset.update(**kw)
+
+    new_values = {field: kw[field] for field in fields_to_audit}
+    uses_expressions = any([isinstance(val, Expression) for val in new_values.values()])
+
+    old_values = {}
+    values_to_fetch = fields_to_update | {"pk"}
+    for value in queryset.values(*values_to_fetch):
+        pk = value.pop("pk")
+        old_values[pk] = value
+
+    with transaction.atomic(using=queryset.db):
+        rows = queryset.update(**kw)
+        if uses_expressions:
+            # fetch updated values to ensure audit event deltas are accurate
+            # after update is performed with expressions
+            new_values = {}
+            for value in queryset.values(*values_to_fetch):
+                pk = value.pop("pk")
+                new_values[pk] = value
+        else:
+            new_values = {pk: new_values for pk in old_values.keys()}
+
+        # create and write the audit events _after_ the update succeeds
+        request = field_audit.request.get()
+        audit_events = []
+        for pk, old_values_for_pk in old_values.items():
+            audit_event = AuditEvent.make_audit_event_from_values(
+                old_values_for_pk, new_values[pk], pk, queryset.model, request
+            )
+            if audit_event:
+                audit_events.append(audit_event)
+        if audit_events:
+            AuditEvent.objects.bulk_create(audit_events)
+        return rows
 
 
 def get_related_m2m_objects(objs, exclude: list | None = None) -> dict[Any, list[Any]]:
@@ -171,3 +222,32 @@ def get_related_pipelines_queryset(instance, pipeline_param_key: str = None):
         Q(**{f"params__{pipeline_param_key}": instance.id}) | Q(**{f"params__{pipeline_param_key}": str(instance.id)})
     )
     return pipelines
+
+
+def get_admin_emails_with_delete_permission(team):
+    from apps.teams.models import Membership
+
+    return list(
+        Membership.objects.filter(team__name=team.name, groups__permissions__codename="delete_team").values_list(
+            "user__email", flat=True
+        )
+    )
+
+
+def send_team_deleted_notification(team_name, admin_emails):
+    email_context = {
+        "team_name": team_name,
+    }
+    send_mail(
+        subject=_("Team '{}' has been deleted").format(team_name),
+        message=render_to_string("teams/email/team_deleted_notification.txt", context=email_context),
+        from_email=settings.DEFAULT_FROM_EMAIL,
+        recipient_list=admin_emails,
+        fail_silently=False,
+        html_message=render_to_string("teams/email/team_deleted_notification.html", context=email_context),
+    )
+
+
+def chunk_list(lst, chunk_size):
+    for i in range(0, len(lst), chunk_size):
+        yield lst[i : i + chunk_size]

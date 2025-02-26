@@ -130,10 +130,9 @@ paths:
               schema:
                 $ref: '#/components/schemas/CreateChatCompletionResponse'
           description: ''
-  /api/participants/:
+  /api/participants:
     post:
       operationId: update_participant_data
-      description: Upsert participant data for all specified experiments in the payload
       summary: Update Participant Data
       tags:
       - Participants
@@ -263,6 +262,92 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/ExperimentSessionWithMessages'
+          description: ''
+  /api/sessions/{id}/end_experiment_session/:
+    post:
+      operationId: session_end
+      summary: End Experiment Session
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: string
+        description: ID of the session
+        required: true
+      tags:
+      - Experiment Sessions
+      security:
+      - apiKeyAuth: []
+      - tokenAuth: []
+      responses:
+        '200':
+          description: No response body
+  /api/trigger_bot:
+    post:
+      operationId: trigger_bot_message
+      description: Trigger the bot to send a message to the user
+      summary: Trigger the bot to send a message to the user
+      tags:
+      - Channels
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/TriggerBotMessageRequest'
+            examples:
+              GenerateBotMessageAndSend:
+                value:
+                  identifier: part1
+                  experiment: exp1
+                  platform: connect_messaging
+                  prompt_text: Tell the user to do something
+                summary: Generates a bot message and sends it to the user
+              ParticipantNotFound:
+                value:
+                  detail: Participant not found
+                summary: Participant not found
+              ExperimentChannelNotFound:
+                value:
+                  detail: Experiment cannot send messages on the connect_messaging
+                    channel
+                summary: Experiment cannot send messages on the specified channel
+              ConsentNotGiven:
+                value:
+                  detail: User has not given consent
+                summary: User has not given consent
+        required: true
+      security:
+      - apiKeyAuth: []
+      - tokenAuth: []
+      responses:
+        '200':
+          description: No response body
+        '400':
+          content:
+            application/json:
+              schema:
+                description: Bad Request
+              examples:
+                ConsentNotGiven:
+                  value:
+                    detail: User has not given consent
+                  summary: User has not given consent
+          description: ''
+        '404':
+          content:
+            application/json:
+              schema:
+                description: Not Found
+              examples:
+                ParticipantNotFound:
+                  value:
+                    detail: Participant not found
+                  summary: Participant not found
+                ExperimentChannelNotFound:
+                  value:
+                    detail: Experiment cannot send messages on the connect_messaging
+                      channel
+                  summary: Experiment cannot send messages on the specified channel
           description: ''
   /channels/api/{experiment_id}/incoming_message:
     post:
@@ -683,6 +768,7 @@ components:
       - sureadhere
       - api
       - slack
+      - commcare_connect
       type: string
       description: |-
         * `telegram` - Telegram
@@ -692,6 +778,7 @@ components:
         * `sureadhere` - SureAdhere
         * `api` - API
         * `slack` - Slack
+        * `commcare_connect` - CommCare Connect
     Team:
       type: object
       properties:
@@ -705,6 +792,32 @@ components:
       required:
       - name
       - slug
+    TriggerBotMessageRequest:
+      type: object
+      properties:
+        identifier:
+          type: string
+          title: Participant Identifier
+        platform:
+          allOf:
+          - $ref: '#/components/schemas/PlatformEnum'
+          title: Participant Platform
+        experiment:
+          type: string
+          format: uuid
+          title: Experiment ID
+        prompt_text:
+          type: string
+          title: Prompt to go to bot
+        start_new_session:
+          type: boolean
+          default: false
+          title: Starts a new session
+      required:
+      - experiment
+      - identifier
+      - platform
+      - prompt_text
   securitySchemes:
     apiKeyAuth:
       type: apiKey

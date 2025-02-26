@@ -61,7 +61,7 @@ npm run dev
 
 **Note**
 
-You should be using node >= 18.0.0. If you have [nvm](https://github.com/nvm-sh/nvm/blob/master/README.md) 
+You should be using node >= 22.14.0. If you have [nvm](https://github.com/nvm-sh/nvm/blob/master/README.md) 
 installed, you can run `nvm use` to switch to the correct version.
 
 To check which version you are using use `node --version`.
@@ -115,6 +115,13 @@ Options:
   -p STRING, --upgrade-package=STRING
   -u, --upgrade-all
 ```
+
+### Adding a new requirement
+
+To add a new requirement:
+
+1. Add the package to `requirements.in` (or `dev-requirements.in` for dev only packages).
+2. Run `inv requirements` to update the `requirements.txt` file.
 
 ## Installing Git commit hooks
 

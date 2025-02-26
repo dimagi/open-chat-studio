@@ -14,21 +14,24 @@ from telebot import TeleBot
 from telebot.util import antiflood, smart_split
 
 from apps.channels import audio
+from apps.channels.clients.connect_client import CommCareConnectClient
 from apps.channels.models import ChannelPlatform, ExperimentChannel
 from apps.chat.bots import get_bot
 from apps.chat.exceptions import (
     AudioSynthesizeException,
-    MessageHandlerException,
+    ChannelException,
     ParticipantNotAllowedException,
     VersionedExperimentSessionsNotAllowedException,
 )
 from apps.chat.models import Chat, ChatMessage, ChatMessageType
+from apps.chat.tasks import STATUSES_FOR_COMPLETE_CHATS
 from apps.events.models import StaticTriggerType
 from apps.events.tasks import enqueue_static_triggers
 from apps.experiments.models import (
     Experiment,
     ExperimentSession,
     Participant,
+    ParticipantData,
     SessionStatus,
     VoiceResponseBehaviours,
 )
@@ -37,11 +40,14 @@ from apps.service_providers.speech_service import SynthesizedAudio
 from apps.slack.utils import parse_session_external_id
 from apps.users.models import CustomUser
 
+logger = logging.getLogger("ocs.channels")
+
 USER_CONSENT_TEXT = "1"
 UNSUPPORTED_MESSAGE_BOT_PROMPT = """
 Tell the user (in the language being spoken) that they sent an unsupported message.
 You only support {supported_types} messages types. Respond only with the message for the user
 """
+DEFAULT_ERROR_RESPONSE_TEXT = "Sorry, something went wrong while processing your message. Please try again later"
 
 # The regex from https://stackoverflow.com/a/6041965 is used, but tweaked to remove capturing groups
 URL_REGEX = r"(?:http|ftp|https):\/\/(?:[\w_-]+(?:(?:\.[\w_-]+)+))(?:[\w.,@?^=%&:\/~+#-]*[\w@?^=%&\/~+#-])"
@@ -82,7 +88,7 @@ class ChannelBase(ABC):
         experiment_session: An optional ExperimentSession object representing the experiment session associated
             with the handler.
     Raises:
-        MessageHandlerException: If both 'experiment_channel' and 'experiment_session' arguments are not provided.
+        ChannelException: If both 'experiment_channel' and 'experiment_session' arguments are not provided.
 
     Class variables:
         supported_message_types: A list of message content types that are supported by this channel
@@ -115,6 +121,8 @@ class ChannelBase(ABC):
         self.message = None
         self._user_query = None
         self.bot = get_bot(experiment_session, experiment=experiment) if experiment_session else None
+        self._participant_identifier = experiment_session.participant.identifier if experiment_session else None
+        self._is_user_message = False
 
     @classmethod
     def start_new_session(
@@ -143,9 +151,15 @@ class ChannelBase(ABC):
 
     @property
     def participant_identifier(self) -> str:
+        if self._participant_identifier is not None:
+            return self._participant_identifier
+
         if self.experiment_session and self.experiment_session.participant.identifier:
-            return self.experiment_session.participant.identifier
-        return self.message.participant_id
+            self._participant_identifier = self.experiment_session.participant.identifier
+        elif self.message:
+            self._participant_identifier = self.message.participant_id
+
+        return self._participant_identifier
 
     @property
     def participant_user(self):
@@ -182,10 +196,7 @@ class ChannelBase(ABC):
         pass
 
     @staticmethod
-    def from_experiment_session(experiment_session: ExperimentSession) -> "ChannelBase":
-        """Given an `experiment_session` instance, returns the correct ChannelBase subclass to use"""
-        platform = experiment_session.experiment_channel.platform
-
+    def get_channel_class_for_platform(platform: ChannelPlatform) -> "ChannelBase":
         if platform == "telegram":
             channel_cls = TelegramChannel
         elif platform == "web":
@@ -200,8 +211,16 @@ class ChannelBase(ABC):
             channel_cls = SureAdhereChannel
         elif platform == "slack":
             channel_cls = SlackChannel
+        elif platform == "commcare_connect":
+            channel_cls = CommCareConnectChannel
         else:
             raise Exception(f"Unsupported platform type {platform}")
+        return channel_cls
+
+    @staticmethod
+    def from_experiment_session(experiment_session: ExperimentSession) -> "ChannelBase":
+        """Given an `experiment_session` instance, returns the correct ChannelBase subclass to use"""
+        channel_cls = ChannelBase.get_channel_class_for_platform(experiment_session.experiment_channel.platform)
         return channel_cls(
             experiment_session.experiment,
             experiment_channel=experiment_session.experiment_channel,
@@ -232,6 +251,7 @@ class ChannelBase(ABC):
         """Handles the message coming from the user. Call this to send bot messages to the user.
         The `message` here will probably be some object, depending on the channel being used.
         """
+        self._is_user_message = True
         try:
             return self._new_user_message(message)
         except GenerationCancelled:
@@ -248,26 +268,30 @@ class ChannelBase(ABC):
         except ParticipantNotAllowedException:
             return self.send_message_to_user("Sorry, you are not allowed to chat to this bot")
 
-        if not self.is_message_type_supported():
-            return self._handle_unsupported_message()
+        try:
+            if not self.is_message_type_supported():
+                return self._handle_unsupported_message()
 
-        if self.experiment_channel.platform != ChannelPlatform.WEB:
-            if self._is_reset_conversation_request():
-                # Webchats' statuses are updated through an "external" flow
-                return ""
-
-            if self.experiment.conversational_consent_enabled:
-                if self._should_handle_pre_conversation_requirements():
-                    self._handle_pre_conversation_requirements()
+            if self.experiment_channel.platform != ChannelPlatform.WEB:
+                if self._is_reset_conversation_request():
+                    # Webchats' statuses are updated through an "external" flow
                     return ""
-            else:
-                # If `conversational_consent_enabled` is not enabled, we should just make sure that the session's status
-                # is ACTIVE
-                self.experiment_session.update_status(SessionStatus.ACTIVE)
 
-        enqueue_static_triggers.delay(self.experiment_session.id, StaticTriggerType.NEW_HUMAN_MESSAGE)
-        response = self._handle_supported_message()
-        return response
+                if self.experiment.conversational_consent_enabled and self.experiment.consent_form_id:
+                    if self._should_handle_pre_conversation_requirements():
+                        self._handle_pre_conversation_requirements()
+                        return ""
+                else:
+                    # If `conversational_consent_enabled` is not enabled, we should just make sure that the session's
+                    # status is ACTIVE
+                    self.experiment_session.update_status(SessionStatus.ACTIVE)
+
+            enqueue_static_triggers.delay(self.experiment_session.id, StaticTriggerType.NEW_HUMAN_MESSAGE)
+            response = self._handle_supported_message()
+            return response
+        except Exception as e:
+            self._inform_user_of_error()
+            raise e
 
     def _handle_pre_conversation_requirements(self):
         """Since external channels doesn't have nice UI, we need to ask users' consent and get them to fill in the
@@ -344,11 +368,7 @@ class ChannelBase(ABC):
 
     def _extract_user_query(self) -> str:
         if self.message.content_type == MESSAGE_TYPES.VOICE:
-            try:
-                return self._get_voice_transcript()
-            except Exception as e:
-                self._inform_user_of_error()
-                raise e
+            return self._get_voice_transcript()
         return self.message.message_text
 
     def send_message_to_user(self, bot_message: str):
@@ -392,7 +412,7 @@ class ChannelBase(ABC):
             synthetic_voice_audio = speech_service.synthesize_voice(text, synthetic_voice)
             self.send_voice_to_user(synthetic_voice_audio)
         except AudioSynthesizeException as e:
-            logging.exception(e)
+            logger.exception(e)
             self.send_text_to_user(text)
 
         if extracted_urls:
@@ -442,11 +462,11 @@ class ChannelBase(ABC):
         session.
         """
         if not self.experiment_session:
-            self.experiment_session = self._get_latest_session()
+            self._load_latest_session()
 
         if not self.experiment_session:
             self._create_new_experiment_session()
-        else:
+        elif self._is_user_message:
             if self._is_reset_conversation_request() and self.experiment_session.user_already_engaged():
                 self._reset_session()
             if not self.experiment_session.experiment_channel:
@@ -461,19 +481,47 @@ class ChannelBase(ABC):
                 self.experiment_session.experiment_channel = self.experiment_channel
                 self.experiment_session.save()
 
-    def _get_latest_session(self):
-        return (
+    def ensure_session_exists_for_participant(self, identifier: str, new_session: bool = False):
+        """
+        Ensures an experiment session exists for the participant specied with `identifier`. This is useful for creating
+        a session outside of the normal flow where a participant initiates the interaction and where we'll have the
+        participant identifier from the incoming messasge. When the bot initiates the conversation, this is not true
+        anymore, so we'll need to get the identifier from the params.
+
+        If `new_session` is `True`, the current session will be ended (if one exists) and a new one will be
+        created.
+
+        Raises:
+            ChannelException when there is an existing session, but with another participant.
+        """
+        if self.participant_identifier:
+            if self.participant_identifier != identifier:
+                raise ChannelException("Participant identifier does not match the existing one")
+        else:
+            self._participant_identifier = identifier
+
+        if new_session:
+            self._load_latest_session()
+            self._reset_session()
+        else:
+            self._ensure_sessions_exists()
+
+    def _load_latest_session(self):
+        """Loads the latest experiment session on the channel"""
+        self.experiment_session = (
             ExperimentSession.objects.filter(
                 experiment=self.experiment.get_working_version(),
                 participant__identifier=str(self.participant_identifier),
             )
+            .exclude(status__in=STATUSES_FOR_COMPLETE_CHATS)
             .order_by("-created_at")
             .first()
         )
 
     def _reset_session(self):
-        """Resets the session by ending the current `experiment_session` and creating a new one"""
-        self.experiment_session.end()
+        """Resets the session by ending the current `experiment_session` (if one exists) and creating a new one"""
+        if self.experiment_session:
+            self.experiment_session.end()
         self._create_new_experiment_session()
 
     def _create_new_experiment_session(self):
@@ -506,14 +554,25 @@ class ChannelBase(ABC):
         )
 
     def _inform_user_of_error(self):
-        """Simply tells the user that something went wrong to keep them in the loop"""
-        bot_message = self._generate_response_for_user(
-            """
-            Tell the user that something went wrong while processing their message and that they should
-            try again later
-            """
-        )
-        self.send_message_to_user(bot_message)
+        """Simply tells the user that something went wrong to keep them in the loop. This method wil not raise an error
+        if something went wrong during this operation.
+        """
+
+        try:
+            bot_message = self._generate_response_for_user(
+                """
+                Tell the user that something went wrong while processing their message and that they should
+                try again later
+                """
+            )
+        except Exception:
+            logger.exception("Something went wrong while trying to generate an appropriate error message for the user")
+            bot_message = DEFAULT_ERROR_RESPONSE_TEXT
+
+        try:
+            self.send_message_to_user(bot_message)
+        except Exception:
+            logger.exception("Something went wrong while trying to inform the user of an error")
 
     def _generate_response_for_user(self, prompt: str) -> str:
         """Generates a response based on the `prompt`."""
@@ -533,7 +592,7 @@ class WebChannel(ChannelBase):
 
     def _ensure_sessions_exists(self):
         if not self.experiment_session:
-            raise MessageHandlerException("WebChannel requires an existing session")
+            raise ChannelException("WebChannel requires an existing session")
 
     @classmethod
     def start_new_session(
@@ -569,6 +628,10 @@ class WebChannel(ChannelBase):
             ).task_id
             session.save()
         return session
+
+    def _inform_user_of_error():
+        # Web channel's errors are optionally rendered in the UI, so no need to send a message
+        pass
 
 
 class TelegramChannel(ChannelBase):
@@ -715,7 +778,7 @@ class ApiChannel(ChannelBase):
         super().__init__(experiment, experiment_channel, experiment_session)
         self.user = user
         if not self.user and not self.experiment_session:
-            raise MessageHandlerException("ApiChannel requires either an existing session or a user")
+            raise ChannelException("ApiChannel requires either an existing session or a user")
 
     @property
     def participant_user(self):
@@ -766,7 +829,49 @@ class SlackChannel(ChannelBase):
 
     def _ensure_sessions_exists(self):
         if not self.experiment_session:
-            raise MessageHandlerException("WebChannel requires an existing session")
+            raise ChannelException("WebChannel requires an existing session")
+
+
+class CommCareConnectChannel(ChannelBase):
+    voice_replies_supported = False
+    supported_message_types = [MESSAGE_TYPES.TEXT]
+
+    def __init__(
+        self,
+        experiment: Experiment,
+        experiment_channel: ExperimentChannel,
+        experiment_session: ExperimentSession | None = None,
+    ):
+        super().__init__(experiment, experiment_channel, experiment_session)
+        self.client = CommCareConnectClient()
+
+    def send_text_to_user(self, text: str):
+        if self.participant_data.system_metadata.get("consent", False) is False:
+            raise ChannelException("Participant has not given consent to chat")
+        self.client.send_message_to_user(
+            channel_id=self.connect_channel_id, message=text, encryption_key=self.encryption_key
+        )
+
+    @cached_property
+    def participant_data(self) -> ParticipantData:
+        experiment = self.experiment
+        if self.experiment.is_a_version:
+            experiment = self.experiment.working_version
+        return experiment.participantdata_set.defer("data").get(participant__identifier=self.participant_identifier)
+
+    @cached_property
+    def connect_channel_id(self) -> str:
+        channel_id = self.participant_data.system_metadata.get("commcare_connect_channel_id")
+        if not channel_id:
+            raise ChannelException(f"channel_id is missing for participant {self.participant_identifier}")
+        return channel_id
+
+    @cached_property
+    def encryption_key(self) -> bytes:
+        key = self.participant_data.get_encryption_key_bytes()
+        if not key:
+            raise ChannelException(f"Encryption key is missing for participant {self.participant_identifier}")
+        return key
 
 
 def _start_experiment_session(

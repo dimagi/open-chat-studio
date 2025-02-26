@@ -1,3 +1,4 @@
+from langchain_core.callbacks.manager import CallbackManager
 from langchain_core.tracers import LangChainTracer
 from pydantic import BaseModel
 
@@ -29,6 +30,9 @@ class TraceService:
     def get_current_trace_info(self) -> TraceInfo | None:
         return None
 
+    def initialize_from_callback_manager(self, callback_manager: CallbackManager):
+        pass
+
 
 class LangFuseTraceService(TraceService):
     """
@@ -50,6 +54,17 @@ class LangFuseTraceService(TraceService):
 
         self._callback = CallbackHandler(user_id=participant_id, session_id=session_id, **self.config)
         return self._callback
+
+    def initialize_from_callback_manager(self, callback_manager: CallbackManager):
+        """
+        Populates the callback from the callback handler already configured in `callback_manager`. This allows the trace
+        service to reuse existing callbacks.
+        """
+        from langfuse.callback import CallbackHandler
+
+        for handler in callback_manager.handlers:
+            if isinstance(handler, CallbackHandler):
+                self._callback = handler
 
     def update_trace(self, metadata: dict):
         if not metadata:

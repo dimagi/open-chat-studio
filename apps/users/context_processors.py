@@ -1,5 +1,5 @@
 def user_teams(request):
-    if not request.user.is_authenticated:
+    if not (hasattr(request, "user") and request.user.is_authenticated):
         return {}
 
     current_team = getattr(request, "team", None)
@@ -9,8 +9,11 @@ def user_teams(request):
     if current_team:
         other_membership = other_membership.exclude(team=current_team)
     return {
-        "other_teams": {
-            membership.team.name: membership.team.dashboard_url
-            for membership in other_membership.select_related("team")
-        }
+        "other_teams": sorted(
+            [
+                (membership.team.name, membership.team.dashboard_url)
+                for membership in other_membership.select_related("team")
+            ],
+            key=lambda x: x[0].lower(),
+        ),
     }

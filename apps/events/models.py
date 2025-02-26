@@ -13,7 +13,9 @@ from apps.chat.models import ChatMessage, ChatMessageType
 from apps.events import actions
 from apps.events.const import TOTAL_FAILURES
 from apps.experiments.models import Experiment, ExperimentSession, VersionsMixin, VersionsObjectManagerMixin
+from apps.experiments.versioning import VersionDetails, VersionField
 from apps.teams.models import BaseTeamModel
+from apps.teams.utils import current_team
 from apps.utils.models import BaseModel
 from apps.utils.slug import get_next_unique_id
 from apps.utils.time import pretty_date
@@ -140,8 +142,21 @@ class StaticTrigger(BaseModel, VersionsMixin):
         new_instance.save()
         return new_instance
 
-    def get_fields_to_exclude(self):
-        return super().get_fields_to_exclude() + ["action", "experiment", "event_logs"]
+    @property
+    def version_details(self):
+        action_param_versions = []
+        static_trigger_type = StaticTriggerType(self.type).label.lower()
+        event_action_type = EventActionType(self.action.action_type).label
+        # Static trigger group names should be user friendly
+        group_name = f"When {static_trigger_type} then {event_action_type}"
+
+        for name, value in self.action.params.items():
+            action_param_versions.append(VersionField(group_name=group_name, name=name, raw_value=value))
+
+        return VersionDetails(
+            instance=self,
+            fields=action_param_versions,
+        )
 
 
 class TimeoutTrigger(BaseModel, VersionsMixin):
@@ -297,6 +312,24 @@ class TimeoutTrigger(BaseModel, VersionsMixin):
     def get_fields_to_exclude(self):
         return super().get_fields_to_exclude() + ["action", "experiment", "event_logs"]
 
+    @property
+    def version_details(self) -> VersionDetails:
+        event_action_type = EventActionType(self.action.action_type).label
+        group_name = event_action_type
+
+        action_param_versions = [VersionField(group_name=group_name, name="action", raw_value=event_action_type)]
+        for name, value in self.action.params.items():
+            action_param_versions.append(VersionField(group_name=group_name, name=name, raw_value=value))
+
+        return VersionDetails(
+            instance=self,
+            fields=[
+                VersionField(group_name=group_name, name="delay", raw_value=self.delay),
+                VersionField(group_name=group_name, name="total_num_triggers", raw_value=self.total_num_triggers),
+                *action_param_versions,
+            ],
+        )
+
 
 class TimePeriod(models.TextChoices):
     MINUTES = ("minutes", "Minutes")
@@ -357,9 +390,12 @@ class ScheduledMessage(BaseTeamModel):
             # Schedules probably created by the API
             return
 
-        experiment_session.ad_hoc_bot_message(
-            self.params["prompt_text"], fail_silently=False, use_experiment=self._get_experiment_to_generate_response()
-        )
+        with current_team(experiment_session.team):
+            experiment_session.ad_hoc_bot_message(
+                self.params["prompt_text"],
+                fail_silently=False,
+                use_experiment=self._get_experiment_to_generate_response(),
+            )
 
         utc_now = timezone.now()
         self.last_triggered_at = utc_now

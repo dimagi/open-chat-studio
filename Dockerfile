@@ -31,7 +31,7 @@ RUN --mount=type=cache,target=/root/.cache \
       --no-group dev \
       --group prod
 
-FROM node:18-bullseye AS build-node
+FROM node:22 AS build-node
 RUN nodejs -v && npm -v
 WORKDIR /code
 

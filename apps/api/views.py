@@ -1,29 +1,40 @@
+import json
+import logging
 import textwrap
 
+import httpx
+from django.conf import settings
 from django.contrib.auth.decorators import permission_required
-from django.contrib.contenttypes.models import ContentType
 from django.db import transaction
-from django.http import FileResponse, Http404, HttpResponse
+from django.http import FileResponse, Http404, HttpResponse, JsonResponse
 from django.shortcuts import get_object_or_404
+from django.views.decorators.csrf import csrf_exempt
+from django.views.decorators.http import require_POST
 from drf_spectacular.types import OpenApiTypes
-from drf_spectacular.utils import OpenApiExample, OpenApiParameter, extend_schema, extend_schema_view
+from drf_spectacular.utils import OpenApiExample, OpenApiParameter, extend_schema, extend_schema_view, inline_serializer
 from rest_framework import filters, mixins, status
-from rest_framework.decorators import api_view, renderer_classes
+from rest_framework.decorators import action, api_view, renderer_classes
 from rest_framework.exceptions import NotFound
 from rest_framework.renderers import BaseRenderer
 from rest_framework.response import Response
+from rest_framework.views import Request
 from rest_framework.viewsets import GenericViewSet
 
-from apps.api.permissions import DjangoModelPermissionsWithView
+from apps.api.permissions import DjangoModelPermissionsWithView, verify_hmac
 from apps.api.serializers import (
     ExperimentSerializer,
     ExperimentSessionCreateSerializer,
     ExperimentSessionSerializer,
     ParticipantDataUpdateRequest,
+    TriggerBotMessageRequest,
 )
+from apps.api.tasks import setup_connect_channels_for_bots, trigger_bot_message_task
+from apps.channels.models import ChannelPlatform, ExperimentChannel
 from apps.events.models import ScheduledMessage, TimePeriod
 from apps.experiments.models import Experiment, ExperimentSession, Participant, ParticipantData
 from apps.files.models import File
+
+logger = logging.getLogger(__name__)
 
 
 @extend_schema_view(
@@ -113,6 +124,18 @@ class ExperimentViewSet(mixins.ListModelMixin, mixins.RetrieveModelMixin, Generi
 @api_view(["POST"])
 @permission_required("experiments.change_participantdata")
 def update_participant_data(request):
+    return _update_participant_data(request)
+
+
+@extend_schema(exclude=True)
+@api_view(["POST"])
+@permission_required("experiments.change_participantdata")
+def update_participant_data_old(request):
+    # This endpoint is kept for backwards compatibility of the path with a trailing "/"
+    return _update_participant_data(request)
+
+
+def _update_participant_data(request):
     """
     Upsert participant data for all specified experiments in the payload
     """
@@ -121,6 +144,10 @@ def update_participant_data(request):
 
     identifier = serializer.data["identifier"]
     platform = serializer.data["platform"]
+    if platform == ChannelPlatform.COMMCARE_CONNECT:
+        # CommCare Connect identifiers are case-sensitive
+        identifier = identifier.upper()
+
     team = request.team
     participant, _ = Participant.objects.get_or_create(identifier=identifier, team=team, platform=platform)
 
@@ -132,20 +159,26 @@ def update_participant_data(request):
     experiment_data = serializer.data["data"]
     experiment_map = _get_participant_experiments(team, experiment_data)
 
-    content_type = ContentType.objects.get_for_model(Experiment)
+    experiment_data_map = {}
     for data in experiment_data:
         experiment = experiment_map[data["experiment"]]
 
-        ParticipantData.objects.update_or_create(
+        participant_data, _created = ParticipantData.objects.update_or_create(
             participant=participant,
-            content_type=content_type,
-            object_id=experiment.id,
+            experiment=experiment,
             team=team,
             defaults={"data": data["data"]} if data.get("data") else {},
         )
 
         if schedule_data := data.get("schedules"):
             _create_update_schedules(team, experiment, participant, schedule_data)
+
+        if platform == ChannelPlatform.COMMCARE_CONNECT:
+            experiment_data_map[experiment.id] = participant_data.id
+
+    if platform == ChannelPlatform.COMMCARE_CONNECT:
+        setup_connect_channels_for_bots.delay(connect_id=identifier, experiment_data_map=experiment_data_map)
+
     return HttpResponse()
 
 
@@ -251,6 +284,21 @@ def _create_update_schedules(team, experiment, participant, schedule_data):
         tags=["Experiment Sessions"],
         request=ExperimentSessionCreateSerializer,
     ),
+    end_experiment_session=extend_schema(
+        operation_id="session_end",
+        summary="End Experiment Session",
+        tags=["Experiment Sessions"],
+        parameters=[
+            OpenApiParameter(
+                name="id",
+                type=OpenApiTypes.STR,
+                location=OpenApiParameter.PATH,
+                description="ID of the session",
+            ),
+        ],
+        request=inline_serializer("end_session_serializer", {}),
+        responses=inline_serializer("end_session_serializer", {}),
+    ),
 )
 class ExperimentSessionViewSet(mixins.ListModelMixin, mixins.RetrieveModelMixin, GenericViewSet):
     permission_classes = [DjangoModelPermissionsWithView]
@@ -286,6 +334,15 @@ class ExperimentSessionViewSet(mixins.ListModelMixin, mixins.RetrieveModelMixin,
         headers = {"Location": str(output["url"])}
         return Response(output, status=status.HTTP_201_CREATED, headers=headers)
 
+    @action(detail=True, methods=["post"])
+    def end_experiment_session(self, request, id=None):
+        try:
+            session = ExperimentSession.objects.get(external_id=id)
+        except ExperimentSession.DoesNotExist:
+            return Response({"error": "Session not found:{id}"}, status=status.HTTP_404_NOT_FOUND)
+        session.end()
+        return Response(status=status.HTTP_200_OK)
+
 
 class BinaryRenderer(BaseRenderer):
     media_type = "application/octet-stream"
@@ -305,3 +362,144 @@ def file_content_view(request, pk: int):
         return FileResponse(file.file.open(), as_attachment=True, filename=file.file.name)
     except FileNotFoundError:
         raise Http404()
+
+
+@csrf_exempt
+@require_POST
+def generate_key(request: Request):
+    """Generates a key for a specific channel to use for secure communication"""
+    token = request.META.get("HTTP_AUTHORIZATION")
+    if not (token and "channel_id" in request.POST):
+        return HttpResponse("Missing token or data", status=400)
+
+    commcare_connect_channel_id = request.POST["channel_id"]
+    response = httpx.get(settings.COMMCARE_CONNECT_GET_CONNECT_ID_URL, headers={"AUTHORIZATION": token})
+    response.raise_for_status()
+    connect_id = response.json().get("sub")
+
+    try:
+        participant_data = ParticipantData.objects.defer("data").get(
+            participant__identifier=connect_id, system_metadata__commcare_connect_channel_id=commcare_connect_channel_id
+        )
+    except ParticipantData.DoesNotExist:
+        raise Http404()
+
+    if not participant_data.encryption_key:
+        participant_data.generate_encryption_key()
+
+    return JsonResponse({"key": participant_data.encryption_key})
+
+
+@csrf_exempt
+@require_POST
+@verify_hmac
+def callback(request: Request):
+    """This callback endpoint is called by commcare connect when the message is delivered to the user"""
+    # Not sure what to do with this, so just return
+    return HttpResponse()
+
+
+@csrf_exempt
+@require_POST
+@verify_hmac
+def consent(request: Request):
+    """The user gave consent to the bot to message them"""
+    if not request.body:
+        return HttpResponse("Missing data", status=400)
+    request_data = json.loads(request.body)
+    if "consent" not in request_data or "channel_id" not in request_data:
+        return HttpResponse("Missing consent or commcare_connect_channel_id", status=400)
+
+    participant_data = get_object_or_404(
+        ParticipantData, system_metadata__commcare_connect_channel_id=request_data["channel_id"]
+    )
+    participant_data.update_consent(request_data["consent"])
+
+    return HttpResponse()
+
+
+@extend_schema(
+    operation_id="trigger_bot_message",
+    summary="Trigger the bot to send a message to the user",
+    tags=["Channels"],
+    request=TriggerBotMessageRequest(),
+    responses={
+        200: {},
+        400: {"description": "Bad Request"},
+        404: {"description": "Not Found"},
+    },
+    examples=[
+        OpenApiExample(
+            name="GenerateBotMessageAndSend",
+            summary="Generates a bot message and sends it to the user",
+            value={
+                "identifier": "part1",
+                "experiment": "exp1",
+                "platform": "connect_messaging",
+                "prompt_text": "Tell the user to do something",
+            },
+            status_codes=[200],
+        ),
+        OpenApiExample(
+            name="ParticipantNotFound",
+            summary="Participant not found",
+            value={"detail": "Participant not found"},
+            status_codes=[404],
+        ),
+        OpenApiExample(
+            name="ExperimentChannelNotFound",
+            summary="Experiment cannot send messages on the specified channel",
+            value={"detail": "Experiment cannot send messages on the connect_messaging channel"},
+            status_codes=[404],
+        ),
+        OpenApiExample(
+            name="ConsentNotGiven",
+            summary="User has not given consent",
+            value={"detail": "User has not given consent"},
+            status_codes=[400],
+        ),
+    ],
+)
+@api_view(["POST"])
+def trigger_bot_message(request):
+    """
+    Trigger the bot to send a message to the user
+    """
+    serializer = TriggerBotMessageRequest(data=request.data)
+    serializer.is_valid(raise_exception=True)
+
+    data = serializer.data
+    platform = data["platform"]
+    if platform == ChannelPlatform.COMMCARE_CONNECT:
+        # CommCare Connect identifiers are case-sensitive
+        data["identifier"] = data["identifier"].upper()
+
+    identifier = data["identifier"]
+    experiment_public_id = data["experiment"]
+
+    experiment = get_object_or_404(Experiment, public_id=experiment_public_id, team=request.team)
+
+    participant_data = ParticipantData.objects.filter(
+        participant__identifier=identifier,
+        participant__platform=platform,
+        experiment=experiment.id,
+    ).first()
+    if platform == ChannelPlatform.COMMCARE_CONNECT and not participant_data:
+        # The commcare_connect channel requires certain data from the participant_data in order to send messages to th
+        # user, which is why we need to check if the participant_data exists
+        return Response({"detail": "Participant not found"}, status=status.HTTP_404_NOT_FOUND)
+    elif not Participant.objects.filter(identifier=identifier, platform=platform).exists():
+        return Response({"detail": "Participant not found"}, status=status.HTTP_404_NOT_FOUND)
+
+    if not ExperimentChannel.objects.filter(platform=platform, experiment=experiment).exists():
+        return Response(
+            {"detail": f"Experiment cannot send messages on the {platform} channel"},
+            status=status.HTTP_404_NOT_FOUND,
+        )
+
+    if platform == ChannelPlatform.COMMCARE_CONNECT and not participant_data.has_consented():
+        return Response({"detail": "User has not given consent"}, status=status.HTTP_400_BAD_REQUEST)
+
+    trigger_bot_message_task.delay(data)
+
+    return Response(status=status.HTTP_200_OK)

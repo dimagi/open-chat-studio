@@ -16,7 +16,7 @@ def test_edit_participant_data(client, team_with_users):
     user = participant.team.members.first()
     data = {"name": "A"}
     participant_data = ParticipantData.objects.create(
-        team=team, content_object=session.experiment, participant=participant, data=data
+        team=team, experiment=session.experiment, participant=participant, data=data
     )
     client.login(username=user.username, password="password")
 

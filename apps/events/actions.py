@@ -74,9 +74,14 @@ class ScheduleTriggerAction(EventActionHandlerBase):
             - If the scheduled message's last_triggered_at field is not None (it has fired before), that field is
             then used as the baseline for adding the new delta
         """
+        params = action.params.copy()
+        # We need to map `minutes` to `mins` for compatibility with MakeInterval
+        if params["time_period"] == "minutes":
+            params["time_period"] = "mins"
+
         (
             action.scheduled_messages.annotate(
-                new_delta=MakeInterval(action.params["time_period"], action.params["frequency"]),
+                new_delta=MakeInterval(params["time_period"], params["frequency"]),
             )
             .filter(is_complete=False, custom_schedule_params={})
             .update(

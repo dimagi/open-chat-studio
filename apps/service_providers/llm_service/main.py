@@ -10,12 +10,17 @@ from langchain_core.language_models import BaseChatModel
 from langchain_core.load import dumpd
 from langchain_core.messages import HumanMessage
 from langchain_core.runnables import RunnableConfig, ensure_config
+from langchain_google_genai import ChatGoogleGenerativeAI
 from langchain_openai.chat_models import AzureChatOpenAI, ChatOpenAI
 from openai import OpenAI
 from openai._base_client import SyncAPIClient
 
 from apps.service_providers.llm_service.callbacks import TokenCountingCallbackHandler
-from apps.service_providers.llm_service.token_counters import AnthropicTokenCounter, OpenAITokenCounter
+from apps.service_providers.llm_service.token_counters import (
+    AnthropicTokenCounter,
+    GeminiTokenCounter,
+    OpenAITokenCounter,
+)
 
 
 class OpenAIAssistantRunnable(BrokenOpenAIAssistantRunnable):
@@ -196,3 +201,33 @@ class AnthropicLlmService(LlmService):
 
     def get_callback_handler(self, model: str) -> BaseCallbackHandler:
         return TokenCountingCallbackHandler(AnthropicTokenCounter())
+
+
+class DeepSeekLlmService(LlmService):
+    deepseek_api_key: str
+    deepseek_api_base: str
+
+    def get_chat_model(self, llm_model: str, temperature: float) -> BaseChatModel:
+        return ChatOpenAI(
+            model=llm_model,
+            temperature=temperature,
+            openai_api_key=self.deepseek_api_key,
+            openai_api_base=self.deepseek_api_base,
+        )
+
+    def get_callback_handler(self, model: str) -> BaseCallbackHandler:
+        return TokenCountingCallbackHandler(OpenAITokenCounter(model))
+
+
+class GoogleLlmService(LlmService):
+    google_api_key: str
+
+    def get_chat_model(self, llm_model: str, temperature: float) -> BaseChatModel:
+        return ChatGoogleGenerativeAI(
+            model=llm_model,
+            google_api_key=self.google_api_key,
+            temperature=temperature,
+        )
+
+    def get_callback_handler(self, model: str) -> BaseCallbackHandler:
+        return TokenCountingCallbackHandler(GeminiTokenCounter(model, self.google_api_key))

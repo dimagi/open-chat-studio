@@ -14,7 +14,7 @@ class AudioTranscriptionException(ChatException):
         super().__init__(message)
 
 
-class MessageHandlerException(ChatException):
+class ChannelException(ChatException):
     def __init__(self, message):
         super().__init__(message)
 

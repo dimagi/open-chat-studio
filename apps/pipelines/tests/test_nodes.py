@@ -30,7 +30,7 @@ class TestSendEmailInputValidation:
         ],
     )
     def test_valid_recipient_list(self, recipient_list):
-        model = SendEmail(recipient_list=recipient_list, subject="Test Subject")
+        model = SendEmail(name="email", recipient_list=recipient_list, subject="Test Subject")
         assert model.recipient_list == recipient_list
 
     @pytest.mark.parametrize(
@@ -44,4 +44,4 @@ class TestSendEmailInputValidation:
     )
     def test_invalid_recipient_list(self, recipient_list):
         with pytest.raises(ValidationError, match="Invalid list of emails addresses"):
-            SendEmail(recipient_list=recipient_list, subject="Test Subject")
+            SendEmail(name="email", recipient_list=recipient_list, subject="Test Subject")

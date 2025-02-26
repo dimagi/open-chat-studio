@@ -25,14 +25,13 @@ const LabeledHandle = React.forwardRef<
   HTMLDivElement,
   HandleProps &
     React.HTMLAttributes<HTMLDivElement> & {
-      title: string;
+      label: string | React.ReactElement;
       handleClassName?: string;
       labelClassName?: string;
     }
->(({ className, labelClassName, title, position, ...props }, ref) => (
+>(({ className, labelClassName, label, position, ...props }, ref) => (
   <div
     ref={ref}
-    title={title}
     className={classNames(
       "relative flex items-center",
       getFlexDirection(position),
@@ -40,7 +39,7 @@ const LabeledHandle = React.forwardRef<
     )}
   >
     <BaseHandle position={position} {...props} />
-    <label className={classNames("px-4 font-semibold font-mono", labelClassName)}>{title}</label>
+    <label className={classNames("px-4 font-semibold font-mono", labelClassName)}>{label}</label>
   </div>
 ));
 

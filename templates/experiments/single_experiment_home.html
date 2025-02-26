@@ -99,10 +99,8 @@
           </div>
           <ul tabindex="0" class="dropdown-content menu bg-base-100 rounded-box z-[1] w-52 p-2 shadow border">
             {% if experiment.is_public %}
-              <li>
-                <a href="{% url 'experiments:start_session_public' team.slug experiment.public_id %}" target="_blank">
-                  <i class="fa-solid fa-link"></i> Public Link
-                </a>
+              <li onclick="sharing_modal.showModal()">
+                <span><i class="fa-solid fa-share-nodes"></i> Share</span>
               </li>
             {% endif %}
             {% if perms.experiments.invite_participants %}
@@ -114,6 +112,9 @@
             {% endif %}
           </ul>
         </div>
+        {% if experiment.is_public %}
+          {% include "experiments/share/dialog.html" %}
+        {% endif %}
       {#  Commented elements included for Tailwind processing #}
       {#  <i class="fa-brands fa-telegram"></i> #}
       {#  <i class="fa-brands fa-whatsapp"></i> #}
@@ -202,7 +203,7 @@
       <div class="my-4">
         <h3 class="font-bold text-lg">Parent Experiments:
           <span class="ml-2 tooltip" data-tip="This experiment is configured as a child of the following experiments.">
-            <i class="text-sm fa fa-circle-question" ></i>
+            <i class="text-sm fa-regular fa-circle-question" ></i>
           </span>
         </h3>
       </div>
@@ -213,10 +214,10 @@
 
   <div role="tablist" class="tabs tabs-bordered">
     {% if perms.chat.view_chat %}
-      <input type="radio" name="tab_group" role="tab" class="tab" aria-label="All Sessions" id="tab-allsessions" checked/>
+      <input type="radio" name="tab_group" role="tab" class="tab" aria-label="Sessions" id="tab-allsessions" checked/>
       <div role="tabpanel" class="tab-content" id="content-allsessions">
         <div class="app-card">
-          <div x-data="{tags: '', participant: null}">
+          <div x-data="{tags: '', participants: []}">
             <div class="flex gap-x-2">
               {% if perms.experiments.download_chats %}
                 {% include "experiments/components/exports.html" %}
@@ -229,7 +230,7 @@
               >
                 <div class="flex gap-2">
                   <div class="w-72 my-2">
-                    <input x-model="participant" name="participant" id="participant-filter" placeholder="Filter participants...">
+                    <input x-model="participants" name="participants" id="participants-filter" placeholder="Filter participants...">
                   </div>
                   {% if perms.annotations.view_customtaggeditem %}
                     <div class="w-72 my-2">
@@ -258,46 +259,6 @@
       </div>
     {% endif %}
 
-    <input type="radio" name="tab_group" role="tab" class="tab" aria-label="My Sessions" id="tab-mysessions" />
-    <div role="tabpanel" class="tab-content" id="content-mysessions">
-      <div class="app-card">
-        <div class="overflow-x-auto">
-          <table class="w-full table-fixed">
-            <thead class="bg-base-200 base-content uppercase text-sm leading-normal">
-              <tr>
-                <th class="px-3 py-3 text-left">Started</th>
-                <th class="px-3 py-3 text-left">Last Message</th>
-                <th class="px-3 py-3 text-left">Version</th>
-                <th class="px-3 py-3 text-left">Actions</th>
-              </tr>
-            </thead>
-            <tbody>
-              {% for session in user_sessions %}
-                <tr class="text-sm">
-                  <td class="overflow-hidden px-3 py-3 text-left">{{ session.created_at }}</td>
-                  <td class="overflow-hidden px-3 py-3 text-left">{{ session.last_message_created_at }}</td>
-                  <td class="overflow-hidden px-3 py-3 text-left">{{session.experiment_version_for_display }}</td>
-                  <td class="overflow-hidden px-3 py-3 text-left">
-                    {% if session.is_complete or not experiment.is_editable %}
-                      <a class="btn btn-sm btn-outline btn-primary"
-                         href="{% url 'experiments:experiment_session_view' team.slug experiment.public_id session.external_id %}"
-                         class="link">Review Chat</a>
-                    {% else %}
-                      <a class="btn btn-sm btn-outline btn-primary"
-                         href="{% url 'experiments:experiment_chat_session' team.slug experiment.id session.get_experiment_version_number session.id %}" class="link"
-                      >
-                        Continue Chat
-                      </a>
-                    {% endif %}
-                  </td>
-                </tr>
-              {% endfor %}
-            </tbody>
-          </table>
-        </div>
-      </div>
-    </div>
-
     <input type="radio" name="tab_group" role="tab" class="tab" aria-label="Versions" id="tab-versions" />
     <div role="tabpanel" class="tab-content" id="content-versions">
       <div class="app-card">
@@ -324,31 +285,33 @@
       </div>
     {% endflag %}
 
-    <input type="radio" name="tab_group" role="tab" class="tab" aria-label="Routes" id="tab-routes"/>
-    <div role="tabpanel" class="tab-content" id="content-routes">
-      <div class="app-card">
-        {% if experiment.assistant %}
-          Assistants cannot be router bots. Please use a normal bot
-        {% elif can_make_child_routes %}
-          {% if experiment.is_editable %}
-            <a class="btn btn-sm btn-outline btn-primary mb-2" href="{% url 'experiments:experiment_route_new' team.slug experiment.id 'processor' %}"><i class="fa-regular fa-plus"></i> Create child route</a>
+    {% if not experiment.pipeline %}
+      <input type="radio" name="tab_group" role="tab" class="tab" aria-label="Routes" id="tab-routes"/>
+      <div role="tabpanel" class="tab-content" id="content-routes">
+        <div class="app-card">
+          {% if experiment.assistant %}
+            Assistants cannot be router bots. Please use a normal bot
+          {% elif can_make_child_routes %}
+            {% if experiment.is_editable %}
+              <a class="btn btn-sm btn-outline btn-primary mb-2" href="{% url 'experiments:experiment_route_new' team.slug experiment.id 'processor' %}"><i class="fa-regular fa-plus"></i> Create child route</a>
+            {% endif %}
+            {% render_table child_routes_table %}
+          {% else %}
+            Child experiments cannot have their own routes.
           {% endif %}
-          {% render_table child_routes_table %}
-        {% else %}
-          Child experiments cannot have their own routes.
-        {% endif %}
+        </div>
       </div>
-    </div>
 
-    <input type="radio" name="tab_group" role="tab" class="tab" aria-label="Terminal Bot" id="tab-terminal_bots"/>
-    <div role="tabpanel" class="tab-content" id="content-terminal_bots">
-      <div class="app-card">
-        {% if terminal_bots_table.data|length == 0 and experiment.is_editable%}
-          <a class="btn btn-sm btn-outline btn-primary mb-2" href="{% url 'experiments:experiment_route_new' team.slug experiment.id 'terminal' %}"><i class="fa-regular fa-plus"></i> Add terminal bot</a>
-        {% endif %}
-        {% render_table terminal_bots_table %}
+      <input type="radio" name="tab_group" role="tab" class="tab" aria-label="Terminal Bot" id="tab-terminal_bots"/>
+      <div role="tabpanel" class="tab-content" id="content-terminal_bots">
+        <div class="app-card">
+          {% if terminal_bots_table.data|length == 0 and experiment.is_editable%}
+            <a class="btn btn-sm btn-outline btn-primary mb-2" href="{% url 'experiments:experiment_route_new' team.slug experiment.id 'terminal' %}"><i class="fa-regular fa-plus"></i> Add terminal bot</a>
+          {% endif %}
+          {% render_table terminal_bots_table %}
+        </div>
       </div>
-    </div>
+    {% endif %}
   </div>
   <script src="{% static 'js/app-bundle.js' %}"></script>
   <script>
@@ -378,7 +341,7 @@
         hidePlaceholder: true,
       });
 
-      new TomSelect('#participant-filter', {
+      new TomSelect('#participants-filter', {
         plugins: ["remove_button", "caret_position", "input_autogrow"],
         valueField: 'identifier',
         searchField: ['name', 'identifier'],

@@ -1,7 +1,6 @@
 import React, { useState } from "react";
 import OverlayPanel from "../components/OverlayPanel";
 import { apiClient } from "../api/api";
-import usePipelineManagerStore from "../stores/pipelineManagerStore";
 import usePipelineStore from "../stores/pipelineStore";
 
 type TestMessageBoxParams = {
@@ -13,7 +12,7 @@ export default function TestMessageBox({
   isOpen,
   setIsOpen,
 }: TestMessageBoxParams) {
-  const currentPipelineId = usePipelineManagerStore(
+  const currentPipelineId = usePipelineStore(
     (state) => state.currentPipelineId,
   );
   const setEdgeLabel = usePipelineStore((state) => state.setEdgeLabel);
@@ -60,11 +59,15 @@ export default function TestMessageBox({
           response.result &&
           typeof response.result !== "string"
         ) {
-          // The task finished succesfully and we receive the response
+          // The task finished successfully and we receive the response
           const result = response.result;
-          setResponseMessage(result.messages[result.messages.length - 1]);
-          for (const [nodeId, nodeOutput] of Object.entries(result.outputs)) {
-            setEdgeLabel(nodeId, nodeOutput.output_handle, nodeOutput.message);
+          if (result.error) {
+            setErrorMessage(result.error);
+          } else {
+            setResponseMessage(result.messages[result.messages.length - 1]);
+            for (const [nodeId, nodeOutput] of Object.entries(result.outputs)) {
+              setEdgeLabel(nodeId, nodeOutput.output_handle, nodeOutput.message);
+            }
           }
           setLoading(false);
           polling = false;
@@ -123,13 +126,13 @@ export default function TestMessageBox({
   return (
     <div className="relative">
       <button
-        className="absolute top-4 left-16 z-10 text-4xl text-primary"
+        className="btn btn-circle btn-ghost absolute top-4 left-16 z-10 text-primary"
         onClick={togglePanel}
         title="Test Pipeline"
       >
         <i
           className={`fas ${
-            isOpen ? "fa-circle-minus" : "fa-circle-play"
+            isOpen ? "fa-circle-stop" : "fa-circle-play"
           } text-4xl shadow-md rounded-full`}
         />
       </button>

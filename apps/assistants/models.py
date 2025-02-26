@@ -3,14 +3,16 @@ from typing import Self
 from django.contrib.postgres.fields import ArrayField
 from django.core.validators import MaxValueValidator, MinValueValidator
 from django.db import models, transaction
+from django.db.models import Q
 from django.urls import reverse
 from field_audit import audit_fields
 from field_audit.models import AuditAction, AuditingManager
 
 from apps.chat.agent.tools import get_assistant_tools
 from apps.custom_actions.mixins import CustomActionOperationMixin
-from apps.experiments.models import VersionsMixin, VersionsObjectManagerMixin
-from apps.experiments.versioning import VersionField
+from apps.experiments.models import Experiment, VersionsMixin, VersionsObjectManagerMixin
+from apps.experiments.versioning import VersionDetails, VersionField
+from apps.pipelines.models import Node
 from apps.teams.models import BaseTeamModel
 from apps.utils.models import BaseModel
 
@@ -171,31 +173,107 @@ class OpenAiAssistant(BaseTeamModel, VersionsMixin, CustomActionOperationMixin):
     def archive(self):
         from apps.assistants.tasks import delete_openai_assistant_task
 
-        # don't archive assistant if it's still referenced by an active experiment or pipeline
-        if self.get_related_experiments_queryset().exists():
+        if (
+            self.get_related_experiments_queryset().exists()
+            or self.get_related_pipeline_node_queryset().exists()
+            or self.get_related_experiments_with_pipeline_queryset().exists()
+        ):
             return False
-
-        if self.get_related_pipeline_node_queryset().exists():
-            return False
+        if self.is_working_version:
+            for (
+                version
+            ) in self.versions.all():  # first perform all checks so assistants are not archived prior to return False
+                if (
+                    version.get_related_experiments_queryset().exists()
+                    or version.get_related_pipeline_node_queryset().exists()
+                    or version.get_related_experiments_with_pipeline_queryset().exists()
+                ):
+                    return False
+            for version in self.versions.all():
+                delete_openai_assistant_task.delay(version.id)
+            self.versions.update(is_archived=True, audit_action=AuditAction.AUDIT)
 
         super().archive()
-        if self.is_working_version:
-            # TODO: should this delete the assistant from OpenAI?
-            self.versions.update(is_archived=True, audit_action=AuditAction.AUDIT)
-        else:
-            delete_openai_assistant_task.delay(self.id)
-
+        delete_openai_assistant_task.delay(self.id)
         return True
 
-    def get_related_experiments_queryset(self):
-        return self.experiment_set.filter(is_archived=False)
+    def get_related_experiments_queryset(self, assistant_ids: list = None):
+        """Returns working versions and published experiments containing the assistant ids"""
+        if assistant_ids:
+            return Experiment.objects.filter(
+                Q(working_version_id=None) | Q(is_default_version=True),
+                assistant_id__in=assistant_ids,
+                is_archived=False,
+            )
 
-    def get_related_pipeline_node_queryset(self):
-        from apps.pipelines.models import Node
+        return self.experiment_set.filter(Q(working_version_id=None) | Q(is_default_version=True), is_archived=False)
 
+    def get_related_pipeline_node_queryset(self, assistant_ids: list = None):
+        """Returns working version pipelines with assistant nodes containing the assistant ids"""
+        assistant_ids = assistant_ids if assistant_ids else [str(self.id)]
         return Node.objects.filter(type="AssistantNode").filter(
-            params__assistant_id=str(self.id),
+            pipeline__working_version_id=None,
+            params__assistant_id__in=assistant_ids,
+            is_archived=False,
             pipeline__is_archived=False,
+        )
+
+    def get_related_experiments_with_pipeline_queryset(self, assistant_ids: list = None):
+        """Returns published experiment versions referenced by versioned pipelines with assistant nodes
+        containing the assistant ids"""
+        assistant_ids = assistant_ids if assistant_ids else [str(self.id)]
+        nodes = Node.objects.filter(type="AssistantNode").filter(
+            pipeline__working_version_id__isnull=False,
+            params__assistant_id__in=assistant_ids,
+            is_archived=False,
+            pipeline__is_archived=False,
+        )
+
+        if pipeline_ids := nodes.values_list("pipeline_id", flat=True):
+            return Experiment.objects.filter(
+                is_default_version=True,
+                pipeline_id__in=pipeline_ids,
+                is_archived=False,
+            )
+        return Experiment.objects.none()
+
+    @property
+    def version_details(self) -> VersionDetails:
+        from apps.experiments.models import VersionFieldDisplayFormatters
+
+        return VersionDetails(
+            instance=self,
+            fields=[
+                VersionField(group_name="General", name="name", raw_value=self.name.split(" v")[0]),
+                VersionField(group_name="General", name="include_file_info", raw_value=self.include_file_info),
+                VersionField(group_name="Language Model", name="llm_provider", raw_value=self.llm_provider),
+                VersionField(group_name="Language Model", name="llm_provider_model", raw_value=self.llm_provider_model),
+                VersionField(group_name="Language Model", name="temperature", raw_value=self.temperature),
+                VersionField(group_name="Language Model", name="top_p", raw_value=self.top_p),
+                VersionField(group_name="Language Model", name="instructions", raw_value=self.instructions),
+                VersionField(
+                    group_name="Tools",
+                    name="builtin_tools",
+                    raw_value=self.builtin_tools,
+                    to_display=VersionFieldDisplayFormatters.format_builtin_tools,
+                ),
+                VersionField(
+                    group_name="Tools",
+                    name="tools",
+                    raw_value=self.tools,
+                    to_display=VersionFieldDisplayFormatters.format_tools,
+                ),
+                VersionField(
+                    group_name="Tools",
+                    name="allow_file_search_attachments",
+                    raw_value=self.allow_file_search_attachments,
+                ),
+                VersionField(
+                    group_name="Tools",
+                    name="allow_code_interpreter_attachments",
+                    raw_value=self.allow_code_interpreter_attachments,
+                ),
+            ],
         )
 
 

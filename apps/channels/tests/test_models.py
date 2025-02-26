@@ -6,6 +6,7 @@ from apps.channels.models import ChannelPlatform, ExperimentChannel
 from apps.chat.models import Chat, ChatMessage, ChatMessageType
 from apps.experiments.exceptions import ChannelAlreadyUtilizedException
 from apps.service_providers.models import MessagingProviderType
+from apps.teams.models import Flag
 from apps.utils.factories.channels import ExperimentChannelFactory
 from apps.utils.factories.experiment import ExperimentFactory, ExperimentSessionFactory
 from apps.utils.factories.service_provider_factories import MessagingProviderFactory
@@ -132,3 +133,19 @@ def _build_provider(provider_type: MessagingProviderType, team):
         case MessagingProviderType.slack:
             config = {"slack_team_id": "", "slack_installation_id": 123}
     MessagingProviderFactory(type=provider_type, team=team, config=config)
+
+
+@override_settings(WAFFLE_CREATE_MISSING_FLAGS=True)
+def test_is_active_for_team_creates_missing_flag(experiment):
+    flag = Flag.get("missing_flag_1")
+    is_active = flag.is_active_for_team(experiment.team)
+    assert is_active is False
+    assert flag.id is not None
+
+
+@override_settings(WAFFLE_CREATE_MISSING_FLAGS=False)
+def test_is_active_for_team_does_not_create_missing_flag(experiment):
+    flag = Flag.get("missing_flag_2")
+    is_active = flag.is_active_for_team(experiment.team)
+    assert is_active is False
+    assert flag.id is None

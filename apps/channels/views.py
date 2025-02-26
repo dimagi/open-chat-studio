@@ -2,7 +2,7 @@ import json
 import uuid
 
 from django.conf import settings
-from django.http import Http404, HttpResponse, HttpResponseBadRequest
+from django.http import Http404, HttpRequest, HttpResponse, HttpResponseBadRequest, JsonResponse
 from django.shortcuts import get_object_or_404
 from django.views.decorators.csrf import csrf_exempt
 from django.views.decorators.http import require_POST
@@ -12,9 +12,11 @@ from rest_framework import serializers
 from rest_framework.decorators import api_view
 from rest_framework.response import Response
 
+from apps.api.permissions import verify_hmac
 from apps.channels import tasks
 from apps.channels.models import ChannelPlatform, ExperimentChannel
-from apps.experiments.models import Experiment, ExperimentSession
+from apps.channels.serializers import CommCareConnectMessageSerializer
+from apps.experiments.models import Experiment, ExperimentSession, ParticipantData
 
 
 @csrf_exempt
@@ -124,3 +126,31 @@ def new_api_message(request, experiment_id: uuid):
         session,
     )
     return Response(data={"response": response})
+
+
+@require_POST
+@csrf_exempt
+@verify_hmac
+def new_connect_message(request: HttpRequest):
+    serializer = CommCareConnectMessageSerializer(data=json.loads(request.body))
+    if not serializer.is_valid():
+        return JsonResponse(serializer.errors, status=400)
+
+    connect_channel_id = serializer.data["channel_id"]
+    try:
+        participant_data = ParticipantData.objects.get(
+            system_metadata__commcare_connect_channel_id=connect_channel_id,
+        )
+
+        channel = ExperimentChannel.objects.get(
+            platform=ChannelPlatform.COMMCARE_CONNECT, experiment__id=participant_data.experiment_id
+        )
+    except ParticipantData.DoesNotExist:
+        return JsonResponse({"detail": "No participant data found"}, status=404)
+    except ExperimentChannel.DoesNotExist:
+        return JsonResponse({"detail": "No experiment channel found"}, status=404)
+
+    tasks.handle_commcare_connect_message.delay(
+        experiment_channel_id=channel.id, participant_data_id=participant_data.id, messages=serializer.data["messages"]
+    )
+    return HttpResponse()

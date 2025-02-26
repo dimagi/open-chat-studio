@@ -43,6 +43,7 @@ team_urlpatterns = [
     path("annotations/", include("apps.annotations.urls")),
     path("participants/", include("apps.participants.urls")),
     path("slack/", include("apps.slack.urls")),
+    path("help/", include("apps.help.urls")),
 ]
 
 urlpatterns = [
@@ -59,13 +60,10 @@ urlpatterns = [
     path("teams/", include("apps.teams.urls")),
     path("", include("apps.web.urls")),
     path("", include(slack_global_urls)),
-    path("support/", include("apps.support.urls")),
     path("celery-progress/", include("celery_progress.urls")),
     # API docs
     path("api/schema/", SpectacularAPIView.as_view(), name="schema"),
     path("api/docs/", SpectacularRedocView.as_view(url_name="schema"), name="redoc"),
-    # hijack urls for impersonation
-    path("hijack/", include("hijack.urls", namespace="hijack")),
     path("channels/", include("apps.channels.urls", namespace="channels")),
     path("api/", include("apps.api.urls", namespace="api")),
     path("tz_detect/", include("tz_detect.urls")),

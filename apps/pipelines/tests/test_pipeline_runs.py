@@ -3,6 +3,7 @@ from unittest.mock import patch
 import pytest
 from langchain_core.runnables import RunnableLambda
 
+from apps.channels.datamodels import Attachment
 from apps.chat.models import ChatMessage, ChatMessageType
 from apps.experiments.models import ExperimentSession
 from apps.pipelines.models import LogEntry, Pipeline, PipelineRunStatus
@@ -26,15 +27,29 @@ def session():
 @django_db_transactional()
 def test_running_pipeline_creates_run(pipeline: Pipeline, session: ExperimentSession):
     input = "foo"
-    pipeline.invoke(PipelineState(messages=[input]), session)
+    attachments = [
+        Attachment(file_id=123, type="code_interpreter", name="test.py", size=10),
+    ]
+    serialized_attachments = [att.model_dump() for att in attachments]
+    pipeline.invoke(PipelineState(messages=[input], attachments=serialized_attachments), session)
     assert pipeline.runs.count() == 1
     run = pipeline.runs.first()
     assert run.status == PipelineRunStatus.SUCCESS
 
-    assert run.input == PipelineState(messages=[input])
+    assert run.input == PipelineState(messages=[input], attachments=serialized_attachments)
     ai_message = ChatMessage.objects.filter(message_type=ChatMessageType.AI).last()
     assert run.output == PipelineState(
         ai_message_id=ai_message.id,
+        attachments=[
+            {
+                "content_type": "application/octet-stream",
+                "file_id": 123,
+                "name": "test.py",
+                "size": 10,
+                "type": "code_interpreter",
+                "upload_to_assistant": False,
+            }
+        ],
         messages=[
             input,  # the input to the graph
             input,  # The output of the start node
@@ -43,6 +58,11 @@ def test_running_pipeline_creates_run(pipeline: Pipeline, session: ExperimentSes
         outputs={
             pipeline.node_ids[0]: {"message": "foo"},
             pipeline.node_ids[1]: {"message": "foo"},
+        },
+        temp_state={
+            "outputs": {"end": "foo", "start": "foo"},
+            "user_input": "foo",
+            "attachments": serialized_attachments,
         },
     )
 
@@ -107,6 +127,8 @@ def test_running_failed_pipeline_logs_error(pipeline: Pipeline, session: Experim
     error_message = "Bad things are afoot"
 
     class FailingNode(PipelineNode):
+        name: str = "failure"
+
         def process(self, *args, **kwargs) -> RunnableLambda:
             raise Exception(error_message)
 
@@ -143,3 +165,13 @@ def test_running_pipeline_stores_session(pipeline: Pipeline, session: Experiment
     pipeline.invoke(PipelineState(messages=[input]), session)
     assert pipeline.runs.count() == 1
     assert pipeline.runs.first().session_id == session.id
+
+
+@django_db_transactional()
+@pytest.mark.parametrize("save_input_to_history", [True, False])
+def test_save_input_to_history(save_input_to_history, pipeline: Pipeline, session: ExperimentSession):
+    input = "Hi"
+    pipeline.invoke(PipelineState(messages=[input]), session, save_input_to_history=save_input_to_history)
+    assert (
+        session.chat.messages.filter(content="Hi", message_type=ChatMessageType.HUMAN).exists() == save_input_to_history
+    )

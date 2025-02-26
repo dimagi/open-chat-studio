@@ -20,7 +20,7 @@ class PromptTemplateContext:
             "current_datetime": self.get_current_datetime,
         }
 
-    def get_context(self, variables: list[str]):
+    def get_context(self, variables: list[str]) -> dict:
         context = {}
         for key, factory in self.factories.items():
             # allow partial matches to support format specifiers
@@ -83,8 +83,8 @@ class SafeAccessWrapper(dict):
     """
 
     def __init__(self, data: Any):
-        super().__init__(self, __data=data)
         self.__data = data
+        super().__init__(self, __data=data)
 
     def __getitem__(self, key):
         if isinstance(self.__data, list | str):

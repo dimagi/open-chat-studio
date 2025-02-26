@@ -1,6 +1,9 @@
+import logging
+
 from django.contrib import messages
 from django.contrib.auth.mixins import PermissionRequiredMixin
 from django.db import transaction
+from django.db.models import Q
 from django.http import HttpResponse, HttpResponseRedirect
 from django.shortcuts import get_object_or_404, render
 from django.template.loader import render_to_string
@@ -24,7 +27,6 @@ from .models import OpenAiAssistant, ToolResources
 from .sync import (
     OpenAiSyncError,
     delete_file_from_openai,
-    delete_openai_assistant,
     get_diff_with_openai_assistant,
     get_out_of_sync_files,
     import_openai_assistant,
@@ -33,6 +35,8 @@ from .sync import (
 )
 from .tables import OpenAiAssistantTable
 from .utils import get_llm_providers_for_assistants
+
+logger = logging.getLogger("ocs.assistants")
 
 
 class OpenAiAssistantHome(LoginAndTeamRequiredMixin, TemplateView, PermissionRequiredMixin):
@@ -123,6 +127,9 @@ class CreateOpenAiAssistant(BaseOpenAiAssistantView, CreateView):
         except OpenAiSyncError as e:
             messages.error(self.request, f"Error syncing assistant to OpenAI: {e}")
             return self.form_invalid(form)
+        except Exception as e:
+            logger.exception(f"Could not push assistant to OpenAI. {e}")
+            messages.error(self.request, "Could not create the assistant at OpenAI. Pleas try again later")
         return HttpResponseRedirect(self.get_success_url())
 
 
@@ -144,6 +151,9 @@ class EditOpenAiAssistant(BaseOpenAiAssistantView, UpdateView):
             messages.error(self.request, f"Error syncing changes to OpenAI: {e}")
             form.add_error(None, str(e))
             return self.form_invalid(form)
+        except Exception as e:
+            logger.exception(f"Could not push assistant to OpenAI. {e}")
+            messages.error(self.request, "Could not create the assistant at OpenAI. Pleas try again later")
         return response
 
 
@@ -179,26 +189,10 @@ class SyncEditingOpenAiAssistant(BaseOpenAiAssistantView, View):
             sync_from_openai(assistant)
         except OpenAiSyncError as e:
             messages.error(request, f"Error syncing assistant: {e}")
+        except Exception as e:
+            logger.exception(f"Error syncing assistant. {e}")
+            messages.error(request, "Could not sync assistant. Please try again later")
         return HttpResponse(headers={"HX-Refresh": "true"})
-
-
-class DeleteOpenAiAssistant(LoginAndTeamRequiredMixin, View, PermissionRequiredMixin):
-    permission_required = "assistants.delete_openaiassistant"
-
-    @transaction.atomic()
-    def delete(self, request, team_slug: str, pk: int):
-        assistant = get_object_or_404(OpenAiAssistant, team=request.team, pk=pk)
-        if assistant.working_version_id is None and not assistant.is_archived:
-            messages.warning(request, "Cannot delete a versioned assistant without first archiving.")
-            return HttpResponse(status=400)
-        try:
-            delete_openai_assistant(assistant)
-        except OpenAiSyncError as e:
-            messages.error(request, f"Error deleting assistant from OpenAI: {e}")
-            return HttpResponse(status=500)
-        assistant.delete()
-        messages.success(request, "Assistant Deleted")
-        return HttpResponse()
 
 
 class LocalDeleteOpenAiAssistant(LoginAndTeamRequiredMixin, View, PermissionRequiredMixin):
@@ -212,13 +206,39 @@ class LocalDeleteOpenAiAssistant(LoginAndTeamRequiredMixin, View, PermissionRequ
             messages.success(request, "Assistant Archived")
             return HttpResponse()
         else:
+            version_query = None
+            if assistant.is_working_version:
+                version_query = list(
+                    map(
+                        str,
+                        OpenAiAssistant.objects.filter(
+                            Q(id=assistant.id) | Q(working_version__id=assistant.id)
+                        ).values_list("id", flat=True),
+                    )
+                )
             experiments = [
-                Chip(label=experiment.name, url=experiment.get_absolute_url())
-                for experiment in assistant.get_related_experiments_queryset()
+                Chip(
+                    label=(
+                        f"{experiment.name} [{experiment.get_version_name()}]"
+                        if experiment.is_working_version
+                        else f"{experiment.name} {experiment.get_version_name()} [published]"
+                    ),
+                    url=experiment.get_absolute_url(),
+                )
+                for experiment in assistant.get_related_experiments_queryset(assistant_ids=version_query)
             ]
             pipeline_nodes = [
                 Chip(label=node.pipeline.name, url=node.pipeline.get_absolute_url())
-                for node in assistant.get_related_pipeline_node_queryset().select_related("pipeline")
+                for node in assistant.get_related_pipeline_node_queryset(assistant_ids=version_query).select_related(
+                    "pipeline"
+                )
+            ]
+            experiments_with_pipeline_nodes = [
+                Chip(
+                    label=f"{experiment.name} {experiment.get_version_name()} [published]",
+                    url=experiment.get_absolute_url(),
+                )
+                for experiment in assistant.get_related_experiments_with_pipeline_queryset(assistant_ids=version_query)
             ]
             response = render_to_string(
                 "assistants/partials/referenced_objects.html",
@@ -226,6 +246,7 @@ class LocalDeleteOpenAiAssistant(LoginAndTeamRequiredMixin, View, PermissionRequ
                     "object_name": "assistant",
                     "experiments": experiments,
                     "pipeline_nodes": pipeline_nodes,
+                    "experiments_with_pipeline_nodes": experiments_with_pipeline_nodes,
                 },
             )
             return HttpResponse(response, headers={"HX-Reswap": "none"}, status=400)
@@ -240,6 +261,9 @@ class SyncOpenAiAssistant(LoginAndTeamRequiredMixin, View, PermissionRequiredMix
             sync_from_openai(assistant)
         except OpenAiSyncError as e:
             messages.error(request, f"Error syncing assistant: {e}")
+        except Exception as e:
+            logger.exception(f"Error syncing assistant. {e}")
+            messages.error(request, "Could not sync assistant. Please try again later")
         return render_table_row(request, OpenAiAssistantTable, assistant)
 
 

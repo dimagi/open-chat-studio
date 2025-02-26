@@ -184,3 +184,11 @@ class ParticipantDataUpdateRequest(serializers.Serializer):
         choices=ChannelPlatform.choices, default=ChannelPlatform.API, label="Participant Platform"
     )
     data = ParticipantExperimentData(many=True)
+
+
+class TriggerBotMessageRequest(serializers.Serializer):
+    identifier = serializers.CharField(label="Participant Identifier")
+    platform = serializers.ChoiceField(choices=ChannelPlatform.choices, label="Participant Platform")
+    experiment = serializers.UUIDField(label="Experiment ID")
+    prompt_text = serializers.CharField(label="Prompt to go to bot")
+    start_new_session = serializers.BooleanField(label="Starts a new session", required=False, default=False)

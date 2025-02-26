@@ -5,8 +5,10 @@ import time
 from typing import Literal
 
 import tiktoken
+from django.conf import settings
 from django.core.exceptions import ValidationError
 from django.core.validators import validate_email
+from django.db.models import TextChoices
 from jinja2 import meta
 from jinja2.sandbox import SandboxedEnvironment
 from langchain_core.messages import BaseMessage
@@ -20,14 +22,22 @@ from pydantic_core.core_schema import FieldValidationInfo
 from RestrictedPython import compile_restricted, safe_builtins, safe_globals
 
 from apps.assistants.models import OpenAiAssistant
-from apps.channels.datamodels import Attachment
 from apps.chat.agent.tools import get_node_tools
 from apps.chat.conversation import compress_chat_history, compress_pipeline_chat_history
 from apps.chat.models import ChatMessageType
 from apps.experiments.models import ExperimentSession, ParticipantData
 from apps.pipelines.exceptions import PipelineNodeBuildError, PipelineNodeRunError
 from apps.pipelines.models import Node, PipelineChatHistory, PipelineChatHistoryTypes
-from apps.pipelines.nodes.base import NodeSchema, OptionsSource, PipelineNode, PipelineState, UiSchema, Widgets
+from apps.pipelines.nodes.base import (
+    NodeSchema,
+    OptionsSource,
+    PipelineNode,
+    PipelineState,
+    UiSchema,
+    Widgets,
+    deprecated_node,
+)
+from apps.pipelines.nodes.helpers import ParticipantDataProxy
 from apps.pipelines.tasks import send_email_from_pipeline
 from apps.service_providers.exceptions import ServiceProviderConfigError
 from apps.service_providers.llm_service.adapters import AssistantAdapter, ChatAdapter
@@ -46,7 +56,11 @@ from apps.utils.prompt import OcsPromptTemplate, PromptVars, validate_prompt_var
 class RenderTemplate(PipelineNode):
     """Renders a Jinja template"""
 
-    model_config = ConfigDict(json_schema_extra=NodeSchema(label="Render a template"))
+    model_config = ConfigDict(
+        json_schema_extra=NodeSchema(
+            label="Render a template", documentation_link=settings.DOCUMENTATION_LINKS["node_template"]
+        )
+    )
 
     template_string: str = Field(
         description="Use {{your_variable_name}} to refer to designate input",
@@ -73,7 +87,7 @@ class RenderTemplate(PipelineNode):
             content = all_variables(input)
         template = SandboxedEnvironment().from_string(self.template_string)
         output = template.render(content)
-        return PipelineState.from_node_output(node_id=node_id, output=output)
+        return PipelineState.from_node_output(node_name=self.name, node_id=node_id, output=output)
 
 
 class LLMResponseMixin(BaseModel):
@@ -167,6 +181,7 @@ class HistoryMixin(LLMResponseMixin):
         return message
 
 
+@deprecated_node(message="Use the 'LLM' node instead.")
 class LLMResponse(PipelineNode, LLMResponseMixin):
     """Calls an LLM with the given input"""
 
@@ -175,13 +190,15 @@ class LLMResponse(PipelineNode, LLMResponseMixin):
     def _process(self, input, node_id: str, **kwargs) -> PipelineState:
         llm = self.get_chat_model()
         output = llm.invoke(input, config=self._config)
-        return PipelineState.from_node_output(node_id=node_id, output=output.content)
+        return PipelineState.from_node_output(node_name=self.name, node_id=node_id, output=output.content)
 
 
 class LLMResponseWithPrompt(LLMResponse, HistoryMixin):
-    """Calls an LLM with a prompt"""
+    """Uses and LLM to respond to the input."""
 
-    model_config = ConfigDict(json_schema_extra=NodeSchema(label="LLM response with prompt"))
+    model_config = ConfigDict(
+        json_schema_extra=NodeSchema(label="LLM", documentation_link=settings.DOCUMENTATION_LINKS["node_llm"])
+    )
 
     source_material_id: int | None = Field(
         None, json_schema_extra=UiSchema(widget=Widgets.select, options_source=OptionsSource.source_material)
@@ -245,7 +262,7 @@ class LLMResponseWithPrompt(LLMResponse, HistoryMixin):
 
         # Invoke runnable
         result = chat.invoke(input=input)
-        return PipelineState.from_node_output(node_id=node_id, output=result.output)
+        return PipelineState.from_node_output(node_name=self.name, node_id=node_id, output=result.output)
 
     def tools_enabled(self) -> bool:
         return len(self.tools) > 0 or len(self.custom_actions) > 0
@@ -254,7 +271,11 @@ class LLMResponseWithPrompt(LLMResponse, HistoryMixin):
 class SendEmail(PipelineNode):
     """Send the input to the node to the list of addresses provided"""
 
-    model_config = ConfigDict(json_schema_extra=NodeSchema(label="Send an email"))
+    model_config = ConfigDict(
+        json_schema_extra=NodeSchema(
+            label="Send an email", documentation_link=settings.DOCUMENTATION_LINKS["node_email"]
+        )
+    )
 
     recipient_list: str = Field(description="A comma-separated list of email addresses")
     subject: str
@@ -273,32 +294,35 @@ class SendEmail(PipelineNode):
         send_email_from_pipeline.delay(
             recipient_list=self.recipient_list.split(","), subject=self.subject, message=input
         )
-        return PipelineState.from_node_output(node_id=node_id, output=None)
+        return PipelineState.from_node_output(node_name=self.name, node_id=node_id, output=input)
 
 
 class Passthrough(PipelineNode):
     """Returns the input without modification"""
 
-    model_config = ConfigDict(json_schema_extra=NodeSchema(label="Do Nothing"))
+    model_config = ConfigDict(json_schema_extra=NodeSchema(label="Do Nothing", can_add=False))
 
     def _process(self, input, state: PipelineState, node_id: str) -> PipelineState:
         if self.logger:
             self.logger.debug(f"Returning input: '{input}' without modification", input=input, output=input)
-        return PipelineState.from_node_output(node_id=node_id, output=input)
+        return PipelineState.from_node_output(node_name=self.name, node_id=node_id, output=input)
 
 
 class StartNode(Passthrough):
     """The start of the pipeline"""
 
+    name: str = "start"
     model_config = ConfigDict(json_schema_extra=NodeSchema(label="Start", flow_node_type="startNode"))
 
 
 class EndNode(Passthrough):
     """The end of the pipeline"""
 
+    name: str = "end"
     model_config = ConfigDict(json_schema_extra=NodeSchema(label="End", flow_node_type="endNode"))
 
 
+@deprecated_node(message="Use the 'Router' node instead.")
 class BooleanNode(Passthrough):
     """Branches based whether the input matches a certain value"""
 
@@ -316,29 +340,49 @@ class BooleanNode(Passthrough):
         return {"output_0": "true", "output_1": "false"}
 
 
-class RouterNode(Passthrough, HistoryMixin):
-    """Routes the input to one of the linked nodes"""
-
-    model_config = ConfigDict(json_schema_extra=NodeSchema(label="Router"))
-
-    prompt: str = Field(
-        default="You are an extremely helpful router",
-        min_length=1,
-        json_schema_extra=UiSchema(widget=Widgets.expandable_text),
-    )
-    num_outputs: int = Field(2, json_schema_extra=UiSchema(widget=Widgets.none))
+class RouterMixin(BaseModel):
     keywords: list[str] = Field(default_factory=list, json_schema_extra=UiSchema(widget=Widgets.keywords))
 
     @field_validator("keywords")
     def ensure_keywords_exist(cls, value, info: FieldValidationInfo):
-        num_outputs = info.data.get("num_outputs")
         if not all(entry for entry in value):
             raise PydanticCustomError("invalid_keywords", "Keywords cannot be empty")
 
         if len(set(value)) != len(value):
             raise PydanticCustomError("invalid_keywords", "Keywords must be unique")
 
-        return value[:num_outputs]  # Ensure the number of keywords matches the number of outputs
+        return value
+
+    def _get_keyword(self, result: str):
+        keyword = result.lower().strip()
+        if keyword in [k.lower() for k in self.keywords]:
+            return keyword.lower()
+        else:
+            return self.keywords[0].lower()
+
+    def get_output_map(self):
+        """Returns a mapping of the form:
+        {"output_1": "keyword 1", "output_2": "keyword_2", ...} where keywords are defined by the user
+        """
+        return {f"output_{output_num}": keyword.lower() for output_num, keyword in enumerate(self.keywords)}
+
+
+class RouterNode(RouterMixin, Passthrough, HistoryMixin):
+    """Routes the input to one of the linked nodes using an LLM"""
+
+    model_config = ConfigDict(
+        json_schema_extra=NodeSchema(
+            label="LLM Router",
+            documentation_link=settings.DOCUMENTATION_LINKS["node_llm_router"],
+            field_order=["llm_provider_id", "llm_temperature", "history_type", "prompt", "keywords"],
+        )
+    )
+
+    prompt: str = Field(
+        default="You are an extremely helpful router",
+        min_length=1,
+        json_schema_extra=UiSchema(widget=Widgets.expandable_text),
+    )
 
     def _process_conditional(self, state: PipelineState, node_id=None):
         prompt = OcsPromptTemplate.from_messages(
@@ -350,29 +394,55 @@ class RouterNode(Passthrough, HistoryMixin):
         session: ExperimentSession | None = state.get("experiment_session")
 
         if self.history_type != PipelineChatHistoryTypes.NONE and session:
-            input_messages = prompt.invoke(context).to_messages()
+            input_messages = prompt.format_messages(**context)
             context["history"] = self._get_history(session, node_id, input_messages)
 
         chain = prompt | self.get_chat_model()
 
         result = chain.invoke(context, config=self._config)
-        keyword = self._get_keyword(result)
+        keyword = self._get_keyword(result.content)
         if session:
             self._save_history(session, node_id, node_input, keyword)
         return keyword
 
-    def _get_keyword(self, result):
-        keyword = result.content.lower().strip()
-        if keyword in [k.lower() for k in self.keywords]:
-            return keyword.lower()
-        else:
-            return self.keywords[0].lower()
 
-    def get_output_map(self):
-        """Returns a mapping of the form:
-        {"output_1": "keyword 1", "output_2": "keyword_2", ...} where keywords are defined by the user
-        """
-        return {f"output_{output_num}": keyword.lower() for output_num, keyword in enumerate(self.keywords)}
+class StaticRouterNode(RouterMixin, Passthrough):
+    """Routes the input to a linked node using the temp state of the pipeline or participant data"""
+
+    class DataSource(TextChoices):
+        participant_data = "participant_data", "Participant Data"
+        temp_state = "temp_state", "Temporary State"
+
+    model_config = ConfigDict(
+        json_schema_extra=NodeSchema(
+            label="Static Router",
+            documentation_link=settings.DOCUMENTATION_LINKS["node_static_router"],
+            field_order=["data_source", "route_key", "keywords"],
+        )
+    )
+
+    data_source: DataSource = Field(
+        DataSource.participant_data,
+        description="The source of the data to use for routing",
+        json_schema_extra=UiSchema(enum_labels=DataSource.labels),
+    )
+    route_key: str = Field(..., description="The key in the data to use for routing")
+
+    def _process_conditional(self, state: PipelineState, node_id=None):
+        from apps.service_providers.llm_service.prompt_context import SafeAccessWrapper
+
+        if self.data_source == self.DataSource.participant_data:
+            data = ParticipantDataProxy.from_state(state).get()
+        else:
+            data = state["temp_state"]
+
+        formatted_key = f"{{data.{self.route_key}}}"
+        try:
+            result = formatted_key.format(data=SafeAccessWrapper(data))
+        except KeyError:
+            result = ""
+
+        return self._get_keyword(result)
 
 
 class ExtractStructuredDataNodeMixin:
@@ -413,8 +483,8 @@ class ExtractStructuredDataNodeMixin:
             new_reference_data = self.update_reference_data(output, reference_data)
 
         self.post_extraction_hook(new_reference_data, state)
-        output = json.dumps(new_reference_data)
-        return PipelineState.from_node_output(node_id=node_id, output=output)
+        output = input if self.is_passthrough else json.dumps(new_reference_data)
+        return PipelineState.from_node_output(node_name=self.name, node_id=node_id, output=output)
 
     def post_extraction_hook(self, output, state):
         pass
@@ -513,7 +583,12 @@ class StructuredDataSchemaValidatorMixin:
 class ExtractStructuredData(ExtractStructuredDataNodeMixin, LLMResponse, StructuredDataSchemaValidatorMixin):
     """Extract structured data from the input"""
 
-    model_config = ConfigDict(json_schema_extra=NodeSchema(label="Extract Structured Data"))
+    model_config = ConfigDict(
+        json_schema_extra=NodeSchema(
+            label="Extract Structured Data",
+            documentation_link=settings.DOCUMENTATION_LINKS["node_extract_structured_data"],
+        )
+    )
 
     data_schema: str = Field(
         default='{"name": "the name of the user"}',
@@ -521,11 +596,20 @@ class ExtractStructuredData(ExtractStructuredDataNodeMixin, LLMResponse, Structu
         json_schema_extra=UiSchema(widget=Widgets.expandable_text),
     )
 
+    @property
+    def is_passthrough(self) -> bool:
+        return False
+
 
 class ExtractParticipantData(ExtractStructuredDataNodeMixin, LLMResponse, StructuredDataSchemaValidatorMixin):
     """Extract structured data and saves it as participant data"""
 
-    model_config = ConfigDict(json_schema_extra=NodeSchema(label="Update Participant Data"))
+    model_config = ConfigDict(
+        json_schema_extra=NodeSchema(
+            label="Update Participant Data",
+            documentation_link=settings.DOCUMENTATION_LINKS["node_update_participant_data"],
+        )
+    )
 
     data_schema: str = Field(
         default='{"name": "the name of the user"}',
@@ -533,6 +617,10 @@ class ExtractParticipantData(ExtractStructuredDataNodeMixin, LLMResponse, Struct
         json_schema_extra=UiSchema(widget=Widgets.expandable_text),
     )
     key_name: str = ""
+
+    @property
+    def is_passthrough(self) -> bool:
+        return True
 
     def get_reference_data(self, state) -> dict:
         """Returns the participant data as reference. If there is a `key_name`, the value in the participant data
@@ -579,7 +667,7 @@ class ExtractParticipantData(ExtractStructuredDataNodeMixin, LLMResponse, Struct
         except ParticipantData.DoesNotExist:
             ParticipantData.objects.create(
                 participant=session.participant,
-                content_object=session.experiment,
+                experiment=session.experiment,
                 team=session.team,
                 data=output,
             )
@@ -588,7 +676,11 @@ class ExtractParticipantData(ExtractStructuredDataNodeMixin, LLMResponse, Struct
 class AssistantNode(PipelineNode):
     """Calls an OpenAI assistant"""
 
-    model_config = ConfigDict(json_schema_extra=NodeSchema(label="OpenAI Assistant"))
+    model_config = ConfigDict(
+        json_schema_extra=NodeSchema(
+            label="OpenAI Assistant", documentation_link=settings.DOCUMENTATION_LINKS["node_assistant"]
+        )
+    )
 
     assistant_id: int = Field(
         ..., json_schema_extra=UiSchema(widget=Widgets.select, options_source=OptionsSource.assistant)
@@ -622,11 +714,12 @@ class AssistantNode(PipelineNode):
 
         session: ExperimentSession | None = state.get("experiment_session")
         runnable = self._get_assistant_runnable(assistant, session=session, node_id=node_id)
-        attachments = [Attachment.model_validate(params) for params in state.get("attachments", [])]
-        chain_output: ChainOutput = runnable.invoke(input, config={}, attachments=attachments)
+        attachments = self._get_attachments(state)
+        chain_output: ChainOutput = runnable.invoke(input, config=self._config, attachments=attachments)
         output = chain_output.output
 
         return PipelineState.from_node_output(
+            node_name=self.name,
             node_id=node_id,
             output=output,
             message_metadata={
@@ -635,17 +728,28 @@ class AssistantNode(PipelineNode):
             },
         )
 
+    def _get_attachments(self, state) -> list:
+        return [att for att in state.get("temp_state", {}).get("attachments", []) if att.upload_to_assistant]
+
     def _get_assistant_runnable(self, assistant: OpenAiAssistant, session: ExperimentSession, node_id: str):
+        trace_service = session.experiment.trace_service
+        if trace_service:
+            trace_service.initialize_from_callback_manager(self._config.get("callbacks"))
+
         history_manager = PipelineHistoryManager.for_assistant()
-        adapter = AssistantAdapter.for_pipeline(session=session, node=self)
+        adapter = AssistantAdapter.for_pipeline(session=session, node=self, trace_service=trace_service)
         if assistant.tools_enabled:
             return AgentAssistantChat(adapter=adapter, history_manager=history_manager)
         else:
             return AssistantChat(adapter=adapter, history_manager=history_manager)
 
 
-DEFAULT_FUNCTION = """# You must define a main function, which takes the node input as a string.
+CODE_NODE_DOCS = f"{settings.DOCUMENTATION_BASE_URL}{settings.DOCUMENTATION_LINKS['node_code']}"
+DEFAULT_FUNCTION = f"""# You must define a main function, which takes the node input as a string.
 # Return a string to pass to the next node.
+
+# Learn more about Python nodes at {CODE_NODE_DOCS}
+
 def main(input: str, **kwargs) -> str:
     return input
 """
@@ -654,7 +758,9 @@ def main(input: str, **kwargs) -> str:
 class CodeNode(PipelineNode):
     """Runs python"""
 
-    model_config = ConfigDict(json_schema_extra=NodeSchema(label="Python Node"))
+    model_config = ConfigDict(
+        json_schema_extra=NodeSchema(label="Python Node", documentation_link=settings.DOCUMENTATION_LINKS["node_code"])
+    )
     code: str = Field(
         default=DEFAULT_FUNCTION,
         description="The code to run",
@@ -702,21 +808,24 @@ class CodeNode(PipelineNode):
         )
 
         custom_locals = {}
-        custom_globals = self._get_custom_globals()
+        custom_globals = self._get_custom_globals(state)
+        kwargs = {"logger": self.logger}
         try:
             exec(byte_code, custom_globals, custom_locals)
-            result = str(custom_locals[function_name](input))
+            result = str(custom_locals[function_name](input, **kwargs))
         except Exception as exc:
             raise PipelineNodeRunError(exc) from exc
-        return PipelineState.from_node_output(node_id=node_id, output=result)
+        return PipelineState.from_node_output(node_name=self.name, node_id=node_id, output=result)
 
-    def _get_custom_globals(self):
+    def _get_custom_globals(self, state: PipelineState):
         from RestrictedPython.Eval import (
             default_guarded_getitem,
             default_guarded_getiter,
         )
 
         custom_globals = safe_globals.copy()
+
+        participant_data_proxy = ParticipantDataProxy.from_state(state)
         custom_globals.update(
             {
                 "__builtins__": self._get_custom_builtins(),
@@ -726,9 +835,27 @@ class CodeNode(PipelineNode):
                 "_getitem_": default_guarded_getitem,
                 "_getiter_": default_guarded_getiter,
                 "_write_": lambda x: x,
+                "get_participant_data": participant_data_proxy.get,
+                "set_participant_data": participant_data_proxy.set,
+                "get_temp_state_key": self._get_temp_state_key(state),
+                "set_temp_state_key": self._set_temp_state_key(state),
             }
         )
         return custom_globals
+
+    def _get_temp_state_key(self, state: PipelineState):
+        def get_temp_state_key(key_name: str):
+            return state["temp_state"].get(key_name)
+
+        return get_temp_state_key
+
+    def _set_temp_state_key(self, state: PipelineState):
+        def set_temp_state_key(key_name: str, value):
+            if key_name in {"user_input", "outputs", "attachments"}:
+                raise PipelineNodeRunError(f"Cannot set the '{key_name}' key of the temporary state")
+            state["temp_state"][key_name] = value
+
+        return set_temp_state_key
 
     def _get_custom_builtins(self):
         allowed_modules = {

@@ -6,15 +6,20 @@ from django.core.exceptions import ValidationError
 from django.db import transaction
 from django.http import HttpResponse, HttpResponseBadRequest
 from django.shortcuts import get_object_or_404, render, resolve_url
+from django.template.loader import render_to_string
 from django.urls import reverse
 from django.views.decorators.http import require_http_methods, require_POST
 from django_tables2 import SingleTableView
 from waffle import flag_is_active
 
+from apps.assistants.models import OpenAiAssistant
+from apps.experiments.models import Experiment
 from apps.files.views import BaseAddFileHtmxView
 from apps.service_providers.forms import LlmProviderModelForm
 from apps.service_providers.models import LlmProviderModel, MessagingProviderType, VoiceProviderType
+from apps.utils.deletion import get_related_objects
 
+from ..generics.chips import Chip
 from ..generics.views import BaseTypeSelectFormView
 from ..teams.decorators import login_and_team_required
 from .utils import ServiceProvider, get_service_provider_config_form
@@ -38,10 +43,42 @@ class ServiceProviderTableView(SingleTableView, ServiceProviderMixin):
         return self.provider_type.table
 
 
+def matches_blocking_deletion_condition(obj):
+    return (getattr(obj, "working_version_id", None) is None) or (getattr(obj, "is_default_version", False) is True)
+
+
 @require_http_methods(["DELETE"])
 def delete_service_provider(request, team_slug: str, provider_type: str, pk: int):
     provider = ServiceProvider[provider_type]
     service_config = get_object_or_404(provider.model, team=request.team, pk=pk)
+    related_objects = get_related_objects(service_config)
+
+    if related_objects:
+        filtered_objects = [obj for obj in related_objects if matches_blocking_deletion_condition(obj)]
+        related_experiments = [
+            Chip(
+                label=(
+                    f"{experiment.name} [{experiment.get_version_name()}]"
+                    if experiment.is_working_version
+                    else f"{experiment.name} {experiment.get_version_name()} [published]"
+                ),
+                url=experiment.get_absolute_url(),
+            )
+            for experiment in [obj for obj in filtered_objects if isinstance(obj, Experiment)]
+        ]
+        related_assistants = [
+            Chip(label=assistant.name, url=assistant.get_absolute_url())
+            for assistant in [obj for obj in filtered_objects if isinstance(obj, OpenAiAssistant)]
+        ]
+        response = render_to_string(
+            "assistants/partials/referenced_objects.html",
+            context={
+                "object_name": "service provider",
+                "experiments": related_experiments,
+                "assistants": related_assistants,
+            },
+        )
+        return HttpResponse(response, headers={"HX-Reswap": "none"}, status=400)
     service_config.delete()
     return HttpResponse()
 

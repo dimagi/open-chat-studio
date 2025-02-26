@@ -5,14 +5,19 @@ from unittest.mock import Mock, patch
 import pytest
 from django.core import mail
 from django.test import override_settings
+from langchain_core.runnables import RunnableConfig
 
+from apps.channels.datamodels import Attachment
 from apps.experiments.models import ParticipantData
 from apps.pipelines.exceptions import PipelineBuildError, PipelineNodeBuildError
+from apps.pipelines.logging import LoggingCallbackHandler
 from apps.pipelines.nodes.base import PipelineState
-from apps.pipelines.nodes.nodes import EndNode, StartNode
+from apps.pipelines.nodes.helpers import ParticipantDataProxy
+from apps.pipelines.nodes.nodes import EndNode, StartNode, StaticRouterNode
 from apps.pipelines.tests.utils import (
     assistant_node,
     boolean_node,
+    code_node,
     create_runnable,
     email_node,
     end_node,
@@ -24,6 +29,7 @@ from apps.pipelines.tests.utils import (
     render_template_node,
     router_node,
     start_node,
+    state_key_router_node,
 )
 from apps.service_providers.llm_service.runnables import ChainOutput
 from apps.utils.factories.assistants import OpenAiAssistantFactory
@@ -134,7 +140,7 @@ def test_llm_with_prompt_response(
     user_input = "The User Input"
     participant_data = ParticipantData.objects.create(
         team=experiment_session.team,
-        content_object=experiment_session.experiment,
+        experiment=experiment_session.experiment,
         participant=experiment_session.participant,
         data={"name": "A"},
     )
@@ -218,7 +224,7 @@ def test_branching_pipeline(pipeline, experiment_session):
         },
     ]
     user_input = "The Input"
-    output = create_runnable(pipeline, nodes, edges).invoke(
+    output = create_runnable(pipeline, nodes, edges, lenient=True).invoke(
         PipelineState(messages=[user_input], experiment_session=experiment_session)
     )["outputs"]
     expected_output = {
@@ -368,6 +374,130 @@ def test_router_node(get_llm_service, provider, provider_model, pipeline, experi
     assert output["messages"][-1] == "A z"
 
 
+@django_db_with_data(available_apps=("apps.service_providers",))
+@mock.patch("apps.pipelines.nodes.base.PipelineNode.logger", mock.Mock())
+def test_static_router_temp_state(pipeline, experiment_session):
+    # The static router will switch based on a state key, and pass its input through
+
+    code_set = """
+def main(input, **kwargs):
+    if "go to first" in input.lower():
+        set_temp_state_key("route_to", "first")
+    elif "go to second" in input.lower():
+        set_temp_state_key("route_to", "second")
+    return input
+"""
+    start = start_node()
+    code = code_node(code_set)
+    router = state_key_router_node("route_to", ["first", "second"], data_source=StaticRouterNode.DataSource.temp_state)
+    template_a = render_template_node("A {{ input }}")
+    template_b = render_template_node("B {{ input }}")
+    end = end_node()
+    nodes = [start, code, router, template_a, template_b, end]
+    edges = [
+        {"id": "start -> code", "source": start["id"], "target": code["id"]},
+        {"id": "code -> router", "source": code["id"], "target": router["id"]},
+        {
+            "id": "router -> A",
+            "source": router["id"],
+            "target": template_a["id"],
+            "sourceHandle": "output_0",
+        },
+        {
+            "id": "router -> B",
+            "source": router["id"],
+            "target": template_b["id"],
+            "sourceHandle": "output_1",
+        },
+        {"id": "A -> end", "source": template_a["id"], "target": end["id"]},
+        {"id": "B -> end", "source": template_b["id"], "target": end["id"]},
+    ]
+    runnable = create_runnable(pipeline, nodes, edges)
+    output = runnable.invoke(PipelineState(messages=["Go to FIRST"], experiment_session=experiment_session))
+    assert output["messages"][-1] == "A Go to FIRST"
+
+    output = runnable.invoke(PipelineState(messages=["Go to Second"], experiment_session=experiment_session))
+    assert output["messages"][-1] == "B Go to Second"
+
+    # default route
+    output = runnable.invoke(PipelineState(messages=["Go to Third"], experiment_session=experiment_session))
+    assert output["messages"][-1] == "A Go to Third"
+
+
+@django_db_with_data(available_apps=("apps.service_providers",))
+@mock.patch("apps.pipelines.nodes.base.PipelineNode.logger", mock.Mock())
+def test_static_router_participant_data(pipeline, experiment_session):
+    start = start_node()
+    router = state_key_router_node(
+        "route_to", ["first", "second"], data_source=StaticRouterNode.DataSource.participant_data
+    )
+    template_a = render_template_node("A {{ input }}")
+    template_b = render_template_node("B {{ input }}")
+    end = end_node()
+    nodes = [start, router, template_a, template_b, end]
+    edges = [
+        {"id": "start -> router", "source": start["id"], "target": router["id"]},
+        {
+            "id": "router -> A",
+            "source": router["id"],
+            "target": template_a["id"],
+            "sourceHandle": "output_0",
+        },
+        {
+            "id": "router -> B",
+            "source": router["id"],
+            "target": template_b["id"],
+            "sourceHandle": "output_1",
+        },
+        {"id": "A -> end", "source": template_a["id"], "target": end["id"]},
+        {"id": "B -> end", "source": template_b["id"], "target": end["id"]},
+    ]
+    runnable = create_runnable(pipeline, nodes, edges)
+
+    ParticipantDataProxy(experiment_session).set({"route_to": "first"})
+    output = runnable.invoke(PipelineState(messages=["Hi"], experiment_session=experiment_session))
+    assert output["messages"][-1] == "A Hi"
+
+    ParticipantDataProxy(experiment_session).set({"route_to": "second"})
+    output = runnable.invoke(PipelineState(messages=["Hi"], experiment_session=experiment_session))
+    assert output["messages"][-1] == "B Hi"
+
+    # default route
+    ParticipantDataProxy(experiment_session).set({})
+    output = runnable.invoke(PipelineState(messages=["Hi"], experiment_session=experiment_session))
+    assert output["messages"][-1] == "A Hi"
+
+
+@django_db_with_data(available_apps=("apps.service_providers",))
+def test_attachments_in_code_node(pipeline, experiment_session):
+    code_set = """
+def main(input, **kwargs):
+    attachments = get_temp_state_key("attachments")
+    kwargs["logger"].info([att.model_dump() for att in attachments])
+    return ",".join([att.name for att in attachments])
+"""
+    start = start_node()
+    code = code_node(code_set)
+    end = end_node()
+    nodes = [start, code, end]
+    runnable = create_runnable(pipeline, nodes)
+    callback = LoggingCallbackHandler()
+    attachments = [
+        Attachment(file_id=123, type="code_interpreter", name="test.py", size=10),
+        Attachment(file_id=456, type="file_search", name="blog.md", size=20),
+    ]
+    serialized_attachments = [att.model_dump() for att in attachments]
+    output = runnable.invoke(
+        PipelineState(
+            messages=["log attachments"], experiment_session=experiment_session, attachments=serialized_attachments
+        ),
+        config=RunnableConfig(callbacks=[callback]),
+    )
+    assert output["messages"][-1] == "test.py,blog.md"
+    log_entry = [e for e in callback.log_entries if e.level == "INFO"][0]
+    assert log_entry.message == str(serialized_attachments)
+
+
 @contextmanager
 def extract_structured_data_pipeline(provider, provider_model, pipeline, llm=None):
     service = build_fake_llm_service(responses=[{"name": "John"}], token_counts=[0], fake_llm=llm)
@@ -406,7 +536,7 @@ def test_extract_structured_data_with_chunking(provider, provider_model, pipelin
     session = ExperimentSessionFactory()
     ParticipantData.objects.create(
         team=session.team,
-        content_object=session.experiment,
+        experiment=session.experiment,
         data={"drink": "martini"},
         participant=session.participant,
     )
@@ -566,6 +696,32 @@ def test_assistant_node(get_assistant_runnable, tools_enabled):
     assert output_state["message_metadata"]["input"] == {"test": "metadata"}
     assert output_state["message_metadata"]["output"] == {"test": "metadata"}
     assert output_state["messages"][-1] == "Hi there human"
+
+
+@pytest.mark.django_db()
+@patch("apps.pipelines.nodes.nodes.AssistantNode._get_assistant_runnable")
+def test_assistant_node_attachments(get_assistant_runnable):
+    runnable_mock = Mock()
+    runnable_mock.invoke.return_value = ChainOutput(output="Hi there human", prompt_tokens=30, completion_tokens=20)
+    get_assistant_runnable.return_value = runnable_mock
+
+    pipeline = PipelineFactory()
+    assistant = OpenAiAssistantFactory()
+    nodes = [start_node(), assistant_node(str(assistant.id)), end_node()]
+    runnable = create_runnable(pipeline, nodes)
+    attachments = [
+        Attachment(file_id=123, type="code_interpreter", name="test.py", size=10),
+        Attachment(file_id=456, type="code_interpreter", name="demo.py", size=10, upload_to_assistant=True),
+    ]
+    state = PipelineState(
+        messages=["Hi there bot"],
+        experiment_session=ExperimentSessionFactory(),
+        attachments=[att.model_dump() for att in attachments],
+    )
+    output_state = runnable.invoke(state)
+    assert output_state["messages"][-1] == "Hi there human"
+    args, kwargs = runnable_mock.invoke.call_args
+    assert kwargs["attachments"] == [attachments[1]]
 
 
 @pytest.mark.django_db()
@@ -732,4 +888,89 @@ def test_cyclical_graph(pipeline):
     ]
 
     with pytest.raises(PipelineBuildError, match="A cycle was detected"):
-        create_runnable(pipeline, nodes, edges)
+        create_runnable(pipeline, nodes, edges, lenient=True)
+
+
+@django_db_with_data(available_apps=("apps.service_providers",))
+def test_parallel_nodes(pipeline):
+    start = start_node()
+    passthrough_1 = passthrough_node()
+    passthrough_2 = passthrough_node()
+    end = end_node()
+    nodes = [start, passthrough_1, passthrough_2, end]
+    edges = [
+        {
+            "id": "start -> passthrough 1",
+            "source": start["id"],
+            "target": passthrough_1["id"],
+        },
+        {
+            "id": "start -> passthrough 2",
+            "source": start["id"],
+            "target": passthrough_2["id"],
+        },
+        {
+            "id": "passthrough 1 -> end",
+            "source": passthrough_1["id"],
+            "target": end["id"],
+        },
+        {
+            "id": "passthrough 2 -> end",
+            "source": passthrough_2["id"],
+            "target": end["id"],
+        },
+    ]
+
+    with pytest.raises(PipelineBuildError, match="Multiple edges connected to the same output"):
+        create_runnable(pipeline, nodes, edges, lenient=False)
+
+
+@django_db_with_data(available_apps=("apps.service_providers",))
+def test_multiple_valid_inputs(pipeline):
+    """This tests the case where a node has multiple valid inputs to make sure it selects the correct one.
+
+    start --> router -+-> template --> end
+                      |                 ^
+                      +---------- ------+
+
+    In this graph, the end node can have valid input from 'router' and 'template' (if the router routes
+    to the template node). The end node should select the input from the 'template' and not the 'router'.
+    """
+    start = start_node()
+    router = boolean_node()
+    template = render_template_node("T: {{ input }}")
+    end = end_node()
+    nodes = [start, router, template, end]
+    # ordering of edges is significant
+    edges = [
+        {
+            "id": "start -> router",
+            "source": start["id"],
+            "target": router["id"],
+        },
+        {
+            "id": "router -> template",
+            "source": router["id"],
+            "target": template["id"],
+            "sourceHandle": "output_1",
+        },
+        {
+            "id": "template -> end",
+            "source": template["id"],
+            "target": end["id"],
+        },
+        {
+            "id": "router -> end",
+            "source": router["id"],
+            "target": end["id"],
+            "sourceHandle": "output_0",
+        },
+    ]
+
+    state = PipelineState(
+        messages=["not hello"],
+        experiment_session=ExperimentSessionFactory.build(),
+        pipeline_version=1,
+    )
+    output = create_runnable(pipeline, nodes, edges, lenient=False).invoke(state)
+    assert output["messages"][-1] == "T: not hello"

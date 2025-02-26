@@ -2,14 +2,20 @@
 This test suite is designed to ensure that the base channel functionality is working as
 intended. It utilizes the Telegram channel subclass to serve as a testing framework.
 """
-
 import re
 from unittest.mock import Mock, patch
 
 import pytest
+from django.test import override_settings
 
 from apps.channels.models import ChannelPlatform, ExperimentChannel
-from apps.chat.channels import URL_REGEX, ChannelBase, TelegramChannel, strip_urls_and_emojis
+from apps.chat.channels import (
+    DEFAULT_ERROR_RESPONSE_TEXT,
+    URL_REGEX,
+    ChannelBase,
+    TelegramChannel,
+    strip_urls_and_emojis,
+)
 from apps.chat.exceptions import VersionedExperimentSessionsNotAllowedException
 from apps.chat.models import ChatMessageType
 from apps.experiments.models import (
@@ -59,6 +65,7 @@ def test_incoming_message_adds_channel_info(telegram_channel):
 @patch("apps.chat.channels.TelegramChannel.send_text_to_user", Mock())
 @patch("apps.chat.channels.TelegramChannel._get_bot_response", Mock())
 def test_channel_added_for_experiment_session(telegram_channel):
+    """Ensure that the experiment session gets a link to the experimentt channel that this is using"""
     chat_id = 123123
     message = telegram_messages.text_message(chat_id=chat_id)
     _send_user_message_on_channel(telegram_channel, message)
@@ -102,6 +109,32 @@ def test_incoming_message_uses_existing_experiment_session(telegram_channel):
 
 @pytest.mark.django_db()
 @patch("apps.chat.channels.TelegramChannel.send_text_to_user", Mock())
+@patch("apps.chat.channels.TelegramChannel._get_bot_response", Mock())
+def test_non_active_sessions_are_not_resused(telegram_channel):
+    """
+    Sessions that were ended should not be reused when the user sends a new message. Rather, a new session should be
+    created
+    """
+    chat_id = 12312331
+    experiment = telegram_channel.experiment
+
+    message = telegram_messages.text_message(chat_id=chat_id)
+    _send_user_message_on_channel(telegram_channel, message)
+    # End the session. This could have been done using a timeout trigger for instance
+    telegram_channel.experiment_session.end()
+
+    # Remove the session from telegram_channel to simulate a new instance
+    telegram_channel.experiment_session = None
+
+    # When the user sends another message, a new session should be created
+    message = telegram_messages.text_message(chat_id=chat_id)
+    _send_user_message_on_channel(telegram_channel, message)
+    assert experiment.sessions.filter(participant__identifier=chat_id, status=SessionStatus.ACTIVE).count() == 1
+    assert experiment.sessions.filter(participant__identifier=chat_id, status=SessionStatus.PENDING_REVIEW).count() == 1
+
+
+@pytest.mark.django_db()
+@patch("apps.chat.channels.TelegramChannel.send_text_to_user", Mock())
 def test_different_sessions_created_for_different_users(telegram_channel):
     user_1_chat_id = 00000
     user_2_chat_id = 11111
@@ -112,6 +145,7 @@ def test_different_sessions_created_for_different_users(telegram_channel):
 
     # Calling new_user_message added an experiment_session, so we should remove it before reusing the instance
     telegram_channel.experiment_session = None
+    telegram_channel._participant_identifier = None
 
     # Second user's message
     user_2_message = telegram_messages.text_message(chat_id=user_2_chat_id)
@@ -368,6 +402,32 @@ def test_failed_transcription_informs_the_user(
 
 
 @pytest.mark.django_db()
+@patch("apps.chat.channels.TelegramChannel._generate_response_for_user")
+@patch("apps.chat.channels.TelegramChannel.send_message_to_user")
+@patch("apps.chat.channels.TelegramChannel.is_message_type_supported")
+def test_any_failure_informs_users(
+    is_message_type_supported, send_message_to_user, _generate_response_for_user, telegram_channel, caplog
+):
+    """
+    Any failure should try and inform the user that something went wrong. The method that does the informing should
+    not fail.
+    """
+
+    is_message_type_supported.side_effect = Exception("Random error")
+    # The generate response should fail, causing the default error message to be sent
+    _generate_response_for_user.side_effect = Exception("Generation error")
+
+    with pytest.raises(Exception, match="Random error"):
+        telegram_channel.new_user_message(telegram_messages.text_message())
+
+    assert send_message_to_user.call_args[0][0] == DEFAULT_ERROR_RESPONSE_TEXT
+
+    assert caplog.records[0].msg == (
+        "Something went wrong while trying to generate an appropriate error message for the user"
+    )
+
+
+@pytest.mark.django_db()
 @patch("apps.chat.channels.TelegramChannel._get_voice_transcript")
 @patch("apps.chat.channels.TelegramChannel.send_text_to_user")
 @patch("apps.chat.channels.TelegramChannel._reply_voice_message")
@@ -433,6 +493,7 @@ def test_user_query_extracted_for_pre_conversation_flow(message_func, message_ty
 
 
 @pytest.mark.django_db()
+@override_settings(COMMCARE_CONNECT_SERVER_SECRET="123", COMMCARE_CONNECT_SERVER_ID="123")
 @pytest.mark.parametrize("platform", [platform for platform, _ in ChannelPlatform.choices])
 def test_all_channels_can_be_instantiated_from_a_session(platform, twilio_provider):
     """This test checks all channel types and makes sure that we can instantiate each one by calling
@@ -786,14 +847,21 @@ class TestChannel(ChannelBase):
 class TestBaseChannelMethods:
     """Unit tests for the methods of the ChannelBase class"""
 
-    def test_participant_identifier(self):
-        """Fetching the participant data"""
+    def test_participant_identifier_determination(self):
+        """
+        Test participant identifier is fetched from the cached value, otherwise from the session, and lastly from the
+        user message
+        """
         session = ExperimentSessionFactory(participant__identifier="Alpha")
         exp_channel = ExperimentChannelFactory(experiment=session.experiment)
         channel_base = TestChannel(experiment=session.experiment, experiment_channel=exp_channel)
         channel_base.message = telegram_messages.text_message(chat_id="Beta")
 
         assert channel_base.participant_identifier == "Beta"
+        assert channel_base._participant_identifier == "Beta"
+        # Reset cached value
+        channel_base._participant_identifier = None
+        # Set the session and check that the identifier is fetched from the session
         channel_base.experiment_session = session
         assert channel_base.participant_identifier == "Alpha"
 
@@ -824,3 +892,18 @@ class TestBaseChannelMethods:
         assert new_version.is_a_version is True
         with pytest.raises(VersionedExperimentSessionsNotAllowedException):
             ChannelBase.start_new_session(new_version, channel, participant_identifier="testy-pie")
+
+    @pytest.mark.parametrize("new_session", [True, False])
+    def test_ensure_session_exists_for_participant(self, new_session, experiment):
+        experiment_channel = ExperimentChannelFactory(experiment=experiment)
+        if new_session:
+            ExperimentSessionFactory(
+                experiment=experiment, participant__identifier="testy-pie", experiment_channel=experiment_channel
+            )
+        channel_base = TestChannel(experiment=experiment, experiment_channel=experiment_channel)
+        channel_base.ensure_session_exists_for_participant(identifier="testy-pie", new_session=new_session)
+
+        if new_session:
+            assert ExperimentSession.objects.filter(participant__identifier="testy-pie").count() == 2
+        else:
+            assert ExperimentSession.objects.filter(participant__identifier="testy-pie").count() == 1

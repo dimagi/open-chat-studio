@@ -1,10 +1,11 @@
 import React, { ReactNode } from "react";
 
-import { NodeProps, Position } from "reactflow";
+import { NodeProps, NodeToolbar, Position } from "reactflow";
 import { NodeData } from "./types/nodeParams";
 import { nodeBorderClass } from "./utils";
-import usePipelineManagerStore from "./stores/pipelineManagerStore";
 import { BaseHandle } from "./nodes/BaseHandle";
+import { HelpContent } from "./panel/ComponentHelp";
+import usePipelineStore from "./stores/pipelineStore";
 
 function BoundaryNode({
   nodeProps,
@@ -16,10 +17,22 @@ function BoundaryNode({
   children: ReactNode;
 }) {
   const { id, selected } = nodeProps;
-  const nodeErrors = usePipelineManagerStore((state) => state.errors[id]);
+  const nodeError = usePipelineStore((state) => state.getNodeFieldError(id, "root"));
   return (
     <>
-      <div className={nodeBorderClass(nodeErrors, selected)}>
+      <NodeToolbar position={Position.Top} isVisible={!!nodeError}>
+        <div className="border border-primary join">
+            {nodeError && (
+              <div className="dropdown dropdown-top">
+                  <button tabIndex={0} role="button" className="btn btn-xs join-item">
+                      <i className="fa-solid fa-exclamation-triangle text-warning"></i>
+                  </button>
+                  <HelpContent><p>{nodeError}</p></HelpContent>
+              </div>
+            )}
+        </div>
+      </NodeToolbar>
+      <div className={nodeBorderClass(!!nodeError, selected)}>
         <div className="px-4">
           <div className="m-1 text-lg font-bold text-center">{label}</div>
         </div>

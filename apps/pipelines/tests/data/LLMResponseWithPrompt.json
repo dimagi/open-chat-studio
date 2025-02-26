@@ -1,5 +1,5 @@
 {
-  "description": "Calls an LLM with a prompt",
+  "description": "Uses and LLM to respond to the input.",
   "properties": {
     "llm_provider_id": {
       "title": "LLM Model",
@@ -43,6 +43,11 @@
       "ui:widget": "none",
       "type": "string"
     },
+    "name": {
+      "title": "Node Name",
+      "type": "string",
+      "ui:widget": "node_name"
+    },
     "source_material_id": {
       "default": null,
       "title": "Source Material Id",
@@ -79,10 +84,15 @@
   },
   "required": [
     "llm_provider_id",
-    "llm_provider_model_id"
+    "llm_provider_model_id",
+    "name"
   ],
   "title": "LLMResponseWithPrompt",
   "type": "object",
+  "ui:can_add": true,
+  "ui:can_delete": true,
+  "ui:deprecated": false,
+  "ui:documentation_link": "/concepts/pipelines/nodes/#llm",
   "ui:flow_node_type": "pipelineNode",
-  "ui:label": "LLM response with prompt"
+  "ui:label": "LLM"
 }

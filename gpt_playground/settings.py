@@ -64,8 +64,6 @@ THIRD_PARTY_APPS = [
     "drf_spectacular",
     "rest_framework_api_key",
     "celery_progress",
-    "hijack",  # "login as" functionality
-    "hijack.contrib.admin",  # hijack buttons in the admin
     "whitenoise.runserver_nostatic",  # whitenoise runserver
     "waffle",
     "django_celery_beat",
@@ -84,6 +82,7 @@ THIRD_PARTY_APPS = [
 PROJECT_APPS = [
     "apps.web.apps.OcsAdminConfig",
     "apps.audit",
+    "apps.help",
     "apps.users",
     "apps.api",
     "apps.chat",
@@ -92,6 +91,7 @@ PROJECT_APPS = [
     "apps.web.apps.WebConfig",
     "apps.teams",
     "apps.channels",
+    "apps.documents",
     "apps.service_providers",
     "apps.analysis",
     "apps.generics",
@@ -125,7 +125,6 @@ MIDDLEWARE = [
     "apps.web.locale_middleware.UserLocaleMiddleware",
     "django.contrib.messages.middleware.MessageMiddleware",
     "django.middleware.clickjacking.XFrameOptionsMiddleware",
-    "hijack.middleware.HijackUserMiddleware",
     "waffle.middleware.WaffleMiddleware",
     "field_audit.middleware.FieldAuditMiddleware",
     "apps.audit.middleware.AuditTransactionMiddleware",
@@ -446,6 +445,13 @@ if TASKBADGER_ORG and TASKBADGER_PROJECT and TASKBADGER_API_KEY:
     import taskbadger
     from taskbadger.systems.celery import CelerySystemIntegration
 
+    def _before_create(task: dict):
+        from apps.teams.utils import get_current_team
+
+        if team := get_current_team():
+            task.setdefault("tags", {})["team"] = team.slug
+        return task
+
     taskbadger.init(
         organization_slug=TASKBADGER_ORG,
         project_slug=TASKBADGER_PROJECT,
@@ -456,9 +462,11 @@ if TASKBADGER_ORG and TASKBADGER_PROJECT and TASKBADGER_API_KEY:
                     # ignore these since they execute often and fire other tasks that we already track
                     "apps.events.tasks.enqueue_static_triggers",
                     "apps.events.tasks.enqueue_timed_out_events",
-                ]
+                ],
+                record_task_args=True,
             )
         ],
+        before_create=_before_create,
     )
 
 LOG_LEVEL = env("OCS_LOG_LEVEL", default="DEBUG" if DEBUG else "INFO")
@@ -515,11 +523,28 @@ SITE_URL_ROOT = env("SITE_URL_ROOT", default=None)
 TAGGIT_CASE_INSENSITIVE = True
 
 # Documentation links
+# Available in templates as `docs_links`. Also see `apps.generics.help` and `generics/help.html`
 DOCUMENTATION_LINKS = {
-    "consent": "https://dimagi.atlassian.net/wiki/spaces/OCS/pages/2144305304/Consent+Forms+on+OCS",
+    # Try to make these keys grep-able so that usages are easy to find
+    "consent": "/concepts/consent/",
+    "embed": "/how-to/embed/",
     "survey": "https://dimagi.atlassian.net/wiki/spaces/OCS/pages/2144305308/Surveys",
-    "experiment": "https://dimagi.atlassian.net/wiki/spaces/OCS/pages/2144305312/Creating+a+Chatbot+Experiment",
+    "experiment": "/concepts/experiment/",
+    "pipelines": "/concepts/pipelines/",
+    "concepts.prompt_variables": "/concepts/prompt_variables/",
+    "concepts.experiments": "/concepts/experiment/",
+    "node_llm": "/concepts/pipelines/nodes/#llm",
+    "node_llm_router": "/concepts/pipelines/nodes/#llm-router",
+    "node_static_router": "/concepts/pipelines/nodes/#static-router",
+    "node_assistant": "/concepts/pipelines/nodes/#assistant",
+    "node_code": "/concepts/pipelines/nodes/#python-node",
+    "node_template": "/concepts/pipelines/nodes/#template",
+    "node_email": "/concepts/pipelines/nodes/#email",
+    "node_extract_structured_data": "/concepts/pipelines/nodes/#extract-structured-data",
+    "node_update_participant_data": "/concepts/pipelines/nodes/#update-participant-data",
 }
+# Available in templates as `docs_base_url`. Also see `apps.generics.help` and `generics/help.html`
+DOCUMENTATION_BASE_URL = env("DOCUMENTATION_BASE_URL", default="https://docs.openchatstudio.com")
 
 # Django rest framework config
 API_KEY_CUSTOM_HEADER = "HTTP_X_API_KEY"
@@ -577,3 +602,15 @@ HEALTH_CHECK = {
 CRYPTOGRAPHY_SALT = env("CRYPTOGRAPHY_SALT", default="")
 
 PUBLIC_CHAT_LINK_MAX_AGE = 5  # 5 minutes
+
+
+# Connect Messaging
+COMMCARE_CONNECT_SERVER_SECRET = env("COMMCARE_CONNECT_SERVER_SECRET", default="")
+COMMCARE_CONNECT_SERVER_ID = env("COMMCARE_CONNECT_SERVER_ID", default="")
+COMMCARE_CONNECT_ENABLED = COMMCARE_CONNECT_SERVER_SECRET and COMMCARE_CONNECT_SERVER_ID
+COMMCARE_CONNECT_SERVER_URL = env("COMMCARE_CONNECT_SERVER_URL", default="https://connectid.dimagi.com")
+COMMCARE_CONNECT_GET_CONNECT_ID_URL = f"{COMMCARE_CONNECT_SERVER_URL}/o/userinfo/"
+
+
+# AI helper
+AI_HELPER_API_KEY = env("AI_HELPER_API_KEY", default="")

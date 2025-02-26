@@ -1,11 +1,10 @@
 import {Node, NodeProps, NodeToolbar, Position} from "reactflow";
 import React, {ChangeEvent} from "react";
-import {getCachedData, nodeBorderClass} from "./utils";
+import {concatenate, formatDocsForSchema, getCachedData, nodeBorderClass} from "./utils";
 import usePipelineStore from "./stores/pipelineStore";
-import usePipelineManagerStore from "./stores/pipelineManagerStore";
 import useEditorStore from "./stores/editorStore";
-import {NodeData} from "./types/nodeParams";
-import {getNodeInputWidget, showAdvancedButton} from "./nodes/GetInputWidget";
+import {JsonSchema, NodeData} from "./types/nodeParams";
+import {getWidgetsForNode} from "./nodes/GetInputWidget";
 import NodeInput from "./nodes/NodeInput";
 import NodeOutputs from "./nodes/NodeOutputs";
 import {HelpContent} from "./panel/ComponentHelp";
@@ -17,23 +16,27 @@ export function PipelineNode(nodeProps: NodeProps<NodeData>) {
   const openEditorForNode = useEditorStore((state) => state.openEditorForNode)
   const setNode = usePipelineStore((state) => state.setNode);
   const deleteNode = usePipelineStore((state) => state.deleteNode);
-  const nodeErrors = usePipelineManagerStore((state) => state.errors[id]);
-  const {nodeSchemas} = getCachedData();
-  const nodeSchema = nodeSchemas.get(data.type)!;
-  const schemaProperties = Object.getOwnPropertyNames(nodeSchema.properties);
-  const requiredProperties = nodeSchema.required || [];
+  const hasErrors = usePipelineStore((state) => state.nodeHasErrors(id));
+  const nodeError = usePipelineStore((state) => state.getNodeFieldError(id, "root"));
+  const nodeSchema = getCachedData().nodeSchemas.get(data.type)!;
 
   const updateParamValue = (
     event: ChangeEvent<HTMLTextAreaElement | HTMLSelectElement | HTMLInputElement>,
   ) => {
     const {name, value} = event.target;
+    let updateValue: string | boolean = value
+    if (event.target instanceof HTMLInputElement && event.target.type === "checkbox") {
+      updateValue = event.target.checked;
+    }
+    
+    
     setNode(id, (old) => ({
       ...old,
       data: {
         ...old.data,
         params: {
           ...old.data.params,
-          [name]: value,
+          [name]: updateValue,
         },
       },
     }));
@@ -43,9 +46,11 @@ export function PipelineNode(nodeProps: NodeProps<NodeData>) {
     openEditorForNode(nodeProps);
   }
 
+  const nodeDocs = formatDocsForSchema(nodeSchema);
+
   return (
     <>
-      <NodeToolbar position={Position.Top}>
+      <NodeToolbar position={Position.Top} isVisible={hasErrors || selected}>
         <div className="border border-primary join">
             <button
               className="btn btn-xs join-item"
@@ -57,47 +62,69 @@ export function PipelineNode(nodeProps: NodeProps<NodeData>) {
                   <i className="fa fa-pencil"></i>
               </button>
             )}
-            {nodeSchema.description && (
-              <div className="dropdown dropdown-top">
+            {nodeDocs && (
+              <div className="dropdown dropdown-right">
                   <button tabIndex={0} role="button" className="btn btn-xs join-item">
-                      <i className={"fa fa-circle-question"}></i>
+                      <i className={"fa-regular fa-circle-question"}></i>
                   </button>
-                  <HelpContent><p>{nodeSchema.description}</p></HelpContent>
+                  <HelpContent>{nodeDocs}</HelpContent>
               </div>
             )}
+            {nodeError && (
+                <div className="dropdown dropdown-top">
+                    <button tabIndex={0} role="button" className="btn btn-xs join-item">
+                        <i className="fa-solid fa-exclamation-triangle text-warning"></i>
+                    </button>
+                    <HelpContent><p>{nodeError}</p></HelpContent>
+                </div>
+              )}
         </div>
       </NodeToolbar>
-      <div className={nodeBorderClass(nodeErrors, selected)}>
-        <div className="m-1 text-lg font-bold text-center">{nodeSchema["ui:label"]}</div>
+      <div className={nodeBorderClass(hasErrors, selected)}>
+        <NodeHeader nodeSchema={nodeSchema} nodeName={concatenate(data.params["name"])} />
 
         <NodeInput />
         <div className="px-4">
           <div>
-            {schemaProperties.map((name) => (
-              <React.Fragment key={name}>
-                {getNodeInputWidget({
-                  id: id,
-                  name: name,
-                  schema: nodeSchema.properties[name],
-                  params: data.params,
-                  updateParamValue: updateParamValue,
-                  nodeType: data.type,
-                  required: requiredProperties.includes(name),
-                })}
-              </React.Fragment>
-            ))}
+            {getWidgetsForNode({schema: nodeSchema, nodeId: id, nodeData: data, updateParamValue: updateParamValue})}
           </div>
-          {showAdvancedButton(data.type) && (
-            <div className="mt-2">
-              <button className="btn btn-sm btn-ghost w-full"
-                      onClick={() => editNode()}>
-                Advanced
-              </button>
-            </div>
-          )}
+          <div className="mt-2">
+            <button className="btn btn-sm btn-ghost w-full"
+                    onClick={() => editNode()}>
+              Advanced
+            </button>
+          </div>
         </div>
         <NodeOutputs data={data} />
       </div>
     </>
   );
+}
+
+function NodeHeader({nodeSchema, nodeName}: {nodeSchema: JsonSchema, nodeName: string}) {
+  const defaultNodeNameRegex = /^[A-Za-z]+-[a-zA-Z0-9]{5}$/;
+  const hasCustomName = !defaultNodeNameRegex.test(nodeName);
+  const header = hasCustomName ? nodeName : nodeSchema["ui:label"];
+  const subheader = hasCustomName ? nodeSchema["ui:label"] : "";
+  return (
+    <div className="m-1 text-lg font-bold text-center">
+      <DeprecationNotice nodeSchema={nodeSchema} />
+      {header}
+      {subheader && <div className="text-sm">{subheader}</div>}
+    </div>
+  );
+}
+
+
+function DeprecationNotice({nodeSchema}: {nodeSchema: JsonSchema}) {
+  if (!nodeSchema["ui:deprecated"]) {
+    return <></>;
+  }
+  const customMessage = nodeSchema["ui:deprecation_message"] || "";
+  return (
+    <div className="mr-2 text-warning inline-block tooltip"
+         data-tip={`This node type has been deprecated and will be removed in future. ${customMessage}`}>
+      <i className="fa-solid fa-exclamation-triangle"></i>
+    </div>
+  )
 }

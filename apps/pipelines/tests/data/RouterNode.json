@@ -1,5 +1,5 @@
 {
-  "description": "Routes the input to one of the linked nodes",
+  "description": "Routes the input to one of the linked nodes using an LLM",
   "properties": {
     "llm_provider_id": {
       "title": "LLM Model",
@@ -43,18 +43,10 @@
       "ui:widget": "none",
       "type": "string"
     },
-    "prompt": {
-      "default": "You are an extremely helpful router",
-      "minLength": 1,
-      "title": "Prompt",
+    "name": {
+      "title": "Node Name",
       "type": "string",
-      "ui:widget": "expandable_text"
-    },
-    "num_outputs": {
-      "default": 2,
-      "title": "Num Outputs",
-      "type": "integer",
-      "ui:widget": "none"
+      "ui:widget": "node_name"
     },
     "keywords": {
       "items": {
@@ -63,14 +55,33 @@
       "title": "Keywords",
       "type": "array",
       "ui:widget": "keywords"
+    },
+    "prompt": {
+      "default": "You are an extremely helpful router",
+      "minLength": 1,
+      "title": "Prompt",
+      "type": "string",
+      "ui:widget": "expandable_text"
     }
   },
   "required": [
     "llm_provider_id",
-    "llm_provider_model_id"
+    "llm_provider_model_id",
+    "name"
   ],
   "title": "RouterNode",
   "type": "object",
+  "ui:can_add": true,
+  "ui:can_delete": true,
+  "ui:deprecated": false,
+  "ui:documentation_link": "/concepts/pipelines/nodes/#llm-router",
   "ui:flow_node_type": "pipelineNode",
-  "ui:label": "Router"
+  "ui:label": "LLM Router",
+  "ui:order": [
+    "llm_provider_id",
+    "llm_temperature",
+    "history_type",
+    "prompt",
+    "keywords"
+  ]
 }

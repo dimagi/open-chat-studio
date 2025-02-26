@@ -1,3 +1,4 @@
+from collections import defaultdict
 from collections.abc import Iterator
 from datetime import datetime
 from functools import cached_property
@@ -15,6 +16,9 @@ from apps.chat.models import ChatMessage, ChatMessageType
 from apps.custom_actions.form_utils import set_custom_actions
 from apps.custom_actions.mixins import CustomActionOperationMixin
 from apps.experiments.models import ExperimentSession, VersionsMixin, VersionsObjectManagerMixin
+from apps.experiments.versioning import VersionDetails, VersionField
+from apps.pipelines.exceptions import PipelineBuildError
+from apps.pipelines.executor import patch_executor
 from apps.pipelines.flow import Flow, FlowNode, FlowNodeData
 from apps.pipelines.logging import PipelineLoggingCallbackHandler
 from apps.pipelines.nodes.base import PipelineState
@@ -86,14 +90,14 @@ class Pipeline(BaseTeamModel, VersionsMixin):
                 "x": -200,
                 "y": 200,
             },
-            data=FlowNodeData(id=start_id, type=StartNode.__name__),
+            data=FlowNodeData(id=start_id, type=StartNode.__name__, params={"name": "start"}),
         )
         end_id = str(uuid4())
         end_node = FlowNode(
             id=end_id,
             type="endNode",
             position={"x": 1000, "y": 200},
-            data=FlowNodeData(id=end_id, type=EndNode.__name__),
+            data=FlowNodeData(id=end_id, type=EndNode.__name__, params={"name": "end"}),
         )
         default_nodes = [start_node.model_dump(), end_node.model_dump()]
         new_pipeline = cls.objects.create(
@@ -113,8 +117,17 @@ class Pipeline(BaseTeamModel, VersionsMixin):
         # Delete old nodes
         current_ids = set(self.node_ids)
         new_ids = set(node.id for node in nodes)
-        to_delete = current_ids - new_ids
-        Node.objects.filter(pipeline=self, flow_id__in=to_delete).delete()
+        to_remove = current_ids - new_ids
+
+        pipeline_nodes = Node.objects.annotate(versions_count=models.Count("versions")).filter(
+            pipeline=self, flow_id__in=to_remove
+        )
+        nodes_to_archive = pipeline_nodes.filter(versions_count__gt=0)
+        pipeline_nodes.filter(versions_count=0).delete()
+
+        for node in nodes_to_archive:
+            # Preserve the node if it has versions, otherwise we tamper with previous versions
+            node.archive()
 
         # Set new nodes or update existing ones
         for node in nodes:
@@ -129,19 +142,39 @@ class Pipeline(BaseTeamModel, VersionsMixin):
             )
             created_node.update_from_params()
 
-    def validate(self) -> dict:
+    def validate(self, full=True) -> dict:
         """Validate the pipeline nodes and return a dictionary of errors"""
+        from apps.pipelines.graph import PipelineGraph
         from apps.pipelines.nodes import nodes as pipeline_nodes
 
-        errors = {}
-
-        for node in self.node_set.all():
+        errors = defaultdict(dict)
+        nodes = self.node_set.all()
+        for node in nodes:
             node_class = getattr(pipeline_nodes, node.type)
             try:
                 node_class.model_validate(node.params)
             except pydantic.ValidationError as e:
                 errors[node.flow_id] = {err["loc"][0]: err["msg"] for err in e.errors()}
-        return errors
+
+        name_to_flow_id = defaultdict(list)
+        for node in nodes:
+            name_to_flow_id[node.params.get("name")].append(node.flow_id)
+
+        for name, flow_ids in name_to_flow_id.items():
+            if len(flow_ids) > 1:
+                for flow_id in flow_ids:
+                    errors[flow_id].update({"name": "All node names must be unique"})
+
+        if errors:
+            return {"node": errors}
+
+        if full:
+            try:
+                PipelineGraph.build_runnable_from_pipeline(self)
+            except PipelineBuildError as e:
+                return e.to_json()
+
+        return {}
 
     @cached_property
     def flow_data(self) -> dict:
@@ -159,6 +192,7 @@ class Pipeline(BaseTeamModel, VersionsMixin):
                         id=node.flow_id,
                         type=node.type,
                         params=node.params,
+                        label=node.label,
                     ),
                 )
             )
@@ -173,17 +207,17 @@ class Pipeline(BaseTeamModel, VersionsMixin):
         """Invoke the pipeline without a session or the ability to save the run to history"""
         from apps.pipelines.graph import PipelineGraph
 
-        output = ""
         with temporary_session(self.team, user_id) as session:
             runnable = PipelineGraph.build_runnable_from_pipeline(self)
             input = PipelineState(messages=[input], experiment_session=session, pipeline_version=self.version_number)
-            output = runnable.invoke(input)
+            with patch_executor():
+                output = runnable.invoke(input, config={"max_concurrency": 1})
             output = PipelineState(**output).json_safe()
         return output
 
     def invoke(
-        self, input: PipelineState, session: ExperimentSession, save_run_to_history: bool = True
-    ) -> PipelineState:
+        self, input: PipelineState, session: ExperimentSession, save_run_to_history=True, save_input_to_history=True
+    ) -> dict:
         from apps.pipelines.graph import PipelineGraph
 
         runnable = PipelineGraph.build_runnable_from_pipeline(self)
@@ -205,9 +239,10 @@ class Pipeline(BaseTeamModel, VersionsMixin):
             pipeline_run.output = output
             if save_run_to_history and session is not None:
                 metadata = output.get("message_metadata", {})
-                self._save_message_to_history(
-                    session, input["messages"][-1], ChatMessageType.HUMAN, metadata=metadata.get("input", {})
-                )
+                if save_input_to_history:
+                    self._save_message_to_history(
+                        session, input["messages"][-1], ChatMessageType.HUMAN, metadata=metadata.get("input", {})
+                    )
                 ai_message = self._save_message_to_history(
                     session, output["messages"][-1], ChatMessageType.AI, metadata=metadata.get("output", {})
                 )
@@ -302,6 +337,28 @@ class Pipeline(BaseTeamModel, VersionsMixin):
             .values("trigger_experiment_id")
         )
 
+    @property
+    def version_details(self) -> VersionDetails:
+        reserved_types = ["StartNode", "EndNode"]
+
+        def node_name(node):
+            name = node.params.get("name")
+            if name == node.flow_id:
+                return node.type
+            return name
+
+        return VersionDetails(
+            instance=self,
+            fields=[
+                VersionField(name="name", raw_value=self.name),
+                VersionField(
+                    name="nodes",
+                    queryset=self.node_set.exclude(type__in=reserved_types),
+                    to_display=node_name,
+                ),
+            ],
+        )
+
 
 class Node(BaseModel, VersionsMixin, CustomActionOperationMixin):
     flow_id = models.CharField(max_length=128, db_index=True)  # The ID assigned by react-flow
@@ -371,6 +428,39 @@ class Node(BaseModel, VersionsMixin, CustomActionOperationMixin):
             if assistant_id:
                 assistant = OpenAiAssistant.objects.get(id=assistant_id)
                 assistant.archive()
+
+    @property
+    def version_details(self) -> VersionDetails:
+        from apps.assistants.models import OpenAiAssistant
+        from apps.experiments.models import VersionFieldDisplayFormatters
+
+        node_name = self.params.get("name", self.type)
+        if node_name == self.flow_id:
+            node_name = self.type
+
+        param_versions = []
+        for name, value in self.params.items():
+            display_formatter = None
+            match name:
+                case "tools":
+                    display_formatter = VersionFieldDisplayFormatters.format_tools
+                case "custom_actions":
+                    display_formatter = VersionFieldDisplayFormatters.format_custom_action_operation
+                case "name":
+                    value = node_name
+                case "assistant_id":
+                    name = "assistant"
+                    # Load the assistant, since it is being versioned
+                    value = OpenAiAssistant.objects.filter(id=value).first()
+
+            param_versions.append(
+                VersionField(group_name=node_name, name=name, raw_value=value, to_display=display_formatter)
+            )
+
+        return VersionDetails(
+            instance=self,
+            fields=param_versions,
+        )
 
 
 class PipelineRunStatus(models.TextChoices):

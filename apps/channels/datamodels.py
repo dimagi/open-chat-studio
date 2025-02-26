@@ -1,13 +1,66 @@
+import logging
+from functools import cached_property
+from typing import Literal
+
 import phonenumbers
 from pydantic import BaseModel, ConfigDict, Field, field_validator
 
 from apps.channels.models import ChannelPlatform
 from apps.chat.channels import MESSAGE_TYPES
 
+logger = logging.getLogger("ocs.channels")
+
+AttachmentType = Literal["code_interpreter", "file_search"]
+
 
 class Attachment(BaseModel):
     file_id: int
-    type: str
+    type: AttachmentType
+    name: str
+    size: int = Field(..., ge=0)
+    content_type: str = "application/octet-stream"
+
+    upload_to_assistant: bool = False
+    """Setting this to True will cause the Assistant Node to send the attachment
+    as a file attachment with the message."""
+
+    @classmethod
+    def from_file(cls, file, type: AttachmentType):
+        return cls(
+            file_id=file.id,
+            type=type,
+            name=file.name,
+            size=file.content_size,
+            content_type=file.content_type,
+        )
+
+    @property
+    def id(self):
+        return self.file_id
+
+    @cached_property
+    def _file(self):
+        from apps.files.models import File
+
+        try:
+            return File.objects.get(id=self.file_id)
+        except File.DoesNotExist:
+            logger.error(f"Attachment with id {self.file_id} not found", exc_info=True, extra=self.model_dump())
+            return None
+
+    @cached_property
+    def document(self):
+        from apps.documents.readers import Document
+
+        return Document.from_file(self._file)
+
+    def read_bytes(self):
+        if not self._file:
+            return b""
+        return self._file.file.read()
+
+    def read_text(self):
+        return self.document.get_contents_as_string()
 
 
 class BaseMessage(BaseModel):
@@ -16,7 +69,7 @@ class BaseMessage(BaseModel):
     participant_id: str
     message_text: str
     content_type: MESSAGE_TYPES | None = Field(default=MESSAGE_TYPES.TEXT)
-    attachments: list[Attachment] = Field(default={})
+    attachments: list[Attachment] = Field(default=[])
 
 
 class TelegramMessage(BaseMessage):

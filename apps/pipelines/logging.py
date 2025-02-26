@@ -4,19 +4,14 @@ from langchain_core.callbacks import BaseCallbackHandler
 from loguru import logger
 
 
-class PipelineLoggingCallbackHandler(BaseCallbackHandler):
-    """Handles logging within the pipeline
-
-    Since Langchain / Langgraph runs in separate threads, we append to a list
-    in a thread-safe manner, then periodically write to the DB later.
-
-    """
-
-    def __init__(self, pipeline_run, verbose=False) -> None:
-        self.pipeline_run = pipeline_run
-        self.logger = get_logger(uuid.uuid4().hex, self.pipeline_run)
+class LoggingCallbackHandler(BaseCallbackHandler):
+    def __init__(self, verbose=False) -> None:
         self.verbose = verbose
         self._run_id_names = {}
+        self._init_get_logger()
+
+    def _init_get_logger(self):
+        self.logger, self.log_entries = noop_logger()
 
     def _should_log(self, kwargs):
         """We only log steps that are defined nodes inside of the pipeline.
@@ -65,13 +60,32 @@ class PipelineLoggingCallbackHandler(BaseCallbackHandler):
             )
 
     def on_chain_error(self, error, *args, **kwargs):
-        from apps.pipelines.models import PipelineRunStatus
-
-        self.pipeline_run.status = PipelineRunStatus.ERROR
         self.logger.error(error)
 
 
-def get_logger(name, pipeline_run):
+class PipelineLoggingCallbackHandler(LoggingCallbackHandler):
+    """Handles logging within the pipeline
+
+    Since Langchain / Langgraph runs in separate threads, we append to a list
+    in a thread-safe manner, then periodically write to the DB later.
+
+    """
+
+    def __init__(self, pipeline_run, verbose=False) -> None:
+        self.pipeline_run = pipeline_run
+        super().__init__(verbose)
+
+    def _init_get_logger(self):
+        self.logger = get_logger(uuid.uuid4().hex, self.pipeline_run)
+
+    def on_chain_error(self, error, *args, **kwargs):
+        from apps.pipelines.models import PipelineRunStatus
+
+        self.pipeline_run.status = PipelineRunStatus.ERROR
+        super().on_chain_error(error, *args, **kwargs)
+
+
+def get_logger(name, pipeline_run) -> logger:
     log = logger.bind(name=name)
     log.level("DEBUG")
     log.remove()
@@ -79,9 +93,18 @@ def get_logger(name, pipeline_run):
     return log
 
 
-class LogHandler:
-    def __init__(self, pipeline_run):
-        self.pipeline_run = pipeline_run
+def noop_logger() -> tuple[logger, list]:
+    log = logger.bind(name=uuid.uuid4().hex)
+    log.level("DEBUG")
+    log.remove()
+    handler = MemLogHandler()
+    log.add(handler)
+    return log, handler.entries
+
+
+class MemLogHandler:
+    def __init__(self):
+        self.entries = []
 
     def __call__(self, message):
         from apps.pipelines.models import LogEntry
@@ -99,6 +122,18 @@ class LogHandler:
                 "input": str(input) if input else None,
             }
         )
+        self._save(log_entry)
+
+    def _save(self, entry):
+        self.entries.append(entry)
+
+
+class LogHandler(MemLogHandler):
+    def __init__(self, pipeline_run):
+        super().__init__()
+        self.pipeline_run = pipeline_run
+
+    def _save(self, entry):
         # Appending to a list is thread safe in python
-        self.pipeline_run.log["entries"].append(log_entry.model_dump())
+        self.pipeline_run.log["entries"].append(entry.model_dump())
         self.pipeline_run.save()

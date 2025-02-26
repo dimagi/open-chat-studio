@@ -8,19 +8,35 @@ import {
   Node,
   NodeChange,
 } from "reactflow";
-import { create } from "zustand";
-import { PipelineStoreType } from "../types/pipelineStore";
-import usePipelineManagerStore from "./pipelineManagerStore";
+import {create, StateCreator} from "zustand";
+import {PipelineStoreType} from "../types/pipelineStore";
 import useEditorStore from "./editorStore";
-import { getNodeId } from "../utils";
-import { cloneDeep } from "lodash";
+import {getNodeId} from "../utils";
+import {cloneDeep} from "lodash";
+import {ErrorsType, PipelineManagerStoreType} from "../types/pipelineManagerStore";
+import {apiClient} from "../api/api";
+import {PipelineType} from "../types/pipeline";
+import {isEqual} from "lodash";
 
-const usePipelineStore = create<PipelineStoreType>((set, get) => ({
+let saveTimeoutId: NodeJS.Timeout | null = null;
+
+const createPipelineStore: StateCreator<
+  PipelineStoreType & PipelineManagerStoreType,
+  [],
+  [],
+  PipelineStoreType
+> = (set, get) => ({
   nodes: [],
   edges: [],
   reactFlowInstance: null,
   setReactFlowInstance: (newState) => {
     set({reactFlowInstance: newState});
+    if (get().currentPipeline) {
+      get().resetFlow({
+        nodes: get().currentPipeline?.data?.nodes ?? [],
+        edges: get().currentPipeline?.data?.edges ?? [],
+      });
+    }
   },
   onNodesChange: (changes: NodeChange[]) => {
     set({
@@ -41,9 +57,7 @@ const usePipelineStore = create<PipelineStoreType>((set, get) => ({
       nodes: newChange,
     });
 
-    const flowsManager = usePipelineManagerStore.getState();
-
-    flowsManager.autoSaveCurrentPipline(
+    get().autoSaveCurrentPipline(
       newChange,
       newEdges,
     );
@@ -55,9 +69,7 @@ const usePipelineStore = create<PipelineStoreType>((set, get) => ({
       edges: newChange,
     });
 
-    const flowsManager = usePipelineManagerStore.getState();
-
-    flowsManager.autoSaveCurrentPipline(
+    get().autoSaveCurrentPipline(
       get().nodes,
       newChange,
     );
@@ -89,10 +101,10 @@ const usePipelineStore = create<PipelineStoreType>((set, get) => ({
 
     useEditorStore.getState().closeEditor();
     const nodes = get().nodes.filter((node) =>
-        typeof nodeId === "string"
-          ? node.id === nodeId
-          : nodeId.includes(node.id)
-      )
+      typeof nodeId === "string"
+        ? node.id === nodeId
+        : nodeId.includes(node.id)
+    )
     const connectedEdges = getConnectedEdges(nodes, get().edges);
     const remainingEdges = get().edges.filter(
       (edge) => !connectedEdges.includes(edge),
@@ -132,16 +144,16 @@ const usePipelineStore = create<PipelineStoreType>((set, get) => ({
     // Not calling setEdges so we don't autoSave
     set({
       edges: get().edges.map(
-          (edge) => {
-            if (sourceId == edge.source) {
-              if (!outputHandle || edge.sourceHandle === outputHandle) {
-                edge.label = label;
-                edge.type = 'annotatedEdge';
-              }
+        (edge) => {
+          if (sourceId == edge.source) {
+            if (!outputHandle || edge.sourceHandle === outputHandle) {
+              edge.label = label;
+              edge.type = 'annotatedEdge';
             }
-            return edge;
           }
-        )
+          return edge;
+        }
+      )
     });
   },
   onConnect: (connection) => {
@@ -150,9 +162,7 @@ const usePipelineStore = create<PipelineStoreType>((set, get) => ({
       newEdges = addEdge(connection, oldEdges);
       return newEdges;
     });
-    usePipelineManagerStore
-      .getState()
-      .autoSaveCurrentPipline(
+    get().autoSaveCurrentPipline(
         get().nodes,
         newEdges,
       );
@@ -185,14 +195,15 @@ const usePipelineStore = create<PipelineStoreType>((set, get) => ({
     }
 
     const newId = getNodeId(node.data.type);
-
+    const data = cloneDeep(node.data);
+    data.params["name"] = newId;
     // Create a new node object
     const newNode = {
       id: newId,
       type: node.type,
       position: actualPosition,
       data: {
-        ...cloneDeep(node.data),
+        ...data,
         id: newId,
       },
     };
@@ -203,12 +214,206 @@ const usePipelineStore = create<PipelineStoreType>((set, get) => ({
       .concat({...newNode, selected: false});
     get().setNodes(newNodes);
   },
-  resetFlow: ({ nodes, edges }) => {
+  resetFlow: ({nodes, edges}) => {
     set({
       nodes,
       edges,
     });
   },
+})
+
+const createPipelineManagerStore: StateCreator<
+  PipelineManagerStoreType & PipelineStoreType,
+  [],
+  [],
+  PipelineManagerStoreType
+> = (set, get) => ({
+  currentPipeline: undefined,
+  currentPipelineId: undefined,
+  dirty: false,
+  isSaving: false,
+  isLoading: true,
+  errors: {},
+  loadPipeline: async (pipelineId: number) => {
+    set({isLoading: true});
+    apiClient.getPipeline(pipelineId).then((pipeline) => {
+      if (pipeline) {
+        if (pipeline.data) {
+          updateEdgeClasses(pipeline.data.edges, pipeline.errors);
+        }
+        set({currentPipeline: pipeline, currentPipelineId: pipelineId});
+        set({errors: pipeline.errors});
+        set({isLoading: false});
+        if (get().reactFlowInstance) {
+          get().resetFlow({
+            nodes: pipeline?.data?.nodes ?? [],
+            edges: pipeline?.data?.edges ?? [],
+          });
+        }
+      }
+    }).catch((e) => {
+      console.log(e);
+    });
+  },
+  updatePipelineName: (name: string) => {
+    if (get().currentPipeline) {
+      set({currentPipeline: {...get().currentPipeline!, name}});
+    }
+  },
+  setIsLoading: (isLoading: boolean) => set({isLoading}),
+  autoSaveCurrentPipline: (nodes: Node[], edges: Edge[]) => {
+    if (!get().currentPipeline) {
+      return
+    }
+    const dataToSave = getDataToSave(
+      {
+        nodes: get().currentPipeline!.data?.nodes || [],
+        edges: get().currentPipeline!.data?.edges || [],
+      },
+      {nodes, edges}
+    )
+    if (!dataToSave) {
+      return;
+    }
+    set({dirty: true});
+    // Clear the previous timeout if it exists.
+    if (saveTimeoutId) {
+      clearTimeout(saveTimeoutId);
+    }
+
+    // Set up a new timeout.
+    saveTimeoutId = setTimeout(() => {
+      if (get().currentPipeline) {
+        get().savePipeline(
+          {...get().currentPipeline!, data: dataToSave},
+          true,
+        );
+      }
+    }, 1000);
+  },
+  savePipeline: (pipeline: PipelineType,) => {
+    set({isSaving: true});
+    if (saveTimeoutId) {
+      clearTimeout(saveTimeoutId);
+    }
+    return new Promise<void>((resolve, reject) => {
+      apiClient.updatePipeline(get().currentPipelineId!, pipeline)
+        .then((response) => {
+          if (response) {
+            pipeline.data = response.data;
+            set({currentPipeline: pipeline, dirty: false});
+            set({errors: response.errors});
+            if (get().reactFlowInstance && response.errors) {
+              set({
+                edges: updateEdgeClasses(get().edges, response.errors)
+              })
+            }
+            resolve();
+          }
+        })
+        .catch((err) => {
+          alertify.error("There was an error saving");
+          reject(err);
+        }).finally(() => {
+        set({isSaving: false});
+      });
+    });
+  },
+  nodeHasErrors: (nodeId: string) => {
+    return !!get().errors["node"] && !!get().errors["node"]![nodeId];
+  },
+  getNodeFieldError: (nodeId: string, fieldName: string) => {
+    const errors = get().errors;
+    if (!errors["node"]) {
+      return "";
+    }
+    const nodeErrors = errors["node"][nodeId];
+    return nodeErrors ? nodeErrors[fieldName] : "";
+  },
+  edgeHasErrors: (edgeId: string) => {
+    return !!get().errors["edge"] && get().errors["edge"]!.includes(edgeId);
+  },
+  getPipelineError: () => {
+    return get().errors["pipeline"];
+  },
+})
+
+
+const usePipelineStore = create<PipelineStoreType & PipelineManagerStoreType>((...a) => ({
+  ...createPipelineStore(...a),
+  ...createPipelineManagerStore(...a),
 }));
 
 export default usePipelineStore;
+
+
+/**
+ * Updates the class names of edges in a pipeline based on error status.
+ *
+ * @remarks
+ * This function modifies the edge classes to visually indicate error states. Edges with errors
+ * receive an "edge-error" class, while error-free edges have their class name removed.
+ *
+ * @param edges - List of edges
+ * @param errors - An object containing error information for different pipeline components
+ *
+ * @returns Void. Modifies edges in-place by adding or removing "edge-error" class.
+ */
+function updateEdgeClasses(edges: Edge[], errors: ErrorsType) {
+  const edgeErrors = errors["edge"] || [];
+  for (const edge of edges) {
+    if (edgeErrors.includes(edge["id"])) {
+      edge["className"] = "edge-error";
+    } else {
+      delete edge["className"];
+    }
+  }
+  return edges;
+}
+
+interface NodesAndEdges {
+  nodes: Node[],
+  edges: Edge[],
+}
+
+/**
+ * Returns the data to save if it is different from the data that was saved before.
+ *
+ * @param oldPipelineData - The data that was saved before
+ * @param newPipelineData - The data that is currently in the editor
+ *
+ * @returns The data to save if it is different from the data that was saved before, otherwise undefined
+ */
+const getDataToSave = (oldPipelineData: NodesAndEdges, newPipelineData: NodesAndEdges) => {
+  // See `apps.pipelines.flow.FlowNode
+  const newNodes = byId(newPipelineData.nodes.map(({id, position, type, data}) => ({id, position, type, data})));
+  const oldNodes = byId(oldPipelineData.nodes);
+  if (!isEqual(oldNodes, newNodes)) {
+    return newPipelineData;
+  }
+
+  // See `apps.pipelines.flow.FlowEdge`
+  const newEdges = byId(newPipelineData.edges.map(({id, source, target, sourceHandle, targetHandle}) => ({
+        id,
+        source,
+        target,
+        sourceHandle,
+        targetHandle
+      })));
+  const oldEdges = byId(oldPipelineData.edges);
+  if (!isEqual(oldEdges, newEdges)) {
+    return newPipelineData;
+  }
+  return undefined;
+}
+
+/**
+ * Returns an object with the given array of objects as values, with the `id` field as the key.
+ * @param arr
+ */
+const byId = <T extends {id: string}>(arr: T[]) => {
+  return arr.reduce((acc, node) => {
+      acc[node.id] = node;
+      return acc;
+    }, {} as {[key: string]: T});
+}

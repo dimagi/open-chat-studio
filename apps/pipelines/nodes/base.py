@@ -1,3 +1,4 @@
+import logging
 import operator
 from abc import ABC
 from collections.abc import Sequence
@@ -6,11 +7,15 @@ from functools import cached_property
 from typing import Annotated, Any, Literal, Self
 
 from langchain_core.runnables import RunnableConfig
-from pydantic import BaseModel, ConfigDict
+from pydantic import BaseModel, ConfigDict, Field, model_validator
 from pydantic.config import JsonDict
+from typing_extensions import TypedDict
 
 from apps.experiments.models import ExperimentSession
-from apps.pipelines.logging import PipelineLoggingCallbackHandler
+from apps.pipelines.exceptions import PipelineNodeRunError
+from apps.pipelines.logging import LoggingCallbackHandler, noop_logger
+
+logger = logging.getLogger("ocs.pipelines")
 
 
 def add_messages(left: dict, right: dict):
@@ -27,25 +32,49 @@ def add_messages(left: dict, right: dict):
     return output
 
 
+def add_temp_state_messages(left: dict, right: dict):
+    output = {**left}
+    try:
+        output["outputs"].update(right["outputs"])
+    except KeyError:
+        output["outputs"] = right.get("outputs", {})
+    for key, value in right.items():
+        if key != "outputs":
+            output[key] = value
+
+    return output
+
+
+class TempState(TypedDict):
+    user_input: str
+    outputs: dict
+    attachments: list
+
+
 class PipelineState(dict):
     messages: Annotated[Sequence[Any], operator.add]
     outputs: Annotated[dict, add_messages]
     experiment_session: ExperimentSession
     pipeline_version: int
+    temp_state: Annotated[TempState, add_temp_state_messages]
     ai_message_id: int | None = None
     message_metadata: dict | None = None
-    attachments: list | None = None
+    attachments: list = Field(default=[])
 
     def json_safe(self):
         # We need to make a copy of `self` so as to not change the actual value of `experiment_session` forever
         copy = self.copy()
         if "experiment_session" in copy:
             copy["experiment_session"] = copy["experiment_session"].id
+
+        if "attachments" in copy.get("temp_state", {}):
+            copy["temp_state"]["attachments"] = [att.model_dump() for att in copy["temp_state"]["attachments"]]
         return copy
 
     @classmethod
-    def from_node_output(cls, node_id: str, output: Any = None, **kwargs) -> Self:
+    def from_node_output(cls, node_name: str, node_id: str, output: Any = None, **kwargs) -> Self:
         kwargs["outputs"] = {node_id: {"message": output}}
+        kwargs["temp_state"] = {"outputs": {node_name: output}}
         if output is not None:
             kwargs["messages"] = [output]
         return cls(**kwargs)
@@ -77,22 +106,56 @@ class PipelineNode(BaseModel, ABC):
     model_config = ConfigDict(arbitrary_types_allowed=True)
 
     _config: RunnableConfig | None = None
+    name: str = Field(title="Node Name", json_schema_extra={"ui:widget": "node_name"})
 
-    def process(self, node_id: str, incoming_edges: list, state: PipelineState, config) -> PipelineState:
+    def process(
+        self, node_id: str, incoming_edges: list, state: PipelineState, config: RunnableConfig
+    ) -> PipelineState:
+        from apps.channels.datamodels import Attachment
+
         self._config = config
 
-        for incoming_edge in reversed(incoming_edges):
-            # We assume there is only a single path that would be valid through
-            # the graph.
-            # If we wanted to have multiple parallel paths that end
-            # in a single node, we should give that node multiple inputs, and
-            # read the input from that particular input
-            if incoming_edge in state["outputs"]:
-                input = state["outputs"][incoming_edge]["message"]
-                break
-        else:  # This is the first node in the graph
-            input = state["messages"][-1]
-        return self._process(input=input, state=state, node_id=node_id)
+        if not incoming_edges:
+            # This is the first node in the graph
+            node_input = state["messages"][-1]
+
+            # init temp state here to avoid having to do it in each place the pipeline is invoked
+            state["temp_state"]["user_input"] = node_input
+            state["temp_state"]["attachments"] = [
+                Attachment.model_validate(att) for att in state.get("attachments", [])
+            ]
+        elif len(incoming_edges) == 1:
+            incoming_edge = incoming_edges[0]
+            node_input = state["outputs"][incoming_edge]["message"]
+        else:
+            # Here we use some internal langgraph state to determine which input to use
+            # The 'langgraph_triggers' key is set in the metadata of the pipeline by langgraph. Some examples:
+            #   - start:xyz
+            #   - xyz
+            #   - branch:xyz:condition:abc
+            #   - join:abc+def:xyz
+            node_triggers = config["metadata"]["langgraph_triggers"]
+            for incoming_edge in incoming_edges:
+                if any(incoming_edge in trigger for trigger in node_triggers):
+                    node_input = state["outputs"][incoming_edge]["message"]
+                    break
+            else:
+                # This shouldn't happen, but keeping it here for now to avoid breaking
+                logger.warning(f"Cannot determine which input to use for node {node_id}. Switching to fallback.")
+                for incoming_edge in reversed(incoming_edges):
+                    if incoming_edge in state["outputs"]:
+                        node_input = state["outputs"][incoming_edge]["message"]
+                        break
+                else:
+                    raise PipelineNodeRunError(
+                        f"Cannot determine which input to use for node {node_id}",
+                        {
+                            "node_id": node_id,
+                            "edge_ids": incoming_edges,
+                            "state_outputs": state["outputs"],
+                        },
+                    )
+        return self._process(input=node_input, state=state, node_id=node_id)
 
     def process_conditional(self, state: PipelineState, node_id: str | None = None) -> str:
         conditional_branch = self._process_conditional(state, node_id)
@@ -101,7 +164,7 @@ class PipelineNode(BaseModel, ABC):
         state["outputs"][node_id]["output_handle"] = output_handle
         return conditional_branch
 
-    def _process(self, input: str, state: PipelineState, node_id: str) -> str:
+    def _process(self, input: str, state: PipelineState, node_id: str) -> PipelineState:
         """The method that executes node specific functionality"""
         raise NotImplementedError
 
@@ -116,8 +179,9 @@ class PipelineNode(BaseModel, ABC):
     @cached_property
     def logger(self):
         for handler in self._config["callbacks"].handlers:
-            if isinstance(handler, PipelineLoggingCallbackHandler):
+            if isinstance(handler, LoggingCallbackHandler):
                 return handler.logger
+        return noop_logger()[0]
 
 
 class Widgets(StrEnum):
@@ -165,7 +229,57 @@ class UiSchema(BaseModel):
 class NodeSchema(BaseModel):
     label: str
     flow_node_type: Literal["pipelineNode", "startNode", "endNode"] = "pipelineNode"
+    can_delete: bool = None
+    can_add: bool = None
+    deprecated: bool = False
+    deprecation_message: str = None
+    documentation_link: str = None
+    field_order: list[str] = Field(
+        None,
+        description=(
+            "The order of the fields in the UI. "
+            "Any field not in this list will be appended to the end. "
+            "The 'name' field is always displayed first regardless of its position in this list."
+        ),
+    )
+
+    @model_validator(mode="after")
+    def update_metadata_fields(self) -> Self:
+        is_pipeline_node = self.flow_node_type == "pipelineNode"
+        if self.can_delete is None:
+            self.can_delete = is_pipeline_node
+        if self.can_add is None:
+            self.can_add = is_pipeline_node
+
+        if self.deprecated:
+            self.can_add = False
+        return self
 
     def __call__(self, schema: JsonDict):
         schema["ui:label"] = self.label
         schema["ui:flow_node_type"] = self.flow_node_type
+        schema["ui:can_delete"] = self.can_delete
+        schema["ui:can_add"] = self.can_add
+        schema["ui:deprecated"] = self.deprecated
+        if self.deprecated and self.deprecation_message:
+            schema["ui:deprecation_message"] = self.deprecation_message
+        if self.field_order:
+            schema["ui:order"] = self.field_order
+        if self.documentation_link:
+            schema["ui:documentation_link"] = self.documentation_link
+
+
+def deprecated_node(cls=None, *, message=None):
+    """Class decorator for deprecating a node"""
+
+    def _inner(cls):
+        schema = cls.model_config["json_schema_extra"]
+        schema.deprecated = True
+        schema.deprecation_message = message
+        schema.can_add = False
+        return cls
+
+    if cls is None:
+        return _inner
+
+    return _inner(cls)

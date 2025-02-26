@@ -19,6 +19,11 @@
       "type": "number",
       "ui:widget": "range"
     },
+    "name": {
+      "title": "Node Name",
+      "type": "string",
+      "ui:widget": "node_name"
+    },
     "data_schema": {
       "default": "{\"name\": \"the name of the user\"}",
       "description": "A JSON object structure where the key is the name of the field and the value the description",
@@ -34,10 +39,15 @@
   },
   "required": [
     "llm_provider_id",
-    "llm_provider_model_id"
+    "llm_provider_model_id",
+    "name"
   ],
   "title": "ExtractParticipantData",
   "type": "object",
+  "ui:can_add": true,
+  "ui:can_delete": true,
+  "ui:deprecated": false,
+  "ui:documentation_link": "/concepts/pipelines/nodes/#update-participant-data",
   "ui:flow_node_type": "pipelineNode",
   "ui:label": "Update Participant Data"
 }

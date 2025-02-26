@@ -12,7 +12,7 @@ from apps.experiments.models import (
     SourceMaterial,
     Survey,
 )
-from apps.generics import actions
+from apps.generics import actions, chips
 
 
 class ExperimentTable(tables.Table):
@@ -22,8 +22,6 @@ class ExperimentTable(tables.Table):
     description = columns.Column(verbose_name="Description")
     owner = columns.Column(accessor="owner__username", verbose_name="Created By")
     type = columns.Column(orderable=False, empty_values=())
-    is_public = columns.BooleanColumn(verbose_name="Publically accessible", orderable=False, yesno="✓,")
-    is_archived = columns.BooleanColumn(verbose_name="Archived", yesno="✓,")
     actions = columns.TemplateColumn(
         template_name="experiments/components/experiment_actions_column.html",
     )
@@ -39,6 +37,11 @@ class ExperimentTable(tables.Table):
         }
         orderable = False
         empty_text = "No experiments found."
+
+    def render_name(self, record):
+        if record.is_archived:
+            return f"{record.name} (archived)"
+        return record.name
 
     def render_type(self, record):
         if record.assistant_id:
@@ -135,22 +138,51 @@ class ConsentFormTable(tables.Table):
         empty_text = "No consent forms found."
 
 
-class ExperimentSessionsTable(tables.Table):
-    participant = actions.chip_column(
-        accessor="participant", align="left", orderable=True, order_by="participant__identifier"
+def session_chat_url(url_name, request, record, value):
+    return reverse(
+        url_name, args=[request.team.slug, record.experiment.id, record.get_experiment_version_number(), record.id]
     )
-    started = columns.Column(accessor="created_at", verbose_name="Started", orderable=True)
+
+
+def _show_chat_button(request, record):
+    return record.participant.user == request.user and not record.is_complete() and record.experiment.is_editable()
+
+
+class ExperimentSessionsTable(tables.Table):
+    participant = columns.Column(accessor="participant", verbose_name="Participant", order_by="participant__identifier")
     last_message = columns.Column(accessor="last_message_created_at", verbose_name="Last Message", orderable=True)
     tags = columns.TemplateColumn(
         verbose_name="Tags",
         template_name="annotations/tag_ui.html",
     )
     versions = columns.Column(verbose_name="Versions", accessor="experiment_version_for_display")
-    actions = actions.chip_column(label="Session Details", align="center", verbose_name="")
+    actions = actions.ActionsColumn(
+        actions=[
+            actions.Action(
+                url_name="experiments:experiment_chat_session",
+                url_factory=session_chat_url,
+                icon_class="fa-solid fa-comment",
+                title="Continue Chat",
+                display_condition=_show_chat_button,
+            ),
+            actions.chip_action(
+                label="Session Details",
+            ),
+        ],
+        align="right",
+    )
 
     def render_tags(self, record, bound_column):
         template = get_template(bound_column.column.template_name)
         return template.render({"object": record.chat})
+
+    def render_participant(self, record):
+        template = get_template("generic/chip.html")
+        participant = record.participant
+        chip = chips.Chip(
+            label=str(participant), url=participant.get_link_to_experiment_data(experiment=record.experiment)
+        )
+        return template.render({"chip": chip})
 
     class Meta:
         model = ExperimentSession
@@ -183,9 +215,7 @@ class ExperimentVersionsTable(tables.Table):
         return record.created_at if record.working_version_id else ""
 
     def render_version_number(self, record):
-        if record.is_working_version:
-            return f"{record.version_number} (unreleased)"
-        return record.version_number
+        return "(unreleased)" if record.is_working_version else record.version_number
 
 
 def _get_route_url(url_name, request, record, value):

@@ -1,9 +1,9 @@
 import React, {useEffect, useState} from "react";
 import Component from "./Component";
 import OverlayPanel from "../components/OverlayPanel";
-import {getCachedData} from "../utils";
+import {formatDocsForSchema, getCachedData} from "../utils";
 import ComponentHelp from "./ComponentHelp";
-import {NodeData} from "../types/nodeParams";
+import {JsonSchema, NodeData, NodeParams} from "../types/nodeParams";
 import usePipelineStore from "../stores/pipelineStore";
 
 type ComponentListParams = {
@@ -14,10 +14,10 @@ type ComponentListParams = {
 export default function ComponentList({isOpen, setIsOpen}: ComponentListParams) {
   const addNode = usePipelineStore((state) => state.addNode);
   const {defaultValues, nodeSchemas} = getCachedData();
-  const schemaList = Array.from(nodeSchemas.values())
+  const schemaList = Array.from(nodeSchemas.values()).sort((a, b) => a["ui:label"].localeCompare(b["ui:label"]));
 
-  function getDefaultParamValues(schema: any): Record<string, any> {
-    const defaults: Record<string, any> = {};
+  function getDefaultParamValues(schema: JsonSchema): NodeParams {
+    const defaults: NodeParams = {name: ""};
     for (const name in schema.properties) {
       const property = schema.properties[name];
       defaults[name] = [property.default, defaultValues[name]].find((value) => value !== undefined && value !== null) ?? null;
@@ -57,7 +57,7 @@ export default function ComponentList({isOpen, setIsOpen}: ComponentListParams) 
 
   function onDragStart(
     event: React.DragEvent<any>,
-    schema: any
+    schema: JsonSchema
   ): void {
     hideHelp();
     const nodeData: NodeData = {
@@ -71,7 +71,7 @@ export default function ComponentList({isOpen, setIsOpen}: ComponentListParams) 
 
   function onClick(
       event: React.MouseEvent<any>,
-      schema: any
+      schema: JsonSchema
   ): void {
       hideHelp();
       const newNode = {
@@ -91,7 +91,7 @@ export default function ComponentList({isOpen, setIsOpen}: ComponentListParams) 
     setIsOpen(!isOpen);
   }
 
-  const components = schemaList.filter((schema) => schema["ui:flow_node_type"] === "pipelineNode").map((schema) => {
+  const components = schemaList.filter((schema) => schema["ui:can_add"]).map((schema) => {
     return (
       <Component
         key={schema.title}
@@ -109,7 +109,8 @@ export default function ComponentList({isOpen, setIsOpen}: ComponentListParams) 
 
   // Help bubbles need to be outside the overlay container to avoid clipping
   const helps = schemaList.map((schema) => {
-    if (!schema.description) {
+    const helpContent = formatDocsForSchema(schema);
+    if (!helpContent) {
       return null;
     }
     return <ComponentHelp
@@ -119,7 +120,7 @@ export default function ComponentList({isOpen, setIsOpen}: ComponentListParams) 
       scrollPosition={scrollPosition}
       showHelp={showHelp.show.get(schema.title)}
     >
-      <p>{schema.description}</p>
+      {helpContent}
     </ComponentHelp>;
   })
 
@@ -131,7 +132,7 @@ export default function ComponentList({isOpen, setIsOpen}: ComponentListParams) 
   return (
     <div className="relative">
       <button
-        className="absolute top-4 left-4 z-10 text-4xl text-primary"
+        className="btn btn-circle btn-ghost absolute top-4 left-4 z-10 text-primary"
         onClick={togglePanel}
         title="Add Node"
       >

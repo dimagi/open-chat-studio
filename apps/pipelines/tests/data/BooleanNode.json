@@ -1,16 +1,26 @@
 {
   "description": "Branches based whether the input matches a certain value",
   "properties": {
+    "name": {
+      "title": "Node Name",
+      "type": "string",
+      "ui:widget": "node_name"
+    },
     "input_equals": {
       "title": "Input Equals",
       "type": "string"
     }
   },
   "required": [
+    "name",
     "input_equals"
   ],
   "title": "BooleanNode",
   "type": "object",
+  "ui:can_add": false,
+  "ui:can_delete": true,
+  "ui:deprecated": true,
+  "ui:deprecation_message": "Use the 'Router' node instead.",
   "ui:flow_node_type": "pipelineNode",
   "ui:label": "Conditional Node"
 }

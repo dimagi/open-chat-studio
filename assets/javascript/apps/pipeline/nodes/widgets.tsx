@@ -1,22 +1,17 @@
-import React, {
-  ChangeEvent,
-  ChangeEventHandler,
-  ReactNode,
-  useId,
-  useEffect,
-} from "react";
-import { useState } from "react";
+import React, {ChangeEvent, ChangeEventHandler, ReactNode, useEffect, useId, useState,} from "react";
 import CodeMirror from '@uiw/react-codemirror';
-import { python } from "@codemirror/lang-python";
-import { githubLight, githubDark } from "@uiw/codemirror-theme-github";
-import { TypedOption } from "../types/nodeParameterValues";
+import {python} from "@codemirror/lang-python";
+import {githubDark, githubLight} from "@uiw/codemirror-theme-github";
+import {CompletionContext, snippetCompletion as snip} from '@codemirror/autocomplete'
+import {TypedOption} from "../types/nodeParameterValues";
 import usePipelineStore from "../stores/pipelineStore";
-import { classNames, concatenate, getCachedData, getSelectOptions } from "../utils";
-import { NodeParams, PropertySchema } from "../types/nodeParams";
-import { Node, useUpdateNodeInternals } from "reactflow";
+import {classNames, concatenate, getCachedData, getDocumentationLink, getSelectOptions} from "../utils";
+import {JsonSchema, NodeParams, PropertySchema} from "../types/nodeParams";
+import {Node, useUpdateNodeInternals} from "reactflow";
 import DOMPurify from 'dompurify';
+import {apiClient} from "../api/api";
 
-export function getWidget(name: string) {
+export function getWidget(name: string, params: PropertySchema) {
   switch (name) {
     case "toggle":
       return ToggleWidget
@@ -38,7 +33,12 @@ export function getWidget(name: string) {
       return HistoryTypeWidget
     case "keywords":
       return KeywordsWidget
+    case "node_name":
+      return NodeNameWidget
     default:
+      if (params.enum) {
+        return SelectWidget
+      }
       return DefaultWidget
   }
 }
@@ -53,9 +53,15 @@ interface WidgetParams {
   updateParamValue: (event: React.ChangeEvent<HTMLTextAreaElement | HTMLSelectElement | HTMLInputElement>) => any;
   schema: PropertySchema
   nodeParams: NodeParams
+  nodeSchema: JsonSchema
   required: boolean,
-  getFieldError: (nodeId: string, fieldName: string) => string | undefined;
+  getNodeFieldError: (nodeId: string, fieldName: string) => string | undefined;
 }
+
+interface ToggleWidgetParams extends Omit<WidgetParams, 'paramValue'> {
+  paramValue: boolean;
+}
+
 
 function DefaultWidget(props: WidgetParams) {
   return (
@@ -65,6 +71,37 @@ function DefaultWidget(props: WidgetParams) {
         name={props.name}
         onChange={props.updateParamValue}
         value={props.paramValue}
+        type="text"
+        required={props.required}
+      ></input>
+    </InputField>
+  );
+}
+
+/**
+ * A widget component for displaying and editing the name of a node.
+ *
+ * Will display a blank input field if the current value matches the node ID.
+ */
+function NodeNameWidget(props: WidgetParams) {
+  const value = concatenate(props.paramValue);
+  const [inputValue, setInputValue] = React.useState(value === props.nodeId ? "" : value);
+
+  const handleInputChange = (event: React.ChangeEvent<HTMLInputElement>) => {
+    setInputValue(event.target.value);
+    if (!event.target.value) {
+      event.target.value = props.nodeId;
+    }
+    props.updateParamValue(event);
+  };
+
+  return (
+    <InputField label={props.label} help_text={props.helpText} inputError={props.inputError}>
+      <input
+        className="input input-bordered w-full"
+        name={props.name}
+        onChange={handleInputChange}
+        value={inputValue}
         type="text"
         required={props.required}
       ></input>
@@ -118,18 +155,14 @@ function RangeWidget(props: WidgetParams) {
   </InputField>
 }
 
-function ToggleWidget(props: WidgetParams) {
-  const onChangeCallback = (event: React.ChangeEvent<HTMLInputElement>) => {
-    event.target.value = event.target.checked ? "true" : "false";
-    props.updateParamValue(event);
-  };
+function ToggleWidget(props: ToggleWidgetParams) {
   return (
     <InputField label={props.label} help_text={props.helpText} inputError={props.inputError}>
       <input
         className="toggle"
         name={props.name}
-        onChange={onChangeCallback}
-        checked={props.paramValue === "true"}
+        onChange={props.updateParamValue}
+        checked={props.paramValue}
         type="checkbox"
       ></input>
     </InputField>
@@ -247,14 +280,18 @@ export function CodeWidget(props: WidgetParams) {
 
     useEffect(() => {
         // Set dark / light mode
-     const mediaQuery: MediaQueryList = window.matchMedia("(prefers-color-scheme: dark)");
-     const handleChange = (event: MediaQueryListEvent): void => {
-       setIsDarkMode(event.matches);
-     };
-    setIsDarkMode(mediaQuery.matches);
+      setIsDarkMode(document.body.getAttribute("data-theme") === 'dark')
+      const observer = new MutationObserver(function(mutations) {
+        mutations.forEach(function(mutation) {
+          if (mutation.type === "attributes") {
+            setIsDarkMode(document.body.getAttribute("data-theme") === 'dark')
+          }
+        });
+      });
 
-    mediaQuery.addEventListener("change", handleChange);
-    return () => mediaQuery.removeEventListener("change", handleChange);
+      observer.observe(document.body, {attributes: true});
+
+    return () => observer.disconnect()
   }, []);
 
   const modalId = useId();
@@ -294,25 +331,30 @@ export function CodeWidget(props: WidgetParams) {
         onChange={onChangeCallback}
         isDarkMode={isDarkMode}
         inputError={props.inputError}
+        documentationLink={getDocumentationLink(props.nodeSchema)}
       />
     </>
   );
 }
 
-
 export function CodeModal(
-  { modalId, humanName, value, onChange, isDarkMode, inputError }: {
+  { modalId, humanName, value, onChange, isDarkMode, inputError, documentationLink }: {
     modalId: string;
     humanName: string;
     value: string;
     onChange: (value: string) => void;
     isDarkMode: boolean;
     inputError: string | undefined;
+    documentationLink: string | null;
   }) {
+
+  const [showGenerate, setShowGenerate] = useState(false);
+
   return (
     <dialog
       id={modalId}
       className="modal nopan nodelete nodrag noflow nowheel"
+      onClose={() => setShowGenerate(false)}
     >
       <div className="modal-box  min-w-[85vw] h-[80vh] flex flex-col">
         <form method="dialog">
@@ -321,20 +363,29 @@ export function CodeModal(
           </button>
         </form>
         <div className="flex-grow h-full w-full flex flex-col">
-          <h4 className="mb-4 font-bold text-lg bottom-2 capitalize">
-            {humanName}
-          </h4>
-          <CodeMirror
+          <div className="flex justify-between items-center">
+            <h4 className="font-bold text-lg bottom-2 capitalize">
+              {humanName}
+              {documentationLink && <a href={documentationLink} target={"_blank"} className="ml-2 font-light text-info tooltip tooltip-right" data-tip="View Documentation">
+                <i className="fa-regular fa-circle-question fa-sm"></i>
+              </a>}
+            </h4>
+            <button className="btn btn-sm btn-ghost" onClick={() => setShowGenerate(!showGenerate)}>
+              <i className="fa-solid fa-wand-magic-sparkles"></i>Help
+            </button>
+          </div>
+          <GenerateCodeSection
+            showGenerate={showGenerate}
+            setShowGenerate={setShowGenerate}
+            isDarkMode={isDarkMode}
+            onAccept={onChange}
+            currentCode={value}
+          />
+          <CodeNodeEditor
             value={value}
             onChange={onChange}
-            className="textarea textarea-bordered h-full w-full flex-grow"
-            height="100%"
-            width="100%"
-            theme={isDarkMode ? githubDark : githubLight}
-            extensions={[
-              python(),
-            ]}
-          />
+            isDarkMode={isDarkMode}
+            />
         </div>
         <div className="flex flex-col">
             <span className="text-red-500">{inputError}</span>
@@ -346,6 +397,168 @@ export function CodeModal(
       </form>
     </dialog>
   );
+}
+
+function GenerateCodeSection({
+  showGenerate,
+  setShowGenerate,
+  isDarkMode,
+  onAccept,
+  currentCode,
+}: {
+  showGenerate: boolean;
+  setShowGenerate: (value: boolean) => void;
+  isDarkMode: boolean;
+  onAccept: (value: string) => void;
+  currentCode: string;
+}) {
+  const [prompt, setPrompt] = useState("")
+  const [generated, setGenerated] = useState("")
+  const [generating, setGenerating] = useState(false)
+  const [error, setError] = useState("")
+
+  const generateCode = () => {
+    setGenerating(true);
+    apiClient.generateCode(prompt, currentCode).then((generatedCode) => {
+      setGenerating(false);
+      if (generatedCode.error || generatedCode.response === "") {
+        setError(generatedCode.error || "No code generated. Please provide more information.");
+        return;
+      } else if (generatedCode.response) {
+        setGenerated(generatedCode.response);
+        setShowGenerate(false);
+      }
+    }).catch(() => {
+      setGenerating(false);
+      setError("An error occurred while generating code. Please try again.");
+    });
+  }
+
+  const handleKeydown = (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
+    if (e.ctrlKey && e.key === "Enter") {
+      generateCode();
+    }
+  }
+
+  return (
+    <div>
+      {showGenerate && (
+        <div className={"my-2"}>
+          <textarea
+            className="textarea textarea-bordered resize-none textarea-sm w-full"
+            rows={2}
+            wrap="off"
+            placeholder="Describe what you want the Python Node to do or what issue you are facing"
+            value={prompt}
+            onChange={(e) => setPrompt(e.target.value)}
+            onKeyDown={handleKeydown}
+          ></textarea>
+          {error && <small className="text-red-500">{error}</small>}
+          <div className={"flex items-center gap-2"}>
+            <button className={"btn btn-sm btn-primary"} onClick={generateCode} disabled={!prompt}>
+              <i className="fa-solid fa-wand-magic-sparkles"></i>Go
+            </button>
+            {generating && <span className="loading loading-bars loading-md"></span>}
+          </div>
+        </div>
+      )}
+      {generated &&
+        <div>
+          <h2 className="font-semibold">Generated Code</h2>
+          <CodeNodeEditor
+            value={generated}
+            onChange={setGenerated}
+            isDarkMode={isDarkMode}
+            />
+        <div className={"my-2 join"}>
+          <button className={"btn btn-sm btn-success join-item"} onClick={() => {
+            onAccept(generated)
+            setShowGenerate(false)
+            setGenerated("")
+            setPrompt("")
+          }}>
+            <i className="fa-solid fa-check"></i>
+            Use Generated Code
+          </button>
+          <button className={"btn btn-sm btn-warning join-item"} onClick={() => {
+            setGenerated("")
+            setShowGenerate(true)
+          }}>
+            <i className="fa-solid fa-arrows-rotate"></i>
+            Regenerate
+          </button>
+        </div>
+      </div>
+    }
+    </div>
+  );
+}
+
+function CodeNodeEditor(
+  {value, onChange, isDarkMode}: {
+    value: string;
+    onChange: (value: string) => void;
+    isDarkMode: boolean;
+  }
+) {
+  const customCompletions = {
+    get_participant_data: snip("get_participant_data()", {
+      label: "get_participant_data",
+      type: "keyword",
+      detail: "Gets participant data for the current participant",
+      boost: 1
+    }),
+    set_participant_data: snip("set_participant_data(${data})", {
+      label: "set_participant_data",
+      type: "keyword",
+      detail: "Overwrites the participant data with the value provided",
+      boost: 1
+    }),
+    set_temp_state_key: snip("set_temp_state_key(\"${key_name}\", ${data})", {
+      label: "set_temp_state_key",
+      type: "keyword",
+      detail: "Sets the given key in the temporary state. Overwrites the current value",
+      boost: 1
+    }),
+    get_temp_state_key: snip("get_temp_state_key(\"${key_name}\")", {
+      label: "get_temp_state_key",
+      type: "keyword",
+      detail: "Gets the value for the given key from the temporary state",
+      boost: 1
+    }),
+  }
+
+  function pythonCompletions(context: CompletionContext) {
+    const word = context.matchBefore(/\w*/)
+    if (!word || (word.from == word.to && !context.explicit))
+      return null
+    return {
+      from: word.from,
+      options: Object.values(customCompletions).filter(completion =>
+        completion.label.toLowerCase().startsWith(word.text.toLowerCase())
+      )
+    }
+  }
+
+  return <CodeMirror
+    value={value}
+    onChange={onChange}
+    className="textarea textarea-bordered h-full w-full flex-grow min-h-48"
+    height="100%"
+    width="100%"
+    theme={isDarkMode ? githubDark : githubLight}
+    extensions={[
+      python(),
+      python().language.data.of({
+        autocomplete: pythonCompletions
+      })
+    ]}
+    basicSetup={{
+      lineNumbers: true,
+      tabSize: 4,
+      indentOnInput: true,
+    }}
+  />
 }
 
 
@@ -426,7 +639,7 @@ export function KeywordsWidget(props: WidgetParams) {
   const setEdges = usePipelineStore((state) => state.setEdges);
   const updateNodeInternals = useUpdateNodeInternals()
 
-  function getNewNodeData(old: Node, keywords: any[], numOutputs: number) {
+  function getNewNodeData(old: Node, keywords: any[]) {
     return {
       ...old,
       data: {
@@ -434,7 +647,6 @@ export function KeywordsWidget(props: WidgetParams) {
         params: {
           ...old.data.params,
           ["keywords"]: keywords,
-          ["num_outputs"]: numOutputs,
         },
       },
     };
@@ -443,7 +655,7 @@ export function KeywordsWidget(props: WidgetParams) {
   const addKeyword = () => {
     setNode(props.nodeId, (old) => {
       const updatedList = [...(old.data.params["keywords"] || []), ""];
-      return getNewNodeData(old, updatedList, old.data.params.num_outputs + 1);
+      return getNewNodeData(old, updatedList);
     });
     updateNodeInternals(props.nodeId);
   }
@@ -452,7 +664,7 @@ export function KeywordsWidget(props: WidgetParams) {
     setNode(props.nodeId, (old) => {
         const updatedList = [...(old.data.params["keywords"] || [])];
         updatedList[index] = value;
-        return getNewNodeData(old, updatedList, old.data.params.num_outputs);
+        return getNewNodeData(old, updatedList);
       }
     );
   };
@@ -461,7 +673,7 @@ export function KeywordsWidget(props: WidgetParams) {
     setNode(props.nodeId, (old) => {
       const updatedList = [...(old.data.params["keywords"] || [])];
       updatedList.splice(index, 1);
-      return getNewNodeData(old, updatedList, old.data.params.num_outputs - 1);
+      return getNewNodeData(old, updatedList);
     });
     updateNodeInternals(props.nodeId);
     const handleName = `output_${index}`;
@@ -488,9 +700,14 @@ export function KeywordsWidget(props: WidgetParams) {
     });
   }
 
-  const length = parseInt(concatenate(props.nodeParams.num_outputs)) || 1;
+  const length = (Array.isArray(props.nodeParams.keywords) ? props.nodeParams.keywords.length : 1);
   const keywords = Array.isArray(props.nodeParams.keywords) ? props.nodeParams["keywords"] : []
   const canDelete = length > 1;
+  const defaultMarker = (
+    <span className="tooltip normal-case" data-tip="This is the default output if there are no matches">
+      <i className="fa-solid fa-asterisk fa-2xs ml-1 text-accent"></i>
+    </span>
+  )
   return (
     <>
       <div className="form-control w-full capitalize">
@@ -511,7 +728,7 @@ export function KeywordsWidget(props: WidgetParams) {
           return (
             <div className="form-control w-full capitalize" key={index}>
               <div className="flex justify-between items-center">
-                <label className="label">{label}</label>
+                <label className="label">{label}{index === 0 && defaultMarker}</label>
                 <div className="tooltip tooltip-left" data-tip={`Delete Keyword ${index + 1}`}>
                   <button className="btn btn-xs btn-ghost" onClick={() => deleteKeyword(index)} disabled={!canDelete}>
                     <i className="fa-solid fa-minus"></i>
@@ -596,7 +813,7 @@ export function HistoryTypeWidget(props: WidgetParams) {
   const options = getSelectOptions(props.schema);
   const historyType = concatenate(props.paramValue);
   const historyName = concatenate(props.nodeParams["history_name"]);
-  const historyNameError = props.getFieldError(props.nodeId, "history_name");
+  const historyNameError = props.getNodeFieldError(props.nodeId, "history_name");
   return (
     <>
       <div className="flex join">

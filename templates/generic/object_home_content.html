@@ -1,3 +1,4 @@
+{% load i18n %}
 {% load django_tables2 %}
 <div class="app-card">
   <div class="grid grid-cols-6">
@@ -6,8 +7,8 @@
         <h1 id="{{ title|slugify }}" class="{{ title_class|default:"pg-title" }} hover:cursor-pointer">
           <a href="#{{ title|slugify }}">{{ title }}</a>
         </h1>
-        {% if info_link %}
-          <a class="mx-2 text-xs text-neutral-500" href="{{ info_link }}" target="_blank">Learn more <i class="text-xs fa fa-circle-question"></i></a>
+        {% if title_help_content %}
+          {% include "generic/help.html" with help_content=title_help_content %}
         {% endif %}
       </div>
       <span class="text-neutral-500">{{ subtitle }}</span>

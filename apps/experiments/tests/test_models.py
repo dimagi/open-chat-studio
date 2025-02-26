@@ -37,8 +37,6 @@ from apps.utils.factories.experiment import (
 from apps.utils.factories.files import FileFactory
 from apps.utils.factories.pipelines import NodeFactory, PipelineFactory
 from apps.utils.factories.service_provider_factories import (
-    LlmProviderFactory,
-    LlmProviderModelFactory,
     VoiceProviderFactory,
 )
 from apps.utils.factories.team import TeamFactory
@@ -358,7 +356,7 @@ class TestExperimentSession:
         participant = ParticipantFactory()
         session = ExperimentSessionFactory(participant=participant, team=participant.team)
         participant_data = ParticipantData.objects.create(
-            content_object=session.experiment,
+            experiment=session.experiment,
             participant=participant,
             team=participant.team,
             data={"first_name": "Jimmy"},
@@ -394,7 +392,7 @@ class TestExperimentSession:
             action=event_action,
         )
         ParticipantData.objects.create(
-            content_object=session.experiment,
+            experiment=session.experiment,
             participant=participant,
             team=participant.team,
             data={"name": "Tester", "timezone": "Africa/Johannesburg"},
@@ -487,7 +485,7 @@ class TestParticipant:
         ExperimentSessionFactory(participant=participant)
         existing_data_obj = ParticipantData.objects.create(
             team=team,
-            content_object=sessions[0].experiment,
+            experiment=sessions[0].experiment,
             data={"first_name": "Jack", "last_name": "Turner"},
             participant=participant,
         )
@@ -531,48 +529,48 @@ class TestSourceMaterialVersioning:
 
 @pytest.mark.django_db()
 class TestExperimentRouteVersioning:
-    @pytest.mark.parametrize("child_has_versions", [True, False])
-    def test_child_is_working_with_changes_creates_new_version(self, child_has_versions):
+    def _setup_route(self):
         parent_exp = ExperimentFactory()
         team = parent_exp.team
-        working_child = ExperimentFactory(team=team, prompt_text="some prompt")
-        working_route = ExperimentRoute.objects.create(
-            team=team, parent=parent_exp, child=working_child, keyword="testing"
-        )
+        child_exp = ExperimentFactory(team=team)
+        exp_route = ExperimentRoute.objects.create(team=team, parent=parent_exp, child=child_exp, keyword="testing")
+        return child_exp, exp_route
 
-        if child_has_versions:
-            working_child.create_new_version()
-            # Update the working version so there are changes
-            working_child.prompt_text = "a new prompt"
-            working_child.save()
+    def test_child_without_versions(self):
+        """
+        When the child doesn't have a version then we expect a new version to be created for the new route version.
+        """
+        child_exp, exp_route = self._setup_route()
+        route_version = exp_route.create_new_version(new_parent=ExperimentFactory(team=exp_route.team))
 
-        versioned_route = working_route.create_new_version(new_parent=ExperimentFactory(team=team))
-        expected_difference = set(["id", "parent_id", "child_id"])
-        _compare_models(working_route, versioned_route, expected_changed_fields=expected_difference)
-        assert versioned_route.child != working_child
-        assert versioned_route.child.working_version == working_child
+        assert route_version.child == child_exp.latest_version
 
-    def test_versioned_child_is_reused(self):
-        working_route, versioned_route = self._setup_versioned_experiment_route(child_bot="child")
-        expected_difference = set(["id", "parent_id"])
-        _compare_models(working_route, versioned_route, expected_changed_fields=expected_difference)
-        assert versioned_route.child == working_route.child
+    def test_child_with_changes_since_latest_version(self):
+        """
+        When the child have a version, but also changed since the latest version, then we expect a new version to be
+        created for the new route version.
+        """
+        child_exp, exp_route = self._setup_route()
 
-    def test_working_child_without_changes_uses_latest_version(self):
-        working_route, versioned_route = self._setup_versioned_experiment_route(child_bot="working")
-        expected_difference = set(["id", "parent_id", "child_id"])
-        _compare_models(working_route, versioned_route, expected_changed_fields=expected_difference)
-        assert versioned_route.child == working_route.child.latest_version
+        # Create a version of the child
+        first_child_version = child_exp.create_new_version()
+        # Changes since the last version
+        child_exp.prompt_text = "New prompt"
 
-    def _setup_versioned_experiment_route(self, child_bot: str):
-        parent_exp = ExperimentFactory()
-        team = parent_exp.team
-        working_child = ExperimentFactory(team=team)
-        child_version = working_child.create_new_version()
-        child_bot = working_child if child_bot == "working" else child_version
-        working_route = ExperimentRoute.objects.create(team=team, parent=parent_exp, child=child_bot, keyword="testing")
-        version = working_route.create_new_version(new_parent=ExperimentFactory(team=team))
-        return working_route, version
+        # This should create a new version of the child as well
+        route_version = exp_route.create_new_version(new_parent=ExperimentFactory(team=exp_route.team))
+        assert child_exp.latest_version != first_child_version
+        assert route_version.child == child_exp.latest_version
+
+    def test_child_with_no_changes_since_latest_version(self):
+        """When the child has a version and there are no changes between that version and the working version, then the
+        latest version should be used for the new route version.
+        """
+        child_exp, exp_route = self._setup_route()
+        # First create a version of the child
+        child_version = child_exp.create_new_version()
+        route_version = exp_route.create_new_version(new_parent=ExperimentFactory(team=exp_route.team))
+        assert route_version.child == child_version
 
 
 @pytest.mark.django_db()
@@ -593,60 +591,6 @@ class TestExperimentRoute:
         queryset = ExperimentRoute.eligible_children(team=parent.team)
         assert len(queryset) == 3
 
-    def test_compare_with_model_testcase_1(self):
-        """
-        One child is a working version and the other is a version of that working version
-        """
-        # 1. The children of both route versions are family with one being the working version
-        # 1.1. No changes between the working and versioned child
-        parent = ExperimentFactory()
-        versioned_parent = parent.create_new_version()
-        child = ExperimentFactory(team=parent.team)
-        versioned_child = child.create_new_version()
-        route = ExperimentRoute.objects.create(parent=parent, child=child, keyword="test", team=parent.team)
-        route2 = ExperimentRoute.objects.create(
-            parent=versioned_parent, child=versioned_child, keyword="test", team=parent.team, working_version=route
-        )
-        changes = route.compare_with_model(route2, exclude_fields=route2.get_fields_to_exclude())
-        assert changes == set([])
-
-        # 1.2. A change between the working and versioned child
-        child.prompt_text = "This is a change"
-        child.save()
-        changes = route.compare_with_model(route2, exclude_fields=route2.get_fields_to_exclude())
-        assert changes == set(["prompt_text"])
-
-    def test_compare_with_model_testcase_2(self):
-        """
-        Both children are versions of the same experiment
-        """
-        parent = ExperimentFactory()
-        versioned_parent = parent.create_new_version()
-        child = ExperimentFactory(team=parent.team)
-        versioned_child = child.create_new_version()
-        route = ExperimentRoute.objects.create(parent=parent, child=versioned_child, keyword="test", team=parent.team)
-        route2 = ExperimentRoute.objects.create(
-            parent=versioned_parent, child=versioned_child, keyword="test", team=parent.team, working_version=route
-        )
-        changes = route.compare_with_model(route2, exclude_fields=route2.get_fields_to_exclude())
-        assert changes == set()
-
-    def test_compare_with_model_testcase_3(self):
-        """
-        They are different versions, so we expect the compare method to pick this up
-        """
-        parent = ExperimentFactory()
-        versioned_parent = parent.create_new_version()
-        child = ExperimentFactory(team=parent.team)
-        versioned_child1 = child.create_new_version()
-        versioned_child2 = child.create_new_version()
-        route = ExperimentRoute.objects.create(parent=parent, child=versioned_child1, keyword="test", team=parent.team)
-        route2 = ExperimentRoute.objects.create(
-            parent=versioned_parent, child=versioned_child2, keyword="test", team=parent.team, working_version=route
-        )
-        changes = route.compare_with_model(route2, exclude_fields=route2.get_fields_to_exclude())
-        assert changes == set(["child"])
-
     def test_compare_with_model_testcase_4(self):
         """
         The children are experiments of different families.
@@ -654,20 +598,15 @@ class TestExperimentRoute:
         parent = ExperimentFactory()
         versioned_parent = parent.create_new_version()
         child1 = ExperimentFactory(team=parent.team)
-        child2 = ExperimentFactory(
-            team=parent.team,
-            synthetic_voice=SyntheticVoiceFactory(),
-            voice_provider=VoiceProviderFactory(),
-            llm_provider=LlmProviderFactory(),
-            llm_provider_model=LlmProviderModelFactory(name="yoda"),
-            prompt_text="this is a change",
-        )
+        child2 = ExperimentFactory(team=parent.team)
         route = ExperimentRoute.objects.create(parent=parent, child=child1, keyword="test", team=parent.team)
         route2 = ExperimentRoute.objects.create(
             parent=versioned_parent, child=child2, keyword="test", team=parent.team, working_version=route
         )
-        changes = route.compare_with_model(route2, exclude_fields=route2.get_fields_to_exclude())
-        assert changes == set(["child"])
+        route1_version = route.version_details
+        route1_version.compare(route2.version_details)
+        changed_fields = [field.name for field in route1_version.fields if field.changed]
+        assert changed_fields == ["child"]
 
     def _setup_route(self, keyword: str):
         parent = ExperimentFactory()

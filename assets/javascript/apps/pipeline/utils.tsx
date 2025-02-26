@@ -1,6 +1,13 @@
+import React from "react"
 import ShortUniqueId from "short-unique-id";
 import {NodeParameterValues, Option} from "./types/nodeParameterValues";
 import {JsonSchema, PropertySchema} from "./types/nodeParams";
+
+declare global {
+  interface Window {
+    DOCUMENTATION_BASE_URL: string;
+  }
+}
 
 const uid = new ShortUniqueId({ length: 5 });
 
@@ -12,7 +19,7 @@ export function classNames(...classes: Array<string | null | undefined>): string
   return classes.filter(Boolean).join(" ");
 }
 
-export function nodeBorderClass(nodeErrors : Record<string, string>, selected : boolean ): string {
+export function nodeBorderClass(nodeErrors : boolean, selected : boolean ): string {
   const defaultBorder = nodeErrors ? "border-error " : ""
   const selectedBorder = nodeErrors ? "border-secondary" : "border-primary"
   const border = selected ? selectedBorder : defaultBorder
@@ -35,6 +42,32 @@ export const getCachedData: () => typeof localCache = () => {
   }
   return localCache;
 };
+
+
+export function formatDocsForSchema(schema: JsonSchema)  {
+  const description = schema.description || "";
+  const documentationLink = getDocumentationLink(schema);
+  if (!description && !documentationLink) {
+    return null;
+  }
+  return <>
+    <p>{description}</p>
+    {documentationLink && <p><a className="link" href={documentationLink} target="_blank">Learn more</a></p>}
+  </>;
+}
+
+
+export function getDocumentationLink(schema: JsonSchema) {
+  let documentationLink = schema["ui:documentation_link"];
+  if (!documentationLink) {
+    return null;
+  }
+  if (documentationLink && !documentationLink.startsWith("http")) {
+    documentationLink = `${window.DOCUMENTATION_BASE_URL}${documentationLink}`;
+  }
+  return documentationLink;
+}
+
 
 export function concatenate(value: string | string[] | null | undefined): string {
   if (!value) return "";
