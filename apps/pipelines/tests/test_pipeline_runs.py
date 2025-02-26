@@ -165,3 +165,13 @@ def test_running_pipeline_stores_session(pipeline: Pipeline, session: Experiment
     pipeline.invoke(PipelineState(messages=[input]), session)
     assert pipeline.runs.count() == 1
     assert pipeline.runs.first().session_id == session.id
+
+
+@django_db_transactional()
+@pytest.mark.parametrize("save_input_to_history", [True, False])
+def test_save_input_to_history(save_input_to_history, pipeline: Pipeline, session: ExperimentSession):
+    input = "Hi"
+    pipeline.invoke(PipelineState(messages=[input]), session, save_input_to_history=save_input_to_history)
+    assert (
+        session.chat.messages.filter(content="Hi", message_type=ChatMessageType.HUMAN).exists() == save_input_to_history
+    )
