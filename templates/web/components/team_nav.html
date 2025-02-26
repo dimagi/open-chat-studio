@@ -47,6 +47,15 @@
       {% endif %}
     </ul>
   </li>
+  {% if perms.documents.view_repository %}
+    <li>
+      <a href="{% url 'documents:repository_home' request.team.slug %}"
+         {% if active_tab == 'manage_files' %}class="active"{% endif %}>
+        <i class="fa fa-folder" aria-hidden="true"></i></i>
+      {% translate "Manage Files" %}
+    </a>
+    </li>
+  {% endif %}
   {% if perms.experiments.view_participant %}
     <li>
       <a href="{% url 'participants:participant_home' request.team.slug %}"
