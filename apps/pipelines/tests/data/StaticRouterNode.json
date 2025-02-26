@@ -6,12 +6,6 @@
       "type": "string",
       "ui:widget": "node_name"
     },
-    "num_outputs": {
-      "default": 2,
-      "title": "Num Outputs",
-      "type": "integer",
-      "ui:widget": "none"
-    },
     "keywords": {
       "items": {
         "type": "string"

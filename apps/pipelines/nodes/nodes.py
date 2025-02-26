@@ -341,19 +341,17 @@ class BooleanNode(Passthrough):
 
 
 class RouterMixin(BaseModel):
-    num_outputs: int = Field(2, json_schema_extra=UiSchema(widget=Widgets.none))
     keywords: list[str] = Field(default_factory=list, json_schema_extra=UiSchema(widget=Widgets.keywords))
 
     @field_validator("keywords")
     def ensure_keywords_exist(cls, value, info: FieldValidationInfo):
-        num_outputs = info.data.get("num_outputs")
         if not all(entry for entry in value):
             raise PydanticCustomError("invalid_keywords", "Keywords cannot be empty")
 
         if len(set(value)) != len(value):
             raise PydanticCustomError("invalid_keywords", "Keywords must be unique")
 
-        return value[:num_outputs]  # Ensure the number of keywords matches the number of outputs
+        return value
 
     def _get_keyword(self, result: str):
         keyword = result.lower().strip()
