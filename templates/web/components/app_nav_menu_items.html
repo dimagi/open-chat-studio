@@ -27,7 +27,7 @@
       {% translate "Sign out" %}
     </a>
   </li>
-  {% include "web/components/theme_select.html" %}
+  {% include "web/components/theme_select.html" with position="right" text="Toggle Theme" %}
 </ul>
 {% if user.is_staff or user.is_superuser %}
   <li class="menu-title">
