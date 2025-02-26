@@ -25,7 +25,6 @@
   --chat-z-index: 50;
 
   display: block;
-  z-index: var(--chat-z-index);
 }
 
 /* These custom button styles need to remain since they use CSS variables */
@@ -43,6 +42,10 @@
     color: var(--button-text-color-hover);
     border-color: var(--button-border-color-hover);
   }
+}
+
+#ocs-chat-window {
+  z-index: var(--chat-z-index);
 }
 
 .iframe-placeholder {
