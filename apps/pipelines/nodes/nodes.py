@@ -778,10 +778,7 @@ class CodeNode(PipelineNode):
                 mode="exec",
             )
             custom_locals = {}
-            try:
-                exec(byte_code, {}, custom_locals)
-            except Exception as exc:
-                raise PydanticCustomError("invalid_code", "{error}", {"error": exc.msg})
+            exec(byte_code, {}, custom_locals)
 
             try:
                 main = custom_locals["main"]
