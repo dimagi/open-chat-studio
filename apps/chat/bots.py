@@ -300,6 +300,7 @@ class PipelineBot:
                 pipeline_version=self.experiment.pipeline.version_number,
             ),
             self.session,
+            save_input_to_history=save_input_to_history,
         )
         self.ai_message_id = output["ai_message_id"]
         return output["messages"][-1]
