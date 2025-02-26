@@ -108,7 +108,7 @@ def setup_dev_env(c: Context, step=False):
     cprint(f"\nChecking node version (>{MIN_NODE_VERSION} required)", "green")
     if not _check_node_version(c):
         cprint(f"Node version should be {MIN_NODE_VERSION} or higher", "red")
-        cprint("\nSkipping font end build. Run 'inv npm --install' once you have upgraded node.", "yellow")
+        cprint("\nSkipping front end build. Run 'inv npm --install' once you have upgraded node.", "yellow")
     else:
         cprint("\nInstalling npm packages and building front end resources", "green")
         if not step or _confirm("\tOK?", _exit=False):
