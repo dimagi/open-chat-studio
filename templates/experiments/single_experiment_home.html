@@ -303,7 +303,7 @@
                                   x-show="filter.showOptions"
                                   @click.outside="filter.showOptions = false"
                                   class="absolute mt-1 bg-white border border-gray-200 rounded-lg shadow-lg z-30 max-h-64 overflow-y-auto w-40"
-                                >
+                                  style="z-index: 9999 !important;">
                                   <div class="py-1">
                                     <template x-for="option in filterData.columns[filter.column]?.options" :key="option">
                                       <div class="flex items-center px-4 py-2 hover:bg-gray-50">
@@ -517,10 +517,10 @@
           showFilters: false,
           filters: [],
           columns: {
-            'participant': {type: 'string', operators: ['=', 'contains', 'starts_with', 'ends_with']},
-            'last_message': {type: 'timestamp', operators: ['>', '<', '<=', '>=']},
+            'participant': {type: 'string', operators: ['equals', 'contains', 'starts_with', 'ends_with']},
+            'last_message': {type: 'timestamp', operators: ['on', 'before', 'after']},
             'tags': {type: 'choice', operators: ['any of', 'all of'], options: ['user', 'system','👍', '👎']},
-            'versions': {type: 'choice', operators: ['any of', 'all of'], options: ['v0', 'v1', 'v2', 'v3', 'v4', 'v5', 'v6']}
+            'versions': {type: 'choice', operators: ['any of', 'all of'], options: ['v0', 'v1', 'v2', 'v3', 'v4', 'v5']}
           }
         },
         init() {
