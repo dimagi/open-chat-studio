@@ -15,7 +15,7 @@
 {% block pre_form %}
   {% if object.id %}
     <h2 class="text-l pg-text-muted">Assistant ID:
-      {% include "generic/copy_button.html" with copy_element_id="copy_assistant_id" copy_value=object.assistant_id extra_styles="btn-ghost" %}
+      {% include "generic/copy_chip.html" with copy_element_id="copy_assistant_id" copy_value=object.assistant_id extra_styles="btn-ghost" %}
     </h2>
   {% endif %}
   {% if object.pk %}

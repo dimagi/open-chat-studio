@@ -106,7 +106,7 @@
                 <option value="{{ identifier }}" {% if identifier in form.initial.participant_allowlist %}selected{% endif %}>{{ identifier }}</option>
               {% endfor %}
             </select>
-            {% include "generic/copy_button.html" with copy_element_id="id_participant_allowlist" action_text="Copy participant list" extra_styles="btn-ghost" %}
+            {% include "generic/copy_chip.html" with copy_element_id="id_participant_allowlist" action_text="Copy participant list" extra_styles="btn-ghost" %}
           </div>
         </p>
       </div>
