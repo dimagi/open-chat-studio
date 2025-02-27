@@ -268,6 +268,10 @@ class VersionsMixin:
             return "unreleased"
         return f"v{self.version_number}"
 
+    def get_version_name_list(self):
+        """Returns list of version names in form of v + version number including working version."""
+        return [v.get_version_name() for v in self.versions.all() if self.has_versions] + [f"v{self.version_number}"]
+
 
 @audit_fields(*model_audit_fields.SOURCE_MATERIAL_FIELDS, audit_special_queryset_writes=True)
 class SourceMaterial(BaseTeamModel, VersionsMixin):

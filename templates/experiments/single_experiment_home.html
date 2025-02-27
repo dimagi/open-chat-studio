@@ -212,54 +212,215 @@
   </div>
 
 
-  <div role="tablist" class="tabs tabs-bordered">
+  <div class="tabs-container">
+    <div role="tablist" class="tabs tabs-bordered flex justify-start">
+      {% if perms.chat.view_chat %}
+        <input type="radio" name="tab_group" role="tab" class="tab" aria-label="Sessions" id="tab-allsessions" checked/>
+      {% endif %}
+      <input type="radio" name="tab_group" role="tab" class="tab" aria-label="Versions" id="tab-versions" />
+      {% flag "events" %}
+        <input type="radio" name="tab_group" role="tab" class="tab" aria-label="Events" id="tab-events" />
+      {% endflag %}
+      <input type="radio" name="tab_group" role="tab" class="tab" aria-label="Routes" id="tab-routes"/>
+      <input type="radio" name="tab_group" role="tab" class="tab" aria-label="Terminal Bot" id="tab-terminal_bots"/>
+    </div>
+
+
     {% if perms.chat.view_chat %}
-      <input type="radio" name="tab_group" role="tab" class="tab" aria-label="Sessions" id="tab-allsessions" checked/>
       <div role="tabpanel" class="tab-content" id="content-allsessions">
         <div class="app-card">
-          <div x-data="{tags: '', participants: []}">
-            <div class="flex gap-x-2">
+          <div class="relative">
+            <div class="flex items-center gap-4">
               {% if perms.experiments.download_chats %}
                 {% include "experiments/components/exports.html" %}
               {% endif %}
-              <form
-                hx-trigger="load, change"
-                hx-target="#sessions-table"
-                hx-get="{% url 'experiments:sessions-list' request.team.slug experiment.id %}"
-                hx-swap="innerHTML"
-              >
-                <div class="flex gap-2">
-                  <div class="w-72 my-2">
-                    <input x-model="participants" name="participants" id="participants-filter" placeholder="Filter participants...">
-                  </div>
-                  {% if perms.annotations.view_customtaggeditem %}
-                    <div class="w-72 my-2">
-                      <select x-model="tags" id="tag-multiselect-filter" name="tags" multiple
-                              placeholder="Filter tags..."
-                              autocomplete="off">
-                        <option value="">Filter tags...</option>
-                        {% for tag in available_tags %}
-                          <option value="{{ tag.name }}">{{ tag.name }}</option>
-                        {% endfor %}
-                      </select>
-                    </div>
-                  {% endif %}
-                  <div class="form-control">
-                    <label class="label cursor-pointer">
-                      <span class="label-text mr-2">Include API Sessions</span>
-                      <input type="checkbox" name="show-all" class="toggle" />
-                    </label>
+              <div x-data="filterComponent">
+              <!-- Filter Button -->
+                <div class="flex items-center">
+                  <button @click="toggleFilters()" class="btn btn-sm btn-outline">
+                    <i class="fa-solid fa-filter"></i> Filter <span x-show="getActiveFilterCount() > 0">(<span x-text="getActiveFilterCount()"></span>)</span>
+                  </button>
+
+                  <button
+                    x-show="getActiveFilterCount() > 0"
+                    @click="clearAllFilters()"
+                    class="p-2 text-gray-400 hover:text-gray-600 h-10 w-10 flex items-center justify-center"
+                    title="Clear all filters">
+                    <span class="text-lg font-bold">×</span>
+                  </button>
+                </div>
+
+              <!-- Filters Panel -->
+                <div
+                  x-show="filterData.showFilters"
+                  class="absolute left-0 mt-2 p-4 bg-white border border-gray-200 rounded-lg shadow-lg z-10"
+                  style="width: fit-content;"
+                >
+                  <div class="space-y-3">
+                    <template x-for="(filter, index) in filterData.filters" :key="index">
+                      <div class="flex items-center gap-3">
+                      <!-- Where/AND Label -->
+                        <div class="text-gray-500 font-medium w-16">
+                          <span x-text="index === 0 ? 'Where' : 'AND'"></span>
+                        </div>
+                      <!-- Column Selector -->
+                        <div class="relative">
+                          <select
+                            x-model="filter.column"
+                            @change="updateOperatorsByColumn(index)"
+                            class="block w-40 py-2 px-3 border border-gray-200 rounded-lg bg-white text-sm"
+                          >
+                            <option value="">Column</option>
+                            <template x-for="(config, column) in filterData.columns" :key="column">
+                              <option :value="column" x-text="column"></option>
+                            </template>
+                          </select>
+                        </div>
+                      <!-- Operator Selector -->
+                        <div x-show="filter.column" class="relative">
+                          <select
+                            x-model="filter.operator"
+                            @change="triggerFilterChange()"
+                            class="block w-32 py-2 px-3 border border-gray-200 rounded-lg bg-white text-sm"
+                          >
+                            <template x-for="operator in filter.availableOperators" :key="operator">
+                              <option :value="operator" x-text="operator"></option>
+                            </template>
+                          </select>
+                        </div>
+                        <template x-if="filter.operator">
+                          <div class="relative">
+                          <!-- Multi-select dropdown-->
+                            <template x-if="['tags', 'versions'].includes(filter.column) && ['any of', 'all of'].includes(filter.operator)">
+                              <div class="relative">
+                                <div
+                                  @click="filter.showOptions = !filter.showOptions"
+                                  class="block w-40 py-2 px-3 border border-gray-200 rounded-lg bg-white text-sm cursor-pointer flex justify-between items-center"
+                                >
+                                <!-- Display selected items up to char length of 18 -->
+                                  <span x-text="filter.selectedValues.length ?
+                                                (filter.selectedValues.join(', ').length > 18 ?
+                                                filter.selectedValues.join(', ').substring(0, 18) + '...' :
+                                                filter.selectedValues.join(', ')) :
+                                                'Select'"></span>
+                                  <i class="fa-solid fa-caret-down fa-sm"></i>
+                                </div>
+
+                                <div
+                                  x-show="filter.showOptions"
+                                  @click.outside="filter.showOptions = false"
+                                  class="absolute mt-1 bg-white border border-gray-200 rounded-lg shadow-lg z-30 max-h-64 overflow-y-auto w-40"
+                                  style="z-index: 9999 !important;">
+
+                                <!-- Search input at the top of dropdown -->
+                                  <div class="sticky top-0 bg-white border-b border-gray-200 p-2">
+                                    <div class="relative">
+                                      <input
+                                        type="text"
+                                        x-model="filter.searchQuery"
+                                        @input="filterDropdownOptions(index)"
+                                        placeholder="Search..."
+                                        class="w-full pl-8 pr-2 py-1 text-sm border border-gray-200 rounded-md focus:outline-none focus:border-blue-500"
+                                      />
+                                    </div>
+                                  </div>
+
+                                  <div class="py-1">
+                                    <template x-for="option in filter.filteredOptions" :key="option">
+                                      <div class="flex items-center px-4 py-2 hover:bg-gray-50">
+                                        <input
+                                          type="checkbox"
+                                          :id="`option-${index}-${option}`"
+                                          :value="option"
+                                          x-model="filter.selectedValues"
+                                          @change="updateFilterValue(index)"
+                                          class="mr-2"
+                                        >
+                                        <label :for="`option-${index}-${option}`" x-text="option" class="cursor-pointer"></label>
+                                      </div>
+                                    </template>
+
+                                  <!-- No results message -->
+                                    <div
+                                      x-show="filter.filteredOptions && filter.filteredOptions.length === 0"
+                                      class="px-4 py-2 text-sm text-gray-500 italic">
+                                      No matching options
+                                    </div>
+                                  </div>
+                                </div>
+                              </div>
+                            </template>
+                          <!-- String Input for string type -->
+                            <template x-if="filterData.columns[filter.column]?.type === 'string'">
+                              <input
+                                type="text"
+                                x-model="filter.value"
+                                @input="triggerFilterChange()"
+                                class="block w-40 py-2 px-3 border border-gray-200 rounded-lg bg-white text-sm"
+                                placeholder="Enter value..."
+                              >
+                            </template>
+                          <!-- Timestamp Input -->
+                            <template x-if="filterData.columns[filter.column]?.type === 'timestamp'">
+                              <input
+                                type="date"
+                                x-model="filter.value"
+                                @change="triggerFilterChange()"
+                                class="block w-40 py-2 px-3 border border-gray-200 rounded-lg bg-white text-sm"
+                              >
+                            </template>
+                          <!-- Regular select dropdown for choice type with non-multiselect operators -->
+                            <template x-if="filterData.columns[filter.column]?.type === 'choice' && !['any of', 'all of'].includes(filter.operator)">
+                              <select
+                                x-model="filter.value"
+                                @change="triggerFilterChange()"
+                                class="block w-40 py-2 px-3 border border-gray-200 rounded-lg bg-white text-sm"
+                              >
+                                <option value="">Select value</option>
+                                <template x-for="option in filterData.columns[filter.column]?.options" :key="option">
+                                  <option :value="option" x-text="option"></option>
+                                </template>
+                              </select>
+                            </template>
+                          </div>
+                        </template>
+                      <!-- Remove Filter Button-->
+                        <button
+                          @click="removeFilter(index)"
+                          class="p-2 text-gray-400 hover:text-gray-600 h-10 w-10 flex items-center justify-center"
+                          aria-label="Remove filter"
+                        >
+                          <span class="text-lg">×</span>
+                        </button>
+                      </div>
+                    </template>
+                  <!-- Add Filter Button -->
+                    <button
+                      @click="addFilter()"
+                      class="flex items-center gap-2 px-4 py-2 mt-3 text-gray-700 border border-gray-200 rounded-lg hover:bg-gray-50 text-sm"
+                    >
+                      + Add filter
+                    </button>
                   </div>
                 </div>
-              </form>
+              </div>
+              <label class="label cursor-pointer">
+                <span class="label-text mr-2">Include API Sessions</span>
+                <input type="checkbox" name="show-all" class="toggle" />
+              </label>
             </div>
           </div>
-          <div id="sessions-table"></div>
+        </div>
+        <div id="sessions-table"
+             hx-get="{% url 'experiments:sessions-list' request.team.slug experiment.id %}"
+             hx-trigger="load"
+             hx-target="this"
+             hx-swap="innerHTML"
+             hx-include="[name='show-all']">
         </div>
       </div>
+      </div>
     {% endif %}
-
-    <input type="radio" name="tab_group" role="tab" class="tab" aria-label="Versions" id="tab-versions" />
     <div role="tabpanel" class="tab-content" id="content-versions">
       <div class="app-card">
         <div id="versions-table"
@@ -271,9 +432,7 @@
         </div>
       </div>
     </div>
-
     {% flag "events" %}
-      <input type="radio" name="tab_group" role="tab" class="tab" aria-label="Events" id="tab-events" />
       <div role="tabpanel" class="tab-content" id="content-events">
         <div class="app-card">
           <a class="btn btn-sm btn-outline btn-primary" href="{% url 'experiments:events:static_event_new' team.slug experiment.id %}"><i class="fa-regular fa-plus"></i> Create Static Event</a>
@@ -284,9 +443,7 @@
         </div>
       </div>
     {% endflag %}
-
     {% if not experiment.pipeline %}
-      <input type="radio" name="tab_group" role="tab" class="tab" aria-label="Routes" id="tab-routes"/>
       <div role="tabpanel" class="tab-content" id="content-routes">
         <div class="app-card">
           {% if experiment.assistant %}
@@ -301,8 +458,7 @@
           {% endif %}
         </div>
       </div>
-
-      <input type="radio" name="tab_group" role="tab" class="tab" aria-label="Terminal Bot" id="tab-terminal_bots"/>
+      </div>
       <div role="tabpanel" class="tab-content" id="content-terminal_bots">
         <div class="app-card">
           {% if terminal_bots_table.data|length == 0 and experiment.is_editable%}
@@ -310,7 +466,6 @@
           {% endif %}
           {% render_table terminal_bots_table %}
         </div>
-      </div>
     {% endif %}
   </div>
   <script>
@@ -334,47 +489,7 @@
     }
 
     document.addEventListener('DOMContentLoaded', () => {
-      new TomSelect('#tag-multiselect-filter', {
-        plugins: ["remove_button", "caret_position", "input_autogrow"],
-        maxItems: null,
-        hidePlaceholder: true,
-      });
-
-      new TomSelect('#participants-filter', {
-        plugins: ["remove_button", "caret_position", "input_autogrow"],
-        valueField: 'identifier',
-        searchField: ['name', 'identifier'],
-        hidePlaceholder: true,
-        load: function(query, callback) {
-          const url = '{% url "participants:search" request.team.slug %}?q=' + encodeURIComponent(query);
-          fetch(url)
-            .then(response => response.json())
-            .then(json => {
-              callback(json.results);
-            }).catch(()=>{
-              callback();
-            });
-        },
-        render: {
-          option: function(item, escape) {
-            return `<div class="">
-                      <span class="h4">
-                        ${ escape(item.name || 'No Name') }
-                      </span>
-                      <span class="text-muted"> (${ escape(item.identifier) })</span>
-                    </div>`;
-          },
-          item: function(item, escape) {
-            return `<div class="">
-                      <span class="h4">
-                        ${ escape(item.name || 'No Name') }
-                      </span>
-                      <span class="text-muted"> (${ escape(item.identifier) })</span>
-                    </div>`;
-          }
-        },
-      });
-
+      showTabContent('allsessions');
       const tabs = document.querySelectorAll('.tab');
       tabs.forEach(tab => {
         tab.addEventListener('change', (event) => {
@@ -387,5 +502,140 @@
     });
 
     window.addEventListener('hashchange', selectTabFromHash);
+  </script>
+  <script>
+    const tags = {{ available_tags|safe|default:"[]" }};
+    const versionsList = {{ experiment_versions|safe|default:"[]" }};
+    document.addEventListener('alpine:init', () => {
+      Alpine.data('filterComponent', () => ({
+        filterData: {
+          showFilters: false,
+          filters: [],
+          columns: {
+            'participant': {type: 'string', operators: ['equals', 'contains', 'starts_with', 'ends_with']},
+            'last_message': {type: 'timestamp', operators: ['on', 'before', 'after']},
+            'tags': {type: 'choice', operators: ['any of', 'all of'], options: tags },
+            'versions': {type: 'choice', operators: ['any of', 'all of'], options: versionsList}
+          }
+        },
+        init() {
+          htmx.process(this.$el);
+        },
+        toggleFilters() {
+          this.filterData.showFilters = !this.filterData.showFilters;
+          if (this.filterData.showFilters && this.filterData.filters.length === 0) {
+            this.addFilter();
+          }
+        },
+        addFilter() {
+          this.filterData.filters.push({
+            column: '',
+            operator: '',
+            value: '',
+            selectedValues: [],
+            availableOperators: [],
+            showOptions: false,
+            searchQuery: '',
+            filteredOptions: []
+          });
+        },
+        updateOperatorsByColumn(index) {
+          const filter = this.filterData.filters[index];
+          const column = filter.column;
+          if (column && this.filterData.columns[column]) {
+            filter.availableOperators = this.filterData.columns[column].operators;
+          // Set the first available operator as default
+            filter.operator = filter.availableOperators[0] || '';
+            filter.value = '';
+            filter.selectedValues = [];
+            if (this.filterData.columns[column].options) {
+              filter.filteredOptions = [...this.filterData.columns[column].options];
+            }
+          } else {
+            filter.availableOperators = [];
+            filter.operator = '';
+          }
+          this.triggerFilterChange();
+        },
+        filterDropdownOptions(index) {
+          const filter = this.filterData.filters[index];
+          const column = filter.column;
+
+          if (column && this.filterData.columns[column] && this.filterData.columns[column].options) {
+            const query = filter.searchQuery.toLowerCase().trim();
+
+            if (query === '') {
+              filter.filteredOptions = [...this.filterData.columns[column].options];
+            } else {
+              filter.filteredOptions = this.filterData.columns[column].options.filter(option =>
+                option.toLowerCase().includes(query)
+              );
+            }
+          }
+        },
+        removeFilter(index) {
+          this.filterData.filters.splice(index, 1);
+          this.triggerFilterChange();
+        },
+        updateFilterValue(index) {
+          const filter = this.filterData.filters[index];
+          if (['any of', 'all of'].includes(filter.operator)) {
+            filter.value = JSON.stringify(filter.selectedValues);
+          }
+          this.triggerFilterChange();
+        },
+        getActiveFilterCount() {
+          return this.filterData.filters.filter(filter => {
+            return filter.column && filter.operator && (
+              filter.value ||
+              (Array.isArray(filter.selectedValues) && filter.selectedValues.length > 0)
+            );
+          }).length;
+        },
+        clearAllFilters() {
+          this.filterData.filters = [];
+          this.addFilter();
+          this.filterData.showFilters = false;
+          this.triggerFilterChange();
+        },
+        triggerFilterChange() {
+          let filterParams = {};
+          this.filterData.filters.forEach((filter, i) => {
+            if (filter.column && filter.operator && (filter.value || filter.selectedValues.length > 0)) {
+              filterParams[`filter_${i}_column`] = filter.column;
+              filterParams[`filter_${i}_operator`] = filter.operator;
+              if (['any of', 'all of'].includes(filter.operator)) {
+                filterParams[`filter_${i}_value`] = JSON.stringify(filter.selectedValues);
+              } else {
+                filterParams[`filter_${i}_value`] = filter.value;
+              }
+            }
+          });
+          const url = new URL(window.location.href);
+          for (const key of [...url.searchParams.keys()]) {
+            if (key.startsWith('filter_')) {
+              url.searchParams.delete(key);
+            }
+          }
+          Object.entries(filterParams).forEach(([key, value]) => {
+            url.searchParams.set(key, value);
+          });
+          window.history.replaceState({}, '', url.toString());
+          const sessionsTableUrl = document.getElementById('sessions-table').getAttribute('hx-get');
+          const filterUrl = new URL(sessionsTableUrl, window.location.origin);
+          Object.entries(filterParams).forEach(([key, value]) => {
+            filterUrl.searchParams.set(key, value);
+          });
+          const showAllCheckbox = document.querySelector('input[name="show-all"]');
+          if (showAllCheckbox && showAllCheckbox.checked) {
+            filterUrl.searchParams.set('show-all', 'on');
+          }
+          htmx.ajax('GET', filterUrl.toString(), {
+            target: '#sessions-table',
+            swap: 'innerHTML'
+          });
+        }
+      }));
+    });
   </script>
 {% endblock %}
