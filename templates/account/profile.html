@@ -8,7 +8,6 @@
   {% include 'account/components/api_keys.html' %}
 {% endblock %}
 {% block page_js %}
-  <script src="{% static 'js/app-bundle.js' %}"></script>
   <script>
     document.addEventListener('DOMContentLoaded', () => {
       const uploadUrl = '{% url "users:upload_profile_image" %}';
