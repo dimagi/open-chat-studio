@@ -1,6 +1,7 @@
 import datetime
 import inspect
 import json
+import random
 import time
 from typing import Literal
 
@@ -866,6 +867,7 @@ class CodeNode(PipelineNode):
             "re",
             "datetime",
             "time",
+            "random",
         }
         custom_builtins = safe_builtins.copy()
         custom_builtins.update(
@@ -877,6 +879,7 @@ class CodeNode(PipelineNode):
                 "all": all,
                 "any": any,
                 "datetime": datetime,
+                "random": random,
             }
         )
 
