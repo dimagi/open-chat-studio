@@ -95,6 +95,7 @@ def main(input, **kwargs):
             "",
             """"_file" is an invalid attribute name because it starts with "_".""",
         ),
+        ("import PyPDF2\ndef main(input):\n\treturn input", "", "No module named 'PyPDF2'"),
     ],
 )
 def test_code_node_build_errors(pipeline, code, input, error):
