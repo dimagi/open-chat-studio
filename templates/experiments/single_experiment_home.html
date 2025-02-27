@@ -255,9 +255,6 @@
                   x-show="filterData.showFilters"
                   class="absolute left-0 mt-2 p-4 bg-white border border-gray-200 rounded-lg shadow-lg z-10"
                   style="width: fit-content;"
-                  hx-get="/sessions/"
-                  hx-trigger="filterChange"
-                  hx-target="#sessions-table"
                 >
                   <div class="space-y-3">
                     <template x-for="(filter, index) in filterData.filters" :key="index">
@@ -343,7 +340,7 @@
                                       </div>
                                     </template>
 
-                                        <!-- No results message -->
+                                  <!-- No results message -->
                                     <div
                                       x-show="filter.filteredOptions && filter.filteredOptions.length === 0"
                                       class="px-4 py-2 text-sm text-gray-500 italic">
@@ -416,8 +413,10 @@
         </div>
         <div id="sessions-table"
              hx-get="{% url 'experiments:sessions-list' request.team.slug experiment.id %}"
-             hx-trigger="load, filterChange"
-             hx-swap="innerHTML">
+             hx-trigger="load"
+             hx-target="this"
+             hx-swap="innerHTML"
+             hx-include="[name='show-all']">
         </div>
       </div>
       </div>
@@ -647,23 +646,42 @@
           this.triggerFilterChange();
         },
         triggerFilterChange() {
-          const params = new URLSearchParams();
-
+          let filterParams = {};
           this.filterData.filters.forEach((filter, i) => {
             if (filter.column && filter.operator && (filter.value || filter.selectedValues.length > 0)) {
-              params.append(`filter_${i}_column`, filter.column);
-              params.append(`filter_${i}_operator`, filter.operator);
-
+              filterParams[`filter_${i}_column`] = filter.column;
+              filterParams[`filter_${i}_operator`] = filter.operator;
               if (['any of', 'all of'].includes(filter.operator)) {
-              // For multi-select, pass the values as a JSON array
-                params.append(`filter_${i}_value`, JSON.stringify(filter.selectedValues));
+                filterParams[`filter_${i}_value`] = JSON.stringify(filter.selectedValues);
               } else {
-                params.append(`filter_${i}_value`, filter.value);
+                filterParams[`filter_${i}_value`] = filter.value;
               }
             }
           });
-          htmx.trigger('#sessions-table', 'filterChange', {
-            parameters: params.toString()
+          const url = new URL(window.location.href);
+          for (const key of [...url.searchParams.keys()]) {
+            if (key.startsWith('filter_')) {
+              url.searchParams.delete(key);
+            }
+          }
+          // Add new filter parameters to URL
+          Object.entries(filterParams).forEach(([key, value]) => {
+            url.searchParams.set(key, value);
+          });
+          window.history.replaceState({}, '', url.toString());
+          const sessionsTableUrl = document.getElementById('sessions-table').getAttribute('hx-get');
+          const filterUrl = new URL(sessionsTableUrl, window.location.origin);
+          // Add all our filter parameters to this URL
+          Object.entries(filterParams).forEach(([key, value]) => {
+            filterUrl.searchParams.set(key, value);
+          });
+          const showAllCheckbox = document.querySelector('input[name="show-all"]');
+          if (showAllCheckbox && showAllCheckbox.checked) {
+            filterUrl.searchParams.set('show-all', 'on');
+          }
+          htmx.ajax('GET', filterUrl.toString(), {
+            target: '#sessions-table',
+            swap: 'innerHTML'
           });
         }
       }));
