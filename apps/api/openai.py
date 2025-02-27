@@ -103,10 +103,12 @@ def chat_completions_schema(versioned: bool):
         parameters=parameters,
     )
 
+
 @chat_completions_schema(versioned=False)
 @api_view(["POST"])
 def chat_completions(request, experiment_id: uuid.UUID):
     return chat_completions_version(request._request, experiment_id)
+
 
 @chat_completions_schema(versioned=True)
 @api_view(["POST"])
