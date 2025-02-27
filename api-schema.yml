@@ -132,27 +132,71 @@ paths:
           description: ''
   /api/openai/{experiment_id}/v{version}/chat/completions:
     post:
-      operationId: api_openai_v_chat_completions_create
+      operationId: openai_chat_completions_versioned
+      description: |2
+
+        Use OpenAI's client to send messages to the experiment and get responses. This will
+        create a new session in the experiment with all the provided messages
+        and return the response from the experiment.
+
+        The last message must be a 'user' message.
+
+        Example (Python):
+
+        ```python
+        experiment_id = "your experiment ID"
+
+        client = OpenAI(
+            api_key="your API key",
+            base_url=f"https://chatbots.dimagi.com/api/openai/{experiment_id}",
+        )
+
+        completion = client.chat.completions.create(
+            model="anything",
+            messages=[
+                {"role": "assistant", "content": "How can I help you today?"},
+                {"role": "user", "content": "I need help with something."},
+            ],
+        )
+
+        reply = completion.choices[0].message
+        ```
+      summary: Versioned Chat Completions API for Experiments
       parameters:
       - in: path
         name: experiment_id
         schema:
           type: string
-          format: uuid
+        description: Experiment ID
         required: true
       - in: path
         name: version
         schema:
           type: integer
         required: true
+      - in: query
+        name: version
+        schema:
+          type: string
+        description: Version of experiment
       tags:
-      - api
+      - OpenAI
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateChatCompletionRequest'
+        required: true
       security:
       - apiKeyAuth: []
       - tokenAuth: []
       responses:
         '200':
-          description: No response body
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CreateChatCompletionResponse'
+          description: ''
   /api/participants:
     post:
       operationId: update_participant_data
