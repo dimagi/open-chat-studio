@@ -414,12 +414,12 @@
             </div>
           </div>
         </div>
+        <div id="sessions-table"
+             hx-get="{% url 'experiments:sessions-list' request.team.slug experiment.id %}"
+             hx-trigger="load, filterChange"
+             hx-swap="innerHTML">
+        </div>
       </div>
-      </div>
-      <div id="sessions-table"
-           hx-get="{% url 'experiments:sessions-list' request.team.slug experiment.id %}"
-           hx-trigger="load, filterChange"
-           hx-swap="innerHTML">
       </div>
     {% endif %}
     <div role="tabpanel" class="tab-content" id="content-versions">
@@ -546,6 +546,9 @@
     window.addEventListener('hashchange', selectTabFromHash);
   </script>
   <script>
+    const tags = {{ available_tags|safe|default:"[]" }};
+    const versionsList = {{ experiment_versions|safe|default:"[]" }};
+
     document.addEventListener('alpine:init', () => {
       Alpine.data('filterComponent', () => ({
         filterData: {
@@ -554,8 +557,8 @@
           columns: {
             'participant': {type: 'string', operators: ['equals', 'contains', 'starts_with', 'ends_with']},
             'last_message': {type: 'timestamp', operators: ['on', 'before', 'after']},
-            'tags': {type: 'choice', operators: ['any of', 'all of'], options: ['user', 'system','👍', '👎']},
-            'versions': {type: 'choice', operators: ['any of', 'all of'], options: ['v0', 'v1', 'v2', 'v3', 'v4', 'v5']}
+            'tags': {type: 'choice', operators: ['any of', 'all of'], options: tags },
+            'versions': {type: 'choice', operators: ['any of', 'all of'], options: versionsList}
           }
         },
         init() {
