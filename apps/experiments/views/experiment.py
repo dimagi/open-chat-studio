@@ -161,18 +161,43 @@ class ExperimentSessionsTableView(SingleTableView, PermissionRequiredMixin):
             .filter(team=self.request.team, experiment__id=self.kwargs["experiment_id"])
             .select_related("participant__user")
         )
-
         if not self.request.GET.get("show-all"):
             query_set = query_set.exclude(experiment_channel__platform=ChannelPlatform.API)
-
-        if tags_query := self.request.GET.get("tags"):
-            tags = tags_query.split("&")
-            query_set = query_set.filter(chat__tags__name__in=tags).distinct()
-
-        if participant_identifiers := self.request.GET.get("participants"):
-            participant_identifiers = participant_identifiers.split(",")
-            query_set = query_set.filter(participant__identifier__in=participant_identifiers)
+        query_set = self.apply_dynamic_filters(query_set)
         return query_set
+
+    def apply_dynamic_filters(self, query_set):
+        i = 0
+        filter_conditions = Q()
+        filter_applied = False
+        while True:
+            filter_column = self.request.GET.get(f"filter_{i}_column")
+            filter_operator = self.request.GET.get(f"filter_{i}_operator")
+            filter_value = self.request.GET.get(f"filter_{i}_value")
+            if not all([filter_column, filter_operator, filter_value]):
+                break
+            condition = self.build_filter_condition(filter_column, filter_operator, filter_value)
+            if condition:
+                filter_conditions &= condition
+                filter_applied = True
+            i += 1
+        if filter_applied:
+            query_set = query_set.filter(filter_conditions).distinct()
+        return query_set
+
+    def build_filter_condition(self, column, operator, value):
+        """Build a Q object for the filter condition based on column, operator and value"""
+        if not value:
+            return None
+        if column == "participant":
+            return self.build_participant_filter(operator, value)
+        elif column == "last_message":
+            return self.build_timestamp_filter(operator, value)
+        elif column == "tags":
+            return self.build_tags_filter(operator, value)
+        elif column == "versions":
+            return self.build_versions_filter(operator, value)
+        return None
 
 
 class ExperimentVersionsTableView(SingleTableView, PermissionRequiredMixin):
