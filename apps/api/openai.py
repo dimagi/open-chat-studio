@@ -87,7 +87,12 @@ from apps.channels.tasks import handle_api_message
     ],
 )
 @api_view(["POST"])
-def chat_completions(request, experiment_id: uuid.UUID, version=None):
+def chat_completions(request, experiment_id: uuid.UUID):
+    return chat_completions_version(request._request, experiment_id)
+
+
+@api_view(["POST"])
+def chat_completions_version(request, experiment_id: uuid.UUID, version=None):
     try:
         messages = [_convert_message(message) for message in request.data.get("messages", [])]
     except APIException as e:

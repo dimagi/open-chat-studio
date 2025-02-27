@@ -22,7 +22,7 @@ urlpatterns = [
     path("openai/<uuid:experiment_id>/chat/completions", openai.chat_completions, name="openai-chat-completions"),
     path(
         "openai/<uuid:experiment_id>/v<int:version>/chat/completions",
-        openai.chat_completions,
+        openai.chat_completions_version,
         name="openai-chat-completions-versioned",
     ),
     path("files/<int:pk>/content", views.file_content_view, name="file-content"),
