@@ -71,20 +71,19 @@ jobs:
           - 6379:6379
     steps:
       - uses: actions/checkout@v4
-      - name: Set up Python
-        uses: actions/setup-python@v5
+      - uses: actions/setup-python@v5
         with:
           python-version: ${{ env.PYTHON_VERSION }}
-          cache: 'pip'
+      - uses: astral-sh/setup-uv@v3
+        with:
+          enable-cache: true
       - name: Install Dependencies
-        run: |
-          python -m pip install --upgrade pip
-          pip install -r dev-requirements.txt
+        run: uv sync --frozen
       - name: Run Tests
         env:
           DJANGO_DATABASE_USER: postgres
           DJANGO_DATABASE_PASSWORD: postgres_password
-        run: pytest -n auto --cov --cov-report=xml --junitxml=junit.xml -o junit_family=legacy
+        run: uv run --no-sync pytest -n auto --cov --cov-report=xml --junitxml=junit.xml -o junit_family=legacy
 
       - name: Upload results to Codecov
         if: ${{ !cancelled() }}
