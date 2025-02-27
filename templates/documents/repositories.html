@@ -2,7 +2,7 @@
 {% extends 'web/app/app_base.html' %}
 {% block app %}
     {% load i18n %}
-    <div class="app-card">
+    <div class="app-card" x-data>
         <div class="grid grid-cols-6">
             <div class="col-span-5">
                 <div class="flex">
@@ -14,14 +14,34 @@
         </div>
 
         <div role="tablist" class="tabs tabs-bordered">
-            <input type="radio" name="repository" role="tab" class="tab" aria-label="Files" checked="checked" />
+            <input
+                type="radio"
+                name="repository"
+                role="tab"
+                class="tab"
+                aria-label="Files"
+                @click="window.location.href = '{% url 'documents:repository_home' request.team.slug 'files' %}'"
+                {% if tab_name == "files" %}checked="checked"{% endif %}
+            />
             <div role="tabpanel" class="tab-content p-10">
-                {% include 'documents/tab_content.html' with object_type="files" object_list_url=files_list_url %}
+                {% if tab_name == "files" %}
+                    {% include 'documents/tab_content.html' with object_list_url=files_list_url %}
+                {% endif %}
             </div>
 
-            <!-- <input type="radio" name="repository" role="tab" class="tab" aria-label="Collections" />
+            <input
+                type="radio"
+                name="repository"
+                role="tab"
+                class="tab"
+                aria-label="Collections"
+                @click="window.location.href = '{% url 'documents:repository_home' request.team.slug 'collections' %}'"
+                {% if tab_name == "collections" %}checked="checked"{% endif %}
+            />
             <div role="tabpanel" class="tab-content p-10">
-                {% include 'documents/tab_content.html' with object_type="collections" object_list_url=collections_list_url %}
-            </div> -->
+                {% if tab_name == "collections" %}
+                    {% include 'documents/tab_content.html' with object_list_url=collections_list_url %}
+                {% endif %}
+            </div>
         </div>
 {% endblock %}

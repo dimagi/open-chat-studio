@@ -6,15 +6,12 @@
             class="text-left px-3 py-3 border-b border-base-300 hover:cursor-pointer"
             hx-get="{% url details_url_name request.team.slug object.id %}"
             hx-trigger="click"
-            hx-target="#{{ object_type }}_details"
+            hx-target="#{{ tab_name }}_details"
             @click="selected_item = {{ object.id }}"
             :class="selected_item === {{ object.id }} ? 'bg-gray-300': 'hover:bg-base-200'"
         >
             <div class="flex justify-between">
-                <div class="flex flex-col gap-1">
-                    <span>{{ object.name }}</span>
-                    <span class="text-sm italic">{{ object.size }}</span>
-                </div>
+                <span>{{ object.name }}</span>
                 <div class="text-gray-600 italic">{{ object.created_at }}</div>
             </div>
         </li>
