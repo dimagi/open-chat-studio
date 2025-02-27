@@ -19,7 +19,7 @@
                 name="repository"
                 role="tab"
                 class="tab"
-                aria-label="Files"
+                aria-label="Files ({{ files_count }})"
                 @click="window.location.href = '{% url 'documents:repositories' request.team.slug 'files' %}'"
                 {% if tab_name == "files" %}checked="checked"{% endif %}
             />
@@ -34,7 +34,7 @@
                 name="repository"
                 role="tab"
                 class="tab"
-                aria-label="Collections"
+                aria-label="Collections ({{ collections_count }})"
                 @click="window.location.href = '{% url 'documents:repositories' request.team.slug 'collections' %}'"
                 {% if tab_name == "collections" %}checked="checked"{% endif %}
             />
