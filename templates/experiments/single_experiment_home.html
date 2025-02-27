@@ -490,46 +490,6 @@
     }
 
     document.addEventListener('DOMContentLoaded', () => {
-    //   new TomSelect('#tag-multiselect-filter', {
-    //     plugins: ["remove_button", "caret_position", "input_autogrow"],
-    //     maxItems: null,
-    //     hidePlaceholder: true,
-    //   });
-
-      // new TomSelect('#participants-filter', {
-      //   plugins: ["remove_button", "caret_position", "input_autogrow"],
-      //   valueField: 'identifier',
-      //   searchField: ['name', 'identifier'],
-      //   hidePlaceholder: true,
-      //   load: function(query, callback) {
-      //     const url = '{% url "participants:search" request.team.slug %}?q=' + encodeURIComponent(query);
-      //     fetch(url)
-      //       .then(response => response.json())
-      //       .then(json => {
-      //         callback(json.results);
-      //       }).catch(()=>{
-      //         callback();
-      //       });
-      //   },
-      //   render: {
-      //     option: function(item, escape) {
-      //       return `<div class="">
-      //                 <span class="h4">
-      //                   ${ escape(item.name || 'No Name') }
-      //                 </span>
-      //                 <span class="text-muted"> (${ escape(item.identifier) })</span>
-      //               </div>`;
-      //     },
-      //     item: function(item, escape) {
-      //       return `<div class="">
-      //                 <span class="h4">
-      //                   ${ escape(item.name || 'No Name') }
-      //                 </span>
-      //                 <span class="text-muted"> (${ escape(item.identifier) })</span>
-      //               </div>`;
-      //     }
-      //   },
-      // });
       showTabContent('allsessions');
       const tabs = document.querySelectorAll('.tab');
       tabs.forEach(tab => {
@@ -547,7 +507,6 @@
   <script>
     const tags = {{ available_tags|safe|default:"[]" }};
     const versionsList = {{ experiment_versions|safe|default:"[]" }};
-
     document.addEventListener('alpine:init', () => {
       Alpine.data('filterComponent', () => ({
         filterData: {
@@ -597,7 +556,6 @@
             filter.availableOperators = [];
             filter.operator = '';
           }
-
           this.triggerFilterChange();
         },
         filterDropdownOptions(index) {
@@ -608,10 +566,8 @@
             const query = filter.searchQuery.toLowerCase().trim();
 
             if (query === '') {
-            // If search is empty, show all options
               filter.filteredOptions = [...this.filterData.columns[column].options];
             } else {
-            // Filter options based on search query
               filter.filteredOptions = this.filterData.columns[column].options.filter(option =>
                 option.toLowerCase().includes(query)
               );
@@ -625,7 +581,6 @@
         updateFilterValue(index) {
           const filter = this.filterData.filters[index];
           if (['any of', 'all of'].includes(filter.operator)) {
-          // Serialize the selected values into a string format for the backend
             filter.value = JSON.stringify(filter.selectedValues);
           }
           this.triggerFilterChange();
@@ -640,7 +595,6 @@
         },
         clearAllFilters() {
           this.filterData.filters = [];
-        // Add a single empty filter
           this.addFilter();
           this.filterData.showFilters = false;
           this.triggerFilterChange();
@@ -664,14 +618,12 @@
               url.searchParams.delete(key);
             }
           }
-          // Add new filter parameters to URL
           Object.entries(filterParams).forEach(([key, value]) => {
             url.searchParams.set(key, value);
           });
           window.history.replaceState({}, '', url.toString());
           const sessionsTableUrl = document.getElementById('sessions-table').getAttribute('hx-get');
           const filterUrl = new URL(sessionsTableUrl, window.location.origin);
-          // Add all our filter parameters to this URL
           Object.entries(filterParams).forEach(([key, value]) => {
             filterUrl.searchParams.set(key, value);
           });
