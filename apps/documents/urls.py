@@ -5,11 +5,12 @@ from apps.documents import views
 app_name = "documents"
 
 urlpatterns = [
-    path("<slug:tab_name>", views.RepositoryHome.as_view(), name="repository_home"),
+    path("<slug:tab_name>", views.RepositoryHome.as_view(), name="repositories"),
     # List views
-    path("files_list/", views.FileListView.as_view(), name="files_list"),
-    path("collections_list/", views.CollectionListView.as_view(), name="collections_list"),
+    path("files/", views.FileListView.as_view(), name="files_list"),
+    path("files/<int:id>/details", views.FileDetails.as_view(), name="file_details"),
+    path("files/upload", views.upload_files, name="upload_files"),
     # Detail views
-    path("file_details/<int:id>", views.FileDetails.as_view(), name="file_details"),
-    path("collection_details/<int:id>", views.CollectionDetails.as_view(), name="collection_details"),
+    path("collections/", views.CollectionListView.as_view(), name="collections_list"),
+    path("collections/<int:id>/details", views.CollectionDetails.as_view(), name="collection_details"),
 ]
