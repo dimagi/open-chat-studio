@@ -16,9 +16,7 @@
       </svg>
       <div>
         <span>API Key created. Save this somewhere safe - you will only see it once: <code id="api-key">{{ new_api_key }}</code></span>
-        <button class="btn btn-ghost btn-xs" onclick="SiteJS.app.copyToClipboard(this, 'api-key')" title="Copy to clipboard">
-          <i class="fa-regular fa-copy"></i>
-        </button>
+        {% include "generic/copy_button.html" with copy_element_id="api-key" extra_styles="btn-ghost" %}
       </div>
     </div>
   {% endif %}
