@@ -82,6 +82,7 @@ THIRD_PARTY_APPS = [
 PROJECT_APPS = [
     "apps.web.apps.OcsAdminConfig",
     "apps.audit",
+    "apps.help",
     "apps.users",
     "apps.api",
     "apps.chat",
@@ -399,11 +400,11 @@ WAFFLE_CREATE_MISSING_FLAGS = True
 
 # replace any values below with specifics for your project
 PROJECT_METADATA = {
-    "NAME": gettext_lazy("Dimagi Chatbots"),
+    "NAME": gettext_lazy("Open Chat Studio"),
     "URL": "http://localhost:8000",
-    "DESCRIPTION": gettext_lazy("Experiments with AI, GPT and LLMs"),
+    "DESCRIPTION": gettext_lazy("Build Chatbots and deploy them to WhatsApp, Telegram, Slack and more"),
     "CONTACT_EMAIL": "devops+openchatstudio@dimagi.com",
-    "IMAGE": "https://chatbots.dimagi.com/static/images/dimagi-logo.png",
+    "IMAGE": "https://chatbots.dimagi.com/static/images/logo.png",
     "TERMS_URL": env("TERMS_URL", default=""),
     "PRIVACY_POLICY_URL": env("PRIVACY_POLICY_URL", default=""),
 }
@@ -609,3 +610,7 @@ COMMCARE_CONNECT_SERVER_ID = env("COMMCARE_CONNECT_SERVER_ID", default="")
 COMMCARE_CONNECT_ENABLED = COMMCARE_CONNECT_SERVER_SECRET and COMMCARE_CONNECT_SERVER_ID
 COMMCARE_CONNECT_SERVER_URL = env("COMMCARE_CONNECT_SERVER_URL", default="https://connectid.dimagi.com")
 COMMCARE_CONNECT_GET_CONNECT_ID_URL = f"{COMMCARE_CONNECT_SERVER_URL}/o/userinfo/"
+
+
+# AI helper
+AI_HELPER_API_KEY = env("AI_HELPER_API_KEY", default="")

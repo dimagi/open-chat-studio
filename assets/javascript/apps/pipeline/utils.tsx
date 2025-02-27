@@ -46,17 +46,26 @@ export const getCachedData: () => typeof localCache = () => {
 
 export function formatDocsForSchema(schema: JsonSchema)  {
   const description = schema.description || "";
-  let documentation_link = schema["ui:documentation_link"];
-  if (!description && !documentation_link) {
+  const documentationLink = getDocumentationLink(schema);
+  if (!description && !documentationLink) {
     return null;
-  }
-  if (documentation_link && !documentation_link.startsWith("http")) {
-    documentation_link = `${window.DOCUMENTATION_BASE_URL}${documentation_link}`;
   }
   return <>
     <p>{description}</p>
-    {documentation_link && <p><a className="link" href={documentation_link} target="_blank">Learn more</a></p>}
+    {documentationLink && <p><a className="link" href={documentationLink} target="_blank">Learn more</a></p>}
   </>;
+}
+
+
+export function getDocumentationLink(schema: JsonSchema) {
+  let documentationLink = schema["ui:documentation_link"];
+  if (!documentationLink) {
+    return null;
+  }
+  if (documentationLink && !documentationLink.startsWith("http")) {
+    documentationLink = `${window.DOCUMENTATION_BASE_URL}${documentationLink}`;
+  }
+  return documentationLink;
 }
 
 

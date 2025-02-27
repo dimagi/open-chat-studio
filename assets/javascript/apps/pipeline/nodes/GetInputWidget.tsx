@@ -1,5 +1,5 @@
 import React from "react";
-import {JsonSchema, NodeParams, PropertySchema} from "../types/nodeParams";
+import {JsonSchema, NodeParams} from "../types/nodeParams";
 import usePipelineStore from "../stores/pipelineStore";
 import {getWidget} from "./widgets";
 
@@ -18,7 +18,7 @@ type GetWidgetParamsGeneric = GetWidgetsParams & {
 type InputWidgetParams = {
   id: string;
   name: string;
-  schema: PropertySchema;
+  schema: JsonSchema;
   params: NodeParams;
   updateParamValue: (event: React.ChangeEvent<HTMLTextAreaElement | HTMLSelectElement | HTMLInputElement>) => any;
   nodeType: string;
@@ -74,12 +74,15 @@ const getWidgetsGeneric = (
       return 0;
     }
   });
+   if (!Array.isArray(nodeData.params.keywords)) {
+    nodeData.params.keywords = [""]; // initialize keywords with size 1
+  }
   return schemaProperties.map((name) => (
     <React.Fragment key={name}>
       {widgetGenerator({
         id: nodeId,
         name: name,
-        schema: schema.properties[name],
+        schema: schema,
         params: nodeData.params,
         updateParamValue: updateParamValue,
         nodeType: nodeData.type,
@@ -123,14 +126,14 @@ export const getInputWidget = (params: InputWidgetParams) => {
      */
     return <></>
   }
-
-  const widgetOrType = params.schema["ui:widget"] || params.schema.type;
+  const widgetSchema = params.schema.properties[params.name];
+  const widgetOrType = widgetSchema["ui:widget"] || widgetSchema.type;
   if (widgetOrType == 'none') {
     return <></>;
   }
 
   const getNodeFieldError = usePipelineStore((state) => state.getNodeFieldError);
-  const Widget = getWidget(widgetOrType, params.schema)
+  const Widget = getWidget(widgetOrType, widgetSchema)
   let fieldError = getNodeFieldError(params.id, params.name);
   const paramValue = params.params[params.name];
   if (params.required && (paramValue === null || paramValue === undefined)) {
@@ -140,13 +143,14 @@ export const getInputWidget = (params: InputWidgetParams) => {
     <Widget
       nodeId={params.id}
       name={params.name}
-      label={params.schema.title || params.name.replace(/_/g, " ")}
-      helpText={params.schema.description || ""}
+      label={widgetSchema.title || params.name.replace(/_/g, " ")}
+      helpText={widgetSchema.description || ""}
       paramValue={paramValue ?? ""}
       inputError={fieldError}
       updateParamValue={params.updateParamValue}
-      schema={params.schema}
+      schema={widgetSchema}
       nodeParams={params.params}
+      nodeSchema={params.schema}
       required={params.required}
       getNodeFieldError={getNodeFieldError}
     />

@@ -27,11 +27,7 @@
       {% translate "Sign out" %}
     </a>
   </li>
-  <div class="flex justify-end items-center gap-x-2 px-4 my-2">
-    <i class="fa-solid fa-circle-half-stroke h-4 w-4"></i>
-    <span>Toggle Theme</span>
-    <input type="checkbox" id="theme-toggle" class="toggle">
-  </div>
+  {% include "web/components/theme_select.html" with position="right" text="Toggle Theme" %}
 </ul>
 {% if user.is_staff or user.is_superuser %}
   <li class="menu-title">
