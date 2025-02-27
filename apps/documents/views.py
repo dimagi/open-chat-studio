@@ -4,13 +4,14 @@ from functools import cache
 from django.contrib.postgres.search import TrigramSimilarity
 from django.db import transaction
 from django.db.models import Q
-from django.shortcuts import redirect
+from django.shortcuts import get_object_or_404, redirect
 from django.urls import reverse
 from django.views.decorators.http import require_POST
 from django.views.generic import ListView, TemplateView
 
 from apps.documents.models import Repository, RepositoryType
 from apps.files.models import File
+from apps.teams.decorators import login_and_team_required
 from apps.teams.mixins import LoginAndTeamRequiredMixin
 
 
@@ -25,6 +26,10 @@ class RepositoryHome(LoginAndTeamRequiredMixin, TemplateView):
             "files_list_url": reverse("documents:files_list", kwargs={"team_slug": team_slug}),
             "upload_files_url": reverse("documents:upload_files", kwargs={"team_slug": team_slug}),
             "collections_list_url": reverse("documents:collections_list", kwargs={"team_slug": team_slug}),
+            "files_count": File.objects.filter(team__slug=team_slug).count(),
+            "collections_count": Repository.objects.filter(
+                team__slug=team_slug, type=RepositoryType.COLLECTION
+            ).count(),
         }
         if tab_name == "files":
             context["collections"] = Repository.objects.filter(
@@ -104,6 +109,13 @@ def upload_files(request, team_slug: str):
         type=RepositoryType.COLLECTION, team=request.team, name=request.POST.get("collection_name")
     )
     repo.files.add(*files)
+    return redirect(reverse("documents:repositories", kwargs={"team_slug": team_slug, "tab_name": "files"}))
+
+
+@login_and_team_required
+def delete_file(request, team_slug: str, id: int):
+    file = get_object_or_404(File, team__slug=team_slug, id=id)
+    file.delete()
     return redirect(reverse("documents:repositories", kwargs={"team_slug": team_slug, "tab_name": "files"}))
 
 
