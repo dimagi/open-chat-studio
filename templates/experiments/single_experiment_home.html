@@ -314,8 +314,22 @@
                                   @click.outside="filter.showOptions = false"
                                   class="absolute mt-1 bg-white border border-gray-200 rounded-lg shadow-lg z-30 max-h-64 overflow-y-auto w-40"
                                   style="z-index: 9999 !important;">
+
+                                <!-- Search input at the top of dropdown -->
+                                  <div class="sticky top-0 bg-white border-b border-gray-200 p-2">
+                                    <div class="relative">
+                                      <input
+                                        type="text"
+                                        x-model="filter.searchQuery"
+                                        @input="filterDropdownOptions(index)"
+                                        placeholder="Search..."
+                                        class="w-full pl-8 pr-2 py-1 text-sm border border-gray-200 rounded-md focus:outline-none focus:border-blue-500"
+                                      />
+                                    </div>
+                                  </div>
+
                                   <div class="py-1">
-                                    <template x-for="option in filterData.columns[filter.column]?.options" :key="option">
+                                    <template x-for="option in filter.filteredOptions" :key="option">
                                       <div class="flex items-center px-4 py-2 hover:bg-gray-50">
                                         <input
                                           type="checkbox"
@@ -328,6 +342,13 @@
                                         <label :for="`option-${index}-${option}`" x-text="option" class="cursor-pointer"></label>
                                       </div>
                                     </template>
+
+                                        <!-- No results message -->
+                                    <div
+                                      x-show="filter.filteredOptions && filter.filteredOptions.length === 0"
+                                      class="px-4 py-2 text-sm text-gray-500 italic">
+                                      No matching options
+                                    </div>
                                   </div>
                                 </div>
                               </div>
@@ -553,25 +574,47 @@
             value: '',
             selectedValues: [],
             availableOperators: [],
-            showOptions: false
+            showOptions: false,
+            searchQuery: '',
+            filteredOptions: []
           });
         },
         updateOperatorsByColumn(index) {
           const filter = this.filterData.filters[index];
           const column = filter.column;
-
           if (column && this.filterData.columns[column]) {
             filter.availableOperators = this.filterData.columns[column].operators;
           // Set the first available operator as default
             filter.operator = filter.availableOperators[0] || '';
             filter.value = '';
             filter.selectedValues = [];
+            if (this.filterData.columns[column].options) {
+              filter.filteredOptions = [...this.filterData.columns[column].options];
+            }
           } else {
             filter.availableOperators = [];
             filter.operator = '';
           }
 
           this.triggerFilterChange();
+        },
+        filterDropdownOptions(index) {
+          const filter = this.filterData.filters[index];
+          const column = filter.column;
+
+          if (column && this.filterData.columns[column] && this.filterData.columns[column].options) {
+            const query = filter.searchQuery.toLowerCase().trim();
+
+            if (query === '') {
+            // If search is empty, show all options
+              filter.filteredOptions = [...this.filterData.columns[column].options];
+            } else {
+            // Filter options based on search query
+              filter.filteredOptions = this.filterData.columns[column].options.filter(option =>
+                option.toLowerCase().includes(query)
+              );
+            }
+          }
         },
         removeFilter(index) {
           this.filterData.filters.splice(index, 1);
@@ -595,7 +638,7 @@
         },
         clearAllFilters() {
           this.filterData.filters = [];
-          // Add a single empty filter
+        // Add a single empty filter
           this.addFilter();
           this.filterData.showFilters = false;
           this.triggerFilterChange();
@@ -616,8 +659,6 @@
               }
             }
           });
-
-        // Trigger the HTMX request with the filter parameters
           htmx.trigger('#sessions-table', 'filterChange', {
             parameters: params.toString()
           });
