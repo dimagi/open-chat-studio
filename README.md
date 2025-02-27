@@ -120,8 +120,15 @@ Options:
 
 To add a new requirement:
 
-1. Add the package to `requirements.in` (or `dev-requirements.in` for dev only packages).
-2. Run `inv requirements` to update the `requirements.txt` file.
+```shell
+uv add <package-name>
+```
+
+To add a development requirement:
+
+```shell
+uv add --dev <package-name>
+```
 
 ## Installing Git commit hooks
 
