@@ -32,4 +32,8 @@ class Migration(migrations.Migration):
             },
             bases=(models.Model, apps.utils.models.VersioningMixin),
         ),
+        migrations.AddConstraint(
+            model_name='repository',
+            constraint=models.UniqueConstraint(fields=('team', 'type', 'name'), name='unique_repository_per_team'),
+        ),
     ]

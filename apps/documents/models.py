@@ -13,7 +13,8 @@ class Repository(BaseTeamModel):
     type = models.CharField(choices=RepositoryType.choices, default=RepositoryType.COLLECTION)
     files = models.ManyToManyField("files.File", blank=False)
 
-    # TODO: Unique constraint on team, type, name
+    class Meta:
+        constraints = [models.UniqueConstraint(fields=["team", "type", "name"], name="unique_repository_per_team")]
 
     @property
     def size(self) -> float:
