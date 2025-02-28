@@ -321,13 +321,16 @@ def test_render_template(mock_from_state):
         "data": {"key": "value"},
         "schedules": {"schedule_key": "schedule_value"},
     }
-    mock_from_state.return_value.get.side_effect = lambda key: mock_participant_data.get(key)
-    template_string = "Participant {{ participant_details.identifier }} on {{ participant_details.platform }}"
 
+    mock_participant_proxy = mock.Mock()
+    mock_participant_proxy.get.side_effect = lambda key: mock_participant_data.get(key)
+    mock_from_state.return_value = mock_participant_proxy
+    template_string = "Participant {{ participant_details.identifier }} on {{ participant_details.platform }}"
     render_template_node = RenderTemplate(template_string=template_string)
     mock_state = PipelineState(temp_state={"temp_key": "temp_value"})
     mock_input = None
     result = render_template_node._process(input=mock_input, node_id="test_node", state=mock_state)
+
     assert result.output == "Participant test_identifier on test_platform"
     render_template_node.logger.error.assert_not_called()
 
@@ -335,7 +338,9 @@ def test_render_template(mock_from_state):
 @mock.patch("apps.pipelines.nodes.template.ParticipantDataProxy.from_state")
 @mock.patch("apps.pipelines.nodes.base.PipelineNode.logger", mock.Mock())
 def test_render_template_failure(mock_from_state):
-    mock_from_state.return_value.get.side_effect = lambda key: None
+    mock_participant_proxy = mock.Mock()
+    mock_participant_proxy.get.side_effect = lambda key: None
+    mock_from_state.return_value = mock_participant_proxy
     template_string = "Participant {{ participant_details.identifier }}"
     render_template_node = RenderTemplate(template_string=template_string)
     mock_state = PipelineState(temp_state={})
@@ -343,4 +348,4 @@ def test_render_template_failure(mock_from_state):
     with pytest.raises(PipelineNodeRunError, match="Error rendering template"):
         render_template_node._process(input=mock_input, node_id="test_node", state=mock_state)
 
-    assert render_template_node.logger.error.call_count == 1
+    render_template_node.logger.error.assert_called_once_with("Error rendering template", exc_info=True)
