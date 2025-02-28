@@ -68,26 +68,29 @@ class RenderTemplate(PipelineNode):
         json_schema_extra=UiSchema(widget=Widgets.expandable_text),
     )
 
-    def _process(self, input, node_id: str, **kwargs) -> PipelineState:
+    def _process(self, input, node_id: str, state: PipelineState, **kwargs) -> PipelineState:
         def all_variables(in_):
             return {var: in_ for var in meta.find_undeclared_variables(env.parse(self.template_string))}
 
         env = SandboxedEnvironment()
         try:
-            if isinstance(input, BaseMessage):
-                content = json.loads(input.content)
-            elif isinstance(input, dict):
-                content = input
-            else:
-                content = json.loads(input)
-                if not isinstance(content, dict):
-                    # e.g. it was just a string or an int
-                    content = all_variables(input)
-        except json.JSONDecodeError:
-            # As a last resort, just set the all the variables in the template to the input
-            content = all_variables(input)
-        template = SandboxedEnvironment().from_string(self.template_string)
-        output = template.render(content)
+            participant_data_proxy = ParticipantDataProxy.from_state(state)
+            content = {
+                "participant_details": {
+                    "identifier": participant_data_proxy.get("identifier"),
+                    "platform": participant_data_proxy.get("platform"),
+                },
+                "participant_data": participant_data_proxy.get("data"),
+                "participant_schedules": participant_data_proxy.get("schedules"),
+                "temp_state": state.get("temp_state", {}),
+            }
+
+            template = env.from_string(self.template_string)
+            output = template.render(content)
+        except Exception as e:
+            self.logger.error(f"Template rendering failed: {e}")
+            raise PipelineNodeRunError(f"Error rendering template: {e}")
+
         return PipelineState.from_node_output(node_name=self.name, node_id=node_id, output=output)
 
 
