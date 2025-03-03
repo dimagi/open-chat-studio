@@ -234,10 +234,9 @@ def main(input, **kwargs):
         code_node(code_get),
         end_node(),
     ]
-    experiment_session.participant_id = 1
-    state = PipelineState(experiment_session=experiment_session, messages=[input])
-    output = create_runnable(pipeline, nodes).invoke(state)
-    assert output["messages"][-1] == str(
+    assert create_runnable(pipeline, nodes).invoke(
+        PipelineState(experiment_session=experiment_session, messages=[input])
+    )["messages"][-1] == str(
         {
             "start": input,
             "passthrough": input,

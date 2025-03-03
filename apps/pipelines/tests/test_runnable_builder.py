@@ -175,15 +175,10 @@ def test_render_template(pipeline):
         render_template_node("{{ thing }} is cool"),
         end_node(),
     ]
-
-    experiment_session = ExperimentSessionFactory.build(participant_id=1, team_id=1, study_id=1)
-    state = PipelineState(
-        messages=[{"thing": "Cycling"}],
-        experiment_session=experiment_session,
-        pipeline_version=1,
+    assert (
+        create_runnable(pipeline, nodes).invoke(PipelineState(messages=[{"thing": "Cycling"}]))["messages"][-1]
+        == "Cycling is cool"
     )
-    output = create_runnable(pipeline, nodes).invoke(state)
-    assert output["messages"][-1] == "Cycling is cool"
 
 
 @django_db_with_data(available_apps=("apps.service_providers",))
@@ -972,10 +967,9 @@ def test_multiple_valid_inputs(pipeline):
         },
     ]
 
-    experiment_session = ExperimentSessionFactory.build(participant_id=1, team_id=1, study_id=1)
     state = PipelineState(
         messages=["not hello"],
-        experiment_session=experiment_session,
+        experiment_session=ExperimentSessionFactory.build(),
         pipeline_version=1,
     )
     output = create_runnable(pipeline, nodes, edges, lenient=False).invoke(state)
