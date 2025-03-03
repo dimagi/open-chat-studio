@@ -68,3 +68,13 @@ class ParticipantDataProxy:
         participant_data = self._get_db_object()
         participant_data.data = data
         participant_data.save(update_fields=["data"])
+        if hasattr(self.session, "participant") and hasattr(self.session.participant, "global_data"):
+            participant = self.session.participant
+            global_data_keys = list(participant.global_data.keys())
+            updated_fields = []
+            for key in global_data_keys:
+                if key in data and hasattr(participant, key):
+                    setattr(participant, key, data[key])
+                    updated_fields.append(key)
+            if updated_fields:
+                participant.save(update_fields=updated_fields)
