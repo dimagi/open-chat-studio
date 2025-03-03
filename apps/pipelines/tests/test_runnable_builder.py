@@ -967,9 +967,10 @@ def test_multiple_valid_inputs(pipeline):
         },
     ]
 
+    experiment_session = ExperimentSessionFactory.build(participant_id=1)
     state = PipelineState(
         messages=["not hello"],
-        experiment_session=ExperimentSessionFactory.build(),
+        experiment_session=experiment_session,
         pipeline_version=1,
     )
     output = create_runnable(pipeline, nodes, edges, lenient=False).invoke(state)
