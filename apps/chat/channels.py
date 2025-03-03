@@ -629,7 +629,7 @@ class WebChannel(ChannelBase):
             session.save()
         return session
 
-    def _inform_user_of_error():
+    def _inform_user_of_error(self):
         # Web channel's errors are optionally rendered in the UI, so no need to send a message
         pass
 
