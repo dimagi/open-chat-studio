@@ -55,8 +55,12 @@ class ParticipantDataProxy:
             )
         return self._participant_data
 
-    def get(self):
-        return self._get_db_object().data
+    def get(self, key=None, *args, **kwargs):
+        data = self._get_db_object().data or {}
+        if key is None:
+            return data
+        default_value = args[0] if args else None
+        return data.get(key, default_value)
 
     def set(self, data):
         participant_data = self._get_db_object()
