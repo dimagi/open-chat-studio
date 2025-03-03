@@ -967,7 +967,7 @@ def test_multiple_valid_inputs(pipeline):
         },
     ]
 
-    experiment_session = ExperimentSessionFactory.build(participant_id=1)
+    experiment_session = ExperimentSessionFactory.build(participant_id=1, team_id=1)
     state = PipelineState(
         messages=["not hello"],
         experiment_session=experiment_session,
