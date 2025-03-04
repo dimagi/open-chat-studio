@@ -239,7 +239,7 @@ ACCOUNT_LOGIN_ON_EMAIL_CONFIRMATION = True
 ACCOUNT_FORMS = {
     "signup": "apps.teams.forms.TeamSignupForm",
 }
-SOCIALACCOUNT_ADAPTER = "apps.teams.adapter.SsoAccountAdapter"
+SOCIALACCOUNT_ADAPTER = "apps.sso.adapter.SsoAccountAdapter"
 
 # User signup configuration: change to "mandatory" to require users to confirm email before signing in.
 # or "optional" to send confirmation emails but not require them
