@@ -231,6 +231,8 @@
         <div class="app-card">
           <div class="relative">
             <div class="flex items-center gap-4">
+              {{ available_tags|default:"[]"|json_script:"available-tags-data" }}
+              {{ experiment_versions|default:"[]"|json_script:"experiment-versions-data" }}
               {% if perms.experiments.download_chats %}
                 {% include "experiments/components/exports.html" %}
               {% endif %}
@@ -503,8 +505,8 @@
     window.addEventListener('hashchange', selectTabFromHash);
   </script>
   <script>
-    const tags = {{ available_tags|safe|default:"[]" }};
-    const versionsList = {{ experiment_versions|safe|default:"[]" }};
+    const tags = JSON.parse(document.getElementById('available-tags-data').textContent);
+    const versionsList = JSON.parse(document.getElementById('experiment-versions-data').textContent);
     document.addEventListener('alpine:init', () => {
       Alpine.data('filterComponent', () => ({
         filterData: {
@@ -597,11 +599,11 @@
         triggerFilterChange() {
           let filterParams = {};
           this.filterData.filters.forEach((filter, i) => {
-            if (filter.column && filter.operator && (filter.value || filter.selectedValues.length > 0)) {
+            if (filter.column && filter.operator && (filter.value || Array.isArray(filter.selectedValues) &&  filter.selectedValues.length > 0)) {
               filterParams[`filter_${i}_column`] = filter.column;
               filterParams[`filter_${i}_operator`] = filter.operator;
               if (['any of', 'all of'].includes(filter.operator)) {
-                filterParams[`filter_${i}_value`] = JSON.stringify(filter.selectedValues);
+                filterParams[`filter_${i}_value`] = filter.selectedValues;
               } else {
                 filterParams[`filter_${i}_value`] = filter.value;
               }
