@@ -1,6 +1,7 @@
 import uuid
 
 from allauth.account.views import SignupView
+from django.conf import settings
 from django.contrib import messages
 from django.http import HttpResponseRedirect
 from django.shortcuts import get_object_or_404, redirect, render
@@ -32,7 +33,7 @@ def accept_invitation(request, invitation_id: uuid.UUID):
         # accept invitation workflow
         if not request.user.is_authenticated:
             messages.error(request, _("Please log in again to accept your invitation."))
-            return HttpResponseRedirect(reverse("account_login"))
+            return HttpResponseRedirect(reverse(settings.LOGIN_URL))
         else:
             if invitation.is_accepted:
                 messages.error(request, _("Sorry, it looks like that invitation link has expired."))

@@ -20,7 +20,7 @@ def login_and_team_required(view_func):
     @wraps(view_func)
     def _inner(request, *args, **kwargs):
         if not valid_auth_and_membership(request):
-            return HttpResponseRedirect("{}?next={}".format(reverse("account_login"), request.path))
+            return HttpResponseRedirect(f"{reverse(settings.LOGIN_URL)}?next={request.path}")
         return view_func(request, *args, **kwargs)
 
     return _inner
