@@ -26,8 +26,12 @@ def validate_prompt_variables(form_data, prompt_key: str, known_vars: set):
     """Ensures that the variables expected by the prompt has values and that only those in `known_vars` are allowed
     to be used, otherwise a `ValidationError` is thrown.
     """
-    prompt_text = form_data[prompt_key]
-    prompt_variables = {get_root_var(var) for var in PromptTemplate.from_template(prompt_text).input_variables}
+    prompt_text = form_data.get(prompt_key, "")
+    try:
+        prompt_variables = {get_root_var(var) for var in PromptTemplate.from_template(prompt_text).input_variables}
+    except ValueError as e:
+        raise ValidationError({prompt_key: f"Invalid format in prompt: {e}"})
+
     unknown = prompt_variables - known_vars
     if unknown:
         raise ValidationError({prompt_key: f"Prompt contains unknown variables: {', '.join(unknown)}"})
