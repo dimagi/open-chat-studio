@@ -253,8 +253,7 @@
               <!-- Filters Panel -->
                 <div
                   x-show="filterData.showFilters"
-                  class="absolute left-0 mt-2 p-4 bg-white border border-gray-200 rounded-lg shadow-lg z-10"
-                  style="width: fit-content;"
+                  class="absolute left-0 mt-2 p-4 bg-white border border-gray-200 rounded-lg shadow-lg z-10 w-fit"
                 >
                   <div class="space-y-3">
                     <template x-for="(filter, index) in filterData.filters" :key="index">
@@ -291,7 +290,7 @@
                         <template x-if="filter.operator">
                           <div class="relative">
                           <!-- Multi-select dropdown-->
-                            <template x-if="['tags', 'versions'].includes(filter.column) && ['any of', 'all of'].includes(filter.operator)">
+                            <template x-if="filterData.columns[filter.column]?.type === 'choice' && ['any of', 'all of'].includes(filter.operator)">
                               <div class="relative">
                                 <div
                                   @click="filter.showOptions = !filter.showOptions"
