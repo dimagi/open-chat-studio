@@ -6,8 +6,8 @@ Experiments with AI, GPT and LLMs. See [this wiki](https://dimagi.atlassian.net/
 
 ## Dev Environment Setup
 
-This project uses [Invoke](https://www.pyinvoke.org/) for dev automation. You can view the list of
-available commands with:
+This project uses [UV](https://docs.astral.sh/uv/getting-started/installation/) and
+uses [Invoke](https://www.pyinvoke.org/) for dev automation. You can view the list of available commands with:
 
 ```shell
 inv -l
@@ -19,8 +19,7 @@ New commands / updates can be made to the `tasks.py` file.
 Setup a virtualenv and install requirements:
 
 ```bash
-python -m venv venv
-pip install -r dev-requirements.txt
+uv sync
 ```
 
 Python 3.11 is recommended.
@@ -121,8 +120,15 @@ Options:
 
 To add a new requirement:
 
-1. Add the package to `requirements.in` (or `dev-requirements.in` for dev only packages).
-2. Run `inv requirements` to update the `requirements.txt` file.
+```shell
+uv add <package-name>
+```
+
+To add a development requirement:
+
+```shell
+uv add --dev <package-name>
+```
 
 ## Installing Git commit hooks
 
