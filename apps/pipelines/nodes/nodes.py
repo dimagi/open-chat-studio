@@ -71,16 +71,28 @@ class RenderTemplate(PipelineNode):
         try:
             content = {
                 "input": input,
-                "participant_details": {
-                    "identifier": state.experiment_session.participant.identifier,
-                    "platform": state.experiment_session.participant.platform,
-                },
-                "participant_data": json.dumps(state.experiment_session.participant_data_from_experiment, indent=4),
-                "participant_schedules": state.experiment_session.participant.get_schedules_for_experiment(
-                    state.experiment_session.experiment, as_dict=True, include_complete=True
-                ),
+                "messages": state.get("messages", []),
                 "temp_state": state.get("temp_state", {}),
             }
+
+            if hasattr(state, "experiment_session") and state.experiment_session:
+                participant = state.experiment_session.participant
+                content.update(
+                    {
+                        "participant_details": {
+                            "identifier": participant.identifier,
+                            "platform": participant.platform,
+                        },
+                        "participant_data": json.dumps(
+                            state.experiment_session.participant_data_from_experiment, indent=4
+                        ),
+                        "participant_schedules": participant.get_schedules_for_experiment(
+                            state.experiment_session.experiment,
+                            as_dict=True,
+                            include_complete=True,
+                        ),
+                    }
+                )
 
             template = env.from_string(self.template_string)
             output = template.render(content)
