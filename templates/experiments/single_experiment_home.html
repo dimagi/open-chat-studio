@@ -244,9 +244,9 @@
                   <button
                     x-show="getActiveFilterCount() > 0"
                     @click="clearAllFilters()"
-                    class="p-2 text-gray-400 hover:text-gray-600 h-10 w-10 flex items-center justify-center"
+                    class="btn btn-square btn-sm btn-ghost"
                     title="Clear all filters">
-                    <span class="text-lg font-bold">×</span>
+                    x
                   </button>
                 </div>
 
@@ -263,11 +263,11 @@
                           <span x-text="index === 0 ? 'Where' : 'AND'"></span>
                         </div>
                       <!-- Column Selector -->
-                        <div class="relative">
+                        <div class="relative py-2">
                           <select
                             x-model="filter.column"
                             @change="updateOperatorsByColumn(index)"
-                            class="block w-40 py-2 px-3 border border-gray-200 rounded-lg bg-white text-sm"
+                            class="w-40 select select-bordered select-sm"
                           >
                             <option value="">Column</option>
                             <template x-for="(config, column) in filterData.columns" :key="column">
@@ -276,11 +276,11 @@
                           </select>
                         </div>
                       <!-- Operator Selector -->
-                        <div x-show="filter.column" class="relative">
+                        <div x-show="filter.column" class="relative py-1 px-1">
                           <select
                             x-model="filter.operator"
                             @change="triggerFilterChange()"
-                            class="block w-32 py-2 px-3 border border-gray-200 rounded-lg bg-white text-sm"
+                            class="w-40 select select-bordered select-sm"
                           >
                             <template x-for="operator in filter.availableOperators" :key="operator">
                               <option :value="operator" x-text="operator"></option>
@@ -288,13 +288,14 @@
                           </select>
                         </div>
                         <template x-if="filter.operator">
-                          <div class="relative">
-                          <!-- Multi-select dropdown-->
+                          <div class="relative py-1 pl-1">
                             <template x-if="filterData.columns[filter.column]?.type === 'choice' && ['any of', 'all of'].includes(filter.operator)">
                               <div class="relative">
+                              <!-- Dropdown trigger button -->
                                 <div
                                   @click="filter.showOptions = !filter.showOptions"
-                                  class="block w-40 py-2 px-3 border border-gray-200 rounded-lg bg-white text-sm cursor-pointer flex justify-between items-center"
+                                  class="block w-40 px-3 border border-gray-300 rounded-lg bg-white text-sm cursor-pointer flex justify-between items-center"
+                                  style="height: 2rem;"
                                 >
                                 <!-- Display selected items up to char length of 18 -->
                                   <span x-text="filter.selectedValues.length ?
@@ -305,38 +306,38 @@
                                   <i class="fa-solid fa-caret-down fa-sm"></i>
                                 </div>
 
+
                                 <div
                                   x-show="filter.showOptions"
                                   @click.outside="filter.showOptions = false"
-                                  class="absolute mt-1 bg-white border border-gray-200 rounded-lg shadow-lg z-30 max-h-64 overflow-y-auto w-40"
+                                  class="absolute z-50 mt-1 bg-base-100 border shadow-lg rounded-lg max-h-64 overflow-y-auto w-40 border-gray-20"
                                   style="z-index: 9999 !important;">
 
                                 <!-- Search input at the top of dropdown -->
-                                  <div class="sticky top-0 bg-white border-b border-gray-200 p-2">
+                                  <div class="sticky top-0 bg-base-100 border-b p-2">
                                     <div class="relative">
                                       <input
                                         type="text"
                                         x-model="filter.searchQuery"
                                         @input="filterDropdownOptions(index)"
                                         placeholder="Search..."
-                                        class="w-full pl-8 pr-2 py-1 text-sm border border-gray-200 rounded-md focus:outline-none focus:border-blue-500"
+                                        class="input input-sm input-bordered w-full pl-8 focus:outline-none focus:border-primary"
                                       />
                                     </div>
                                   </div>
-
                                   <div class="py-1">
                                     <template x-for="option in filter.filteredOptions" :key="option">
-                                      <div class="flex items-center px-4 py-2 hover:bg-gray-50">
+                                      <label :for="`option-${index}-${option}`" class="flex items-center px-4 py-2 hover:bg-base-200 cursor-pointer text-sm">
                                         <input
                                           type="checkbox"
                                           :id="`option-${index}-${option}`"
                                           :value="option"
                                           x-model="filter.selectedValues"
                                           @change="updateFilterValue(index)"
-                                          class="mr-2"
+                                          class="checkbox checkbox-xs mr-2"
                                         >
-                                        <label :for="`option-${index}-${option}`" x-text="option" class="cursor-pointer"></label>
-                                      </div>
+                                        <span x-text="option"></span>
+                                      </label>
                                     </template>
 
                                   <!-- No results message -->
@@ -355,7 +356,7 @@
                                 type="text"
                                 x-model="filter.value"
                                 @input="triggerFilterChange()"
-                                class="block w-40 py-2 px-3 border border-gray-200 rounded-lg bg-white text-sm"
+                                class="w-40 input input-bordered input-sm"
                                 placeholder="Enter value..."
                               >
                             </template>
@@ -365,7 +366,7 @@
                                 type="date"
                                 x-model="filter.value"
                                 @change="triggerFilterChange()"
-                                class="block w-40 py-2 px-3 border border-gray-200 rounded-lg bg-white text-sm"
+                                class="input input-bordered input-sm w-40"
                               >
                             </template>
                           <!-- Regular select dropdown for choice type with non-multiselect operators -->
@@ -386,17 +387,16 @@
                       <!-- Remove Filter Button-->
                         <button
                           @click="removeFilter(index)"
-                          class="p-2 text-gray-400 hover:text-gray-600 h-10 w-10 flex items-center justify-center"
+                          class="btn btn-square btn-sm btn-ghost"
                           aria-label="Remove filter"
-                        >
-                          <span class="text-lg">×</span>
+                        >×
                         </button>
                       </div>
                     </template>
                   <!-- Add Filter Button -->
                     <button
                       @click="addFilter()"
-                      class="flex items-center gap-2 px-4 py-2 mt-3 text-gray-700 border border-gray-200 rounded-lg hover:bg-gray-50 text-sm"
+                      class="btn btn-sm btn-neutral mt-2"
                     >
                       + Add filter
                     </button>
