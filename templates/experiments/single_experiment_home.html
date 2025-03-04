@@ -457,7 +457,6 @@
           {% endif %}
         </div>
       </div>
-      </div>
       <div role="tabpanel" class="tab-content" id="content-terminal_bots">
         <div class="app-card">
           {% if terminal_bots_table.data|length == 0 and experiment.is_editable%}
@@ -517,9 +516,6 @@
             'tags': {type: 'choice', operators: ['any of', 'all of'], options: tags },
             'versions': {type: 'choice', operators: ['any of', 'all of'], options: versionsList}
           }
-        },
-        init() {
-          htmx.process(this.$el);
         },
         toggleFilters() {
           this.filterData.showFilters = !this.filterData.showFilters;
