@@ -53,6 +53,7 @@ urlpatterns = [
     path("i18n/", include("django.conf.urls.i18n")),
     path("sitemap.xml", sitemap, {"sitemaps": sitemaps}, name="django.contrib.sitemaps.views.sitemap"),
     path("a/<slug:team_slug>/", include(team_urlpatterns)),
+    path("", include("apps.sso.urls")),  # must be before allauth urls since it uses the same paths
     path("accounts/", include("allauth_2fa.urls")),
     path("accounts/", include("allauth.urls")),
     path("users/", include("apps.users.urls")),

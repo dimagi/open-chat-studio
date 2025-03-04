@@ -56,6 +56,7 @@ THIRD_PARTY_APPS = [
     "allauth",  # allauth account/registration management
     "allauth.account",
     "allauth.socialaccount",
+    "allauth.socialaccount.providers.openid_connect",
     "django_otp",
     "django_otp.plugins.otp_totp",
     "django_otp.plugins.otp_static",
@@ -100,6 +101,7 @@ PROJECT_APPS = [
     "apps.annotations",
     "apps.pipelines",
     "apps.slack",
+    "apps.sso",
     "apps.participants",
 ]
 
@@ -148,6 +150,7 @@ TEMPLATES = [
         "DIRS": [
             BASE_DIR / "templates",
         ],
+        "APP_DIRS": True,
         "OPTIONS": {
             "context_processors": [
                 "django.template.context_processors.debug",
@@ -196,7 +199,7 @@ else:
 # Django recommends overriding the user model even if you don't think you need to because it makes
 # future changes much easier.
 AUTH_USER_MODEL = "users.CustomUser"
-LOGIN_URL = "account_login"
+LOGIN_URL = "sso:login"
 LOGIN_REDIRECT_URL = "/"
 
 # Password validation
@@ -236,6 +239,7 @@ ACCOUNT_LOGIN_ON_EMAIL_CONFIRMATION = True
 ACCOUNT_FORMS = {
     "signup": "apps.teams.forms.TeamSignupForm",
 }
+SOCIALACCOUNT_ADAPTER = "apps.teams.adapter.SsoAccountAdapter"
 
 # User signup configuration: change to "mandatory" to require users to confirm email before signing in.
 # or "optional" to send confirmation emails but not require them
@@ -553,7 +557,7 @@ FIELD_AUDIT_AUDITORS = ["apps.audit.auditors.AuditContextProvider"]
 FIELD_AUDIT_TEAM_EXEMPT_VIEWS = [
     "account_reset_password_from_key",
     "teams:signup_after_invite",
-    "account_login",
+    LOGIN_URL,
 ]
 FIELD_AUDIT_REQUEST_ID_HEADERS = [
     "X-Request-ID",  # Heroku
