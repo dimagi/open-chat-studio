@@ -335,7 +335,7 @@
                                           :id="`option-${index}-${option}`"
                                           :value="option"
                                           x-model="filter.selectedValues"
-                                          @change="updateFilterValue(index)"
+                                          @change="triggerFilterChange()"
                                           class="checkbox checkbox-xs mr-2"
                                         >
                                         <span x-text="option"></span>
@@ -575,13 +575,6 @@
           this.filterData.filters.splice(index, 1);
           this.triggerFilterChange();
         },
-        updateFilterValue(index) {
-          const filter = this.filterData.filters[index];
-          if (['any of', 'all of'].includes(filter.operator)) {
-            filter.value = JSON.stringify(filter.selectedValues);
-          }
-          this.triggerFilterChange();
-        },
         getActiveFilterCount() {
           return this.filterData.filters.filter(filter => {
             return filter.column && filter.operator && (
@@ -599,38 +592,37 @@
         triggerFilterChange() {
           let filterParams = {};
           this.filterData.filters.forEach((filter, i) => {
-            if (filter.column && filter.operator && (filter.value || Array.isArray(filter.selectedValues) &&  filter.selectedValues.length > 0)) {
+            if (filter.column && filter.operator && (
+              filter.value ||
+              (Array.isArray(filter.selectedValues) && filter.selectedValues.length > 0)
+            )) {
+              // Add the filter column and operator parameters
               filterParams[`filter_${i}_column`] = filter.column;
               filterParams[`filter_${i}_operator`] = filter.operator;
+
+              // Handle the filter value based on operator type
               if (['any of', 'all of'].includes(filter.operator)) {
-                filterParams[`filter_${i}_value`] = filter.selectedValues;
+                // For multi-select operators, use the selectedValues array
+                if (filter.selectedValues && filter.selectedValues.length > 0) {
+                  // Important: JSON stringify the array for backend compatibility
+                  filterParams[`filter_${i}_value`] = JSON.stringify(filter.selectedValues);
+                }
               } else {
+                // For single-value operators, use the value property
                 filterParams[`filter_${i}_value`] = filter.value;
               }
             }
           });
-          const url = new URL(window.location.href);
-          for (const key of [...url.searchParams.keys()]) {
-            if (key.startsWith('filter_')) {
-              url.searchParams.delete(key);
-            }
-          }
-          Object.entries(filterParams).forEach(([key, value]) => {
-            url.searchParams.set(key, value);
-          });
-          window.history.replaceState({}, '', url.toString());
           const sessionsTableUrl = document.getElementById('sessions-table').getAttribute('hx-get');
-          const filterUrl = new URL(sessionsTableUrl, window.location.origin);
-          Object.entries(filterParams).forEach(([key, value]) => {
-            filterUrl.searchParams.set(key, value);
-          });
+
           const showAllCheckbox = document.querySelector('input[name="show-all"]');
           if (showAllCheckbox && showAllCheckbox.checked) {
-            filterUrl.searchParams.set('show-all', 'on');
+            filterParams['show-all'] = 'on';
           }
-          htmx.ajax('GET', filterUrl.toString(), {
+          htmx.ajax('GET', sessionsTableUrl, {
             target: '#sessions-table',
-            swap: 'innerHTML'
+            swap: 'innerHTML',
+            values: filterParams
           });
         }
       }));
