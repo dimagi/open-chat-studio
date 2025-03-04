@@ -21,3 +21,9 @@ When a user signs in we check their email address to see if there is a `SocialAp
 * Maybe a team setting to restrict invitations to only those with specific email domains?
   * (this is similar to the point above)
 * Check invitation and signup flows
+
+## Feature Flag
+
+This is currently behind a feature flag. To test it the FF must have `everyone` set to `Unknown` and have the `Testing` flag on.
+
+Then navigate to the login page and append this to the URL: `?dwft_sso_login=1`. From that point on the SSO flag will be enabled for you. To disalbe it change the `1` to a `0` in the URL param, and it will get disabled. This works using cookies so if you clear your cookies you will need to re-enable it.

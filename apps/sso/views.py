@@ -4,6 +4,7 @@ from allauth.socialaccount.models import SocialApp
 from django import forms
 from django.shortcuts import redirect
 from django.utils.translation import gettext_lazy as _
+from waffle import flag_is_active
 
 
 class BaseLoginForm(forms.Form):
@@ -42,6 +43,9 @@ class CustomLoginView(LoginView):
     """
 
     def get_form_class(self):
+        if not flag_is_active(self.request, "sso_login"):
+            return super().get_form_class()
+
         if self.request.method == "GET":
             return EmailForm
         elif self.request.method == "POST":
@@ -51,6 +55,9 @@ class CustomLoginView(LoginView):
                 return LoginForm
 
     def form_valid(self, form):
+        if not flag_is_active(self.request, "sso_login"):
+            return super().form_valid(form)
+
         app, email = self._get_social_app(form)
         if app:
             provider = app.get_provider(self.request)
