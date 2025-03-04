@@ -13,10 +13,10 @@ from apps.api.serializers import ExperimentSessionCreateSerializer, MessageSeria
 from apps.channels.tasks import handle_api_message
 
 
-@extend_schema(
-    operation_id="openai_chat_completions",
-    summary="Chat Completions API for Experiments",
-    description=textwrap.dedent(
+def chat_completions_schema(versioned: bool):
+    operation_id = "openai_chat_completions"
+    summary = "Chat Completions API for Experiments"
+    description = textwrap.dedent(
         """
         Use OpenAI's client to send messages to the experiment and get responses. This will
         create a new session in the experiment with all the provided messages
@@ -45,49 +45,74 @@ from apps.channels.tasks import handle_api_message
         reply = completion.choices[0].message
         ```
         """
-    ),
-    tags=["OpenAI"],
-    request=inline_serializer(
-        "CreateChatCompletionRequest",
-        {"messages": MessageSerializer(many=True)},
-    ),
-    responses={
-        200: inline_serializer(
-            "CreateChatCompletionResponse",
-            {
-                "id": serializers.CharField(),
-                "choices": inline_serializer(
-                    "ChatCompletionResponseChoices",
-                    {
-                        "finish_reason": serializers.CharField(),
-                        "index": serializers.IntegerField(),
-                        "message": inline_serializer(
-                            "ChatCompletionResponseMessage",
-                            {
-                                "role": serializers.ChoiceField(choices=["assistant"]),
-                                "content": serializers.CharField(),
-                            },
-                        ),
-                    },
-                    many=True,
-                ),
-                "created": serializers.IntegerField(),
-                "model": serializers.CharField(),
-                "object": serializers.ChoiceField(choices=["chat.completion"]),
-            },
-        )
-    },
-    parameters=[
+    )
+    parameters = [
         OpenApiParameter(
             name="experiment_id",
             type=OpenApiTypes.STR,
             location=OpenApiParameter.PATH,
             description="Experiment ID",
         ),
-    ],
-)
+    ]
+    if versioned:
+        operation_id = f"{operation_id}_versioned"
+        summary = "Versioned Chat Completions API for Experiments"
+        parameters.append(
+            OpenApiParameter(
+                name="version",
+                type=OpenApiTypes.STR,
+                location=OpenApiParameter.QUERY,
+                description="Version of experiment",
+            )
+        )
+    return extend_schema(
+        operation_id=operation_id,
+        summary=summary,
+        description=description,
+        tags=["OpenAI"],
+        request=inline_serializer(
+            "CreateChatCompletionRequest",
+            {"messages": MessageSerializer(many=True)},
+        ),
+        responses={
+            200: inline_serializer(
+                "CreateChatCompletionResponse",
+                {
+                    "id": serializers.CharField(),
+                    "choices": inline_serializer(
+                        "ChatCompletionResponseChoices",
+                        {
+                            "finish_reason": serializers.CharField(),
+                            "index": serializers.IntegerField(),
+                            "message": inline_serializer(
+                                "ChatCompletionResponseMessage",
+                                {
+                                    "role": serializers.ChoiceField(choices=["assistant"]),
+                                    "content": serializers.CharField(),
+                                },
+                            ),
+                        },
+                        many=True,
+                    ),
+                    "created": serializers.IntegerField(),
+                    "model": serializers.CharField(),
+                    "object": serializers.ChoiceField(choices=["chat.completion"]),
+                },
+            )
+        },
+        parameters=parameters,
+    )
+
+
+@chat_completions_schema(versioned=False)
 @api_view(["POST"])
 def chat_completions(request, experiment_id: uuid.UUID):
+    return chat_completions_version(request._request, experiment_id)
+
+
+@chat_completions_schema(versioned=True)
+@api_view(["POST"])
+def chat_completions_version(request, experiment_id: uuid.UUID, version=None):
     try:
         messages = [_convert_message(message) for message in request.data.get("messages", [])]
     except APIException as e:
@@ -99,7 +124,6 @@ def chat_completions(request, experiment_id: uuid.UUID):
 
     if last_message.get("role") != "user":
         return _make_error_response(400, "Last message must be a user message")
-
     converted_data = {
         "experiment": experiment_id,
         "messages": messages,
@@ -111,9 +135,10 @@ def chat_completions(request, experiment_id: uuid.UUID):
         return _make_error_response(400, str(e))
 
     session = serializer.save()
+    experiment_version = session.experiment.get_version(version) if version is not None else session.experiment_version
     response_message = handle_api_message(
         request.user,
-        session.experiment_version,
+        experiment_version,
         session.experiment_channel,
         last_message.get("content"),
         session.participant.identifier,

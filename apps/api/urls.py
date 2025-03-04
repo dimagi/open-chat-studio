@@ -20,6 +20,11 @@ urlpatterns = [
     # Duplicate update-participant-data without a trailing "/" for backwards compatibility
     path("participants", views.update_participant_data, name="update-participant-data"),
     path("openai/<uuid:experiment_id>/chat/completions", openai.chat_completions, name="openai-chat-completions"),
+    path(
+        "openai/<uuid:experiment_id>/v<int:version>/chat/completions",
+        openai.chat_completions_version,
+        name="openai-chat-completions-versioned",
+    ),
     path("files/<int:pk>/content", views.file_content_view, name="file-content"),
     path("commcare_connect/", include((connect_patterns, "commcare-connect"))),
     path("trigger_bot", views.trigger_bot_message, name="trigger_bot"),
