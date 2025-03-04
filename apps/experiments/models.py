@@ -9,8 +9,7 @@ from uuid import uuid4
 import markdown
 import pytz
 from django.conf import settings
-from django.contrib.contenttypes.fields import GenericForeignKey, GenericRelation
-from django.contrib.contenttypes.models import ContentType
+from django.contrib.contenttypes.fields import GenericRelation
 from django.contrib.postgres.fields import ArrayField
 from django.core.exceptions import FieldDoesNotExist
 from django.core.validators import MaxValueValidator, MinValueValidator, validate_email
@@ -1462,10 +1461,6 @@ class ParticipantData(BaseTeamModel):
     objects = ParticipantDataObjectManager()
     participant = models.ForeignKey(Participant, on_delete=models.CASCADE, related_name="data_set")
     data = encrypt(models.JSONField(default=dict))
-    content_type = models.ForeignKey(ContentType, on_delete=models.CASCADE, null=True)
-    # TODO. Remove object_id and content_object once production is stable
-    object_id = models.PositiveIntegerField(null=True)
-    content_object = GenericForeignKey("content_type", "object_id")
     experiment = models.ForeignKey(Experiment, on_delete=models.CASCADE)
     system_metadata = models.JSONField(default=dict)
     encryption_key = encrypt(
