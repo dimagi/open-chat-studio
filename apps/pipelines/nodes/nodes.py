@@ -10,7 +10,6 @@ from django.conf import settings
 from django.core.exceptions import ValidationError
 from django.core.validators import validate_email
 from django.db.models import TextChoices
-from jinja2 import meta
 from jinja2.sandbox import SandboxedEnvironment
 from langchain_core.messages import BaseMessage
 from langchain_core.prompts import MessagesPlaceholder, PromptTemplate
@@ -62,20 +61,17 @@ class RenderTemplate(PipelineNode):
             label="Render a template", documentation_link=settings.DOCUMENTATION_LINKS["node_template"]
         )
     )
-
     template_string: str = Field(
         description="Use {{your_variable_name}} to refer to designate input",
         json_schema_extra=UiSchema(widget=Widgets.expandable_text),
     )
 
     def _process(self, input, node_id: str, state: PipelineState, **kwargs) -> PipelineState:
-        def all_variables(in_):
-            return {var: in_ for var in meta.find_undeclared_variables(env.parse(self.template_string))}
-
         env = SandboxedEnvironment()
         try:
             participant_data_proxy = ParticipantDataProxy.from_state(state)
             content = {
+                "input": input,
                 "participant_details": {
                     "identifier": participant_data_proxy.get("identifier"),
                     "platform": participant_data_proxy.get("platform"),
