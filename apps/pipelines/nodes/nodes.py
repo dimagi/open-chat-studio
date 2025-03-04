@@ -77,7 +77,10 @@ class RenderTemplate(PipelineNode):
 
             if state.get("messages"):
                 for message in state["messages"]:
-                    content.update(message)
+                    if isinstance(message, dict):
+                        content.update(message)
+                    else:
+                        content["input"] = message
 
             if hasattr(state, "experiment_session") and state.experiment_session:
                 participant = state.experiment_session.participant
