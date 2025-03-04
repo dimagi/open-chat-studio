@@ -69,15 +69,16 @@ class RenderTemplate(PipelineNode):
     def _process(self, input, node_id: str, state: PipelineState, **kwargs) -> PipelineState:
         env = SandboxedEnvironment()
         try:
-            participant_data_proxy = ParticipantDataProxy.from_state(state)
             content = {
                 "input": input,
                 "participant_details": {
-                    "identifier": participant_data_proxy.get("identifier"),
-                    "platform": participant_data_proxy.get("platform"),
+                    "identifier": state.experiment_session.participant.identifier,
+                    "platform": state.experiment_session.participant.platform,
                 },
-                "participant_data": participant_data_proxy.get("data"),
-                "participant_schedules": participant_data_proxy.get("schedules"),
+                "participant_data": json.dumps(state.experiment_session.participant_data_from_experiment, indent=4),
+                "participant_schedules": state.experiment_session.participant.get_schedules_for_experiment(
+                    state.experiment_session.experiment, as_dict=True, include_complete=True
+                ),
                 "temp_state": state.get("temp_state", {}),
             }
 
