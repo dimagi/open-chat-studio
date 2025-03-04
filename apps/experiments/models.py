@@ -1462,10 +1462,6 @@ class ParticipantData(BaseTeamModel):
     objects = ParticipantDataObjectManager()
     participant = models.ForeignKey(Participant, on_delete=models.CASCADE, related_name="data_set")
     data = encrypt(models.JSONField(default=dict))
-    content_type = models.ForeignKey(ContentType, on_delete=models.CASCADE, null=True)
-    # TODO. Remove object_id and content_object once production is stable
-    object_id = models.PositiveIntegerField(null=True)
-    content_object = GenericForeignKey("content_type", "object_id")
     experiment = models.ForeignKey(Experiment, on_delete=models.CASCADE)
     system_metadata = models.JSONField(default=dict)
     encryption_key = encrypt(
