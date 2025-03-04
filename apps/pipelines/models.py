@@ -504,6 +504,12 @@ class PipelineChatHistoryTypes(models.TextChoices):
     NONE = "none", "No History"
 
 
+class PipelineChatHistoryModes(models.TextChoices):
+    SUMMARIZE = "summarize", "Summarize"
+    TRUNCATE_TOKENS = "truncate tokens", "Truncate Tokens"
+    MAX_HISTORY_LENGTH = "max history length", "Max History Length"
+
+
 class PipelineChatHistory(BaseModel):
     session = models.ForeignKey(ExperimentSession, on_delete=models.CASCADE, related_name="pipeline_chat_history")
 

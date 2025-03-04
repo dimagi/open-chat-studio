@@ -814,6 +814,10 @@ export function HistoryTypeWidget(props: WidgetParams) {
   const historyType = concatenate(props.paramValue);
   const historyName = concatenate(props.nodeParams["history_name"]);
   const historyNameError = props.getNodeFieldError(props.nodeId, "history_name");
+  const userMaxTokenLimit = concatenate(props.nodeParams["user_max_token_limit"]);
+  const initialHistoryMode = concatenate(props.nodeParams["history_mode"]);
+  const [historyMode, setHistoryMode] = useState(initialHistoryMode || "Summarize");
+
   return (
     <>
       <div className="flex join">
@@ -845,9 +849,40 @@ export function HistoryTypeWidget(props: WidgetParams) {
       <div className="flex flex-col">
         <small className="text-red-500">{historyNameError}</small>
       </div>
+
+<div className="flex join">
+      <InputField label="History Mode" help_text="">
+        <select
+          className="select select-bordered join-item"
+          name="history_mode"
+          onChange={(e) => {
+            setHistoryMode(e.target.value);
+            props.updateParamValue(e);
+          }}
+          value={historyMode}
+        >
+          <option value="Summarize">Summarize</option>
+          <option value="Truncate Tokens">Truncate Tokens</option>
+          <option value="Max History Length">Max History Length</option>
+        </select>
+      </InputField>
+    </div>
+
+    {(historyMode === "Summarize" || historyMode === "Truncate Tokens") && (
+      <div className="flex join">
+        <InputField label="Max Token Size" help_text="">
+          <input
+            className="input input-bordered join-item"
+            name="user_max_token_limit"
+            type="number"
+            onChange={props.updateParamValue}
+            value={userMaxTokenLimit || ""}
+          />
+        </InputField>
+      </div>
+    )}
     </>
-  )
-    ;
+  );
 }
 
 export function InputField({label, help_text, inputError, children}: React.PropsWithChildren<{
