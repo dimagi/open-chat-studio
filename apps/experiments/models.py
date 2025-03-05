@@ -9,7 +9,6 @@ from uuid import uuid4
 import markdown
 import pytz
 from django.conf import settings
-from django.contrib.contenttypes.fields import GenericRelation
 from django.contrib.postgres.fields import ArrayField
 from django.core.exceptions import FieldDoesNotExist
 from django.core.validators import MaxValueValidator, MinValueValidator, validate_email
