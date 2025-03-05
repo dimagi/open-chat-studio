@@ -1372,7 +1372,7 @@ class Participant(BaseTeamModel):
             return {}
 
     def get_schedules_for_experiment(
-        self, experiment, as_dict=False, as_timezone: str | None = None, include_complete=False
+        self, experiment, as_dict=False, as_timezone: str | None = None, include_inactive=False
     ):
         """
         Returns all scheduled messages for the associated participant for this session's experiment as well as
@@ -1394,8 +1394,8 @@ class Participant(BaseTeamModel):
             .select_related("action")
             .order_by("created_at")
         )
-        if not include_complete:
-            messages = messages.filter(is_complete=False)
+        if not include_inactive:
+            messages = messages.filter(is_complete=False, cancelled_at=None)
 
         scheduled_messages = []
         for message in messages:
