@@ -225,7 +225,7 @@ SIGNUP_ENABLED = env("SIGNUP_ENABLED", default=False)
 if SIGNUP_ENABLED:
     ACCOUNT_ADAPTER = "apps.teams.adapter.AcceptInvitationAdapter"
 else:
-    ACCOUNT_ADAPTER = "apps.users.adapter.NoNewUsersAccountAdapter"
+    ACCOUNT_ADAPTER = "apps.teams.adapter.NoNewUsersAccountAdapter"
 ACCOUNT_AUTHENTICATION_METHOD = "email"
 ACCOUNT_EMAIL_REQUIRED = True
 ACCOUNT_EMAIL_SUBJECT_PREFIX = ""
@@ -559,7 +559,7 @@ API_KEY_CUSTOM_HEADER = "HTTP_X_API_KEY"
 FIELD_AUDIT_AUDITORS = ["apps.audit.auditors.AuditContextProvider"]
 FIELD_AUDIT_TEAM_EXEMPT_VIEWS = [
     "account_reset_password_from_key",
-    "teams:signup_after_invite",
+    "sso:signup_after_invite",
     LOGIN_URL,
 ]
 FIELD_AUDIT_REQUEST_ID_HEADERS = [

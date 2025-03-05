@@ -1,10 +1,9 @@
 import uuid
 
-from allauth.account.views import SignupView
 from django.conf import settings
 from django.contrib import messages
 from django.http import HttpResponseRedirect
-from django.shortcuts import get_object_or_404, redirect, render
+from django.shortcuts import get_object_or_404, render
 from django.urls import reverse
 from django.utils.translation import gettext_lazy as _
 
@@ -56,38 +55,3 @@ def accept_invitation(request, invitation_id: uuid.UUID):
             "invitation_url": reverse("teams:accept_invitation", args=[invitation_id]),
         },
     )
-
-
-class SignupAfterInvite(SignupView):
-    def get(self, request, *args, **kwargs):
-        if self.invitation.is_accepted:
-            messages.warning(
-                self.request,
-                _("The invitation has already been accepted. Please sign in to continue or request a new invitation."),
-            )
-            return redirect("web:home")
-        return super().get(request, *args, **kwargs)
-
-    def is_open(self):
-        """Allow signups from invitations even if public signups are closed."""
-        return True
-
-    @property
-    def invitation(self) -> Invitation:
-        from ..models import Invitation
-
-        invitation_id = self.kwargs["invitation_id"]
-        return get_object_or_404(Invitation, id=invitation_id)
-
-    def get_initial(self):
-        initial = super().get_initial()
-        if self.invitation:
-            initial["team_name"] = self.invitation.team.name
-            initial["email"] = self.invitation.email
-        return initial
-
-    def get_context_data(self, **kwargs):
-        context = super().get_context_data(**kwargs)
-        if self.invitation:
-            context["invitation"] = self.invitation
-        return context
