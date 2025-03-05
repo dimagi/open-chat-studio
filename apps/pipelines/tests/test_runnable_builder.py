@@ -208,14 +208,14 @@ def test_branching_pipeline(pipeline, experiment_session):
             "target": template_b["id"],
         },
         {
-            "id": "RenderTemplate-A -> END",
-            "source": template_a["id"],
-            "target": end["id"],
-        },
-        {
             "id": "RenderTemplate-B -> RenderTemplate-C",
             "source": template_b["id"],
             "target": template_c["id"],
+        },
+        {
+            "id": "RenderTemplate-A -> END",
+            "source": template_a["id"],
+            "target": end["id"],
         },
         {
             "id": "RenderTemplate-C -> END",
