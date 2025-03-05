@@ -64,4 +64,4 @@ class ParticipantDataProxy:
         participant_data.data = data
         participant_data.save(update_fields=["data"])
 
-        self.session.participant.update_from_data(data)
+        self.session.participant.update_name_from_data(data)
