@@ -706,7 +706,6 @@ class Experiment(BaseTeamModel, VersionsMixin, CustomActionOperationMixin):
         help_text="This tells the bot when to reply with voice messages",
     )
     files = models.ManyToManyField("files.File", blank=True)
-    participant_data = GenericRelation("experiments.ParticipantData", related_query_name="bots")
     children = models.ManyToManyField(
         "Experiment", blank=True, through="ExperimentRoute", symmetrical=False, related_name="parents"
     )
