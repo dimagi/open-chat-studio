@@ -61,36 +61,62 @@ def new_turn_message(request, experiment_id: uuid):
     return HttpResponse()
 
 
-@extend_schema(
-    operation_id="new_api_message",
-    summary="New API Message",
-    tags=["Channels"],
-    request=inline_serializer(
-        "NewAPIMessage",
-        fields={
-            "message": serializers.CharField(label="User message"),
-            "session": serializers.CharField(required=False, label="Optional session ID"),
-        },
-    ),
-    responses={
-        200: inline_serializer(
-            "NewAPIMessageResponse",
-            fields={
-                "response": serializers.CharField(label="AI response"),
-            },
-        )
-    },
-    parameters=[
+def new_api_message_schema(versioned: bool):
+    operation_id = "new_api_message"
+    summary = "New API Message"
+    parameters = [
         OpenApiParameter(
             name="experiment_id",
             type=OpenApiTypes.STR,
             location=OpenApiParameter.PATH,
             description="Experiment ID",
         ),
-    ],
-)
+    ]
+    request_serializer_name = "NewAPIMessage"
+    response_serializer_name = "NewAPIMessageResponse"
+    if versioned:
+        operation_id = f"{operation_id}_versioned"
+        summary = "New API Message Versioned"
+        parameters.append(
+            OpenApiParameter(
+                name="version",
+                type=OpenApiTypes.STR,
+                location=OpenApiParameter.QUERY,
+                description="Version of experiment",
+            )
+        )
+        request_serializer_name = "NewAPIMessageVersioned"
+        response_serializer_name = "NewAPIMessageResponseVersioned"
+    return extend_schema(
+        operation_id=operation_id,
+        summary=summary,
+        tags=["Channels"],
+        request=inline_serializer(
+            request_serializer_name,
+            fields={
+                "message": serializers.CharField(label="User message"),
+                "session": serializers.CharField(required=False, label="Optional session ID"),
+            },
+        ),
+        responses={
+            200: inline_serializer(
+                response_serializer_name,
+                fields={"response": serializers.CharField(label="AI response")},
+            )
+        },
+        parameters=parameters,
+    )
+
+
+@new_api_message_schema(versioned=False)
 @api_view(["POST"])
-def new_api_message(request, experiment_id: uuid, version=None):
+def new_api_message(request, experiment_id: uuid):
+    return new_api_message_versioned(request, experiment_id)
+
+
+@new_api_message_schema(versioned=True)
+@api_view(["POST"])
+def new_api_message_versioned(request, experiment_id: uuid, version=None):
     """Chat with an experiment."""
     message_data = request.data.copy()
     participant_id = request.user.email

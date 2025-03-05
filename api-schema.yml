@@ -185,7 +185,7 @@ paths:
         content:
           application/json:
             schema:
-              $ref: '#/components/schemas/CreateChatCompletionRequest'
+              $ref: '#/components/schemas/CreateChatCompletionRequestVersioned'
         required: true
       security:
       - apiKeyAuth: []
@@ -195,7 +195,7 @@ paths:
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/CreateChatCompletionResponse'
+                $ref: '#/components/schemas/CreateChatCompletionResponseVersioned'
           description: ''
   /api/participants:
     post:
@@ -419,7 +419,6 @@ paths:
   /channels/api/{experiment_id}/incoming_message:
     post:
       operationId: new_api_message
-      description: Chat with an experiment.
       summary: New API Message
       parameters:
       - in: path
@@ -448,9 +447,9 @@ paths:
           description: ''
   /channels/api/{experiment_id}/v{version}/incoming_message:
     post:
-      operationId: new_api_message_2
+      operationId: new_api_message_versioned
       description: Chat with an experiment.
-      summary: New API Message
+      summary: New API Message Versioned
       parameters:
       - in: path
         name: experiment_id
@@ -463,13 +462,18 @@ paths:
         schema:
           type: integer
         required: true
+      - in: query
+        name: version
+        schema:
+          type: string
+        description: Version of experiment
       tags:
       - Channels
       requestBody:
         content:
           application/json:
             schema:
-              $ref: '#/components/schemas/NewAPIMessage'
+              $ref: '#/components/schemas/NewAPIMessageVersioned'
         required: true
       security:
       - apiKeyAuth: []
@@ -479,39 +483,20 @@ paths:
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/NewAPIMessageResponse'
+                $ref: '#/components/schemas/NewAPIMessageResponseVersioned'
           description: ''
 components:
   schemas:
-    ChatCompletionResponseChoices:
-      type: object
-      properties:
-        finish_reason:
-          type: string
-        index:
-          type: integer
-        message:
-          $ref: '#/components/schemas/ChatCompletionResponseMessage'
-      required:
-      - finish_reason
-      - index
-      - message
-    ChatCompletionResponseMessage:
-      type: object
-      properties:
-        role:
-          $ref: '#/components/schemas/ChatCompletionResponseMessageRoleEnum'
-        content:
-          type: string
-      required:
-      - content
-      - role
-    ChatCompletionResponseMessageRoleEnum:
-      enum:
-      - assistant
-      type: string
-      description: '* `assistant` - assistant'
     CreateChatCompletionRequest:
+      type: object
+      properties:
+        messages:
+          type: array
+          items:
+            $ref: '#/components/schemas/Message'
+      required:
+      - messages
+    CreateChatCompletionRequestVersioned:
       type: object
       properties:
         messages:
@@ -528,7 +513,7 @@ components:
         choices:
           type: array
           items:
-            $ref: '#/components/schemas/ChatCompletionResponseChoices'
+            $ref: '#/components/schemas/CreateChatCompletionResponseChoices'
         created:
           type: integer
         model:
@@ -541,6 +526,73 @@ components:
       - id
       - model
       - object
+    CreateChatCompletionResponseChoices:
+      type: object
+      properties:
+        finish_reason:
+          type: string
+        index:
+          type: integer
+        message:
+          $ref: '#/components/schemas/CreateChatCompletionResponseMessage'
+      required:
+      - finish_reason
+      - index
+      - message
+    CreateChatCompletionResponseMessage:
+      type: object
+      properties:
+        role:
+          $ref: '#/components/schemas/RoleBe7Enum'
+        content:
+          type: string
+      required:
+      - content
+      - role
+    CreateChatCompletionResponseVersioned:
+      type: object
+      properties:
+        id:
+          type: string
+        choices:
+          type: array
+          items:
+            $ref: '#/components/schemas/CreateChatCompletionResponseVersionedChoices'
+        created:
+          type: integer
+        model:
+          type: string
+        object:
+          $ref: '#/components/schemas/ObjectEnum'
+      required:
+      - choices
+      - created
+      - id
+      - model
+      - object
+    CreateChatCompletionResponseVersionedChoices:
+      type: object
+      properties:
+        finish_reason:
+          type: string
+        index:
+          type: integer
+        message:
+          $ref: '#/components/schemas/CreateChatCompletionResponseVersionedMessage'
+      required:
+      - finish_reason
+      - index
+      - message
+    CreateChatCompletionResponseVersionedMessage:
+      type: object
+      properties:
+        role:
+          $ref: '#/components/schemas/RoleBe7Enum'
+        content:
+          type: string
+      required:
+      - content
+      - role
     Experiment:
       type: object
       properties:
@@ -753,6 +805,25 @@ components:
           title: AI response
       required:
       - response
+    NewAPIMessageResponseVersioned:
+      type: object
+      properties:
+        response:
+          type: string
+          title: AI response
+      required:
+      - response
+    NewAPIMessageVersioned:
+      type: object
+      properties:
+        message:
+          type: string
+          title: User message
+        session:
+          type: string
+          title: Optional session ID
+      required:
+      - message
     ObjectEnum:
       enum:
       - chat.completion
@@ -881,6 +952,11 @@ components:
         * `api` - API
         * `slack` - Slack
         * `commcare_connect` - CommCare Connect
+    RoleBe7Enum:
+      enum:
+      - assistant
+      type: string
+      description: '* `assistant` - assistant'
     Team:
       type: object
       properties:

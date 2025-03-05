@@ -54,6 +54,8 @@ def chat_completions_schema(versioned: bool):
             description="Experiment ID",
         ),
     ]
+    request_serializer_name = "CreateChatCompletionRequest"
+    response_serializer_name = "CreateChatCompletionResponse"
     if versioned:
         operation_id = f"{operation_id}_versioned"
         summary = "Versioned Chat Completions API for Experiments"
@@ -65,27 +67,29 @@ def chat_completions_schema(versioned: bool):
                 description="Version of experiment",
             )
         )
+        request_serializer_name = "CreateChatCompletionRequestVersioned"
+        response_serializer_name = "CreateChatCompletionResponseVersioned"
     return extend_schema(
         operation_id=operation_id,
         summary=summary,
         description=description,
         tags=["OpenAI"],
         request=inline_serializer(
-            "CreateChatCompletionRequest",
+            request_serializer_name,
             {"messages": MessageSerializer(many=True)},
         ),
         responses={
             200: inline_serializer(
-                "CreateChatCompletionResponse",
+                response_serializer_name,
                 {
                     "id": serializers.CharField(),
                     "choices": inline_serializer(
-                        "ChatCompletionResponseChoices",
+                        f"{response_serializer_name}Choices",
                         {
                             "finish_reason": serializers.CharField(),
                             "index": serializers.IntegerField(),
                             "message": inline_serializer(
-                                "ChatCompletionResponseMessage",
+                                f"{response_serializer_name}Message",
                                 {
                                     "role": serializers.ChoiceField(choices=["assistant"]),
                                     "content": serializers.CharField(),
