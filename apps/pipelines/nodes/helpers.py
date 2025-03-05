@@ -55,14 +55,9 @@ class ParticipantDataProxy:
             )
         return self._participant_data
 
-    def get(self, include_global=True):
+    def get(self):
         data = self._get_db_object().data
-        if include_global and hasattr(self.session, "participant") and hasattr(self.session.participant, "global_data"):
-            # Only add global data keys that don't already exist in participant data
-            for key, value in self.session.participant.global_data.items():
-                if key not in data:
-                    data[key] = value
-        return data
+        return self.session.participant.global_data | data
 
     def set(self, data):
         participant_data = self._get_db_object()
