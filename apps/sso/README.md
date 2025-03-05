@@ -20,7 +20,8 @@ When a user signs in we check their email address to see if there is a `SocialAp
 * Do we need to associate the `SocialApplication` with a specific `Team` (one or many)?
 * Maybe a team setting to restrict invitations to only those with specific email domains?
   * (this is similar to the point above)
-* Check invitation and signup flows
+* How should we handle signups outside of the invitation flow?
+  * Should there be a way to force emails with a specific domain to go through the SSO flow?
 
 ## Feature Flag
 
