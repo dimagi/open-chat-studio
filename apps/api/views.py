@@ -153,8 +153,7 @@ def _update_participant_data(request):
 
     # Update the participant's name if provided
     if name := serializer.data.get("name"):
-        participant.name = name
-        participant.save()
+        participant.update_from_data({"name": name})
 
     experiment_data = serializer.data["data"]
     experiment_map = _get_participant_experiments(team, experiment_data)

@@ -1298,6 +1298,19 @@ class Participant(BaseTeamModel):
             return {"name": self.name}
         return {}
 
+    def update_from_data(self, data: dict):
+        """
+        Updates participant fields from a data dictionary.
+        Only fields that exist in global_data will be updated.
+        """
+        updated_fields = []
+        for key in list(self.global_data.keys()):
+            if key in data and hasattr(self, key):
+                setattr(self, key, data[key])
+                updated_fields.append(key)
+        if updated_fields:
+            self.save(update_fields=updated_fields)
+
     def __str__(self):
         if self.is_anonymous:
             suffix = str(self.public_id)[:6]
