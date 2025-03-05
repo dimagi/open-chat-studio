@@ -1,6 +1,8 @@
-from allauth.account.forms import LoginForm, PasswordField
+from allauth import app_settings
+from allauth.account.forms import PasswordField
 from allauth.account.views import LoginView
 from allauth.socialaccount.models import SocialApp
+from allauth.utils import get_form_class
 from django import forms
 from django.shortcuts import redirect
 from django.utils.translation import gettext_lazy as _
@@ -52,7 +54,7 @@ class CustomLoginView(LoginView):
             if "password" not in self.request.POST:
                 return EmailForm
             else:
-                return LoginForm
+                return get_form_class(app_settings.FORMS, "signup", self.form_class)
 
     def form_valid(self, form):
         if not flag_is_active(self.request, "sso_login"):
