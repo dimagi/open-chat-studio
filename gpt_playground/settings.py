@@ -240,6 +240,9 @@ ACCOUNT_FORMS = {
     "signup": "apps.teams.forms.TeamSignupForm",
 }
 SOCIALACCOUNT_ADAPTER = "apps.sso.adapter.SsoAccountAdapter"
+SOCIALACCOUNT_FORMS = {
+    "signup": "apps.sso.forms.SsoSignupForm",
+}
 
 # User signup configuration: change to "mandatory" to require users to confirm email before signing in.
 # or "optional" to send confirmation emails but not require them

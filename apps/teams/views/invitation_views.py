@@ -20,7 +20,11 @@ def accept_invitation(request, invitation_id: uuid.UUID):
         request.session["invitation_id"] = str(invitation_id)
     else:
         clear_invite_from_session(request)
-    if request.user.is_authenticated and is_member(request.user, invitation.team):
+    if (
+        request.user.is_authenticated
+        and request.user.email.lower() == invitation.email.lower()
+        and is_member(request.user, invitation.team)
+    ):
         messages.info(
             request,
             _("It looks like you're already a member of {team}. You've been redirected.").format(
@@ -49,6 +53,7 @@ def accept_invitation(request, invitation_id: uuid.UUID):
         "teams/accept_invite.html",
         {
             "invitation": invitation,
+            "invitation_url": reverse("teams:accept_invitation", args=[invitation_id]),
         },
     )
 
