@@ -331,6 +331,16 @@ class TimeoutTrigger(BaseModel, VersionsMixin):
         )
 
 
+class ScheduledMessageManager(models.Manager):
+    def get_messages_to_fire(self, now):
+        now = now or timezone.now()
+        return (
+            self.filter(is_complete=False, cancelled_at=None, next_trigger_date__lte=now)
+            .select_related("action")
+            .order_by("next_trigger_date")
+        )
+
+
 class TimePeriod(models.TextChoices):
     MINUTES = ("minutes", "Minutes")
     HOURS = ("hours", "Hours")
@@ -356,6 +366,11 @@ class ScheduledMessage(BaseTeamModel):
     custom_schedule_params = models.JSONField(blank=True, default=dict)
     end_date = models.DateTimeField(null=True, blank=True)
 
+    cancelled_at = models.DateTimeField(null=True, blank=True)
+    cancelled_by = models.ForeignKey("users.CustomUser", on_delete=models.SET_NULL, null=True, blank=True)
+
+    objects = ScheduledMessageManager()
+
     class Meta:
         unique_together = ("experiment", "participant", "external_id")
         indexes = [models.Index(fields=["is_complete"])]
@@ -367,6 +382,11 @@ class ScheduledMessage(BaseTeamModel):
             delta = relativedelta(**{params["time_period"]: params["frequency"]})
             self.next_trigger_date = timezone.now() + delta
         super().save(*args, **kwargs)
+
+    def cancel(self, cancelled_by=None):
+        self.cancelled_at = timezone.now()
+        self.cancelled_by = cancelled_by
+        self.save()
 
     def assign_external_id(self):
         if not self.external_id:
