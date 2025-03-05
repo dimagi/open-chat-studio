@@ -21,19 +21,19 @@ def chat_completions_schema(versioned: bool):
         Use OpenAI's client to send messages to the experiment and get responses. This will
         create a new session in the experiment with all the provided messages
         and return the response from the experiment.
-        
+
         The last message must be a 'user' message.
-        
+
         Example (Python):
-        
+
         ```python
         experiment_id = "your experiment ID"
-        
+
         client = OpenAI(
             api_key="your API key",
             base_url=f"https://chatbots.dimagi.com/api/openai/{experiment_id}",
         )
-        
+
         completion = client.chat.completions.create(
             model="anything",
             messages=[
@@ -41,7 +41,7 @@ def chat_completions_schema(versioned: bool):
                 {"role": "user", "content": "I need help with something."},
             ],
         )
-        
+
         reply = completion.choices[0].message
         ```
         """
@@ -54,8 +54,6 @@ def chat_completions_schema(versioned: bool):
             description="Experiment ID",
         ),
     ]
-    request_serializer_name = "CreateChatCompletionRequest"
-    response_serializer_name = "CreateChatCompletionResponse"
     if versioned:
         operation_id = f"{operation_id}_versioned"
         summary = "Versioned Chat Completions API for Experiments"
@@ -67,29 +65,27 @@ def chat_completions_schema(versioned: bool):
                 description="Version of experiment",
             )
         )
-        request_serializer_name = "CreateChatCompletionRequestVersioned"
-        response_serializer_name = "CreateChatCompletionResponseVersioned"
     return extend_schema(
         operation_id=operation_id,
         summary=summary,
         description=description,
         tags=["OpenAI"],
         request=inline_serializer(
-            request_serializer_name,
+            "CreateChatCompletionRequest",
             {"messages": MessageSerializer(many=True)},
         ),
         responses={
             200: inline_serializer(
-                response_serializer_name,
+                "CreateChatCompletionResponse",
                 {
                     "id": serializers.CharField(),
                     "choices": inline_serializer(
-                        f"{response_serializer_name}Choices",
+                        "ChatCompletionResponseChoices",
                         {
                             "finish_reason": serializers.CharField(),
                             "index": serializers.IntegerField(),
                             "message": inline_serializer(
-                                f"{response_serializer_name}Message",
+                                "ChatCompletionResponseMessage",
                                 {
                                     "role": serializers.ChoiceField(choices=["assistant"]),
                                     "content": serializers.CharField(),

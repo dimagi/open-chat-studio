@@ -72,8 +72,7 @@ def new_api_message_schema(versioned: bool):
             description="Experiment ID",
         ),
     ]
-    request_serializer_name = "NewAPIMessage"
-    response_serializer_name = "NewAPIMessageResponse"
+
     if versioned:
         operation_id = f"{operation_id}_versioned"
         summary = "New API Message Versioned"
@@ -85,25 +84,26 @@ def new_api_message_schema(versioned: bool):
                 description="Version of experiment",
             )
         )
-        request_serializer_name = "NewAPIMessageVersioned"
-        response_serializer_name = "NewAPIMessageResponseVersioned"
+
+    request_serializer = inline_serializer(
+        "NewAPIMessage",
+        fields={
+            "message": serializers.CharField(label="User message"),
+            "session": serializers.CharField(required=False, label="Optional session ID"),
+        },
+    )
+
+    response_serializer = inline_serializer(
+        "NewAPIMessageResponse",
+        fields={"response": serializers.CharField(label="AI response")},
+    )
+
     return extend_schema(
         operation_id=operation_id,
         summary=summary,
         tags=["Channels"],
-        request=inline_serializer(
-            request_serializer_name,
-            fields={
-                "message": serializers.CharField(label="User message"),
-                "session": serializers.CharField(required=False, label="Optional session ID"),
-            },
-        ),
-        responses={
-            200: inline_serializer(
-                response_serializer_name,
-                fields={"response": serializers.CharField(label="AI response")},
-            )
-        },
+        request=request_serializer,
+        responses={200: response_serializer},
         parameters=parameters,
     )
 
