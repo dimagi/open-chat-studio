@@ -6,6 +6,7 @@ from django.db.models import Q
 from django.http import JsonResponse
 from django.shortcuts import get_object_or_404, redirect, render
 from django.urls import reverse
+from django.views.decorators.http import require_POST
 from django.views.generic import CreateView, TemplateView
 from django_tables2 import SingleTableView
 
@@ -15,6 +16,7 @@ from apps.teams.decorators import login_and_team_required
 from apps.teams.mixins import LoginAndTeamRequiredMixin
 
 from ..channels.models import ChannelPlatform
+from ..events.models import ScheduledMessage
 from ..experiments.tables import ExperimentSessionsTable
 from .tables import ParticipantTable
 
@@ -145,3 +147,18 @@ def search_participant_api(request, team_slug: str):
 
     results = query.order_by("identifier")[:10]
     return JsonResponse({"results": [{"name": p.name, "identifier": p.identifier} for p in results]})
+
+
+@login_and_team_required
+@permission_required("experiments.change_participant")
+@require_POST
+def cancel_schedule(request, team_slug: str, participant_id: int, schedule_id: str):
+    schedule = get_object_or_404(
+        ScheduledMessage, external_id=schedule_id, participant_id=participant_id, team=request.team
+    )
+    schedule.cancel(cancelled_by=request.user)
+    return render(
+        request,
+        "participants/partials/participant_schedule_single.html",
+        {"schedule": schedule.as_dict(), "participant_id": participant_id},
+    )

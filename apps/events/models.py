@@ -2,6 +2,7 @@ import logging
 from datetime import timedelta
 from functools import cached_property
 
+import pytz
 from dateutil.relativedelta import relativedelta
 from django.contrib.contenttypes.fields import GenericForeignKey, GenericRelation
 from django.contrib.contenttypes.models import ContentType
@@ -383,6 +384,10 @@ class ScheduledMessage(BaseTeamModel):
             self.next_trigger_date = timezone.now() + delta
         super().save(*args, **kwargs)
 
+    @property
+    def is_cancelled(self):
+        return self.cancelled_at is not None
+
     def cancel(self, cancelled_by=None):
         self.cancelled_at = timezone.now()
         self.cancelled_by = cancelled_by
@@ -514,3 +519,25 @@ class ScheduledMessage(BaseTeamModel):
 
     def __str__(self):
         return self.as_string()
+
+    def as_dict(self, as_timezone=None):
+        next_trigger_date = self.next_trigger_date
+        last_triggered_at = self.last_triggered_at
+        if as_timezone:
+            next_trigger_date = next_trigger_date.astimezone(pytz.timezone(as_timezone))
+            if last_triggered_at:
+                last_triggered_at = last_triggered_at.astimezone(pytz.timezone(as_timezone))
+        return {
+            "name": self.name,
+            "prompt": self.prompt_text,
+            "external_id": self.external_id,
+            "frequency": self.frequency,
+            "time_period": self.time_period,
+            "repetitions": self.repetitions,
+            "next_trigger_date": next_trigger_date,
+            "last_triggered_at": last_triggered_at,
+            "total_triggers": self.total_triggers,
+            "triggers_remaining": self.remaining_triggers,
+            "is_complete": self.is_complete,
+            "is_cancelled": self.is_cancelled,
+        }
