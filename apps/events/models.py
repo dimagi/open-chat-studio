@@ -460,7 +460,8 @@ class ScheduledMessage(BaseTeamModel):
 
     @property
     def remaining_triggers(self):
-        return self.expected_trigger_count - self.total_triggers
+        remaining = self.expected_trigger_count - self.total_triggers
+        return max(remaining, 0)
 
     @property
     def was_created_by_system(self) -> bool:
