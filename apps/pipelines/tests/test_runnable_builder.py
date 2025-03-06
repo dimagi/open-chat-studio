@@ -175,10 +175,9 @@ def test_render_template(pipeline):
         render_template_node("{{ input }} is cool"),
         end_node(),
     ]
-    assert (
-        create_runnable(pipeline, nodes).invoke(PipelineState(messages=[{"input": "Cycling"}]))["messages"][-1]
-        == "Cycling is cool"
-    )
+
+    result = create_runnable(pipeline, nodes).invoke(PipelineState(messages=["Cycling"]))
+    assert result["messages"][-1] == "Cycling is cool"
 
 
 @django_db_with_data(available_apps=("apps.service_providers",))
