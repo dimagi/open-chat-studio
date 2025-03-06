@@ -66,16 +66,18 @@
           {% endif %}
         {% endif %}
       </div>
-      <div>
-        <button class="btn btn-sm btn-ghost tooltip" data-tip="Cancel this schedule"
-                {% if schedule.is_cancelled or schedule.is_complete %}disabled{% endif %}
-                hx-post="{% url 'participants:cancel_schedule' request.team.slug participant_id schedule.external_id %}"
-                hx-confirm="Are you sure you want to cancel this schedule?"
-                hx-target="#schedule_{{ schedule.external_id }}"
-                hx-swap="outerHTML">
-          <i class="fa-solid fa-ban"></i>
-        </button>
-      </div>
+      {% if perms.experiments.change_participant %}
+        <div>
+          <button class="btn btn-sm btn-ghost tooltip" data-tip="Cancel this schedule"
+                  {% if schedule.is_cancelled or schedule.is_complete %}disabled{% endif %}
+                  hx-post="{% url 'participants:cancel_schedule' request.team.slug participant_id schedule.external_id %}"
+                  hx-confirm="Are you sure you want to cancel this schedule?"
+                  hx-target="#schedule_{{ schedule.external_id }}"
+                  hx-swap="outerHTML">
+            <i class="fa-solid fa-ban"></i>
+          </button>
+        </div>
+      {% endif %}
     </div>
   </div>
 </div>
