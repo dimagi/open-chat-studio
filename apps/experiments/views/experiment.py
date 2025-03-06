@@ -173,20 +173,22 @@ class ExperimentSessionsTableView(SingleTableView, PermissionRequiredMixin):
         return query_set
 
     def apply_dynamic_filters(self, query_set):
-        i = 0
         filter_conditions = Q()
         filter_applied = False
-        while True:
+
+        for i in range(30):  # arbitrary number higher than any # of filters we'd expect
             filter_column = self.request.GET.get(f"filter_{i}_column")
             filter_operator = self.request.GET.get(f"filter_{i}_operator")
             filter_value = self.request.GET.get(f"filter_{i}_value")
+
             if not all([filter_column, filter_operator, filter_value]):
                 break
+
             condition = self.build_filter_condition(filter_column, filter_operator, filter_value)
             if condition:
                 filter_conditions &= condition
                 filter_applied = True
-            i += 1
+
         if filter_applied:
             query_set = query_set.filter(filter_conditions).distinct()
         return query_set
