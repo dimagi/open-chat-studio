@@ -559,7 +559,7 @@ class AgentAssistantChat(AssistantChat):
         if self.adapter.disabled_tools:
             input["tools"] = self._get_allowed_tools(self.adapter.disabled_tools)
 
-        response = assistant_runnable.invoke(input)
+        response = assistant_runnable.invoke(input, config)
         max_time_limit = 60
         start_time = time.time()
         time_elapsed = 0.0
@@ -585,10 +585,13 @@ class AgentAssistantChat(AssistantChat):
                     tool_outputs.append({"output": output.content, "tool_call_id": output.tool_call_id})
 
                 response = assistant_runnable.invoke(
-                    {"tool_outputs": tool_outputs, "run_id": last_action.run_id, "thread_id": last_action.thread_id}
+                    {"tool_outputs": tool_outputs, "run_id": last_action.run_id, "thread_id": last_action.thread_id},
+                    config,
                 )
             else:
-                response = self._handle_tool_artifacts(tool_outputs_with_artifacts, assistant_runnable, last_action)
+                response = self._handle_tool_artifacts(
+                    tool_outputs_with_artifacts, assistant_runnable, last_action, config
+                )
 
             time_elapsed = time.time() - start_time
             iteration_count += 1
@@ -615,7 +618,7 @@ class AgentAssistantChat(AssistantChat):
 
         return tool_outputs, tool_outputs_with_artifacts
 
-    def _handle_tool_artifacts(self, tool_outputs_with_artifacts, assistant_runnable, last_action):
+    def _handle_tool_artifacts(self, tool_outputs_with_artifacts, assistant_runnable, last_action, config):
         """When artifacts are produced we don't submit the tool outputs to the existing run since
         that only accepts text.
 
@@ -666,7 +669,8 @@ class AgentAssistantChat(AssistantChat):
                 "attachments": [{"file_id": file_id, "tools": tools} for file_id, _ in files],
                 "thread_id": last_action.thread_id,
                 "tools": allowed_tools,
-            }
+            },
+            config,
         )
 
     def _get_allowed_tools(self, disabled_tools: set[str]):
