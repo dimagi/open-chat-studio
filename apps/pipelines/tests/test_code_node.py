@@ -313,11 +313,17 @@ def main(input, **kwargs):
 @django_db_with_data(available_apps=("apps.service_providers",))
 @mock.patch("apps.pipelines.nodes.base.PipelineNode.logger", mock.Mock())
 def test_render_template_with_context_keys(pipeline, experiment_session):
+    participant_data = ParticipantData.objects.create(
+        team=experiment_session.team,
+        experiment=experiment_session.experiment,
+        participant=experiment_session.participant,
+        data={"identifier": "participant_123"},
+    )
     nodes = [
         start_node(),
         render_template_node(
-            "input: {{input}}, temp_state.my_key: {{temp_state.my_key}}, "
-            "participant_id: {{participant_details.identifier}}"
+            "input: {{ input }}, temp_state.my_key: {{ temp_state.my_key }}, "
+            "participant_id: {{ participant_details.identifier }}"
         ),
         end_node(),
     ]
@@ -325,7 +331,8 @@ def test_render_template_with_context_keys(pipeline, experiment_session):
         experiment_session=experiment_session,
         messages=["Cycling"],
         temp_state={"my_key": "example_key"},
-        participant_details={"identifier": "participant_123"},
     )
     result = create_runnable(pipeline, nodes).invoke(state)
     assert result["messages"][-1] == ("input: Cycling, temp_state.my_key: example_key, participant_id: participant_123")
+    participant_data.refresh_from_db()
+    assert participant_data.data["identifier"] == "participant_123"
