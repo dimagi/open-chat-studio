@@ -148,7 +148,7 @@ paths:
 
         client = OpenAI(
             api_key="your API key",
-            base_url=f"https://chatbots.dimagi.com/api/openai/{experiment_id}",
+            base_url=f"https://chatbots.dimagi.com/api/openai/{experiment_id}/v{version}",
         )
 
         completion = client.chat.completions.create(
@@ -185,7 +185,7 @@ paths:
         content:
           application/json:
             schema:
-              $ref: '#/components/schemas/CreateChatCompletionRequestVersioned'
+              $ref: '#/components/schemas/CreateChatCompletionRequest'
         required: true
       security:
       - apiKeyAuth: []
@@ -195,7 +195,7 @@ paths:
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/CreateChatCompletionResponseVersioned'
+                $ref: '#/components/schemas/CreateChatCompletionResponse'
           description: ''
   /api/participants:
     post:
@@ -448,7 +448,6 @@ paths:
   /channels/api/{experiment_id}/v{version}/incoming_message:
     post:
       operationId: new_api_message_versioned
-      description: Chat with an experiment.
       summary: New API Message Versioned
       parameters:
       - in: path
@@ -473,7 +472,7 @@ paths:
         content:
           application/json:
             schema:
-              $ref: '#/components/schemas/NewAPIMessageVersioned'
+              $ref: '#/components/schemas/NewAPIMessage'
         required: true
       security:
       - apiKeyAuth: []
@@ -483,20 +482,39 @@ paths:
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/NewAPIMessageResponseVersioned'
+                $ref: '#/components/schemas/NewAPIMessageResponse'
           description: ''
 components:
   schemas:
-    CreateChatCompletionRequest:
+    ChatCompletionResponseChoices:
       type: object
       properties:
-        messages:
-          type: array
-          items:
-            $ref: '#/components/schemas/Message'
+        finish_reason:
+          type: string
+        index:
+          type: integer
+        message:
+          $ref: '#/components/schemas/ChatCompletionResponseMessage'
       required:
-      - messages
-    CreateChatCompletionRequestVersioned:
+      - finish_reason
+      - index
+      - message
+    ChatCompletionResponseMessage:
+      type: object
+      properties:
+        role:
+          $ref: '#/components/schemas/ChatCompletionResponseMessageRoleEnum'
+        content:
+          type: string
+      required:
+      - content
+      - role
+    ChatCompletionResponseMessageRoleEnum:
+      enum:
+      - assistant
+      type: string
+      description: '* `assistant` - assistant'
+    CreateChatCompletionRequest:
       type: object
       properties:
         messages:
@@ -513,7 +531,7 @@ components:
         choices:
           type: array
           items:
-            $ref: '#/components/schemas/CreateChatCompletionResponseChoices'
+            $ref: '#/components/schemas/ChatCompletionResponseChoices'
         created:
           type: integer
         model:
@@ -526,73 +544,6 @@ components:
       - id
       - model
       - object
-    CreateChatCompletionResponseChoices:
-      type: object
-      properties:
-        finish_reason:
-          type: string
-        index:
-          type: integer
-        message:
-          $ref: '#/components/schemas/CreateChatCompletionResponseMessage'
-      required:
-      - finish_reason
-      - index
-      - message
-    CreateChatCompletionResponseMessage:
-      type: object
-      properties:
-        role:
-          $ref: '#/components/schemas/RoleBe7Enum'
-        content:
-          type: string
-      required:
-      - content
-      - role
-    CreateChatCompletionResponseVersioned:
-      type: object
-      properties:
-        id:
-          type: string
-        choices:
-          type: array
-          items:
-            $ref: '#/components/schemas/CreateChatCompletionResponseVersionedChoices'
-        created:
-          type: integer
-        model:
-          type: string
-        object:
-          $ref: '#/components/schemas/ObjectEnum'
-      required:
-      - choices
-      - created
-      - id
-      - model
-      - object
-    CreateChatCompletionResponseVersionedChoices:
-      type: object
-      properties:
-        finish_reason:
-          type: string
-        index:
-          type: integer
-        message:
-          $ref: '#/components/schemas/CreateChatCompletionResponseVersionedMessage'
-      required:
-      - finish_reason
-      - index
-      - message
-    CreateChatCompletionResponseVersionedMessage:
-      type: object
-      properties:
-        role:
-          $ref: '#/components/schemas/RoleBe7Enum'
-        content:
-          type: string
-      required:
-      - content
-      - role
     Experiment:
       type: object
       properties:
@@ -805,25 +756,6 @@ components:
           title: AI response
       required:
       - response
-    NewAPIMessageResponseVersioned:
-      type: object
-      properties:
-        response:
-          type: string
-          title: AI response
-      required:
-      - response
-    NewAPIMessageVersioned:
-      type: object
-      properties:
-        message:
-          type: string
-          title: User message
-        session:
-          type: string
-          title: Optional session ID
-      required:
-      - message
     ObjectEnum:
       enum:
       - chat.completion
@@ -952,11 +884,6 @@ components:
         * `api` - API
         * `slack` - Slack
         * `commcare_connect` - CommCare Connect
-    RoleBe7Enum:
-      enum:
-      - assistant
-      type: string
-      description: '* `assistant` - assistant'
     Team:
       type: object
       properties:

@@ -61,6 +61,20 @@ def new_turn_message(request, experiment_id: uuid):
     return HttpResponse()
 
 
+new_api_message_request_serializer = inline_serializer(
+    "NewAPIMessage",
+    fields={
+        "message": serializers.CharField(label="User message"),
+        "session": serializers.CharField(required=False, label="Optional session ID"),
+    },
+)
+
+new_api_message_response_serializer = inline_serializer(
+    "NewAPIMessageResponse",
+    fields={"response": serializers.CharField(label="AI response")},
+)
+
+
 def new_api_message_schema(versioned: bool):
     operation_id = "new_api_message"
     summary = "New API Message"
@@ -85,25 +99,12 @@ def new_api_message_schema(versioned: bool):
             )
         )
 
-    request_serializer = inline_serializer(
-        "NewAPIMessage",
-        fields={
-            "message": serializers.CharField(label="User message"),
-            "session": serializers.CharField(required=False, label="Optional session ID"),
-        },
-    )
-
-    response_serializer = inline_serializer(
-        "NewAPIMessageResponse",
-        fields={"response": serializers.CharField(label="AI response")},
-    )
-
     return extend_schema(
         operation_id=operation_id,
         summary=summary,
         tags=["Channels"],
-        request=request_serializer,
-        responses={200: response_serializer},
+        request=new_api_message_request_serializer,
+        responses={200: new_api_message_response_serializer},
         parameters=parameters,
     )
 
@@ -111,12 +112,16 @@ def new_api_message_schema(versioned: bool):
 @new_api_message_schema(versioned=False)
 @api_view(["POST"])
 def new_api_message(request, experiment_id: uuid):
-    return new_api_message_versioned(request._request, experiment_id)
+    return new_api_message_versioned(request, experiment_id)
 
 
 @new_api_message_schema(versioned=True)
 @api_view(["POST"])
 def new_api_message_versioned(request, experiment_id: uuid, version=None):
+    return new_api_message_versioned(request, experiment_id, version)
+
+
+def _new_api_message(request, experiment_id: uuid, version=None):
     """Chat with an experiment."""
     message_data = request.data.copy()
     participant_id = request.user.email

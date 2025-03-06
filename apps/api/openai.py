@@ -12,12 +12,65 @@ from rest_framework.response import Response
 from apps.api.serializers import ExperimentSessionCreateSerializer, MessageSerializer
 from apps.channels.tasks import handle_api_message
 
+create_chat_completion_request = inline_serializer(
+    "CreateChatCompletionRequest", {"messages": MessageSerializer(many=True)}
+)
+
+create_chat_completion_response = inline_serializer(
+    "CreateChatCompletionResponse",
+    {
+        "id": serializers.CharField(),
+        "choices": inline_serializer(
+            "ChatCompletionResponseChoices",
+            {
+                "finish_reason": serializers.CharField(),
+                "index": serializers.IntegerField(),
+                "message": inline_serializer(
+                    "ChatCompletionResponseMessage",
+                    {
+                        "role": serializers.ChoiceField(choices=["assistant"]),
+                        "content": serializers.CharField(),
+                    },
+                ),
+            },
+            many=True,
+        ),
+        "created": serializers.IntegerField(),
+        "model": serializers.CharField(),
+        "object": serializers.ChoiceField(choices=["chat.completion"]),
+    },
+)
+
 
 def chat_completions_schema(versioned: bool):
     operation_id = "openai_chat_completions"
     summary = "Chat Completions API for Experiments"
+    base_url = "https://chatbots.dimagi.com/api/openai/{experiment_id}"
+
+    parameters = [
+        OpenApiParameter(
+            name="experiment_id",
+            type=OpenApiTypes.STR,
+            location=OpenApiParameter.PATH,
+            description="Experiment ID",
+        ),
+    ]
+
+    if versioned:
+        operation_id = f"{operation_id}_versioned"
+        summary = "Versioned Chat Completions API for Experiments"
+        base_url = "https://chatbots.dimagi.com/api/openai/{experiment_id}/v{version}"
+        parameters.append(
+            OpenApiParameter(
+                name="version",
+                type=OpenApiTypes.STR,
+                location=OpenApiParameter.QUERY,
+                description="Version of experiment",
+            )
+        )
+
     description = textwrap.dedent(
-        """
+        f"""
         Use OpenAI's client to send messages to the experiment and get responses. This will
         create a new session in the experiment with all the provided messages
         and return the response from the experiment.
@@ -31,14 +84,14 @@ def chat_completions_schema(versioned: bool):
 
         client = OpenAI(
             api_key="your API key",
-            base_url=f"https://chatbots.dimagi.com/api/openai/{experiment_id}",
+            base_url=f"{base_url}",
         )
 
         completion = client.chat.completions.create(
             model="anything",
             messages=[
-                {"role": "assistant", "content": "How can I help you today?"},
-                {"role": "user", "content": "I need help with something."},
+                {{"role": "assistant", "content": "How can I help you today?"}},
+                {{"role": "user", "content": "I need help with something."}},
             ],
         )
 
@@ -46,60 +99,14 @@ def chat_completions_schema(versioned: bool):
         ```
         """
     )
-    parameters = [
-        OpenApiParameter(
-            name="experiment_id",
-            type=OpenApiTypes.STR,
-            location=OpenApiParameter.PATH,
-            description="Experiment ID",
-        ),
-    ]
-    if versioned:
-        operation_id = f"{operation_id}_versioned"
-        summary = "Versioned Chat Completions API for Experiments"
-        parameters.append(
-            OpenApiParameter(
-                name="version",
-                type=OpenApiTypes.STR,
-                location=OpenApiParameter.QUERY,
-                description="Version of experiment",
-            )
-        )
+
     return extend_schema(
         operation_id=operation_id,
         summary=summary,
         description=description,
         tags=["OpenAI"],
-        request=inline_serializer(
-            "CreateChatCompletionRequest",
-            {"messages": MessageSerializer(many=True)},
-        ),
-        responses={
-            200: inline_serializer(
-                "CreateChatCompletionResponse",
-                {
-                    "id": serializers.CharField(),
-                    "choices": inline_serializer(
-                        "ChatCompletionResponseChoices",
-                        {
-                            "finish_reason": serializers.CharField(),
-                            "index": serializers.IntegerField(),
-                            "message": inline_serializer(
-                                "ChatCompletionResponseMessage",
-                                {
-                                    "role": serializers.ChoiceField(choices=["assistant"]),
-                                    "content": serializers.CharField(),
-                                },
-                            ),
-                        },
-                        many=True,
-                    ),
-                    "created": serializers.IntegerField(),
-                    "model": serializers.CharField(),
-                    "object": serializers.ChoiceField(choices=["chat.completion"]),
-                },
-            )
-        },
+        request=create_chat_completion_request,
+        responses={200: create_chat_completion_response},
         parameters=parameters,
     )
 
@@ -107,12 +114,16 @@ def chat_completions_schema(versioned: bool):
 @chat_completions_schema(versioned=False)
 @api_view(["POST"])
 def chat_completions(request, experiment_id: uuid.UUID):
-    return chat_completions_version(request._request, experiment_id)
+    return chat_completions_version(request, experiment_id)
 
 
 @chat_completions_schema(versioned=True)
 @api_view(["POST"])
 def chat_completions_version(request, experiment_id: uuid.UUID, version=None):
+    _chat_completions(request, experiment_id, version)
+
+
+def _chat_completions(request, experiment_id: uuid.UUID, version=None):
     try:
         messages = [_convert_message(message) for message in request.data.get("messages", [])]
     except APIException as e:
