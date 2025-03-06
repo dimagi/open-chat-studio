@@ -1,9 +1,10 @@
 import json
 from datetime import datetime
 
-from django.db.models import Exists, OuterRef, Q
+from django.db.models import Count, Exists, OuterRef, Q
 
 from apps.chat.models import Chat, ChatMessage
+from apps.experiments.models import ExperimentSession
 
 
 def build_participant_filter(operator, value):
@@ -42,10 +43,17 @@ def build_tags_filter(operator, value):
         if operator == "any of":
             return Q(chat__tags__name__in=selected_tags)
         elif operator == "all of":
-            conditions = Q()
-            for tag in selected_tags:
-                conditions &= Q(chat__tags__name=tag)
-            return conditions
+            return Q(
+                chat_id__in=ExperimentSession.objects.filter(chat__tags__name__in=selected_tags)
+                .values("id")
+                .annotate(
+                    matching_tag_count=Count(
+                        "chat__tags__name", filter=Q(chat__tags__name__in=selected_tags), distinct=True
+                    )
+                )
+                .filter(matching_tag_count=len(selected_tags))
+                .values_list("id", flat=True)
+            )
     except json.JSONDecodeError:
         pass
     return None
