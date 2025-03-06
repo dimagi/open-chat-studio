@@ -172,11 +172,11 @@ def test_llm_with_prompt_response(
 def test_render_template(pipeline):
     nodes = [
         start_node(),
-        render_template_node("{{ thing }} is cool"),
+        render_template_node("{{ input }} is cool"),
         end_node(),
     ]
     assert (
-        create_runnable(pipeline, nodes).invoke(PipelineState(messages=[{"thing": "Cycling"}]))["messages"][-1]
+        create_runnable(pipeline, nodes).invoke(PipelineState(messages=[{"input": "Cycling"}]))["messages"][-1]
         == "Cycling is cool"
     )
 
