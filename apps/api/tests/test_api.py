@@ -255,24 +255,25 @@ def test_update_participant_schedules(experiment):
     updated_schedules = list(
         experiment.scheduled_messages.filter(participant__identifier=identifier).order_by("next_trigger_date")
     )
-    assert len(updated_schedules) == 2
-    assert updated_schedules[0].custom_schedule_params == {
+    assert len(updated_schedules) == 3
+    assert updated_schedules[0].cancelled_at is not None
+    assert updated_schedules[1].custom_schedule_params == {
         "name": "schedule2 updated",
         "prompt_text": "email john smith",
         "repetitions": 1,
         "frequency": 1,
         "time_period": "days",
     }
-    assert updated_schedules[0].next_trigger_date == schedules[1].next_trigger_date
+    assert updated_schedules[1].next_trigger_date == schedules[1].next_trigger_date
 
-    assert updated_schedules[1].custom_schedule_params == {
+    assert updated_schedules[2].custom_schedule_params == {
         "name": "schedule3",
         "prompt_text": "don't forget to floss",
         "repetitions": 1,
         "frequency": 1,
         "time_period": "days",
     }
-    assert updated_schedules[1].next_trigger_date == trigger_date3
+    assert updated_schedules[2].next_trigger_date == trigger_date3
 
 
 def _setup_channel_participant(experiment, identifier, channel_platform, system_metadata=None):
