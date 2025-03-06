@@ -396,7 +396,7 @@ def test_render_template_with_context_keys(pipeline, experiment_session):
         experiment_session=experiment_session,
         messages=["Cycling"],
         temp_state={"my_key": "example_key"},
-        participant_data=participant_data,
+        context={"participant_data": participant_data},
     )
     result = create_runnable(pipeline, nodes).invoke(state)
     assert result["messages"][-1] == ("input: Cycling, temp_state.my_key: example_key, participant_id: participant_123")
