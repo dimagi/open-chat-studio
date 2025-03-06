@@ -846,7 +846,17 @@ class Experiment(BaseTeamModel, VersionsMixin, CustomActionOperationMixin):
             return self.trace_provider.get_service()
 
     def get_api_url(self):
-        return absolute_url(reverse("api:openai-chat-completions", args=[self.public_id]))
+        if self.is_working_version:
+            return absolute_url(reverse("api:openai-chat-completions", args=[self.public_id]))
+        else:
+            working_version = self.working_version
+            return absolute_url(
+                reverse("api:openai-chat-completions-versioned", args=[working_version.public_id, self.version_number])
+            )
+
+    @property
+    def api_url(self):
+        return self.get_api_url()
 
     @transaction.atomic()
     def create_new_version(self, version_description: str | None = None, make_default: bool = False):

@@ -61,36 +61,67 @@ def new_turn_message(request, experiment_id: uuid):
     return HttpResponse()
 
 
-@extend_schema(
-    operation_id="new_api_message",
-    summary="New API Message",
-    tags=["Channels"],
-    request=inline_serializer(
-        "NewAPIMessage",
-        fields={
-            "message": serializers.CharField(label="User message"),
-            "session": serializers.CharField(required=False, label="Optional session ID"),
-        },
-    ),
-    responses={
-        200: inline_serializer(
-            "NewAPIMessageResponse",
-            fields={
-                "response": serializers.CharField(label="AI response"),
-            },
-        )
+new_api_message_request_serializer = inline_serializer(
+    "NewAPIMessage",
+    fields={
+        "message": serializers.CharField(label="User message"),
+        "session": serializers.CharField(required=False, label="Optional session ID"),
     },
-    parameters=[
+)
+
+new_api_message_response_serializer = inline_serializer(
+    "NewAPIMessageResponse",
+    fields={"response": serializers.CharField(label="AI response")},
+)
+
+
+def new_api_message_schema(versioned: bool):
+    operation_id = "new_api_message"
+    summary = "New API Message"
+    parameters = [
         OpenApiParameter(
             name="experiment_id",
             type=OpenApiTypes.STR,
             location=OpenApiParameter.PATH,
             description="Experiment ID",
         ),
-    ],
-)
+    ]
+
+    if versioned:
+        operation_id = f"{operation_id}_versioned"
+        summary = "New API Message Versioned"
+        parameters.append(
+            OpenApiParameter(
+                name="version",
+                type=OpenApiTypes.STR,
+                location=OpenApiParameter.QUERY,
+                description="Version of experiment",
+            )
+        )
+
+    return extend_schema(
+        operation_id=operation_id,
+        summary=summary,
+        tags=["Channels"],
+        request=new_api_message_request_serializer,
+        responses={200: new_api_message_response_serializer},
+        parameters=parameters,
+    )
+
+
+@new_api_message_schema(versioned=False)
 @api_view(["POST"])
 def new_api_message(request, experiment_id: uuid):
+    return _new_api_message(request, experiment_id)
+
+
+@new_api_message_schema(versioned=True)
+@api_view(["POST"])
+def new_api_message_versioned(request, experiment_id: uuid, version=None):
+    return _new_api_message(request, experiment_id, version)
+
+
+def _new_api_message(request, experiment_id: uuid, version=None):
     """Chat with an experiment."""
     message_data = request.data.copy()
     participant_id = request.user.email
@@ -109,17 +140,16 @@ def new_api_message(request, experiment_id: uuid):
             )
         except ExperimentSession.DoesNotExist:
             raise Http404
-
         participant_id = session.participant.identifier
         experiment_channel = session.experiment_channel
         experiment = session.experiment
     else:
         experiment = get_object_or_404(Experiment, public_id=experiment_id, team=request.team)
         experiment_channel = ExperimentChannel.objects.get_team_api_channel(request.team)
-
+    experiment_version = experiment.get_version(version) if version is not None else experiment.default_version
     response = tasks.handle_api_message(
         request.user,
-        experiment.default_version,
+        experiment_version,
         experiment_channel,
         message_data["message"],
         participant_id,

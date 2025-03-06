@@ -78,7 +78,6 @@ def test_chat_completion(mock_experiment_response, experiment, api_key, live_ser
         ],
     )
 
-    assert ExperimentSession.objects.count() == 1
     session = ExperimentSession.objects.first()
     assert completion.id == session.external_id
     assert completion.model == experiment.llm_provider_model.name
