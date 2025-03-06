@@ -278,9 +278,6 @@ class LLMResponseWithPrompt(LLMResponse, HistoryMixin):
         result = chat.invoke(input=input)
         return PipelineState.from_node_output(node_name=self.name, node_id=node_id, output=result.output)
 
-    def has_tools(self) -> bool:
-        return len(self.tools) > 0 or len(self.custom_actions) > 0
-
 
 class SendEmail(PipelineNode):
     """Send the input to the node to the list of addresses provided"""
