@@ -1295,6 +1295,14 @@ class Participant(BaseTeamModel):
             return {"name": self.name}
         return {}
 
+    def update_name_from_data(self, data: dict):
+        """
+        Updates participant name field from a data dictionary.
+        """
+        if "name" in data:
+            self.name = data["name"]
+            self.save(update_fields=["name"])
+
     def __str__(self):
         if self.is_anonymous:
             suffix = str(self.public_id)[:6]
