@@ -381,6 +381,9 @@ def main(input, **kwargs):
 @django_db_with_data(available_apps=("apps.service_providers",))
 @mock.patch("apps.pipelines.nodes.base.PipelineNode.logger", mock.Mock())
 def test_render_template_with_context_keys(pipeline, experiment_session):
+    participant_data = {
+        "identifier": "participant_123",
+    }
     nodes = [
         start_node(),
         render_template_node(
@@ -393,7 +396,7 @@ def test_render_template_with_context_keys(pipeline, experiment_session):
         experiment_session=experiment_session,
         messages=["Cycling"],
         temp_state={"my_key": "example_key"},
-        participant_details={"identifier": "participant_123"},
+        participant_data=participant_data,
     )
     result = create_runnable(pipeline, nodes).invoke(state)
     assert result["messages"][-1] == ("input: Cycling, temp_state.my_key: example_key, participant_id: participant_123")
