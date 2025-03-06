@@ -4,6 +4,7 @@ import secrets
 import uuid
 from datetime import datetime
 from functools import cached_property
+from typing import Self
 from uuid import uuid4
 
 import markdown
@@ -594,6 +595,10 @@ class AgentTools(models.TextChoices):
     DELETE_REMINDER = "delete-reminder", gettext("Delete Reminder")
     MOVE_SCHEDULED_MESSAGE_DATE = "move-scheduled-message-date", gettext("Move Reminder Date")
     UPDATE_PARTICIPANT_DATA = "update-user-data", gettext("Update Participant Data")
+
+    @classmethod
+    def reminder_tools(cls) -> list[Self]:
+        return [cls.RECURRING_REMINDER, cls.ONE_OFF_REMINDER, cls.DELETE_REMINDER, cls.MOVE_SCHEDULED_MESSAGE_DATE]
 
 
 @audit_fields(*model_audit_fields.EXPERIMENT_FIELDS, audit_special_queryset_writes=True)
