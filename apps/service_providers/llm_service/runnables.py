@@ -535,6 +535,8 @@ class AssistantChat(RunnableSerializable[dict, ChainOutput]):
         assistant_runnable._wait_for_run(run_id, thread_id, progress_states=("in_progress", "queued", "cancelling"))
 
     def _get_response(self, assistant_runnable: OpenAIAssistantRunnable, input: dict, config: dict) -> tuple[str, str]:
+        if self.adapter.tools:
+            input["tools"] = []  # all tools are disabled
         response: OpenAIAssistantFinish = assistant_runnable.invoke(input, config)
         return response.thread_id, response.run_id
 

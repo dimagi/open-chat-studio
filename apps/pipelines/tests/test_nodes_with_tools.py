@@ -67,9 +67,10 @@ def test_assistant_node(patched_invoke, disabled_tools):
     assert output_state["messages"][-1] == "hello"
     args = patched_invoke.call_args[0]
     assert patched_invoke.call_count == 1
-    if not disabled_tools or disabled_tools == tools:
-        # TODO: fix for case when all tools are disabled
+    if not disabled_tools:
         assert args[0] == {"content": "Hi there bot", "attachments": [], "instructions": ""}
+    elif disabled_tools == tools:
+        assert args[0] == {"content": "Hi there bot", "attachments": [], "instructions": "", "tools": []}
     elif disabled_tools != tools:
         assert patched_invoke.call_count == 1
         assert len(args[0]["tools"]) == 1
