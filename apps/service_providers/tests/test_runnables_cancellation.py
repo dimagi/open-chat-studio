@@ -39,7 +39,7 @@ def session(fake_llm_service):
 
 
 @pytest.mark.django_db()
-@patch("apps.service_providers.llm_service.adapters.get_allowed_tools")
+@patch("apps.service_providers.llm_service.adapters.get_tools")
 def test_simple_runnable_cancellation(get_tools, session, fake_llm_service):
     get_tools.return_value = []
     runnable = _get_runnable_with_mocked_history(session, SimpleLLMChat)
@@ -47,7 +47,7 @@ def test_simple_runnable_cancellation(get_tools, session, fake_llm_service):
 
 
 @pytest.mark.django_db()
-@patch("apps.service_providers.llm_service.adapters.get_allowed_tools")
+@patch("apps.service_providers.llm_service.adapters.get_tools")
 def test_agent_runnable_cancellation(get_tools, session, fake_llm_service):
     get_tools.return_value = [OneOffReminderTool(experiment_session=session)]
     runnable = _get_runnable_with_mocked_history(session, AgentLLMChat)
