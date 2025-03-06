@@ -308,3 +308,31 @@ def main(input, **kwargs):
     )
     assert create_runnable(pipeline, nodes).invoke(state)["messages"][-1] == "content from file"
     File.objects.get(id=file.id)
+
+
+@django_db_with_data(available_apps=("apps.service_providers",))
+@mock.patch("apps.pipelines.nodes.base.PipelineNode.logger", mock.Mock())
+def test_render_template_with_context_keys(pipeline, experiment_session):
+    template = """
+    input: {{ input }}
+    temp_state.my_key: {{ temp_state.my_key }}
+    participant_id: {{ participant_details.identifier }}
+    """
+    nodes = [
+        start_node(),
+        render_template_node(template),
+        end_node(),
+    ]
+    state = PipelineState(
+        input="UserInput",
+        temp_state={"myKey": "TempStateValue"},
+        experiment_session=mock.Mock(
+            participant=mock.Mock(identifier="Participant123"),
+            participant_data_from_experiment={},
+        ),
+    )
+    result = create_runnable(pipeline, nodes).invoke(state)
+    expected_output = (
+        "input: UserInput\n" "temp_state.my_key: TempStateValue\n" "participant_id: Participant123\n"
+    ).strip()
+    assert result["message"][-1].strip() == expected_output
