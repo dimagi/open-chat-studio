@@ -185,7 +185,7 @@ class PipelineNode(BaseModel, ABC):
 
     @property
     def tools_enabled(self):
-        return self._config.get("configurable", {}).get("disable_tools", False)
+        return not self._config.get("configurable", {}).get("disable_tools", False)
 
 
 class Widgets(StrEnum):
