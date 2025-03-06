@@ -193,7 +193,9 @@ class ExperimentSessionsTable(tables.Table):
 
 
 class ExperimentVersionsTable(tables.Table):
-    version_number = columns.Column(verbose_name="Version Number")
+    version_number = columns.TemplateColumn(
+        template_name="experiments/components/experiment_version_cell.html", verbose_name="Version Number"
+    )
     created_at = columns.Column(verbose_name="Created On", accessor="created_at")
     version_description = columns.Column(verbose_name="Description", default="")
     is_default_version = columns.BooleanColumn(yesno="✓,", verbose_name="Published")
@@ -213,9 +215,6 @@ class ExperimentVersionsTable(tables.Table):
 
     def render_created_at(self, record):
         return record.created_at if record.working_version_id else ""
-
-    def render_version_number(self, record):
-        return "(unreleased)" if record.is_working_version else record.version_number
 
 
 def _get_route_url(url_name, request, record, value):
