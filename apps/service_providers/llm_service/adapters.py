@@ -23,7 +23,7 @@ from apps.service_providers.llm_service.main import LlmService, OpenAIAssistantR
 from apps.service_providers.llm_service.prompt_context import PromptTemplateContext
 
 if TYPE_CHECKING:
-    from apps.pipelines.nodes.nodes import AssistantNode
+    from apps.pipelines.nodes.nodes import AssistantNode, LLMResponseWithPrompt
     from apps.service_providers.models import LlmProviderModel
 
 
@@ -108,7 +108,7 @@ class ChatAdapter(BaseAdapter):
     def for_pipeline(
         cls,
         session: ExperimentSession,
-        node: "AssistantNode",
+        node: "LLMResponseWithPrompt",
         llm_service: LlmService,
         provider_model: "LlmProviderModel",
         tools: list,

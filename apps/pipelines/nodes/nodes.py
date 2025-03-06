@@ -256,16 +256,18 @@ class LLMResponseWithPrompt(LLMResponse, HistoryMixin):
         chat_adapter = ChatAdapter.for_pipeline(
             session=session, node=self, llm_service=self.get_llm_service(), provider_model=provider_model, tools=tools
         )
-        if self.tools_enabled():
+        if self.has_tools() and self.tools_enabled():
             chat = AgentLLMChat(adapter=chat_adapter, history_manager=history_manager)
         else:
+            if self.has_tools():
+                self.logger.info("Tools have been disabled")
             chat = SimpleLLMChat(adapter=chat_adapter, history_manager=history_manager)
 
         # Invoke runnable
         result = chat.invoke(input=input)
         return PipelineState.from_node_output(node_name=self.name, node_id=node_id, output=result.output)
 
-    def tools_enabled(self) -> bool:
+    def has_tools(self) -> bool:
         return len(self.tools) > 0 or len(self.custom_actions) > 0
 
 
