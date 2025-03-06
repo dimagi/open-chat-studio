@@ -381,7 +381,8 @@ def main(input, **kwargs):
 @django_db_with_data(available_apps=("apps.service_providers",))
 @mock.patch("apps.pipelines.nodes.base.PipelineNode.logger", mock.Mock())
 def test_render_template_with_context_keys(pipeline, experiment_session):
-    experiment_session.participant_data_from_experiment = lambda: {"identifier": "participant_123"}
+    mock_participant_details = {"identifier": "participant_123"}
+    experiment_session.participant_data_from_experiment = mock.Mock(return_value=mock_participant_details)
 
     nodes = [
         start_node(),
