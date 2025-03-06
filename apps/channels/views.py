@@ -112,13 +112,13 @@ def new_api_message_schema(versioned: bool):
 @new_api_message_schema(versioned=False)
 @api_view(["POST"])
 def new_api_message(request, experiment_id: uuid):
-    return new_api_message_versioned(request, experiment_id)
+    return _new_api_message(request, experiment_id)
 
 
 @new_api_message_schema(versioned=True)
 @api_view(["POST"])
 def new_api_message_versioned(request, experiment_id: uuid, version=None):
-    return new_api_message_versioned(request, experiment_id, version)
+    return _new_api_message(request, experiment_id, version)
 
 
 def _new_api_message(request, experiment_id: uuid, version=None):
