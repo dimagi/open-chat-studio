@@ -1,6 +1,7 @@
 import datetime
 import inspect
 import json
+import logging
 import random
 import time
 from typing import Literal
@@ -741,9 +742,11 @@ class AssistantNode(PipelineNode):
 
         history_manager = PipelineHistoryManager.for_assistant()
         adapter = AssistantAdapter.for_pipeline(session=session, node=self, trace_service=trace_service)
-        if assistant.tools_enabled:
+        if assistant.tools_enabled and self.tools_enabled:
             return AgentAssistantChat(adapter=adapter, history_manager=history_manager)
         else:
+            if assistant.tools_enabled:
+                logging.info("Tools have been disabled")
             return AssistantChat(adapter=adapter, history_manager=history_manager)
 
 
