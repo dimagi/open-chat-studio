@@ -44,7 +44,7 @@ def notify_users_of_violation(session_id: int, safety_layer_id: int):
 def get_bot(session: ExperimentSession, experiment: Experiment | None = None, disable_tools: bool = False):
     experiment = experiment or session.experiment_version
     if experiment.pipeline_id:
-        return PipelineBot(session, experiment=experiment, disable_tools=disable_tools)
+        return PipelineBot(session, experiment=experiment, disable_reminder_tools=disable_tools)
     return TopicBot(session, experiment, disable_tools=disable_tools)
 
 
@@ -284,11 +284,11 @@ class SafetyBot:
 
 
 class PipelineBot:
-    def __init__(self, session: ExperimentSession, experiment: Experiment, disable_tools=False):
+    def __init__(self, session: ExperimentSession, experiment: Experiment, disable_reminder_tools=False):
         self.experiment = experiment
         self.session = session
         self.ai_message_id = None
-        self.disable_tools = disable_tools
+        self.disable_reminder_tools = disable_reminder_tools
 
     def process_input(self, user_input: str, save_input_to_history=True, attachments: list["Attachment"] | None = None):
         attachments = attachments or []
@@ -302,7 +302,7 @@ class PipelineBot:
             ),
             self.session,
             save_input_to_history=save_input_to_history,
-            disable_tools=self.disable_tools,
+            disable_reminder_tools=self.disable_reminder_tools,
         )
         self.ai_message_id = output["ai_message_id"]
         return output["messages"][-1]

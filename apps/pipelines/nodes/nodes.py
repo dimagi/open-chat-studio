@@ -255,13 +255,23 @@ class LLMResponseWithPrompt(LLMResponse, HistoryMixin):
         node = Node.objects.get(flow_id=node_id, pipeline__version_number=pipeline_version)
         tools = get_node_tools(node, session)
         chat_adapter = ChatAdapter.for_pipeline(
-            session=session, node=self, llm_service=self.get_llm_service(), provider_model=provider_model, tools=tools
+            session=session,
+            node=self,
+            llm_service=self.get_llm_service(),
+            provider_model=provider_model,
+            tools=tools,
+            disabled_tools=self.disabled_tools,
         )
-        if self.has_tools() and self.tools_enabled():
+
+        allowed_tools = chat_adapter.get_allowed_tools()
+        if len(tools) != len(allowed_tools):
+            self.logger.info(
+                "Some tools have been disabled: %s", [tool.name for tool in tools if tool not in allowed_tools]
+            )
+
+        if allowed_tools:
             chat = AgentLLMChat(adapter=chat_adapter, history_manager=history_manager)
         else:
-            if self.has_tools():
-                self.logger.info("Tools have been disabled")
             chat = SimpleLLMChat(adapter=chat_adapter, history_manager=history_manager)
 
         # Invoke runnable
@@ -741,8 +751,17 @@ class AssistantNode(PipelineNode):
             trace_service.initialize_from_callback_manager(self._config.get("callbacks"))
 
         history_manager = PipelineHistoryManager.for_assistant()
-        adapter = AssistantAdapter.for_pipeline(session=session, node=self, trace_service=trace_service)
-        if assistant.tools_enabled and self.tools_enabled:
+        adapter = AssistantAdapter.for_pipeline(
+            session=session, node=self, trace_service=trace_service, disabled_tools=self.disabled_tools
+        )
+
+        allowed_tools = adapter.get_allowed_tools()
+        if len(adapter.tools) != len(allowed_tools):
+            self.logger.info(
+                "Some tools have been disabled: %s", [tool.name for tool in adapter.tools if tool not in allowed_tools]
+            )
+
+        if allowed_tools:
             return AgentAssistantChat(adapter=adapter, history_manager=history_manager)
         else:
             if assistant.tools_enabled:

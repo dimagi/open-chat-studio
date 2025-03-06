@@ -14,6 +14,7 @@ from functools import cached_property
 from typing import TYPE_CHECKING, Self
 
 from langchain_core.prompts import PromptTemplate, get_template_variables
+from langchain_core.tools import BaseTool
 
 from apps.assistants.models import OpenAiAssistant
 from apps.chat.agent.tools import get_assistant_tools, get_tools
@@ -55,7 +56,9 @@ class BaseAdapter(metaclass=ABCMeta):
         context["input"] = input
         return template.format(**context)
 
-    def get_tools(self):
+    def get_allowed_tools(self):
+        if self.disabled_tools:
+            return [tool for tool in self.tools if tool.name not in self.disabled_tools]
         return self.tools
 
 
@@ -68,7 +71,8 @@ class ChatAdapter(BaseAdapter):
         temperature: float,
         prompt_text: str,
         max_token_limit: int,
-        tools: list = None,
+        tools: list[BaseTool] = None,
+        disabled_tools: set[str] = None,
         input_formatter: str | None = None,
         source_material_id: int | None = None,
         trace_service=None,
@@ -81,6 +85,7 @@ class ChatAdapter(BaseAdapter):
         self.prompt_text = prompt_text
         self.max_token_limit = max_token_limit
         self.tools = tools or []
+        self.disabled_tools = disabled_tools
         self.input_formatter = input_formatter
         self.source_material_id = source_material_id
         self.trace_service = trace_service
@@ -99,6 +104,7 @@ class ChatAdapter(BaseAdapter):
             prompt_text=experiment.prompt_text,
             max_token_limit=experiment.max_token_limit,
             tools=get_tools(session, experiment=experiment),
+            disabled_tools=None,  # not supported for simple experiments
             input_formatter=experiment.input_formatter,
             source_material_id=experiment.source_material_id,
             trace_service=trace_service,
@@ -111,7 +117,8 @@ class ChatAdapter(BaseAdapter):
         node: "LLMResponseWithPrompt",
         llm_service: LlmService,
         provider_model: "LlmProviderModel",
-        tools: list,
+        tools: list[BaseTool],
+        disabled_tools: set[str] = None,
     ) -> Self:
         return cls(
             session=session,
@@ -121,6 +128,7 @@ class ChatAdapter(BaseAdapter):
             prompt_text=node.prompt,
             max_token_limit=provider_model.max_token_limit,
             tools=tools,
+            disabled_tools=disabled_tools,
             input_formatter="{input}",
             source_material_id=node.source_material_id,
             trace_service=session.experiment.trace_service,
@@ -152,6 +160,7 @@ class AssistantAdapter(BaseAdapter):
         input_formatter: str | None = None,
         trace_service=None,
         save_message_metadata_only: bool = False,
+        disabled_tools: set[str] = None,
     ):
         self.session = session
         self.assistant = assistant
@@ -167,6 +176,7 @@ class AssistantAdapter(BaseAdapter):
         self.team = session.team
 
         self.tools = get_assistant_tools(assistant, experiment_session=session)
+        self.disabled_tools = disabled_tools
         self.template_context = PromptTemplateContext(session, source_material_id=None)
 
     @staticmethod
@@ -177,10 +187,13 @@ class AssistantAdapter(BaseAdapter):
             citations_enabled=experiment.citations_enabled,
             input_formatter=experiment.input_formatter,
             trace_service=trace_service,
+            disabled_tools=None,  # not supported for simple experiments
         )
 
     @staticmethod
-    def for_pipeline(session: ExperimentSession, node: "AssistantNode", trace_service=None) -> Self:
+    def for_pipeline(
+        session: ExperimentSession, node: "AssistantNode", trace_service=None, disabled_tools: set[str] = None
+    ) -> Self:
         assistant = OpenAiAssistant.objects.get(id=node.assistant_id)
         return AssistantAdapter(
             session=session,
@@ -189,6 +202,7 @@ class AssistantAdapter(BaseAdapter):
             input_formatter=node.input_formatter,
             trace_service=trace_service,
             save_message_metadata_only=True,
+            disabled_tools=disabled_tools,
         )
 
     @cached_property

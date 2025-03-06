@@ -221,8 +221,9 @@ class Pipeline(BaseTeamModel, VersionsMixin):
         session: ExperimentSession,
         save_run_to_history=True,
         save_input_to_history=True,
-        disable_tools=False,
+        disable_reminder_tools=False,
     ) -> dict:
+        from apps.experiments.models import AgentTools
         from apps.pipelines.graph import PipelineGraph
 
         runnable = PipelineGraph.build_runnable_from_pipeline(self)
@@ -242,7 +243,7 @@ class Pipeline(BaseTeamModel, VersionsMixin):
             config = RunnableConfig(
                 callbacks=callbacks,
                 configurable={
-                    "disable_tools": disable_tools,
+                    "disabled_tools": AgentTools.reminder_tools() if disable_reminder_tools else [],
                 },
             )
             output = runnable.invoke(input, config=config)

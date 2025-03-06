@@ -67,8 +67,8 @@ def test_tool_artifact_response(session, fake_llm_service):
 
 
 def get_runnable(session, tool):
-    with patch("apps.service_providers.llm_service.adapters.get_tools") as get_tools:
-        get_tools.return_value = [tool]
+    with patch("apps.service_providers.llm_service.adapters.get_allowed_tools") as get_allowed_tools:
+        get_allowed_tools.return_value = [tool]
         history_manager = ExperimentHistoryManager.for_llm_chat(session=session, experiment=session.experiment)
         adapter = ChatAdapter.for_experiment(session.experiment, session)
         runnable = AgentLLMChat(adapter=adapter, history_manager=history_manager)

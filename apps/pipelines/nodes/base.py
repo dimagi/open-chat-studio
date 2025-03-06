@@ -184,8 +184,9 @@ class PipelineNode(BaseModel, ABC):
         return noop_logger()[0]
 
     @property
-    def tools_enabled(self):
-        return not self._config.get("configurable", {}).get("disable_tools", False)
+    def disabled_tools(self) -> set[str] | None:
+        if disabled := self._config.get("configurable", {}).get("disabled_tools"):
+            return set(disabled)
 
 
 class Widgets(StrEnum):
