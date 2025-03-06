@@ -71,33 +71,25 @@ class RenderTemplate(PipelineNode):
         try:
             content = {
                 "input": input,
-                "messages": state.get("messages", []),
                 "temp_state": state.get("temp_state", {}),
             }
 
-            if state.get("messages"):
-                for message in state["messages"]:
-                    if isinstance(message, dict):
-                        content.update(message)
-                    else:
-                        content["input"] = message
-
             if hasattr(state, "experiment_session") and state.experiment_session:
-                participant = state.experiment_session.participant
+                participant = getattr(state.experiment_session, "participant", None)
                 content.update(
                     {
                         "participant_details": {
-                            "identifier": participant.identifier,
-                            "platform": participant.platform,
+                            "identifier": getattr(participant, "identifier", None),
+                            "platform": getattr(participant, "platform", None),
                         },
-                        "participant_data": json.dumps(
-                            state.experiment_session.participant_data_from_experiment, indent=4
-                        ),
+                        "participant_data": getattr(state.experiment_session, "participant_data_from_experiment", {}),
                         "participant_schedules": participant.get_schedules_for_experiment(
                             state.experiment_session.experiment,
                             as_dict=True,
                             include_complete=True,
-                        ),
+                        )
+                        if participant
+                        else [],
                     }
                 )
 
