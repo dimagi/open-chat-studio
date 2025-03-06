@@ -312,6 +312,7 @@ def main(input, **kwargs):
 
 @django_db_with_data(available_apps=("apps.service_providers",))
 @mock.patch("apps.pipelines.nodes.base.PipelineNode.logger", mock.Mock())
+
 def test_render_template_with_context_keys(pipeline, experiment_session):
     participant_data = ParticipantData.objects.create(
         team=experiment_session.team,
@@ -336,3 +337,69 @@ def test_render_template_with_context_keys(pipeline, experiment_session):
     assert result["messages"][-1] == ("input: Cycling, temp_state.my_key: example_key, participant_id: participant_123")
     participant_data.refresh_from_db()
     assert participant_data.data["identifier"] == "participant_123"
+
+def test_participant_data_proxy_get_includes_global_data(pipeline, experiment_session):
+    """
+    Test that the get method of ParticipantDataProxy returns a merged dictionary
+    that includes both the ParticipantData.data and the participant's global_data.
+    """
+    experiment_session.participant.name = "Dimagi"
+    experiment_session.participant.save()
+
+    ParticipantData.objects.create(
+        team=experiment_session.team,
+        experiment=experiment_session.experiment,
+        participant=experiment_session.participant,
+        data={"favorite_color": "green", "favorite_number": 42},
+    )
+    code = """
+def main(input, **kwargs):
+    data = get_participant_data()
+    return f"Name: {data.get('name')}, Color: {data.get('favorite_color')}"
+    """
+    nodes = [
+        start_node(),
+        code_node(code),
+        end_node(),
+    ]
+    assert (
+        create_runnable(pipeline, nodes).invoke(PipelineState(experiment_session=experiment_session, messages=["hi"]))[
+            "messages"
+        ][-1]
+        == "Name: Dimagi, Color: green"
+    )
+
+
+@django_db_with_data(available_apps=("apps.service_providers",))
+@mock.patch("apps.pipelines.nodes.base.PipelineNode.logger", mock.Mock())
+def test_participant_data_proxy_set_updates_global_data(pipeline, experiment_session):
+    experiment_session.participant.name = "Original Boring Name"
+    experiment_session.participant.save()
+    ParticipantData.objects.create(
+        team=experiment_session.team,
+        experiment=experiment_session.experiment,
+        participant=experiment_session.participant,
+        data={},
+    )
+    code = """
+def main(input, **kwargs):
+    data = get_participant_data()
+    data["name"] = "Updated Exciting Name"
+    set_participant_data(data)
+    updated = get_participant_data()
+    return f"Name: {updated.get('name')}"
+    """
+    nodes = [
+        start_node(),
+        code_node(code),
+        end_node(),
+    ]
+    assert (
+        create_runnable(pipeline, nodes).invoke(PipelineState(experiment_session=experiment_session, messages=["hi"]))[
+            "messages"
+        ][-1]
+        == "Name: Updated Exciting Name"
+    )
+    experiment_session.participant.refresh_from_db()
+    assert experiment_session.participant.name == "Updated Exciting Name"
+

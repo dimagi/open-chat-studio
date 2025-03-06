@@ -9,8 +9,6 @@ from uuid import uuid4
 import markdown
 import pytz
 from django.conf import settings
-from django.contrib.contenttypes.fields import GenericForeignKey, GenericRelation
-from django.contrib.contenttypes.models import ContentType
 from django.contrib.postgres.fields import ArrayField
 from django.core.exceptions import FieldDoesNotExist
 from django.core.validators import MaxValueValidator, MinValueValidator, validate_email
@@ -707,7 +705,6 @@ class Experiment(BaseTeamModel, VersionsMixin, CustomActionOperationMixin):
         help_text="This tells the bot when to reply with voice messages",
     )
     files = models.ManyToManyField("files.File", blank=True)
-    participant_data = GenericRelation("experiments.ParticipantData", related_query_name="bots")
     children = models.ManyToManyField(
         "Experiment", blank=True, through="ExperimentRoute", symmetrical=False, related_name="parents"
     )
@@ -1298,6 +1295,14 @@ class Participant(BaseTeamModel):
             return {"name": self.name}
         return {}
 
+    def update_name_from_data(self, data: dict):
+        """
+        Updates participant name field from a data dictionary.
+        """
+        if "name" in data:
+            self.name = data["name"]
+            self.save(update_fields=["name"])
+
     def __str__(self):
         if self.is_anonymous:
             suffix = str(self.public_id)[:6]
@@ -1462,10 +1467,6 @@ class ParticipantData(BaseTeamModel):
     objects = ParticipantDataObjectManager()
     participant = models.ForeignKey(Participant, on_delete=models.CASCADE, related_name="data_set")
     data = encrypt(models.JSONField(default=dict))
-    content_type = models.ForeignKey(ContentType, on_delete=models.CASCADE, null=True)
-    # TODO. Remove object_id and content_object once production is stable
-    object_id = models.PositiveIntegerField(null=True)
-    content_object = GenericForeignKey("content_type", "object_id")
     experiment = models.ForeignKey(Experiment, on_delete=models.CASCADE)
     system_metadata = models.JSONField(default=dict)
     encryption_key = encrypt(

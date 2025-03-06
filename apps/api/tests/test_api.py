@@ -152,7 +152,7 @@ def test_update_participant_data_returns_404():
     assert response.status_code == 404
     assert response.json() == {"errors": [{"message": f"Experiment {experiment2.public_id} not found"}]}
     # Assert that nothing was created
-    assert experiment.participant_data.filter(participant=participant).exists() is False
+    assert experiment.participantdata_set.filter(participant=participant).exists() is False
 
 
 @pytest.mark.django_db()
