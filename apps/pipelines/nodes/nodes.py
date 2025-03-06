@@ -26,7 +26,6 @@ from RestrictedPython import compile_restricted, safe_builtins, safe_globals
 from apps.assistants.models import OpenAiAssistant
 from apps.chat.agent.tools import get_node_tools
 from apps.chat.conversation import compress_chat_history, compress_pipeline_chat_history
-from apps.chat.models import ChatMessageType
 from apps.experiments.models import ExperimentSession, ParticipantData
 from apps.pipelines.exceptions import PipelineNodeBuildError, PipelineNodeRunError
 from apps.pipelines.models import Node, PipelineChatHistory, PipelineChatHistoryTypes
@@ -734,8 +733,8 @@ class AssistantNode(PipelineNode):
             node_id=node_id,
             output=output,
             message_metadata={
-                "input": runnable.adapter.get_message_metadata(ChatMessageType.HUMAN),
-                "output": runnable.adapter.get_message_metadata(ChatMessageType.AI),
+                "input": runnable.history_manager.input_message_metadata or {},
+                "output": runnable.history_manager.output_message_metadata or {},
             },
         )
 
