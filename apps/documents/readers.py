@@ -4,9 +4,12 @@ import docx
 import pypdf
 from pydantic import BaseModel, Field
 
+from apps.documents.patch_docx import patch_docx
 from apps.files.models import File
 
 logger = logging.getLogger("ocs.documents")
+
+patch_docx()
 
 
 class FileReadException(Exception):
