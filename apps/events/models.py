@@ -7,7 +7,7 @@ from dateutil.relativedelta import relativedelta
 from django.contrib.contenttypes.fields import GenericForeignKey, GenericRelation
 from django.contrib.contenttypes.models import ContentType
 from django.db import models, transaction
-from django.db.models import F, Func, OuterRef, Q, Subquery
+from django.db.models import F, Func, OuterRef, Q, Subquery, functions
 from django.utils import timezone
 
 from apps.chat.models import ChatMessage, ChatMessageType
@@ -333,10 +333,9 @@ class TimeoutTrigger(BaseModel, VersionsMixin):
 
 
 class ScheduledMessageManager(models.Manager):
-    def get_messages_to_fire(self, now):
-        now = now or timezone.now()
+    def get_messages_to_fire(self):
         return (
-            self.filter(is_complete=False, cancelled_at=None, next_trigger_date__lte=now)
+            self.filter(is_complete=False, cancelled_at=None, next_trigger_date__lte=functions.Now())
             .select_related("action")
             .order_by("next_trigger_date")
         )

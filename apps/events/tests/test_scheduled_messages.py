@@ -50,18 +50,20 @@ def test_get_messages_to_fire():
     event_action, params = _construct_event_action(
         frequency=1, time_period=TimePeriod.DAYS, experiment_id=session.experiment.id
     )
-    with freeze_time("2024-04-01"):
+    with freeze_time("2024-04-01"), patch("apps.events.models.functions.Now") as db_time:
         utc_now = timezone.now()
+        db_time.return_value = utc_now
 
         scheduled_message = ScheduledMessageFactory(
             team=session.team, participant=session.participant, action=event_action
         )
         # behind the trigger date
-        pending_messages = ScheduledMessage.objects.get_messages_to_fire(now=utc_now)
+        pending_messages = ScheduledMessage.objects.get_messages_to_fire()
         assert len(pending_messages) == 0
 
         # ahead of the trigger date
-        pending_messages = ScheduledMessage.objects.get_messages_to_fire(now=utc_now + relativedelta(days=2))
+        db_time.return_value = utc_now + relativedelta(days=2)
+        pending_messages = ScheduledMessage.objects.get_messages_to_fire()
         assert len(pending_messages) == 1
         assert pending_messages[0] == scheduled_message
 
@@ -69,7 +71,8 @@ def test_get_messages_to_fire():
         scheduled_message.save()
 
         # Completed messages should not be returned
-        pending_messages = ScheduledMessage.objects.get_messages_to_fire(now=utc_now + relativedelta(days=4))
+        db_time.return_value = utc_now + relativedelta(days=4)
+        pending_messages = ScheduledMessage.objects.get_messages_to_fire()
         assert len(pending_messages) == 0
 
 
@@ -79,18 +82,20 @@ def test_get_messages_to_fire_cancelled():
     event_action, params = _construct_event_action(
         frequency=1, time_period=TimePeriod.DAYS, experiment_id=session.experiment.id
     )
-    with freeze_time("2024-04-01"):
+    with freeze_time("2024-04-01"), patch("apps.events.models.functions.Now") as db_time:
         utc_now = timezone.now()
 
         scheduled_message = ScheduledMessageFactory(
             team=session.team, participant=session.participant, action=event_action
         )
-        pending_messages = ScheduledMessage.objects.get_messages_to_fire(now=utc_now + relativedelta(days=2))
+        db_time.return_value = utc_now + relativedelta(days=2)
+        pending_messages = ScheduledMessage.objects.get_messages_to_fire()
         assert len(pending_messages) == 1
 
         scheduled_message.cancel()
 
-        pending_messages = ScheduledMessage.objects.get_messages_to_fire(now=utc_now + relativedelta(days=2))
+        db_time.return_value = utc_now + relativedelta(days=2)
+        pending_messages = ScheduledMessage.objects.get_messages_to_fire()
         assert len(pending_messages) == 0
 
 
@@ -134,7 +139,7 @@ def test_poll_scheduled_messages(ad_hoc_bot_message, period):
     seconds_offset = 1
     step_delta = delta + relativedelta(seconds=seconds_offset)
 
-    with freeze_time("2024-04-01") as frozen_time, patch("apps.events.tasks.functions.Now") as db_time:
+    with freeze_time("2024-04-01") as frozen_time, patch("apps.events.models.functions.Now") as db_time:
         current_time = db_time.return_value = timezone.now()
         scheduled_message = ScheduledMessageFactory(
             team=session.team, participant=session.participant, action=event_action, experiment=session.experiment
@@ -190,7 +195,7 @@ def test_error_when_sending_sending_message_to_a_user(_set_telegram_webhook, cap
     with (
         caplog.at_level(logging.ERROR),
         patch("apps.experiments.models.ExperimentSession.ad_hoc_bot_message", side_effect=Exception("Oops")),
-        patch("apps.events.tasks.functions.Now") as db_time,
+        patch("apps.events.models.functions.Now") as db_time,
     ):
         sm = ScheduledMessageFactory(
             participant=session.participant, action=event_action, team=session.team, experiment=session.experiment
