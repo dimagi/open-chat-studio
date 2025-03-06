@@ -183,6 +183,10 @@ class PipelineNode(BaseModel, ABC):
                 return handler.logger
         return noop_logger()[0]
 
+    @property
+    def tools_enabled(self):
+        return self._config.get("configurable", {}).get("disable_tools", False)
+
 
 class Widgets(StrEnum):
     expandable_text = "expandable_text"

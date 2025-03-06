@@ -216,7 +216,12 @@ class Pipeline(BaseTeamModel, VersionsMixin):
         return output
 
     def invoke(
-        self, input: PipelineState, session: ExperimentSession, save_run_to_history=True, save_input_to_history=True
+        self,
+        input: PipelineState,
+        session: ExperimentSession,
+        save_run_to_history=True,
+        save_input_to_history=True,
+        disable_tools=False,
     ) -> dict:
         from apps.pipelines.graph import PipelineGraph
 
@@ -234,7 +239,13 @@ class Pipeline(BaseTeamModel, VersionsMixin):
                 )
                 callbacks.append(trace_service_callback)
 
-            output = runnable.invoke(input, config=RunnableConfig(callbacks=callbacks))
+            config = RunnableConfig(
+                callbacks=callbacks,
+                configurable={
+                    "disable_tools": disable_tools,
+                },
+            )
+            output = runnable.invoke(input, config=config)
             output = PipelineState(**output).json_safe()
             pipeline_run.output = output
             if save_run_to_history and session is not None:
