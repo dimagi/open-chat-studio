@@ -172,13 +172,12 @@ def test_llm_with_prompt_response(
 def test_render_template(pipeline):
     nodes = [
         start_node(),
-        render_template_node("{{ thing }} is cool"),
+        render_template_node("{{ input }} is cool"),
         end_node(),
     ]
-    assert (
-        create_runnable(pipeline, nodes).invoke(PipelineState(messages=[{"thing": "Cycling"}]))["messages"][-1]
-        == "Cycling is cool"
-    )
+
+    result = create_runnable(pipeline, nodes).invoke(PipelineState(messages=["Cycling"]))
+    assert result["messages"][-1] == "Cycling is cool"
 
 
 @django_db_with_data(available_apps=("apps.service_providers",))
@@ -208,14 +207,14 @@ def test_branching_pipeline(pipeline, experiment_session):
             "target": template_b["id"],
         },
         {
-            "id": "RenderTemplate-A -> END",
-            "source": template_a["id"],
-            "target": end["id"],
-        },
-        {
             "id": "RenderTemplate-B -> RenderTemplate-C",
             "source": template_b["id"],
             "target": template_c["id"],
+        },
+        {
+            "id": "RenderTemplate-A -> END",
+            "source": template_a["id"],
+            "target": end["id"],
         },
         {
             "id": "RenderTemplate-C -> END",
