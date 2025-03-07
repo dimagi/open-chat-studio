@@ -488,18 +488,18 @@ def trigger_bot_message(request):
     if platform == ChannelPlatform.COMMCARE_CONNECT and not participant_data:
         # The commcare_connect channel requires certain data from the participant_data in order to send messages to th
         # user, which is why we need to check if the participant_data exists
-        return Response({"detail": "Participant not found"}, status=status.HTTP_404_NOT_FOUND)
+        return JsonResponse({"detail": "Participant not found"}, status=status.HTTP_404_NOT_FOUND)
     elif not Participant.objects.filter(identifier=identifier, platform=platform).exists():
-        return Response({"detail": "Participant not found"}, status=status.HTTP_404_NOT_FOUND)
+        return JsonResponse({"detail": "Participant not found"}, status=status.HTTP_404_NOT_FOUND)
 
     if not ExperimentChannel.objects.filter(platform=platform, experiment=experiment).exists():
-        return Response(
+        return JsonResponse(
             {"detail": f"Experiment cannot send messages on the {platform} channel"},
             status=status.HTTP_404_NOT_FOUND,
         )
 
     if platform == ChannelPlatform.COMMCARE_CONNECT and not participant_data.has_consented():
-        return Response({"detail": "User has not given consent"}, status=status.HTTP_400_BAD_REQUEST)
+        return JsonResponse({"detail": "User has not given consent"}, status=status.HTTP_400_BAD_REQUEST)
 
     trigger_bot_message_task.delay(data)
 

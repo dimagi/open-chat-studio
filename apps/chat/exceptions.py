@@ -1,25 +1,22 @@
 class ChatException(Exception):
-    def __init__(self, message):
+    def __init__(self, message=""):
         self.message = message
         super().__init__(self.message)
 
 
 class AudioSynthesizeException(ChatException):
-    def __init__(self, message):
-        super().__init__(message)
+    pass
 
 
 class AudioTranscriptionException(ChatException):
-    def __init__(self, message):
-        super().__init__(message)
+    pass
 
 
 class ChannelException(ChatException):
-    def __init__(self, message):
-        super().__init__(message)
+    pass
 
 
-class ParticipantNotAllowedException(Exception):
+class ParticipantNotAllowedException(ChatException):
     pass
 
 

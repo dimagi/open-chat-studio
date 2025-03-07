@@ -2,6 +2,7 @@
 This test suite is designed to ensure that the base channel functionality is working as
 intended. It utilizes the Telegram channel subclass to serve as a testing framework.
 """
+
 import re
 from unittest.mock import Mock, patch
 
@@ -22,6 +23,7 @@ from apps.experiments.models import (
     ExperimentRoute,
     ExperimentSession,
     Participant,
+    ParticipantData,
     SessionStatus,
     VoiceResponseBehaviours,
 )
@@ -500,11 +502,14 @@ def test_all_channels_can_be_instantiated_from_a_session(platform, twilio_provid
     `ChannelBase.from_experiment_session`. For the sake of ease, we assume all platforms uses the Twilio
     messenging provider.
     """
-    experiment = ExperimentFactory()
-    experiment_channel = ExperimentChannelFactory(
-        messaging_provider=twilio_provider, experiment=experiment, platform=platform
+    session = ExperimentSessionFactory(experiment_channel__platform=platform)
+    ParticipantData.objects.create(
+        team=session.team,
+        experiment=session.experiment,
+        data={},
+        participant=session.participant,
+        system_metadata={"consent": True},
     )
-    session = ExperimentSessionFactory(experiment_channel=experiment_channel)
     channel = ChannelBase.from_experiment_session(session)
     assert type(channel) in ChannelBase.__subclasses__()
 
