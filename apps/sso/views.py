@@ -26,6 +26,7 @@ class LoginEmailForm(BaseLoginForm):
                 "type": "email",
                 "placeholder": _("Email address"),
                 "autocomplete": "email",
+                "autofocus": True,
             }
         ),
     )
@@ -33,7 +34,17 @@ class LoginEmailForm(BaseLoginForm):
 
 class LoginPasswordForm(BaseLoginForm):
     login = forms.EmailField(widget=forms.HiddenInput())
-    password = PasswordField(label=_("Password"), autocomplete="current-password")
+    password = PasswordField(
+        label=_("Password"),
+        widget=forms.PasswordInput(
+            render_value=False,
+            attrs={
+                "placeholder": _("Password"),
+                "autocomplete": "current-password",
+                "autofocus": True,
+            },
+        ),
+    )
 
 
 class CustomLoginView(LoginView):
@@ -74,7 +85,7 @@ class CustomLoginView(LoginView):
         return self.render_to_response(self.get_context_data(form=form))
 
 
-def _redirect_for_sso(request, email):
+def _redirect_for_sso(request, email, for_signup=False):
     app, email = _get_social_app_for_email(email)
     if app:
         provider = app.get_provider(request)
@@ -83,7 +94,10 @@ def _redirect_for_sso(request, email):
         request.session.modified = True
 
         # Redirect to the provider's login URL
-        return redirect(provider.get_login_url(request, process="signup"))
+        kwargs = {}
+        if for_signup:
+            kwargs["process"] = "signup"
+        return redirect(provider.get_login_url(request, **kwargs))
 
 
 def _get_social_app_for_email(email):
@@ -103,7 +117,7 @@ class SignupAfterInvite(SignupView):
             return redirect("web:home")
 
         # if flag_is_active(self.request, "sso_login"):
-        if response := _redirect_for_sso(self.request, self.invitation.email):
+        if response := _redirect_for_sso(self.request, self.invitation.email, for_signup=True):
             return response
         return super().get(request, *args, **kwargs)
 
