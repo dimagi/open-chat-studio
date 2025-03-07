@@ -578,6 +578,9 @@
         },
         removeFilter(index) {
           this.filterData.filters.splice(index, 1);
+          if (this.filterData.filters.length === 0) {
+            this.addFilter();
+          }
           this.triggerFilterChange();
         },
         getActiveFilterCount() {
