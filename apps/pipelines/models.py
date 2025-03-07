@@ -506,8 +506,8 @@ class PipelineChatHistoryTypes(models.TextChoices):
 
 class PipelineChatHistoryModes(models.TextChoices):
     SUMMARIZE = "summarize", "Summarize"
-    TRUNCATE_TOKENS = "truncate tokens", "Truncate Tokens"
-    MAX_HISTORY_LENGTH = "max history length", "Max History Length"
+    TRUNCATE_TOKENS = "truncate_tokens", "Truncate Tokens"
+    MAX_HISTORY_LENGTH = "max_history_length", "Max History Length"
 
 
 class PipelineChatHistory(BaseModel):

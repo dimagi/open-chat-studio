@@ -28,7 +28,7 @@ from apps.chat.conversation import compress_chat_history, compress_pipeline_chat
 from apps.chat.models import ChatMessageType
 from apps.experiments.models import ExperimentSession, ParticipantData
 from apps.pipelines.exceptions import PipelineNodeBuildError, PipelineNodeRunError
-from apps.pipelines.models import Node, PipelineChatHistory, PipelineChatHistoryTypes
+from apps.pipelines.models import Node, PipelineChatHistory, PipelineChatHistoryModes, PipelineChatHistoryTypes
 from apps.pipelines.nodes.base import (
     NodeSchema,
     OptionsSource,
@@ -130,11 +130,9 @@ class HistoryMixin(LLMResponseMixin):
             widget=Widgets.none,
         ),
     )
-    history_mode: str | None = Field(
+    history_mode: PipelineChatHistoryModes = Field(
         None,
-        json_schema_extra=UiSchema(
-            widget=Widgets.none,
-        ),
+        json_schema_extra=UiSchema(widget=Widgets.history_mode, enum_labels=PipelineChatHistoryModes.labels),
     )
     user_max_token_limit: int | None = Field(
         None,

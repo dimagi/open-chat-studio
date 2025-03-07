@@ -16,7 +16,7 @@ from langchain_core.prompts import (
 )
 
 from apps.chat.models import Chat, ChatMessage, ChatMessageType
-from apps.pipelines.models import PipelineChatHistory, PipelineChatMessages
+from apps.pipelines.models import PipelineChatHistory, PipelineChatHistoryModes, PipelineChatMessages
 from apps.utils.prompt import OcsPromptTemplate
 
 SUMMARY_TOO_LARGE_ERROR_MESSAGE = "Unable to compress chat history: existing summary too large"
@@ -206,6 +206,7 @@ def _compress_chat_history(
     )
     return history, last_message, summary
 
+
 def truncate_tokens(history, max_token_limit, llm, input_message_tokens):
     """Removes old messages until the token count is below the max limit."""
     pruned_memory = []
@@ -216,7 +217,7 @@ def truncate_tokens(history, max_token_limit, llm, input_message_tokens):
     return history, pruned_memory
 
 
-def summarize_history(llm, history, max_token_limit, input_message_tokens, summary):
+def summarize_history(llm, history, max_token_limit, input_message_tokens, summary, input_messages):
     pruned_memory = []
     history_tokens = llm.get_num_tokens_from_messages(history)
     summary_tokens = (
@@ -224,11 +225,31 @@ def summarize_history(llm, history, max_token_limit, input_message_tokens, summa
         if summary
         else INITIAL_SUMMARY_TOKENS_ESTIMATE
     )
-    while history and history_tokens + summary_tokens + input_message_tokens > max_token_limit:
-        pruned_memory.append(history.pop(0))
-        history_tokens = llm.get_num_tokens_from_messages(history)
+    first_pass_done = False
+    while (
+        not first_pass_done
+        # Check `_tokens_exceeds_limit` here, since the generated summary can cause a token limit breach
+        or _tokens_exceeds_limit(
+            history, token_count=(history_tokens + summary_tokens + input_message_tokens), limit=max_token_limit
+        )
+    ):
+        first_pass_done = True
+        # Keep removing messages if token limit OR message limit is exceeded
+        while _tokens_exceeds_limit(
+            history, token_count=(history_tokens + summary_tokens + input_message_tokens), limit=max_token_limit
+        ) or _messages_exceeds_limit(history, input_messages):
+            prune_count = 1
+            # Remove the number of messages needed to get to the limit
+            if _messages_exceeds_limit(history, input_messages):
+                prune_count = len(history) + len(input_messages) - MAX_UNCOMPRESSED_MESSAGES
+
+            pruned_messages, history = history[:prune_count], history[prune_count:]
+            pruned_memory.extend(pruned_messages)
+            history_tokens = llm.get_num_tokens_from_messages(history)
+    # Generate a new summary of pruned messages
     summary = _get_new_summary(llm, pruned_memory, summary, max_token_limit)
     return history, pruned_memory, summary
+
 
 def compress_chat_history_from_messages(
     llm, history, keep_history_len: int, max_token_limit: int, input_messages: list, history_mode: str = None
@@ -243,13 +264,13 @@ def compress_chat_history_from_messages(
     history, pruned_memory = history[-keep_history_len:], history[:-keep_history_len]
     latest_message = history[-1] if history else None
     input_message_tokens = llm.get_num_tokens_from_messages(input_messages)
-    if history_mode == "Max History Length":
+    if history_mode == PipelineChatHistoryModes.MAX_HISTORY_LENGTH:
         return history, latest_message, summary
-    elif history_mode == "Truncate Tokens":
+    elif history_mode == PipelineChatHistoryModes.TRUNCATE_TOKENS:
         history, pruned_memory = truncate_tokens(history, max_token_limit, llm, input_message_tokens)
-    elif history_mode == "Summarize" or history_mode == None:
+    elif history_mode == PipelineChatHistoryModes.SUMMARIZE or history_mode == None:
         history, pruned_memory, summary = summarize_history(
-            llm, history, max_token_limit, input_message_tokens, summary
+            llm, history, max_token_limit, input_message_tokens, summary, input_messages
         )
         log.info(
             "Compressed chat history to %s tokens (%s prompt + %s summary + %s history)",

@@ -31,6 +31,8 @@ export function getWidget(name: string, params: PropertySchema) {
       return LlmWidget
     case "history":
       return HistoryTypeWidget
+    case "history_mode":
+      return HistoryModeWidget
     case "keywords":
       return KeywordsWidget
     case "node_name":
@@ -814,9 +816,6 @@ export function HistoryTypeWidget(props: WidgetParams) {
   const historyType = concatenate(props.paramValue);
   const historyName = concatenate(props.nodeParams["history_name"]);
   const historyNameError = props.getNodeFieldError(props.nodeId, "history_name");
-  const userMaxTokenLimit = concatenate(props.nodeParams["user_max_token_limit"]);
-  const initialHistoryMode = concatenate(props.nodeParams["history_mode"]);
-  const [historyMode, setHistoryMode] = useState(initialHistoryMode || "Summarize");
 
   return (
     <>
@@ -849,9 +848,25 @@ export function HistoryTypeWidget(props: WidgetParams) {
       <div className="flex flex-col">
         <small className="text-red-500">{historyNameError}</small>
       </div>
+    </>
+  );
+}
 
+export function HistoryModeWidget(props: WidgetParams) {
+  const options = getSelectOptions(props.schema);
+  const userMaxTokenLimit = concatenate(props.nodeParams["user_max_token_limit"]);
+  const initialHistoryMode = concatenate(props.nodeParams["history_mode"]);
+  const [historyMode, setHistoryMode] = useState(initialHistoryMode || "Summarize");
+   const historyModeHelpTexts: Record<string, string> = {
+    "Summarize": "If the token count exceeds the limit, older messages will be summarized while keeping the last few messages intact.",
+    "Truncate Tokens": "If the token count exceeds the limit, older messages will be removed until the token count is below the limit.",
+    "Max History Length": "The chat history will always be truncated to the last 10 messages. Older messages will not be sent."
+  };
+
+  return (
+    <>
 <div className="flex join">
-      <InputField label="History Mode" help_text="">
+      <InputField label="History Mode" help_text={historyModeHelpTexts[historyMode]}>
         <select
           className="select select-bordered join-item"
           name="history_mode"
@@ -861,16 +876,17 @@ export function HistoryTypeWidget(props: WidgetParams) {
           }}
           value={historyMode}
         >
-          <option value="Summarize">Summarize</option>
-          <option value="Truncate Tokens">Truncate Tokens</option>
-          <option value="Max History Length">Max History Length</option>
+          {options.map((option) => (
+              <option key={option.value} value={option.value}>
+                {option.label}
+              </option>
+            ))}
         </select>
       </InputField>
     </div>
-
-    {(historyMode === "Summarize" || historyMode === "Truncate Tokens") && (
-      <div className="flex join">
-        <InputField label="Max Token Size" help_text="">
+    {(historyMode === "summarize" || historyMode === "truncate_tokens") && (
+      <div className="flex join mb-4">
+        <InputField label="Token Limit" help_text="Maximum number of tokens before messages are summarized or truncated.">
           <input
             className="input input-bordered join-item"
             name="user_max_token_limit"
