@@ -1,11 +1,15 @@
 import logging
 
+import docx
 import pypdf
 from pydantic import BaseModel, Field
 
+from apps.documents.patch_docx import patch_docx
 from apps.files.models import File
 
 logger = logging.getLogger("ocs.documents")
+
+patch_docx()
 
 
 class FileReadException(Exception):
@@ -68,8 +72,13 @@ def read_pdf(file_obj) -> Document:
     return Document(parts=pages)
 
 
+def read_docx(file_obj) -> Document:
+    return Document(parts=[DocumentPart(content=paragraph.text) for paragraph in docx.Document(file_obj).paragraphs])
+
+
 READERS = {
     "application/pdf": read_pdf,
     "text": read_text,
+    "application/vnd.openxmlformats-officedocument.wordprocessingml.document": read_docx,
     None: read_text,
 }

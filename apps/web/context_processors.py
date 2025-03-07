@@ -27,6 +27,7 @@ def project_meta(request):
         "temporary_superuser_access": get_temporary_superuser_access(request),
         "docs_base_url": settings.DOCUMENTATION_BASE_URL,
         "docs_links": settings.DOCUMENTATION_LINKS,
+        "dark_mode": request.COOKIES.get("theme", "") == "dark",
         "login_url_name": settings.LOGIN_URL,
     }
 

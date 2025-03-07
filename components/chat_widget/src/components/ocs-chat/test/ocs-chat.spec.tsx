@@ -25,7 +25,7 @@ describe('open-chat-studio-widget', () => {
       <open-chat-studio-widget visible="true">
         <mock:shadow-root>
           <button class="btn">Chat</button>
-          <div class="fixed w-full sm:w-[450px] h-3/5 bg-white border border-gray-200 shadow-lg rounded-lg overflow-hidden flex flex-col bottom-0 sm:bottom-5 right-0 sm:right-5">
+          <div id="ocs-chat-window" class="fixed w-full sm:w-[450px] h-3/5 bg-white border border-gray-200 shadow-lg rounded-lg overflow-hidden flex flex-col bottom-0 sm:bottom-5 right-0 sm:right-5">
             <div class="flex justify-between items-center px-2 py-2 border-b border-gray-100">
               <div class="flex gap-1">
                 <button
@@ -107,7 +107,7 @@ describe('open-chat-studio-widget', () => {
       <open-chat-studio-widget visible="true" bot-url="https://localhost" position="center" expanded="true">
         <mock:shadow-root>
           <button class="btn">Chat</button>
-          <div class="fixed w-full sm:w-[450px] h-5/6 bg-white border border-gray-200 shadow-lg rounded-lg overflow-hidden flex flex-col left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2">
+          <div id="ocs-chat-window" class="fixed w-full sm:w-[450px] h-5/6 bg-white border border-gray-200 shadow-lg rounded-lg overflow-hidden flex flex-col left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2">
             <div class="flex justify-between items-center px-2 py-2 border-b border-gray-100">
               <div class="flex gap-1">
                 <button

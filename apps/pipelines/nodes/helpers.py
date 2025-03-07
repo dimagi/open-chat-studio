@@ -56,9 +56,12 @@ class ParticipantDataProxy:
         return self._participant_data
 
     def get(self):
-        return self._get_db_object().data
+        data = self._get_db_object().data
+        return self.session.participant.global_data | data
 
     def set(self, data):
         participant_data = self._get_db_object()
         participant_data.data = data
         participant_data.save(update_fields=["data"])
+
+        self.session.participant.update_name_from_data(data)

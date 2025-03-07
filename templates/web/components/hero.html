@@ -2,23 +2,22 @@
 {% load static %}
 <section class="my-8 mx-4">
   <div class="container ">
-    <div class="pg-columns pg-align-items-center">
-      <div class="pg-column my-24 mx-12">
-        <img class="img-fluid dark:hidden block" src="{% static 'images/dimagi-logo.png' %}" alt="{% translate "Dimagi" %}">
-        <img class="img-fluid hidden dark:block" src="{% static 'images/dimagi-logo-white.png' %}" alt="{% translate "Dimagi" %}">
+    <div class="flex flex-col mt-4 md:mt-24 md:mx-48">
+      <div class="flex-1 justify-start">
+        <img class="img-fluid dark:hidden block" src="{% static 'images/logo.png' %}" alt="{% translate "Open Chat Studio" %}">
+        <img class="img-fluid hidden dark:block" src="{% static 'images/logo_white.png' %}" alt="{% translate "Open Chat Studio" %}">
       </div>
-      <div class="pg-column">
-        <h1 class="pg-title">{{project_meta.NAME}}</h1>
-        <h2 class="pg-subtitle">
+      <div class="flex-1 mt-12 justify-start">
+        <h2 class="text-2xl">
           {{project_meta.DESCRIPTION}}
         </h2>
-        <p class="buttons">
+        <p class="mt-4 flex flex-grow">
           {% if signup_enabled %}
-            <a class="pg-button-primary" href="{% url 'account_signup' %}">
+            <a class="btn btn-outline" href="{% url 'account_signup' %}">
               {% translate "Create account" %}
             </a>
           {% endif %}
-          <a class="pg-button-secondary" href="{% url login_url_name %}">
+          <a class="btn btn-outline btn-secondary w-44" href="{% url login_url_name %}">
             {% translate "Sign In" %}
           </a>
         </p>

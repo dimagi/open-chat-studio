@@ -1,5 +1,9 @@
 {% extends "web/base.html" %}
 {% load static %}
+{% block page_head %}
+  {{ block.super }}
+  <script src="{% static 'js/app-bundle.js' %}"></script>
+{% endblock %}
 {% block top_nav %}
   {% include 'web/components/top_nav_app.html' %}
 {% endblock %}

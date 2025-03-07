@@ -66,8 +66,6 @@ packaging==23.2
     #   -c requirements.txt
     #   build
     #   pytest
-pip==24.3.1
-    # via pip-tools
 pip-tools==7.4.1
     # via -r dev-requirements.in
 platformdirs==4.3.6
@@ -124,10 +122,7 @@ typing-extensions==4.12.2
     #   faker
 virtualenv==20.27.1
     # via pre-commit
-watchfiles==0.24.0
+watchfiles==1.0.4
     # via -r dev-requirements.in
 wheel==0.44.0
     # via pip-tools
-
-# The following packages were excluded from the output:
-# setuptools

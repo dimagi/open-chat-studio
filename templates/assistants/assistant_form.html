@@ -14,7 +14,9 @@
 {% endblock %}
 {% block pre_form %}
   {% if object.id %}
-    <h2 class="text-l pg-text-muted">Assistant ID: {{ object.assistant_id }}</h2>
+    <h2 class="text-l pg-text-muted">Assistant ID:
+      {% include "generic/copy_chip.html" with copy_element_id="copy_assistant_id" copy_value=object.assistant_id extra_styles="btn-ghost" %}
+    </h2>
   {% endif %}
   {% if object.pk %}
     <div id="sync-wrapper" class="flex w-full gap-2"

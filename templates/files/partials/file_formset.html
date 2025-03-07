@@ -1,6 +1,6 @@
 <div x-data="{ count: 0, get zeroCount() { return this.count-1 } }">
   <div class="flex flex-row justify-between mb-4">
-    <h3 class="text-lg font-medium">{{ form_title|default:"FILES" }}</h3>
+    <h3 class="text-lg font-medium">{{ form_title|default:"FILES" }} <span class="text-xs text-gray-500">(upload files)</span></h3>
     <button type="button" class="btn btn-sm"
             @click="count++; $nextTick(() => { document.getElementById('id_files-' + zeroCount + '-file').click() })">
       <i class="fa-solid fa-paperclip"></i> Add

@@ -2,6 +2,12 @@ import axios, { AxiosInstance } from "axios";
 import { PipelineType } from "../types/pipeline";
 import { SimplePipelineMessageResponse, TestMessageTaskResponse } from "../types/testMessage";
 
+type AiHelpResponse = {
+  response?: string;
+  error?: string;
+}
+
+
 class ApiClient {
   private team: string | null;
   constructor() {
@@ -61,6 +67,10 @@ class ApiClient {
     );
   }
 
+  public async generateCode(prompt: string, currentCode: string): Promise<AiHelpResponse> {
+    return this.makeRequest<AiHelpResponse>("post", `/help/generate_code/`, {query: prompt, context: currentCode});
+  }
+
   private createClient(): AxiosInstance {
     return axios.create({
       baseURL: `/a/${this.team}`,
@@ -73,19 +83,21 @@ class ApiClient {
     data?: any,
   ): Promise<T> {
     const client = this.createClient();
+    let response;
     try {
-      const response =
+      response =
         method === "get"
           ? await client.get<T>(url)
           : await client.post<T>(url, data);
-      if (response.status !== 200) {
-        throw new Error(`HTTP error! status: ${response.status}`);
-      }
-      return response.data;
     } catch (error) {
       console.error(error);
-      throw error;
+      return Promise.reject();
     }
+    if (response.status !== 200) {
+      console.error(response);
+      return Promise.reject(response.data);
+    }
+    return response.data;
   }
 }
 

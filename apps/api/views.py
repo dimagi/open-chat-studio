@@ -8,12 +8,13 @@ from django.contrib.auth.decorators import permission_required
 from django.db import transaction
 from django.http import FileResponse, Http404, HttpResponse, JsonResponse
 from django.shortcuts import get_object_or_404
+from django.utils import timezone
 from django.views.decorators.csrf import csrf_exempt
 from django.views.decorators.http import require_POST
 from drf_spectacular.types import OpenApiTypes
-from drf_spectacular.utils import OpenApiExample, OpenApiParameter, extend_schema, extend_schema_view
+from drf_spectacular.utils import OpenApiExample, OpenApiParameter, extend_schema, extend_schema_view, inline_serializer
 from rest_framework import filters, mixins, status
-from rest_framework.decorators import api_view, renderer_classes
+from rest_framework.decorators import action, api_view, renderer_classes
 from rest_framework.exceptions import NotFound
 from rest_framework.renderers import BaseRenderer
 from rest_framework.response import Response
@@ -152,9 +153,7 @@ def _update_participant_data(request):
     participant, _ = Participant.objects.get_or_create(identifier=identifier, team=team, platform=platform)
 
     # Update the participant's name if provided
-    if name := serializer.data.get("name"):
-        participant.name = name
-        participant.save()
+    participant.update_name_from_data(serializer.data)
 
     experiment_data = serializer.data["data"]
     experiment_map = _get_participant_experiments(team, experiment_data)
@@ -171,7 +170,7 @@ def _update_participant_data(request):
         )
 
         if schedule_data := data.get("schedules"):
-            _create_update_schedules(team, experiment, participant, schedule_data)
+            _create_update_schedules(request, experiment, participant, schedule_data)
 
         if platform == ChannelPlatform.COMMCARE_CONNECT:
             experiment_data_map[experiment.id] = participant_data.id
@@ -196,7 +195,7 @@ def _get_participant_experiments(team, experiment_data) -> dict[str, Experiment]
 
 
 @transaction.atomic()
-def _create_update_schedules(team, experiment, participant, schedule_data):
+def _create_update_schedules(request, experiment, participant, schedule_data):
     def _get_id(data):
         return data.get("id") or ScheduledMessage.generate_external_id(data["name"], experiment.id, participant.id)
 
@@ -219,7 +218,7 @@ def _create_update_schedules(team, experiment, participant, schedule_data):
         else:
             new.append(
                 ScheduledMessage(
-                    team=team,
+                    team=request.team,
                     experiment=experiment,
                     participant=participant,
                     next_trigger_date=data["date"],
@@ -237,7 +236,9 @@ def _create_update_schedules(team, experiment, participant, schedule_data):
 
     delete_ids = {data["id"] for data in schedule_data if data.get("delete")}
     if delete_ids:
-        ScheduledMessage.objects.filter(external_id__in=delete_ids).delete()
+        ScheduledMessage.objects.filter(external_id__in=delete_ids).update(
+            cancelled_at=timezone.now(), cancelled_by=request.user
+        )
     if updated:
         ScheduledMessage.objects.bulk_update(updated, fields=["next_trigger_date", "custom_schedule_params"])
     if new:
@@ -284,6 +285,21 @@ def _create_update_schedules(team, experiment, participant, schedule_data):
         tags=["Experiment Sessions"],
         request=ExperimentSessionCreateSerializer,
     ),
+    end_experiment_session=extend_schema(
+        operation_id="session_end",
+        summary="End Experiment Session",
+        tags=["Experiment Sessions"],
+        parameters=[
+            OpenApiParameter(
+                name="id",
+                type=OpenApiTypes.STR,
+                location=OpenApiParameter.PATH,
+                description="ID of the session",
+            ),
+        ],
+        request=inline_serializer("end_session_serializer", {}),
+        responses=inline_serializer("end_session_serializer", {}),
+    ),
 )
 class ExperimentSessionViewSet(mixins.ListModelMixin, mixins.RetrieveModelMixin, GenericViewSet):
     permission_classes = [DjangoModelPermissionsWithView]
@@ -318,6 +334,15 @@ class ExperimentSessionViewSet(mixins.ListModelMixin, mixins.RetrieveModelMixin,
         output = ExperimentSessionSerializer(instance=serializer.instance, context=self.get_serializer_context()).data
         headers = {"Location": str(output["url"])}
         return Response(output, status=status.HTTP_201_CREATED, headers=headers)
+
+    @action(detail=True, methods=["post"])
+    def end_experiment_session(self, request, id=None):
+        try:
+            session = ExperimentSession.objects.get(external_id=id)
+        except ExperimentSession.DoesNotExist:
+            return Response({"error": "Session not found:{id}"}, status=status.HTTP_404_NOT_FOUND)
+        session.end()
+        return Response(status=status.HTTP_200_OK)
 
 
 class BinaryRenderer(BaseRenderer):

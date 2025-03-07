@@ -1,7 +1,6 @@
 import logging
 
 from celery.app import shared_task
-from django.db.models import functions
 
 from apps.events.models import ScheduledMessage, StaticTrigger, TimeoutTrigger
 from apps.experiments.models import ExperimentSession
@@ -52,17 +51,11 @@ def fire_trigger(trigger_id, session_id):
     return triggered
 
 
-def _get_messages_to_fire():
-    return ScheduledMessage.objects.filter(is_complete=False, next_trigger_date__lte=functions.Now()).select_related(
-        "action"
-    )
-
-
 @shared_task(ignore_result=True)
 def poll_scheduled_messages():
     """Polls scheduled messages and triggers those that are due. After triggering, it updates the database with the
     new trigger details for each message."""
 
-    messages = _get_messages_to_fire()
+    messages = ScheduledMessage.objects.get_messages_to_fire()
     for message in messages:
         message.safe_trigger()

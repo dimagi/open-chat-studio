@@ -16,6 +16,7 @@ import {cloneDeep} from "lodash";
 import {ErrorsType, PipelineManagerStoreType} from "../types/pipelineManagerStore";
 import {apiClient} from "../api/api";
 import {PipelineType} from "../types/pipeline";
+import {isEqual} from "lodash";
 
 let saveTimeoutId: NodeJS.Timeout | null = null;
 
@@ -237,7 +238,9 @@ const createPipelineManagerStore: StateCreator<
     set({isLoading: true});
     apiClient.getPipeline(pipelineId).then((pipeline) => {
       if (pipeline) {
-        updateEdgeClasses(pipeline, pipeline.errors);
+        if (pipeline.data) {
+          updateEdgeClasses(pipeline.data.edges, pipeline.errors);
+        }
         set({currentPipeline: pipeline, currentPipelineId: pipelineId});
         set({errors: pipeline.errors});
         set({isLoading: false});
@@ -259,6 +262,19 @@ const createPipelineManagerStore: StateCreator<
   },
   setIsLoading: (isLoading: boolean) => set({isLoading}),
   autoSaveCurrentPipline: (nodes: Node[], edges: Edge[]) => {
+    if (!get().currentPipeline) {
+      return
+    }
+    const dataToSave = getDataToSave(
+      {
+        nodes: get().currentPipeline!.data?.nodes || [],
+        edges: get().currentPipeline!.data?.edges || [],
+      },
+      {nodes, edges}
+    )
+    if (!dataToSave) {
+      return;
+    }
     set({dirty: true});
     // Clear the previous timeout if it exists.
     if (saveTimeoutId) {
@@ -269,7 +285,7 @@ const createPipelineManagerStore: StateCreator<
     saveTimeoutId = setTimeout(() => {
       if (get().currentPipeline) {
         get().savePipeline(
-          {...get().currentPipeline!, data: {nodes, edges}},
+          {...get().currentPipeline!, data: dataToSave},
           true,
         );
       }
@@ -285,14 +301,12 @@ const createPipelineManagerStore: StateCreator<
         .then((response) => {
           if (response) {
             pipeline.data = response.data;
-            updateEdgeClasses(pipeline, response.errors);
             set({currentPipeline: pipeline, dirty: false});
             set({errors: response.errors});
-            if (get().reactFlowInstance) {
-              get().resetFlow({
-                nodes: pipeline?.data?.nodes ?? [],
-                edges: pipeline?.data?.edges ?? [],
-              });
+            if (get().reactFlowInstance && response.errors) {
+              set({
+                edges: updateEdgeClasses(get().edges, response.errors)
+              })
             }
             resolve();
           }
@@ -340,21 +354,66 @@ export default usePipelineStore;
  * This function modifies the edge classes to visually indicate error states. Edges with errors
  * receive an "edge-error" class, while error-free edges have their class name removed.
  *
- * @param pipeline - The pipeline containing edges to be checked
+ * @param edges - List of edges
  * @param errors - An object containing error information for different pipeline components
  *
  * @returns Void. Modifies edges in-place by adding or removing "edge-error" class.
  */
-function updateEdgeClasses(pipeline: PipelineType, errors: ErrorsType) {
-  if (!pipeline.data) {
-    return;
-  }
+function updateEdgeClasses(edges: Edge[], errors: ErrorsType) {
   const edgeErrors = errors["edge"] || [];
-  for (const edge of pipeline.data!.edges) {
+  for (const edge of edges) {
     if (edgeErrors.includes(edge["id"])) {
       edge["className"] = "edge-error";
     } else {
       delete edge["className"];
     }
   }
+  return edges;
+}
+
+interface NodesAndEdges {
+  nodes: Node[],
+  edges: Edge[],
+}
+
+/**
+ * Returns the data to save if it is different from the data that was saved before.
+ *
+ * @param oldPipelineData - The data that was saved before
+ * @param newPipelineData - The data that is currently in the editor
+ *
+ * @returns The data to save if it is different from the data that was saved before, otherwise undefined
+ */
+const getDataToSave = (oldPipelineData: NodesAndEdges, newPipelineData: NodesAndEdges) => {
+  // See `apps.pipelines.flow.FlowNode
+  const newNodes = byId(newPipelineData.nodes.map(({id, position, type, data}) => ({id, position, type, data})));
+  const oldNodes = byId(oldPipelineData.nodes);
+  if (!isEqual(oldNodes, newNodes)) {
+    return newPipelineData;
+  }
+
+  // See `apps.pipelines.flow.FlowEdge`
+  const newEdges = byId(newPipelineData.edges.map(({id, source, target, sourceHandle, targetHandle}) => ({
+        id,
+        source,
+        target,
+        sourceHandle,
+        targetHandle
+      })));
+  const oldEdges = byId(oldPipelineData.edges);
+  if (!isEqual(oldEdges, newEdges)) {
+    return newPipelineData;
+  }
+  return undefined;
+}
+
+/**
+ * Returns an object with the given array of objects as values, with the `id` field as the key.
+ * @param arr
+ */
+const byId = <T extends {id: string}>(arr: T[]) => {
+  return arr.reduce((acc, node) => {
+      acc[node.id] = node;
+      return acc;
+    }, {} as {[key: string]: T});
 }
