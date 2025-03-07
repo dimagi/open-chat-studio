@@ -88,7 +88,7 @@ class RenderTemplate(PipelineNode):
                             "participant_schedules": participant.get_schedules_for_experiment(
                                 exp_session.experiment,
                                 as_dict=True,
-                                include_complete=True,
+                                include_inactive=True,
                             )
                             or [],
                         }
