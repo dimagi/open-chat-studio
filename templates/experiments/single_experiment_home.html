@@ -278,7 +278,7 @@
                           >
                             <option value="">Column</option>
                             <template x-for="(config, column) in filterData.columns" :key="column">
-                              <option :value="column" x-text="config.label"></option>
+                              <option :value="column" x-text="config.label" :selected="column === filter.column"></option>
                             </template>
                           </select>
                         </div>
