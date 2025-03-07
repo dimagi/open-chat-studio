@@ -91,12 +91,33 @@ def test_returns_empty_string_when_unauthorized_participant(mock_session):
 
 
 def test_invalid_format_specifier_not_caught():
-    """
-    Test that invalid format specifiers are caught with ValidationError (Sentry OPEN-CHAT-STUDIO-R1).
-    """
     form_data = {"prompt": "{source_material:abcd}", "source_material": "some text"}
     prompt_key = "prompt"
     known_vars = {"source_material"}
 
-    with pytest.raises(ValidationError, match="Invalid format in prompt"):
+    with pytest.raises(ValidationError, match="Invalid prompt variable '{source_material:abcd}'. Remove the ':abcd'."):
+        validate_prompt_variables(form_data, prompt_key, known_vars)
+
+
+def test_invalid_conversion_caught():
+    """
+    Test for conversion specifiers (e.g., !s)
+    """
+    form_data = {"prompt": "{var!s}", "source_material": "some text"}
+    prompt_key = "prompt"
+    known_vars = {"var"}
+
+    with pytest.raises(ValidationError, match="Invalid prompt variable '{var!s}'. Remove the '!s'."):
+        validate_prompt_variables(form_data, prompt_key, known_vars)
+
+
+def test_invalid_conversion_and_specifier_caught():
+    """
+    Test for both conversion and format specifiers (e.g., !r:xyz)
+    """
+    form_data = {"prompt": "{var!r:xyz}", "source_material": "some text"}
+    prompt_key = "prompt"
+    known_vars = {"var"}
+
+    with pytest.raises(ValidationError, match="Invalid prompt variable '{var!r:xyz}'. Remove the '!r:xyz'."):
         validate_prompt_variables(form_data, prompt_key, known_vars)

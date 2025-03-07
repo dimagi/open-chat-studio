@@ -35,8 +35,14 @@ def validate_prompt_variables(form_data, prompt_key: str, known_vars: set):
     try:
         for literal, field_name, format_spec, conversion in Formatter().parse(prompt_text):
             if field_name is not None:
-                if format_spec:
-                    raise ValidationError({prompt_key: "Invalid format in prompt: format specifiers are not allowed."})
+                if format_spec or conversion:
+                    conversion = f"!{conversion}" if conversion else ""
+                    format_spec = f":{format_spec}" if format_spec else ""
+                    variable = f"{{{field_name}{conversion}{format_spec}}}"
+                    bad_part = f"{conversion}{format_spec}"
+                    raise ValidationError(
+                        {prompt_key: f"Invalid prompt variable '{variable}'. Remove the '{bad_part}'."}
+                    )
                 prompt_variables.add(get_root_var(field_name))
     except ValueError as e:
         raise ValidationError({prompt_key: f"Invalid format in prompt: {e}"})
