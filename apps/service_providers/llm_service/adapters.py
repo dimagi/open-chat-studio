@@ -18,7 +18,7 @@ from langchain_core.tools import BaseTool
 
 from apps.assistants.models import OpenAiAssistant
 from apps.chat.agent.tools import get_assistant_tools, get_tools
-from apps.chat.models import Chat, ChatMessageType
+from apps.chat.models import Chat
 from apps.experiments.models import Experiment, ExperimentSession
 from apps.service_providers.llm_service.main import LlmService, OpenAIAssistantRunnable
 from apps.service_providers.llm_service.prompt_context import PromptTemplateContext
@@ -171,8 +171,6 @@ class AssistantAdapter(BaseAdapter):
         self.save_message_metadata_only = save_message_metadata_only
 
         self.provider_model_name = assistant.llm_provider_model.name
-        self.input_message_metadata = {}
-        self.output_message_metadata = {}
         self.team = session.team
 
         self.tools = get_assistant_tools(assistant, experiment_session=session)
@@ -294,9 +292,3 @@ class AssistantAdapter(BaseAdapter):
 
     def get_openai_assistant(self) -> OpenAIAssistantRunnable:
         return self.assistant.get_assistant()
-
-    def get_message_metadata(self, message_type: ChatMessageType) -> dict:
-        """
-        Retrieve metadata for a given message type.
-        """
-        return self.input_message_metadata if message_type == ChatMessageType.HUMAN else self.output_message_metadata
