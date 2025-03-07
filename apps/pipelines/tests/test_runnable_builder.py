@@ -173,13 +173,12 @@ def test_llm_with_prompt_response(
 def test_render_template(pipeline):
     nodes = [
         start_node(),
-        render_template_node("{{ thing }} is cool"),
+        render_template_node("{{ input }} is cool"),
         end_node(),
     ]
-    assert (
-        create_runnable(pipeline, nodes).invoke(PipelineState(messages=[{"thing": "Cycling"}]))["messages"][-1]
-        == "Cycling is cool"
-    )
+
+    result = create_runnable(pipeline, nodes).invoke(PipelineState(messages=["Cycling"]))
+    assert result["messages"][-1] == "Cycling is cool"
 
 
 @django_db_with_data(available_apps=("apps.service_providers",))
@@ -209,14 +208,14 @@ def test_branching_pipeline(pipeline, experiment_session):
             "target": template_b["id"],
         },
         {
-            "id": "RenderTemplate-A -> END",
-            "source": template_a["id"],
-            "target": end["id"],
-        },
-        {
             "id": "RenderTemplate-B -> RenderTemplate-C",
             "source": template_b["id"],
             "target": template_c["id"],
+        },
+        {
+            "id": "RenderTemplate-A -> END",
+            "source": template_a["id"],
+            "target": end["id"],
         },
         {
             "id": "RenderTemplate-C -> END",
@@ -948,7 +947,7 @@ def test_multiple_valid_inputs(pipeline):
     template = render_template_node("T: {{ input }}")
     end = end_node()
     nodes = [start, router, template, end]
-    # ordering of edges is significant
+
     edges = [
         {
             "id": "start -> router",
@@ -973,10 +972,10 @@ def test_multiple_valid_inputs(pipeline):
             "sourceHandle": "output_0",
         },
     ]
-
+    experiment_session = ExperimentSessionFactory.create()
     state = PipelineState(
         messages=["not hello"],
-        experiment_session=ExperimentSessionFactory.build(),
+        experiment_session=experiment_session,
         pipeline_version=1,
     )
     output = create_runnable(pipeline, nodes, edges, lenient=False).invoke(state)

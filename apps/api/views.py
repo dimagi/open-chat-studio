@@ -8,6 +8,7 @@ from django.contrib.auth.decorators import permission_required
 from django.db import transaction
 from django.http import FileResponse, Http404, HttpResponse, JsonResponse
 from django.shortcuts import get_object_or_404
+from django.utils import timezone
 from django.views.decorators.csrf import csrf_exempt
 from django.views.decorators.http import require_POST
 from drf_spectacular.types import OpenApiTypes
@@ -169,7 +170,7 @@ def _update_participant_data(request):
         )
 
         if schedule_data := data.get("schedules"):
-            _create_update_schedules(team, experiment, participant, schedule_data)
+            _create_update_schedules(request, experiment, participant, schedule_data)
 
         if platform == ChannelPlatform.COMMCARE_CONNECT:
             experiment_data_map[experiment.id] = participant_data.id
@@ -194,7 +195,7 @@ def _get_participant_experiments(team, experiment_data) -> dict[str, Experiment]
 
 
 @transaction.atomic()
-def _create_update_schedules(team, experiment, participant, schedule_data):
+def _create_update_schedules(request, experiment, participant, schedule_data):
     def _get_id(data):
         return data.get("id") or ScheduledMessage.generate_external_id(data["name"], experiment.id, participant.id)
 
@@ -217,7 +218,7 @@ def _create_update_schedules(team, experiment, participant, schedule_data):
         else:
             new.append(
                 ScheduledMessage(
-                    team=team,
+                    team=request.team,
                     experiment=experiment,
                     participant=participant,
                     next_trigger_date=data["date"],
@@ -235,7 +236,9 @@ def _create_update_schedules(team, experiment, participant, schedule_data):
 
     delete_ids = {data["id"] for data in schedule_data if data.get("delete")}
     if delete_ids:
-        ScheduledMessage.objects.filter(external_id__in=delete_ids).delete()
+        ScheduledMessage.objects.filter(external_id__in=delete_ids).update(
+            cancelled_at=timezone.now(), cancelled_by=request.user
+        )
     if updated:
         ScheduledMessage.objects.bulk_update(updated, fields=["next_trigger_date", "custom_schedule_params"])
     if new:
