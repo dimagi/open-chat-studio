@@ -91,6 +91,9 @@ def test_returns_empty_string_when_unauthorized_participant(mock_session):
 
 
 def test_invalid_format_specifier_not_caught():
+    """
+    Test that invalid format specifiers are caught with ValidationError (Sentry OPEN-CHAT-STUDIO-R1).
+    """
     form_data = {"prompt": "{source_material:abcd}", "source_material": "some text"}
     prompt_key = "prompt"
     known_vars = {"source_material"}
