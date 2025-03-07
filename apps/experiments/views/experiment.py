@@ -1334,6 +1334,7 @@ def experiment_session_details_view(request, team_slug: str, experiment_id: uuid
             "participant_schedules": session.participant.get_schedules_for_experiment(
                 experiment, as_dict=True, include_inactive=True
             ),
+            "participant_id": session.participant_id,
         },
     )
 
