@@ -4,7 +4,7 @@ from unittest import mock
 import pytest
 
 from apps.channels.datamodels import Attachment
-from apps.experiments.models import ParticipantData
+from apps.experiments.models import Participant, ParticipantData
 from apps.files.models import File
 from apps.pipelines.exceptions import PipelineNodeBuildError, PipelineNodeRunError
 from apps.pipelines.nodes.base import PipelineState
@@ -381,21 +381,39 @@ def main(input, **kwargs):
 @django_db_with_data(available_apps=("apps.service_providers",))
 @mock.patch("apps.pipelines.nodes.base.PipelineNode.logger", mock.Mock())
 def test_render_template_with_context_keys(pipeline, experiment_session):
-    mock_participant_details = {"identifier": "participant_123"}
-    experiment_session.participant_data_from_experiment = mock.Mock(return_value=mock_participant_details)
-
-    nodes = [
-        start_node(),
-        render_template_node(
-            "input: {{input}}, temp_state.my_key: {{temp_state.my_key}}, "
-            "participant_id: {{participant_details.identifier}}"
-        ),
-        end_node(),
-    ]
+    participant = Participant.objects.create(
+        identifier="participant_123",
+        team=experiment_session.team,
+        platform="web",
+    )
+    experiment_session.participant = participant
+    experiment_session.save()
+    ParticipantData.objects.create(
+        team=experiment_session.team,
+        experiment=experiment_session.experiment,
+        participant=participant,
+        data={"custom_key": "custom_value"},
+    )
     state = PipelineState(
         experiment_session=experiment_session,
         messages=["Cycling"],
         temp_state={"my_key": "example_key"},
+        pipeline_version=1,
+        outputs={},
     )
+    nodes = [
+        start_node(),
+        render_template_node(
+            "input: {{input}}, temp_state.my_key: {{temp_state.my_key}}, "
+            "participant_id: {{participant_details.identifier}}, "
+            "participant_data: {{participant_data.custom_key}}"
+        ),
+        end_node(),
+    ]
     result = create_runnable(pipeline, nodes).invoke(state)
-    assert result["messages"][-1] == ("input: Cycling, temp_state.my_key: example_key, participant_id: participant_123")
+    expected = (
+        "input: Cycling, temp_state.my_key: example_key, "
+        "participant_id: participant_123, "
+        "participant_data: custom_value"
+    )
+    assert result["messages"][-1] == expected

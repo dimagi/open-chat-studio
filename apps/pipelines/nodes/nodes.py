@@ -74,24 +74,26 @@ class RenderTemplate(PipelineNode):
                 "temp_state": state.get("temp_state", {}),
             }
 
-            if hasattr(state, "experiment_session") and state.experiment_session:
-                participant = getattr(state.experiment_session, "participant", None)
-                content.update(
-                    {
-                        "participant_details": {
-                            "identifier": getattr(participant, "identifier", None),
-                            "platform": getattr(participant, "platform", None),
-                        },
-                        "participant_data": getattr(state.experiment_session, "participant_data_from_experiment", {}),
-                        "participant_schedules": participant.get_schedules_for_experiment(
-                            state.experiment_session.experiment,
-                            as_dict=True,
-                            include_complete=True,
-                        )
-                        if participant
-                        else [],
-                    }
-                )
+            if "experiment_session" in state and state["experiment_session"]:
+                exp_session = state["experiment_session"]
+                participant = getattr(exp_session, "participant", None)
+                if participant:
+                    content.update(
+                        {
+                            "participant_details": {
+                                "identifier": getattr(participant, "identifier", None),
+                                "platform": getattr(participant, "platform", None),
+                            },
+                            "participant_schedules": participant.get_schedules_for_experiment(
+                                exp_session.experiment,
+                                as_dict=True,
+                                include_complete=True,
+                            )
+                            or [],
+                        }
+                    )
+                proxy = ParticipantDataProxy(exp_session)
+                content["participant_data"] = proxy.get() or {}
 
             template = env.from_string(self.template_string)
             output = template.render(content)

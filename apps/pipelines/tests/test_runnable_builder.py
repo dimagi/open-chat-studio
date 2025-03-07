@@ -940,7 +940,7 @@ def test_multiple_valid_inputs(pipeline):
     template = render_template_node("T: {{ input }}")
     end = end_node()
     nodes = [start, router, template, end]
-    # ordering of edges is significant
+
     edges = [
         {
             "id": "start -> router",
@@ -965,10 +965,10 @@ def test_multiple_valid_inputs(pipeline):
             "sourceHandle": "output_0",
         },
     ]
-
+    experiment_session = ExperimentSessionFactory.create()
     state = PipelineState(
         messages=["not hello"],
-        experiment_session=ExperimentSessionFactory.build(),
+        experiment_session=experiment_session,
         pipeline_version=1,
     )
     output = create_runnable(pipeline, nodes, edges, lenient=False).invoke(state)
