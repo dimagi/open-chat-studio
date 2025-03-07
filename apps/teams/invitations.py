@@ -54,6 +54,17 @@ def send_invitation_accepted(invitation):
     )
 
 
+def get_invitation_from_request(request):
+    invitation_id = get_invitation_id_from_request(request)
+    if invitation_id:
+        try:
+            return Invitation.objects.get(id=invitation_id)
+        except Invitation.DoesNotExist:
+            # for now just swallow missing invitation errors
+            # these should get picked up by the form validation
+            clear_invite_from_session(request)
+
+
 def get_invitation_id_from_request(request):
     return (
         # URL takes precedence over session/cookie

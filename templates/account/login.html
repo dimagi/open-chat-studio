@@ -13,17 +13,28 @@
         <form class="mt-6 space-y-6" method="post">
           {% csrf_token %}
           {{ form.non_field_errors }}
-          {% render_field form.login %}
-          {% render_field form.password %}
+          {% if form.login %}
+            {% render_field form.login %}
+          {% endif %}
+          {% if form.password %}
+            {% render_field form.password %}
+          {% endif %}
           <div>
-            <input class="btn btn-primary btn-block" type="submit" value="{% translate "Sign In" %}">
+            {% if form.password %}
+              {% translate "Sign In" as btn_text %}
+            {% else %}
+              {% translate "Continue" as btn_text %}
+            {% endif %}
+            <input class="btn btn-primary btn-block" type="submit" value="{{ btn_text }}">
           </div>
         </form>
-        <div class="text-sm mt-4">
-          <a href="{% url 'account_reset_password' %}" class="font-medium text-blue-700 dark:text-blue-300 hover:text-blue-500">
-            {% translate "Forgot password?" %}
-          </a>
-        </div>
+        {% if form.password %}
+          <div class="text-sm mt-4">
+            <a href="{% url 'account_reset_password' %}" class="font-medium text-blue-700 dark:text-blue-300 hover:text-blue-500">
+              {% translate "Forgot password?" %}
+            </a>
+          </div>
+        {% endif %}
       </div>
     </div>
   </div>
