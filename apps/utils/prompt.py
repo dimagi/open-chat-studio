@@ -1,4 +1,4 @@
-import string
+from string import Formatter
 from typing import Any
 
 from django.db import models
@@ -28,10 +28,15 @@ def validate_prompt_variables(form_data, prompt_key: str, known_vars: set):
     to be used, otherwise a `ValidationError` is thrown.
     """
     prompt_text = form_data.get(prompt_key, "")
+    if not prompt_text:
+        return set()
+
+    prompt_variables = set()
     try:
-        prompt_variables = set()
-        for literal_text, field_name, format_spec, conversion in string.Formatter().parse(prompt_text):
-            if field_name:
+        for literal, field_name, format_spec, conversion in Formatter().parse(prompt_text):
+            if field_name is not None:
+                if format_spec:
+                    raise ValidationError({prompt_key: "Invalid format in prompt: format specifiers are not allowed."})
                 prompt_variables.add(get_root_var(field_name))
     except ValueError as e:
         raise ValidationError({prompt_key: f"Invalid format in prompt: {e}"})
