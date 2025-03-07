@@ -843,11 +843,20 @@ class CommCareConnectChannel(ChannelBase):
         experiment_session: ExperimentSession | None = None,
     ):
         super().__init__(experiment, experiment_channel, experiment_session)
+        self._check_consent()
         self.client = CommCareConnectClient()
 
-    def send_text_to_user(self, text: str):
-        if self.participant_data.system_metadata.get("consent", False) is False:
+    def _check_consent(self):
+        # This is a failsafe, checks should also happen earlier in the process
+        if self.experiment_session and not self.participant_data.system_metadata.get("consent", False):
             raise ChannelException("Participant has not given consent to chat")
+
+    def _ensure_sessions_exists(self):
+        super()._ensure_sessions_exists()
+        self._check_consent()
+
+    def send_text_to_user(self, text: str):
+        self._check_consent()
         self.client.send_message_to_user(
             channel_id=self.connect_channel_id, message=text, encryption_key=self.encryption_key
         )
