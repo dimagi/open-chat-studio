@@ -223,10 +223,8 @@ class TestDeleteReminderTool:
 
         response = self._invoke_tool(session, message_id=scheduled_message.external_id)
         assert response == "Cannot delete this reminder"
-        try:
-            scheduled_message.refresh_from_db()
-        except ScheduledMessage.DoesNotExist:
-            pytest.fail(reason="Expected ScheduledMessage.DoesNotExist to not be raised")
+        scheduled_message.refresh_from_db()
+        assert scheduled_message.cancelled_at is None
 
     def test_user_can_delete_their_scheduled_message(self, session):
         scheduled_message = ScheduledMessage.objects.create(
@@ -237,8 +235,8 @@ class TestDeleteReminderTool:
         )
         response = self._invoke_tool(session, message_id=scheduled_message.external_id)
         assert response == "Success"
-        with pytest.raises(ScheduledMessage.DoesNotExist):
-            scheduled_message.refresh_from_db()
+        scheduled_message.refresh_from_db()
+        assert scheduled_message.cancelled_at is not None
 
     def test_specified_message_does_not_exist(self, session):
         response = self._invoke_tool(session, message_id="gone with the wind")
