@@ -171,8 +171,6 @@ class AssistantAdapter(BaseAdapter):
         self.save_message_metadata_only = save_message_metadata_only
 
         self.provider_model_name = assistant.llm_provider_model.name
-        self.input_message_metadata = {}
-        self.output_message_metadata = {}
         self.team = session.team
 
         self.tools = get_assistant_tools(assistant, experiment_session=session)
