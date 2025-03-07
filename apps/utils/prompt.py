@@ -1,8 +1,9 @@
+from string import Formatter
 from typing import Any
 
 from django.db import models
 from django.forms import ValidationError
-from langchain_core.prompts import ChatPromptTemplate, PromptTemplate
+from langchain_core.prompts import ChatPromptTemplate
 
 from apps.experiments.models import AgentTools
 
@@ -27,8 +28,22 @@ def validate_prompt_variables(form_data, prompt_key: str, known_vars: set):
     to be used, otherwise a `ValidationError` is thrown.
     """
     prompt_text = form_data.get(prompt_key, "")
+    if not prompt_text:
+        return set()
+
+    prompt_variables = set()
     try:
-        prompt_variables = {get_root_var(var) for var in PromptTemplate.from_template(prompt_text).input_variables}
+        for literal, field_name, format_spec, conversion in Formatter().parse(prompt_text):
+            if field_name is not None:
+                if format_spec or conversion:
+                    conversion = f"!{conversion}" if conversion else ""
+                    format_spec = f":{format_spec}" if format_spec else ""
+                    variable = f"{{{field_name}{conversion}{format_spec}}}"
+                    bad_part = f"{conversion}{format_spec}"
+                    raise ValidationError(
+                        {prompt_key: f"Invalid prompt variable '{variable}'. Remove the '{bad_part}'."}
+                    )
+                prompt_variables.add(get_root_var(field_name))
     except ValueError as e:
         raise ValidationError({prompt_key: f"Invalid format in prompt: {e}"})
 
