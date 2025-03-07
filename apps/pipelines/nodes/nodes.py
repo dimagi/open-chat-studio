@@ -11,7 +11,6 @@ from django.conf import settings
 from django.core.exceptions import ValidationError
 from django.core.validators import validate_email
 from django.db.models import TextChoices
-from jinja2 import meta
 from jinja2.sandbox import SandboxedEnvironment
 from langchain_core.messages import BaseMessage
 from langchain_core.prompts import MessagesPlaceholder, PromptTemplate
@@ -63,32 +62,46 @@ class RenderTemplate(PipelineNode):
             label="Render a template", documentation_link=settings.DOCUMENTATION_LINKS["node_template"]
         )
     )
-
     template_string: str = Field(
         description="Use {{your_variable_name}} to refer to designate input",
         json_schema_extra=UiSchema(widget=Widgets.expandable_text),
     )
 
-    def _process(self, input, node_id: str, **kwargs) -> PipelineState:
-        def all_variables(in_):
-            return {var: in_ for var in meta.find_undeclared_variables(env.parse(self.template_string))}
-
+    def _process(self, input, node_id: str, state: PipelineState, **kwargs) -> PipelineState:
         env = SandboxedEnvironment()
         try:
-            if isinstance(input, BaseMessage):
-                content = json.loads(input.content)
-            elif isinstance(input, dict):
-                content = input
-            else:
-                content = json.loads(input)
-                if not isinstance(content, dict):
-                    # e.g. it was just a string or an int
-                    content = all_variables(input)
-        except json.JSONDecodeError:
-            # As a last resort, just set the all the variables in the template to the input
-            content = all_variables(input)
-        template = SandboxedEnvironment().from_string(self.template_string)
-        output = template.render(content)
+            content = {
+                "input": input,
+                "temp_state": state.get("temp_state", {}),
+            }
+
+            if "experiment_session" in state and state["experiment_session"]:
+                exp_session = state["experiment_session"]
+                participant = getattr(exp_session, "participant", None)
+                if participant:
+                    content.update(
+                        {
+                            "participant_details": {
+                                "identifier": getattr(participant, "identifier", None),
+                                "platform": getattr(participant, "platform", None),
+                            },
+                            "participant_schedules": participant.get_schedules_for_experiment(
+                                exp_session.experiment,
+                                as_dict=True,
+                                include_complete=True,
+                            )
+                            or [],
+                        }
+                    )
+                proxy = ParticipantDataProxy(exp_session)
+                content["participant_data"] = proxy.get() or {}
+
+            template = env.from_string(self.template_string)
+            output = template.render(content)
+        except Exception as e:
+            self.logger.error(f"Template rendering failed: {e}")
+            raise PipelineNodeRunError(f"Error rendering template: {e}")
+
         return PipelineState.from_node_output(node_name=self.name, node_id=node_id, output=output)
 
 
