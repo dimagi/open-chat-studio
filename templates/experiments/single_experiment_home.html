@@ -369,12 +369,23 @@
                             </template>
                           <!-- Timestamp Input -->
                             <template x-if="filterData.columns[filter.column]?.type === 'timestamp'">
-                              <input
-                                type="date"
-                                x-model="filter.value"
-                                @change="triggerFilterChange()"
-                                class="input input-bordered input-sm w-40"
-                              >
+                              <div class="relative">
+                                <input
+                                  type="date"
+                                  x-model="filter.value"
+                                  @input="filter.isValidDate = $event.target.validity.valid"
+                                  @change="filter.isValidDate && triggerFilterChange()"
+                                  class="input input-bordered input-sm w-40"
+                                  :class="{'input-error': filter.value && !filter.isValidDate}"
+                                  min="2020-01-01"
+                                  max="2100-01-01"
+                                >
+                                <i
+                                  x-show="filter.value && !filter.isValidDate"
+                                  class="fa-solid fa-triangle-exclamation text-error"
+                                  title="Please enter a valid date">
+                                </i>
+                              </div>
                             </template>
                           <!-- Regular select dropdown for choice type with non-multiselect operators -->
                             <template x-if="filterData.columns[filter.column]?.type === 'choice' && !['any of', 'all of'].includes(filter.operator)">
