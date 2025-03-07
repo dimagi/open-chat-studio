@@ -243,8 +243,13 @@
                     <i class="fa-solid fa-filter"></i> Filter <span x-show="getActiveFilterCount() > 0" x-cloak>(<span x-text="getActiveFilterCount()"></span>)</span>
                   </button>
 
+                  <div x-show="filterData.loading" x-cloak class="ml-2">
+                    <i class="fa-solid fa-spinner fa-spin"></i>
+                  </div>
+
+                  <!-- Clear filters button -->
                   <button
-                    x-show="getActiveFilterCount() > 0"
+                    x-show="getActiveFilterCount() > 0 && !filterData.loading"
                     @click="clearAllFilters()"
                     class="btn btn-square btn-sm btn-ghost"
                     title="Clear all filters" x-cloak>
@@ -590,6 +595,7 @@
           this.triggerFilterChange();
         },
         triggerFilterChange() {
+          this.filterData.loading = true;
           let filterParams = {};
           this.filterData.filters.forEach((filter, i) => {
             if (filter.column && filter.operator && (
@@ -623,6 +629,8 @@
             target: '#sessions-table',
             swap: 'innerHTML',
             values: filterParams
+          }).finally(() => {
+            this.filterData.loading = false;
           });
         }
       }));
