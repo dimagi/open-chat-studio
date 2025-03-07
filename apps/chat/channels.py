@@ -196,7 +196,7 @@ class ChannelBase(ABC):
         pass
 
     @staticmethod
-    def get_channel_class_for_platform(platform: ChannelPlatform) -> "ChannelBase":
+    def get_channel_class_for_platform(platform: ChannelPlatform | str) -> type["ChannelBase"]:
         if platform == "telegram":
             channel_cls = TelegramChannel
         elif platform == "web":
@@ -266,7 +266,8 @@ class ChannelBase(ABC):
         try:
             self._add_message(message)
         except ParticipantNotAllowedException:
-            return self.send_message_to_user("Sorry, you are not allowed to chat to this bot")
+            self.send_message_to_user("Sorry, you are not allowed to chat to this bot")
+            return ""
 
         try:
             if not self.is_message_type_supported():
