@@ -273,7 +273,7 @@
                           >
                             <option value="">Column</option>
                             <template x-for="(config, column) in filterData.columns" :key="column">
-                              <option :value="column" x-text="column"></option>
+                              <option :value="column" x-text="config.label"></option>
                             </template>
                           </select>
                         </div>
@@ -513,10 +513,10 @@
           showFilters: false,
           filters: [],
           columns: {
-            'participant': {type: 'string', operators: ['equals', 'contains', 'starts_with', 'ends_with']},
-            'last_message': {type: 'timestamp', operators: ['on', 'before', 'after']},
-            'tags': {type: 'choice', operators: ['any of', 'all of'], options: tags },
-            'versions': {type: 'choice', operators: ['any of', 'all of'], options: versionsList}
+            'participant': {type: 'string', operators: ['equals', 'contains', 'starts_with', 'ends_with'], label: 'Participant'},
+            'last_message': {type: 'timestamp', operators: ['on', 'before', 'after'], label: 'Last Message'},
+            'tags': {type: 'choice', operators: ['any of', 'all of'], options: tags, label: 'Tags' },
+            'versions': {type: 'choice', operators: ['any of', 'all of'], options: versionsList, label: 'Versions'}
           }
         },
         toggleFilters() {
