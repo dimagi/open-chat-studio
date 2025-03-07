@@ -1,10 +1,12 @@
 from unittest.mock import Mock, patch
 
 import pytest
+from django.core.exceptions import ValidationError
 
 from apps.channels.models import ChannelPlatform
 from apps.experiments.models import SourceMaterial
 from apps.service_providers.llm_service.prompt_context import PromptTemplateContext
+from apps.utils.prompt import validate_prompt_variables
 
 
 @pytest.fixture()
@@ -86,3 +88,15 @@ def test_returns_empty_string_when_unauthorized_participant(mock_session):
     context = PromptTemplateContext(mock_session, 1)
     assert context.is_unauthorized_participant is True
     assert context.get_participant_data() == ""
+
+
+def test_invalid_format_specifier_not_caught():
+    """
+    Test that invalid format specifiers are caught with ValidationError (Sentry OPEN-CHAT-STUDIO-R1).
+    """
+    form_data = {"prompt": "{source_material:abcd}", "source_material": "some text"}
+    prompt_key = "prompt"
+    known_vars = {"source_material"}
+
+    with pytest.raises(ValidationError, match="Invalid format in prompt"):
+        validate_prompt_variables(form_data, prompt_key, known_vars)
