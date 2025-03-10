@@ -17,6 +17,7 @@ class File(BaseTeamModel):
     content_type = models.CharField(blank=True)
     schema = models.JSONField(default=dict, blank=True)
     expiry_date = models.DateTimeField(null=True)
+    summary = models.TextField(max_length=400, blank=True)  # This is roughly 1 short paragraph
 
     @classmethod
     def from_external_source(cls, filename, external_file, external_id, external_source, team_id):
@@ -66,6 +67,11 @@ class File(BaseTeamModel):
             return mimetypes.guess_type(filename)[0] or "application/octet-stream"
         except Exception:
             return "application/octet-stream"
+
+    @property
+    def size_mb(self) -> float:
+        """Returns the size of this file in megabytes (decimal)"""
+        return round(self.content_size / 1048576, 2)
 
     def save(self, *args, **kwargs):
         if self.file:
