@@ -19,7 +19,9 @@
 
         <div class="py-3 col-span-1">
             <dt class="text-sm font-medium leading-6">Files ({{ object.files.count }})</dt>
-            <dd class="text-sm col-span-2"></dd>
+            <dd class="text-sm col-span-2">
+                {{ object.file_names|join:', ' }}
+            </dd>
         </div>
 
         <div class="py-3 col-span-3">
