@@ -31,6 +31,8 @@ export function getWidget(name: string, params: PropertySchema) {
       return LlmWidget
     case "history":
       return HistoryTypeWidget
+    case "history_mode":
+      return HistoryModeWidget
     case "keywords":
       return KeywordsWidget
     case "node_name":
@@ -814,6 +816,7 @@ export function HistoryTypeWidget(props: WidgetParams) {
   const historyType = concatenate(props.paramValue);
   const historyName = concatenate(props.nodeParams["history_name"]);
   const historyNameError = props.getNodeFieldError(props.nodeId, "history_name");
+
   return (
     <>
       <div className="flex join">
@@ -846,8 +849,80 @@ export function HistoryTypeWidget(props: WidgetParams) {
         <small className="text-red-500">{historyNameError}</small>
       </div>
     </>
-  )
-    ;
+  );
+}
+
+export function HistoryModeWidget(props: WidgetParams) {
+  const options = getSelectOptions(props.schema);
+  const userMaxTokenLimit = concatenate(props.nodeParams["user_max_token_limit"]);
+  const maxHistoryLength = concatenate(props.nodeParams["max_history_length"]);
+  const initialHistoryMode = concatenate(props.nodeParams["history_mode"]);
+  const [historyMode, setHistoryMode] = useState(initialHistoryMode || "Summarize");
+
+  const historyModeHelpTexts: Record<string, string> = {
+    summarize:"If the token count exceeds the limit, older messages will be summarized while keeping the last few messages intact.",
+    truncate_tokens:"If the token count exceeds the limit, older messages will be removed until the token count is below the limit.",
+    max_history_length:"The chat history will always be truncated to the last N messages.",
+  };
+
+  return (
+    <>
+      <div className="flex join">
+        <InputField label="History Mode">
+          <select
+            className="select select-bordered join-item"
+            name="history_mode"
+            onChange={(e) => {
+              setHistoryMode(e.target.value);
+              props.updateParamValue(e);
+            }}
+            value={historyMode}
+          >
+            {options.map((option) => (
+              <option key={option.value} value={option.value}>
+                {option.label}
+              </option>
+            ))}
+          </select>
+          <br />
+          <br />
+          <div>{historyModeHelpTexts[historyMode]}</div>
+        </InputField>
+      </div>
+
+      {(historyMode === "summarize" || historyMode === "truncate_tokens") && (
+        <div className="flex join mb-4">
+          <InputField label="Token Limit">
+            <input
+              className="input input-bordered join-item"
+              name="user_max_token_limit"
+              type="number"
+              onChange={props.updateParamValue}
+              value={userMaxTokenLimit || ""}
+            />
+            <br />
+            <div>Maximum number of tokens before messages are summarized or truncated.</div>
+          </InputField>
+        </div>
+      )}
+
+      {historyMode === "max_history_length" && (
+        <div className="flex join mb-4">
+          <InputField label="Max History Length">
+            <input
+              className="input input-bordered join-item"
+              name="max_history_length"
+              type="number"
+              onChange={props.updateParamValue}
+              value={maxHistoryLength || ""}
+            />
+            <br />
+            <div>Chat history will only keep the most recent messages up to max history length.</div>
+          </InputField>
+        </div>
+      )}
+    </>
+  );
 }
 
 export function InputField({label, help_text, inputError, children}: React.PropsWithChildren<{
