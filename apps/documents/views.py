@@ -2,6 +2,7 @@ import json
 from functools import cache
 
 from django.contrib.auth.decorators import permission_required
+from django.contrib.auth.mixins import PermissionRequiredMixin
 from django.contrib.postgres.search import TrigramSimilarity
 from django.db import transaction
 from django.db.models import Q
@@ -41,7 +42,7 @@ class RepositoryHome(LoginAndTeamRequiredMixin, TemplateView):
         return context
 
 
-class BaseObjectListView(ListView):
+class BaseObjectListView(ListView, PermissionRequiredMixin):
     details_url_name: str
 
     def get_context_data(self, *args, **kwargs):
@@ -51,7 +52,7 @@ class BaseObjectListView(ListView):
         return context
 
 
-class BaseDetailsView(TemplateView):
+class BaseDetailsView(TemplateView, PermissionRequiredMixin):
     @cache
     def get_object(self):
         return self.model.objects.get(team__slug=self.kwargs["team_slug"], id=self.kwargs["id"])
@@ -66,6 +67,7 @@ class FileListView(LoginAndTeamRequiredMixin, BaseObjectListView):
     paginate_by = 10
     details_url_name = "documents:file_details"
     tab_name = "files"
+    permission_required = "files.view_file"
 
     def get_queryset(self):
         queryset = super().get_queryset().filter(team__slug=self.kwargs["team_slug"]).order_by("-created_at")
@@ -82,6 +84,7 @@ class FileListView(LoginAndTeamRequiredMixin, BaseObjectListView):
 class FileDetails(LoginAndTeamRequiredMixin, BaseDetailsView):
     template_name = "documents/file_details.html"
     model = File
+    permission_required = "files.view_file"
 
     def get_context_data(self, *args, **kwargs):
         context = super().get_context_data(*args, **kwargs)
@@ -96,6 +99,7 @@ class FileDetails(LoginAndTeamRequiredMixin, BaseDetailsView):
 
 @require_POST
 @transaction.atomic()
+@permission_required("files.add_file")
 def upload_files(request, team_slug: str):
     """Upload files to a collection"""
     # TODO: Check collection size and error if it's too large with the new files added
@@ -158,6 +162,7 @@ class CollectionListView(LoginAndTeamRequiredMixin, BaseObjectListView):
     paginate_by = 10
     details_url_name = "documents:collection_details"
     tab_name = "collections"
+    permission_required = "documents.view_repository"
 
     def get_queryset(self):
         queryset = (
@@ -179,6 +184,7 @@ class CollectionListView(LoginAndTeamRequiredMixin, BaseObjectListView):
 class CollectionDetails(LoginAndTeamRequiredMixin, BaseDetailsView):
     template_name = "documents/collection_details.html"
     model = Repository
+    permission_required = "documents.view_repository"
 
 
 @require_POST
