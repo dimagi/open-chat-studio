@@ -1,9 +1,9 @@
 <form
     action="{% url 'documents:edit_file' request.team.slug object.id %}"
     method="POST"
-    class="m-2 flex flex-row justify-between" x-data="{ editing: false, collections: {{ current_collections }} }">
+    class="m-2 grid grid-cols-4" x-data="{ editing: false, collections: {{ current_collections }} }">
     {% csrf_token %}
-    <div>
+    <div class="col-span-3">
         <input x-cloak x-show="editing" name="name" class="input input-bordered" value="{{ object.name }}"></input>
         <h1 x-show="!editing" class="pg-title">{{ object.name }}</h1>
 
@@ -13,12 +13,17 @@
                 <dd class="text-sm col-span-2">{{ object.created_at }}</dd>
             </div>
 
-            <div class="p-3 col-span-1">
+            <div class="py-3 col-span-1">
                 <dt class="text-sm font-medium leading-6">Size</dt>
                 <dd class="text-sm col-span-2">{{ object.size_mb }} MB</dd>
             </div>
 
-            <div class="py-3 col-span-2">
+            <div class="py-3 col-span-1">
+                <dt class="text-sm font-medium leading-6">Content Type</dt>
+                <dd class="text-sm col-span-2 overflow-auto">{{ object.content_type }}</dd>
+            </div>
+
+            <div class="py-3 col-span-1">
                 <dt class="text-sm font-medium leading-6">Collections</dt>
                 <dd class="text-sm col-span-2">
                     <span x-show="!editing">{{ current_collections|join:", " }}</span>
@@ -46,7 +51,7 @@
             </div>
         </dl>
     </div>
-    <div class="py-3">
+    <div class="py-3 col-span-1">
         <div class="join">
             <button type="button" class="btn btn-sm join-item pl-3" x-show="!editing" @click="editing = true">
                 Edit <i class="fa-solid fa-pencil fa-xs"></i>
