@@ -26,6 +26,7 @@ class RepositoryHome(LoginAndTeamRequiredMixin, TemplateView):
             "files_list_url": reverse("documents:files_list", kwargs={"team_slug": team_slug}),
             "upload_files_url": reverse("documents:upload_files", kwargs={"team_slug": team_slug}),
             "collections_list_url": reverse("documents:collections_list", kwargs={"team_slug": team_slug}),
+            "new_collection_url": reverse("documents:new_collection", kwargs={"team_slug": team_slug}),
             "files_count": File.objects.filter(team__slug=team_slug).count(),
             "collections_count": Repository.objects.filter(
                 team__slug=team_slug, type=RepositoryType.COLLECTION
@@ -146,3 +147,18 @@ class CollectionListView(LoginAndTeamRequiredMixin, BaseObjectListView):
 class CollectionDetails(LoginAndTeamRequiredMixin, BaseDetailsView):
     template_name = "documents/collection_details.html"
     model = Repository
+
+
+@require_POST
+@transaction.atomic()
+def new_collection(request, team_slug: str):
+    """Create a new collection"""
+    Repository.objects.create(type=RepositoryType.COLLECTION, team=request.team, name=request.POST.get("name"))
+    return redirect(reverse("documents:repositories", kwargs={"team_slug": team_slug, "tab_name": "collections"}))
+
+
+@login_and_team_required
+def delete_collection(request, team_slug: str, id: int):
+    collection = get_object_or_404(Repository, team__slug=team_slug, id=id, type=RepositoryType.COLLECTION)
+    collection.delete()
+    return redirect(reverse("documents:repositories", kwargs={"team_slug": team_slug, "tab_name": "collections"}))

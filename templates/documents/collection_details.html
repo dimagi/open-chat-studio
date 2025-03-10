@@ -1,6 +1,6 @@
 <div class="m-2">
     <h1 class="pg-title">{{ object.name }}</h1>
-    <dl class="grid grid-cols-2 gap-1">
+    <dl class="grid grid-cols-3 gap-1">
         <div class="py-3 col-span-1">
             <dt class="text-sm font-medium leading-6">Uploaded at</dt>
             <dd class="text-sm col-span-2">{{ object.created_at }}</dd>
@@ -11,12 +11,18 @@
             <dd class="text-sm col-span-2">{{ object.size }} MB</dd>
         </div>
 
-        <div class="py-3 col-span-2">
+        <div class="py-3 col-span-1">
+            <a type="button" class="btn btn-xs" href="{% url 'documents:delete_collection' request.team.slug object.id %}">
+                <i class="fa-solid fa-trash htmx-hide"></i>
+            </a>
+        </div>
+
+        <div class="py-3 col-span-1">
             <dt class="text-sm font-medium leading-6">Files ({{ object.files.count }})</dt>
             <dd class="text-sm col-span-2"></dd>
         </div>
 
-        <div class="py-3 col-span-2">
+        <div class="py-3 col-span-3">
             <dt class="text-sm font-medium leading-6">Summary</dt>
             <dd class="text-sm col-span-2">{{ object.summary }}</dd>
         </div>

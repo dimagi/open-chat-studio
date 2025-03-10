@@ -14,4 +14,6 @@ urlpatterns = [
     # Collections
     path("collections/", views.CollectionListView.as_view(), name="collections_list"),
     path("collections/<int:id>/details", views.CollectionDetails.as_view(), name="collection_details"),
+    path("collections/new", views.new_collection, name="new_collection"),
+    path("collections/<int:id>/delete", views.delete_collection, name="delete_collection"),
 ]
