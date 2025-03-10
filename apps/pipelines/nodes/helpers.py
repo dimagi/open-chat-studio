@@ -65,3 +65,28 @@ class ParticipantDataProxy:
         participant_data.save(update_fields=["data"])
 
         self.session.participant.update_name_from_data(data)
+
+    def get_schedules(self):
+        """
+        Returns all active scheduled messages for the participant in the current experiment session.
+        """
+        from apps.events.models import ScheduledMessage
+
+        experiment = self.session.experiment
+        participant = self.session.participant
+        team = self.session.experiment.team
+        messages = (
+            ScheduledMessage.objects.filter(
+                experiment=experiment,
+                participant=participant,
+                team=team,
+                is_complete=False,
+                cancelled_at=None,
+            )
+            .select_related("action")
+            .order_by("created_at")
+        )
+        scheduled_messages = []
+        for message in messages:
+            scheduled_messages.append(message.as_string())
+        return scheduled_messages
