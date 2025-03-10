@@ -268,7 +268,7 @@ def compress_chat_history_from_messages(
         return history, latest_message, summary
     elif history_mode == PipelineChatHistoryModes.TRUNCATE_TOKENS:
         history, pruned_memory = truncate_tokens(history, max_token_limit, llm, input_message_tokens)
-    elif history_mode == PipelineChatHistoryModes.SUMMARIZE or history_mode == None:
+    elif history_mode == PipelineChatHistoryModes.SUMMARIZE or history_mode is None:
         history, pruned_memory, summary = summarize_history(
             llm, history, max_token_limit, input_message_tokens, summary, input_messages
         )

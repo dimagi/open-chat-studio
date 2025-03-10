@@ -106,7 +106,7 @@ export const getNodeInputWidget = (param: InputWidgetParams) => {
   }
 
   const allowedInNode = nodeTypeToInputParamsMap[param.nodeType];
-  if (param.name == "name" || param.name == "history_mode" || (allowedInNode && !allowedInNode.includes(param.name))) {
+  if (param.name == "name" || (allowedInNode && !allowedInNode.includes(param.name))) {
     /* name param is always in the advanced box */
     return <></>;
   }

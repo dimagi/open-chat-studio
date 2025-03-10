@@ -855,48 +855,72 @@ export function HistoryTypeWidget(props: WidgetParams) {
 export function HistoryModeWidget(props: WidgetParams) {
   const options = getSelectOptions(props.schema);
   const userMaxTokenLimit = concatenate(props.nodeParams["user_max_token_limit"]);
+  const maxHistoryLength = concatenate(props.nodeParams["max_history_length"]);
   const initialHistoryMode = concatenate(props.nodeParams["history_mode"]);
   const [historyMode, setHistoryMode] = useState(initialHistoryMode || "Summarize");
-   const historyModeHelpTexts: Record<string, string> = {
-    "Summarize": "If the token count exceeds the limit, older messages will be summarized while keeping the last few messages intact.",
-    "Truncate Tokens": "If the token count exceeds the limit, older messages will be removed until the token count is below the limit.",
-    "Max History Length": "The chat history will always be truncated to the last 10 messages. Older messages will not be sent."
+
+  const historyModeHelpTexts: Record<string, string> = {
+    summarize:"If the token count exceeds the limit, older messages will be summarized while keeping the last few messages intact.",
+    truncate_tokens:"If the token count exceeds the limit, older messages will be removed until the token count is below the limit.",
+    max_history_length:"The chat history will always be truncated to the last N messages.",
   };
 
   return (
     <>
-<div className="flex join">
-      <InputField label="History Mode" help_text={historyModeHelpTexts[historyMode]}>
-        <select
-          className="select select-bordered join-item"
-          name="history_mode"
-          onChange={(e) => {
-            setHistoryMode(e.target.value);
-            props.updateParamValue(e);
-          }}
-          value={historyMode}
-        >
-          {options.map((option) => (
+      <div className="flex join">
+        <InputField label="History Mode">
+          <select
+            className="select select-bordered join-item"
+            name="history_mode"
+            onChange={(e) => {
+              setHistoryMode(e.target.value);
+              props.updateParamValue(e);
+            }}
+            value={historyMode}
+          >
+            {options.map((option) => (
               <option key={option.value} value={option.value}>
                 {option.label}
               </option>
             ))}
-        </select>
-      </InputField>
-    </div>
-    {(historyMode === "summarize" || historyMode === "truncate_tokens") && (
-      <div className="flex join mb-4">
-        <InputField label="Token Limit" help_text="Maximum number of tokens before messages are summarized or truncated.">
-          <input
-            className="input input-bordered join-item"
-            name="user_max_token_limit"
-            type="number"
-            onChange={props.updateParamValue}
-            value={userMaxTokenLimit || ""}
-          />
+          </select>
+          <br />
+          <br />
+          <div>{historyModeHelpTexts[historyMode]}</div>
         </InputField>
       </div>
-    )}
+
+      {(historyMode === "summarize" || historyMode === "truncate_tokens") && (
+        <div className="flex join mb-4">
+          <InputField label="Token Limit">
+            <input
+              className="input input-bordered join-item"
+              name="user_max_token_limit"
+              type="number"
+              onChange={props.updateParamValue}
+              value={userMaxTokenLimit || ""}
+            />
+            <br />
+            <div>Maximum number of tokens before messages are summarized or truncated.</div>
+          </InputField>
+        </div>
+      )}
+
+      {historyMode === "max_history_length" && (
+        <div className="flex join mb-4">
+          <InputField label="Max History Length">
+            <input
+              className="input input-bordered join-item"
+              name="max_history_length"
+              type="number"
+              onChange={props.updateParamValue}
+              value={maxHistoryLength || ""}
+            />
+            <br />
+            <div>Chat history will only keep the most recent messages up to max history length.</div>
+          </InputField>
+        </div>
+      )}
     </>
   );
 }
