@@ -25,7 +25,7 @@
             />
             <div role="tabpanel" class="tab-content p-10">
                 {% if tab_name == "files" %}
-                    {% include 'documents/tab_content.html' with object_list_url=files_list_url add_new_modal_template='documents/upload_files_modal.html' add_new_modal_title="Upload files" modal_submit_url=upload_files_url %}
+                    {% include 'documents/shared/tab_content.html' with object_list_url=files_list_url add_new_modal_template='documents/upload_files_modal.html' add_new_modal_title="Upload files" modal_submit_url=upload_files_url %}
                 {% endif %}
             </div>
 
@@ -40,7 +40,7 @@
             />
             <div role="tabpanel" class="tab-content p-10">
                 {% if tab_name == "collections" %}
-                    {% include 'documents/tab_content.html' with object_list_url=collections_list_url add_new_modal_template='documents/create_collection_modal.html' add_new_modal_title="New Collection" %}
+                    {% include 'documents/shared/tab_content.html' with object_list_url=collections_list_url add_new_modal_template='documents/new_collection_modal.html' add_new_modal_title="New Collection" %}
                 {% endif %}
             </div>
         </div>

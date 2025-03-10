@@ -59,7 +59,7 @@ class BaseDetailsView(TemplateView):
 
 
 class FileListView(LoginAndTeamRequiredMixin, BaseObjectListView):
-    template_name = "documents/list.html"
+    template_name = "documents/shared/list.html"
     model = File
     paginate_by = 10
     details_url_name = "documents:file_details"
@@ -120,7 +120,7 @@ def delete_file(request, team_slug: str, id: int):
 
 
 class CollectionListView(LoginAndTeamRequiredMixin, BaseObjectListView):
-    template_name = "documents/list.html"
+    template_name = "documents/shared/list.html"
     model = Repository
     paginate_by = 10
     details_url_name = "documents:collection_details"
