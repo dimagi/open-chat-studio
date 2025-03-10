@@ -86,7 +86,10 @@ class FileDetails(LoginAndTeamRequiredMixin, BaseDetailsView):
         context = super().get_context_data(*args, **kwargs)
         file = self.get_object()
         collection_names = file.repository_set.filter(type=RepositoryType.COLLECTION).values_list("name", flat=True)
-        context["collections"] = ", ".join(collection_names)
+        context["current_collections"] = list(collection_names)
+        context["available_collections"] = Repository.objects.filter(
+            team__slug=self.kwargs["team_slug"], type=RepositoryType.COLLECTION
+        ).values_list("name", flat=True)
         return context
 
 
@@ -113,10 +116,38 @@ def upload_files(request, team_slug: str):
     return redirect(reverse("documents:repositories", kwargs={"team_slug": team_slug, "tab_name": "files"}))
 
 
+# TODO: Permissions
 @login_and_team_required
 def delete_file(request, team_slug: str, id: int):
     file = get_object_or_404(File, team__slug=team_slug, id=id)
     file.delete()
+    return redirect(reverse("documents:repositories", kwargs={"team_slug": team_slug, "tab_name": "files"}))
+
+
+# TODO: Permissions
+@login_and_team_required
+@require_POST
+def edit_file(request, team_slug: str, id: int):
+    file = get_object_or_404(File.objects.defer("file"), team__slug=team_slug, id=id)
+    file.name = request.POST.get("name")
+    file.summary = request.POST.get("summary")
+
+    existing_collections = set(
+        file.repository_set.filter(type=RepositoryType.COLLECTION).values_list("name", flat=True)
+    )
+    collection_set = set()
+    # Handle new collections
+    for collection_name in request.POST.getlist("collections[]"):
+        collection_set.add(collection_name)
+        repo = get_object_or_404(Repository, team__slug=team_slug, type=RepositoryType.COLLECTION, name=collection_name)
+        repo.files.add(file)
+    file.save(update_fields=["name", "summary"])
+
+    # Remove from collections
+    for collection_name in existing_collections - collection_set:
+        repo = get_object_or_404(Repository, team__slug=team_slug, type=RepositoryType.COLLECTION, name=collection_name)
+        repo.files.remove(file)
+
     return redirect(reverse("documents:repositories", kwargs={"team_slug": team_slug, "tab_name": "files"}))
 
 

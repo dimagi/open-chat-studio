@@ -11,6 +11,7 @@ urlpatterns = [
     path("files/<int:id>/details", views.FileDetails.as_view(), name="file_details"),
     path("files/upload", views.upload_files, name="upload_files"),
     path("files/<int:id>/delete", views.delete_file, name="delete_file"),
+    path("files/<int:id>/edit", views.edit_file, name="edit_file"),
     # Collections
     path("collections/", views.CollectionListView.as_view(), name="collections_list"),
     path("collections/<int:id>/details", views.CollectionDetails.as_view(), name="collection_details"),

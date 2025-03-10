@@ -1,30 +1,73 @@
-<div class="m-2">
-    <h1 class="pg-title">{{ object.name }}</h1>
-    <dl class="grid grid-cols-3 gap-1">
-        <div class="py-3 col-span-1">
-            <dt class="text-sm font-medium leading-6">Uploaded at</dt>
-            <dd class="text-sm col-span-2">{{ object.created_at }}</dd>
-        </div>
+<form
+    action="{% url 'documents:edit_file' request.team.slug object.id %}"
+    method="POST"
+    class="m-2 flex flex-row justify-between" x-data="{ editing: false, collections: {{ current_collections }} }">
+    {% csrf_token %}
+    <div>
+        <input x-cloak x-show="editing" name="name" class="input input-bordered" value="{{ object.name }}"></input>
+        <h1 x-show="!editing" class="pg-title">{{ object.name }}</h1>
 
-        <div class="py-3 col-span-1">
-            <dt class="text-sm font-medium leading-6">Size</dt>
-            <dd class="text-sm col-span-2">{{ object.size_kilobytes }} KB</dd>
-        </div>
+        <dl class="grid grid-cols-2 gap-1">
+            <div class="py-3 col-span-1">
+                <dt class="text-sm font-medium leading-6">Uploaded at</dt>
+                <dd class="text-sm col-span-2">{{ object.created_at }}</dd>
+            </div>
 
-        <div class="py-3 col-span-1">
-            <a type="button" class="btn btn-xs" href="{% url 'documents:delete_file' request.team.slug object.id %}">
+            <div class="p-3 col-span-1">
+                <dt class="text-sm font-medium leading-6">Size</dt>
+                <dd class="text-sm col-span-2">{{ object.size_mb }} MB</dd>
+            </div>
+
+            <div class="py-3 col-span-2">
+                <dt class="text-sm font-medium leading-6">Collections</dt>
+                <dd class="text-sm col-span-2">
+                    <span x-show="!editing">{{ current_collections|join:", " }}</span>
+                    <div x-cloak x-show="editing">
+                        <select x-model="collections" id="collections-select" name="collections[]" multiple placeholder="Select collections" autocomplete="off">
+                            {% for name in available_collections %}
+                                <option
+                                    value="{{ name }}"
+                                    {% if name in current_collections %}selected{% endif %}
+                                >
+                                    {{ name }}
+                                </option>
+                            {% endfor %}
+                        </select>
+                    </div>
+                </dd>
+            </div>
+
+            <div class="py-3 col-span-2">
+                <dt class="text-sm font-medium leading-6">Summary</dt>
+                <dd class="text-sm col-span-2">
+                    <textarea name="summary" x-cloak x-show="editing" rows="2" cols="40" class="input input-bordered">{{ object.summary }}</textarea>
+                    <span x-show="!editing">{{ object.summary }}</span>
+                </dd>
+            </div>
+        </dl>
+    </div>
+    <div class="py-3">
+        <div class="join">
+            <button type="button" class="btn btn-sm join-item pl-3" x-show="!editing" @click="editing = true">
+                Edit <i class="fa-solid fa-pencil fa-xs"></i>
+            </button>
+            <button type="submit" class="btn btn-sm join-item" x-cloak x-show="editing">
+                Update <i class="fa-solid fa-check fa-xs"></i>
+            </button>
+            <a type="button" class="btn btn-sm join-item" x-show="!editing" href="{% url 'documents:delete_file' request.team.slug object.id %}">
                 <i class="fa-solid fa-trash htmx-hide"></i>
             </a>
+            <button type="button" @click="editing = false" class="btn btn-sm join-item" x-cloak x-show="editing">
+                Cancel
+            </button>
         </div>
+    </div>
+</form>
 
-        <div class="py-3 col-span-3">
-            <dt class="text-sm font-medium leading-6">Collections</dt>
-            <dd class="text-sm col-span-2">{{ collections }}</dd>
-        </div>
-
-        <div class="py-3 col-span-3">
-            <dt class="text-sm font-medium leading-6">Summary</dt>
-            <dd class="text-sm col-span-2">{{ object.summary }}</dd>
-        </div>
-    </dl>
-</div>
+<script>
+    new TomSelect("#collections-select", {
+        plugins: ["remove_button", "caret_position", "input_autogrow"],
+        maxItems: null,
+        create: false,
+    });
+</script>

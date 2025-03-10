@@ -69,9 +69,9 @@ class File(BaseTeamModel):
             return "application/octet-stream"
 
     @property
-    def size_kilobytes(self) -> float:
-        """Returns the size of this file in kilobytes (decimal)"""
-        return round(self.content_size / 1000, 1)
+    def size_mb(self) -> float:
+        """Returns the size of this file in megabytes (decimal)"""
+        return round(self.content_size / 1048576, 2)
 
     def save(self, *args, **kwargs):
         if self.file:
