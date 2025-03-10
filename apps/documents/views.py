@@ -1,6 +1,7 @@
 import json
 from functools import cache
 
+from django.contrib.auth.decorators import permission_required
 from django.contrib.postgres.search import TrigramSimilarity
 from django.db import transaction
 from django.db.models import Q
@@ -116,17 +117,17 @@ def upload_files(request, team_slug: str):
     return redirect(reverse("documents:repositories", kwargs={"team_slug": team_slug, "tab_name": "files"}))
 
 
-# TODO: Permissions
 @login_and_team_required
+@permission_required("files.delete_file")
 def delete_file(request, team_slug: str, id: int):
     file = get_object_or_404(File, team__slug=team_slug, id=id)
     file.delete()
     return redirect(reverse("documents:repositories", kwargs={"team_slug": team_slug, "tab_name": "files"}))
 
 
-# TODO: Permissions
 @login_and_team_required
 @require_POST
+@permission_required("files.change_file")
 def edit_file(request, team_slug: str, id: int):
     file = get_object_or_404(File.objects.defer("file"), team__slug=team_slug, id=id)
     file.name = request.POST.get("name")
@@ -189,7 +190,19 @@ def new_collection(request, team_slug: str):
 
 
 @login_and_team_required
+@permission_required("documents.delete_repository")
 def delete_collection(request, team_slug: str, id: int):
     collection = get_object_or_404(Repository, team__slug=team_slug, id=id, type=RepositoryType.COLLECTION)
     collection.delete()
+    return redirect(reverse("documents:repositories", kwargs={"team_slug": team_slug, "tab_name": "collections"}))
+
+
+@login_and_team_required
+@require_POST
+@permission_required("documents.change_repository")
+def edit_collection(request, team_slug: str, id: int):
+    collection = get_object_or_404(Repository, team__slug=team_slug, id=id, type=RepositoryType.COLLECTION)
+    collection.name = request.POST["name"]
+    collection.summary = request.POST["summary"]
+    collection.save(update_fields=["name", "summary"])
     return redirect(reverse("documents:repositories", kwargs={"team_slug": team_slug, "tab_name": "collections"}))
