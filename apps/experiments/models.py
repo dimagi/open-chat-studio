@@ -54,10 +54,14 @@ class VersionFieldDisplayFormatters:
 
     @staticmethod
     def format_trigger(triggers) -> str:
+        if isinstance(triggers, VersionField):
+            triggers = triggers.raw_value
         if not isinstance(triggers, list):
             triggers = [triggers]
         result_strings = []
         for field in triggers:
+            if isinstance(field, VersionField):
+                field = field.raw_value
             static_trigger = getattr(field, "raw_value", field)
             string = "If"
             if static_trigger.trigger_type == "TimeoutTrigger":
