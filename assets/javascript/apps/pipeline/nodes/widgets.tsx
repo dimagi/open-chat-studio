@@ -884,8 +884,6 @@ export function HistoryModeWidget(props: WidgetParams) {
               </option>
             ))}
           </select>
-          <br />
-          <br />
           <div>{historyModeHelpTexts[historyMode]}</div>
         </InputField>
       </div>
@@ -900,7 +898,6 @@ export function HistoryModeWidget(props: WidgetParams) {
               onChange={props.updateParamValue}
               value={userMaxTokenLimit || ""}
             />
-            <br />
             <div>Maximum number of tokens before messages are summarized or truncated.</div>
           </InputField>
         </div>
@@ -916,7 +913,6 @@ export function HistoryModeWidget(props: WidgetParams) {
               onChange={props.updateParamValue}
               value={maxHistoryLength || ""}
             />
-            <br />
             <div>Chat history will only keep the most recent messages up to max history length.</div>
           </InputField>
         </div>

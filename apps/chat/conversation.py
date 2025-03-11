@@ -190,16 +190,21 @@ def _compress_chat_history(
     total_messages = history.copy()
     total_messages.extend(input_messages)
     current_token_count = llm.get_num_tokens_from_messages(total_messages)
-    if current_token_count <= max_token_limit and len(total_messages) <= MAX_UNCOMPRESSED_MESSAGES:
-        log.info("Skipping chat history compression: %s <= %s", current_token_count, max_token_limit)
-        return history, None, None
+    if history_mode in [PipelineChatHistoryModes.SUMMARIZE, PipelineChatHistoryModes.TRUNCATE_TOKENS]:
+        if current_token_count <= max_token_limit and len(total_messages) <= MAX_UNCOMPRESSED_MESSAGES:
+            log.info("Skipping chat history compression: %s <= %s", current_token_count, max_token_limit)
+            return history, None, None
+    elif history_mode == PipelineChatHistoryModes.MAX_HISTORY_LENGTH:
+        if keep_history_len is not None and len(total_messages) <= keep_history_len:
+            log.info("Skipping chat history compression: %d <= %d", len(total_messages), keep_history_len)
+            return history, None, None
 
     log.debug(
         "Compressing chat history: %s/%s(max) tokens and %d/%d(max) messages",
         current_token_count,
         max_token_limit,
         len(total_messages),
-        MAX_UNCOMPRESSED_MESSAGES,
+        keep_history_len,
     )
     history, last_message, summary = compress_chat_history_from_messages(
         llm, history, keep_history_len, max_token_limit, input_messages, history_mode
