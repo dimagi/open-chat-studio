@@ -629,7 +629,21 @@
           this.filterData.showFilters = false;
           this.triggerFilterChange();
         },
+        filterDropdownOptions(index) {
+          const filter = this.filterData.filters[index];
+          const column = filter.column;
+          if (column && this.filterData.columns[column] && this.filterData.columns[column].options) {
+            const searchQuery = (filter.searchQuery || '').toLowerCase().trim();
 
+            if (!searchQuery) {
+              filter.filteredOptions = [...this.filterData.columns[column].options];
+            } else {
+              filter.filteredOptions = this.filterData.columns[column].options.filter(option =>
+                option.toLowerCase().includes(searchQuery)
+              );
+            }
+          }
+        },
         loadFiltersFromUrl() {
           const urlParams = new URLSearchParams(window.location.search);
           const filters = [];
