@@ -374,7 +374,8 @@
                                 type="text"
                                 x-model="filter.value"
                                 @input.debounce="triggerFilterChange()"
-                                class="w-40 input input-bordered input-sm"
+                                class="w-40 block px-3 border border-base-200 rounded-lg bg-base-100 text-sm"
+                                style="height: 2rem;"
                                 placeholder="Enter value..."
                               >
                             </template>
@@ -386,7 +387,8 @@
                                   x-model="filter.value"
                                   @input="filter.isValidDate = $event.target.validity.valid"
                                   @change="filter.isValidDate && triggerFilterChange()"
-                                  class="input input-bordered input-sm w-40"
+                                  class="w-40 block px-3 border border-base-200 rounded-lg bg-base-100 text-sm"
+                                  style="height: 2rem;"
                                   :class="{'input-error': filter.value && !filter.isValidDate}"
                                   min="2020-01-01"
                                   max="2100-01-01"
