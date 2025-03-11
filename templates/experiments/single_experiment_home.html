@@ -594,12 +594,16 @@
             filter.operator = filter.availableOperators[0] || '';
             filter.value = '';
             filter.selectedValues = [];
-            if (this.filterData.columns[column].options) {
-              filter.filteredOptions = [...this.filterData.columns[column].options];
+            filter.searchQuery = '';
+            if (this.filterData.columns[column].type === 'choice') {
+              filter.filteredOptions = [...this.filterData.columns[column].options || []];
+            } else {
+              filter.filteredOptions = [];
             }
           } else {
             filter.availableOperators = [];
             filter.operator = '';
+            filter.filteredOptions = [];
           }
           this.triggerFilterChange();
         },
