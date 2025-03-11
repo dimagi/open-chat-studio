@@ -381,7 +381,7 @@
                             </template>
                           <!-- Timestamp Input -->
                             <template x-if="filterData.columns[filter.column]?.type === 'timestamp'">
-                              <div class="relative">
+                              <div class="relative" x-init="if (!('isValidDate' in filter)) filter.isValidDate = true">
                                 <input
                                   type="date"
                                   x-model="filter.value"
