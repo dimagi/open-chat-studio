@@ -415,11 +415,7 @@ class ScheduledMessage(BaseTeamModel):
             return
 
         with current_team(experiment_session.team):
-            experiment_session.ad_hoc_bot_message(
-                self.params["prompt_text"],
-                fail_silently=False,
-                use_experiment=self._get_experiment_to_generate_response(),
-            )
+            experiment_session.try_send_message(self.params["prompt_text"], fail_silently=False)
 
         utc_now = timezone.now()
         self.last_triggered_at = utc_now
