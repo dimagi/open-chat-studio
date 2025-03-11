@@ -231,7 +231,7 @@ class AgentLLMChat(LLMChat):
         return output.get("output", "")
 
     def _build_chain(self) -> Runnable[dict[str, Any], dict]:
-        tools = self.adapter.get_tools()
+        tools = self.adapter.get_allowed_tools()
         agent = create_tool_calling_agent(llm=self.adapter.get_chat_model(), tools=tools, prompt=self.prompt)
         return AgentExecutor.from_agent_and_tools(
             agent=agent,
@@ -535,6 +535,8 @@ class AssistantChat(RunnableSerializable[dict, ChainOutput]):
         assistant_runnable._wait_for_run(run_id, thread_id, progress_states=("in_progress", "queued", "cancelling"))
 
     def _get_response(self, assistant_runnable: OpenAIAssistantRunnable, input: dict, config: dict) -> tuple[str, str]:
+        if self.adapter.tools:
+            input["tools"] = []  # all tools are disabled
         response: OpenAIAssistantFinish = assistant_runnable.invoke(input, config)
         return response.thread_id, response.run_id
 
@@ -554,7 +556,10 @@ class AgentAssistantChat(AssistantChat):
         return {}
 
     def _get_response(self, assistant_runnable: OpenAIAssistantRunnable, input: dict, config: dict) -> tuple[str, str]:
-        response = assistant_runnable.invoke(input)
+        if self.adapter.disabled_tools:
+            input["tools"] = self._get_allowed_tools(self.adapter.disabled_tools)
+
+        response = assistant_runnable.invoke(input, config)
         max_time_limit = 60
         start_time = time.time()
         time_elapsed = 0.0
@@ -580,10 +585,13 @@ class AgentAssistantChat(AssistantChat):
                     tool_outputs.append({"output": output.content, "tool_call_id": output.tool_call_id})
 
                 response = assistant_runnable.invoke(
-                    {"tool_outputs": tool_outputs, "run_id": last_action.run_id, "thread_id": last_action.thread_id}
+                    {"tool_outputs": tool_outputs, "run_id": last_action.run_id, "thread_id": last_action.thread_id},
+                    config,
                 )
             else:
-                response = self._handle_tool_artifacts(tool_outputs_with_artifacts, assistant_runnable, last_action)
+                response = self._handle_tool_artifacts(
+                    tool_outputs_with_artifacts, assistant_runnable, last_action, config
+                )
 
             time_elapsed = time.time() - start_time
             iteration_count += 1
@@ -591,7 +599,7 @@ class AgentAssistantChat(AssistantChat):
         return response.thread_id, response.run_id
 
     def _invoke_tools(self, response) -> tuple[list, list]:
-        tool_map = {tool.name: tool for tool in self.adapter.get_tools()}
+        tool_map = {tool.name: tool for tool in self.adapter.get_allowed_tools()}
 
         tool_outputs = []
         tool_outputs_with_artifacts = []
@@ -610,13 +618,13 @@ class AgentAssistantChat(AssistantChat):
 
         return tool_outputs, tool_outputs_with_artifacts
 
-    def _handle_tool_artifacts(self, tool_outputs_with_artifacts, assistant_runnable, last_action):
+    def _handle_tool_artifacts(self, tool_outputs_with_artifacts, assistant_runnable, last_action, config):
         """When artifacts are produced we don't submit the tool outputs to the existing run since
         that only accepts text.
 
         Instead, we create a new run with a new message and add the artifacts as attachments.
         """
-        from apps.assistants.sync import _openai_create_file_with_retries, convert_to_openai_tool
+        from apps.assistants.sync import _openai_create_file_with_retries
 
         logger.info(
             "Cancelling run %s. Starting new run for thread %s with attachments",
@@ -653,9 +661,7 @@ class AgentAssistantChat(AssistantChat):
         )
 
         # only allow tools that weren't used in the previous run
-        allowed_tools = [{"type": tool} for tool in self.adapter.assistant_builtin_tools]
-        if unused_tools := [tool for tool in self.adapter.get_tools() if tool.name not in seen_tools]:
-            allowed_tools.extend([convert_to_openai_tool(tool) for tool in unused_tools])
+        allowed_tools = self._get_allowed_tools(seen_tools)
 
         return assistant_runnable.invoke(
             {
@@ -663,5 +669,14 @@ class AgentAssistantChat(AssistantChat):
                 "attachments": [{"file_id": file_id, "tools": tools} for file_id, _ in files],
                 "thread_id": last_action.thread_id,
                 "tools": allowed_tools,
-            }
+            },
+            config,
         )
+
+    def _get_allowed_tools(self, disabled_tools: set[str]):
+        from apps.assistants.sync import convert_to_openai_tool
+
+        allowed_tools = [{"type": tool} for tool in self.adapter.assistant_builtin_tools if tool not in disabled_tools]
+        if unused_tools := [tool for tool in self.adapter.get_allowed_tools() if tool.name not in disabled_tools]:
+            allowed_tools.extend([convert_to_openai_tool(tool) for tool in unused_tools])
+        return allowed_tools

@@ -1,8 +1,9 @@
+from string import Formatter
 from typing import Any
 
 from django.db import models
 from django.forms import ValidationError
-from langchain_core.prompts import ChatPromptTemplate, PromptTemplate
+from langchain_core.prompts import ChatPromptTemplate
 
 from apps.experiments.models import AgentTools
 
@@ -23,11 +24,28 @@ PROMPT_VARS_REQUIRED_BY_TOOL = {
 
 
 def validate_prompt_variables(form_data, prompt_key: str, known_vars: set):
-    """Ensures that the variables expected by the prompt has values and that only those in `known_vars` are allowed
-    to be used, otherwise a `ValidationError` is thrown.
-    """
-    prompt_text = form_data[prompt_key]
-    prompt_variables = {get_root_var(var) for var in PromptTemplate.from_template(prompt_text).input_variables}
+    prompt_text = form_data.get(prompt_key, "")
+    tools = form_data.get("tools", [])
+
+    if not prompt_text and not tools:
+        return set()
+
+    prompt_variables = set()
+    try:
+        for literal, field_name, format_spec, conversion in Formatter().parse(prompt_text):
+            if field_name is not None:
+                if format_spec or conversion:
+                    conversion = f"!{conversion}" if conversion else ""
+                    format_spec = f":{format_spec}" if format_spec else ""
+                    variable = f"{{{field_name}{conversion}{format_spec}}}"
+                    bad_part = f"{conversion}{format_spec}"
+                    raise ValidationError(
+                        {prompt_key: f"Invalid prompt variable '{variable}'. Remove the '{bad_part}'."}
+                    )
+                prompt_variables.add(get_root_var(field_name))
+    except ValueError as e:
+        raise ValidationError({prompt_key: f"Invalid format in prompt: {e}"})
+
     unknown = prompt_variables - known_vars
     if unknown:
         raise ValidationError({prompt_key: f"Prompt contains unknown variables: {', '.join(unknown)}"})
@@ -37,20 +55,25 @@ def validate_prompt_variables(form_data, prompt_key: str, known_vars: set):
     elif form_data.get("source_material") and "source_material" not in prompt_variables:
         raise ValidationError({prompt_key: "source_material variable expected since source material is specified"})
 
-    if tools := form_data.get("tools", []):
+    if tools:
         required_prompt_variables = []
         for tool_name in tools:
             required_prompt_variables.extend(PROMPT_VARS_REQUIRED_BY_TOOL[AgentTools(tool_name)])
-
         missing_vars = set(required_prompt_variables) - prompt_variables
         if missing_vars:
             raise ValidationError(
                 {prompt_key: f"Tools require {', '.join(missing_vars)}. Please include them in your prompt."}
             )
+        if not prompt_text and required_prompt_variables:
+            raise ValidationError(
+                {prompt_key: f"Tools {tools} require a prompt with variables, but the prompt is empty."}
+            )
 
     for var in prompt_variables:
         if prompt_text.count(f"{{{var}}}") > 1:
             raise ValidationError({prompt_key: f"Variable {var} is used more than once."})
+
+    return prompt_variables
 
 
 def get_root_var(var: str) -> str:

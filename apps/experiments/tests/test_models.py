@@ -173,6 +173,7 @@ class TestExperimentSession:
                 "total_triggers": 0,
                 "triggers_remaining": 1,
                 "prompt": "hi",
+                "is_cancelled": False,
             }
 
         expected_dict_version = [

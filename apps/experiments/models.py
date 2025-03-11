@@ -4,13 +4,12 @@ import secrets
 import uuid
 from datetime import datetime
 from functools import cached_property
+from typing import Self
 from uuid import uuid4
 
 import markdown
 import pytz
 from django.conf import settings
-from django.contrib.contenttypes.fields import GenericForeignKey, GenericRelation
-from django.contrib.contenttypes.models import ContentType
 from django.contrib.postgres.fields import ArrayField
 from django.core.exceptions import FieldDoesNotExist
 from django.core.validators import MaxValueValidator, MinValueValidator, validate_email
@@ -597,6 +596,10 @@ class AgentTools(models.TextChoices):
     MOVE_SCHEDULED_MESSAGE_DATE = "move-scheduled-message-date", gettext("Move Reminder Date")
     UPDATE_PARTICIPANT_DATA = "update-user-data", gettext("Update Participant Data")
 
+    @classmethod
+    def reminder_tools(cls) -> list[Self]:
+        return [cls.RECURRING_REMINDER, cls.ONE_OFF_REMINDER, cls.DELETE_REMINDER, cls.MOVE_SCHEDULED_MESSAGE_DATE]
+
 
 @audit_fields(*model_audit_fields.EXPERIMENT_FIELDS, audit_special_queryset_writes=True)
 class Experiment(BaseTeamModel, VersionsMixin, CustomActionOperationMixin):
@@ -707,7 +710,6 @@ class Experiment(BaseTeamModel, VersionsMixin, CustomActionOperationMixin):
         help_text="This tells the bot when to reply with voice messages",
     )
     files = models.ManyToManyField("files.File", blank=True)
-    participant_data = GenericRelation("experiments.ParticipantData", related_query_name="bots")
     children = models.ManyToManyField(
         "Experiment", blank=True, through="ExperimentRoute", symmetrical=False, related_name="parents"
     )
@@ -849,7 +851,17 @@ class Experiment(BaseTeamModel, VersionsMixin, CustomActionOperationMixin):
             return self.trace_provider.get_service()
 
     def get_api_url(self):
-        return absolute_url(reverse("api:openai-chat-completions", args=[self.public_id]))
+        if self.is_working_version:
+            return absolute_url(reverse("api:openai-chat-completions", args=[self.public_id]))
+        else:
+            working_version = self.working_version
+            return absolute_url(
+                reverse("api:openai-chat-completions-versioned", args=[working_version.public_id, self.version_number])
+            )
+
+    @property
+    def api_url(self):
+        return self.get_api_url()
 
     @transaction.atomic()
     def create_new_version(self, version_description: str | None = None, make_default: bool = False):
@@ -1298,6 +1310,14 @@ class Participant(BaseTeamModel):
             return {"name": self.name}
         return {}
 
+    def update_name_from_data(self, data: dict):
+        """
+        Updates participant name field from a data dictionary.
+        """
+        if "name" in data:
+            self.name = data["name"]
+            self.save(update_fields=["name"])
+
     def __str__(self):
         if self.is_anonymous:
             suffix = str(self.public_id)[:6]
@@ -1372,7 +1392,7 @@ class Participant(BaseTeamModel):
             return {}
 
     def get_schedules_for_experiment(
-        self, experiment, as_dict=False, as_timezone: str | None = None, include_complete=False
+        self, experiment, as_dict=False, as_timezone: str | None = None, include_inactive=False
     ):
         """
         Returns all scheduled messages for the associated participant for this session's experiment as well as
@@ -1394,8 +1414,8 @@ class Participant(BaseTeamModel):
             .select_related("action")
             .order_by("created_at")
         )
-        if not include_complete:
-            messages = messages.filter(is_complete=False)
+        if not include_inactive:
+            messages = messages.filter(is_complete=False, cancelled_at=None)
 
         scheduled_messages = []
         for message in messages:
@@ -1406,21 +1426,7 @@ class Participant(BaseTeamModel):
                     next_trigger_date = next_trigger_date.astimezone(pytz.timezone(as_timezone))
                     if last_triggered_at:
                         last_triggered_at = last_triggered_at.astimezone(pytz.timezone(as_timezone))
-                scheduled_messages.append(
-                    {
-                        "name": message.name,
-                        "prompt": message.prompt_text,
-                        "external_id": message.external_id,
-                        "frequency": message.frequency,
-                        "time_period": message.time_period,
-                        "repetitions": message.repetitions,
-                        "next_trigger_date": next_trigger_date,
-                        "last_triggered_at": last_triggered_at,
-                        "total_triggers": message.total_triggers,
-                        "triggers_remaining": message.remaining_triggers,
-                        "is_complete": message.is_complete,
-                    }
-                )
+                scheduled_messages.append(message.as_dict(as_timezone=as_timezone))
             else:
                 scheduled_messages.append(message.as_string(as_timezone=as_timezone))
         return scheduled_messages
@@ -1462,10 +1468,6 @@ class ParticipantData(BaseTeamModel):
     objects = ParticipantDataObjectManager()
     participant = models.ForeignKey(Participant, on_delete=models.CASCADE, related_name="data_set")
     data = encrypt(models.JSONField(default=dict))
-    content_type = models.ForeignKey(ContentType, on_delete=models.CASCADE, null=True)
-    # TODO. Remove object_id and content_object once production is stable
-    object_id = models.PositiveIntegerField(null=True)
-    content_object = GenericForeignKey("content_type", "object_id")
     experiment = models.ForeignKey(Experiment, on_delete=models.CASCADE)
     system_metadata = models.JSONField(default=dict)
     encryption_key = encrypt(

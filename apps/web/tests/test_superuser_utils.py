@@ -17,7 +17,7 @@ from apps.web.superuser_utils import (
 def request_with_session(rf):
     request = rf.get("/")
     request.session = {}
-    request.user = mock.Mock(email="test@example.com")
+    request.user = mock.Mock(email="test@example.com", is_anonymous=False)
     return request
 
 

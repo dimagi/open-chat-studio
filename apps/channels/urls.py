@@ -16,5 +16,10 @@ urlpatterns = [
     ),
     path("whatsapp/turn/<uuid:experiment_id>/incoming_message", views.new_turn_message, name="new_turn_message"),
     path("api/<uuid:experiment_id>/incoming_message", views.new_api_message, name="new_api_message"),
+    path(
+        "api/<uuid:experiment_id>/v<int:version>/incoming_message",
+        views.new_api_message_versioned,
+        name="new_api_message_versioned",
+    ),
     path("commcare_connect/incoming_message", views.new_connect_message, name="new_connect_message"),
 ]

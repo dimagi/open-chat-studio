@@ -1332,8 +1332,9 @@ def experiment_session_details_view(request, team_slug: str, experiment_id: uuid
             ],
             "participant_data": json.dumps(session.participant_data_from_experiment, indent=4),
             "participant_schedules": session.participant.get_schedules_for_experiment(
-                experiment, as_dict=True, include_complete=True
+                experiment, as_dict=True, include_inactive=True
             ),
+            "participant_id": session.participant_id,
         },
     )
 
