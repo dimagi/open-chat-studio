@@ -277,11 +277,10 @@
                               class="block w-40 px-3 border border-base-200 rounded-lg bg-base-100 text-sm cursor-pointer flex justify-between items-center"
                               style="height: 2rem;"
                             >
-                              <span x-text="filter.column ? filterData.columns[filter.column].label : 'Column'"></span>
+                              <span x-text="filter.column ? filterData.columns[filter.column].label : 'Select column'"></span>
                               <i class="fa-solid fa-caret-down fa-sm"></i>
                             </label>
                             <ul tabindex="0" class="dropdown-content z-[1] menu p-2 bg-base-100 rounded-box border border-base-200 w-40">
-                              <li><a @click="filter.column = ''; updateOperatorsByColumn(index)">Column</a></li>
                               <template x-for="(config, column) in filterData.columns" :key="column">
                                 <li><a @click="filter.column = column; updateOperatorsByColumn(index)" x-text="config.label"></a></li>
                               </template>
