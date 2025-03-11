@@ -260,7 +260,7 @@
               <!-- Filters Panel -->
                 <div
                   x-show="filterData.showFilters"
-                  class="absolute left-0 mt-2 p-4 bg-white border border-gray-200 rounded-lg shadow-lg z-10 w-fit"
+                  class="absolute left-0 mt-2 p-4 bg-base-100 border border-base-200 rounded-lg shadow-lg z-10 w-fit"
                 >
                   <div class="space-y-3">
                     <template x-for="(filter, index) in filterData.filters" :key="index">
@@ -274,13 +274,13 @@
                           <div class="dropdown dropdown-bottom">
                             <label
                               tabindex="0"
-                              class="block w-40 px-3 border border-gray-300 rounded-lg bg-white text-sm cursor-pointer flex justify-between items-center"
+                              class="block w-40 px-3 border border-base-200 rounded-lg bg-base-100 text-sm cursor-pointer flex justify-between items-center"
                               style="height: 2rem;"
                             >
                               <span x-text="filter.column ? filterData.columns[filter.column].label : 'Column'"></span>
                               <i class="fa-solid fa-caret-down fa-sm"></i>
                             </label>
-                            <ul tabindex="0" class="dropdown-content z-[1] menu p-2 bg-base-100 rounded-box border border-gray-300 w-40">
+                            <ul tabindex="0" class="dropdown-content z-[1] menu p-2 bg-base-100 rounded-box border border-base-200 w-40">
                               <li><a @click="filter.column = ''; updateOperatorsByColumn(index)">Column</a></li>
                               <template x-for="(config, column) in filterData.columns" :key="column">
                                 <li><a @click="filter.column = column; updateOperatorsByColumn(index)" x-text="config.label"></a></li>
@@ -293,13 +293,13 @@
                           <div class="dropdown dropdown-bottom">
                             <label
                               tabindex="0"
-                              class="block w-40 px-3 border border-gray-300 rounded-lg bg-white text-sm cursor-pointer flex justify-between items-center"
+                              class="block w-40 px-3 border border-base-200 rounded-lg bg-base-100 text-sm cursor-pointer flex justify-between items-center"
                               style="height: 2rem;"
                             >
                               <span x-text="filter.operator || 'Select operator'"></span>
                               <i class="fa-solid fa-caret-down fa-sm"></i>
                             </label>
-                            <ul tabindex="0" class="dropdown-content z-[1] menu p-2 bg-base-100 rounded-box border border-gray-300 w-40">
+                            <ul tabindex="0" class="dropdown-content z-[1] menu p-2 bg-base-100 rounded-box border border-base-200 w-40">
                               <template x-for="operator in filter.availableOperators" :key="operator">
                                 <li><a @click="filter.operator = operator; triggerFilterChange()" x-text="operator"></a></li>
                               </template>
@@ -313,7 +313,7 @@
                               <!-- Dropdown trigger button -->
                                 <div
                                   @click="filter.showOptions = !filter.showOptions"
-                                  class="block w-40 px-3 border border-gray-300 rounded-lg bg-white text-sm cursor-pointer flex justify-between items-center"
+                                  class="block w-40 px-3 border border-base-200 rounded-lg bg-base-100 text-sm cursor-pointer flex justify-between items-center"
                                   style="height: 2rem;"
                                 >
                                 <!-- Display selected items up to char length of 18 -->
@@ -329,7 +329,7 @@
                                 <div
                                   x-show="filter.showOptions"
                                   @click.outside="filter.showOptions = false"
-                                  class="absolute z-50 mt-1 bg-base-100 rounded-lg max-h-64 overflow-y-auto w-40 border border-gray-300"
+                                  class="absolute z-50 mt-1 bg-base-100 rounded-lg max-h-64 overflow-y-auto w-40 border border-base-300"
                                   style="z-index: 9999 !important;">
 
                                 <!-- Search input at the top of dropdown -->
@@ -404,7 +404,7 @@
                               <select
                                 x-model="filter.value"
                                 @change="triggerFilterChange()"
-                                class="block w-40 py-2 px-3 border border-gray-200 rounded-lg bg-white text-sm"
+                                class="block w-40 py-2 px-3 border border-base-300 rounded-lg bg-base-100 text-sm"
                               >
                                 <option value="">Select value</option>
                                 <template x-for="option in filterData.columns[filter.column]?.options" :key="option">
