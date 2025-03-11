@@ -271,28 +271,40 @@
                         </div>
                       <!-- Column Selector -->
                         <div class="relative py-2">
-                          <select
-                            x-model="filter.column"
-                            @change="updateOperatorsByColumn(index)"
-                            class="w-40 select select-bordered select-sm"
-                          >
-                            <option value="">Column</option>
-                            <template x-for="(config, column) in filterData.columns" :key="column">
-                              <option :value="column" x-text="config.label" :selected="column === filter.column"></option>
-                            </template>
-                          </select>
+                          <div class="dropdown dropdown-bottom">
+                            <label
+                              tabindex="0"
+                              class="block w-40 px-3 border border-gray-300 rounded-lg bg-white text-sm cursor-pointer flex justify-between items-center"
+                              style="height: 2rem;"
+                            >
+                              <span x-text="filter.column ? filterData.columns[filter.column].label : 'Column'"></span>
+                              <i class="fa-solid fa-caret-down fa-sm"></i>
+                            </label>
+                            <ul tabindex="0" class="dropdown-content z-[1] menu p-2 shadow bg-base-100 rounded-box w-40">
+                              <li><a @click="filter.column = ''; updateOperatorsByColumn(index)">Column</a></li>
+                              <template x-for="(config, column) in filterData.columns" :key="column">
+                                <li><a @click="filter.column = column; updateOperatorsByColumn(index)" x-text="config.label"></a></li>
+                              </template>
+                            </ul>
+                          </div>
                         </div>
                       <!-- Operator Selector -->
                         <div x-show="filter.column" class="relative py-1 px-1">
-                          <select
-                            x-model="filter.operator"
-                            @change="triggerFilterChange()"
-                            class="w-40 select select-bordered select-sm"
-                          >
-                            <template x-for="operator in filter.availableOperators" :key="operator">
-                              <option :value="operator" x-text="operator"></option>
-                            </template>
-                          </select>
+                          <div class="dropdown dropdown-bottom">
+                            <label
+                              tabindex="0"
+                              class="block w-40 px-3 border border-gray-300 rounded-lg bg-white text-sm cursor-pointer flex justify-between items-center"
+                              style="height: 2rem;"
+                            >
+                              <span x-text="filter.operator || 'Select operator'"></span>
+                              <i class="fa-solid fa-caret-down fa-sm"></i>
+                            </label>
+                            <ul tabindex="0" class="dropdown-content z-[1] menu p-2 shadow bg-base-100 rounded-box w-40">
+                              <template x-for="operator in filter.availableOperators" :key="operator">
+                                <li><a @click="filter.operator = operator; triggerFilterChange()" x-text="operator"></a></li>
+                              </template>
+                            </ul>
+                          </div>
                         </div>
                         <template x-if="filter.operator">
                           <div class="relative py-1 pl-1">
