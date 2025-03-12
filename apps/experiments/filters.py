@@ -72,7 +72,7 @@ def build_versions_filter(operator, value):
                     chat=OuterRef("chat"),
                     tags__name__startswith=tag,
                     tags__category=Chat.MetadataKeys.EXPERIMENT_VERSION,
-                ).values("id")[:1]
+                ).values("id")
                 for tag in version_tags
             ]
             combined_query = Q()
@@ -88,7 +88,7 @@ def build_versions_filter(operator, value):
                     chat=OuterRef("chat"),
                     tags__name__startswith=tag,
                     tags__category=Chat.MetadataKeys.EXPERIMENT_VERSION,
-                ).values("id")[:1]
+                ).values("id")
                 q_objects &= Q(Exists(tag_exists))
             return q_objects
     except json.JSONDecodeError:
