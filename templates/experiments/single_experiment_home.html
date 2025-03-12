@@ -650,8 +650,9 @@
           const filters = [];
           let maxIndex = -1;
           for (const [key, value] of urlParams.entries()) {
-            if (key.startsWith('filter_') && key.includes('_column')) {
-              const index = parseInt(key.split('_')[1]);
+            const match = key.match(/filter_(\d+)_column/);
+            if (match) {
+              const index = parseInt(match[1]);
               if (index > maxIndex) maxIndex = index;
             }
           }
