@@ -299,7 +299,7 @@ def test_update_participant_data_and_setup_connect_channels(httpx_mock):
     httpx_mock.add_response(
         method="POST",
         url=f"{settings.COMMCARE_CONNECT_SERVER_URL}/messaging/create_channel/",
-        json={"channel_id": created_connect_channel_id},
+        json={"channel_id": created_connect_channel_id, "consent": True},
     )
 
     team = TeamWithUsersFactory()
@@ -373,7 +373,7 @@ def test_update_participant_data_and_setup_connect_channels(httpx_mock):
     assert request_data["channel_source"] == "bot1"
     assert Participant.objects.filter(identifier="CONNECTID_2").exists()
     data = ParticipantData.objects.get(participant__identifier="CONNECTID_2", experiment_id=experiment1.id)
-    assert data.system_metadata["commcare_connect_channel_id"] == created_connect_channel_id
+    assert data.system_metadata == {"commcare_connect_channel_id": created_connect_channel_id, "consent": True}
 
 
 @pytest.mark.django_db()
