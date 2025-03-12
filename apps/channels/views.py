@@ -183,13 +183,6 @@ def new_connect_message(request: HttpRequest):
     if not participant_data.has_consented():
         return JsonResponse({"detail": "User has not given consent"}, status=status.HTTP_400_BAD_REQUEST)
 
-    # Temprary code ------
-    import logging
-
-    logger = logging.getLogger("ocs.endpoints.new_connect_message")
-    logger.info(serializer.data)
-    # --------------------
-
     tasks.handle_commcare_connect_message.delay(
         experiment_channel_id=channel.id, participant_data_id=participant_data.id, messages=serializer.data["messages"]
     )
