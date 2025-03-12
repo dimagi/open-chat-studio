@@ -56,7 +56,7 @@ THIRD_PARTY_APPS = [
     "allauth",  # allauth account/registration management
     "allauth.account",
     "allauth.socialaccount",
-    "allauth.socialaccount.providers.openid_connect",
+    "allauth.socialaccount.providers.microsoft",
     "django_otp",
     "django_otp.plugins.otp_totp",
     "django_otp.plugins.otp_static",
@@ -243,6 +243,12 @@ ACCOUNT_FORMS = {
 SOCIALACCOUNT_ADAPTER = "apps.sso.adapter.SsoAccountAdapter"
 SOCIALACCOUNT_FORMS = {
     "signup": "apps.sso.forms.SsoSignupForm",
+}
+SOCIALACCOUNT_PROVIDERS = {
+    "microsoft": {
+        "SCOPE": ["openid", "profile", "email", "User.Read"],
+        "AUTH_PARAMS": {"claims": '{"id_token": {"login_hint": null}}'},
+    }
 }
 
 # User signup configuration: change to "mandatory" to require users to confirm email before signing in.

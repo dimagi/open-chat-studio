@@ -5,10 +5,13 @@ from allauth.socialaccount.models import SocialApp
 from allauth.utils import get_form_class
 from django import forms
 from django.contrib import messages
+from django.contrib.auth.signals import user_logged_out
+from django.http import HttpResponse
 from django.shortcuts import get_object_or_404, redirect
 from django.utils.translation import gettext_lazy as _
 from waffle import flag_is_active
 
+from apps.sso.models import SsoSession
 from apps.teams.models import Invitation
 
 
@@ -128,3 +131,32 @@ class SignupAfterInvite(SignupView):
         if self.invitation:
             context["invitation"] = self.invitation
         return context
+
+
+def sso_logout(request):
+    """
+    This view is called by the SSO provider when the user logs out.
+    See https://openid.net/specs/openid-connect-frontchannel-1_0.html
+    See https://learn.microsoft.com/en-us/entra/identity-platform/v2-protocols-oidc#single-sign-out
+    """
+    sso_session_id = request.GET.get("sid")
+    if not sso_session_id:
+        return HttpResponse(status=200)
+    
+    sso_session = SsoSession.objects.select_related("user", "django_session").filter(id=sso_session_id).first()
+    if not sso_session:
+        return HttpResponse(status=200)
+    
+    session_matches_request = request.session.session_key == sso_session.django_session_id
+    request.session.flush()
+    if not session_matches_request:
+        sso_session.django_session.delete()
+        sso_session.delete()
+        
+    user_logged_out.send(sender=sso_session.user.__class__, request=request, user=sso_session.user)
+    if hasattr(request, "user"):
+        from django.contrib.auth.models import AnonymousUser
+
+        request.user = AnonymousUser()
+
+    return HttpResponse(status=200)
