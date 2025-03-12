@@ -1,8 +1,6 @@
-<form
-    action="{% url 'documents:edit_collection' request.team.slug object.id %}"
-    method="POST"
-    class="m-2 grid grid-cols-4" x-data="{ editing: false }">
-    {% csrf_token %}
+{% extends 'documents/shared/details_base.html' %}
+
+{% block detail_content %}
     <div class="col-span-3">
         <input x-cloak x-show="editing" name="name" class="input input-bordered" value="{{ object.name }}"></input>
         <h1 x-show="!editing" class="pg-title">{{ object.name }}</h1>
@@ -34,20 +32,4 @@
             </div>
         </dl>
     </div>
-    <div class="py-3 col-span-1">
-        <div class="join">
-            <button type="button" class="btn btn-sm join-item pl-3" x-show="!editing" @click="editing = true">
-                Edit <i class="fa-solid fa-pencil fa-xs"></i>
-            </button>
-            <button type="submit" class="btn btn-sm join-item" x-cloak x-show="editing">
-                Update <i class="fa-solid fa-check fa-xs"></i>
-            </button>
-            <a type="button" class="btn btn-sm join-item" x-show="!editing" href="{% url 'documents:delete_collection' request.team.slug object.id %}">
-                <i class="fa-solid fa-trash htmx-hide"></i>
-            </a>
-            <button type="button" @click="editing = false" class="btn btn-sm join-item" x-cloak x-show="editing">
-                Cancel
-            </button>
-        </div>
-    </div>
-</form>
+{% endblock %}

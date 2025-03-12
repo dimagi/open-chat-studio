@@ -91,6 +91,12 @@ class FileDetails(LoginAndTeamRequiredMixin, BaseDetailsView):
         file = self.get_object()
         collection_names = file.repository_set.filter(type=RepositoryType.COLLECTION).values_list("name", flat=True)
         context["current_collections"] = list(collection_names)
+        context["edit_url"] = reverse(
+            "documents:edit_file", kwargs={"team_slug": self.kwargs["team_slug"], "id": file.id}
+        )
+        context["delete_url"] = reverse(
+            "documents:delete_file", kwargs={"team_slug": self.kwargs["team_slug"], "id": file.id}
+        )
         context["available_collections"] = Repository.objects.filter(
             team__slug=self.kwargs["team_slug"], type=RepositoryType.COLLECTION
         ).values_list("name", flat=True)
@@ -185,6 +191,17 @@ class CollectionDetails(LoginAndTeamRequiredMixin, BaseDetailsView):
     template_name = "documents/collection_details.html"
     model = Repository
     permission_required = "documents.view_repository"
+
+    def get_context_data(self, *args, **kwargs):
+        context = super().get_context_data(*args, **kwargs)
+        collection = self.get_object()
+        context["edit_url"] = reverse(
+            "documents:edit_collection", kwargs={"team_slug": self.kwargs["team_slug"], "id": collection.id}
+        )
+        context["delete_url"] = reverse(
+            "documents:delete_collection", kwargs={"team_slug": self.kwargs["team_slug"], "id": collection.id}
+        )
+        return context
 
 
 @require_POST
