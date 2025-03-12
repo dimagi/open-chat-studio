@@ -1,4 +1,5 @@
 from django import forms
+from django.forms import inlineformset_factory
 
 from apps.assistants.models import OpenAiAssistant, ToolResources
 from apps.assistants.utils import get_assistant_tool_options, get_llm_providers_for_assistants
@@ -100,21 +101,65 @@ class ImportAssistantForm(forms.Form):
 
 
 class ToolResourceFileFormsets:
-    def __init__(self, request):
-        self.code_interpreter = get_file_formset(request, prefix="code_interpreter")
-        self.file_search = get_file_formset(request, prefix="file_search")
+    def __init__(self, request, instance=None):
+        self.request = request
+        self.instance = instance
+        if instance:  # Edit
+            self.edit_formset = inlineformset_factory(
+                OpenAiAssistant,
+                ToolResources,
+                fields=("allow_file_downloads",),
+                extra=0,
+                can_delete=False,
+            )(self.request.POST if self.request.method == "POST" else None, instance=instance)
+        else:  # Create
+            self.code_interpreter = get_file_formset(request, prefix="code_interpreter")
+            self.file_search = get_file_formset(request, prefix="file_search")
+            # Adding forms to allow file download during Assistant Creation
+            self.code_interpreter_form = forms.Form(self.request.POST if self.request.method == "POST" else None)
+            self.file_search_form = forms.Form(self.request.POST if self.request.method == "POST" else None)
+            self.code_interpreter_form.fields["allow_file_downloads"] = forms.BooleanField(
+                required=False, label="Allow file downloads (Code Interpreter)", initial=False
+            )
+            self.file_search_form.fields["allow_file_downloads"] = forms.BooleanField(
+                required=False, label="Allow file downloads (File Search)", initial=False
+            )
 
     def is_valid(self):
-        return self.code_interpreter.is_valid() and self.file_search.is_valid()
+        if self.instance:
+            return self.edit_formset.is_valid()
+        return (
+            self.code_interpreter.is_valid()
+            and self.file_search.is_valid()
+            and self.code_interpreter_form.is_valid()
+            and self.file_search_form.is_valid()
+        )
 
     def save(self, request, assistant):
-        if "code_interpreter" in assistant.builtin_tools:
-            self.create_tool_resources("code_interpreter", request, assistant, self.code_interpreter)
-        if "file_search" in assistant.builtin_tools:
-            self.create_tool_resources("file_search", request, assistant, self.file_search)
+        if self.instance:
+            self.edit_formset.save()
+        else:
+            if "code_interpreter" in assistant.builtin_tools:
+                self.create_tool_resources(
+                    "code_interpreter",
+                    request,
+                    assistant,
+                    self.code_interpreter,
+                    self.code_interpreter_form.cleaned_data.get("allow_file_downloads", False),
+                )
+            if "file_search" in assistant.builtin_tools:
+                self.create_tool_resources(
+                    "file_search",
+                    request,
+                    assistant,
+                    self.file_search,
+                    self.file_search_form.cleaned_data.get("allow_file_downloads", False),
+                )
 
-    def create_tool_resources(self, type_, request, assistant, form):
+    def create_tool_resources(self, type_, request, assistant, form, allow_file_downloads=False):
         files = form.save(request)
         if files:
-            resources = ToolResources.objects.create(assistant=assistant, tool_type=type_)
+            resources = ToolResources.objects.create(
+                assistant=assistant, tool_type=type_, allow_file_downloads=allow_file_downloads
+            )
             resources.files.set(files)
