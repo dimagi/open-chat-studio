@@ -11,7 +11,7 @@
             {% translate "Sign Up" %}
           </a>
         {% endif %}
-        <a href="{% url login_url_name %}" class="btn btn-outline ml-2">
+        <a href="{% url login_url_name|default:"account_login" %}" class="btn btn-outline ml-2">
           {% translate "Sign In" %}
         </a>
       {% endif %}

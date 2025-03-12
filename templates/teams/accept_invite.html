@@ -46,7 +46,7 @@
                 </a>
               </p>
               <p>
-                <a href="{% url login_url_name %}{% querystring next=invitation_url %}" class="link">
+                <a href="{% url login_url_name|default:"account_login" %}{% querystring next=invitation_url %}" class="link">
                   {% blocktranslate with invite_email=invitation.email %}
                     Already have an account as {{ invite_email }}? Sign in.
                   {% endblocktranslate %}
