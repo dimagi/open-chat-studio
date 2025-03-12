@@ -382,6 +382,17 @@ def test_assistant_response_with_annotations(
         attachment, _created = chat.attachments.get_or_create(tool_type="file_path")
         attachment.files.add(local_file)
 
+    # ToolResources for assistant with allow_file_downloads=True
+    from apps.assistants.models import ToolResources
+
+    runnable = create_experiment_runnable(session.experiment, session)
+    assistant = runnable.adapter.assistant
+    tool_resource = ToolResources.objects.create(
+        assistant=assistant, tool_type="file_search", allow_file_downloads=True
+    )
+    if not cited_file_missing:
+        tool_resource.files.add(local_file)
+
     # Build OpenAI responses
     annotations = [
         FilePathAnnotation(
@@ -407,7 +418,6 @@ def test_assistant_response_with_annotations(
         " Another link to nothing [file3.pdf](https://example.com/download/file-3)"
     )
 
-    assistant = create_experiment_runnable(session.experiment, session)
     list_messages.return_value = _create_thread_messages(
         ASSISTANT_ID, run.id, thread_id, [{"assistant": ai_message}], annotations
     )
@@ -415,11 +425,9 @@ def test_assistant_response_with_annotations(
     create_and_run.return_value = run
     retrieve_run.return_value = run
 
-    # Run assistant
-    result = assistant.invoke("test", attachments=[])
+    result = runnable.invoke("test", attachments=[])
 
     if cited_file_missing:
-        # The cited file link is empty, since it's missing from the DB
         expected_output_message = (
             f"![test.png](file:dimagi-test:{session.id}:10)\n"
             f"Hi there human. The generated file can be [downloaded here](file:dimagi-test:{session.id}:10)."
@@ -432,10 +440,9 @@ def test_assistant_response_with_annotations(
             f"Hi there human. The generated file can be [downloaded here](file:dimagi-test:{session.id}:10)."
             " A made up link to *file1.pdf* *file2.pdf*"
             " Also, leaves are tree stuff [1]. Another link to nothing *file3.pdf*"
-            f"\n[1]: file:dimagi-test:{session.id}:9"
+            f"\n[1]: <a href='/a/dimagi-test/assistants/{assistant.id}/files/9/download/'>existing.txt</a>"
         )
     assert result.output == expected_output_message
-
     assert chat.get_metadata(Chat.MetadataKeys.OPENAI_THREAD_ID) == thread_id
     assert chat.attachments.filter(tool_type="file_path").exists()
     message = chat.messages.filter(message_type="ai").first()
