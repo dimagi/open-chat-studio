@@ -23,7 +23,7 @@ def login_and_team_required(view_func):
         if not valid_auth_and_membership(request):
             next_url = request.get_full_path()
             if not url_has_allowed_host_and_scheme(next_url, allowed_hosts={request.get_host()}):
-                next_url = '/'
+                next_url = "/"
             return HttpResponseRedirect(f"{reverse(settings.LOGIN_URL)}?next={next_url}")
         return view_func(request, *args, **kwargs)
 
