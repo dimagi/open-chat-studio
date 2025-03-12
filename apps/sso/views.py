@@ -105,9 +105,9 @@ class SignupAfterInvite(SignupView):
             )
             return redirect("web:home")
 
-        # if flag_is_active(self.request, "sso_login"):
-        if response := _redirect_for_sso(self.request, self.invitation.email):
-            return response
+        if flag_is_active(self.request, "sso_login"):
+            if response := _redirect_for_sso(self.request, self.invitation.email):
+                return response
         return super().get(request, *args, **kwargs)
 
     def is_open(self):
