@@ -85,7 +85,7 @@ def _redirect_for_sso(request, email):
         if allow_list := app.settings.get("allow_list"):
             if email not in allow_list:
                 return
-        
+
         provider = app.get_provider(request)
         # Store email in session to validate later
         request.session["initial_login_email"] = email
@@ -148,17 +148,17 @@ def sso_logout(request):
     sso_session_id = request.GET.get("sid")
     if not sso_session_id:
         return HttpResponse(status=200)
-    
+
     sso_session = SsoSession.objects.select_related("user", "django_session").filter(id=sso_session_id).first()
     if not sso_session:
         return HttpResponse(status=200)
-    
+
     session_matches_request = request.session.session_key == sso_session.django_session_id
     request.session.flush()
     if not session_matches_request:
         sso_session.django_session.delete()
         sso_session.delete()
-        
+
     user_logged_out.send(sender=sso_session.user.__class__, request=request, user=sso_session.user)
     if hasattr(request, "user"):
         from django.contrib.auth.models import AnonymousUser
