@@ -1664,10 +1664,10 @@ class ExperimentSession(BaseTeamModel):
         """Sends the `instruction_prompt` along with the chat history to the LLM to formulate an appropriate prompt
         message. The response from the bot will be saved to the chat history.
         """
-        from apps.chat.bots import get_bot
+        from apps.chat.bots import EventBot
 
-        bot = get_bot(self, experiment=use_experiment, disable_tools=True)
-        return bot.process_input(user_input=instruction_prompt, save_input_to_history=False)
+        bot = EventBot(self, use_experiment)
+        return bot.get_user_message(instruction_prompt)
 
     def try_send_message(self, message: str, fail_silently=True):
         """Tries to send a message to this user session as the bot. Note that `message` will be send to the user
