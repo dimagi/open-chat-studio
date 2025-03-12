@@ -61,6 +61,13 @@
       "type": "string",
       "ui:widget": "expandable_text"
     },
+    "collection_id": {
+      "default": null,
+      "title": "Collection Id",
+      "ui:optionsSource": "collection",
+      "ui:widget": "select",
+      "type": "integer"
+    },
     "tools": {
       "description": "The tools to enable for the bot",
       "items": {

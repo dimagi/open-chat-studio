@@ -221,6 +221,9 @@ class LLMResponseWithPrompt(LLMResponse, HistoryMixin):
         default="You are a helpful assistant. Answer the user's query as best you can",
         json_schema_extra=UiSchema(widget=Widgets.expandable_text),
     )
+    collection_id: int | None = Field(
+        None, json_schema_extra=UiSchema(widget=Widgets.select, options_source=OptionsSource.collection)
+    )
     tools: list[str] = Field(
         default_factory=list,
         description="The tools to enable for the bot",

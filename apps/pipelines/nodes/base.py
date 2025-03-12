@@ -210,6 +210,7 @@ class OptionsSource(StrEnum):
     assistant = "assistant"
     agent_tools = "agent_tools"
     custom_actions = "custom_actions"
+    collection = "collection"
 
 
 class UiSchema(BaseModel):
