@@ -321,16 +321,20 @@ class TestExperimentSession:
         trigger_action = ScheduleTriggerAction()
         trigger_action.invoke(session, action=event_action)
 
-        session.ad_hoc_bot_message = Mock()
+        session.try_send_message = Mock()
         message = ScheduledMessage.objects.get(action=event_action)
         message.participant.get_latest_session = lambda *args, **kwargs: session
         message.safe_trigger()
 
-        experiment_used = session.ad_hoc_bot_message.call_args_list[0].kwargs["use_experiment"]
-        if use_custom_experiment:
-            assert experiment_used == custom_experiment
-        else:
-            assert experiment_used == session.experiment
+        session.try_send_message.assert_called_once()
+        assert session.try_send_message.call_args.args[0] == "hi"
+
+        if hasattr(message, "_get_experiment_to_generate_response"):
+            experiment_used = message._get_experiment_to_generate_response()
+            if use_custom_experiment:
+                assert experiment_used == custom_experiment
+            else:
+                assert experiment_used == session.experiment
 
     @pytest.mark.parametrize(
         ("repetitions", "total_triggers", "end_date", "expected"),
