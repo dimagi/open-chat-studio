@@ -15,7 +15,20 @@ from django.contrib.postgres.fields import ArrayField
 from django.core.exceptions import FieldDoesNotExist
 from django.core.validators import MaxValueValidator, MinValueValidator, validate_email
 from django.db import models, transaction
-from django.db.models import BooleanField, Case, Count, OuterRef, Q, Subquery, UniqueConstraint, When
+from django.db.models import (
+    BooleanField,
+    Case,
+    CharField,
+    Count,
+    F,
+    OuterRef,
+    Q,
+    Subquery,
+    UniqueConstraint,
+    Value,
+    When,
+)
+from django.db.models.functions import Cast, Concat
 from django.template.loader import get_template
 from django.urls import reverse
 from django.utils import timezone
@@ -270,7 +283,13 @@ class VersionsMixin:
 
     def get_version_name_list(self):
         """Returns list of version names in form of v + version number including working version."""
-        return [v.get_version_name() for v in self.versions.all()] + [f"v{self.version_number}"]
+        versions_list = list(
+            self.versions.annotate(
+                friendly_name=Concat(Value("v"), Cast(F("version_number"), output_field=CharField()))
+            ).values_list("friendly_name", flat=True)
+        )
+        versions_list.append(f"v{self.version_number}")
+        return versions_list
 
 
 @audit_fields(*model_audit_fields.SOURCE_MATERIAL_FIELDS, audit_special_queryset_writes=True)
