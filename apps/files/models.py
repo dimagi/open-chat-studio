@@ -71,7 +71,7 @@ class File(BaseTeamModel):
 
     @property
     def size_mb(self) -> float:
-        """Returns the size of this file in megabytes (base 2)"""
+        """Returns the size of this file in megabytes"""
         return bytes_to_megabytes(self.content_size)
 
     def save(self, *args, **kwargs):
