@@ -1,18 +1,22 @@
 import json
 from functools import cache
 
+from django.contrib import messages
 from django.contrib.auth.decorators import permission_required
 from django.contrib.auth.mixins import PermissionRequiredMixin
 from django.contrib.postgres.search import TrigramSimilarity
 from django.db import transaction
 from django.db.models import Q
+from django.http import HttpResponse
 from django.shortcuts import get_object_or_404, redirect
+from django.template.loader import render_to_string
 from django.urls import reverse
 from django.views.decorators.http import require_POST
 from django.views.generic import ListView, TemplateView
 
 from apps.documents.models import Repository, RepositoryType
 from apps.files.models import File
+from apps.generics.chips import Chip
 from apps.teams.decorators import login_and_team_required
 from apps.teams.mixins import LoginAndTeamRequiredMixin
 
@@ -132,7 +136,8 @@ def upload_files(request, team_slug: str):
 def delete_file(request, team_slug: str, id: int):
     file = get_object_or_404(File, team__slug=team_slug, id=id)
     file.delete()
-    return redirect(reverse("documents:repositories", kwargs={"team_slug": team_slug, "tab_name": "files"}))
+    messages.success(request, "File deleted")
+    return HttpResponse()
 
 
 @login_and_team_required
@@ -216,8 +221,21 @@ def new_collection(request, team_slug: str):
 @permission_required("documents.delete_repository")
 def delete_collection(request, team_slug: str, id: int):
     collection = get_object_or_404(Repository, team__slug=team_slug, id=id, type=RepositoryType.COLLECTION)
-    collection.delete()
-    return redirect(reverse("documents:repositories", kwargs={"team_slug": team_slug, "tab_name": "collections"}))
+    if pipeline_nodes := collection.get_references():
+        response = render_to_string(
+            "assistants/partials/referenced_objects.html",
+            context={
+                "object_name": "collection",
+                "pipeline_nodes": [
+                    Chip(label=node.pipeline.name, url=node.pipeline.get_absolute_url()) for node in pipeline_nodes
+                ],
+            },
+        )
+        return HttpResponse(response, headers={"HX-Reswap": "none"}, status=400)
+    else:
+        collection.delete()
+        messages.success(request, "Collection deleted")
+        return HttpResponse()
 
 
 @login_and_team_required

@@ -4,6 +4,7 @@
         hx-{{ hx_method|lower }}="{{ action_url }}"
         hx-target="#record-{{ record.id }}"
         hx-swap="outerHTML"
+        type="button"
 
         {% if confirm_message %}
           hx-trigger="confirmed"
