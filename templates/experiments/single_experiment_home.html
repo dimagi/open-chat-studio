@@ -262,25 +262,25 @@
                   x-show="filterData.showFilters"
                   class="absolute left-0 mt-2 p-4 bg-base-100 border border-base-200 rounded-lg shadow-lg z-10 w-fit"
                 >
-                  <div class="space-y-3">
+                  <div class="space-y-2">
                     <template x-for="(filter, index) in filterData.filters" :key="index">
-                      <div class="flex items-center gap-3">
+                      <div class="flex items-center gap-2">
                       <!-- Where/AND Label -->
                         <div class="text-gray-500 font-medium w-16">
                           <span x-text="index === 0 ? 'Where' : 'AND'"></span>
                         </div>
                       <!-- Column Selector -->
-                        <div class="relative py-2">
+                        <div class="relative">
                           <div class="dropdown dropdown-bottom">
                             <label
                               tabindex="0"
-                              class="block w-40 px-3 border border-base-200 rounded-lg bg-base-100 text-sm cursor-pointer flex justify-between items-center"
+                              class="w-40 px-3 border border-base-200 rounded-lg bg-base-100 text-sm cursor-pointer flex justify-between items-center"
                               style="height: 2rem;"
                             >
                               <span x-text="filter.column ? filterData.columns[filter.column].label : 'Select column'"></span>
                               <i class="fa-solid fa-caret-down fa-sm"></i>
                             </label>
-                            <ul tabindex="0" class="dropdown-content z-[1] menu p-2 bg-base-100 rounded-box border border-base-200 w-40">
+                            <ul tabindex="0" class="dropdown-content z-[1] menu p-2 bg-base-100 rounded-lg border border-base-200 w-40">
                               <template x-for="(config, column) in filterData.columns" :key="column">
                                 <li><a @click="filter.column = column; updateOperatorsByColumn(index)" x-text="config.label"></a></li>
                               </template>
@@ -288,17 +288,17 @@
                           </div>
                         </div>
                       <!-- Operator Selector -->
-                        <div x-show="filter.column" class="relative py-1 px-1">
+                        <div x-show="filter.column" class="relative">
                           <div class="dropdown dropdown-bottom">
                             <label
                               tabindex="0"
-                              class="block w-40 px-3 border border-base-200 rounded-lg bg-base-100 text-sm cursor-pointer flex justify-between items-center"
+                              class="w-40 px-3 border border-base-200 rounded-lg bg-base-100 text-sm cursor-pointer flex justify-between items-center"
                               style="height: 2rem;"
                             >
                               <span x-text="filter.operator || 'Select operator'"></span>
                               <i class="fa-solid fa-caret-down fa-sm"></i>
                             </label>
-                            <ul tabindex="0" class="dropdown-content z-[1] menu p-2 bg-base-100 rounded-box border border-base-200 w-40">
+                            <ul tabindex="0" class="dropdown-content z-[1] menu p-2 bg-base-100 rounded-lg border border-base-200 w-40">
                               <template x-for="operator in filter.availableOperators" :key="operator">
                                 <li><a @click="filter.operator = operator; triggerFilterChange()" x-text="operator"></a></li>
                               </template>
@@ -306,13 +306,13 @@
                           </div>
                         </div>
                         <template x-if="filter.operator">
-                          <div class="relative py-1 pl-1">
+                          <div class="relative">
                             <template x-if="filterData.columns[filter.column]?.type === 'choice' && ['any of', 'all of'].includes(filter.operator)">
                               <div class="relative">
                               <!-- Dropdown trigger button -->
                                 <div
                                   @click="filter.showOptions = !filter.showOptions"
-                                  class="block w-40 px-3 border border-base-200 rounded-lg bg-base-100 text-sm cursor-pointer flex justify-between items-center"
+                                  class="w-40 px-3 border border-base-200 rounded-lg bg-base-100 text-sm cursor-pointer flex justify-between items-center"
                                   style="height: 2rem;"
                                 >
                                 <!-- Display selected items up to char length of 18 -->
