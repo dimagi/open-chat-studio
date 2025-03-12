@@ -701,9 +701,8 @@
               (Array.isArray(filter.selectedValues) && filter.selectedValues.length > 0)
             )
           );
-          if (this.filterData.filters.length > 0) {
-            this.filterData.showFilters = true;
-          } else {
+          this.filterData.showFilters = false;
+          if (this.filterData.filters.length === 0) {
             this.addFilter();
           }
         },
