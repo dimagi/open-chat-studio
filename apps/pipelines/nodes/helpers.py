@@ -72,13 +72,13 @@ class ParticipantDataProxy:
         """
         from apps.events.models import ScheduledMessage
 
-        experiment = self.session.experiment
-        participant = self.session.participant
+        experiment = self.session.experiment_id
+        participant = self.session.participant_id
         team = self.session.experiment.team
         messages = (
             ScheduledMessage.objects.filter(
-                experiment=experiment,
-                participant=participant,
+                experiment_id=experiment,
+                participant_id=participant,
                 team=team,
                 is_complete=False,
                 cancelled_at=None,
