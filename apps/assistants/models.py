@@ -288,6 +288,7 @@ class ToolResources(BaseModel):
     tool_type = models.CharField(max_length=128)
     files = models.ManyToManyField("files.File", blank=True)
     extra = models.JSONField(default=dict, blank=True)
+    allow_file_downloads = models.BooleanField(default=False)
 
     objects = AuditingManager()
 

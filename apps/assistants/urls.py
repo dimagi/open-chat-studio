@@ -17,4 +17,5 @@ urlpatterns = make_crud_urls(views, "OpenAiAssistant", "", delete=False) + [
     ),
     path("<int:pk>/syncing/", views.SyncEditingOpenAiAssistant.as_view(), name="sync_while_editing"),
     path("<int:pk>/checking_sync_status/", views.check_sync_status, name="check_sync_status"),
+    path("<int:assistant_id>/files/<int:file_id>/download/", views.DownloadFileView.as_view(), name="download_file"),
 ]

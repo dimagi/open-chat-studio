@@ -4,7 +4,7 @@ from django.contrib import messages
 from django.contrib.auth.mixins import PermissionRequiredMixin
 from django.db import transaction
 from django.db.models import Q
-from django.http import HttpResponse, HttpResponseRedirect
+from django.http import FileResponse, HttpResponse, HttpResponseForbidden, HttpResponseRedirect
 from django.shortcuts import get_object_or_404, render
 from django.template.loader import render_to_string
 from django.urls import reverse
@@ -20,6 +20,7 @@ from apps.service_providers.utils import get_llm_provider_choices
 from apps.teams.mixins import LoginAndTeamRequiredMixin
 from apps.utils.tables import render_table_row
 
+from ..files.models import File
 from ..generics.chips import Chip
 from ..teams.decorators import login_and_team_required
 from .forms import ImportAssistantForm, OpenAiAssistantForm, ToolResourceFileFormsets
@@ -109,6 +110,11 @@ class CreateOpenAiAssistant(BaseOpenAiAssistantView, CreateView):
     button_text = "Create"
     permission_required = "assistants.add_openaiassistant"
 
+    def get_context_data(self, **kwargs):
+        context = super().get_context_data(**kwargs)
+        context["resource_formsets"] = ToolResourceFileFormsets(self.request)
+        return context
+
     def post(self, request, *args, **kwargs):
         self.object = None
         form = self.get_form()
@@ -138,8 +144,19 @@ class EditOpenAiAssistant(BaseOpenAiAssistantView, UpdateView):
     button_text = "Update"
     permission_required = "assistants.change_openaiassistant"
 
+    def get_context_data(self, **kwargs):
+        context = super().get_context_data(**kwargs)
+        if self.object:
+            context["resource_formsets"] = ToolResourceFileFormsets(self.request, instance=self.object)
+        return context
+
     @transaction.atomic()
     def form_valid(self, form):
+        if self.request.POST and self.object:
+            resource_formsets = ToolResourceFileFormsets(self.request, instance=self.object)
+            if not resource_formsets.is_valid():
+                return self.form_invalid(form)
+            resource_formsets.save(self.request, self.object)
         response = super().form_valid(form)
         if "code_interpreter" in self.object.builtin_tools:
             ToolResources.objects.get_or_create(assistant=self.object, tool_type="code_interpreter")
@@ -325,3 +342,15 @@ class DeleteFileFromAssistant(BaseDeleteFileView):
         if delete_file_from_openai(client, file):
             file.save()
         return HttpResponse()
+
+
+class DownloadFileView(View):
+    def get(self, request, team_slug, assistant_id, file_id):
+        assistant = get_object_or_404(OpenAiAssistant, id=assistant_id, team__slug=team_slug)
+        file_obj = get_object_or_404(File, id=file_id, team__slug=team_slug)
+
+        tool_resource = ToolResources.objects.filter(assistant=assistant, files=file_obj).first()
+        if not tool_resource or not tool_resource.allow_file_downloads:
+            return HttpResponseForbidden("File downloads are not allowed for this assistant.")
+
+        return FileResponse(file_obj.file.open(), as_attachment=True, filename=file_obj.name)
