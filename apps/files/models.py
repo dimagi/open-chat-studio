@@ -6,6 +6,7 @@ from django.core.files.base import ContentFile
 from django.db import models
 
 from apps.teams.models import BaseTeamModel
+from apps.utils.conversions import bytes_to_megabytes
 
 
 class File(BaseTeamModel):
@@ -70,8 +71,8 @@ class File(BaseTeamModel):
 
     @property
     def size_mb(self) -> float:
-        """Returns the size of this file in megabytes (decimal)"""
-        return round(self.content_size / 1048576, 2)
+        """Returns the size of this file in megabytes (base 2)"""
+        return bytes_to_megabytes(self.content_size)
 
     def save(self, *args, **kwargs):
         if self.file:

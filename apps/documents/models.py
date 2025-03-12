@@ -1,6 +1,7 @@
 from django.db import models
 
 from apps.teams.models import BaseTeamModel
+from apps.utils.conversions import bytes_to_megabytes
 
 
 class RepositoryType(models.TextChoices):
@@ -18,8 +19,8 @@ class Repository(BaseTeamModel):
 
     @property
     def size(self) -> float:
-        """Returns the size of this repository in megabytes"""
-        return round(sum([size_bytes for size_bytes in self.files.values_list("content_size", flat=True)]) / 1048576, 2)
+        """Returns the size of this repository in megabytes (base 2)"""
+        return bytes_to_megabytes(sum([bytes for bytes in self.files.values_list("content_size", flat=True)]))
 
     def file_names(self) -> list[str]:
         return list(self.files.values_list("name", flat=True))
