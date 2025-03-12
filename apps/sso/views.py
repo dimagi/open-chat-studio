@@ -72,7 +72,7 @@ class CustomLoginView(LoginView):
         if "password" in form.cleaned_data:
             return super().form_valid(form)
 
-        # user submitted email and no sso app found so as for their password
+        # user submitted email and no sso app found so ask for their password
         form = LoginPasswordForm(initial={"login": form.cleaned_data["login"]})
         return self.render_to_response(self.get_context_data(form=form))
 
@@ -80,6 +80,12 @@ class CustomLoginView(LoginView):
 def _redirect_for_sso(request, email):
     app, email = _get_social_app_for_email(email)
     if app:
+        if email in app.settings.get("ignore_list", []):
+            return
+        if allow_list := app.settings.get("allow_list"):
+            if email not in allow_list:
+                return
+        
         provider = app.get_provider(request)
         # Store email in session to validate later
         request.session["initial_login_email"] = email

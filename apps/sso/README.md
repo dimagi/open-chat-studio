@@ -18,6 +18,15 @@ On successful login we record the SSO session ID in the `SsoSession` model. This
   See https://openid.net/specs/openid-connect-frontchannel-1_0.html
   See https://learn.microsoft.com/en-us/entra/identity-platform/v2-protocols-oidc#single-sign-out
 
+### Additional configuration
+
+The following additional fields can be configured in the social application settings:
+
+| Field | Description |
+| --- | --- |
+| ignore_list | List of user emails which will not trigger the SSO workflow |
+| allow_list | List of user emails. If this exists, only users with emails in the list will trigger the workflow |
+
 ## Feature Flag
 
 This is currently behind a feature flag. To test it the FF must have `everyone` set to `Unknown` and have the `Testing` flag on.
@@ -32,6 +41,8 @@ Then navigate to the login page and append this to the URL: `?dwft_sso_login=1`.
   * (this is similar to the point above)
 * How should we handle signups outside of the invitation flow?
   * Should there be a way to force emails with a specific domain to go through the SSO flow?
+* Improve UI for managing SSO connected accounts in user profile.
+* Provide a way for team admins to manage SSO details.
 
 ## Provider notes
 
