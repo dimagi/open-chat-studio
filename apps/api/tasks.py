@@ -54,10 +54,14 @@ def setup_connect_channels_for_bots(self, connect_id: UUID, experiment_data_map:
         try:
             experiment = participant_datum.experiment
             channel = channels[experiment.id]
-            commcare_connect_channel_id = connect_client.create_channel(
+            response = connect_client.create_channel(
                 connect_id=connect_id, channel_source=channel.extra_data["commcare_connect_bot_name"]
             )
-            participant_datum.system_metadata["commcare_connect_channel_id"] = commcare_connect_channel_id
+
+            participant_datum.system_metadata = {
+                "commcare_connect_channel_id": response["channel_id"],
+                "consent": response["consent"],
+            }
             participant_datum.save(update_fields=["system_metadata"])
         except Exception as e:
             logger.exception(f"Failed to create channel for participant data {participant_datum.id}: {e}")
