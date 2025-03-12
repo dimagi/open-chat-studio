@@ -57,7 +57,7 @@ def profile(request):
             "api_keys": request.user.api_keys.filter(revoked=False).select_related("team"),
             "user_has_valid_totp_device": user_has_valid_totp_device(request.user),
             "new_api_key": new_api_key,
-            'social_accounts': SocialAccount.objects.filter(user=request.user),
+            "social_accounts": SocialAccount.objects.filter(user=request.user),
         },
     )
 
