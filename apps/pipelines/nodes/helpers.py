@@ -88,5 +88,5 @@ class ParticipantDataProxy:
         )
         scheduled_messages = []
         for message in messages:
-            scheduled_messages.append(message.as_string())
+            scheduled_messages.append(message.as_dict())
         return scheduled_messages
