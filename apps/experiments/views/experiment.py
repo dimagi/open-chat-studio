@@ -1096,14 +1096,12 @@ def experiment_invitations(request, team_slug: str, experiment_id: int):
 @login_and_team_required
 def generate_chat_export(request, team_slug: str, experiment_id: str):
     experiment = get_object_or_404(Experiment, id=experiment_id)
-    tags = request.POST.get("tags", [])
-    tags = tags.split(",") if tags else []
-
-    participant_identifiers = request.POST.get("participants")
-    if participant_identifiers:
-        participant_identifiers = participant_identifiers.split(",")
-
-    task_id = async_export_chat.delay(experiment_id, tags=tags, participants=participant_identifiers)
+    filter_params = {}
+    for key, value in request.POST.items():
+        if key.startswith("filter_") and "_" in key[7:]:
+            filter_params[key] = value
+    show_all = request.POST.get("show-all") == "on"
+    task_id = async_export_chat.delay(experiment_id, filter_params=filter_params, show_all=show_all)
     return TemplateResponse(
         request, "experiments/components/exports.html", {"experiment": experiment, "task_id": task_id}
     )

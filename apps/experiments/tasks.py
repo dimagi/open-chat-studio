@@ -1,6 +1,5 @@
 import logging
 import time
-from datetime import timedelta
 
 from celery.app import shared_task
 from django.core.files.base import ContentFile
@@ -12,7 +11,7 @@ from taskbadger.celery import Task as TaskbadgerTask
 from apps.channels.datamodels import Attachment, BaseMessage
 from apps.chat.bots import create_conversation
 from apps.chat.channels import WebChannel
-from apps.experiments.export import experiment_to_csv
+from apps.experiments.export import filtered_export_to_csv, get_filtered_sessions
 from apps.experiments.models import Experiment, ExperimentSession, PromptBuilderHistory, SourceMaterial
 from apps.files.models import File
 from apps.service_providers.models import LlmProvider, LlmProviderModel
@@ -24,18 +23,21 @@ logger = logging.getLogger("ocs.experiments")
 
 
 @shared_task(bind=True, base=TaskbadgerTask)
-def async_export_chat(self, experiment_id: int, tags: list[str] = None, participants: list[str] = None) -> dict:
+def async_export_chat(self, experiment_id: int, **kwargs) -> dict:
     experiment = Experiment.objects.get(id=experiment_id)
-    csv_in_memory = experiment_to_csv(experiment, tags, participants)
-    uploaded_file = ContentFile(content=csv_in_memory.getvalue().encode("utf-8"), name="chat_export.csv")
-    file = File.objects.create(
-        name=uploaded_file.name,
-        content_type="text/csv",
-        file=uploaded_file,
+    filter_params = kwargs.get("filter_params", {})
+    show_all = kwargs.get("show_all", False)
+
+    filtered_sessions = get_filtered_sessions(experiment, filter_params, show_all)
+    session_ids = list(filtered_sessions.values_list("id", flat=True))
+    csv_in_memory = filtered_export_to_csv(experiment, session_ids)
+    file_obj = File.objects.create(
+        name=f"{experiment.name} Chat Export {timezone.now().strftime('%Y-%m-%d_%H-%M-%S')}.csv",
         team=experiment.team,
-        expiry_date=timezone.now() + timedelta(days=1),
+        content_type="text/csv",
     )
-    return {"file_id": file.id}
+    file_obj.file.save(file_obj.name, ContentFile(csv_in_memory.getvalue().encode("utf-8")))
+    return {"file_id": str(file_obj.id)}
 
 
 @shared_task(bind=True, base=TaskbadgerTask)
