@@ -4,12 +4,7 @@ import io
 from django.db.models import Q
 
 from apps.annotations.models import Tag, UserComment
-from apps.experiments.filters import (
-    build_participant_filter,
-    build_tags_filter,
-    build_timestamp_filter,
-    build_versions_filter,
-)
+from apps.experiments.filters import build_filter_condition
 from apps.experiments.models import Experiment, ExperimentSession
 
 
@@ -181,17 +176,3 @@ def filtered_export_to_csv(experiment, session_ids):
             ]
             writer.writerow(row)
     return csv_in_memory
-
-
-def build_filter_condition(column, operator, value):
-    if not value:
-        return None
-    if column == "participant":
-        return build_participant_filter(operator, value)
-    elif column == "last_message":
-        return build_timestamp_filter(operator, value)
-    elif column == "tags":
-        return build_tags_filter(operator, value)
-    elif column == "versions":
-        return build_versions_filter(operator, value)
-    return None
