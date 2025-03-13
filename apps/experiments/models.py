@@ -1554,6 +1554,9 @@ class ExperimentSession(BaseTeamModel):
     class Meta:
         ordering = ["-created_at"]
 
+    def __str__(self):
+        return f"ExperimentSession(id={self.external_id})"
+
     def save(self, *args, **kwargs):
         if not hasattr(self, "chat"):
             self.chat = Chat.objects.create(team=self.team, name=self.experiment.name)
