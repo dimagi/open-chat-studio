@@ -63,7 +63,7 @@
     },
     "collection_id": {
       "default": null,
-      "title": "Collection Id",
+      "title": "Media",
       "ui:optionsSource": "collection",
       "ui:widget": "select",
       "type": "integer"
