@@ -847,8 +847,11 @@ class Experiment(BaseTeamModel, VersionsMixin, CustomActionOperationMixin):
 
     @property
     def trace_service(self):
+        from apps.service_providers.tracing.trace_service import TracingService
+
         if self.trace_provider:
-            return self.trace_provider.get_service()
+            return TracingService(self.trace_provider.type, self.trace_provider.config)
+        return TracingService()
 
     def get_api_url(self):
         if self.is_working_version:
