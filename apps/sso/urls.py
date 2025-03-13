@@ -11,4 +11,5 @@ urlpatterns = [
         views.SignupAfterInvite.as_view(),
         name="signup_after_invite",
     ),
+    path("accounts/sso/logout/", views.sso_logout, name="logout"),
 ]
