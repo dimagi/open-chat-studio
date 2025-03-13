@@ -23,6 +23,11 @@ urlpatterns = [
     ),
     path("participants/<int:pk>/edit_name/", views.edit_name, name="edit_name"),
     path("participants/search/", views.search_participant_api, name="search"),
+    path(
+        "participants/<int:participant_id>/cancel_schedule/<str:schedule_id>/",
+        views.cancel_schedule,
+        name="cancel_schedule",
+    ),
 ]
 
 urlpatterns.extend(make_crud_urls(views, "Participant", "participant", edit=False, delete=False, new=False))

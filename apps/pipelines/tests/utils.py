@@ -64,12 +64,10 @@ def llm_response_with_prompt_node(
     prompt: str | None = None,
     history_type: str | None = None,
     history_name: str | None = None,
+    **kwargs,
 ):
     if prompt is None:
-        prompt = (
-            "Make a summary of the following text: {input}. "
-            "Output it as JSON with a single key called 'summary' with the summary."
-        )
+        prompt = "You are a helpful assistant"
 
     params = {
         "name": "llm response with prompt",
@@ -89,7 +87,7 @@ def llm_response_with_prompt_node(
     return {
         "id": str(uuid4()),
         "type": "LLMResponseWithPrompt",
-        "params": params,
+        "params": params | kwargs,
     }
 
 

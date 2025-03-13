@@ -58,6 +58,8 @@ def remove_expired_temporary_superuser_access(request, remove_grant=None):
     request.session["elevated_privileges"] = valid
 
 
-def get_temporary_superuser_access(request):
+def get_temporary_superuser_access(request) -> dict[str, datetime]:
+    if request.user.is_anonymous:
+        return {}
     remove_expired_temporary_superuser_access(request)
     return {grant: datetime.fromtimestamp(expire) for grant, expire in request.session.get("elevated_privileges", [])}

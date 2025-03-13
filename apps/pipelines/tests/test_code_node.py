@@ -4,7 +4,7 @@ from unittest import mock
 import pytest
 
 from apps.channels.datamodels import Attachment
-from apps.experiments.models import ParticipantData
+from apps.experiments.models import Participant, ParticipantData
 from apps.files.models import File
 from apps.pipelines.exceptions import PipelineNodeBuildError, PipelineNodeRunError
 from apps.pipelines.nodes.base import PipelineState
@@ -308,3 +308,112 @@ def main(input, **kwargs):
     )
     assert create_runnable(pipeline, nodes).invoke(state)["messages"][-1] == "content from file"
     File.objects.get(id=file.id)
+
+
+@django_db_with_data(available_apps=("apps.service_providers",))
+@mock.patch("apps.pipelines.nodes.base.PipelineNode.logger", mock.Mock())
+def test_participant_data_proxy_get_includes_global_data(pipeline, experiment_session):
+    """
+    Test that the get method of ParticipantDataProxy returns a merged dictionary
+    that includes both the ParticipantData.data and the participant's global_data.
+    """
+    experiment_session.participant.name = "Dimagi"
+    experiment_session.participant.save()
+
+    ParticipantData.objects.create(
+        team=experiment_session.team,
+        experiment=experiment_session.experiment,
+        participant=experiment_session.participant,
+        data={"favorite_color": "green", "favorite_number": 42},
+    )
+    code = """
+def main(input, **kwargs):
+    data = get_participant_data()
+    return f"Name: {data.get('name')}, Color: {data.get('favorite_color')}"
+    """
+    nodes = [
+        start_node(),
+        code_node(code),
+        end_node(),
+    ]
+    assert (
+        create_runnable(pipeline, nodes).invoke(PipelineState(experiment_session=experiment_session, messages=["hi"]))[
+            "messages"
+        ][-1]
+        == "Name: Dimagi, Color: green"
+    )
+
+
+@django_db_with_data(available_apps=("apps.service_providers",))
+@mock.patch("apps.pipelines.nodes.base.PipelineNode.logger", mock.Mock())
+def test_participant_data_proxy_set_updates_global_data(pipeline, experiment_session):
+    experiment_session.participant.name = "Original Boring Name"
+    experiment_session.participant.save()
+    ParticipantData.objects.create(
+        team=experiment_session.team,
+        experiment=experiment_session.experiment,
+        participant=experiment_session.participant,
+        data={},
+    )
+    code = """
+def main(input, **kwargs):
+    data = get_participant_data()
+    data["name"] = "Updated Exciting Name"
+    set_participant_data(data)
+    updated = get_participant_data()
+    return f"Name: {updated.get('name')}"
+    """
+    nodes = [
+        start_node(),
+        code_node(code),
+        end_node(),
+    ]
+    assert (
+        create_runnable(pipeline, nodes).invoke(PipelineState(experiment_session=experiment_session, messages=["hi"]))[
+            "messages"
+        ][-1]
+        == "Name: Updated Exciting Name"
+    )
+    experiment_session.participant.refresh_from_db()
+    assert experiment_session.participant.name == "Updated Exciting Name"
+
+
+@django_db_with_data(available_apps=("apps.service_providers",))
+@mock.patch("apps.pipelines.nodes.base.PipelineNode.logger", mock.Mock())
+def test_render_template_with_context_keys(pipeline, experiment_session):
+    participant = Participant.objects.create(
+        identifier="participant_123",
+        team=experiment_session.team,
+        platform="web",
+    )
+    experiment_session.participant = participant
+    experiment_session.save()
+    ParticipantData.objects.create(
+        team=experiment_session.team,
+        experiment=experiment_session.experiment,
+        participant=participant,
+        data={"custom_key": "custom_value"},
+    )
+    state = PipelineState(
+        experiment_session=experiment_session,
+        messages=["Cycling"],
+        temp_state={"my_key": "example_key"},
+        pipeline_version=1,
+        outputs={},
+    )
+    nodes = [
+        start_node(),
+        render_template_node(
+            "input: {{input}}, temp_state.my_key: {{temp_state.my_key}}, "
+            "participant_id: {{participant_details.identifier}}, "
+            "participant_data: {{participant_data.custom_key}}"
+        ),
+        end_node(),
+    ]
+    result = create_runnable(pipeline, nodes).invoke(state)
+    expected = (
+        "input: Cycling, temp_state.my_key: example_key, "
+        "participant_id: participant_123, "
+        "participant_data: custom_value"
+    )
+    assert result["messages"][-1] == expected

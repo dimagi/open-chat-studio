@@ -2,11 +2,12 @@ import logging
 from datetime import timedelta
 from functools import cached_property
 
+import pytz
 from dateutil.relativedelta import relativedelta
 from django.contrib.contenttypes.fields import GenericForeignKey, GenericRelation
 from django.contrib.contenttypes.models import ContentType
 from django.db import models, transaction
-from django.db.models import F, Func, OuterRef, Q, Subquery
+from django.db.models import F, Func, OuterRef, Q, Subquery, functions
 from django.utils import timezone
 
 from apps.chat.models import ChatMessage, ChatMessageType
@@ -331,6 +332,15 @@ class TimeoutTrigger(BaseModel, VersionsMixin):
         )
 
 
+class ScheduledMessageManager(models.Manager):
+    def get_messages_to_fire(self):
+        return (
+            self.filter(is_complete=False, cancelled_at=None, next_trigger_date__lte=functions.Now())
+            .select_related("action")
+            .order_by("next_trigger_date")
+        )
+
+
 class TimePeriod(models.TextChoices):
     MINUTES = ("minutes", "Minutes")
     HOURS = ("hours", "Hours")
@@ -356,6 +366,11 @@ class ScheduledMessage(BaseTeamModel):
     custom_schedule_params = models.JSONField(blank=True, default=dict)
     end_date = models.DateTimeField(null=True, blank=True)
 
+    cancelled_at = models.DateTimeField(null=True, blank=True)
+    cancelled_by = models.ForeignKey("users.CustomUser", on_delete=models.SET_NULL, null=True, blank=True)
+
+    objects = ScheduledMessageManager()
+
     class Meta:
         unique_together = ("experiment", "participant", "external_id")
         indexes = [models.Index(fields=["is_complete"])]
@@ -367,6 +382,15 @@ class ScheduledMessage(BaseTeamModel):
             delta = relativedelta(**{params["time_period"]: params["frequency"]})
             self.next_trigger_date = timezone.now() + delta
         super().save(*args, **kwargs)
+
+    @property
+    def is_cancelled(self):
+        return self.cancelled_at is not None
+
+    def cancel(self, cancelled_by=None):
+        self.cancelled_at = timezone.now()
+        self.cancelled_by = cancelled_by
+        self.save()
 
     def assign_external_id(self):
         if not self.external_id:
@@ -460,7 +484,8 @@ class ScheduledMessage(BaseTeamModel):
 
     @property
     def remaining_triggers(self):
-        return self.expected_trigger_count - self.total_triggers
+        remaining = self.expected_trigger_count - self.total_triggers
+        return max(remaining, 0)
 
     @property
     def was_created_by_system(self) -> bool:
@@ -493,3 +518,25 @@ class ScheduledMessage(BaseTeamModel):
 
     def __str__(self):
         return self.as_string()
+
+    def as_dict(self, as_timezone=None):
+        next_trigger_date = self.next_trigger_date
+        last_triggered_at = self.last_triggered_at
+        if as_timezone:
+            next_trigger_date = next_trigger_date.astimezone(pytz.timezone(as_timezone))
+            if last_triggered_at:
+                last_triggered_at = last_triggered_at.astimezone(pytz.timezone(as_timezone))
+        return {
+            "name": self.name,
+            "prompt": self.prompt_text,
+            "external_id": self.external_id,
+            "frequency": self.frequency,
+            "time_period": self.time_period,
+            "repetitions": self.repetitions,
+            "next_trigger_date": next_trigger_date,
+            "last_triggered_at": last_triggered_at,
+            "total_triggers": self.total_triggers,
+            "triggers_remaining": self.remaining_triggers,
+            "is_complete": self.is_complete,
+            "is_cancelled": self.is_cancelled,
+        }

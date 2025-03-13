@@ -1,6 +1,8 @@
 import datetime
 import inspect
 import json
+import logging
+import random
 import time
 from typing import Literal
 
@@ -9,7 +11,6 @@ from django.conf import settings
 from django.core.exceptions import ValidationError
 from django.core.validators import validate_email
 from django.db.models import TextChoices
-from jinja2 import meta
 from jinja2.sandbox import SandboxedEnvironment
 from langchain_core.messages import BaseMessage
 from langchain_core.prompts import MessagesPlaceholder, PromptTemplate
@@ -24,7 +25,6 @@ from RestrictedPython import compile_restricted, safe_builtins, safe_globals
 from apps.assistants.models import OpenAiAssistant
 from apps.chat.agent.tools import get_node_tools
 from apps.chat.conversation import compress_chat_history, compress_pipeline_chat_history
-from apps.chat.models import ChatMessageType
 from apps.experiments.models import ExperimentSession, ParticipantData
 from apps.pipelines.exceptions import PipelineNodeBuildError, PipelineNodeRunError
 from apps.pipelines.models import Node, PipelineChatHistory, PipelineChatHistoryTypes
@@ -61,32 +61,46 @@ class RenderTemplate(PipelineNode):
             label="Render a template", documentation_link=settings.DOCUMENTATION_LINKS["node_template"]
         )
     )
-
     template_string: str = Field(
         description="Use {{your_variable_name}} to refer to designate input",
         json_schema_extra=UiSchema(widget=Widgets.expandable_text),
     )
 
-    def _process(self, input, node_id: str, **kwargs) -> PipelineState:
-        def all_variables(in_):
-            return {var: in_ for var in meta.find_undeclared_variables(env.parse(self.template_string))}
-
+    def _process(self, input, node_id: str, state: PipelineState, **kwargs) -> PipelineState:
         env = SandboxedEnvironment()
         try:
-            if isinstance(input, BaseMessage):
-                content = json.loads(input.content)
-            elif isinstance(input, dict):
-                content = input
-            else:
-                content = json.loads(input)
-                if not isinstance(content, dict):
-                    # e.g. it was just a string or an int
-                    content = all_variables(input)
-        except json.JSONDecodeError:
-            # As a last resort, just set the all the variables in the template to the input
-            content = all_variables(input)
-        template = SandboxedEnvironment().from_string(self.template_string)
-        output = template.render(content)
+            content = {
+                "input": input,
+                "temp_state": state.get("temp_state", {}),
+            }
+
+            if "experiment_session" in state and state["experiment_session"]:
+                exp_session = state["experiment_session"]
+                participant = getattr(exp_session, "participant", None)
+                if participant:
+                    content.update(
+                        {
+                            "participant_details": {
+                                "identifier": getattr(participant, "identifier", None),
+                                "platform": getattr(participant, "platform", None),
+                            },
+                            "participant_schedules": participant.get_schedules_for_experiment(
+                                exp_session.experiment,
+                                as_dict=True,
+                                include_inactive=True,
+                            )
+                            or [],
+                        }
+                    )
+                proxy = ParticipantDataProxy(exp_session)
+                content["participant_data"] = proxy.get() or {}
+
+            template = env.from_string(self.template_string)
+            output = template.render(content)
+        except Exception as e:
+            self.logger.error(f"Template rendering failed: {e}")
+            raise PipelineNodeRunError(f"Error rendering template: {e}")
+
         return PipelineState.from_node_output(node_name=self.name, node_id=node_id, output=output)
 
 
@@ -253,9 +267,21 @@ class LLMResponseWithPrompt(LLMResponse, HistoryMixin):
         node = Node.objects.get(flow_id=node_id, pipeline__version_number=pipeline_version)
         tools = get_node_tools(node, session)
         chat_adapter = ChatAdapter.for_pipeline(
-            session=session, node=self, llm_service=self.get_llm_service(), provider_model=provider_model, tools=tools
+            session=session,
+            node=self,
+            llm_service=self.get_llm_service(),
+            provider_model=provider_model,
+            tools=tools,
+            disabled_tools=self.disabled_tools,
         )
-        if self.tools_enabled():
+
+        allowed_tools = chat_adapter.get_allowed_tools()
+        if len(tools) != len(allowed_tools):
+            self.logger.info(
+                "Some tools have been disabled: %s", [tool.name for tool in tools if tool not in allowed_tools]
+            )
+
+        if allowed_tools:
             chat = AgentLLMChat(adapter=chat_adapter, history_manager=history_manager)
         else:
             chat = SimpleLLMChat(adapter=chat_adapter, history_manager=history_manager)
@@ -263,9 +289,6 @@ class LLMResponseWithPrompt(LLMResponse, HistoryMixin):
         # Invoke runnable
         result = chat.invoke(input=input)
         return PipelineState.from_node_output(node_name=self.name, node_id=node_id, output=result.output)
-
-    def tools_enabled(self) -> bool:
-        return len(self.tools) > 0 or len(self.custom_actions) > 0
 
 
 class SendEmail(PipelineNode):
@@ -723,8 +746,8 @@ class AssistantNode(PipelineNode):
             node_id=node_id,
             output=output,
             message_metadata={
-                "input": runnable.adapter.get_message_metadata(ChatMessageType.HUMAN),
-                "output": runnable.adapter.get_message_metadata(ChatMessageType.AI),
+                "input": runnable.history_manager.input_message_metadata or {},
+                "output": runnable.history_manager.output_message_metadata or {},
             },
         )
 
@@ -737,10 +760,21 @@ class AssistantNode(PipelineNode):
             trace_service.initialize_from_callback_manager(self._config.get("callbacks"))
 
         history_manager = PipelineHistoryManager.for_assistant()
-        adapter = AssistantAdapter.for_pipeline(session=session, node=self, trace_service=trace_service)
-        if assistant.tools_enabled:
+        adapter = AssistantAdapter.for_pipeline(
+            session=session, node=self, trace_service=trace_service, disabled_tools=self.disabled_tools
+        )
+
+        allowed_tools = adapter.get_allowed_tools()
+        if len(adapter.tools) != len(allowed_tools):
+            self.logger.info(
+                "Some tools have been disabled: %s", [tool.name for tool in adapter.tools if tool not in allowed_tools]
+            )
+
+        if allowed_tools:
             return AgentAssistantChat(adapter=adapter, history_manager=history_manager)
         else:
+            if assistant.tools_enabled:
+                logging.info("Tools have been disabled")
             return AssistantChat(adapter=adapter, history_manager=history_manager)
 
 
@@ -781,7 +815,7 @@ class CodeNode(PipelineNode):
             try:
                 exec(byte_code, {}, custom_locals)
             except Exception as exc:
-                raise PydanticCustomError("invalid_code", "{error}", {"error": exc.msg})
+                raise PydanticCustomError("invalid_code", "{error}", {"error": str(exc)})
 
             try:
                 main = custom_locals["main"]
@@ -866,6 +900,7 @@ class CodeNode(PipelineNode):
             "re",
             "datetime",
             "time",
+            "random",
         }
         custom_builtins = safe_builtins.copy()
         custom_builtins.update(
@@ -877,6 +912,7 @@ class CodeNode(PipelineNode):
                 "all": all,
                 "any": any,
                 "datetime": datetime,
+                "random": random,
             }
         )
 

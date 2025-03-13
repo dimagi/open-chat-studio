@@ -31,6 +31,7 @@ from apps.pipelines.tests.utils import (
     start_node,
     state_key_router_node,
 )
+from apps.service_providers.llm_service.history_managers import PipelineHistoryManager
 from apps.service_providers.llm_service.runnables import ChainOutput
 from apps.utils.factories.assistants import OpenAiAssistantFactory
 from apps.utils.factories.experiment import (
@@ -172,13 +173,12 @@ def test_llm_with_prompt_response(
 def test_render_template(pipeline):
     nodes = [
         start_node(),
-        render_template_node("{{ thing }} is cool"),
+        render_template_node("{{ input }} is cool"),
         end_node(),
     ]
-    assert (
-        create_runnable(pipeline, nodes).invoke(PipelineState(messages=[{"thing": "Cycling"}]))["messages"][-1]
-        == "Cycling is cool"
-    )
+
+    result = create_runnable(pipeline, nodes).invoke(PipelineState(messages=["Cycling"]))
+    assert result["messages"][-1] == "Cycling is cool"
 
 
 @django_db_with_data(available_apps=("apps.service_providers",))
@@ -208,14 +208,14 @@ def test_branching_pipeline(pipeline, experiment_session):
             "target": template_b["id"],
         },
         {
-            "id": "RenderTemplate-A -> END",
-            "source": template_a["id"],
-            "target": end["id"],
-        },
-        {
             "id": "RenderTemplate-B -> RenderTemplate-C",
             "source": template_b["id"],
             "target": template_c["id"],
+        },
+        {
+            "id": "RenderTemplate-A -> END",
+            "source": template_a["id"],
+            "target": end["id"],
         },
         {
             "id": "RenderTemplate-C -> END",
@@ -680,7 +680,11 @@ def test_assistant_node(get_assistant_runnable, tools_enabled):
     runnable_mock.invoke = lambda *args, **kwargs: ChainOutput(
         output="Hi there human", prompt_tokens=30, completion_tokens=20
     )
-    runnable_mock.adapter.get_message_metadata = lambda *args, **kwargs: {"test": "metadata"}
+
+    runnable_mock.history_manager = Mock()
+    runnable_mock.history_manager.input_message_metadata = {"test": "metadata"}
+    runnable_mock.history_manager.output_message_metadata = {"test": "metadata"}
+
     get_assistant_runnable.return_value = runnable_mock
 
     pipeline = PipelineFactory()
@@ -724,14 +728,16 @@ def test_assistant_node_attachments(get_assistant_runnable):
     assert kwargs["attachments"] == [attachments[1]]
 
 
-@pytest.mark.django_db()
+@django_db_with_data(available_apps=("apps.service_providers",))
 @patch("apps.pipelines.nodes.nodes.AssistantNode._get_assistant_runnable")
 def test_assistant_node_raises(get_assistant_runnable):
     runnable_mock = Mock()
     runnable_mock.invoke = lambda *args, **kwargs: ChainOutput(
         output="Hi there human", prompt_tokens=30, completion_tokens=20
     )
-    runnable_mock.state.get_message_metadata = lambda *args, **kwargs: {"test": "metadata"}
+    runnable_mock.history_manager = Mock()
+    runnable_mock.history_manager.input_message_metadata = {"test": "metadata"}
+    runnable_mock.history_manager.output_message_metadata = {"test": "metadata"}
     get_assistant_runnable.return_value = runnable_mock
 
     pipeline = PipelineFactory()
@@ -941,7 +947,7 @@ def test_multiple_valid_inputs(pipeline):
     template = render_template_node("T: {{ input }}")
     end = end_node()
     nodes = [start, router, template, end]
-    # ordering of edges is significant
+
     edges = [
         {
             "id": "start -> router",
@@ -966,11 +972,61 @@ def test_multiple_valid_inputs(pipeline):
             "sourceHandle": "output_0",
         },
     ]
-
+    experiment_session = ExperimentSessionFactory.create()
     state = PipelineState(
         messages=["not hello"],
-        experiment_session=ExperimentSessionFactory.build(),
+        experiment_session=experiment_session,
         pipeline_version=1,
     )
     output = create_runnable(pipeline, nodes, edges, lenient=False).invoke(state)
     assert output["messages"][-1] == "T: not hello"
+
+
+@pytest.mark.django_db()
+@patch("apps.service_providers.models.LlmProvider.get_llm_service")
+@patch("apps.pipelines.nodes.base.PipelineNode.logger", mock.Mock())
+def test_assistant_node_empty_metadata_handling(get_llm_service, pipeline):
+    history_manager_mock = Mock()
+    history_manager_mock.input_message_metadata = None
+    history_manager_mock.output_message_metadata = None
+
+    assistant_chat_mock = Mock()
+    assistant_chat_mock.history_manager = history_manager_mock
+    assistant_chat_mock.invoke = lambda *args, **kwargs: ChainOutput(
+        output="How are you doing?", prompt_tokens=30, completion_tokens=20
+    )
+    assistant = OpenAiAssistantFactory()
+    nodes = [start_node(), assistant_node(str(assistant.id)), end_node()]
+
+    with patch("apps.pipelines.nodes.nodes.AssistantChat", return_value=assistant_chat_mock):
+        runnable = create_runnable(pipeline, nodes)
+        state = PipelineState(
+            messages=["I am just a human I have no feelings"],
+            experiment_session=ExperimentSessionFactory(),
+            attachments=[],
+        )
+        output_state = runnable.invoke(state)
+    assert output_state["message_metadata"]["input"] == {}
+    assert output_state["message_metadata"]["output"] == {}
+    assert output_state["messages"][-1] == "How are you doing?"
+
+
+@pytest.mark.django_db()
+@patch("apps.service_providers.models.LlmProvider.get_llm_service")
+@patch("apps.pipelines.nodes.base.PipelineNode.logger", mock.Mock())
+def test_pipeline_history_manager_metadata_storage(get_llm_service, pipeline):
+    history_manager = PipelineHistoryManager.for_assistant()
+    input_metadata = {"test": "metatdata", "timestamp": "2025-03-06"}
+    output_metadata = {"test": "metadata", "tokens": 150}
+
+    history_manager.add_messages_to_history(
+        input="Hi Bot",
+        input_message_metadata=input_metadata,
+        output="Hi Human",
+        output_message_metadata=output_metadata,
+        save_input_to_history=True,
+        save_output_to_history=True,
+        experiment_tag=None,
+    )
+    assert history_manager.input_message_metadata == input_metadata
+    assert history_manager.output_message_metadata == output_metadata
