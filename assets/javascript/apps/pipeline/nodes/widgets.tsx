@@ -868,7 +868,7 @@ export function HistoryModeWidget(props: WidgetParams) {
   return (
     <>
       <div className="flex join">
-        <InputField label="History Mode">
+        <InputField label="History Mode" help_text = "">
           <select
             className="select select-bordered join-item"
             name="history_mode"
@@ -890,7 +890,7 @@ export function HistoryModeWidget(props: WidgetParams) {
 
       {(historyMode === "summarize" || historyMode === "truncate_tokens") && (
         <div className="flex join mb-4">
-          <InputField label="Token Limit">
+          <InputField label="Token Limit" help_text = "">
             <input
               className="input input-bordered join-item"
               name="user_max_token_limit"
@@ -905,7 +905,7 @@ export function HistoryModeWidget(props: WidgetParams) {
 
       {historyMode === "max_history_length" && (
         <div className="flex join mb-4">
-          <InputField label="Max History Length">
+          <InputField label="Max History Length" help_text = "">
             <input
               className="input input-bordered join-item"
               name="max_history_length"
