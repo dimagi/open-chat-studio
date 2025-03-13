@@ -5,7 +5,7 @@ from django.db.models import Q
 
 from apps.annotations.models import Tag, UserComment
 from apps.experiments.filters import build_filter_condition
-from apps.experiments.models import Experiment, ExperimentSession
+from apps.experiments.models import ExperimentSession
 
 
 def _format_tags(tags: list[Tag]) -> str:
@@ -18,71 +18,6 @@ def _format_comments(user_comments: list[UserComment]) -> str:
     <username_1>: "user 1's comment" | <username_2>: "user 2's comment" | <username_1>: "user 1's comment"
     """
     return " | ".join([str(comment) for comment in user_comments])
-
-
-def experiment_to_message_export_rows(experiment: Experiment, tags: list[str] = None, participants: list[str] = None):
-    queryset = experiment.sessions.prefetch_related(
-        "chat",
-        "chat__messages",
-        "participant",
-        "experiment_channel",
-        "chat__tags",
-        "chat__messages__tags",
-        "chat__messages__comments",
-        "chat__messages__comments__user",
-    )
-    if tags:
-        queryset = queryset.filter(chat__tags__name__in=tags)
-    if participants:
-        queryset = queryset.filter(participant__identifier__in=participants)
-
-    yield [
-        "Message ID",
-        "Message Date",
-        "Message Type",
-        "Message Content",
-        "Platform",
-        "Chat Tags",
-        "Chat Comments",
-        "Session ID",
-        "Session LLM",
-        "Experiment ID",
-        "Experiment Name",
-        "Participant Name",
-        "Participant Identifier",
-        "Participant Public ID",
-        "Message Tags",
-        "Message Comments",
-    ]
-
-    for session in queryset:
-        for message in session.chat.messages.all():
-            yield [
-                message.id,
-                message.created_at,
-                message.message_type,
-                message.content,
-                session.get_platform_name(),
-                _format_tags(message.chat.tags.all()),
-                _format_comments(message.chat.comments.all()),
-                session.external_id,
-                experiment.get_llm_provider_model_name(raises=False),
-                experiment.public_id,
-                experiment.name,
-                session.participant.name,
-                session.participant.identifier,
-                session.participant.public_id,
-                _format_tags(message.tags.all()),
-                _format_comments(message.comments.all()),
-            ]
-
-
-def experiment_to_csv(experiment: Experiment, tags: list[str] = None, participants: list[str] = None) -> io.StringIO:
-    csv_in_memory = io.StringIO()
-    writer = csv.writer(csv_in_memory, delimiter=",", quotechar='"', quoting=csv.QUOTE_MINIMAL)
-    for row in experiment_to_message_export_rows(experiment, tags=tags, participants=participants):
-        writer.writerow(row)
-    return csv_in_memory
 
 
 def get_filtered_sessions(experiment, filter_params, show_all=False):
