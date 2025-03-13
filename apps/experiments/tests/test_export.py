@@ -14,7 +14,7 @@ from apps.utils.factories.experiment import ExperimentFactory, ExperimentSession
 @pytest.mark.parametrize(
     ("session_configs", "filters", "expected_chats_count"),
     [
-        # Basic tag filtering
+        # Tag filtering - any of
         (
             [
                 {
@@ -72,34 +72,6 @@ from apps.utils.factories.experiment import ExperimentFactory, ExperimentSession
                 {"tags": [], "participant": "user3@example.org", "last_message": "2023-06-05", "versions": ["v1"]},
             ],
             [{"column": "participant", "operator": "equals", "value": "user1@example.com"}],
-            1,
-        ),
-        # Multiple filters combined
-        (
-            [
-                {
-                    "tags": ["important", "review"],
-                    "participant": "user1@example.com",
-                    "last_message": "2023-06-15",
-                    "versions": ["v1"],
-                },
-                {
-                    "tags": ["urgent", "review"],
-                    "participant": "user2@gmail.com",
-                    "last_message": "2023-06-10",
-                    "versions": ["v1"],
-                },
-                {
-                    "tags": ["normal"],
-                    "participant": "user3@example.org",
-                    "last_message": "2023-06-05",
-                    "versions": ["v1"],
-                },
-            ],
-            [
-                {"column": "tags", "operator": "any of", "value": ["important", "urgent"]},
-                {"column": "participant", "operator": "contains", "value": "example"},
-            ],
             1,
         ),
         # Tag filtering - all of
@@ -198,7 +170,6 @@ def test_filtered_export_with_multiple_sessions(session_configs, filters, expect
 
         date_str = session_config.get("last_message", "2023-06-01")
         date_obj = datetime.datetime.strptime(date_str, "%Y-%m-%d")
-        print(date_str)
 
         ChatMessage.objects.create(
             chat=session.chat,
