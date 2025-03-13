@@ -37,7 +37,7 @@ def async_export_chat(self, experiment_id: int, **kwargs) -> dict:
         content_type="text/csv",
     )
     file_obj.file.save(file_obj.name, ContentFile(csv_in_memory.getvalue().encode("utf-8")))
-    return {"file_id": str(file_obj.id)}
+    return {"file_id": file_obj.id}
 
 
 @shared_task(bind=True, base=TaskbadgerTask)
