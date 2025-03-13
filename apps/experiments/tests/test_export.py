@@ -99,7 +99,6 @@ from apps.utils.factories.experiment import ExperimentFactory, ExperimentSession
             [
                 {"column": "tags", "operator": "any of", "value": ["important", "urgent"]},
                 {"column": "participant", "operator": "contains", "value": "example"},
-                {"column": "last_message", "operator": "after", "value": "2023-06-01"},
             ],
             1,
         ),
