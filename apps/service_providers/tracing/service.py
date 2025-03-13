@@ -1,3 +1,7 @@
+from dataclasses import asdict, is_dataclass
+from typing import Any
+
+from django.db.models import Model
 from langchain_core.callbacks.manager import CallbackManager
 from langchain_core.tracers import LangChainTracer
 from pydantic import BaseModel
@@ -52,7 +56,7 @@ class LangFuseTraceService(TraceService):
         if self._callback:
             raise ServiceReentryException("Service does not support reentrant use.")
 
-        self._callback = CallbackHandler(user_id=participant_id, session_id=session_id, **self.config)
+        self._callback = CallbackWrapper(CallbackHandler(user_id=participant_id, session_id=session_id, **self.config))
         return self._callback
 
     def initialize_from_callback_manager(self, callback_manager: CallbackManager):
@@ -96,3 +100,47 @@ class LangSmithTraceService(TraceService):
         )
 
         return LangChainTracer(client=client, project_name=self.config["project"])
+
+
+class CallbackWrapper:
+    def __init__(self, callback):
+        self.callback = callback
+
+    def __getattr__(self, item):
+        return getattr(self.callback, item)
+
+    def on_chain_start(
+        self,
+        serialized: dict[str, Any] | None,
+        inputs: dict[str, Any],
+        **kwargs: Any,
+    ) -> Any:
+        inputs = serialize_input_output_dict(inputs)
+        return self.callback.on_chain_start(serialized, inputs, **kwargs)
+
+    def on_chain_end(
+        self,
+        outputs: dict[str, Any],
+        **kwargs: Any,
+    ) -> Any:
+        outputs = serialize_input_output_dict(outputs)
+        return self.callback.on_chain_end(outputs, **kwargs)
+
+
+def serialize_input_output_dict(data: dict[Any, Any]) -> dict[Any, Any]:
+    """Ensure that dict values are serializable."""
+    return safe_serialize(data)
+
+
+def safe_serialize(obj: Any) -> Any:
+    if isinstance(obj, list):
+        return [safe_serialize(item) for item in obj]
+    if isinstance(obj, dict):
+        return {safe_serialize(k): safe_serialize(v) for k, v in obj.items()}
+    if isinstance(obj, BaseModel):
+        return safe_serialize(obj.model_dump())
+    if is_dataclass(obj):
+        return asdict(obj)
+    if isinstance(obj, Model):
+        return str(obj)
+    return obj
