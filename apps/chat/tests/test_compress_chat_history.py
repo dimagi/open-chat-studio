@@ -48,7 +48,14 @@ def chat(team_with_users):
 def test_compress_history_no_need_for_compression(chat):
     llm = FakeLlmSimpleTokenCount(responses=["Summary"])
     ChatMessage.objects.create(chat=chat, content="Hello", message_type=ChatMessageType.HUMAN)
-    history = compress_chat_history(chat, llm, max_token_limit=30, keep_history_len=10, input_messages=[], history_mode=PipelineChatHistoryModes.SUMMARIZE)
+    history = compress_chat_history(
+        chat,
+        llm,
+        max_token_limit=30,
+        keep_history_len=10,
+        input_messages=[],
+        history_mode=PipelineChatHistoryModes.SUMMARIZE,
+    )
     assert len(history) == 1
     assert len(llm.get_calls()) == 0
 
