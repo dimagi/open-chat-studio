@@ -8,7 +8,7 @@ from django.utils import timezone
 from freezegun import freeze_time
 
 from apps.events.models import EventActionType, ScheduledMessage, TimePeriod
-from apps.events.tasks import _get_messages_to_fire, poll_scheduled_messages
+from apps.events.tasks import poll_scheduled_messages
 from apps.experiments.models import ExperimentRoute
 from apps.utils.factories.events import EventActionFactory, ScheduledMessageFactory
 from apps.utils.factories.experiment import ExperimentFactory, ExperimentSessionFactory
@@ -50,20 +50,20 @@ def test_get_messages_to_fire():
     event_action, params = _construct_event_action(
         frequency=1, time_period=TimePeriod.DAYS, experiment_id=session.experiment.id
     )
-    with freeze_time("2024-04-01"), patch("apps.events.tasks.functions.Now") as db_time:
+    with freeze_time("2024-04-01"), patch("apps.events.models.functions.Now") as db_time:
         utc_now = timezone.now()
         db_time.return_value = utc_now
 
         scheduled_message = ScheduledMessageFactory(
             team=session.team, participant=session.participant, action=event_action
         )
-        # DB is behind the trigger date
-        pending_messages = _get_messages_to_fire()
+        # behind the trigger date
+        pending_messages = ScheduledMessage.objects.get_messages_to_fire()
         assert len(pending_messages) == 0
 
-        # DB is now ahead of the trigger date
-        db_time.return_value = utc_now + relativedelta(days=1.1)
-        pending_messages = _get_messages_to_fire()
+        # ahead of the trigger date
+        db_time.return_value = utc_now + relativedelta(days=2)
+        pending_messages = ScheduledMessage.objects.get_messages_to_fire()
         assert len(pending_messages) == 1
         assert pending_messages[0] == scheduled_message
 
@@ -71,7 +71,31 @@ def test_get_messages_to_fire():
         scheduled_message.save()
 
         # Completed messages should not be returned
-        pending_messages = _get_messages_to_fire()
+        db_time.return_value = utc_now + relativedelta(days=4)
+        pending_messages = ScheduledMessage.objects.get_messages_to_fire()
+        assert len(pending_messages) == 0
+
+
+@pytest.mark.django_db()
+def test_get_messages_to_fire_cancelled():
+    session = ExperimentSessionFactory()
+    event_action, params = _construct_event_action(
+        frequency=1, time_period=TimePeriod.DAYS, experiment_id=session.experiment.id
+    )
+    with freeze_time("2024-04-01"), patch("apps.events.models.functions.Now") as db_time:
+        utc_now = timezone.now()
+
+        scheduled_message = ScheduledMessageFactory(
+            team=session.team, participant=session.participant, action=event_action
+        )
+        db_time.return_value = utc_now + relativedelta(days=2)
+        pending_messages = ScheduledMessage.objects.get_messages_to_fire()
+        assert len(pending_messages) == 1
+
+        scheduled_message.cancel()
+
+        db_time.return_value = utc_now + relativedelta(days=2)
+        pending_messages = ScheduledMessage.objects.get_messages_to_fire()
         assert len(pending_messages) == 0
 
 
@@ -115,7 +139,7 @@ def test_poll_scheduled_messages(ad_hoc_bot_message, period):
     seconds_offset = 1
     step_delta = delta + relativedelta(seconds=seconds_offset)
 
-    with freeze_time("2024-04-01") as frozen_time, patch("apps.events.tasks.functions.Now") as db_time:
+    with freeze_time("2024-04-01") as frozen_time, patch("apps.events.models.functions.Now") as db_time:
         current_time = db_time.return_value = timezone.now()
         scheduled_message = ScheduledMessageFactory(
             team=session.team, participant=session.participant, action=event_action, experiment=session.experiment
@@ -155,7 +179,7 @@ def test_poll_scheduled_messages(ad_hoc_bot_message, period):
 
         # We are done now, but let's make 110% sure that another message will not be triggered
         current_time = step_time(frozen_time, db_time, step_delta)
-        assert len(_get_messages_to_fire()) == 0
+        assert len(ScheduledMessage.objects.get_messages_to_fire()) == 0
 
 
 @pytest.mark.django_db()
@@ -171,7 +195,7 @@ def test_error_when_sending_sending_message_to_a_user(_set_telegram_webhook, cap
     with (
         caplog.at_level(logging.ERROR),
         patch("apps.experiments.models.ExperimentSession.ad_hoc_bot_message", side_effect=Exception("Oops")),
-        patch("apps.events.tasks.functions.Now") as db_time,
+        patch("apps.events.models.functions.Now") as db_time,
     ):
         sm = ScheduledMessageFactory(
             participant=session.participant, action=event_action, team=session.team, experiment=session.experiment
@@ -181,7 +205,7 @@ def test_error_when_sending_sending_message_to_a_user(_set_telegram_webhook, cap
         utc_now = timezone.now()
         db_time.return_value = utc_now + relativedelta(days=1.1)
 
-        pending_messages = _get_messages_to_fire()
+        pending_messages = ScheduledMessage.objects.get_messages_to_fire()
         assert len(pending_messages) == 1
 
         poll_scheduled_messages()

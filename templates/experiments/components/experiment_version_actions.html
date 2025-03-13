@@ -19,7 +19,8 @@
             hx-get="{% url 'experiments:experiment-version-details' team_slug=team.slug experiment_id=record.working_version_id version_number=record.version_number %}"
             hx-target="#modal-content"
             hx-trigger="click"
-            onclick="document.querySelector('#versionDetailsModal').showModal();">
+            hx-swap="innerHTML"
+            onclick="clearModalAndOpen();">
       View Details
     </button>
   {% else %}
@@ -28,3 +29,10 @@
     {% endif %}
   {% endif %}
 </div>
+
+<script>
+  function clearModalAndOpen() {
+    document.querySelector("#modal-content").innerHTML = "";
+    document.querySelector("#versionDetailsModal").showModal();
+  }
+</script>

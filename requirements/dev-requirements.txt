@@ -124,7 +124,7 @@ typing-extensions==4.12.2
     #   faker
 virtualenv==20.27.1
     # via pre-commit
-watchfiles==0.24.0
+watchfiles==1.0.4
     # via -r dev-requirements.in
 wheel==0.44.0
     # via pip-tools

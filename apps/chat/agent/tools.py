@@ -143,7 +143,7 @@ class DeleteReminderTool(CustomBaseTool):
         except ScheduledMessage.DoesNotExist:
             return "Could not find this reminder"
 
-        scheduled_message.delete()
+        scheduled_message.cancel()
         return "Success"
 
 
