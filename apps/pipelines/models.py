@@ -252,13 +252,12 @@ class Pipeline(BaseTeamModel, VersionsMixin):
             output = PipelineState(**output).json_safe()
             pipeline_run.output = output
             if save_run_to_history and session is not None:
-                metadata = output.get("message_metadata", {})
                 if save_input_to_history:
                     self._save_message_to_history(
-                        session, input["messages"][-1], ChatMessageType.HUMAN, metadata=metadata.get("input", {})
+                        session, input["messages"][-1], ChatMessageType.HUMAN, metadata=output["input_message_metadata"]
                     )
                 ai_message = self._save_message_to_history(
-                    session, output["messages"][-1], ChatMessageType.AI, metadata=metadata.get("output", {})
+                    session, output["messages"][-1], ChatMessageType.AI, metadata=output["output_message_metadata"]
                 )
                 output["ai_message_id"] = ai_message.id
         finally:
@@ -475,6 +474,10 @@ class Node(BaseModel, VersionsMixin, CustomActionOperationMixin):
             instance=self,
             fields=param_versions,
         )
+
+    def requires_attachment_tool(self) -> bool:
+        """When a collection is linked, the attachment tool is required"""
+        return self.params.get("collection_id") is not None
 
 
 class PipelineRunStatus(models.TextChoices):

@@ -4,6 +4,7 @@ from freezegun import freeze_time
 
 from apps.api.serializers import MessageSerializer
 from apps.chat.models import ChatMessage, ChatMessageType
+from apps.utils.factories.experiment import ChatFactory
 
 CASES = [(ChatMessageType.SYSTEM, "system"), (ChatMessageType.HUMAN, "user"), (ChatMessageType.AI, "assistant")]
 
@@ -16,10 +17,13 @@ def test_message_serializer_api_to_internal(type_, role):
 
 
 @pytest.mark.parametrize(("type_", "role"), CASES)
+@pytest.mark.django_db()
 @freeze_time("2021-01-01T12:00:00Z")
 def test_message_serializer_internal_to_api(type_, role):
     now = timezone.now()
-    serializer = MessageSerializer(instance=ChatMessage(created_at=now, message_type=type_, content="hello"))
+    serializer = MessageSerializer(
+        instance=ChatMessage(chat=ChatFactory(), created_at=now, message_type=type_, content="hello")
+    )
     assert serializer.data == {
         "created_at": "2021-01-01T12:00:00Z",
         "role": role,
