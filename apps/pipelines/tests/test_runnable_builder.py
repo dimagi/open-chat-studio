@@ -154,7 +154,10 @@ def test_llm_with_prompt_response(
             prompt="Node 1: Use this {source_material} to answer questions about {participant_data}.",
         ),
         llm_response_with_prompt_node(
-            str(provider.id), str(provider_model.id), source_material_id=str(source_material.id), prompt="Node 2:"
+            str(provider.id),
+            str(provider_model.id),
+            source_material_id=str(source_material.id),
+            prompt="Node 2: {source_material}",
         ),
         end_node(),
     ]
@@ -162,7 +165,7 @@ def test_llm_with_prompt_response(
         PipelineState(messages=[user_input], experiment_session=experiment_session, pipeline_version=1)
     )["messages"][-1]
     expected_output = (
-        f"Node 2: Node 1: Use this {source_material.material} to answer questions "
+        f"Node 2: {source_material.material} Node 1: Use this {source_material.material} to answer questions "
         f"about {participant_data.data}. {user_input}"
     )
     assert output == expected_output

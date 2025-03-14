@@ -11,6 +11,7 @@ class PromptVars(models.TextChoices):
     PARTICIPANT_DATA = "participant_data"
     SOURCE_MATERIAL = "source_material"
     CURRENT_DATETIME = "current_datetime"
+    MEDIA = "media"
 
 
 PROMPT_VARS_REQUIRED_BY_TOOL = {
@@ -21,27 +22,47 @@ PROMPT_VARS_REQUIRED_BY_TOOL = {
     AgentTools.UPDATE_PARTICIPANT_DATA: [PromptVars.PARTICIPANT_DATA],
 }
 
+PROMPT_VAR_CONTEXT_VAR_MAP = {
+    PromptVars.SOURCE_MATERIAL: "source_material",
+    PromptVars.MEDIA: "collection",
+}
 
-def validate_prompt_variables(form_data, prompt_key: str, known_vars: set):
+
+def _inspect_prompt(context: str, prompt_key) -> tuple[set, str]:
+    """Inspects the prompt text to extract the variables used in it."""
+    prompt_text = context.get(prompt_key, "")
+    try:
+        promp_vars = {get_root_var(var) for var in PromptTemplate.from_template(prompt_text).input_variables}
+        return promp_vars, prompt_text
+    except ValueError as e:
+        raise ValidationError({prompt_key: f"Invalid format in prompt: {e}"})
+
+
+def validate_prompt_variables(context, prompt_key: str, known_vars: set):
     """Ensures that the variables expected by the prompt has values and that only those in `known_vars` are allowed
     to be used, otherwise a `ValidationError` is thrown.
     """
-    prompt_text = form_data.get(prompt_key, "")
-    try:
-        prompt_variables = {get_root_var(var) for var in PromptTemplate.from_template(prompt_text).input_variables}
-    except ValueError as e:
-        raise ValidationError({prompt_key: f"Invalid format in prompt: {e}"})
+    prompt_variables, prompt_text = _inspect_prompt(context, prompt_key)
 
     unknown = prompt_variables - known_vars
     if unknown:
         raise ValidationError({prompt_key: f"Prompt contains unknown variables: {', '.join(unknown)}"})
 
-    if not form_data.get("source_material") and "source_material" in prompt_variables:
-        raise ValidationError({prompt_key: "Prompt expects source_material but it is not provided."})
-    elif form_data.get("source_material") and "source_material" not in prompt_variables:
-        raise ValidationError({prompt_key: "source_material variable expected since source material is specified"})
+    _ensure_component_variables_are_present(context, prompt_variables, prompt_key)
+    _ensure_variable_components_are_present(context, prompt_variables, prompt_key)
 
-    if tools := form_data.get("tools", []):
+    for var in prompt_variables:
+        if prompt_text.count(f"{{{var}}}") > 1:
+            raise ValidationError({prompt_key: f"Variable {var} is used more than once."})
+
+
+def _ensure_component_variables_are_present(context: dict, prompt_variables: set, prompt_key: str):
+    """Ensure that linked components are referenced by the prompt"""
+    for prompt_var, context_var in PROMPT_VAR_CONTEXT_VAR_MAP.items():
+        if context.get(context_var) and prompt_var not in prompt_variables:
+            raise ValidationError({prompt_key: f"Prompt expects {prompt_var} variable."})
+
+    if tools := context.get("tools", []):
         required_prompt_variables = []
         for tool_name in tools:
             required_prompt_variables.extend(PROMPT_VARS_REQUIRED_BY_TOOL[AgentTools(tool_name)])
@@ -52,9 +73,12 @@ def validate_prompt_variables(form_data, prompt_key: str, known_vars: set):
                 {prompt_key: f"Tools require {', '.join(missing_vars)}. Please include them in your prompt."}
             )
 
-    for var in prompt_variables:
-        if prompt_text.count(f"{{{var}}}") > 1:
-            raise ValidationError({prompt_key: f"Variable {var} is used more than once."})
+
+def _ensure_variable_components_are_present(context: dict, prompt_variables: set, prompt_key: str):
+    """Ensures that all variables in the prompt are referencing valid values."""
+    for prompt_var, context_var in PROMPT_VAR_CONTEXT_VAR_MAP.items():
+        if prompt_var in prompt_variables and context.get(context_var) is None:
+            raise ValidationError({prompt_key: f"{prompt_var} variable is specified, but {context_var} is missing"})
 
 
 def get_root_var(var: str) -> str:
