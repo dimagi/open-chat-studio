@@ -189,7 +189,7 @@ class AttachMediaTool(CustomBaseTool):
         return chat_attachment
 
     @transaction.atomic
-    def action(self, file_id: str) -> str:
+    def action(self, file_id: int) -> str:
         try:
             self.chat_attachment.files.add(file_id)
             self.callback(file_id)
