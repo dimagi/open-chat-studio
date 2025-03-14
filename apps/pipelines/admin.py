@@ -3,12 +3,7 @@ import json
 from django import forms
 from django.contrib import admin
 
-from .models import Node, Pipeline, PipelineChatHistory, PipelineChatMessages, PipelineRun
-
-
-class PipelineRunInline(admin.TabularInline):
-    model = PipelineRun
-    extra = 0
+from .models import Node, Pipeline, PipelineChatHistory, PipelineChatMessages
 
 
 class PipelineNodeInline(admin.TabularInline):
@@ -28,7 +23,7 @@ class PipelineAdminForm(forms.ModelForm):
 @admin.register(Pipeline)
 class PipelineAdmin(admin.ModelAdmin):
     form = PipelineAdminForm
-    inlines = [PipelineNodeInline, PipelineRunInline]
+    inlines = [PipelineNodeInline]
 
 
 class PipelineChatMessagesInline(admin.TabularInline):
