@@ -3,8 +3,11 @@ from unittest.mock import Mock, patch
 import pytest
 
 from apps.channels.models import ChannelPlatform
+from apps.documents.models import Repository
 from apps.experiments.models import SourceMaterial
 from apps.service_providers.llm_service.prompt_context import PromptTemplateContext
+from apps.utils.factories.documents import CollectionFactory
+from apps.utils.factories.files import FileFactory
 
 
 @pytest.fixture()
@@ -74,6 +77,26 @@ def test_returns_blank_source_material_not_found(mock_get, mock_session):
     mock_get.side_effect = SourceMaterial.DoesNotExist
     context = PromptTemplateContext(mock_session, 1)
     assert context.get_source_material() == ""
+
+
+@pytest.mark.django_db()
+def test_retrieves_media_successfully():
+    collection = CollectionFactory()
+    file1 = FileFactory(summary="summary1", team_id=collection.team_id)
+    file2 = FileFactory(summary="summary2", team_id=collection.team_id)
+    collection.files.add(file1, file2)
+    context = PromptTemplateContext(session=None, source_material_id=None, collection_id=collection.id)
+    expected_media_summaries = (
+        f"File ({file1.id}): {file1.summary}\n----------\nFile ({file2.id}): {file2.summary}\n----------"
+    )
+    assert context.get_media_summaries() == expected_media_summaries
+
+
+@patch("apps.documents.models.Repository.objects.collections")
+def test_returns_blank_when_collection_not_found(collections_mock):
+    collections_mock.side_effect = Repository.DoesNotExist
+    context = PromptTemplateContext(session=None, source_material_id=1, collection_id=999)
+    assert context.get_media_summaries() == ""
 
 
 def test_retrieves_participant_data_when_authorized(mock_authorized_session):

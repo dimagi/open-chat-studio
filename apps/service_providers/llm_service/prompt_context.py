@@ -41,12 +41,19 @@ class PromptTemplateContext:
             return ""
 
     def get_media_summaries(self):
+        """
+        Example output:
+        File (27): summary1
+        ----------
+        File (28): summary2
+        ----------
+        """
         from apps.documents.models import Repository
 
         try:
             repo = Repository.objects.collections().get(id=self.collection_id)
             id_summary_map = repo.files.values_list("id", "summary")
-            return [{f"file ({id}): {summary}\n"} for id, summary in id_summary_map]
+            return "\n".join([f"File ({id}): {summary}\n" + "-" * 10 for id, summary in id_summary_map])
         except Repository.DoesNotExist:
             return ""
 
