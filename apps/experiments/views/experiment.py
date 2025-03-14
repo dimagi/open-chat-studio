@@ -56,12 +56,7 @@ from apps.experiments.decorators import (
 )
 from apps.experiments.email import send_chat_link_email, send_experiment_invitation
 from apps.experiments.exceptions import ChannelAlreadyUtilizedException
-from apps.experiments.filters import (
-    build_participant_filter,
-    build_tags_filter,
-    build_timestamp_filter,
-    build_versions_filter,
-)
+from apps.experiments.filters import build_filter_condition
 from apps.experiments.forms import (
     ConsentForm,
     ExperimentForm,
@@ -184,7 +179,7 @@ class ExperimentSessionsTableView(SingleTableView, PermissionRequiredMixin):
             if not all([filter_column, filter_operator, filter_value]):
                 break
 
-            condition = self.build_filter_condition(filter_column, filter_operator, filter_value)
+            condition = build_filter_condition(filter_column, filter_operator, filter_value)
             if condition:
                 filter_conditions &= condition
                 filter_applied = True
@@ -192,20 +187,6 @@ class ExperimentSessionsTableView(SingleTableView, PermissionRequiredMixin):
         if filter_applied:
             query_set = query_set.filter(filter_conditions).distinct()
         return query_set
-
-    def build_filter_condition(self, column, operator, value):
-        """Build a Q object for the filter condition based on column, operator and value"""
-        if not value:
-            return None
-        if column == "participant":
-            return build_participant_filter(operator, value)
-        elif column == "last_message":
-            return build_timestamp_filter(operator, value)
-        elif column == "tags":
-            return build_tags_filter(operator, value)
-        elif column == "versions":
-            return build_versions_filter(operator, value)
-        return None
 
 
 class ExperimentVersionsTableView(SingleTableView, PermissionRequiredMixin):
@@ -1096,14 +1077,12 @@ def experiment_invitations(request, team_slug: str, experiment_id: int):
 @login_and_team_required
 def generate_chat_export(request, team_slug: str, experiment_id: str):
     experiment = get_object_or_404(Experiment, id=experiment_id)
-    tags = request.POST.get("tags", [])
-    tags = tags.split(",") if tags else []
-
-    participant_identifiers = request.POST.get("participants")
-    if participant_identifiers:
-        participant_identifiers = participant_identifiers.split(",")
-
-    task_id = async_export_chat.delay(experiment_id, tags=tags, participants=participant_identifiers)
+    filter_params = {}
+    for key, value in request.POST.items():
+        if key.startswith("filter_") and "_" in key[7:]:
+            filter_params[key] = value
+    show_all = request.POST.get("show-all") == "on"
+    task_id = async_export_chat.delay(experiment_id, filter_params=filter_params, show_all=show_all)
     return TemplateResponse(
         request, "experiments/components/exports.html", {"experiment": experiment, "task_id": task_id}
     )

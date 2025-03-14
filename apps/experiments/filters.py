@@ -8,6 +8,20 @@ from apps.annotations.models import CustomTaggedItem
 from apps.chat.models import Chat, ChatMessage
 
 
+def build_filter_condition(column, operator, value):
+    if not value:
+        return None
+    if column == "participant":
+        return build_participant_filter(operator, value)
+    elif column == "last_message":
+        return build_timestamp_filter(operator, value)
+    elif column == "tags":
+        return build_tags_filter(operator, value)
+    elif column == "versions":
+        return build_versions_filter(operator, value)
+    return None
+
+
 def build_participant_filter(operator, value):
     """Build filter condition for participant"""
     if operator == "equals":
