@@ -45,6 +45,10 @@ def add_temp_state_messages(left: dict, right: dict):
     return output
 
 
+def merge_dicts(left: dict, right: dict):
+    return {**left, **right}
+
+
 class TempState(TypedDict):
     user_input: str
     outputs: dict
@@ -57,8 +61,9 @@ class PipelineState(dict):
     experiment_session: ExperimentSession
     pipeline_version: int
     temp_state: Annotated[TempState, add_temp_state_messages]
+    input_message_metadata: Annotated[dict, merge_dicts]
+    output_message_metadata: Annotated[dict, merge_dicts]
     ai_message_id: int | None = None
-    message_metadata: dict | None = None
     attachments: list = Field(default=[])
 
     def json_safe(self):

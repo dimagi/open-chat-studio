@@ -675,19 +675,27 @@ def _run_data_extract_and_update_pipeline(session, provider, pipeline, extracted
         runnable.invoke(state)
 
 
+def assistant_node_runnable_mock(
+    output: str, input_message_metadata: dict = None, output_message_metadata: dict = None
+):
+    """A mock for an assistant node runnable that returns the given output and metadata."""
+    runnable_mock = Mock()
+    runnable_mock.invoke.return_value = ChainOutput(output=output, prompt_tokens=30, completion_tokens=20)
+    runnable_mock.history_manager = Mock()
+    runnable_mock.history_manager.input_message_metadata = input_message_metadata or {}
+    runnable_mock.history_manager.output_message_metadata = output_message_metadata or {}
+    return runnable_mock
+
+
 @pytest.mark.django_db()
 @pytest.mark.parametrize("tools_enabled", [True, False])
 @patch("apps.pipelines.nodes.nodes.AssistantNode._get_assistant_runnable")
 def test_assistant_node(get_assistant_runnable, tools_enabled):
-    runnable_mock = Mock()
-    runnable_mock.invoke = lambda *args, **kwargs: ChainOutput(
-        output="Hi there human", prompt_tokens=30, completion_tokens=20
+    runnable_mock = assistant_node_runnable_mock(
+        output="Hi there human",
+        input_message_metadata={"test": "metadata"},
+        output_message_metadata={"test": "metadata"},
     )
-
-    runnable_mock.history_manager = Mock()
-    runnable_mock.history_manager.input_message_metadata = {"test": "metadata"}
-    runnable_mock.history_manager.output_message_metadata = {"test": "metadata"}
-
     get_assistant_runnable.return_value = runnable_mock
 
     pipeline = PipelineFactory()
@@ -700,16 +708,15 @@ def test_assistant_node(get_assistant_runnable, tools_enabled):
         attachments=[],
     )
     output_state = runnable.invoke(state)
-    assert output_state["message_metadata"]["input"] == {"test": "metadata"}
-    assert output_state["message_metadata"]["output"] == {"test": "metadata"}
+    assert output_state["input_message_metadata"] == {"test": "metadata"}
+    assert output_state["output_message_metadata"] == {"test": "metadata"}
     assert output_state["messages"][-1] == "Hi there human"
 
 
 @pytest.mark.django_db()
 @patch("apps.pipelines.nodes.nodes.AssistantNode._get_assistant_runnable")
 def test_assistant_node_attachments(get_assistant_runnable):
-    runnable_mock = Mock()
-    runnable_mock.invoke.return_value = ChainOutput(output="Hi there human", prompt_tokens=30, completion_tokens=20)
+    runnable_mock = assistant_node_runnable_mock(output="Hi there human")
     get_assistant_runnable.return_value = runnable_mock
 
     pipeline = PipelineFactory()
@@ -734,13 +741,11 @@ def test_assistant_node_attachments(get_assistant_runnable):
 @django_db_with_data(available_apps=("apps.service_providers",))
 @patch("apps.pipelines.nodes.nodes.AssistantNode._get_assistant_runnable")
 def test_assistant_node_raises(get_assistant_runnable):
-    runnable_mock = Mock()
-    runnable_mock.invoke = lambda *args, **kwargs: ChainOutput(
-        output="Hi there human", prompt_tokens=30, completion_tokens=20
+    runnable_mock = runnable_mock = assistant_node_runnable_mock(
+        output="Hi there human",
+        input_message_metadata={"test": "metadata"},
+        output_message_metadata={"test": "metadata"},
     )
-    runnable_mock.history_manager = Mock()
-    runnable_mock.history_manager.input_message_metadata = {"test": "metadata"}
-    runnable_mock.history_manager.output_message_metadata = {"test": "metadata"}
     get_assistant_runnable.return_value = runnable_mock
 
     pipeline = PipelineFactory()
@@ -1009,8 +1014,8 @@ def test_assistant_node_empty_metadata_handling(get_llm_service, pipeline):
             attachments=[],
         )
         output_state = runnable.invoke(state)
-    assert output_state["message_metadata"]["input"] == {}
-    assert output_state["message_metadata"]["output"] == {}
+    assert output_state["input_message_metadata"] == {}
+    assert output_state["output_message_metadata"] == {}
     assert output_state["messages"][-1] == "How are you doing?"
 
 

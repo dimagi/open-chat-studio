@@ -754,10 +754,8 @@ class AssistantNode(PipelineNode):
             node_name=self.name,
             node_id=node_id,
             output=output,
-            message_metadata={
-                "input": runnable.history_manager.input_message_metadata or {},
-                "output": runnable.history_manager.output_message_metadata or {},
-            },
+            input_message_metadata=runnable.history_manager.input_message_metadata or {},
+            output_message_metadata=runnable.history_manager.output_message_metadata or {},
         )
 
     def _get_attachments(self, state) -> list:
