@@ -179,14 +179,22 @@ class ChatMessage(BaseModel, TaggedModelMixin, UserCommentsMixin):
 
         Message metadata example:
         {
-            "openai_file_ids": ["file_id_1", "file_id_2", ...]
+            "openai_file_ids": ["file_id_1", "file_id_2", ...],
+            "ocs_attachment_file_ids": [1,2,3, ...],
         }
         """
-        if file_ids := self.metadata.get("openai_file_ids", []):
-            # We should not show files that are on the assistant level. Users should only be able to download
-            # those on the thread (chat) level, since they uploaded them
-            return [file for file in self.chat.get_attached_files() if file.external_id in file_ids]
-        return []
+        files = []
+        allowed_file_ids = []
+
+        if external_file_ids := self.metadata.get("openai_file_ids", []):
+            allowed_file_ids.extend(File.objects.filter(external_id__in=external_file_ids).values_list("id", flat=True))
+
+        if file_ids := self.metadata.get("ocs_attachment_file_ids", []):
+            # ocs attachments doesn't have external ids
+            allowed_file_ids.extend(file_ids)
+
+        files.extend([file for file in self.chat.get_attached_files() if file.id in allowed_file_ids])
+        return files
 
     def get_metadata(self, key: str):
         return self.metadata.get(key, None)
