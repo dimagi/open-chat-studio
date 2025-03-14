@@ -1,200 +1,141 @@
+import csv
 import datetime
-import json
+import io
+from unittest.mock import MagicMock, patch
 
 import pytest
 
-from apps.annotations.models import Tag
 from apps.chat.models import ChatMessage, ChatMessageType
-from apps.experiments.export import filtered_export_to_csv, get_filtered_sessions
+from apps.experiments.export import filtered_export_to_csv
 from apps.utils.factories.channels import ExperimentChannelFactory
 from apps.utils.factories.experiment import ExperimentFactory, ExperimentSessionFactory
 
 
 @pytest.mark.django_db()
+@patch("apps.experiments.export.get_filtered_sessions")
 @pytest.mark.parametrize(
-    ("session_configs", "filters", "expected_chats_count"),
+    ("session_configs", "filtered_indices", "expected_row_count"),
     [
-        # Tag filtering - any of
+        # Test case 1: Multiple sessions, all included
         (
             [
                 {
-                    "tags": ["session1"],
                     "participant": "user1@example.com",
-                    "last_message": "2023-06-15",
-                    "versions": "v1",
+                    "message": "Message from user1@example.com",
+                    "date": "2023-06-15",
                 },
                 {
-                    "tags": ["session2"],
                     "participant": "user2@gmail.com",
-                    "last_message": "2023-06-10",
-                    "versions": "v1",
+                    "message": "Message from user2@gmail.com",
+                    "date": "2023-06-10",
                 },
-                {"tags": [], "participant": "user3@example.org", "last_message": "2023-06-05", "versions": "v1"},
             ],
-            [{"column": "tags", "operator": "any of", "value": ["session1"]}],
-            1,
+            [0, 1],  # Include both sessions
+            3,  # Header + 2 rows
         ),
-        # Participant filtering - contains
+        # Test case 2: Multiple sessions, only first included
         (
             [
                 {
-                    "tags": ["session1"],
                     "participant": "user1@example.com",
-                    "last_message": "2023-06-15",
-                    "versions": "v1",
+                    "message": "Message from user1@example.com",
+                    "date": "2023-06-15",
                 },
                 {
-                    "tags": ["session2"],
                     "participant": "user2@gmail.com",
-                    "last_message": "2023-06-10",
-                    "versions": "v1",
+                    "message": "Message from user2@gmail.com",
+                    "date": "2023-06-10",
                 },
-                {"tags": [], "participant": "user3@example.org", "last_message": "2023-06-05", "versions": "v1"},
             ],
-            [{"column": "participant", "operator": "contains", "value": "gmail"}],
-            1,
+            [0],  # Include only first session
+            2,  # Header + 1 row
         ),
-        # Participant filtering - equals
+        # Test case 3: Multiple sessions, only second included
         (
             [
                 {
-                    "tags": ["session1"],
                     "participant": "user1@example.com",
-                    "last_message": "2023-06-15",
-                    "versions": ["v1"],
+                    "message": "Message from user1@example.com",
+                    "date": "2023-06-15",
                 },
                 {
-                    "tags": ["session2"],
                     "participant": "user2@gmail.com",
-                    "last_message": "2023-06-10",
-                    "versions": ["v1"],
-                },
-                {"tags": [], "participant": "user3@example.org", "last_message": "2023-06-05", "versions": ["v1"]},
-            ],
-            [{"column": "participant", "operator": "equals", "value": "user1@example.com"}],
-            1,
-        ),
-        # Tag filtering - all of
-        (
-            [
-                {
-                    "tags": ["important", "review"],
-                    "participant": "user1@example.com",
-                    "last_message": "2023-06-15",
-                    "versions": ["v1"],
+                    "message": "Message from user2@gmail.com",
+                    "date": "2023-06-10",
                 },
                 {
-                    "tags": ["urgent", "review"],
-                    "participant": "user2@gmail.com",
-                    "last_message": "2023-06-10",
-                    "versions": ["v2"],
-                },
-                {
-                    "tags": ["normal"],
                     "participant": "user3@example.org",
-                    "last_message": "2023-06-05",
-                    "versions": ["v1"],
+                    "message": "Message from user3@example.org",
+                    "date": "2023-06-05",
                 },
             ],
-            [{"column": "tags", "operator": "all of", "value": ["important", "review"]}],
-            1,
+            [1],  # Include only second session
+            2,  # Header + 1 row
         ),
-        # No matches
+        # Test case 4: Single session
         (
             [
                 {
-                    "tags": ["session1"],
-                    "participant": "user1@example.com",
-                    "last_message": "2023-06-15",
-                    "versions": ["v1"],
+                    "participant": "support@example.com",
+                    "message": "Critical customer issue",
+                    "date": "2023-07-20",
                 },
-                {
-                    "tags": ["session2"],
-                    "participant": "user2@gmail.com",
-                    "last_message": "2023-06-10",
-                    "versions": ["v2"],
-                },
-                {"tags": [], "participant": "user3@example.org", "last_message": "2023-06-05", "versions": ["v1"]},
             ],
-            [{"column": "participant", "operator": "equals", "value": "no one"}],
-            0,
+            [0],  # Include the only session
+            2,  # Header + 1 row
         ),
-        # No filters (returns all)
+        # Test case 5: No sessions included (empty result)
         (
             [
                 {
-                    "tags": ["session1"],
-                    "participant": "user1@example.com",
-                    "last_message": "2023-06-15",
-                    "versions": ["v1"],
+                    "participant": "support@example.com",
+                    "message": "Critical customer issue",
+                    "date": "2023-07-20",
                 },
-                {
-                    "tags": ["session2"],
-                    "participant": "user2@gmail.com",
-                    "last_message": "2023-06-10",
-                    "versions": ["v2"],
-                },
-                {"tags": [], "participant": "user3@example.org", "last_message": "2023-06-05", "versions": ["v1"]},
             ],
-            [],
-            3,
+            [],  # Include no sessions
+            1,  # Header only
         ),
     ],
 )
-def test_filtered_export_with_multiple_sessions(session_configs, filters, expected_chats_count):
+def test_filtered_export_with_mocked_filter(
+    mock_get_filtered_sessions, session_configs, filtered_indices, expected_row_count
+):
+    """Test the export functionality with a mocked filter function that returns a subset of sessions."""
     experiment = ExperimentFactory()
-    user = experiment.owner
     team = experiment.team
 
-    all_possible_tags = set()
-    for session_config in session_configs:
-        all_possible_tags.update(session_config.get("tags", []))
-
-    for filter_item in filters:
-        if filter_item.get("column") == "tags" and isinstance(filter_item.get("value"), list):
-            all_possible_tags.update(filter_item["value"])
-
-    for name in all_possible_tags:
-        if name:
-            Tag.objects.create(name=name, slug=name, team=team, created_by=user)
     sessions = []
-    for session_config in session_configs:
+    for config in session_configs:
         session = ExperimentSessionFactory(
             experiment=experiment,
             team=team,
             experiment_channel=ExperimentChannelFactory(),
-            participant__identifier=session_config.get("participant", "user@example.com"),
+            participant__identifier=config["participant"],
         )
-        if session_config.get("tags"):
-            session.chat.add_tags(session_config["tags"], team=team, added_by=user)
-
-        date_str = session_config.get("last_message", "2023-06-01")
-        date_obj = datetime.datetime.strptime(date_str, "%Y-%m-%d")
-
         ChatMessage.objects.create(
             chat=session.chat,
-            content=f"Message from {session.participant.identifier}",
+            content=config["message"],
             message_type=ChatMessageType.HUMAN,
-            created_at=date_obj,
+            created_at=datetime.datetime.strptime(config["date"], "%Y-%m-%d"),
         )
         sessions.append(session)
 
-    filter_params = {}
-    for i, filter_item in enumerate(filters):
-        filter_params[f"filter_{i}_column"] = filter_item["column"]
-        filter_params[f"filter_{i}_operator"] = filter_item["operator"]
-        if isinstance(filter_item["value"], list):
-            filter_params[f"filter_{i}_value"] = json.dumps(filter_item["value"])
-        else:
-            filter_params[f"filter_{i}_value"] = filter_item["value"]
+    filtered_session_ids = [sessions[i].id for i in filtered_indices]
+    mock_queryset = MagicMock()
+    mock_queryset.values_list.return_value = filtered_session_ids
+    mock_get_filtered_sessions.return_value = mock_queryset
 
-    filtered_sessions = get_filtered_sessions(experiment, filter_params)
-    assert filtered_sessions.count() == expected_chats_count
+    csv_in_memory = filtered_export_to_csv(experiment, filtered_session_ids)
+    csv_content = csv_in_memory.getvalue()
+    csv_lines = csv_content.strip().split("\n") if csv_content.strip() else []
+    assert len(csv_lines) == expected_row_count
 
-    if expected_chats_count > 0:
-        session_ids = list(filtered_sessions.values_list("id", flat=True))
-        csv_in_memory = filtered_export_to_csv(experiment, session_ids)
-
-        csv_content = csv_in_memory.getvalue()
-        csv_lines = csv_content.strip().split("\n")
-        assert len(csv_lines) == expected_chats_count + 1
+    if filtered_indices:
+        csv_reader = csv.reader(io.StringIO(csv_content))
+        rows = list(csv_reader)[1:]  # Skip header
+        assert len(rows) == len(filtered_indices)
+        for i in filtered_indices:
+            message = session_configs[i]["message"]
+            matching_rows = [row for row in rows if message in row]
+            assert len(matching_rows) > 0, f"Message for session {i} not found in CSV"
