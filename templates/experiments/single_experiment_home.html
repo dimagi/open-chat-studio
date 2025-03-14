@@ -280,7 +280,7 @@
                               <span x-text="filter.column ? filterData.columns[filter.column].label : 'Select column'"></span>
                               <i class="fa-solid fa-caret-down fa-sm"></i>
                             </label>
-                            <ul tabindex="0" class="dropdown-content z-[1] menu p-2 bg-base-100 rounded-lg border border-base-200 w-40">
+                            <ul tabindex="0" class="dropdown-content z-[1] menu mt-1 p-2 bg-base-100 rounded-lg border border-base-200 w-40">
                               <template x-for="(config, column) in filterData.columns" :key="column">
                                 <li><a @click="filter.column = column; updateOperatorsByColumn(index)" x-text="config.label"></a></li>
                               </template>
@@ -298,7 +298,7 @@
                               <span x-text="filter.operator || 'Select operator'"></span>
                               <i class="fa-solid fa-caret-down fa-sm"></i>
                             </label>
-                            <ul tabindex="0" class="dropdown-content z-[1] menu p-2 bg-base-100 rounded-lg border border-base-200 w-40">
+                            <ul tabindex="0" class="dropdown-content z-[1] menu mt-1 p-2 bg-base-100 rounded-lg border border-base-200 w-40">
                               <template x-for="operator in filter.availableOperators" :key="operator">
                                 <li><a @click="filter.operator = operator; triggerFilterChange()" x-text="operator"></a></li>
                               </template>
