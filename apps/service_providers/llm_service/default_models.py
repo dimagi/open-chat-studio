@@ -10,6 +10,7 @@ from apps.utils.deletion import get_related_objects, get_related_pipelines_query
 class Model:
     name: str
     token_limit: int
+    is_default: bool = False
 
 
 def k(n: int) -> int:
@@ -18,7 +19,7 @@ def k(n: int) -> int:
 
 DEFAULT_LLM_PROVIDER_MODELS = {
     "azure": [
-        Model("gpt-4o-mini", 128000),
+        Model("gpt-4o-mini", 128000, is_default=True),
         Model("gpt-4o", 128000),
         Model("gpt-4", k(8)),
         Model("gpt-4-32k", 32768),
@@ -27,14 +28,14 @@ DEFAULT_LLM_PROVIDER_MODELS = {
     ],
     "anthropic": [
         Model("claude-3-5-sonnet-latest", k(200)),
-        Model("claude-3-5-haiku-latest", k(200)),
+        Model("claude-3-5-haiku-latest", k(200), is_default=True),
         Model("claude-3-opus-latest", k(200)),
         Model("claude-2.0", k(100)),
         Model("claude-2.1", k(200)),
         Model("claude-instant-1.2", k(100)),
     ],
     "openai": [
-        Model("gpt-4o-mini", 128000),
+        Model("gpt-4o-mini", 128000, is_default=True),
         Model("gpt-4o", 128000),
         Model("chatgpt-4o-latest", 128000),
         Model("o1-preview", 128000),
@@ -53,7 +54,7 @@ DEFAULT_LLM_PROVIDER_MODELS = {
         Model("gemma-7b-it", k(8)),
         Model("llama3-groq-70b-8192-tool-use-preview", k(8)),
         Model("llama3-groq-8b-8192-tool-use-preview", k(8)),
-        Model("llama-3.1-70b-versatile", k(128)),
+        Model("llama-3.1-70b-versatile", k(128), is_default=True),
         Model("llama-3.1-8b-instant", k(128)),
         Model("llama-3.2-1b-preview", k(128)),
         Model("llama-3.2-3b-preview", k(128)),
@@ -65,7 +66,7 @@ DEFAULT_LLM_PROVIDER_MODELS = {
         Model("mixtral-8x7b-32768", 32768),
     ],
     "perplexity": [
-        Model("llama-3.1-sonar-small-128k-online", 127072),
+        Model("llama-3.1-sonar-small-128k-online", 127072, is_default=True),
         Model("llama-3.1-sonar-large-128k-online", 127072),
         Model("llama-3.1-sonar-huge-128k-online", 127072),
         Model("llama-3.1-sonar-small-128k-chat", 127072),
@@ -73,14 +74,21 @@ DEFAULT_LLM_PROVIDER_MODELS = {
         Model("llama-3.1-8b-instruct", 131072),
         Model("llama-3.1-70b-instruct", 131072),
     ],
-    "deepseek": [Model("deepseek-chat", 128000), Model("deepseek-reaoner", 128000)],
+    "deepseek": [
+        Model("deepseek-chat", 128000, is_default=True),
+        Model("deepseek-reaoner", 128000),
+    ],
     "google": [
         Model("gemini-2.0-flash", 1048576),
-        Model("gemini-1.5-flash", 1048576),
+        Model("gemini-1.5-flash", 1048576, is_default=True),
         Model("gemini-1.5-flash-8b", 1048576),
         Model("gemini-1.5-pro", 2097152),
     ],
 }
+
+
+def get_default_model(provider_type: str) -> Model:
+    return next((m for m in DEFAULT_LLM_PROVIDER_MODELS[provider_type] if m.is_default), None)
 
 
 @transaction.atomic()

@@ -1,10 +1,19 @@
 import pytest
 
-from apps.service_providers.llm_service.default_models import DEFAULT_LLM_PROVIDER_MODELS, update_llm_provider_models
+from apps.service_providers.llm_service.default_models import (
+    DEFAULT_LLM_PROVIDER_MODELS,
+    get_default_model,
+    update_llm_provider_models,
+)
 from apps.service_providers.models import LlmProviderModel
 from apps.utils.factories.experiment import ExperimentFactory
 from apps.utils.factories.pipelines import PipelineFactory
 from apps.utils.factories.service_provider_factories import LlmProviderModelFactory
+
+
+def test_all_providers_have_default_models():
+    for provider_type in DEFAULT_LLM_PROVIDER_MODELS:
+        assert get_default_model(provider_type) is not None
 
 
 @pytest.mark.django_db()

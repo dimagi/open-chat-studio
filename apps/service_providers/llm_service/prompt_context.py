@@ -33,6 +33,9 @@ class PromptTemplateContext:
     def get_source_material(self):
         from apps.experiments.models import SourceMaterial
 
+        if not self.source_material_id:
+            return ""
+
         try:
             return SourceMaterial.objects.get(id=self.source_material_id).material
         except SourceMaterial.DoesNotExist:
