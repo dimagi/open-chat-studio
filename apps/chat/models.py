@@ -52,8 +52,8 @@ class Chat(BaseTeamModel, TaggedModelMixin, UserCommentsMixin):
                 yield message.get_summary_message()
 
     @cache
-    def get_attached_files(self):
-        return list(File.objects.filter(chatattachment__chat=self))
+    def get_attached_files(self, file_ids: list[int]):
+        return list(File.objects.filter(chatattachment__chat=self, id__in=file_ids))
 
 
 class ChatMessageType(models.TextChoices):
@@ -193,8 +193,7 @@ class ChatMessage(BaseModel, TaggedModelMixin, UserCommentsMixin):
             # ocs attachments doesn't have external ids
             allowed_file_ids.extend(file_ids)
 
-        if allowed_file_ids:
-            files.extend([file for file in self.chat.get_attached_files() if file.id in allowed_file_ids])
+        files = self.chat.get_attached_files(tuple(allowed_file_ids))
 
         return files
 
