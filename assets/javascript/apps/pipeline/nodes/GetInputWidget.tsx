@@ -26,12 +26,12 @@ type InputWidgetParams = {
 }
 
 const nodeTypeToInputParamsMap: Record<string, string[]> = {
-  "RouterNode": ["llm_model", "history_type", "prompt"],
-  "StaticRouterNode": ["data_source", "route_key"],
-  "ExtractParticipantData": ["llm_model", "history_type", "data_schema"],
-  "ExtractStructuredData": ["llm_model", "history_type", "data_schema"],
-  "LLMResponseWithPrompt": ["llm_model", "history_type", "prompt"],
-  "LLMResponse": ["llm_model", "history_type"],
+  "RouterNode": ["llm_model", "history_type", "prompt", "history_mode"],
+  "StaticRouterNode": ["data_source", "route_key", "history_mode"],
+  "ExtractParticipantData": ["llm_model", "history_type", "data_schema", "history_mode"],
+  "ExtractStructuredData": ["llm_model", "history_type", "data_schema", "history_mode"],
+  "LLMResponseWithPrompt": ["llm_model", "history_type", "prompt", "history_mode"],
+  "LLMResponse": ["llm_model", "history_type", "history_mode"],
   "AssistantNode": ["assistant_id", "citations_enabled"],
 };
 
@@ -106,7 +106,7 @@ export const getNodeInputWidget = (param: InputWidgetParams) => {
   }
 
   const allowedInNode = nodeTypeToInputParamsMap[param.nodeType];
-  if (param.name == "name" || (allowedInNode && !allowedInNode.includes(param.name))) {
+  if (param.name == "name" || param.name == "history_mode" || (allowedInNode && !allowedInNode.includes(param.name))) {
     /* name param is always in the advanced box */
     return <></>;
   }
