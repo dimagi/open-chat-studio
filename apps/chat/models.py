@@ -193,7 +193,9 @@ class ChatMessage(BaseModel, TaggedModelMixin, UserCommentsMixin):
             # ocs attachments doesn't have external ids
             allowed_file_ids.extend(file_ids)
 
-        files.extend([file for file in self.chat.get_attached_files() if file.id in allowed_file_ids])
+        if allowed_file_ids:
+            files.extend([file for file in self.chat.get_attached_files() if file.id in allowed_file_ids])
+
         return files
 
     def get_metadata(self, key: str):
