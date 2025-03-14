@@ -82,6 +82,8 @@ class PipelineState(dict):
         kwargs["temp_state"] = {"outputs": {node_name: output}}
         if output is not None:
             kwargs["messages"] = [output]
+
+        # TODO: Make output attachments available in the temp state
         return cls(**kwargs)
 
 

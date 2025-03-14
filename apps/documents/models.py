@@ -8,11 +8,18 @@ class RepositoryType(models.TextChoices):
     COLLECTION = "collection", "Collection"
 
 
+class RepositoryManager(models.Manager):
+    def collections(self):
+        return self.filter(type=RepositoryType.COLLECTION)
+
+
 class Repository(BaseTeamModel):
     name = models.CharField(max_length=255)
     summary = models.TextField()
     type = models.CharField(choices=RepositoryType.choices, default=RepositoryType.COLLECTION)
     files = models.ManyToManyField("files.File", blank=False)
+
+    objects = RepositoryManager()
 
     class Meta:
         constraints = [models.UniqueConstraint(fields=["team", "type", "name"], name="unique_repository_per_team")]

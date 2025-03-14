@@ -475,6 +475,10 @@ class Node(BaseModel, VersionsMixin, CustomActionOperationMixin):
             fields=param_versions,
         )
 
+    def requires_attachment_tool(self) -> bool:
+        """When a collection is linked, the attachment tool is required"""
+        return self.params.get("collection_id") is not None
+
 
 class PipelineRunStatus(models.TextChoices):
     RUNNING = "running", "Running"

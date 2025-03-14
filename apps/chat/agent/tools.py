@@ -1,13 +1,16 @@
 import logging
+from collections.abc import Callable
 from datetime import datetime, timedelta
+from functools import cached_property
 from typing import TYPE_CHECKING, Any, Union
 
-from django.db import transaction
+from django.db import transaction, utils
 from langchain_community.utilities.openapi import OpenAPISpec
 from langchain_core.tools import BaseTool
 
 from apps.chat.agent import schemas
 from apps.chat.agent.openapi_tool import openapi_spec_op_to_function_def
+from apps.chat.models import ChatAttachment
 from apps.events.forms import ScheduledMessageConfigForm
 from apps.events.models import ScheduledMessage, TimePeriod
 from apps.experiments.models import AgentTools, Experiment, ExperimentSession, ParticipantData
@@ -171,6 +174,30 @@ class UpdateParticipantDataTool(CustomBaseTool):
         return "Success"
 
 
+class AttachMediaTool(CustomBaseTool):
+    name: str = AgentTools.ATTACH_MEDIA
+    description: str = "Attach media to the chat"
+    requires_session: bool = True
+    args_schema: type[schemas.AttachMediaSchema] = schemas.AttachMediaSchema
+    callback: Callable | None = None
+
+    @cached_property
+    def chat_attachment(self) -> ChatAttachment:
+        chat_attachment, _ = ChatAttachment.objects.get_or_create(
+            chat=self.experiment_session.chat, tool_type="ocs_attachments"
+        )
+        return chat_attachment
+
+    @transaction.atomic
+    def action(self, file_id: str) -> str:
+        try:
+            self.chat_attachment.files.add(file_id)
+            self.callback(file_id)
+            return f"File id '{file_id}' is attached"
+        except utils.IntegrityError:
+            return f"Unable to attach file '{file_id}' to the message"
+
+
 def _move_datetime_to_new_weekday_and_time(date: datetime, new_weekday: int, new_hour: int, new_minute: int):
     current_weekday = date.weekday()
     day_diff = new_weekday - current_weekday
@@ -246,9 +273,14 @@ def get_assistant_tools(assistant, experiment_session: ExperimentSession | None 
     return tools
 
 
-def get_node_tools(node: Node, experiment_session: ExperimentSession | None = None) -> list[BaseTool]:
+def get_node_tools(
+    node: Node, experiment_session: ExperimentSession | None = None, attachment_callback: Callable | None = None
+) -> list[BaseTool]:
     tools = get_tool_instances(node.params.get("tools") or [], experiment_session)
     tools.extend(get_custom_action_tools(node))
+    if node.requires_attachment_tool():
+        tools.append(AttachMediaTool(experiment_session=experiment_session, callback=attachment_callback))
+
     return tools
 
 

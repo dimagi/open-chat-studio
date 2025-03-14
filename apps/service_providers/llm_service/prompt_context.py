@@ -7,9 +7,10 @@ from apps.utils.time import pretty_date
 
 
 class PromptTemplateContext:
-    def __init__(self, session, source_material_id):
+    def __init__(self, session, source_material_id, collection_id: int = None):
         self.session = session
         self.source_material_id = source_material_id
+        self.collection_id = collection_id
         self.context_cache = {}
 
     @property
@@ -18,6 +19,7 @@ class PromptTemplateContext:
             "source_material": self.get_source_material,
             "participant_data": self.get_participant_data,
             "current_datetime": self.get_current_datetime,
+            "media": self.get_media_summaries,
         }
 
     def get_context(self, variables: list[str]) -> dict:
@@ -36,6 +38,16 @@ class PromptTemplateContext:
         try:
             return SourceMaterial.objects.get(id=self.source_material_id).material
         except SourceMaterial.DoesNotExist:
+            return ""
+
+    def get_media_summaries(self):
+        from apps.documents.models import Repository
+
+        try:
+            repo = Repository.objects.collections().get(id=self.collection_id)
+            id_summary_map = repo.files.values_list("id", "summary")
+            return [{f"file ({id}): {summary}\n"} for id, summary in id_summary_map]
+        except Repository.DoesNotExist:
             return ""
 
     def get_participant_data(self):

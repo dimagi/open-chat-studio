@@ -595,6 +595,7 @@ class AgentTools(models.TextChoices):
     DELETE_REMINDER = "delete-reminder", gettext("Delete Reminder")
     MOVE_SCHEDULED_MESSAGE_DATE = "move-scheduled-message-date", gettext("Move Reminder Date")
     UPDATE_PARTICIPANT_DATA = "update-user-data", gettext("Update Participant Data")
+    ATTACH_MEDIA = "attach-media", gettext("Attach Media")
 
     @classmethod
     def reminder_tools(cls) -> list[Self]:
