@@ -542,7 +542,7 @@ DOCUMENTATION_LINKS = {
     "consent": "/concepts/consent/",
     "embed": "/how-to/embed/",
     "survey": "https://dimagi.atlassian.net/wiki/spaces/OCS/pages/2144305308/Surveys",
-    "experiment": "/concepts/experiment/",
+    "experiments": "/concepts/experiment/",
     "pipelines": "/concepts/pipelines/",
     "concepts.prompt_variables": "/concepts/prompt_variables/",
     "concepts.experiments": "/concepts/experiment/",
@@ -555,6 +555,7 @@ DOCUMENTATION_LINKS = {
     "node_email": "/concepts/pipelines/nodes/#email",
     "node_extract_structured_data": "/concepts/pipelines/nodes/#extract-structured-data",
     "node_update_participant_data": "/concepts/pipelines/nodes/#update-participant-data",
+    "chatbots": "/concepts/chatbots/",
 }
 # Available in templates as `docs_base_url`. Also see `apps.generics.help` and `generics/help.html`
 DOCUMENTATION_BASE_URL = env("DOCUMENTATION_BASE_URL", default="https://docs.openchatstudio.com")

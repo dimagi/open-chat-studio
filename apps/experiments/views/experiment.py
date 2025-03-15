@@ -12,10 +12,9 @@ from django.conf import settings
 from django.contrib import messages
 from django.contrib.auth.decorators import permission_required
 from django.contrib.auth.mixins import PermissionRequiredMixin
-from django.contrib.postgres.search import TrigramSimilarity
 from django.core.exceptions import PermissionDenied, ValidationError
 from django.db import transaction
-from django.db.models import Case, Count, IntegerField, Q, When
+from django.db.models import Case, Count, IntegerField, When
 from django.http import FileResponse, Http404, HttpResponse, HttpResponseForbidden, HttpResponseRedirect
 from django.shortcuts import get_object_or_404, redirect, render
 from django.template.response import TemplateResponse
@@ -88,10 +87,11 @@ from apps.files.forms import get_file_formset
 from apps.files.models import File
 from apps.files.views import BaseAddFileHtmxView, BaseDeleteFileView
 from apps.generics.chips import Chip
-from apps.generics.help import render_help_with_link
 from apps.service_providers.utils import get_llm_provider_choices
 from apps.teams.decorators import login_and_team_required
 from apps.teams.mixins import LoginAndTeamRequiredMixin
+from apps.utils.BaseTableView import BaseTableView
+from apps.utils.helpers import generic_home
 
 DEFAULT_ERROR_MESSAGE = (
     "Sorry something went wrong. This was likely an intermittent error related to load."
@@ -102,50 +102,13 @@ DEFAULT_ERROR_MESSAGE = (
 @login_and_team_required
 @permission_required("experiments.view_experiment", raise_exception=True)
 def experiments_home(request, team_slug: str):
-    return TemplateResponse(
-        request,
-        "generic/object_home.html",
-        {
-            "active_tab": "experiments",
-            "title": "Experiments",
-            "title_help_content": render_help_with_link("", "experiment"),
-            "new_object_url": reverse("experiments:new", args=[team_slug]),
-            "table_url": reverse("experiments:table", args=[team_slug]),
-            "enable_search": True,
-            "toggle_archived": True,
-        },
-    )
+    return generic_home(request, team_slug, "Experiments", "experiments:table", "experiments:new")
 
 
-class ExperimentTableView(SingleTableView, PermissionRequiredMixin):
+class ExperimentTableView(BaseTableView):
     model = Experiment
-    paginate_by = 25
     table_class = ExperimentTable
-    template_name = "table/single_table.html"
     permission_required = "experiments.view_experiment"
-
-    def get_queryset(self):
-        query_set = (
-            Experiment.objects.get_all()
-            .filter(team=self.request.team, working_version__isnull=True)
-            .order_by("is_archived")
-        )
-        show_archived = self.request.GET.get("show_archived") == "on"
-        if not show_archived:
-            query_set = query_set.filter(is_archived=False)
-
-        search = self.request.GET.get("search")
-        if search:
-            name_similarity = TrigramSimilarity("name", search)
-            description_similarity = TrigramSimilarity("description", search)
-            query_set = (
-                query_set.annotate(
-                    similarity=name_similarity + description_similarity,
-                )
-                .filter(Q(similarity__gt=0.2) | Q(owner__username__icontains=search))
-                .order_by("-similarity")
-            )
-        return query_set
 
 
 class ExperimentSessionsTableView(SingleTableView, PermissionRequiredMixin):
