@@ -1,3 +1,4 @@
+import os
 import re
 import subprocess
 
@@ -71,12 +72,17 @@ def _get_permissions_from_lines(perm_type: str, lines: list[str]) -> set[str]:
     return permissions
 
 
-def _get_lines_with_permission(perm_type: str) -> list[str]:
-    """Look in all python files and find lines with permission references."""
-    name_rx = PERM_NAME_GREEDY_REGEX.format(perm_type)
-    output = subprocess.check_output(
-        f"find apps/  -name '*.py' -exec grep  '\"{name_rx}\"' {{}} \\;",
-        shell=True,
-        cwd=settings.BASE_DIR,
-    ).decode("utf-8")
-    return output.splitlines(keepends=False)
+def _get_lines_with_permission(perm_type):
+    permissions = set()
+    pattern = re.compile(rf'".*\.{perm_type}_.*"')
+
+    for root, _, files in os.walk("apps"):
+        for file in files:
+            if file.endswith(".py"):
+                file_path = os.path.join(root, file)
+                with open(file_path, "r", encoding="utf-8") as f:
+                    for line in f:
+                        if pattern.search(line):
+                            permissions.add(line.strip())
+
+    return list(permissions)
