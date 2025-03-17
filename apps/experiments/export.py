@@ -1,10 +1,8 @@
 import csv
 import io
 
-from django.db.models import Q
-
 from apps.annotations.models import Tag, UserComment
-from apps.experiments.filters import build_filter_condition
+from apps.experiments.filters import apply_dynamic_filters
 from apps.experiments.models import ExperimentSession
 
 
@@ -32,25 +30,7 @@ def get_filtered_sessions(experiment, filter_params, show_all=False):
     if not show_all:
         sessions_queryset = sessions_queryset.exclude(experiment_channel__platform=ChannelPlatform.API)
 
-    if filter_params:
-        filter_conditions = Q()
-        filter_applied = False
-
-        for i in range(30):  # Same limit as in the view
-            filter_column = filter_params.get(f"filter_{i}_column")
-            filter_operator = filter_params.get(f"filter_{i}_operator")
-            filter_value = filter_params.get(f"filter_{i}_value")
-
-            if not all([filter_column, filter_operator, filter_value]):
-                continue
-
-            condition = build_filter_condition(filter_column, filter_operator, filter_value)
-            if condition:
-                filter_conditions &= condition
-                filter_applied = True
-
-        if filter_applied:
-            sessions_queryset = sessions_queryset.filter(filter_conditions).distinct()
+    sessions_queryset = apply_dynamic_filters(sessions_queryset, filter_params)
 
     return sessions_queryset
 

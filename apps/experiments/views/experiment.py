@@ -56,7 +56,7 @@ from apps.experiments.decorators import (
 )
 from apps.experiments.email import send_chat_link_email, send_experiment_invitation
 from apps.experiments.exceptions import ChannelAlreadyUtilizedException
-from apps.experiments.filters import build_filter_condition
+from apps.experiments.filters import apply_dynamic_filters, get_filter_params
 from apps.experiments.forms import (
     ConsentForm,
     ExperimentForm,
@@ -164,28 +164,8 @@ class ExperimentSessionsTableView(SingleTableView, PermissionRequiredMixin):
         )
         if not self.request.GET.get("show-all"):
             query_set = query_set.exclude(experiment_channel__platform=ChannelPlatform.API)
-        query_set = self.apply_dynamic_filters(query_set)
-        return query_set
-
-    def apply_dynamic_filters(self, query_set):
-        filter_conditions = Q()
-        filter_applied = False
-
-        for i in range(30):  # arbitrary number higher than any # of filters we'd expect
-            filter_column = self.request.GET.get(f"filter_{i}_column")
-            filter_operator = self.request.GET.get(f"filter_{i}_operator")
-            filter_value = self.request.GET.get(f"filter_{i}_value")
-
-            if not all([filter_column, filter_operator, filter_value]):
-                break
-
-            condition = build_filter_condition(filter_column, filter_operator, filter_value)
-            if condition:
-                filter_conditions &= condition
-                filter_applied = True
-
-        if filter_applied:
-            query_set = query_set.filter(filter_conditions).distinct()
+        filter_params = get_filter_params(self.request)
+        query_set = apply_dynamic_filters(query_set, filter_params)
         return query_set
 
 
@@ -1077,10 +1057,7 @@ def experiment_invitations(request, team_slug: str, experiment_id: int):
 @login_and_team_required
 def generate_chat_export(request, team_slug: str, experiment_id: str):
     experiment = get_object_or_404(Experiment, id=experiment_id)
-    filter_params = {}
-    for key, value in request.POST.items():
-        if key.startswith("filter_") and "_" in key[7:]:
-            filter_params[key] = value
+    filter_params = get_filter_params(request)
     show_all = request.POST.get("show-all") == "on"
     task_id = async_export_chat.delay(experiment_id, filter_params=filter_params, show_all=show_all)
     return TemplateResponse(

@@ -8,6 +8,45 @@ from apps.annotations.models import CustomTaggedItem
 from apps.chat.models import Chat, ChatMessage
 
 
+def get_filter_params(request):
+    filter_params = {}
+    for i in range(30):  # arbitrary number higher than any # of filters we'd expect
+        filter_column = request.GET.get(f"filter_{i}_column")
+        filter_operator = request.GET.get(f"filter_{i}_operator")
+        filter_value = request.GET.get(f"filter_{i}_value")
+
+        if not all([filter_column, filter_operator, filter_value]):
+            print("we are breaking here")
+            break
+        filter_params[f"filter_{i}_column"] = filter_column
+        filter_params[f"filter_{i}_operator"] = filter_operator
+        filter_params[f"filter_{i}_value"] = filter_value
+    return filter_params
+
+
+def apply_dynamic_filters(query_set, filter_params):
+    if filter_params:
+        filter_conditions = Q()
+        filter_applied = False
+
+        for i in range(30):  # Same limit as in get_filter_params
+            filter_column = filter_params.get(f"filter_{i}_column")
+            filter_operator = filter_params.get(f"filter_{i}_operator")
+            filter_value = filter_params.get(f"filter_{i}_value")
+
+            if not all([filter_column, filter_operator, filter_value]):
+                continue
+
+            condition = build_filter_condition(filter_column, filter_operator, filter_value)
+            if condition:
+                filter_conditions &= condition
+                filter_applied = True
+
+        if filter_applied:
+            query_set = query_set.filter(filter_conditions).distinct()
+    return query_set
+
+
 def build_filter_condition(column, operator, value):
     if not value:
         return None
