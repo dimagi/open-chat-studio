@@ -1,5 +1,4 @@
 import json
-from functools import cache
 
 from django.contrib.auth.decorators import permission_required
 from django.contrib.auth.mixins import PermissionRequiredMixin
@@ -9,7 +8,7 @@ from django.db.models import Q
 from django.shortcuts import get_object_or_404, redirect
 from django.urls import reverse
 from django.views.decorators.http import require_POST
-from django.views.generic import ListView, TemplateView
+from django.views.generic import DetailView, ListView, TemplateView
 
 from apps.documents.models import Repository, RepositoryType
 from apps.files.models import File
@@ -46,15 +45,6 @@ class BaseObjectListView(ListView, PermissionRequiredMixin):
         return context
 
 
-class BaseDetailsView(TemplateView, PermissionRequiredMixin):
-    @cache
-    def get_object(self):
-        return self.model.objects.get(team__slug=self.kwargs["team_slug"], id=self.kwargs["id"])
-
-    def get_context_data(self, team_slug: str, id, **kwargs):
-        return {"object": self.get_object()}
-
-
 class FileListView(LoginAndTeamRequiredMixin, BaseObjectListView):
     template_name = "documents/shared/list.html"
     model = File
@@ -77,10 +67,17 @@ class FileListView(LoginAndTeamRequiredMixin, BaseObjectListView):
         return queryset
 
 
+class BaseDetailsView(DetailView, PermissionRequiredMixin):
+    pass
+
+
 class FileDetails(LoginAndTeamRequiredMixin, BaseDetailsView):
     template_name = "documents/file_details.html"
     model = File
     permission_required = "files.view_file"
+
+    def get_queryset(self):
+        return super().get_queryset().filter(team__slug=self.kwargs["team_slug"])
 
     def get_context_data(self, *args, **kwargs):
         context = super().get_context_data(*args, **kwargs)
@@ -88,10 +85,10 @@ class FileDetails(LoginAndTeamRequiredMixin, BaseDetailsView):
         collection_names = file.repository_set.filter(type=RepositoryType.COLLECTION).values_list("name", flat=True)
         context["current_collections"] = list(collection_names)
         context["edit_url"] = reverse(
-            "documents:edit_file", kwargs={"team_slug": self.kwargs["team_slug"], "id": file.id}
+            "documents:edit_file", kwargs={"team_slug": self.kwargs["team_slug"], "pk": file.id}
         )
         context["delete_url"] = reverse(
-            "documents:delete_file", kwargs={"team_slug": self.kwargs["team_slug"], "id": file.id}
+            "documents:delete_file", kwargs={"team_slug": self.kwargs["team_slug"], "pk": file.id}
         )
         context["available_collections"] = Repository.objects.filter(
             team__slug=self.kwargs["team_slug"], type=RepositoryType.COLLECTION
@@ -188,14 +185,17 @@ class CollectionDetails(LoginAndTeamRequiredMixin, BaseDetailsView):
     model = Repository
     permission_required = "documents.view_repository"
 
+    def get_queryset(self):
+        return super().get_queryset().filter(team__slug=self.kwargs["team_slug"])
+
     def get_context_data(self, *args, **kwargs):
         context = super().get_context_data(*args, **kwargs)
         collection = self.get_object()
         context["edit_url"] = reverse(
-            "documents:edit_collection", kwargs={"team_slug": self.kwargs["team_slug"], "id": collection.id}
+            "documents:edit_collection", kwargs={"team_slug": self.kwargs["team_slug"], "pk": collection.id}
         )
         context["delete_url"] = reverse(
-            "documents:delete_collection", kwargs={"team_slug": self.kwargs["team_slug"], "id": collection.id}
+            "documents:delete_collection", kwargs={"team_slug": self.kwargs["team_slug"], "pk": collection.id}
         )
         return context
 
