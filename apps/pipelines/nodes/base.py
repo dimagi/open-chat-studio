@@ -14,6 +14,7 @@ from typing_extensions import TypedDict
 from apps.experiments.models import ExperimentSession
 from apps.pipelines.exceptions import PipelineNodeRunError
 from apps.pipelines.logging import LoggingCallbackHandler, noop_logger
+from apps.service_providers.llm_service.prompt_context import ParticipantDataProxy
 
 logger = logging.getLogger("ocs.pipelines")
 
@@ -175,6 +176,9 @@ class PipelineNode(BaseModel, ABC):
     def get_output_map(self) -> dict:
         """A mapping from the output handles on the frontend to the return values of _process_conditional"""
         raise NotImplementedError
+
+    def get_participant_proxy(self, state: PipelineState) -> "ParticipantDataProxy":
+        return ParticipantDataProxy.from_state(state)
 
     @cached_property
     def logger(self):
