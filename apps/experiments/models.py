@@ -66,19 +66,45 @@ class VersionFieldDisplayFormatters:
         return ", ".join([entry for entry in arr])
 
     @staticmethod
-    def format_trigger(trigger) -> str:
-        string = "If"
-        if trigger.trigger_type == "TimeoutTrigger":
-            seconds = seconds_to_human(trigger.delay)
-            string = f"{string} no response for {seconds}"
-        else:
-            string = f"{string} {trigger.get_type_display().lower()}"
-
-        trigger_action = trigger.action.get_action_type_display().lower()
-        return f"{string} then {trigger_action}"
+    def format_trigger(triggers) -> str:
+        if isinstance(triggers, VersionField):
+            triggers = triggers.raw_value
+        if not isinstance(triggers, list):
+            triggers = [triggers]
+        result_strings = []
+        for field in triggers:
+            if isinstance(field, VersionField):
+                field = field.raw_value
+            static_trigger = getattr(field, "raw_value", field)
+            string = "If"
+            if static_trigger.trigger_type == "TimeoutTrigger":
+                seconds = seconds_to_human(static_trigger.delay)
+                string = f"{string} no response for {seconds}"
+            else:
+                string = f"{string} {static_trigger.get_type_display().lower()}"
+            trigger_action = static_trigger.action.get_action_type_display().lower()
+            result_strings.append(f"{string} then {trigger_action}")
+        return "; ".join(result_strings) if result_strings else "No triggers found"
 
     @staticmethod
     def format_route(route) -> str:
+        if isinstance(route, VersionField):
+            route = route.raw_value
+        if isinstance(route, list):
+            formatted_routes = []
+            for r in route:
+                if isinstance(r, VersionField):
+                    r = r.raw_value
+                if isinstance(r, ExperimentRoute):
+                    formatted_routes.append(VersionFieldDisplayFormatters._format_single_route(r))
+            return "\n".join(formatted_routes) if formatted_routes else "Invalid route data"
+        if isinstance(route, ExperimentRoute):
+            return VersionFieldDisplayFormatters._format_single_route(route)
+        return "Invalid route data"
+
+    @staticmethod
+    def _format_single_route(route) -> str:
+        """Formats a single ExperimentRoute"""
         if route.type == ExperimentRouteType.PROCESSOR:
             string = f'Route to "{route.child}" using the "{route.keyword}" keyword.'
             if route.is_default:
@@ -1035,7 +1061,6 @@ class Experiment(BaseTeamModel, VersionsMixin, CustomActionOperationMixin):
         """
         Returns a `Version` instance representing the experiment version.
         """
-
         return VersionDetails(
             instance=self,
             fields=[
@@ -1136,13 +1161,13 @@ class Experiment(BaseTeamModel, VersionsMixin, CustomActionOperationMixin):
                 VersionField(
                     group_name="Triggers",
                     name="static_triggers",
-                    queryset=self.static_triggers,
+                    queryset=self.static_triggers.all(),
                     to_display=VersionFieldDisplayFormatters.format_trigger,
                 ),
                 VersionField(
                     group_name="Triggers",
                     name="timeout_triggers",
-                    queryset=self.timeout_triggers,
+                    queryset=self.timeout_triggers.all(),
                     to_display=VersionFieldDisplayFormatters.format_trigger,
                 ),
                 # Routing
@@ -1576,6 +1601,9 @@ class ExperimentSession(BaseTeamModel):
 
     class Meta:
         ordering = ["-created_at"]
+
+    def __str__(self):
+        return f"ExperimentSession(id={self.external_id})"
 
     def save(self, *args, **kwargs):
         if not hasattr(self, "chat"):

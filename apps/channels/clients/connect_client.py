@@ -46,7 +46,7 @@ class CommCareConnectClient:
         url = f"{self._base_url}/messaging/create_channel/"
         response = self.client.post(url, json={"connectid": str(connect_id), "channel_source": channel_source})
         response.raise_for_status()
-        return response.json()["channel_id"]
+        return response.json()
 
     def decrypt_messages(self, key: bytes, messages: list[Message]) -> list[str]:
         """
