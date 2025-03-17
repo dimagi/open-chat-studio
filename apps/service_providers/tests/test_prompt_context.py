@@ -12,11 +12,14 @@ from apps.utils.prompt import validate_prompt_variables
 @pytest.fixture()
 def mock_session():
     session = Mock()
-    session.get_participant_data.return_value = "participant data"
-    session.get_participant_timezone.return_value = "UTC"
     session.experiment_channel.platform = ChannelPlatform.WEB
     session.participant.user = None
-    return session
+
+    proxy_mock = Mock()
+    proxy_mock.get_data.return_value = "participant data"
+    proxy_mock.get_timezone.return_value = "UTC"
+    with patch("apps.service_providers.llm_service.prompt_context.ParticipantDataProxy", return_value=proxy_mock):
+        yield session
 
 
 @pytest.fixture()

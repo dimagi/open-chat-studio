@@ -12,6 +12,7 @@ class PromptTemplateContext:
         self.session = session
         self.source_material_id = source_material_id
         self.context_cache = {}
+        self.participant_data_proxy = ParticipantDataProxy(self.session)
 
     @property
     def factories(self):
@@ -43,11 +44,11 @@ class PromptTemplateContext:
         if self.is_unauthorized_participant:
             data = ""
         else:
-            data = self.session.get_participant_data(use_participant_tz=True) or ""
+            data = self.participant_data_proxy.get() or ""
         return SafeAccessWrapper(data)
 
     def get_current_datetime(self):
-        return pretty_date(timezone.now(), self.session.get_participant_timezone())
+        return pretty_date(timezone.now(), self.participant_data_proxy.get_timezone())
 
     @property
     def is_unauthorized_participant(self):
@@ -193,3 +194,8 @@ class ParticipantDataProxy:
         for message in messages:
             scheduled_messages.append(message.as_dict())
         return scheduled_messages
+
+    def get_timezone(self):
+        """Returns the participant's timezone"""
+        participant_data = self._get_db_object()
+        return participant_data.get("timezone")
