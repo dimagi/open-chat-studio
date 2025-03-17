@@ -3,7 +3,7 @@ import logging
 import uuid
 from datetime import datetime
 from typing import cast
-from urllib.parse import quote
+from urllib.parse import parse_qs, quote, urlparse
 
 import jwt
 from celery.result import AsyncResult
@@ -1057,7 +1057,9 @@ def experiment_invitations(request, team_slug: str, experiment_id: int):
 @login_and_team_required
 def generate_chat_export(request, team_slug: str, experiment_id: str):
     experiment = get_object_or_404(Experiment, id=experiment_id)
-    filter_params = get_filter_params(request)
+    parsed_url = urlparse(request.POST.get("current_url"))
+    query_params = parse_qs(parsed_url.query)
+    filter_params = get_filter_params(request, parsed_params=query_params)
     show_all = request.POST.get("show-all") == "on"
     task_id = async_export_chat.delay(experiment_id, filter_params=filter_params, show_all=show_all)
     return TemplateResponse(

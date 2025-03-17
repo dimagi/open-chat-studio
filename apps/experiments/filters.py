@@ -8,19 +8,23 @@ from apps.annotations.models import CustomTaggedItem
 from apps.chat.models import Chat, ChatMessage
 
 
-def get_filter_params(request):
+def get_filter_params(request, parsed_params=None):
     filter_params = {}
+    param_source = parsed_params if parsed_params is not None else request.GET
     for i in range(30):  # arbitrary number higher than any # of filters we'd expect
-        filter_column = request.GET.get(f"filter_{i}_column")
-        filter_operator = request.GET.get(f"filter_{i}_operator")
-        filter_value = request.GET.get(f"filter_{i}_value")
+        filter_column = param_source.get(f"filter_{i}_column")
+        filter_operator = param_source.get(f"filter_{i}_operator")
+        filter_value = param_source.get(f"filter_{i}_value")
 
         if not all([filter_column, filter_operator, filter_value]):
-            print("we are breaking here")
             break
-        filter_params[f"filter_{i}_column"] = filter_column
-        filter_params[f"filter_{i}_operator"] = filter_operator
-        filter_params[f"filter_{i}_value"] = filter_value
+        filter_params[f"filter_{i}_column"] = (
+            filter_column[0] if isinstance(filter_column, list) else filter_column
+        )  # needed with parsing url
+        filter_params[f"filter_{i}_operator"] = (
+            filter_operator[0] if isinstance(filter_operator, list) else filter_operator
+        )  # ^
+        filter_params[f"filter_{i}_value"] = filter_value[0] if isinstance(filter_value, list) else filter_value
     return filter_params
 
 
@@ -36,12 +40,10 @@ def apply_dynamic_filters(query_set, filter_params):
 
             if not all([filter_column, filter_operator, filter_value]):
                 continue
-
             condition = build_filter_condition(filter_column, filter_operator, filter_value)
             if condition:
                 filter_conditions &= condition
                 filter_applied = True
-
         if filter_applied:
             query_set = query_set.filter(filter_conditions).distinct()
     return query_set

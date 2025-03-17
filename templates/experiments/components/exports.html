@@ -2,16 +2,10 @@
 <div class="flex flex-row gap-1" id="chat-exports">
     <form>
         {% csrf_token %}
+        <input type="hidden" name="current_url" value="{{ request.get_full_path }}">
         <button class="btn btn-sm btn-outline btn-primary no-animation"
                 hx-post="{% url 'experiments:generate_chat_export' team.slug experiment.id %}"
-                hx-include="[name='show-all']"
-                hx-vals='js:{
-                         {% for param, value in request.GET.items %}
-                             {% if param|matches:"^filter_" %}
-                                 "{{ param }}": "{{ value|escapejs }}",
-                             {% endif %}
-                         {% endfor %}
-                         }'
+                hx-include="[name='show-all'], [name='current_url']"
                 hx-trigger="click" hx-swap="outerHTML" hx-target="#chat-exports"
                 {% if task_id %}disabled{% endif %}>
             {% if task_id %}
@@ -21,7 +15,6 @@
             {% endif %}
         </button>
     </form>
-
     {% if task_id %}
         <div
             hx-get="{% url 'experiments:get_export_download_link' team.slug experiment.id task_id %}"
@@ -30,7 +23,6 @@
             hx-target="#chat-exports"
         ></div>
     {% endif %}
-
     {% if export_download_url %}
         <a class="text-sm font-medium hover:link btn btn-sm btn-outline" href="{{ export_download_url }}">
             Download export
