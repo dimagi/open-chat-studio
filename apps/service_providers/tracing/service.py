@@ -64,10 +64,9 @@ class LangFuseTraceService(TraceService):
         Populates the callback from the callback handler already configured in `callback_manager`. This allows the trace
         service to reuse existing callbacks.
         """
-        from langfuse.callback import CallbackHandler
 
         for handler in callback_manager.handlers:
-            if isinstance(handler, CallbackHandler):
+            if isinstance(handler, CallbackWrapper):
                 self._callback = handler
 
     def update_trace(self, metadata: dict):
