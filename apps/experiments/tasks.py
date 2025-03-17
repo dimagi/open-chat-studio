@@ -27,7 +27,6 @@ def async_export_chat(self, experiment_id: int, **kwargs) -> dict:
     experiment = Experiment.objects.get(id=experiment_id)
     filter_params = kwargs.get("filter_params", {})
     show_all = kwargs.get("show_all", False)
-
     filtered_sessions = get_filtered_sessions(experiment, filter_params, show_all)
     session_ids = list(filtered_sessions.values_list("id", flat=True))
     csv_in_memory = filtered_export_to_csv(experiment, session_ids)
@@ -35,8 +34,8 @@ def async_export_chat(self, experiment_id: int, **kwargs) -> dict:
         name=f"{experiment.name} Chat Export {timezone.now().strftime('%Y-%m-%d_%H-%M-%S')}.csv",
         team=experiment.team,
         content_type="text/csv",
+        file=ContentFile(csv_in_memory.getvalue().encode("utf-8")),
     )
-    file_obj.file.save(file_obj.name, ContentFile(csv_in_memory.getvalue().encode("utf-8")))
     return {"file_id": file_obj.id}
 
 
