@@ -21,7 +21,7 @@ class RepositoryHome(LoginAndTeamRequiredMixin, TemplateView):
     template_name = "documents/repositories.html"
 
     def get_context_data(self, team_slug: str, tab_name: str, **kwargs):
-        context = {
+        return {
             "active_tab": "manage_files",
             "title": "Manage Files",
             "tab_name": tab_name,
@@ -34,12 +34,6 @@ class RepositoryHome(LoginAndTeamRequiredMixin, TemplateView):
                 team__slug=team_slug, type=RepositoryType.COLLECTION
             ).count(),
         }
-        if tab_name == "files":
-            context["collections"] = Repository.objects.filter(
-                team__slug=team_slug, type=RepositoryType.COLLECTION
-            ).all()
-
-        return context
 
 
 class BaseObjectListView(ListView, PermissionRequiredMixin):
