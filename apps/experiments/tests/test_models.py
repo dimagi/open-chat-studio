@@ -19,6 +19,7 @@ from apps.experiments.models import (
     SafetyLayer,
     SyntheticVoice,
 )
+from apps.service_providers.llm_service.prompt_context import ParticipantDataProxy
 from apps.utils.factories.assistants import OpenAiAssistantFactory
 from apps.utils.factories.events import (
     EventActionFactory,
@@ -362,7 +363,8 @@ class TestExperimentSession:
             team=participant.team,
             data={"first_name": "Jimmy"},
         )
-        data = session.get_participant_data()
+        data_proxy = ParticipantDataProxy(session)
+        data = data_proxy.get()
         assert data == {
             "name": participant.name,
             "first_name": "Jimmy",
@@ -372,7 +374,7 @@ class TestExperimentSession:
         participant_data.save()
 
         del session.participant_data_from_experiment
-        data = session.get_participant_data()
+        data = data_proxy.get()
         assert data == {
             "name": "James Newman",
             "first_name": "Jimmy",
@@ -383,6 +385,7 @@ class TestExperimentSession:
     def test_get_participant_data_timezone(self, use_participant_tz):
         participant = ParticipantFactory()
         session = ExperimentSessionFactory(participant=participant, team=participant.team)
+        data_proxy = ParticipantDataProxy(session)
         event_action = event_action, params = self._construct_event_action(
             time_period=TimePeriod.DAYS, experiment_id=session.experiment.id
         )
@@ -402,7 +405,7 @@ class TestExperimentSession:
             "name": "Tester",
             "timezone": "Africa/Johannesburg",
         }
-        participant_data = session.get_participant_data(use_participant_tz=use_participant_tz)
+        participant_data = data_proxy.get()
         # test_get_participant_scheduled_messages is testing the schedule format, so pop it so we don't have to update
         # this test as well when we update the string representation of the schedule
         participant_data.pop("scheduled_messages")

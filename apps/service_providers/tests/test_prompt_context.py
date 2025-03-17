@@ -16,8 +16,9 @@ def mock_session():
     session.participant.user = None
 
     proxy_mock = Mock()
-    proxy_mock.get_data.return_value = "participant data"
+    proxy_mock.get.return_value = "participant data"
     proxy_mock.get_timezone.return_value = "UTC"
+    session._proxy_mock = proxy_mock
     with patch("apps.service_providers.llm_service.prompt_context.ParticipantDataProxy", return_value=proxy_mock):
         yield session
 
@@ -31,28 +32,34 @@ def mock_authorized_session(mock_session):
 @patch("apps.experiments.models.SourceMaterial.objects.get")
 def test_builds_context_with_specified_variables(mock_get, mock_session):
     mock_get.return_value = Mock(material="source material")
+    proxy_mock = mock_session._proxy_mock
     context = PromptTemplateContext(mock_session, 1)
     variables = ["source_material", "current_datetime"]
     result = context.get_context(variables)
     assert "source_material" in result
     assert "current_datetime" in result
     assert "participant_data" not in result
-    mock_session.get_participant_data.assert_not_called()
+
+    proxy_mock.get.assert_not_called()
 
 
 def test_repeated_calls_are_cached(mock_authorized_session):
+    proxy_mock = mock_authorized_session._proxy_mock
     context = PromptTemplateContext(mock_authorized_session, 1)
     result = context.get_context([])
     assert result == {}
-    mock_authorized_session.get_participant_data.assert_not_called()
+
+    proxy_mock.get.assert_not_called()
 
     result = context.get_context(["participant_data"])
     assert result == {"participant_data": "participant data"}
-    mock_authorized_session.get_participant_data.assert_called_once()
+    proxy_mock.get.assert_called_once()
 
+    proxy_mock.get.reset_mock()
     result = context.get_context(["participant_data"])
     assert result == {"participant_data": "participant data"}
-    mock_authorized_session.get_participant_data.assert_called_once()
+
+    proxy_mock.get.assert_not_called()
 
 
 def test_calls_with_different_vars_returns_correct_context(mock_session):
