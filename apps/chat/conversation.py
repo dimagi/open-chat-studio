@@ -222,37 +222,33 @@ def truncate_tokens(history, max_token_limit, llm, input_message_tokens):
     return history, pruned_memory
 
 
-def summarize_history(llm, history, max_token_limit, input_message_tokens, summary, input_messages):
-    pruned_memory = []
+def summarize_history(llm, history, max_token_limit, input_message_tokens, summary, input_messages, pruned_memory):
     history_tokens = llm.get_num_tokens_from_messages(history)
     summary_tokens = (
         llm.get_num_tokens_from_messages([SystemMessage(content=summary)])
         if summary
         else INITIAL_SUMMARY_TOKENS_ESTIMATE
     )
-    first_pass_done = False
-    while (
-        not first_pass_done
-        # Check `_tokens_exceeds_limit` here, since the generated summary can cause a token limit breach
-        or _tokens_exceeds_limit(
-            history, token_count=(history_tokens + summary_tokens + input_message_tokens), limit=max_token_limit
-        )
+    first_pass_done = False  # Ensures at least one iteration
+    while not first_pass_done or _tokens_exceeds_limit(
+        history, token_count=(history_tokens + summary_tokens + input_message_tokens), limit=max_token_limit
     ):
         first_pass_done = True
-        # Keep removing messages if token limit OR message limit is exceeded
+        # Keep pruning messages if token limit or message limit is exceeded
         while _tokens_exceeds_limit(
             history, token_count=(history_tokens + summary_tokens + input_message_tokens), limit=max_token_limit
         ) or _messages_exceeds_limit(history, input_messages):
             prune_count = 1
-            # Remove the number of messages needed to get to the limit
             if _messages_exceeds_limit(history, input_messages):
                 prune_count = len(history) + len(input_messages) - MAX_UNCOMPRESSED_MESSAGES
 
             pruned_messages, history = history[:prune_count], history[prune_count:]
             pruned_memory.extend(pruned_messages)
             history_tokens = llm.get_num_tokens_from_messages(history)
-    # Generate a new summary of pruned messages
-    summary = _get_new_summary(llm, pruned_memory, summary, max_token_limit)
+        # Generate a new summary after pruning messages
+        summary = _get_new_summary(llm, pruned_memory, summary, max_token_limit)
+        summary_tokens = llm.get_num_tokens_from_messages([SystemMessage(content=summary)])
+
     return history, pruned_memory, summary
 
 
@@ -275,7 +271,7 @@ def compress_chat_history_from_messages(
         history, pruned_memory = truncate_tokens(history, max_token_limit, llm, input_message_tokens)
     elif history_mode == PipelineChatHistoryModes.SUMMARIZE or history_mode is None:
         history, pruned_memory, summary = summarize_history(
-            llm, history, max_token_limit, input_message_tokens, summary, input_messages
+            llm, history, max_token_limit, input_message_tokens, summary, input_messages, pruned_memory
         )
         log.info(
             "Compressed chat history to %s tokens (%s prompt + %s summary + %s history)",
