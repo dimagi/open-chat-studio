@@ -1,23 +1,23 @@
 {% load custom_filters %}
 <div class="flex flex-row gap-1" id="chat-exports">
-    <form>
-        {% csrf_token %}
-        <input type="hidden" name="current_url" value="{{ request.get_full_path }}">
-        <button class="btn btn-sm btn-outline btn-primary no-animation"
-                hx-post="{% url 'experiments:generate_chat_export' team.slug experiment.id %}"
-                hx-include="[name='show-all'], [name='current_url']"
-                hx-trigger="click" hx-swap="outerHTML" hx-target="#chat-exports"
-                {% if task_id %}disabled{% endif %}>
-            {% if task_id %}
-                <span class="loading loading-bars loading-xs"></span> Generating
-            {% else %}
-                Generate Chat Export
-            {% endif %}
-        </button>
-    </form>
+    <button class="btn btn-sm btn-outline btn-primary no-animation"
+            hx-post="{% url 'experiments:generate_chat_export' team.slug experiment.id %}"
+            hx-trigger="click"
+            hx-swap="outerHTML"
+            hx-target="#chat-exports"
+            hx-headers='{"HX-Current-URL": true}'
+            {% if task_id %}disabled{% endif %}>
+        {% if task_id %}
+            <span class="loading loading-bars loading-xs"></span> Generating
+        {% else %}
+            Generate Chat Export
+        {% endif %}
+    </button>
+
     {% if task_id %}
         <div
             hx-get="{% url 'experiments:get_export_download_link' team.slug experiment.id task_id %}"
+            hx-headers='{"HX-Current-URL": true}'
             hx-trigger="every 2s"
             hx-swap="outerHTML"
             hx-target="#chat-exports"

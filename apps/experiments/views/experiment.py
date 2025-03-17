@@ -1057,7 +1057,7 @@ def experiment_invitations(request, team_slug: str, experiment_id: int):
 @login_and_team_required
 def generate_chat_export(request, team_slug: str, experiment_id: str):
     experiment = get_object_or_404(Experiment, id=experiment_id)
-    parsed_url = urlparse(request.POST.get("current_url"))
+    parsed_url = urlparse(request.headers.get("HX-Current-URL"))
     query_params = parse_qs(parsed_url.query)
     filter_params = get_filter_params(request, parsed_params=query_params)
     show_all = request.POST.get("show-all") == "on"
