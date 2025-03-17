@@ -29,7 +29,7 @@ class RepositoryHome(LoginAndTeamRequiredMixin, TemplateView):
             "upload_files_url": reverse("documents:upload_files", kwargs={"team_slug": team_slug}),
             "collections_list_url": reverse("documents:collections_list", kwargs={"team_slug": team_slug}),
             "new_collection_url": reverse("documents:new_collection", kwargs={"team_slug": team_slug}),
-            "files_count": File.objects.filter(team__slug=team_slug).count(),
+            "files_count": File.objects.filter(team__slug=team_slug, external_id="").count(),
             "collections_count": Repository.objects.filter(
                 team__slug=team_slug, type=RepositoryType.COLLECTION
             ).count(),
@@ -70,7 +70,9 @@ class FileListView(LoginAndTeamRequiredMixin, BaseObjectListView):
     permission_required = "files.view_file"
 
     def get_queryset(self):
-        queryset = super().get_queryset().filter(team__slug=self.kwargs["team_slug"]).order_by("-created_at")
+        queryset = (
+            super().get_queryset().filter(team__slug=self.kwargs["team_slug"], external_id="").order_by("-created_at")
+        )
         search = self.request.GET.get("search")
         if search:
             # TODO: Expand to search summary as well
