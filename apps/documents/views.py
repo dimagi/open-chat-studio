@@ -132,7 +132,7 @@ def delete_file(request, team_slug: str, id: int):
 @require_POST
 @permission_required("files.change_file")
 def edit_file(request, team_slug: str, id: int):
-    file = get_object_or_404(File.objects.defer("file"), team__slug=team_slug, id=id)
+    file = get_object_or_404(File, team__slug=team_slug, id=id)
     file.name = request.POST.get("name")
     file.summary = request.POST.get("summary")
 
