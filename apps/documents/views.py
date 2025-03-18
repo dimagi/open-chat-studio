@@ -1,9 +1,10 @@
 import json
 
+from django.contrib import messages
 from django.contrib.auth.decorators import permission_required
 from django.contrib.auth.mixins import PermissionRequiredMixin
 from django.contrib.postgres.search import TrigramSimilarity
-from django.db import transaction
+from django.db import IntegrityError, transaction
 from django.db.models import Q
 from django.shortcuts import get_object_or_404, redirect
 from django.urls import reverse
@@ -213,7 +214,10 @@ class CollectionDetails(LoginAndTeamRequiredMixin, BaseDetailsView):
 @transaction.atomic()
 def new_collection(request, team_slug: str):
     """Create a new collection"""
-    Repository.objects.create(type=RepositoryType.COLLECTION, team=request.team, name=request.POST.get("name"))
+    try:
+        Repository.objects.create(type=RepositoryType.COLLECTION, team=request.team, name=request.POST.get("name"))
+    except IntegrityError:
+        messages.error(request, "A collection with that name already exists.")
     return redirect(reverse("documents:repositories", kwargs={"team_slug": team_slug, "tab_name": "collections"}))
 
 
