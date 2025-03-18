@@ -64,7 +64,6 @@ def llm_response_with_prompt_node(
     prompt: str | None = None,
     history_type: str | None = None,
     history_name: str | None = None,
-    history_mode: str | None = None,
     **kwargs,
 ):
     if prompt is None:
@@ -84,9 +83,6 @@ def llm_response_with_prompt_node(
 
     if history_name is not None:
         params["history_name"] = history_name
-
-    if history_mode is not None:
-        params["history_mode"] = history_mode
 
     return {
         "id": str(uuid4()),
