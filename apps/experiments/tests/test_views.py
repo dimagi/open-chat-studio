@@ -567,7 +567,7 @@ class TestPublicSessions:
         _verify_user_or_start_session(
             identifier=participant.identifier,
             request=request,
-            experient=experiment_session.experient,
+            experiment=experiment_session.experiment,
             session=experiment_session,
         )
 
