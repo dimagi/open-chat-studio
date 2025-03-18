@@ -122,8 +122,8 @@ def upload_files(request, team_slug: str):
 
 @login_and_team_required
 @permission_required("files.delete_file")
-def delete_file(request, team_slug: str, id: int):
-    file = get_object_or_404(File, team__slug=team_slug, id=id)
+def delete_file(request, team_slug: str, pk: int):
+    file = get_object_or_404(File, team__slug=team_slug, id=pk)
     file.delete()
     return redirect(reverse("documents:repositories", kwargs={"team_slug": team_slug, "tab_name": "files"}))
 
@@ -131,28 +131,37 @@ def delete_file(request, team_slug: str, id: int):
 @login_and_team_required
 @require_POST
 @permission_required("files.change_file")
-def edit_file(request, team_slug: str, id: int):
-    file = get_object_or_404(File, team__slug=team_slug, id=id)
+def edit_file(request, team_slug: str, pk: int):
+    file = get_object_or_404(File, team__slug=team_slug, id=pk)
     file.name = request.POST.get("name")
     file.summary = request.POST.get("summary")
-
-    existing_collections = set(
-        file.repository_set.filter(type=RepositoryType.COLLECTION).values_list("name", flat=True)
-    )
-    collection_set = set()
-    # Handle new collections
-    for collection_name in request.POST.getlist("collections[]"):
-        collection_set.add(collection_name)
-        repo = get_object_or_404(Repository, team__slug=team_slug, type=RepositoryType.COLLECTION, name=collection_name)
-        repo.files.add(file)
     file.save(update_fields=["name", "summary"])
-
-    # Remove from collections
-    for collection_name in existing_collections - collection_set:
-        repo = get_object_or_404(Repository, team__slug=team_slug, type=RepositoryType.COLLECTION, name=collection_name)
-        repo.files.remove(file)
+    _update_collection_membership(file=file, collection_names=request.POST.getlist("collections[]"))
 
     return redirect(reverse("documents:repositories", kwargs={"team_slug": team_slug, "tab_name": "files"}))
+
+
+def _update_collection_membership(file: File, collection_names: list[str]):
+    """Handles updating the collections a file belongs to"""
+    collections = Repository.objects.filter(
+        team__id=file.team_id, type=RepositoryType.COLLECTION, name__in=collection_names
+    ).values_list("id", flat=True)
+
+    existing_collections = set(file.repository_set.filter(type=RepositoryType.COLLECTION).values_list("id", flat=True))
+    new_collections = set(collections) - existing_collections
+    collections_to_remove_files_from = existing_collections - set(collections)
+
+    RepoFileClass = Repository.files.through
+
+    # Handle new collections
+    repo_files = []
+    for id in new_collections:
+        repo_files.append(RepoFileClass(file=file, repository_id=id))
+
+    RepoFileClass.objects.bulk_create(repo_files)
+
+    # Handle outdated collections
+    RepoFileClass.objects.filter(file=file, repository_id__in=collections_to_remove_files_from).delete()
 
 
 class CollectionListView(LoginAndTeamRequiredMixin, BaseObjectListView):
@@ -210,8 +219,8 @@ def new_collection(request, team_slug: str):
 
 @login_and_team_required
 @permission_required("documents.delete_repository")
-def delete_collection(request, team_slug: str, id: int):
-    collection = get_object_or_404(Repository, team__slug=team_slug, id=id, type=RepositoryType.COLLECTION)
+def delete_collection(request, team_slug: str, pk: int):
+    collection = get_object_or_404(Repository, team__slug=team_slug, id=pk, type=RepositoryType.COLLECTION)
     collection.delete()
     return redirect(reverse("documents:repositories", kwargs={"team_slug": team_slug, "tab_name": "collections"}))
 
@@ -219,8 +228,8 @@ def delete_collection(request, team_slug: str, id: int):
 @login_and_team_required
 @require_POST
 @permission_required("documents.change_repository")
-def edit_collection(request, team_slug: str, id: int):
-    collection = get_object_or_404(Repository, team__slug=team_slug, id=id, type=RepositoryType.COLLECTION)
+def edit_collection(request, team_slug: str, pk: int):
+    collection = get_object_or_404(Repository, team__slug=team_slug, id=pk, type=RepositoryType.COLLECTION)
     collection.name = request.POST["name"]
     collection.summary = request.POST["summary"]
     collection.save(update_fields=["name", "summary"])
