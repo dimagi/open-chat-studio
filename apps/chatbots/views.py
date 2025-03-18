@@ -4,21 +4,21 @@ from django.views.generic import CreateView
 from apps.chatbots.tables import ChatbotTable
 from apps.experiments.models import Experiment
 from apps.experiments.views.experiment import BaseExperimentView
+from apps.generics.views import generic_home
 from apps.teams.decorators import login_and_team_required
-from apps.utils.BaseTableView import BaseTableView
-from apps.utils.helpers import generic_home
+from apps.utils.BaseExperimentTableView import BaseExperimentTableView
 
 
 @login_and_team_required
-@permission_required("chatbots.view_chatbot", raise_exception=True)
+@permission_required("experiments.view_experiment", raise_exception=True)
 def chatbots_home(request, team_slug: str):
     return generic_home(request, team_slug, "Chatbots", "chatbots:table", "chatbots:new")
 
 
-class ChatbotTableView(BaseTableView):
+class ChatbotExperimentTableView(BaseExperimentTableView):
     model = Experiment
     table_class = ChatbotTable
-    permission_required = "chatbots.view_chatbot"
+    permission_required = "experiments.view_experiment"
 
     def get_queryset(self):
         queryset = super().get_queryset()

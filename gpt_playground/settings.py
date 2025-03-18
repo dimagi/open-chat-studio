@@ -543,7 +543,7 @@ DOCUMENTATION_LINKS = {
     "consent": "/concepts/consent/",
     "embed": "/how-to/embed/",
     "survey": "https://dimagi.atlassian.net/wiki/spaces/OCS/pages/2144305308/Surveys",
-    "experiments": "/concepts/experiment/",
+    "experiment": "/concepts/experiment/",
     "pipelines": "/concepts/pipelines/",
     "concepts.prompt_variables": "/concepts/prompt_variables/",
     "concepts.experiments": "/concepts/experiment/",

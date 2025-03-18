@@ -87,11 +87,11 @@ from apps.files.forms import get_file_formset
 from apps.files.models import File
 from apps.files.views import BaseAddFileHtmxView, BaseDeleteFileView
 from apps.generics.chips import Chip
+from apps.generics.views import generic_home
 from apps.service_providers.utils import get_llm_provider_choices
 from apps.teams.decorators import login_and_team_required
 from apps.teams.mixins import LoginAndTeamRequiredMixin
-from apps.utils.BaseTableView import BaseTableView
-from apps.utils.helpers import generic_home
+from apps.utils.BaseExperimentTableView import BaseExperimentTableView
 
 DEFAULT_ERROR_MESSAGE = (
     "Sorry something went wrong. This was likely an intermittent error related to load."
@@ -105,7 +105,7 @@ def experiments_home(request, team_slug: str):
     return generic_home(request, team_slug, "Experiments", "experiments:table", "experiments:new")
 
 
-class ExperimentTableView(BaseTableView):
+class ExperimentExperimentTableView(BaseExperimentTableView):
     model = Experiment
     table_class = ExperimentTable
     permission_required = "experiments.view_experiment"

@@ -4,7 +4,7 @@ from django.db.models import Q
 from django_tables2 import SingleTableView
 
 
-class BaseTableView(SingleTableView, PermissionRequiredMixin):
+class BaseExperimentTableView(SingleTableView, PermissionRequiredMixin):
     paginate_by = 25
     template_name = "table/single_table.html"
 
