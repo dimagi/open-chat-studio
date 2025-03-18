@@ -27,12 +27,14 @@ def experiment_session_view(allowed_states=None):
             request.experiment = get_object_or_404(
                 Experiment.objects.get_all(), public_id=experiment_id, team=request.team
             )
-            request.experiment_session = get_object_or_404(
-                ExperimentSession,
-                experiment=request.experiment,
-                external_id=session_id,
-                team=request.team,
-            )
+            try:
+                request.experiment_session = ExperimentSession.objects.select_related("participant", "chat").get(
+                    experiment=request.experiment,
+                    external_id=session_id,
+                    team=request.team,
+                )
+            except ExperimentSession.DoesNotExist:
+                raise Http404()
 
             if allowed_states and request.experiment_session.status not in allowed_states:
                 return _redirect_for_state(request, team_slug)
