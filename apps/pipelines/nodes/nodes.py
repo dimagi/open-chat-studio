@@ -874,6 +874,7 @@ class CodeNode(PipelineNode):
                 "_write_": lambda x: x,
                 "get_participant_data": participant_data_proxy.get,
                 "set_participant_data": participant_data_proxy.set,
+                "get_participant_schedules": participant_data_proxy.get_schedules,
                 "get_temp_state_key": self._get_temp_state_key(state),
                 "set_temp_state_key": self._set_temp_state_key(state),
             }
