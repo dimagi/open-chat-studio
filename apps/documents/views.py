@@ -44,7 +44,7 @@ class RepositoryHome(LoginAndTeamRequiredMixin, TemplateView):
         return context
 
 
-class BaseObjectListView(ListView, PermissionRequiredMixin):
+class BaseObjectListView(LoginAndTeamRequiredMixin, ListView, PermissionRequiredMixin):
     details_url_name: str
 
     def get_context_data(self, *args, **kwargs):
@@ -53,8 +53,21 @@ class BaseObjectListView(ListView, PermissionRequiredMixin):
         context["tab_name"] = self.tab_name
         return context
 
+    def get_queryset(self):
+        queryset = super().get_queryset().filter(team__slug=self.kwargs["team_slug"]).order_by("-created_at")
+        search = self.request.GET.get("search")
+        if search:
+            name_similarity = TrigramSimilarity("name", search)
+            summary_similarity = TrigramSimilarity("summary", search)
+            queryset = (
+                queryset.annotate(similarity=name_similarity + summary_similarity)
+                .filter(Q(similarity__gt=0.2))
+                .order_by("-similarity")
+            )
+        return queryset
 
-class FileListView(LoginAndTeamRequiredMixin, BaseObjectListView):
+
+class FileListView(BaseObjectListView):
     template_name = "documents/shared/list.html"
     model = File
     paginate_by = 10
@@ -63,20 +76,7 @@ class FileListView(LoginAndTeamRequiredMixin, BaseObjectListView):
     permission_required = "files.view_file"
 
     def get_queryset(self):
-        queryset = (
-            super()
-            .get_queryset()
-            .filter(team__slug=self.kwargs["team_slug"], purpose=FilePurpose.COLLECTION)
-            .order_by("-created_at")
-        )
-        search = self.request.GET.get("search")
-        if search:
-            # TODO: Expand to search summary as well
-            name_similarity = TrigramSimilarity("name", search)
-            queryset = (
-                queryset.annotate(similarity=name_similarity).filter(Q(similarity__gt=0.2)).order_by("-similarity")
-            )
-        return queryset
+        return super().get_queryset().filter(purpose=FilePurpose.COLLECTION)
 
 
 class BaseDetailsView(LoginAndTeamRequiredMixin, DetailView, PermissionRequiredMixin):
@@ -180,29 +180,13 @@ def _update_collection_membership(file: File, collection_names: list[str]):
     RepoFileClass.objects.filter(file=file, repository_id__in=collections_to_remove_files_from).delete()
 
 
-class CollectionListView(LoginAndTeamRequiredMixin, BaseObjectListView):
+class CollectionListView(BaseObjectListView):
     template_name = "documents/shared/list.html"
     model = Repository
     paginate_by = 10
     details_url_name = "documents:collection_details"
     tab_name = "collections"
     permission_required = "documents.view_repository"
-
-    def get_queryset(self):
-        queryset = (
-            super()
-            .get_queryset()
-            .filter(type=RepositoryType.COLLECTION, team__slug=self.kwargs["team_slug"])
-            .order_by("-created_at")
-        )
-
-        search = self.request.GET.get("search")
-        if search:
-            name_similarity = TrigramSimilarity("name", search)
-            queryset = (
-                queryset.annotate(similarity=name_similarity).filter(Q(similarity__gt=0.2)).order_by("-similarity")
-            )
-        return queryset
 
 
 class CollectionDetails(BaseDetailsView):
