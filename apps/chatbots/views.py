@@ -24,6 +24,7 @@ class ChatbotExperimentTableView(BaseExperimentTableView):
         queryset = super().get_queryset()
         return queryset.filter(pipeline__isnull=False)
 
+
 # TODO: New chatbot to be implemented as part of #1307
 class CreateChatbot(BaseExperimentView, CreateView):
     def create_experiment(self):

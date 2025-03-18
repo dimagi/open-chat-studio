@@ -84,10 +84,12 @@ class BaseTypeSelectFormView(views.View):
     def get_success_url(self) -> str:
         raise NotImplementedError
 
+
 HELP_TEXT_KEYS = {
     "Experiments": "experiment",
-    "Chatbots": "chatbot",
+    "Chatbots": "chatbots",
 }
+
 
 def generic_home(request, team_slug: str, title: str, table_url_name: str, new_url: str):
     help_key = HELP_TEXT_KEYS.get(title, title.lower())  # Default to lowercase if missing

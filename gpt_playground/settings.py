@@ -104,7 +104,7 @@ PROJECT_APPS = [
     "apps.slack",
     "apps.sso",
     "apps.participants",
-    "apps.chatbots"
+    "apps.chatbots",
 ]
 
 SPECIAL_APPS = [
