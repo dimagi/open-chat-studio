@@ -11,7 +11,7 @@
             class="file-input file-input-bordered w-full max-w-xs"
             accept=".txt,.pdf,.jpg,.png"/>
 
-        <select id="upload-collections-select" name="collection_names[]" multiple placeholder="Select collections" autocomplete="off">
+        <select class="select select-bordered w-full" name="collection_name">
             {% for collection in collections %}
                 <option value="{{ collection.name }}">{{ collection.name }}</option>
             {% endfor %}
@@ -88,14 +88,6 @@
                     this.$refs.fileUpload.files = dataTransfer.files;
                 }
             }))
-        });
-
-        document.addEventListener('DOMContentLoaded', function() {
-            new TomSelect("#upload-collections-select", {
-                plugins: ["remove_button", "caret_position", "input_autogrow"],
-                maxItems: null,
-                create: false,
-            });
-        });
+        })
     </script>
 {% endblock %}
