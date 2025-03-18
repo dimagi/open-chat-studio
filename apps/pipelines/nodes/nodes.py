@@ -408,13 +408,16 @@ class RouterNode(RouterMixin, Passthrough, HistoryMixin):
     )
 
     def _process_conditional(self, state: PipelineState, node_id=None):
+        from apps.service_providers.llm_service.prompt_context import PromptTemplateContext
+
         prompt = OcsPromptTemplate.from_messages(
             [("system", self.prompt), MessagesPlaceholder("history", optional=True), ("human", "{input}")]
         )
 
+        session: ExperimentSession = state["experiment_session"]
         node_input = state["messages"][-1]
         context = {"input": node_input}
-        session: ExperimentSession | None = state.get("experiment_session")
+        context.update(PromptTemplateContext(session).get_context(prompt.input_variables))
 
         if self.history_type != PipelineChatHistoryTypes.NONE and session:
             input_messages = prompt.format_messages(**context)
