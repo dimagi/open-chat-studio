@@ -1271,6 +1271,50 @@ def _experiment_chat_ui(request, embedded=False):
     )
 
 
+@experiment_session_view()
+@verify_session_access_cookie
+def experiment_session_messages_view(request, team_slug: str, experiment_id: uuid.UUID, session_id: str):
+    """View for loading paginated messages with HTMX"""
+    session = request.experiment_session
+    experiment = request.experiment
+    page = int(request.GET.get("page", 1))
+    search = request.GET.get("search", "")
+    page_size = 100
+    all_messages = session.get_messages_for_display()
+
+    if search:
+        filtered_messages = [
+            msg for msg in all_messages if any(search.lower() in tag.lower() for tag in msg.all_tag_names())
+        ]
+    else:
+        filtered_messages = all_messages
+
+    total_messages = len(filtered_messages)
+    total_pages = max(1, (total_messages + page_size - 1) // page_size)
+    page = max(1, min(page, total_pages))
+    start_idx = (page - 1) * page_size
+    end_idx = start_idx + page_size
+
+    context = {
+        "experiment_session": session,
+        "experiment": experiment,
+        "messages": filtered_messages[start_idx:end_idx],
+        "page": page,
+        "total_pages": total_pages,
+        "total_messages": total_messages,
+        "page_size": page_size,
+        "page_start_index": (page - 1) * page_size,
+        "search": search,
+        "available_tags": [t.name for t in Tag.objects.filter(team__slug=team_slug, is_system_tag=False).all()],
+    }
+
+    return TemplateResponse(
+        request,
+        "experiments/components/experiment_chat.html",
+        context,
+    )
+
+
 @experiment_session_view(allowed_states=[SessionStatus.ACTIVE, SessionStatus.SETUP])
 @verify_session_access_cookie
 @require_POST
