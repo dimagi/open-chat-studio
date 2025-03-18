@@ -94,7 +94,7 @@ def verify_session_access_cookie(view):
         except (signing.BadSignature, KeyError):
             raise Http404()
 
-        if not _validate_access_cookie_data(request.experiment_session, access_value):
+        if not _validate_access_cookie_data(request.experiment, request.experiment_session, access_value):
             raise Http404()
 
         return view(request, *args, **kwargs)
@@ -102,17 +102,17 @@ def verify_session_access_cookie(view):
     return _inner
 
 
-def _get_access_cookie_data(experiment_session):
+def _get_access_cookie_data(experiment, experiment_session):
     return {
-        "experiment_id": str(experiment_session.experiment.public_id),
+        "experiment_id": str(experiment.public_id),
         "session_id": str(experiment_session.external_id),
         "participant_id": experiment_session.participant_id,
         "user_id": experiment_session.participant.user_id,
     }
 
 
-def _validate_access_cookie_data(experiment_session, access_data):
-    return _get_access_cookie_data(experiment_session) == access_data
+def _validate_access_cookie_data(experiment, experiment_session, access_data):
+    return _get_access_cookie_data(experiment, experiment_session) == access_data
 
 
 def _redirect_for_state(request, team_slug):
