@@ -44,32 +44,15 @@
 {% block extra_js %}
     <script>
         document.addEventListener('alpine:init', () => {
-            const megabyte_in_bytes = 1048576;
-            const byte_limit = megabyte_in_bytes * 512;
             Alpine.data('modalData', () => ({
                 message: "",
                 uploaded_files: [],
                 file_summaries: {},
                 selected_collection: null,
-                total_upload_size_bytes: 0,
                 handleFileChange(event) {
                     const files = Array.from(event.target.files);
-
-                    let new_upload_bytes = 0
-                    for (let i = 0; i < files.length; i++) {
-                        new_upload_bytes = new_upload_bytes + files[i].size
-                    }
-
-                    if (this.total_upload_size_bytes + new_upload_bytes > byte_limit) {
-                        let current_files_mb = this.total_upload_size_bytes / megabyte_in_bytes
-                        let message = "Unable to add new file(s). The maximum upload capacity is 512MB. Current size is " + current_files_mb + "MB";
-                        alert(message);
-                        return;
-                    }
-
-                    this.total_upload_size_bytes = this.total_upload_size_bytes + new_upload_bytes
                     this.uploaded_files.push(...files);
-                // Add file to summary object
+
                     files.forEach(file => this.file_summaries[file.name] = "");
 
                     const dataTransfer = new DataTransfer();
@@ -79,11 +62,9 @@
                 removeFile(index) {
                     this.uploaded_files.splice(index, 1);
                     const dataTransfer = new DataTransfer();
-                    this.total_upload_size_bytes = 0;
 
                     this.uploaded_files.forEach(file => {
                         dataTransfer.items.add(file)
-                        this.total_upload_size_bytes = this.total_upload_size_bytes + file.size
                     });
                     this.$refs.fileUpload.files = dataTransfer.files;
                 }
