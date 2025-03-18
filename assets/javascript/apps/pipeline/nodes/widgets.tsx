@@ -857,7 +857,7 @@ export function HistoryModeWidget(props: WidgetParams) {
   const userMaxTokenLimit = concatenate(props.nodeParams["user_max_token_limit"]);
   const maxHistoryLength = concatenate(props.nodeParams["max_history_length"]);
   const initialHistoryMode = concatenate(props.nodeParams["history_mode"]);
-  const [historyMode, setHistoryMode] = useState(initialHistoryMode || "Summarize");
+  const [historyMode, setHistoryMode] = useState(initialHistoryMode || "summarize");
 
   const historyModeHelpTexts: Record<string, string> = {
     summarize:"If the token count exceeds the limit, older messages will be summarized while keeping the last few messages intact.",
@@ -884,7 +884,7 @@ export function HistoryModeWidget(props: WidgetParams) {
               </option>
             ))}
           </select>
-          <div>{historyModeHelpTexts[historyMode]}</div>
+          <small className ="text-muted mt-2">{historyModeHelpTexts[historyMode]}</small>
         </InputField>
       </div>
 
@@ -898,7 +898,7 @@ export function HistoryModeWidget(props: WidgetParams) {
               onChange={props.updateParamValue}
               value={userMaxTokenLimit || ""}
             />
-            <div>Maximum number of tokens before messages are summarized or truncated.</div>
+            <small className ="text-muted mt-2">Maximum number of tokens before messages are summarized or truncated.</small>
           </InputField>
         </div>
       )}
@@ -913,7 +913,7 @@ export function HistoryModeWidget(props: WidgetParams) {
               onChange={props.updateParamValue}
               value={maxHistoryLength || ""}
             />
-            <div>Chat history will only keep the most recent messages up to max history length.</div>
+            <small className ="text-muted mt-2">Chat history will only keep the most recent messages up to max history length.</small>
           </InputField>
         </div>
       )}

@@ -200,7 +200,8 @@ def _compress_chat_history(
             return history, None, None
 
     log.debug(
-        "Compressing chat history: %s/%s(max) tokens and %d/%d(max) messages",
+        "Compressing chat history with mode %s: %s/%s(max) tokens and %d/%d(max) messages",
+        history_mode,
         current_token_count,
         max_token_limit,
         len(total_messages),
