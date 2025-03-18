@@ -111,21 +111,19 @@ class FileDetails(LoginAndTeamRequiredMixin, BaseDetailsView):
 def upload_files(request, team_slug: str):
     """Upload files to a collection"""
     # TODO: Check collection size and error if it's too large with the new files added
-    files = []
     file_summaries = json.loads(request.POST["file_summaries"])
+    collection_names = request.POST.getlist("collection_names[]")
+
     for uploaded_file in request.FILES.getlist("files"):
-        files.append(
-            File.objects.create(
-                team=request.team,
-                name=uploaded_file.name,
-                file=uploaded_file,
-                summary=file_summaries[uploaded_file.name],
-            )
+        file = File.objects.create(
+            team=request.team,
+            name=uploaded_file.name,
+            file=uploaded_file,
+            summary=file_summaries[uploaded_file.name],
         )
-    repo, _ = Repository.objects.get_or_create(
-        type=RepositoryType.COLLECTION, team=request.team, name=request.POST.get("collection_name")
-    )
-    repo.files.add(*files)
+        if collection_names:
+            _upsert_collection_membership(file, collection_names)
+
     return redirect(reverse("documents:repositories", kwargs={"team_slug": team_slug, "tab_name": "files"}))
 
 
@@ -145,12 +143,12 @@ def edit_file(request, team_slug: str, pk: int):
     file.name = request.POST.get("name")
     file.summary = request.POST.get("summary")
     file.save(update_fields=["name", "summary"])
-    _update_collection_membership(file=file, collection_names=request.POST.getlist("collections[]"))
+    _upsert_collection_membership(file=file, collection_names=request.POST.getlist("collections[]"))
 
     return redirect(reverse("documents:repositories", kwargs={"team_slug": team_slug, "tab_name": "files"}))
 
 
-def _update_collection_membership(file: File, collection_names: list[str]):
+def _upsert_collection_membership(file: File, collection_names: list[str]):
     """Handles updating the collections a file belongs to"""
     collections = Repository.objects.filter(
         team__id=file.team_id, type=RepositoryType.COLLECTION, name__in=collection_names
