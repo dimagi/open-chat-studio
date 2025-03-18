@@ -45,9 +45,9 @@ def experiment_session_view(allowed_states=None):
     return decorator
 
 
-def set_session_access_cookie(response, experiment_session):
+def set_session_access_cookie(response, experiment, experiment_session):
     """Set the session access cookie on the response"""
-    value = _get_access_cookie_data(experiment_session)
+    value = _get_access_cookie_data(experiment, experiment_session)
     value = signing.get_cookie_signer(salt=CHAT_SESSION_ACCESS_SALT).sign_object(value)
     response.set_cookie(
         CHAT_SESSION_ACCESS_COOKIE,
