@@ -43,7 +43,7 @@
             <div class="py-3 col-span-2">
                 <dt class="text-sm font-medium leading-6">Summary</dt>
                 <dd class="text-sm col-span-2">
-                    <textarea name="summary" x-cloak x-show="editing" rows="2" cols="40" class="input input-bordered">{{ object.summary }}</textarea>
+                    <textarea name="summary" x-cloak x-show="editing" rows="2" cols="40" class="input input-bordered" maxlength="{{ max_summary_length }}">{{ object.summary }}</textarea>
                     <span x-show="!editing">{{ object.summary }}</span>
                 </dd>
             </div>

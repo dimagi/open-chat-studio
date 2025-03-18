@@ -96,6 +96,8 @@ class FileDetails(LoginAndTeamRequiredMixin, BaseDetailsView):
         file = self.get_object()
         collection_names = file.repository_set.filter(type=RepositoryType.COLLECTION).values_list("name", flat=True)
         context["current_collections"] = list(collection_names)
+        context["max_summary_length"] = MAX_SUMMARY_LENGTH
+
         context["edit_url"] = reverse(
             "documents:edit_file", kwargs={"team_slug": self.kwargs["team_slug"], "pk": file.id}
         )
