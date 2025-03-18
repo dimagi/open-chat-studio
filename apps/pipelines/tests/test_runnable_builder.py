@@ -375,6 +375,40 @@ def test_router_node(get_llm_service, provider, provider_model, pipeline, experi
 
 
 @django_db_with_data(available_apps=("apps.service_providers",))
+@mock.patch("apps.service_providers.models.LlmProvider.get_llm_service")
+@mock.patch("apps.pipelines.nodes.base.PipelineNode.logger", mock.Mock())
+def test_router_node_prompt(get_llm_service, provider, provider_model, pipeline, experiment_session):
+    service = build_fake_llm_echo_service()
+    get_llm_service.return_value = service
+    start = start_node()
+    router = router_node(
+        str(provider.id),
+        str(provider_model.id),
+        keywords=["A"],
+        prompt="""
+    PD: {participant_data}
+    DT: {current_datetime}
+    """,
+    )
+    end = end_node()
+    nodes = [start, router, end]
+    edges = [
+        {"id": "start -> router", "source": start["id"], "target": router["id"]},
+        {
+            "id": "RouterNode -> End",
+            "source": router["id"],
+            "target": end["id"],
+            "sourceHandle": "output_0",
+        },
+    ]
+    runnable = create_runnable(pipeline, nodes, edges)
+
+    runnable.invoke(PipelineState(messages=["a"], experiment_session=experiment_session))
+    assert len(service.llm.get_call_messages()[0]) == 2
+    assert str(experiment_session.get_participant_data()) in service.llm.get_call_messages()[0][0].content
+
+
+@django_db_with_data(available_apps=("apps.service_providers",))
 @mock.patch("apps.pipelines.nodes.base.PipelineNode.logger", mock.Mock())
 def test_static_router_temp_state(pipeline, experiment_session):
     # The static router will switch based on a state key, and pass its input through
