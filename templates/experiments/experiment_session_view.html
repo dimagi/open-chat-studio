@@ -44,35 +44,39 @@
     <div role="tablist" class="mt-4 tabs tabs-bordered max-w-5xl">
       <input type="radio" name="experiment_tabs-{{ session.id }}" role="tab" class="tab" aria-label="Messages" checked/>
       <div role="tabpanel" class="tab-content pt-3">
-        {% include "experiments/components/experiment_chat.html" %}
-      </div>
-      {% if perms.experiments.view_participantdata %}
-        <input type="radio" name="experiment_tabs-{{ session.id }}" role="tab" class="tab" aria-label="Participant Data" />
-        <div role="tabpanel" class="tab-content pt-3">
-          <div class="p-3 border rounded-lg">
-            <pre><code class="text-sm">{{ participant_data|escape }}</code></pre>
-          </div>
-        </div>
-        <input type="radio" name="experiment_tabs-{{ session.id }}" role="tab" class="tab" aria-label="Participant Schedules" />
-        <div role="tabpanel" class="tab-content pt-3">
-          <div class="border rounded-lg divide-y">
-            {% include "participants/partials/participant_schedules.html" %}
-          </div>
-        </div>
-      {% endif %}
-      {% if perms.events.view_eventlog %}
-        <input type="radio" name="experiment_tabs-{{ session.id }}" role="tab" class="tab" aria-label="Experiment Events"/>
-        <div role="tabpanel" class="tab-content pt-3">
-          {% for event_trigger in event_triggers %}
-            <div class="max-w-5xl mt-4 border rounded-2xl">
-              {% include "events/components/event_logs.html" with trigger=event_trigger.trigger event_logs=event_trigger.event_logs %}
+        <div id="messages-container" class="min-w-full">
+          <div class="flex items-center justify-center p-10">
+            <span class="loading loading-spinner"</span>
             </div>
-          {% endfor %}
+          </div>
         </div>
-      {% endif %}
-    </div>
+        {% if perms.experiments.view_participantdata %}
+          <input type="radio" name="experiment_tabs-{{ session.id }}" role="tab" class="tab" aria-label="Participant Data" />
+          <div role="tabpanel" class="tab-content pt-3">
+            <div class="p-3 border rounded-lg">
+            <pre><code class="text-sm">{{ participant_data|escape }}</code></pre>
+            </div>
+          </div>
+          <input type="radio" name="experiment_tabs-{{ session.id }}" role="tab" class="tab" aria-label="Participant Schedules" />
+          <div role="tabpanel" class="tab-content pt-3">
+            <div class="border rounded-lg divide-y">
+              {% include "participants/partials/participant_schedules.html" %}
+            </div>
+          </div>
+        {% endif %}
+        {% if perms.events.view_eventlog %}
+          <input type="radio" name="experiment_tabs-{{ session.id }}" role="tab" class="tab" aria-label="Experiment Events"/>
+          <div role="tabpanel" class="tab-content pt-3">
+            {% for event_trigger in event_triggers %}
+              <div class="max-w-5xl mt-4 border rounded-2xl">
+                {% include "events/components/event_logs.html" with trigger=event_trigger.trigger event_logs=event_trigger.event_logs %}
+              </div>
+            {% endfor %}
+          </div>
+        {% endif %}
+      </div>
 
-  </div>
+    </div>
 {% endblock %}
 
 {% block page_js %}
@@ -85,4 +89,28 @@
   >
   </script>
   <script>SiteJS.tagMultiselect.setupTagSelects();</script>
+  <script>
+    document.addEventListener('DOMContentLoaded', function() {
+      const messageTabs = document.querySelectorAll('input[role="tab"][aria-label="Messages"]');
+      messageTabs.forEach(tab => {
+        tab.addEventListener('change', function() {
+          if (!this.checked) return;
+
+          const tabPanel = this.nextElementSibling;
+          if (tabPanel.dataset.loaded) return;
+
+          const messagesContainer = tabPanel.querySelector('#messages-container');
+          if (!messagesContainer) return;
+
+          htmx.ajax('GET',
+            '{% url "experiments:experiment_session_messages_view" request.team.slug experiment.public_id experiment_session.external_id %}',
+            messagesContainer);
+          tabPanel.dataset.loaded = 'true';
+        });
+        if (tab.checked) {
+          tab.dispatchEvent(new Event('change'));
+        }
+      });
+    });
+  </script>
 {% endblock %}
