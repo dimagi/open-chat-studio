@@ -10,7 +10,7 @@ class Migration(migrations.Migration):
     initial = True
 
     dependencies = [
-        ('files', '0005_alter_file_summary'),
+        ('files', '0004_file_summary'),
         ('teams', '0007_create_commcare_connect_flag'),
     ]
 

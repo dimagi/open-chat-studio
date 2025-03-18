@@ -11,6 +11,11 @@ from apps.utils.conversions import bytes_to_megabytes
 MAX_SUMMARY_LENGTH = 1024
 
 
+class FilePurpose(models.TextChoices):
+    ASSISTANT = "assistant", "Assistant"
+    COLLECTION = "collection", "Collection"
+
+
 class File(BaseTeamModel):
     name = models.CharField(max_length=255)
     file = models.FileField()
@@ -21,6 +26,7 @@ class File(BaseTeamModel):
     schema = models.JSONField(default=dict, blank=True)
     expiry_date = models.DateTimeField(null=True)
     summary = models.TextField(max_length=MAX_SUMMARY_LENGTH, blank=True)  # This is roughly 1 short paragraph
+    purpose = models.CharField(max_length=255, choices=FilePurpose.choices)
 
     @classmethod
     def from_external_source(cls, filename, external_file, external_id, external_source, team_id):

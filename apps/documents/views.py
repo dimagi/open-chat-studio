@@ -12,7 +12,7 @@ from django.views.decorators.http import require_POST
 from django.views.generic import DetailView, ListView, TemplateView
 
 from apps.documents.models import Repository, RepositoryType
-from apps.files.models import MAX_SUMMARY_LENGTH, File
+from apps.files.models import MAX_SUMMARY_LENGTH, File, FilePurpose
 from apps.teams.decorators import login_and_team_required
 from apps.teams.mixins import LoginAndTeamRequiredMixin
 
@@ -29,7 +29,7 @@ class RepositoryHome(LoginAndTeamRequiredMixin, TemplateView):
             "upload_files_url": reverse("documents:upload_files", kwargs={"team_slug": team_slug}),
             "collections_list_url": reverse("documents:collections_list", kwargs={"team_slug": team_slug}),
             "new_collection_url": reverse("documents:new_collection", kwargs={"team_slug": team_slug}),
-            "files_count": File.objects.filter(team__slug=team_slug, external_id="").count(),
+            "files_count": File.objects.filter(team__slug=team_slug, purpose=FilePurpose.COLLECTION).count(),
             "max_summary_length": MAX_SUMMARY_LENGTH,
             "collections_count": Repository.objects.filter(
                 team__slug=team_slug, type=RepositoryType.COLLECTION
@@ -64,7 +64,10 @@ class FileListView(LoginAndTeamRequiredMixin, BaseObjectListView):
 
     def get_queryset(self):
         queryset = (
-            super().get_queryset().filter(team__slug=self.kwargs["team_slug"], external_id="").order_by("-created_at")
+            super()
+            .get_queryset()
+            .filter(team__slug=self.kwargs["team_slug"], purpose=FilePurpose.COLLECTION)
+            .order_by("-created_at")
         )
         search = self.request.GET.get("search")
         if search:
@@ -120,6 +123,7 @@ def upload_files(request, team_slug: str):
             name=uploaded_file.name,
             file=uploaded_file,
             summary=file_summaries[uploaded_file.name],
+            purpose=FilePurpose.COLLECTION,
         )
         if collection_names:
             _upsert_collection_membership(file, collection_names)
