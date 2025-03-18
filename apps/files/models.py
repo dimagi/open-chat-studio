@@ -8,6 +8,8 @@ from django.db import models
 from apps.teams.models import BaseTeamModel
 from apps.utils.conversions import bytes_to_megabytes
 
+MAX_SUMMARY_LENGTH = 1024
+
 
 class File(BaseTeamModel):
     name = models.CharField(max_length=255)
@@ -18,7 +20,7 @@ class File(BaseTeamModel):
     content_type = models.CharField(blank=True)
     schema = models.JSONField(default=dict, blank=True)
     expiry_date = models.DateTimeField(null=True)
-    summary = models.TextField(max_length=400, blank=True)  # This is roughly 1 short paragraph
+    summary = models.TextField(max_length=MAX_SUMMARY_LENGTH, blank=True)  # This is roughly 1 short paragraph
 
     @classmethod
     def from_external_source(cls, filename, external_file, external_id, external_source, team_id):

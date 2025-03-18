@@ -12,7 +12,7 @@ from django.views.decorators.http import require_POST
 from django.views.generic import DetailView, ListView, TemplateView
 
 from apps.documents.models import Repository, RepositoryType
-from apps.files.models import File
+from apps.files.models import MAX_SUMMARY_LENGTH, File
 from apps.teams.decorators import login_and_team_required
 from apps.teams.mixins import LoginAndTeamRequiredMixin
 
@@ -30,6 +30,7 @@ class RepositoryHome(LoginAndTeamRequiredMixin, TemplateView):
             "collections_list_url": reverse("documents:collections_list", kwargs={"team_slug": team_slug}),
             "new_collection_url": reverse("documents:new_collection", kwargs={"team_slug": team_slug}),
             "files_count": File.objects.filter(team__slug=team_slug, external_id="").count(),
+            "max_summary_length": MAX_SUMMARY_LENGTH,
             "collections_count": Repository.objects.filter(
                 team__slug=team_slug, type=RepositoryType.COLLECTION
             ).count(),

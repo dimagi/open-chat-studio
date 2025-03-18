@@ -24,7 +24,7 @@
                     <textarea
                         x-model="file_summaries[file.name]"
                         class="col-span-1 textarea textarea-bordered w-full placeholder:text-gray-500"
-                        maxlength="400"
+                        maxlength="max_summary_length"
                         placeholder="Enter a summary of the file..."
                     ></textarea>
                     <button aria-label="Remove File" title="Remove File" type="button" class="btn btn-xs" @click="removeFile(index)">
