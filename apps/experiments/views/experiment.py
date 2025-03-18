@@ -12,7 +12,6 @@ from django.conf import settings
 from django.contrib import messages
 from django.contrib.auth.decorators import permission_required
 from django.contrib.auth.mixins import PermissionRequiredMixin
-from django.contrib.postgres.search import TrigramSimilarity
 from django.core.exceptions import PermissionDenied, ValidationError
 from django.db import transaction
 from django.db.models import Case, Count, IntegerField, Q, When
@@ -92,6 +91,7 @@ from apps.generics.help import render_help_with_link
 from apps.service_providers.utils import get_llm_provider_choices
 from apps.teams.decorators import login_and_team_required
 from apps.teams.mixins import LoginAndTeamRequiredMixin
+from apps.utils.search import similarity_search
 
 DEFAULT_ERROR_MESSAGE = (
     "Sorry something went wrong. This was likely an intermittent error related to load."
@@ -134,16 +134,12 @@ class ExperimentTableView(SingleTableView, PermissionRequiredMixin):
         if not show_archived:
             query_set = query_set.filter(is_archived=False)
 
-        search = self.request.GET.get("search")
-        if search:
-            name_similarity = TrigramSimilarity("name", search)
-            description_similarity = TrigramSimilarity("description", search)
-            query_set = (
-                query_set.annotate(
-                    similarity=name_similarity + description_similarity,
-                )
-                .filter(Q(similarity__gt=0.2) | Q(owner__username__icontains=search))
-                .order_by("-similarity")
+        if search := self.request.GET.get("search"):
+            query_set = similarity_search(
+                query_set,
+                search_phase=search,
+                columns=["name", "description"],
+                extra_conditions=Q(owner__username__icontains=search),
             )
         return query_set
 

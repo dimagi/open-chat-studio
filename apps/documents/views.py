@@ -3,9 +3,7 @@ import json
 from django.contrib import messages
 from django.contrib.auth.decorators import permission_required
 from django.contrib.auth.mixins import PermissionRequiredMixin
-from django.contrib.postgres.search import TrigramSimilarity
 from django.db import IntegrityError, transaction
-from django.db.models import Q
 from django.shortcuts import get_object_or_404, redirect
 from django.urls import reverse
 from django.views.decorators.http import require_POST
@@ -15,6 +13,7 @@ from apps.documents.models import Repository, RepositoryType
 from apps.files.models import MAX_SUMMARY_LENGTH, File, FilePurpose
 from apps.teams.decorators import login_and_team_required
 from apps.teams.mixins import LoginAndTeamRequiredMixin
+from apps.utils.search import similarity_search
 
 
 class RepositoryHome(LoginAndTeamRequiredMixin, TemplateView):
@@ -55,15 +54,8 @@ class BaseObjectListView(LoginAndTeamRequiredMixin, ListView, PermissionRequired
 
     def get_queryset(self):
         queryset = super().get_queryset().filter(team__slug=self.kwargs["team_slug"]).order_by("-created_at")
-        search = self.request.GET.get("search")
-        if search:
-            name_similarity = TrigramSimilarity("name", search)
-            summary_similarity = TrigramSimilarity("summary", search)
-            queryset = (
-                queryset.annotate(similarity=name_similarity + summary_similarity)
-                .filter(Q(similarity__gt=0.2))
-                .order_by("-similarity")
-            )
+        if search := self.request.GET.get("search"):
+            queryset = similarity_search(queryset, search_phase=search, columns=["name", "summary"])
         return queryset
 
 
