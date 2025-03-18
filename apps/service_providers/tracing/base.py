@@ -1,22 +1,18 @@
-from __future__ import annotations
-
 from abc import ABC, abstractmethod
-from typing import TYPE_CHECKING, Any
+from typing import TYPE_CHECKING, Any, Literal
 
 if TYPE_CHECKING:
-    from collections.abc import Sequence
     from uuid import UUID
 
     from langchain.callbacks.base import BaseCallbackHandler
 
-    from .schema import Log
+
+EventLevel = Literal["DEBUG", "DEFAULT", "WARNING", "ERROR"]
 
 
 class BaseTracer(ABC):
-    trace_id: UUID
-
     @abstractmethod
-    def __init__(self, trace_name: str, trace_id: UUID, session_id: str, user_id: str, config: dict):
+    def __init__(self, client_config: dict):
         raise NotImplementedError
 
     @property
@@ -25,9 +21,13 @@ class BaseTracer(ABC):
         raise NotImplementedError
 
     @abstractmethod
-    def add_trace(
+    def initialize(self, trace_name: str, trace_id: UUID, session_id: str, user_id: str):
+        raise NotImplementedError
+
+    @abstractmethod
+    def start_span(
         self,
-        trace_id: str,
+        span_id: str,
         trace_name: str,
         inputs: dict[str, Any],
         metadata: dict[str, Any] | None = None,
@@ -35,13 +35,22 @@ class BaseTracer(ABC):
         raise NotImplementedError
 
     @abstractmethod
-    def end_trace(
+    def end_span(
         self,
-        trace_id: str,
+        span_id: str,
         outputs: dict[str, Any] | None = None,
         error: Exception | None = None,
-        logs: Sequence[Log | dict] = (),
     ) -> None:
+        raise NotImplementedError
+
+    @abstractmethod
+    def event(
+        self,
+        name: str,
+        message: str,
+        level: EventLevel = "DEFAULT",
+        metadata: dict[str, Any] | None = None,
+    ):
         raise NotImplementedError
 
     @abstractmethod

@@ -1,34 +1,25 @@
-from __future__ import annotations
-
 from collections import OrderedDict
 from datetime import UTC, datetime
 from typing import TYPE_CHECKING, Any
 
 from langfuse.callback import CallbackHandler
+from langfuse.client import StatefulClient
 from loguru import logger
 from typing_extensions import override
 
-from .base import BaseTracer
+from .base import BaseTracer, EventLevel
 
 if TYPE_CHECKING:
-    from collections.abc import Sequence
     from uuid import UUID
 
     from langchain.callbacks.base import BaseCallbackHandler
 
-    from .schema import Log
-
 
 class LangFuseTracer(BaseTracer):
-    flow_id: str
-
-    def __init__(self, trace_name: str, trace_id: UUID, session_id: str, user_id: str, config: dict):
-        self.trace_id = trace_id
-        self.trace_name = trace_name
-        self.session_id = session_id
-        self.user_id = user_id
+    def __init__(self, config: dict):
         self.spans: dict = OrderedDict()  # spans that are not ended
-
+        self.trace = None
+        self._client = None
         self._ready: bool = self.setup_langfuse(config) if config else False
 
     @property
@@ -38,23 +29,18 @@ class LangFuseTracer(BaseTracer):
     def setup_langfuse(self, config) -> bool:
         try:
             self._client = client_manager.get(config)
-            self.trace = self._client.trace(
-                id=str(self.trace_id), name=self.trace_name, session_id=self.session_id, user_id=self.user_id
-            )
-        except ImportError:
-            logger.exception("Could not import langfuse. Please install it with `pip install langfuse`.")
-            return False
-
         except Exception as e:  # noqa: BLE001
-            logger.debug(f"Error setting up LangSmith tracer: {e}")
+            logger.debug(f"Error setting up Langfuse tracer: {e}")
             return False
-
         return True
 
+    def initialize(self, trace_name: str, trace_id: UUID, session_id: str, user_id: str):
+        self.trace = self._client.trace(id=str(trace_id), name=trace_name, session_id=session_id, user_id=user_id)
+
     @override
-    def add_trace(
+    def start_span(
         self,
-        trace_id: str,  # actually component id
+        span_id: str,
         trace_name: str,
         inputs: dict[str, Any],
         metadata: dict[str, Any] | None = None,
@@ -70,32 +56,24 @@ class LangFuseTracer(BaseTracer):
             "start_time": start_time,
         }
 
-        if len(self.spans) > 0:
-            last_span = next(reversed(self.spans))
-            span = self.spans[last_span].span(**content_span)
-        else:
-            span = self.trace.span(**content_span)
-
-        self.spans[trace_id] = span
+        self.spans[span_id] = self._get_current_span().span(**content_span)
 
     @override
-    def end_trace(
+    def end_span(
         self,
-        trace_id: str,
+        span_id: str,
         outputs: dict[str, Any] | None = None,
         error: Exception | None = None,
-        logs: Sequence[Log | dict] = (),
     ) -> None:
         end_time = datetime.now(tz=UTC)
         if not self._ready:
             return
 
-        span = self.spans.pop(trace_id, None)
+        span = self.spans.pop(span_id, None)
         if span:
             output: dict = {}
             output |= outputs or {}
             output |= {"error": str(error)} if error else {}
-            output |= {"logs": list(logs)} if logs else {}
             content = {"output": output, "end_time": end_time}
             span.update(**content)
 
@@ -114,6 +92,18 @@ class LangFuseTracer(BaseTracer):
         print(outputs)
         self._client.flush()
 
+    @override
+    def event(self, name: str, message: str, level: EventLevel = "DEFAULT", metadata: dict[str, Any] | None = None):
+        if not self._ready:
+            return None
+
+        self._get_current_span().event(
+            name=name,
+            status_message=message,
+            level=level,
+            metadata=metadata or {},
+        )
+
     def get_langchain_callback(self) -> BaseCallbackHandler | None:
         if not self._ready:
             return None
@@ -121,6 +111,13 @@ class LangFuseTracer(BaseTracer):
         # get callback from parent span
         stateful_client = self.spans[next(reversed(self.spans))] if len(self.spans) > 0 else self.trace
         return CustomCallbackHandler(stateful_client=stateful_client, update_stateful_client=False)
+
+    def _get_current_span(self) -> StatefulClient:
+        if len(self.spans) > 0:
+            last_span = next(reversed(self.spans))
+            return self.spans[last_span]
+        else:
+            return self.trace
 
 
 class CustomCallbackHandler(CallbackHandler):
