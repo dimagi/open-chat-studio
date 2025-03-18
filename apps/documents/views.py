@@ -79,11 +79,11 @@ class FileListView(LoginAndTeamRequiredMixin, BaseObjectListView):
         return queryset
 
 
-class BaseDetailsView(DetailView, PermissionRequiredMixin):
+class BaseDetailsView(LoginAndTeamRequiredMixin, DetailView, PermissionRequiredMixin):
     pass
 
 
-class FileDetails(LoginAndTeamRequiredMixin, BaseDetailsView):
+class FileDetails(BaseDetailsView):
     template_name = "documents/file_details.html"
     model = File
     permission_required = "files.view_file"
@@ -205,7 +205,7 @@ class CollectionListView(LoginAndTeamRequiredMixin, BaseObjectListView):
         return queryset
 
 
-class CollectionDetails(LoginAndTeamRequiredMixin, BaseDetailsView):
+class CollectionDetails(BaseDetailsView):
     template_name = "documents/collection_details.html"
     model = Repository
     permission_required = "documents.view_repository"
