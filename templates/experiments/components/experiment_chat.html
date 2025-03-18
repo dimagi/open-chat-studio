@@ -1,103 +1,155 @@
 {% load json_tags %}
 {% load chat_tags %}
 {% load waffle_tags %}
+{% load pagination_tags %}
 
-<div x-data="{search: null}">
+<div class="max-w-5xl mt-4 border rounded-2xl">
   {% if perms.annotations.view_customtaggeditem %}
-    <div class="mt-1 max-w-5xl">
-      <input type="text" x-model="search" class="input input-bordered input-sm w-1/2" placeholder="Search tags...">
+    <div class="mt-1 max-w-5xl flex items-center gap-2 p-3">
+      <input
+        type="text"
+        name="search"
+        value="{{ search|default:'' }}"
+        class="input input-bordered input-sm w-1/2"
+        placeholder="Search tags..."
+        hx-get="{% url 'experiments:experiment_session_messages_view' request.team.slug experiment.public_id experiment_session.external_id %}"
+        hx-trigger="keyup changed delay:500ms"
+        hx-target="#messages-container"
+        hx-include="[name='search']"
+      >
+      {% if search %}
+        <button
+          class="btn btn-ghost btn-sm"
+          hx-get="{% url 'experiments:experiment_session_messages_view' request.team.slug experiment.public_id experiment_session.external_id %}"
+          hx-target="#messages-container"
+        >
+          <i class="fa-solid fa-times"></i> Clear
+        </button>
+      {% endif %}
     </div>
   {% endif %}
-  <div class="max-w-5xl mt-4 border rounded-2xl">
-    <div class="flow-root">
-      <div class="-mx-4 -my-2 overflow-x-auto sm:-mx-6 lg:-mx-8">
-        <div class="inline-block min-w-full py-2 align-middle sm:px-6 lg:px-8">
-          <table class="min-w-full divide-y divide-gray-300 ">
-            <tbody class="divide-y divide-gray-200" x-data="{commentsRow: null}">
-              {% for message in experiment_session.get_messages_for_display %}
-                <tr
-                  class="{% if message.is_ai_message %}bg-sky-100/40 dark:bg-sky-950/40{% endif %}"
-                  x-data='{
-                          tags: {{ message.all_tag_names|to_json }},
-                          get isSelected() { return commentsRow === {{ forloop.counter }} },
-                          get searchMatch() {
-                          if (!this.search) {
-                          return true;
-                          }
-                          let a = this.tags.filter(tag => tag.toLowerCase().includes(this.search.toLowerCase()));
-                          return a.length > 0;
-                          },
-                          }'
-                  x-show="searchMatch"
-                >
-                  <td class="whitespace-nowrap py-4 pl-4 pr-3 text-sm font-medium">{{ forloop.counter }}</td>
-                  <td class="px-3 py-4 text-sm flex flex-col gap-2">
-                    <div class="flex place-items-center">
-                      {% if message.is_ai_message %}
-                        {% include "experiments/chat/components/system_icon.html" %}
-                      {% else %}
-                        {% include "experiments/chat/components/user_icon.html" %}
-                      {% endif %}
-                      <div class="grow">
-                        <div class="message-contents">
-                          <p>{{ message.content|render_markdown }}</p>
-                        </div>
-                        <div class="flex flex-col">
-                          {% for file in message.get_attached_files %}
-                            <div class="inline text-sm p-1">
-                              <i class="fa-solid fa-file fa-sm"></i> {{ file.name }}
-                            </div>
-                          {% endfor %}
-                        </div>
-                        <div class="mt-2 pg-text-muted flex justify-between items-center gap-2">
-                          <div>
-                            <i class="fa-solid fa-clock mr-1"></i>
-                            <time datetime="{{ message.created_at.isoformat }}" title="{{ message.created_at.isoformat }}">
-                              {{ message.created_at|date:"DATETIME_FORMAT" }}
-                            </time>
-                          </div>
-                          {% if message.trace_info %}
-                            <div class="tooltip" data-tip="Open Trace on {{ message.trace_info.trace_provider|title }}">
-                              <a class="btn btn-xs btn-square" href="{{ message.trace_info.trace_url }}" target="_blank">
-                                <i class="fa-regular fa-chart-bar"></i>
-                              </a>
-                            </div>
-                          {% endif %}
-                          {% if perms.annotations.add_usercomment %}
-                            <div class="grow">
-                              {% include "annotations/tag_ui.html" with object=message allow_edit=experiment.is_editable %}
-                            </div>
-                          {% endif %}
-                        </div>
+
+  <div class="flow-root">
+    <div class="-mx-4 -my-2 overflow-x-auto sm:-mx-6 lg:-mx-8">
+      <div class="inline-block min-w-full py-2 align-middle sm:px-6 lg:px-8">
+        <table class="min-w-full divide-y divide-gray-300 ">
+          <tbody class="divide-y divide-gray-200" x-data="{commentsRow: null}">
+            {% for message in messages %}
+              <tr
+                class="{% if message.is_ai_message %}bg-sky-100/40 dark:bg-sky-950/40{% endif %}"
+                x-data='{
+                        tags: {{ message.all_tag_names|to_json }},
+                        get isSelected() { return commentsRow === {{ forloop.counter }} },
+                        }'
+              >
+                <td class="whitespace-nowrap py-4 pl-4 pr-3 text-sm font-medium">{{ page_start_index|add:forloop.counter }}</td>
+                <td class="px-3 py-4 text-sm flex flex-col gap-2">
+                  <div class="flex place-items-center">
+                    {% if message.is_ai_message %}
+                      {% include "experiments/chat/components/system_icon.html" %}
+                    {% else %}
+                      {% include "experiments/chat/components/user_icon.html" %}
+                    {% endif %}
+                    <div class="grow">
+                      <div class="message-contents">
+                        <p>{{ message.content|render_markdown }}</p>
                       </div>
-                      {% if perms.annotations.add_usercomment %}
-                        <div class="text-gray-500 min-w-fit">
-                          <button class="whitespace-nowrap btn btn-ghost" @click="commentsRow = (commentsRow === {{ forloop.counter }} ? null : {{ forloop.counter }})">
-                            <i class="fa-regular fa-comment"></i>
-                            <span id="{{ message.comment_count_element_id }}">{{ message.get_user_comments|length }}</span>
-                          </button>
+                      <div class="flex flex-col">
+                        {% for file in message.get_attached_files %}
+                          <div class="inline text-sm p-1">
+                            <i class="fa-solid fa-file fa-sm"></i> {{ file.name }}
+                          </div>
+                        {% endfor %}
+                      </div>
+                      <div class="mt-2 pg-text-muted flex justify-between items-center gap-2">
+                        <div>
+                          <i class="fa-solid fa-clock mr-1"></i>
+                          <time datetime="{{ message.created_at.isoformat }}" title="{{ message.created_at.isoformat }}">
+                            {{ message.created_at|date:"DATETIME_FORMAT" }}
+                          </time>
                         </div>
-                      {% endif %}
+                        {% if message.trace_info %}
+                          <div class="tooltip" data-tip="Open Trace on {{ message.trace_info.trace_provider|title }}">
+                            <a class="btn btn-xs btn-square" href="{{ message.trace_info.trace_url }}" target="_blank">
+                              <i class="fa-regular fa-chart-bar"></i>
+                            </a>
+                          </div>
+                        {% endif %}
+                        {% if perms.annotations.add_usercomment %}
+                          <div class="grow">
+                            {% include "annotations/tag_ui.html" with object=message allow_edit=experiment.is_editable %}
+                          </div>
+                        {% endif %}
+                      </div>
                     </div>
                     {% if perms.annotations.add_usercomment %}
-                      <div
-                        x-show="commentsRow === {{ forloop.counter }}"
-                        x-cloak>
-                        <div class="flex justify-between">
-                          <h3 class="font-medium">Message Comments</h3>
-                          <button class="btn btn-ghost btn-sm" @click="commentsRow = null">
-                            <i class="fa-solid fa-close"></i>
-                          </button>
-                        </div>
-                        {% include "experiments/components/user_comments.html" with object=message allow_edit=experiment.is_editable %}
+                      <div class="text min-w-fit">
+                        <button class="whitespace-nowrap btn btn-ghost" @click="commentsRow = (commentsRow === {{ forloop.counter }} ? null : {{ forloop.counter }})">
+                          <i class="fa-regular fa-comment"></i>
+                          <span id="{{ message.comment_count_element_id }}">{{ message.get_user_comments|length }}</span>
+                        </button>
                       </div>
                     {% endif %}
-                  </td>
-                </tr>
-              {% endfor %}
-            </tbody>
-          </table>
-        </div>
+                  </div>
+                  {% if perms.annotations.add_usercomment %}
+                    <div
+                      x-show="commentsRow === {{ forloop.counter }}"
+                      x-cloak>
+                      <div class="flex justify-between">
+                        <h3 class="font-medium">Message Comments</h3>
+                        <button class="btn btn-ghost btn-sm" @click="commentsRow = null">
+                          <i class="fa-solid fa-close"></i>
+                        </button>
+                      </div>
+                      {% include "experiments/components/user_comments.html" with object=message allow_edit=experiment.is_editable %}
+                    </div>
+                  {% endif %}
+                </td>
+              </tr>
+            {% empty %}
+              <tr>
+                <td colspan="2" class="p-4 text-center text">
+                  {% if search %}
+                    No messages found matching "{{ search }}".
+                  {% else %}
+                    No messages found.
+                  {% endif %}
+                </td>
+              </tr>
+            {% endfor %}
+          </tbody>
+        </table>
+
+        <!-- Pagination -->
+        {% if total_pages > 1 %}
+          <div class="p-4 flex justify-between">
+            <div class="mt-4 flex justify-left">
+              <div>
+                <p class="text">
+                  Showing <span class="font-semibold">{{ page_size|multiply:page|subtract:page_size|add:1 }}</span> to <span class="font-semibold">{{ page_size|multiply:page|minimum:total_messages }}</span> of <span class="font-semibold">{{ total_messages }}</span> messages
+                </p>
+              </div>
+            </div>
+            <div class="flex justify-right">
+              {% if page > 1 %}
+                <a href="#"
+                   class="btn"
+                   hx-get="{% url 'experiments:experiment_session_messages_view' request.team.slug experiment.public_id experiment_session.external_id %}?page={{ page|add:"-1" }}{% if search %}&search={{ search }}{% endif %}"
+                   hx-target="#messages-container">
+                  <i class="fa-solid fa-backward-step"></i> Previous
+                </a>
+              {% endif %}
+              {% if page < total_pages %}
+                <a href="#"
+                   class="btn"
+                   hx-get="{% url 'experiments:experiment_session_messages_view' request.team.slug experiment.public_id experiment_session.external_id %}?page={{ page|add:"1" }}{% if search %}&search={{ search }}{% endif %}"
+                   hx-target="#messages-container">
+                  Next <i class="fa-solid fa-forward-step"></i>
+                </a>
+              {% endif %}
+            </div>
+          </div>
+        {% endif %}
       </div>
     </div>
   </div>
