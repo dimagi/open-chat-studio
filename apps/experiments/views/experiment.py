@@ -1169,6 +1169,9 @@ def start_session_from_invite(request, team_slug: str, experiment_id: uuid.UUID,
     if not request.experiment_session.participant:
         raise Http404()
 
+    if not consent:
+        return _record_consent_and_redirect(team_slug, request.experiment, request.experiment_session)
+
     if request.method == "POST":
         form = ConsentForm(consent, request.POST, initial=initial)
         if form.is_valid():
