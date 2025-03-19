@@ -16,12 +16,6 @@ if TYPE_CHECKING:
     from .base import BaseTracer, EventLevel
 
 
-def _get_langfuse_tracer():
-    from .langfuse import LangFuseTracer
-
-    return LangFuseTracer
-
-
 class TracingServiceWrapper:
     def __init__(self, tracers: list[BaseTracer]):
         self._tracers = tracers

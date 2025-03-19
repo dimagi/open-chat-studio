@@ -464,12 +464,12 @@ class TraceProviderType(models.TextChoices):
                 return forms.LangsmithTraceProviderForm
         raise Exception(f"No config form configured for {self}")
 
-    def get_service(self, config: dict) -> tracing.TraceService:
+    def get_service(self, config: dict) -> tracing.BaseTracer:
         match self:
             case TraceProviderType.langfuse:
-                return tracing.LangFuseTraceService(self, config)
+                return tracing.LangFuseTracer(config)
             case TraceProviderType.langsmith:
-                return tracing.LangSmithTraceService(self, config)
+                return tracing.LangSmithTracer(config)
         raise Exception(f"No tracing service configured for {self}")
 
 
@@ -490,5 +490,5 @@ class TraceProvider(BaseTeamModel):
     def type_enum(self):
         return TraceProviderType(self.type)
 
-    def get_service(self) -> tracing.TraceService:
+    def get_service(self) -> tracing.BaseTracer:
         return self.type_enum.get_service(self.config)
