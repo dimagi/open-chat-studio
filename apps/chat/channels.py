@@ -37,6 +37,7 @@ from apps.experiments.models import (
 )
 from apps.service_providers.llm_service.runnables import GenerationCancelled
 from apps.service_providers.speech_service import SynthesizedAudio
+from apps.service_providers.tracing.trace_service import TracingServiceWrapper
 from apps.slack.utils import parse_session_external_id
 from apps.users.models import CustomUser
 
@@ -121,11 +122,14 @@ class ChannelBase(ABC):
         self.experiment = experiment
         self.experiment_channel = experiment_channel
         self.experiment_session = experiment_session
-        self.message: BaseMessage = None
-        self._user_query: str = None
-        self.bot = get_bot(experiment_session, experiment=experiment) if experiment_session else None
+        self.message: BaseMessage | None = None
+        self._user_query: str | None = None
         self._participant_identifier = experiment_session.participant.identifier if experiment_session else None
         self._is_user_message = False
+
+        # Initialize tracing
+        self.tracer = self._setup_tracer()
+        self.bot = get_bot(experiment_session, experiment=experiment) if experiment_session else None
 
     @classmethod
     def start_new_session(
@@ -239,10 +243,15 @@ class ChannelBase(ABC):
             self._user_query = self._extract_user_query()
         return self._user_query
 
+    @cached_property
+    def trace_inputs(self):
+        return {"message": self.message.model_dump()}
+
     def _add_message(self, message):
         """Adds the message to the handler in order to extract session information"""
-        self._user_query = None
         self.message = message
+        self._user_query = None
+        del self.trace_inputs
 
         if not self._participant_is_allowed():
             raise ParticipantNotAllowedException()
@@ -272,29 +281,45 @@ class ChannelBase(ABC):
             self.send_message_to_user("Sorry, you are not allowed to chat to this bot")
             return ""
 
+        # Initialize the tracer if we have a session
+        if self.experiment_session and self.participant_identifier:
+            session_id = str(self.experiment_session.id)
+            run_name = f"{self.experiment.name}-{self.experiment_channel.platform}"
+            user_id = self.participant_identifier
+            self.tracer.initialize(session_id, run_name, user_id)
+
         try:
-            if not self.is_message_type_supported():
-                return self._handle_unsupported_message()
+            # Start tracing this request
+            trace_id = "process_message"
+            with self.tracer.trace_context(trace_id, "process_user_message", self.trace_inputs):
+                if not self.is_message_type_supported():
+                    result = self._handle_unsupported_message()
+                    self.tracer.set_outputs(trace_id, {"response": result, "status": "unsupported_message_type"})
+                    return result
 
-            if self.experiment_channel.platform != ChannelPlatform.WEB:
-                if self._is_reset_conversation_request():
+                if self.experiment_channel.platform != ChannelPlatform.WEB:
                     # Webchats' statuses are updated through an "external" flow
-                    return ""
-
-                if self.experiment.conversational_consent_enabled and self.experiment.consent_form_id:
-                    if self._should_handle_pre_conversation_requirements():
-                        self._handle_pre_conversation_requirements()
+                    if self._is_reset_conversation_request():
+                        self.tracer.set_outputs(trace_id, {"status": "reset_conversation"})
                         return ""
-                else:
-                    # If `conversational_consent_enabled` is not enabled, we should just make sure that the session's
-                    # status is ACTIVE
-                    self.experiment_session.update_status(SessionStatus.ACTIVE)
 
-            enqueue_static_triggers.delay(self.experiment_session.id, StaticTriggerType.NEW_HUMAN_MESSAGE)
-            response = self._handle_supported_message()
+                    if self.experiment.conversational_consent_enabled and self.experiment.consent_form_id:
+                        if self._should_handle_pre_conversation_requirements():
+                            self._handle_pre_conversation_requirements()
+                            return ""
+                    else:
+                        # If `conversational_consent_enabled` is not enabled,
+                        # we should just make sure that the session's status is ACTIVE
+                        self.experiment_session.update_status(SessionStatus.ACTIVE)
+
+                enqueue_static_triggers.delay(self.experiment_session.id, StaticTriggerType.NEW_HUMAN_MESSAGE)
+                response = self._handle_supported_message()
+                self.tracer.set_outputs(trace_id, {"response": response, "status": "success"})
+            self.tracer.end({"response": response, "status": "success"})
             return response
         except Exception as e:
             self._inform_user_of_error()
+            self.tracer.end({"status": "error"}, error=e)
             raise e
 
     def _handle_pre_conversation_requirements(self):
@@ -332,10 +357,14 @@ class ChannelBase(ABC):
 
     def start_conversation(self):
         self.experiment_session.update_status(SessionStatus.ACTIVE)
+        self.tracer.event("start_conversation", "Starting the conversation")
         # This is technically the start of the conversation
-        if self.experiment.seed_message:
-            bot_response = self._generate_response_for_user(self.experiment.seed_message)
-            self.send_message_to_user(bot_response)
+        if seed_message := self.experiment.seed_message:
+            trace_id = "seed_message"
+            with self.tracer.trace_context(trace_id, "generate_seed_message", {"input": seed_message}):
+                bot_response = self._generate_response_for_user(seed_message)
+                self.send_message_to_user(bot_response)
+                self.tracer.set_outputs(trace_id, {"response": bot_response, "status": "success"})
 
     def _chat_initiated(self):
         """The user initiated the chat and we need to get their consent before continuing the conversation"""
@@ -348,6 +377,7 @@ class ChannelBase(ABC):
         bot_message = f"{consent_text}\n\n{confirmation_text}"
         self._add_message_to_history(bot_message, ChatMessageType.AI)
         self.send_text_to_user(bot_message)
+        self.tracer.event("ask_user_for_consent", "Asking user for consent")
 
     def _ask_user_to_take_survey(self):
         pre_survey_link = self.experiment_session.get_pre_survey_link(self.experiment)
@@ -355,6 +385,7 @@ class ChannelBase(ABC):
         bot_message = confirmation_text.format(survey_link=pre_survey_link)
         self._add_message_to_history(bot_message, ChatMessageType.AI)
         self.send_text_to_user(bot_message)
+        self.tracer.event("ask_user_to_take_survey", "Asking user to take the pre-survey")
 
     def _should_handle_pre_conversation_requirements(self):
         """Checks to see if the user went through the pre-conversation formalities, such as giving consent and filling
@@ -391,47 +422,73 @@ class ChannelBase(ABC):
 
     def _handle_supported_message(self):
         self.submit_input_to_llm()
-        response = self._get_bot_response(message=self.user_query)
+
+        # Trace LLM processing in its own span
+        trace_id = "llm_processing"
+        with self.tracer.trace_context(trace_id, "llm_response_generation", self.trace_inputs):
+            response = self._get_bot_response(message=self.user_query)
+            self.tracer.set_outputs(trace_id, {"response": response})
+
         self.send_message_to_user(response)
         # Returning the response here is a bit of a hack to support chats through the web UI while trying to
         # use a coherent interface to manage / handle user messages
         return response
 
-    def _handle_unsupported_message(self):
-        return self.send_text_to_user(self._unsupported_message_type_response())
+    def _handle_unsupported_message(self) -> str:
+        response = self._unsupported_message_type_response()
+        self.send_text_to_user(response)
+        return response
 
     def _reply_voice_message(self, text: str):
         text, extracted_urls = strip_urls_and_emojis(text)
 
-        voice_provider = self.experiment.voice_provider
-        synthetic_voice = self.experiment.synthetic_voice
-        if self.experiment.use_processor_bot_voice and (
-            self.bot.processor_experiment and self.bot.processor_experiment.voice_provider
-        ):
-            voice_provider = self.bot.processor_experiment.voice_provider
-            synthetic_voice = self.bot.processor_experiment.synthetic_voice
+        # Trace voice synthesis
+        trace_id = "voice_synthesis"
+        inputs = {"text_length": len(text), "has_urls": bool(extracted_urls)}
 
-        speech_service = voice_provider.get_speech_service()
-        try:
-            synthetic_voice_audio = speech_service.synthesize_voice(text, synthetic_voice)
-            self.send_voice_to_user(synthetic_voice_audio)
-        except AudioSynthesizeException as e:
-            logger.exception(e)
-            self.send_text_to_user(text)
+        with self.tracer.trace_context(trace_id, "audio_synthesis", inputs):
+            voice_provider = self.experiment.voice_provider
+            synthetic_voice = self.experiment.synthetic_voice
+            if self.experiment.use_processor_bot_voice and (
+                self.bot.processor_experiment and self.bot.processor_experiment.voice_provider
+            ):
+                voice_provider = self.bot.processor_experiment.voice_provider
+                synthetic_voice = self.bot.processor_experiment.synthetic_voice
 
-        if extracted_urls:
-            urls_text = "\n".join(extracted_urls)
-            self.send_text_to_user(urls_text)
+            speech_service = voice_provider.get_speech_service()
+            try:
+                synthetic_voice_audio = speech_service.synthesize_voice(text, synthetic_voice)
+                self.send_voice_to_user(synthetic_voice_audio)
+                self.tracer.set_outputs(
+                    trace_id, {"status": "success", "duration": getattr(synthetic_voice_audio, "duration", None)}
+                )
+            except AudioSynthesizeException as e:
+                logger.exception(e)
+                self.send_text_to_user(text)
+                self.tracer.set_outputs(trace_id, {"status": "error", "error": str(e)})
+                self.tracer.event("voice_synthesis_failed", f"Voice synthesis failed: {str(e)}", level="ERROR")
+
+            if extracted_urls:
+                urls_text = "\n".join(extracted_urls)
+                self.send_text_to_user(urls_text)
 
     def _get_voice_transcript(self) -> str:
         # Indicate to the user that the bot is busy processing the message
         self.transcription_started()
 
-        audio_file = self.get_message_audio()
-        transcript = self._transcribe_audio(audio_file)
-        if self.experiment.echo_transcript:
-            self.echo_transcript(transcript)
-        self.transcription_finished(transcript)
+        # Trace voice processing
+        trace_id = "voice_transcription"
+        inputs = {"content_type": "voice"}
+
+        with self.tracer.trace_context(trace_id, "audio_transcription", inputs):
+            audio_file = self.get_message_audio()
+            transcript = self._transcribe_audio(audio_file)
+            self.tracer.set_outputs(trace_id, {"transcript": transcript})
+
+            if self.experiment.echo_transcript:
+                self.echo_transcript(transcript)
+            self.transcription_finished(transcript)
+
         return transcript
 
     def _transcribe_audio(self, audio: BytesIO) -> str:
@@ -546,6 +603,17 @@ class ChannelBase(ABC):
 
     def is_message_type_supported(self) -> bool:
         return self.message.content_type is not None and self.message.content_type in self.supported_message_types
+
+    def _setup_tracer(self) -> TracingServiceWrapper:
+        """Set up the tracing service wrapper with available tracers from the experiment"""
+        tracers = []
+        if self.experiment and self.experiment.trace_provider:
+            try:
+                tracers.append(self.experiment.trace_provider.get_service())
+            except Exception as e:  # noqa: BLE001
+                logger.error(f"Error setting up trace provider: {e}")
+
+        return TracingServiceWrapper(tracers)
 
     def _unsupported_message_type_response(self):
         """Generates a suitable response to the user when they send unsupported messages"""
