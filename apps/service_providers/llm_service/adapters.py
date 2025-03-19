@@ -26,6 +26,7 @@ from apps.service_providers.llm_service.prompt_context import PromptTemplateCont
 if TYPE_CHECKING:
     from apps.pipelines.nodes.nodes import AssistantNode, LLMResponseWithPrompt
     from apps.service_providers.models import LlmProviderModel
+    from apps.service_providers.tracing.trace_service import TracingServiceWrapper
 
 
 class BaseAdapter(metaclass=ABCMeta):
@@ -36,12 +37,10 @@ class BaseAdapter(metaclass=ABCMeta):
         return self.get_llm_service().get_callback_handler(self.provider_model_name)
 
     def get_trace_metadata(self) -> dict:
-        if self.trace_service:
-            trace_info = self.trace_service.get_current_trace_info()
+        if self.tracer:
+            trace_info = self.tracer.get_current_trace_info()
             if trace_info:
-                return {
-                    "trace_info": {**trace_info.model_dump(), "trace_provider": self.trace_service.type},
-                }
+                return {"trace_info_1": trace_info}
         return {}
 
     def get_llm_service(self):
@@ -75,7 +74,7 @@ class ChatAdapter(BaseAdapter):
         disabled_tools: set[str] = None,
         input_formatter: str | None = None,
         source_material_id: int | None = None,
-        trace_service=None,
+        tracer=None,
         save_message_metadata_only=False,
     ):
         self.session = session
@@ -88,14 +87,14 @@ class ChatAdapter(BaseAdapter):
         self.disabled_tools = disabled_tools
         self.input_formatter = input_formatter
         self.source_material_id = source_material_id
-        self.trace_service = trace_service
+        self.tracer = tracer
 
         self.team = session.team
         self.template_context = PromptTemplateContext(session, source_material_id)
         self.save_message_metadata_only = save_message_metadata_only
 
     @classmethod
-    def for_experiment(cls, experiment: Experiment, session: ExperimentSession, trace_service=None) -> Self:
+    def for_experiment(cls, experiment: Experiment, session: ExperimentSession, tracer=None) -> Self:
         return cls(
             session=session,
             provider_model_name=experiment.get_llm_provider_model_name(),
@@ -107,7 +106,7 @@ class ChatAdapter(BaseAdapter):
             disabled_tools=None,  # not supported for simple experiments
             input_formatter=experiment.input_formatter,
             source_material_id=experiment.source_material_id,
-            trace_service=trace_service,
+            tracer=tracer,
         )
 
     @classmethod
@@ -119,6 +118,7 @@ class ChatAdapter(BaseAdapter):
         provider_model: "LlmProviderModel",
         tools: list[BaseTool],
         disabled_tools: set[str] = None,
+        tracer: TracingServiceWrapper | None = None,
     ) -> Self:
         return cls(
             session=session,
@@ -131,7 +131,7 @@ class ChatAdapter(BaseAdapter):
             disabled_tools=disabled_tools,
             input_formatter="{input}",
             source_material_id=node.source_material_id,
-            trace_service=session.experiment.trace_service,
+            tracer=tracer,
             save_message_metadata_only=True,
         )
 
@@ -158,7 +158,7 @@ class AssistantAdapter(BaseAdapter):
         assistant: OpenAiAssistant,
         citations_enabled: bool,
         input_formatter: str | None = None,
-        trace_service=None,
+        tracer: TracingServiceWrapper | None = None,
         save_message_metadata_only: bool = False,
         disabled_tools: set[str] = None,
     ):
@@ -167,7 +167,7 @@ class AssistantAdapter(BaseAdapter):
         self.llm_service = assistant.get_llm_service()
         self.citations_enabled = citations_enabled
         self.input_formatter = input_formatter
-        self.trace_service = trace_service
+        self.tracer = tracer
         self.save_message_metadata_only = save_message_metadata_only
 
         self.provider_model_name = assistant.llm_provider_model.name
@@ -177,28 +177,28 @@ class AssistantAdapter(BaseAdapter):
         self.disabled_tools = disabled_tools
         self.template_context = PromptTemplateContext(session, source_material_id=None)
 
-    @staticmethod
-    def for_experiment(experiment: Experiment, session: ExperimentSession, trace_service=None) -> Self:
-        return AssistantAdapter(
+    @classmethod
+    def for_experiment(cls, experiment: Experiment, session: ExperimentSession, tracer=None) -> Self:
+        return cls(
             session=session,
             assistant=experiment.assistant,
             citations_enabled=experiment.citations_enabled,
             input_formatter=experiment.input_formatter,
-            trace_service=trace_service,
+            tracer=tracer,
             disabled_tools=None,  # not supported for simple experiments
         )
 
-    @staticmethod
+    @classmethod
     def for_pipeline(
-        session: ExperimentSession, node: "AssistantNode", trace_service=None, disabled_tools: set[str] = None
+        cls, session: ExperimentSession, node: "AssistantNode", tracer=None, disabled_tools: set[str] = None
     ) -> Self:
         assistant = OpenAiAssistant.objects.get(id=node.assistant_id)
-        return AssistantAdapter(
+        return cls(
             session=session,
             assistant=assistant,
             citations_enabled=node.citations_enabled,
             input_formatter=node.input_formatter,
-            trace_service=trace_service,
+            tracer=tracer,
             save_message_metadata_only=True,
             disabled_tools=disabled_tools,
         )
@@ -222,8 +222,8 @@ class AssistantAdapter(BaseAdapter):
     @thread_id.setter
     def thread_id(self, value):
         key = Chat.MetadataKeys.OPENAI_THREAD_ID
-        if self.trace_service:
-            self.trace_service.update_trace({key: value})
+        if self.tracer:
+            self.tracer.update_trace({key: value})
         self.session.chat.set_metadata(key, value)
 
     def update_thread_id(self, thread_id: str):

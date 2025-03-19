@@ -4,7 +4,7 @@ from typing import TYPE_CHECKING, Any
 from langsmith import Client, RunTree
 from typing_extensions import override
 
-from .base import BaseTracer, EventLevel
+from .base import BaseTracer, EventLevel, TraceInfo
 
 if TYPE_CHECKING:
     from uuid import UUID
@@ -13,6 +13,8 @@ if TYPE_CHECKING:
 
 
 class LangSmithTracer(BaseTracer):
+    provider_type = "langsmith"
+
     def __init__(self, client_config: dict):
         self.spans: dict[str, RunTree] = OrderedDict()  # spans identified by span_id
         self.root_run_tree: RunTree | None = None
@@ -166,3 +168,13 @@ class LangSmithTracer(BaseTracer):
         )
         callback.latest_run = target
         return callback
+
+    def get_current_trace_info(self) -> TraceInfo | None:
+        if not self._ready or not self.root_run_tree:
+            return None
+
+        return TraceInfo(
+            provider_type=self.trace_provider_type,
+            trace_id=str(self.root_run_tree.id),
+            trace_url=self.root_run_tree.get_url(),
+        )

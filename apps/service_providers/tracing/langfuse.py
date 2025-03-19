@@ -7,7 +7,7 @@ from langfuse.client import StatefulClient
 from loguru import logger
 from typing_extensions import override
 
-from .base import BaseTracer, EventLevel
+from .base import BaseTracer, EventLevel, TraceInfo
 
 if TYPE_CHECKING:
     from uuid import UUID
@@ -16,9 +16,11 @@ if TYPE_CHECKING:
 
 
 class LangFuseTracer(BaseTracer):
+    provider_type = "langfuse"
+
     def __init__(self, config: dict):
         self.spans: dict = OrderedDict()  # spans that are not ended
-        self.trace = None
+        self.trace: StatefulClient | None = None
         self._client = None
         self._ready: bool = self.setup_langfuse(config) if config else False
 
@@ -111,6 +113,14 @@ class LangFuseTracer(BaseTracer):
         # get callback from parent span
         stateful_client = self.spans[next(reversed(self.spans))] if len(self.spans) > 0 else self.trace
         return CallbackHandler(stateful_client=stateful_client, update_stateful_client=False)
+
+    def get_current_trace_info(self) -> TraceInfo | None:
+        if not self._ready or not self.trace:
+            return None
+
+        return TraceInfo(
+            provider_type=self.trace_provider_type, trace_id=self.trace.trace_id, trace_url=self.trace.get_trace_url()
+        )
 
     def _get_current_span(self) -> StatefulClient:
         if len(self.spans) > 0:

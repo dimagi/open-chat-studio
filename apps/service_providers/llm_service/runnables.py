@@ -32,6 +32,7 @@ from apps.utils.prompt import OcsPromptTemplate
 
 if TYPE_CHECKING:
     from apps.channels.datamodels import Attachment
+    from apps.service_providers.tracing.trace_service import TracingServiceWrapper
 
 logger = logging.getLogger("ocs.runnables")
 
@@ -46,14 +47,15 @@ class GenerationCancelled(Exception):
 
 
 def create_experiment_runnable(
-    experiment: Experiment, session: ExperimentSession, disable_tools: bool = False, trace_service: Any = None
+    experiment: Experiment,
+    session: ExperimentSession,
+    disable_tools: bool = False,
+    tracer: TracingServiceWrapper = None,
 ):
     """Create an experiment runnable based on the experiment configuration."""
-
     if assistant := experiment.assistant:
         history_manager = ExperimentHistoryManager.for_assistant(session=session, experiment=experiment)
-        assistant_adapter = AssistantAdapter.for_experiment(experiment, session, trace_service)
-        runnable = None
+        assistant_adapter = AssistantAdapter.for_experiment(experiment, session, tracer)
         if assistant.tools_enabled and not disable_tools:
             runnable = AgentAssistantChat(adapter=assistant_adapter, history_manager=history_manager)
         else:
@@ -71,11 +73,10 @@ def create_experiment_runnable(
     history_manager = ExperimentHistoryManager.for_llm_chat(
         session=session,
         experiment=experiment,
-        trace_service=trace_service,
+        tracer=tracer,
     )
 
-    runnable = None
-    chat_adapter = ChatAdapter.for_experiment(experiment=experiment, session=session, trace_service=trace_service)
+    chat_adapter = ChatAdapter.for_experiment(experiment=experiment, session=session, tracer=tracer)
     if experiment.tools_enabled and not disable_tools:
         runnable = AgentLLMChat(adapter=chat_adapter, history_manager=history_manager)
     else:

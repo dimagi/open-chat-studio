@@ -513,7 +513,7 @@ class ChannelBase(ABC):
 
     def _get_bot(self):
         if not self._bot:
-            self._bot = get_bot(self.experiment_session, experiment=self.experiment)
+            self._bot = get_bot(self.experiment_session, experiment=self.experiment, tracer=self.tracer)
         return self._bot
 
     def _ensure_sessions_exists(self):

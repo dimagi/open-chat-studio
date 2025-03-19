@@ -17,6 +17,7 @@ from apps.service_providers.llm_service.runnables import create_experiment_runna
 
 if TYPE_CHECKING:
     from apps.channels.datamodels import Attachment
+    from apps.service_providers.tracing.trace_service import TracingServiceWrapper
 
 
 def create_conversation(
@@ -41,11 +42,16 @@ def notify_users_of_violation(session_id: int, safety_layer_id: int):
     notify_users_of_safety_violations_task.delay(session_id, safety_layer_id)
 
 
-def get_bot(session: ExperimentSession, experiment: Experiment | None = None, disable_tools: bool = False):
+def get_bot(
+    session: ExperimentSession,
+    experiment: Experiment | None = None,
+    disable_tools: bool = False,
+    tracer: TracingServiceWrapper | None = None,
+):
     experiment = experiment or session.experiment_version
     if experiment.pipeline_id:
-        return PipelineBot(session, experiment=experiment, disable_reminder_tools=disable_tools)
-    return TopicBot(session, experiment, disable_tools=disable_tools)
+        return PipelineBot(session, experiment=experiment, disable_reminder_tools=disable_tools, tracer=tracer)
+    return TopicBot(session, experiment, disable_tools=disable_tools, tracer=tracer)
 
 
 class TopicBot:
@@ -62,9 +68,16 @@ class TopicBot:
         conversation history of the participant's chat with the router / main bot.
     """
 
-    def __init__(self, session: ExperimentSession, experiment: Experiment | None = None, disable_tools: bool = False):
+    def __init__(
+        self,
+        session: ExperimentSession,
+        experiment: Experiment | None = None,
+        disable_tools: bool = False,
+        tracer: TracingServiceWrapper = None,
+    ):
         self.experiment = experiment or session.experiment_version
         self.disable_tools = disable_tools
+        self.tracer = tracer
         self.prompt = self.experiment.prompt_text
         self.input_formatter = self.experiment.input_formatter
         self.llm = self.experiment.get_chat_model()
@@ -85,7 +98,6 @@ class TopicBot:
         self.default_tag = None
         self.terminal_chain = None
         self.processor_experiment = None
-        self.trace_service = self.experiment.trace_service
 
         # The chain that generated the AI message
         self.generator_chain = None
@@ -94,7 +106,7 @@ class TopicBot:
     def _initialize(self):
         for child_route in self.child_experiment_routes:
             child_runnable = create_experiment_runnable(
-                child_route.child, self.session, self.disable_tools, trace_service=self.trace_service
+                child_route.child, self.session, self.disable_tools, tracer=self.tracer
             )
             self.child_chains[child_route.keyword.lower().strip()] = child_runnable
             if child_route.is_default:
@@ -104,17 +116,13 @@ class TopicBot:
         if self.child_chains and not self.default_child_chain:
             self.default_tag, self.default_child_chain = list(self.child_chains.items())[0]
 
-        self.chain = create_experiment_runnable(
-            self.experiment, self.session, self.disable_tools, trace_service=self.trace_service
-        )
+        self.chain = create_experiment_runnable(self.experiment, self.session, self.disable_tools, tracer=self.tracer)
 
         terminal_route = (
             ExperimentRoute.objects.select_related("child").filter(parent=self.experiment, type="terminal").first()
         )
         if terminal_route:
-            self.terminal_chain = create_experiment_runnable(
-                terminal_route.child, self.session, trace_service=self.trace_service
-            )
+            self.terminal_chain = create_experiment_runnable(terminal_route.child, self.session, tracer=self.tracer)
 
         # load up the safety bots. They should not be agents. We don't want them using tools (for now)
         self.safety_bots = [
@@ -206,20 +214,7 @@ class TopicBot:
 
             return response
 
-        config = {}
-        if self.trace_service:
-            callback = self.trace_service.get_callback(
-                participant_id=str(self.session.participant.identifier),
-                session_id=str(self.session.external_id),
-            )
-            config = {
-                "run_name": self.experiment.name,
-                "callbacks": [callback],
-                "metadata": {
-                    "participant-id": str(self.session.participant.identifier),
-                    "session-id": str(self.session.external_id),
-                },
-            }
+        config = {"callbacks": self.tracer.get_langchain_callbacks()} if self.tracer else {}
         return main_bot_chain.invoke(user_input, config=config)
 
     def get_ai_message_id(self) -> int | None:
@@ -284,11 +279,18 @@ class SafetyBot:
 
 
 class PipelineBot:
-    def __init__(self, session: ExperimentSession, experiment: Experiment, disable_reminder_tools=False):
+    def __init__(
+        self,
+        session: ExperimentSession,
+        experiment: Experiment,
+        disable_reminder_tools=False,
+        tracer: TracingServiceWrapper = None,
+    ):
         self.experiment = experiment
         self.session = session
         self.ai_message_id = None
         self.disable_reminder_tools = disable_reminder_tools
+        self.tracer = tracer
 
     def process_input(self, user_input: str, save_input_to_history=True, attachments: list["Attachment"] | None = None):
         attachments = attachments or []

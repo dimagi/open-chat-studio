@@ -1,6 +1,8 @@
 from abc import ABC, abstractmethod
 from typing import TYPE_CHECKING, Any, Literal
 
+from pydantic import BaseModel
+
 if TYPE_CHECKING:
     from uuid import UUID
 
@@ -10,7 +12,15 @@ if TYPE_CHECKING:
 EventLevel = Literal["DEBUG", "DEFAULT", "WARNING", "ERROR"]
 
 
+class TraceInfo(BaseModel):
+    provider_type: str
+    trace_id: str
+    trace_url: str
+
+
 class BaseTracer(ABC):
+    trace_provider_type = None
+
     @abstractmethod
     def __init__(self, client_config: dict):
         raise NotImplementedError
@@ -65,4 +75,8 @@ class BaseTracer(ABC):
 
     @abstractmethod
     def get_langchain_callback(self) -> BaseCallbackHandler | None:
+        raise NotImplementedError
+
+    @abstractmethod
+    def get_current_trace_info(self) -> TraceInfo | None:
         raise NotImplementedError

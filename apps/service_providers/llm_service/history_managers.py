@@ -1,5 +1,5 @@
 from abc import ABCMeta, abstractmethod
-from typing import Self
+from typing import TYPE_CHECKING, Self
 
 from langchain_core.language_models.chat_models import BaseChatModel
 
@@ -8,6 +8,9 @@ from apps.chat.conversation import compress_chat_history, compress_pipeline_chat
 from apps.chat.models import ChatMessage, ChatMessageType
 from apps.experiments.models import Experiment, ExperimentSession
 from apps.pipelines.models import PipelineChatHistory, PipelineChatHistoryTypes
+
+if TYPE_CHECKING:
+    from apps.service_providers.tracing.trace_service import TracingServiceWrapper
 
 
 class BaseHistoryManager(metaclass=ABCMeta):
@@ -67,12 +70,10 @@ class BaseHistoryManager(metaclass=ABCMeta):
         return chat_message
 
     def get_trace_metadata(self) -> dict:
-        if self.trace_service:
-            trace_info = self.trace_service.get_current_trace_info()
+        if self.tracer:
+            trace_info = self.tracer.get_current_trace_info()
             if trace_info:
-                return {
-                    "trace_info": {**trace_info.model_dump(), "trace_provider": self.trace_service.type},
-                }
+                return {"trace_info_1": trace_info}
         return {}
 
 
@@ -83,12 +84,12 @@ class ExperimentHistoryManager(BaseHistoryManager):
         experiment: Experiment | None = None,
         max_token_limit: int | None = None,
         chat_model: BaseChatModel | None = None,
-        trace_service=None,
+        tracer: TracingServiceWrapper | None = None,
     ):
         self.session = session
         self.max_token_limit = max_token_limit
         self.chat_model = chat_model
-        self.trace_service = trace_service
+        self.tracer = tracer
         self.ai_message = None
 
         # TODO: Think about passing this in as context metadata rather
@@ -100,14 +101,14 @@ class ExperimentHistoryManager(BaseHistoryManager):
         cls,
         session: ExperimentSession,
         experiment: Experiment,
-        trace_service=None,
+        tracer=None,
     ) -> Self:
         return cls(
             session=session,
             experiment=experiment,
             max_token_limit=experiment.max_token_limit,
             chat_model=experiment.get_chat_model(),
-            trace_service=trace_service or experiment.trace_service,
+            tracer=tracer,
         )
 
     @classmethod
@@ -153,6 +154,7 @@ class PipelineHistoryManager(BaseHistoryManager):
         history_name: str | None = None,
         max_token_limit: int | None = None,
         chat_model: BaseChatModel | None = None,
+        tracer: TracingServiceWrapper | None = None,
     ):
         self.session = session
         self.node_id = node_id
@@ -160,7 +162,7 @@ class PipelineHistoryManager(BaseHistoryManager):
         self.history_name = history_name
         self.max_token_limit = max_token_limit
         self.chat_model = chat_model
-        self.trace_service = session.experiment.trace_service if session else None
+        self.tracer = tracer
         self.ai_message = None
 
         self.input_message_metadata = None
