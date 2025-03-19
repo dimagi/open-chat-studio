@@ -105,8 +105,9 @@ class FileDetails(BaseDetailsView):
 
 
 @require_POST
-@transaction.atomic()
+@login_and_team_required
 @permission_required("files.add_file")
+@transaction.atomic()
 def upload_files(request, team_slug: str):
     """Upload files to a collection"""
     # TODO: Check collection size and error if it's too large with the new files added
@@ -138,9 +139,10 @@ def delete_file(request, team_slug: str, pk: int):
     return redirect(reverse("documents:repositories", kwargs={"team_slug": team_slug, "tab_name": "files"}))
 
 
-@login_and_team_required
 @require_POST
+@login_and_team_required
 @permission_required("files.change_file")
+@transaction.atomic()
 def edit_file(request, team_slug: str, pk: int):
     file = get_object_or_404(File, team__slug=team_slug, id=pk)
     file.name = request.POST.get("name")
@@ -207,6 +209,8 @@ class CollectionDetails(BaseDetailsView):
 
 
 @require_POST
+@login_and_team_required
+@permission_required("documents.add_repository")
 @transaction.atomic()
 def new_collection(request, team_slug: str):
     """Create a new collection"""
@@ -225,8 +229,8 @@ def delete_collection(request, team_slug: str, pk: int):
     return redirect(reverse("documents:repositories", kwargs={"team_slug": team_slug, "tab_name": "collections"}))
 
 
-@login_and_team_required
 @require_POST
+@login_and_team_required
 @permission_required("documents.change_repository")
 def edit_collection(request, team_slug: str, pk: int):
     collection = get_object_or_404(Repository, team__slug=team_slug, id=pk, type=RepositoryType.COLLECTION)
