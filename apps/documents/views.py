@@ -1,5 +1,6 @@
 import json
 
+from django.conf import settings
 from django.contrib import messages
 from django.contrib.auth.decorators import permission_required
 from django.contrib.auth.mixins import PermissionRequiredMixin
@@ -10,7 +11,7 @@ from django.views.decorators.http import require_POST
 from django.views.generic import DetailView, ListView, TemplateView
 
 from apps.documents.models import Repository, RepositoryType
-from apps.files.models import MAX_SUMMARY_LENGTH, File, FilePurpose
+from apps.files.models import File, FilePurpose
 from apps.teams.decorators import login_and_team_required
 from apps.teams.mixins import LoginAndTeamRequiredMixin
 from apps.utils.search import similarity_search
@@ -29,7 +30,8 @@ class RepositoryHome(LoginAndTeamRequiredMixin, TemplateView):
             "collections_list_url": reverse("documents:collections_list", kwargs={"team_slug": team_slug}),
             "new_collection_url": reverse("documents:new_collection", kwargs={"team_slug": team_slug}),
             "files_count": File.objects.filter(team__slug=team_slug, purpose=FilePurpose.COLLECTION).count(),
-            "max_summary_length": MAX_SUMMARY_LENGTH,
+            "max_summary_length": settings.MAX_SUMMARY_LENGTH,
+            "supported_file_types": settings.MEDIA_SUPPORTED_FILE_TYPES,
             "collections_count": Repository.objects.filter(
                 team__slug=team_slug, type=RepositoryType.COLLECTION
             ).count(),
@@ -88,7 +90,7 @@ class FileDetails(BaseDetailsView):
         file = self.get_object()
         collection_names = file.repository_set.filter(type=RepositoryType.COLLECTION).values_list("name", flat=True)
         context["current_collections"] = list(collection_names)
-        context["max_summary_length"] = MAX_SUMMARY_LENGTH
+        context["max_summary_length"] = settings.MAX_SUMMARY_LENGTH
 
         context["edit_url"] = reverse(
             "documents:edit_file", kwargs={"team_slug": self.kwargs["team_slug"], "pk": file.id}
