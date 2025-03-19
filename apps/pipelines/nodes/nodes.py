@@ -760,9 +760,7 @@ class AssistantNode(PipelineNode):
             trace_service.initialize_from_callback_manager(self._config.get("callbacks"))
 
         history_manager = PipelineHistoryManager.for_assistant()
-        adapter = AssistantAdapter.for_pipeline(
-            session=session, node=self, trace_service=trace_service, disabled_tools=self.disabled_tools
-        )
+        adapter = AssistantAdapter.for_pipeline(session=session, node=self, disabled_tools=self.disabled_tools)
 
         allowed_tools = adapter.get_allowed_tools()
         if len(adapter.tools) != len(allowed_tools):
