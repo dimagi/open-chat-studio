@@ -21,13 +21,5 @@
                 {{ object.file_names|join:', ' }}
             </dd>
         </div>
-
-        <div class="py-3 col-span-2">
-            <dt class="text-sm font-medium">Summary</dt>
-            <dd class="text-sm">
-                <textarea name="summary" x-cloak x-show="editing" rows="2" cols="40" class="input input-bordered">{{ object.summary }}</textarea>
-                <span x-show="!editing">{{ object.summary }}</span>
-            </dd>
-        </div>
     </dl>
 {% endblock %}

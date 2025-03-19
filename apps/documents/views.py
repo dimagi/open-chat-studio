@@ -232,6 +232,5 @@ def delete_collection(request, team_slug: str, pk: int):
 def edit_collection(request, team_slug: str, pk: int):
     collection = get_object_or_404(Repository, team__slug=team_slug, id=pk, type=RepositoryType.COLLECTION)
     collection.name = request.POST["name"]
-    collection.summary = request.POST["summary"]
-    collection.save(update_fields=["name", "summary"])
+    collection.save(update_fields=["name"])
     return redirect(reverse("documents:repositories", kwargs={"team_slug": team_slug, "tab_name": "collections"}))
