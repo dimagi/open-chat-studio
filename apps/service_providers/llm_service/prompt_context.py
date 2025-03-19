@@ -141,14 +141,14 @@ EMPTY = SafeAccessWrapper(None)
 class ParticipantDataProxy:
     """Allows multiple access without needing to re-fetch from the DB"""
 
+    def __init__(self, experiment_session):
+        self.session = experiment_session
+        self._participant_data = None
+
     @classmethod
     def from_state(cls, pipeline_state) -> Self:
         # using `.get` here for the sake of tests. In practice the session should always be present
         return cls(pipeline_state.get("experiment_session"))
-
-    def __init__(self, experiment_session):
-        self.session = experiment_session
-        self._participant_data = None
 
     def _get_db_object(self):
         if not self._participant_data:
