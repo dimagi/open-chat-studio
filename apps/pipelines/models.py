@@ -43,7 +43,15 @@ class PipelineManager(VersionsObjectManagerMixin, models.Manager):
 
 
 class NodeObjectManager(VersionsObjectManagerMixin, models.Manager):
-    pass
+    def llm_response_with_prompt_nodes(self):
+        from apps.pipelines.nodes.nodes import LLMResponseWithPrompt
+
+        return self.get_queryset().filter(type=LLMResponseWithPrompt.__name__)
+
+    def assistant_nodes(self):
+        from apps.pipelines.nodes.nodes import AssistantNode
+
+        return self.get_queryset().filter(type=AssistantNode.__name__)
 
 
 class Pipeline(BaseTeamModel, VersionsMixin):

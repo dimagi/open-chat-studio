@@ -1,5 +1,6 @@
 from django.db import models
 
+from apps.pipelines.models import Node
 from apps.teams.models import BaseTeamModel
 from apps.utils.conversions import bytes_to_megabytes
 
@@ -24,3 +25,11 @@ class Repository(BaseTeamModel):
 
     def file_names(self) -> list[str]:
         return list(self.files.values_list("name", flat=True))
+
+    def get_references(self) -> list[Node]:
+        return (
+            Node.objects.llm_response_with_prompt_nodes()
+            .select_related("pipeline")
+            .filter(params__collection_id=str(self.id))
+            .all()
+        )
