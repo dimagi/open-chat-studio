@@ -84,12 +84,14 @@ class ExperimentHistoryManager(BaseHistoryManager):
         max_token_limit: int | None = None,
         chat_model: BaseChatModel | None = None,
         trace_service=None,
+        history_mode: str | None = None,
     ):
         self.session = session
         self.max_token_limit = max_token_limit
         self.chat_model = chat_model
         self.trace_service = trace_service
         self.ai_message = None
+        self.history_mode = history_mode
 
         # TODO: Think about passing this in as context metadata rather
         self.experiment_version_number = experiment.version_number
@@ -120,6 +122,7 @@ class ExperimentHistoryManager(BaseHistoryManager):
             llm=self.chat_model,
             max_token_limit=self.max_token_limit,
             input_messages=input_messages,
+            history_mode=self.history_mode,
         )
 
     def add_messages_to_history(
@@ -153,6 +156,7 @@ class PipelineHistoryManager(BaseHistoryManager):
         history_name: str | None = None,
         max_token_limit: int | None = None,
         chat_model: BaseChatModel | None = None,
+        history_mode: str | None = None,
     ):
         self.session = session
         self.node_id = node_id
@@ -165,6 +169,7 @@ class PipelineHistoryManager(BaseHistoryManager):
 
         self.input_message_metadata = None
         self.output_message_metadata = None
+        self.history_mode = history_mode
 
     @classmethod
     def for_llm_chat(
