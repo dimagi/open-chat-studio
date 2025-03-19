@@ -18,7 +18,7 @@ def _format_comments(user_comments: list[UserComment]) -> str:
     return " | ".join([str(comment) for comment in user_comments])
 
 
-def get_filtered_sessions(experiment, filter_params, show_all=False):
+def get_filtered_sessions(experiment, filter_params, include_api=False):
     from apps.channels.models import ChannelPlatform
 
     sessions_queryset = (
@@ -27,7 +27,7 @@ def get_filtered_sessions(experiment, filter_params, show_all=False):
         .select_related("participant__user")
     )
 
-    if not show_all:
+    if not include_api:
         sessions_queryset = sessions_queryset.exclude(experiment_channel__platform=ChannelPlatform.API)
 
     sessions_queryset = apply_dynamic_filters(sessions_queryset, filter_params)

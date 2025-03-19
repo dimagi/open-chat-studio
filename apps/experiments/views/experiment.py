@@ -1060,8 +1060,8 @@ def generate_chat_export(request, team_slug: str, experiment_id: str):
     parsed_url = urlparse(request.headers.get("HX-Current-URL"))
     query_params = parse_qs(parsed_url.query)
     filter_params = get_filter_params(request, parsed_params=query_params)
-    show_all = request.POST.get("show-all") == "on"
-    task_id = async_export_chat.delay(experiment_id, filter_params, show_all)
+    include_api = request.POST.get("show-all") == "on"
+    task_id = async_export_chat.delay(experiment_id, filter_params, include_api)
     return TemplateResponse(
         request, "experiments/components/exports.html", {"experiment": experiment, "task_id": task_id}
     )
