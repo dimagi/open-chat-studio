@@ -4,7 +4,7 @@ from abc import ABC, abstractmethod
 from enum import Enum
 from functools import cached_property
 from io import BytesIO
-from typing import ClassVar
+from typing import TYPE_CHECKING, ClassVar
 
 import emoji
 import requests
@@ -39,6 +39,9 @@ from apps.service_providers.llm_service.runnables import GenerationCancelled
 from apps.service_providers.speech_service import SynthesizedAudio
 from apps.slack.utils import parse_session_external_id
 from apps.users.models import CustomUser
+
+if TYPE_CHECKING:
+    from apps.channels.datamodels import BaseMessage
 
 logger = logging.getLogger("ocs.channels")
 
@@ -118,8 +121,8 @@ class ChannelBase(ABC):
         self.experiment = experiment
         self.experiment_channel = experiment_channel
         self.experiment_session = experiment_session
-        self.message = None
-        self._user_query = None
+        self.message: BaseMessage = None
+        self._user_query: str = None
         self.bot = get_bot(experiment_session, experiment=experiment) if experiment_session else None
         self._participant_identifier = experiment_session.participant.identifier if experiment_session else None
         self._is_user_message = False
@@ -247,7 +250,7 @@ class ChannelBase(ABC):
         self._ensure_sessions_exists()
         self.bot = get_bot(self.experiment_session, experiment=self.experiment)
 
-    def new_user_message(self, message) -> str:
+    def new_user_message(self, message: BaseMessage) -> str:
         """Handles the message coming from the user. Call this to send bot messages to the user.
         The `message` here will probably be some object, depending on the channel being used.
         """
@@ -262,7 +265,7 @@ class ChannelBase(ABC):
             return True
         return self.experiment.is_participant_allowed(self.participant_identifier)
 
-    def _new_user_message(self, message) -> str:
+    def _new_user_message(self, message: BaseMessage) -> str:
         try:
             self._add_message(message)
         except ParticipantNotAllowedException:
@@ -365,7 +368,7 @@ class ChannelBase(ABC):
         ]
 
     def _user_gave_consent(self) -> bool:
-        return self.user_query.strip() == USER_CONSENT_TEXT
+        return self.message.message_text.strip() == USER_CONSENT_TEXT
 
     def _extract_user_query(self) -> str:
         if self.message.content_type == MESSAGE_TYPES.VOICE:
@@ -538,7 +541,8 @@ class ChannelBase(ABC):
         )
 
     def _is_reset_conversation_request(self):
-        return self.user_query.lower().strip() == ExperimentChannel.RESET_COMMAND
+        # only support reset via text, not voice
+        return self.message.message_text.lower().strip() == ExperimentChannel.RESET_COMMAND
 
     def is_message_type_supported(self) -> bool:
         return self.message.content_type is not None and self.message.content_type in self.supported_message_types
