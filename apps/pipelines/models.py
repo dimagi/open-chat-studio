@@ -162,7 +162,9 @@ class Pipeline(BaseTeamModel, VersionsMixin):
             try:
                 node_class.model_validate(node.params)
             except pydantic.ValidationError as e:
-                errors[node.flow_id] = {err["loc"][0]: err["msg"] for err in e.errors()}
+                for error in e.errors():
+                    field = error["loc"][0] if error["loc"] else error["ctx"]["field"]
+                    errors[node.flow_id][field] = error["msg"]
 
         name_to_flow_id = defaultdict(list)
         for node in nodes:

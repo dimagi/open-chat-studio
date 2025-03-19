@@ -182,7 +182,7 @@ def import_openai_assistant(assistant_id: str, llm_provider: LlmProvider, team: 
 
 def validate_instructions(instructions: str):
     validate_prompt_variables(
-        form_data={"instructions": instructions},
+        context={"instructions": instructions},
         prompt_key="instructions",
         known_vars=OpenAiAssistant.ALLOWED_INSTRUCTIONS_VARIABLES,
     )
