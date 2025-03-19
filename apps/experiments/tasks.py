@@ -23,10 +23,8 @@ logger = logging.getLogger("ocs.experiments")
 
 
 @shared_task(bind=True, base=TaskbadgerTask)
-def async_export_chat(self, experiment_id: int, **kwargs) -> dict:
+def async_export_chat(self, experiment_id: int, filter_params: dict, show_all: bool) -> dict:
     experiment = Experiment.objects.get(id=experiment_id)
-    filter_params = kwargs.get("filter_params", {})
-    show_all = kwargs.get("show_all", False)
     filtered_sessions = get_filtered_sessions(experiment, filter_params, show_all)
     session_ids = list(filtered_sessions.values_list("id", flat=True))
     csv_in_memory = filtered_export_to_csv(experiment, session_ids)
