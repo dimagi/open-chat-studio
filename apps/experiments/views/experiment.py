@@ -12,7 +12,6 @@ from django.conf import settings
 from django.contrib import messages
 from django.contrib.auth.decorators import permission_required
 from django.contrib.auth.mixins import PermissionRequiredMixin
-from django.contrib.postgres.search import TrigramSimilarity
 from django.core.exceptions import PermissionDenied, ValidationError
 from django.db import transaction
 from django.db.models import Case, Count, IntegerField, Q, When
@@ -89,10 +88,11 @@ from apps.files.forms import get_file_formset
 from apps.files.models import File
 from apps.files.views import BaseAddFileHtmxView, BaseDeleteFileView
 from apps.generics.chips import Chip
-from apps.generics.help import render_help_with_link
+from apps.generics.views import generic_home
 from apps.service_providers.utils import get_llm_provider_choices
 from apps.teams.decorators import login_and_team_required
 from apps.teams.mixins import LoginAndTeamRequiredMixin
+from apps.utils.BaseExperimentTableView import BaseExperimentTableView
 
 DEFAULT_ERROR_MESSAGE = (
     "Sorry something went wrong. This was likely an intermittent error related to load."
@@ -103,50 +103,13 @@ DEFAULT_ERROR_MESSAGE = (
 @login_and_team_required
 @permission_required("experiments.view_experiment", raise_exception=True)
 def experiments_home(request, team_slug: str):
-    return TemplateResponse(
-        request,
-        "generic/object_home.html",
-        {
-            "active_tab": "experiments",
-            "title": "Experiments",
-            "title_help_content": render_help_with_link("", "experiment"),
-            "new_object_url": reverse("experiments:new", args=[team_slug]),
-            "table_url": reverse("experiments:table", args=[team_slug]),
-            "enable_search": True,
-            "toggle_archived": True,
-        },
-    )
+    return generic_home(request, team_slug, "Experiments", "experiments:table", "experiments:new")
 
 
-class ExperimentTableView(SingleTableView, PermissionRequiredMixin):
+class ExperimentTableView(BaseExperimentTableView):
     model = Experiment
-    paginate_by = 25
     table_class = ExperimentTable
-    template_name = "table/single_table.html"
     permission_required = "experiments.view_experiment"
-
-    def get_queryset(self):
-        query_set = (
-            Experiment.objects.get_all()
-            .filter(team=self.request.team, working_version__isnull=True)
-            .order_by("is_archived")
-        )
-        show_archived = self.request.GET.get("show_archived") == "on"
-        if not show_archived:
-            query_set = query_set.filter(is_archived=False)
-
-        search = self.request.GET.get("search")
-        if search:
-            name_similarity = TrigramSimilarity("name", search)
-            description_similarity = TrigramSimilarity("description", search)
-            query_set = (
-                query_set.annotate(
-                    similarity=name_similarity + description_similarity,
-                )
-                .filter(Q(similarity__gt=0.2) | Q(owner__username__icontains=search))
-                .order_by("-similarity")
-            )
-        return query_set
 
 
 class ExperimentSessionsTableView(SingleTableView, PermissionRequiredMixin):
@@ -887,7 +850,7 @@ def start_session_public(request, team_slug: str, experiment_id: uuid.UUID):
             participant_identifier=identifier,
             timezone=request.session.get("detected_tz", None),
         )
-        return _record_consent_and_redirect(request, team_slug, session)
+        return _record_consent_and_redirect(team_slug, experiment, session)
 
     if request.method == "POST":
         form = ConsentForm(consent, request.POST, initial={"identifier": user.email if user else None})
@@ -913,10 +876,11 @@ def start_session_public(request, team_slug: str, experiment_id: uuid.UUID):
                 return _verify_user_or_start_session(
                     identifier=identifier,
                     request=request,
+                    experiment=experiment,
                     session=session,
                 )
             else:
-                return _record_consent_and_redirect(request, team_slug, session)
+                return _record_consent_and_redirect(team_slug, experiment, session)
     else:
         form = ConsentForm(
             consent,
@@ -967,7 +931,7 @@ def start_session_public_embed(request, team_slug: str, experiment_id: uuid.UUID
     return redirect("experiments:experiment_chat_embed", team_slug, experiment.public_id, session.external_id)
 
 
-def _verify_user_or_start_session(identifier, request, session):
+def _verify_user_or_start_session(identifier, request, experiment, session):
     """
     Verifies if the user is allowed to access the chat.
 
@@ -981,16 +945,16 @@ def _verify_user_or_start_session(identifier, request, session):
     """
     team_slug = session.team.slug
     if request.user.is_authenticated:
-        return _record_consent_and_redirect(request, team_slug, session)
+        return _record_consent_and_redirect(team_slug, experiment, session)
 
     if not session.requires_participant_data():
-        return _record_consent_and_redirect(request, team_slug, session)
+        return _record_consent_and_redirect(team_slug, experiment, session)
 
     if session_data := get_chat_session_access_cookie_data(request, fail_silently=True):
         if Participant.objects.filter(
             id=session_data["participant_id"], identifier=identifier, team_id=session.team_id
         ).exists():
-            return _record_consent_and_redirect(request, team_slug, session)
+            return _record_consent_and_redirect(team_slug, experiment, session)
 
     send_chat_link_email(session)
     return TemplateResponse(request=request, template="account/participant_email_verify.html")
@@ -999,8 +963,8 @@ def _verify_user_or_start_session(identifier, request, session):
 def verify_public_chat_token(request, team_slug: str, experiment_id: uuid.UUID, token: str):
     try:
         claims = jwt.decode(token, settings.SECRET_KEY, algorithms="HS256")
-        session = get_object_or_404(ExperimentSession, external_id=claims["session"])
-        return _record_consent_and_redirect(request, team_slug, session)
+        session = ExperimentSession.objects.select_related("experiment").get(external_id=claims["session"])
+        return _record_consent_and_redirect(team_slug, session.experiment, session)
     except Exception:
         messages.warning(request=request, message="This link could not be verified")
         return redirect(reverse("experiments:start_session_public", args=(team_slug, experiment_id)))
@@ -1093,7 +1057,7 @@ def send_invitation(request, team_slug: str, experiment_id: int, session_id: str
     )
 
 
-def _record_consent_and_redirect(request, team_slug: str, experiment_session: ExperimentSession):
+def _record_consent_and_redirect(team_slug: str, experiment: Experiment, experiment_session: ExperimentSession):
     # record consent, update status
     experiment_session.consent_date = timezone.now()
     if experiment_session.experiment_version.pre_survey:
@@ -1109,27 +1073,28 @@ def _record_consent_and_redirect(request, team_slug: str, experiment_session: Ex
             args=[team_slug, experiment_session.experiment.public_id, experiment_session.external_id],
         )
     )
-    return set_session_access_cookie(response, experiment_session)
+    return set_session_access_cookie(response, experiment, experiment_session)
 
 
 @experiment_session_view(allowed_states=[SessionStatus.SETUP, SessionStatus.PENDING])
 def start_session_from_invite(request, team_slug: str, experiment_id: uuid.UUID, session_id: str):
-    experiment = get_object_or_404(Experiment, public_id=experiment_id, team=request.team)
-    experiment_session = get_object_or_404(ExperimentSession, experiment=experiment, external_id=session_id)
-    default_version = experiment.default_version
+    default_version = request.experiment.default_version
     consent = default_version.consent_form
 
     initial = {
-        "participant_id": experiment_session.participant.id,
-        "identifier": experiment_session.participant.identifier,
+        "participant_id": request.experiment_session.participant.id,
+        "identifier": request.experiment_session.participant.identifier,
     }
-    if not experiment_session.participant:
+    if not request.experiment_session.participant:
         raise Http404()
+
+    if not consent:
+        return _record_consent_and_redirect(team_slug, request.experiment, request.experiment_session)
 
     if request.method == "POST":
         form = ConsentForm(consent, request.POST, initial=initial)
         if form.is_valid():
-            return _record_consent_and_redirect(request, team_slug, experiment_session)
+            return _record_consent_and_redirect(team_slug, request.experiment, request.experiment_session)
 
     else:
         form = ConsentForm(consent, initial=initial)

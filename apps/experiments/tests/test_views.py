@@ -531,7 +531,7 @@ class TestPublicSessions:
         experiment_session = ExperimentSessionFactory()
         request.user = experiment_session.experiment.owner
 
-        _verify_user_or_start_session("something", request, experiment_session)
+        _verify_user_or_start_session("something", request, experiment_session.experiment, experiment_session)
         record_consent_and_redirect_mock.assert_called()
 
     @pytest.mark.parametrize(("participant_match"), [True, False])
@@ -564,7 +564,12 @@ class TestPublicSessions:
         get_chat_session_access_cookie_data.return_value = {
             "participant_id": participant.id if participant_match else participant.id + 1
         }
-        _verify_user_or_start_session(identifier=participant.identifier, request=request, session=experiment_session)
+        _verify_user_or_start_session(
+            identifier=participant.identifier,
+            request=request,
+            experiment=experiment_session.experiment,
+            session=experiment_session,
+        )
 
         if participant_match:
             record_consent_and_redirect_mock.assert_called()
@@ -595,7 +600,12 @@ class TestPublicSessions:
         request_user.is_authenticated = False
         request.user = request_user
         experiment_session = ExperimentSessionFactory(experiment__prompt_text=prompt)
-        _verify_user_or_start_session(identifier="someone@gmail.com", request=request, session=experiment_session)
+        _verify_user_or_start_session(
+            identifier="someone@gmail.com",
+            request=request,
+            experiment=experiment_session.experiment,
+            session=experiment_session,
+        )
         if participant_data_injected:
             _record_consent_and_redirect.assert_not_called()
             send_chat_link_email.assert_called()

@@ -132,16 +132,19 @@ def boolean_node(input_equals="hello"):
     }
 
 
-def router_node(provider_id: str, provider_model_id: str, keywords: list[str]):
+def router_node(provider_id: str, provider_model_id: str, keywords: list[str], **kwargs):
     return {
         "id": str(uuid4()),
         "type": nodes.RouterNode.__name__,
         "params": {
-            "name": "router",
-            "prompt": "You are a router",
-            "keywords": keywords,
-            "llm_provider_id": provider_id,
-            "llm_provider_model_id": provider_model_id,
+            **{
+                "name": "router",
+                "prompt": "You are a router",
+                "keywords": keywords,
+                "llm_provider_id": provider_id,
+                "llm_provider_model_id": provider_model_id,
+            },
+            **kwargs,
         },
     }
 
