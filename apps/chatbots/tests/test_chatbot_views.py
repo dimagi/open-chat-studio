@@ -33,13 +33,9 @@ def test_generic_home():
 
 
 @pytest.mark.django_db()
-def test_chatbot_experiment_table_view(client):
-    User = get_user_model()
-    user = User.objects.create_user(username="testuser", password="testpass")
-    team = Team.objects.create(name="Test Team", slug="test-team")
-    content_type = ContentType.objects.get_for_model(Experiment)
-    permission = Permission.objects.get(codename="view_experiment", content_type=content_type)
-    user.user_permissions.add(permission)
+def test_chatbot_experiment_table_view(client, team_with_users):
+    team = team_with_users
+    user = team.members.first()
     Experiment.objects.create(name="Test 1", pipeline=None, owner=user, team=team)
     Experiment.objects.create(
         name="Test 2",
