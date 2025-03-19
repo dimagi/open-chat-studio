@@ -27,7 +27,7 @@ from apps.chat.agent.tools import get_node_tools
 from apps.chat.conversation import compress_chat_history, compress_pipeline_chat_history
 from apps.experiments.models import ExperimentSession, ParticipantData
 from apps.pipelines.exceptions import PipelineNodeBuildError, PipelineNodeRunError
-from apps.pipelines.models import Node, PipelineChatHistory, PipelineChatHistoryTypes
+from apps.pipelines.models import Node, PipelineChatHistory, PipelineChatHistoryModes, PipelineChatHistoryTypes
 from apps.pipelines.nodes.base import (
     NodeSchema,
     OptionsSource,
@@ -143,6 +143,22 @@ class HistoryMixin(LLMResponseMixin):
             widget=Widgets.none,
         ),
     )
+    history_mode: PipelineChatHistoryModes = Field(
+        None,
+        json_schema_extra=UiSchema(widget=Widgets.history_mode, enum_labels=PipelineChatHistoryModes.labels),
+    )
+    user_max_token_limit: int | None = Field(
+        None,
+        json_schema_extra=UiSchema(
+            widget=Widgets.none,
+        ),
+    )
+    max_history_length: int = Field(
+        10,
+        json_schema_extra=UiSchema(
+            widget=Widgets.none,
+        ),
+    )
 
     @field_validator("history_name")
     def validate_history_name(cls, value, info: FieldValidationInfo):
@@ -163,8 +179,13 @@ class HistoryMixin(LLMResponseMixin):
             return compress_chat_history(
                 chat=session.chat,
                 llm=self.get_chat_model(),
-                max_token_limit=self.get_llm_provider_model().max_token_limit,
+                max_token_limit=(
+                    self.user_max_token_limit
+                    if self.user_max_token_limit is not None
+                    else self.get_llm_provider_model().max_token_limit
+                ),
                 input_messages=input_messages,
+                history_mode=self.history_mode,
             )
 
         try:
@@ -175,9 +196,15 @@ class HistoryMixin(LLMResponseMixin):
             return []
         return compress_pipeline_chat_history(
             pipeline_chat_history=history,
-            max_token_limit=self.get_llm_provider_model().max_token_limit,
             llm=self.get_chat_model(),
+            max_token_limit=(
+                self.user_max_token_limit
+                if self.user_max_token_limit is not None
+                else self.get_llm_provider_model().max_token_limit
+            ),
             input_messages=input_messages,
+            keep_history_len=self.max_history_length,
+            history_mode=self.history_mode,
         )
 
     def _save_history(self, session: ExperimentSession, node_id: str, human_message: str, ai_message: str):
@@ -408,13 +435,16 @@ class RouterNode(RouterMixin, Passthrough, HistoryMixin):
     )
 
     def _process_conditional(self, state: PipelineState, node_id=None):
+        from apps.service_providers.llm_service.prompt_context import PromptTemplateContext
+
         prompt = OcsPromptTemplate.from_messages(
             [("system", self.prompt), MessagesPlaceholder("history", optional=True), ("human", "{input}")]
         )
 
+        session: ExperimentSession = state["experiment_session"]
         node_input = state["messages"][-1]
         context = {"input": node_input}
-        session: ExperimentSession | None = state.get("experiment_session")
+        context.update(PromptTemplateContext(session).get_context(prompt.input_variables))
 
         if self.history_type != PipelineChatHistoryTypes.NONE and session:
             input_messages = prompt.format_messages(**context)
@@ -874,6 +904,7 @@ class CodeNode(PipelineNode):
                 "_write_": lambda x: x,
                 "get_participant_data": participant_data_proxy.get,
                 "set_participant_data": participant_data_proxy.set,
+                "get_participant_schedules": participant_data_proxy.get_schedules,
                 "get_temp_state_key": self._get_temp_state_key(state),
                 "set_temp_state_key": self._set_temp_state_key(state),
             }

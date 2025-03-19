@@ -80,6 +80,7 @@ CONTENT_TYPES = {
     "annotations": ["tag", "customtaggeditem", "usercomment"],
     "participants": [],
     "documents": ["repository"],
+    "chatbots": [],
 }
 
 CUSTOM_PERMISSIONS = {"experiments": ["invite_participants", "download_chats"]}

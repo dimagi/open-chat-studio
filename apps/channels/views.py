@@ -8,7 +8,7 @@ from django.views.decorators.csrf import csrf_exempt
 from django.views.decorators.http import require_POST
 from drf_spectacular.types import OpenApiTypes
 from drf_spectacular.utils import OpenApiParameter, extend_schema, inline_serializer
-from rest_framework import serializers
+from rest_framework import serializers, status
 from rest_framework.decorators import api_view
 from rest_framework.response import Response
 
@@ -179,6 +179,9 @@ def new_connect_message(request: HttpRequest):
         return JsonResponse({"detail": "No participant data found"}, status=404)
     except ExperimentChannel.DoesNotExist:
         return JsonResponse({"detail": "No experiment channel found"}, status=404)
+
+    if not participant_data.has_consented():
+        return JsonResponse({"detail": "User has not given consent"}, status=status.HTTP_400_BAD_REQUEST)
 
     tasks.handle_commcare_connect_message.delay(
         experiment_channel_id=channel.id, participant_data_id=participant_data.id, messages=serializer.data["messages"]
