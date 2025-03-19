@@ -71,10 +71,11 @@ class BaseMessage(BaseModel):
     content_type: MESSAGE_TYPES | None = Field(default=MESSAGE_TYPES.TEXT)
     attachments: list[Attachment] = Field(default=[])
 
+    content_type_unparsed: str | None = Field(default=None)
+
 
 class TelegramMessage(BaseMessage):
     media_id: str | None = None
-    content_type_unparsed: str | None = Field(default=None)
     message_id: int
 
     @field_validator("content_type", mode="before")
@@ -103,7 +104,6 @@ class TwilioMessage(BaseMessage):
     to: str
     platform: ChannelPlatform
     media_url: str | None = Field(default=None)
-    content_type_unparsed: str | None = Field(default=None)
 
     @field_validator("content_type", mode="before")
     @classmethod
@@ -154,7 +154,6 @@ class SureAdhereMessage(BaseMessage):
 class TurnWhatsappMessage(BaseMessage):
     to_number: str = Field(default="", required=False)  # This field is needed for the WhatsappChannel
     media_id: str | None = Field(default=None)
-    content_type_unparsed: str | None = Field(default=None)
 
     @field_validator("content_type", mode="before")
     @classmethod
@@ -186,7 +185,6 @@ class FacebookMessage(BaseMessage):
 
     page_id: str
     media_url: str | None = None
-    content_type_unparsed: str | None = Field(default=None)
 
     @field_validator("content_type", mode="before")
     @classmethod
