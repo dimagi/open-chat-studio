@@ -177,7 +177,7 @@ class PipelineNode(BaseModel, ABC):
         """A mapping from the output handles on the frontend to the return values of _process_conditional"""
         raise NotImplementedError
 
-    def get_participant_proxy(self, state: PipelineState) -> "ParticipantDataProxy":
+    def get_participant_data_proxy(self, state: PipelineState) -> "ParticipantDataProxy":
         return ParticipantDataProxy.from_state(state)
 
     @cached_property
