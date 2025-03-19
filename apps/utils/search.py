@@ -12,7 +12,7 @@ def similarity_search(
         queryset: Base queryset to search on
         search_phase: Search term to match against
         columns: Database columns to search in
-        score: Minimum similarity score threshold (0 to 1)
+        score: The score above which to include results
         extra_conditions: Additional filter conditions
 
     Returns:
