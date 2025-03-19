@@ -887,10 +887,9 @@ class CommCareConnectChannel(ChannelBase):
 
     @cached_property
     def encryption_key(self) -> bytes:
-        key = self.participant_data.get_encryption_key_bytes()
-        if not key:
-            raise ChannelException(f"Encryption key is missing for participant {self.participant_identifier}")
-        return key
+        if not self.participant_data.encryption_key:
+            self.participant_data.generate_encryption_key()
+        return self.participant_data.get_encryption_key_bytes()
 
 
 def _start_experiment_session(
