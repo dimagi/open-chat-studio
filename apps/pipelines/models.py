@@ -23,6 +23,7 @@ from apps.pipelines.flow import Flow, FlowNode, FlowNodeData
 from apps.pipelines.logging import PipelineLoggingCallbackHandler
 from apps.pipelines.nodes.base import PipelineState
 from apps.pipelines.nodes.helpers import temporary_session
+from apps.service_providers.tracing.trace_service import TracingServiceWrapper
 from apps.teams.models import BaseTeamModel
 from apps.utils.models import BaseModel
 
@@ -222,22 +223,22 @@ class Pipeline(BaseTeamModel, VersionsMixin):
         save_run_to_history=True,
         save_input_to_history=True,
         disable_reminder_tools=False,
+        tracer: TracingServiceWrapper | None = None,
     ) -> dict:
         from apps.experiments.models import AgentTools
         from apps.pipelines.graph import PipelineGraph
 
+        tracer = tracer or TracingServiceWrapper([])
         runnable = PipelineGraph.build_runnable_from_pipeline(self)
         pipeline_run = self._create_pipeline_run(input, session)
         logging_callback = PipelineLoggingCallbackHandler(pipeline_run)
 
         logging_callback.logger.debug("Starting pipeline run", input=input["messages"][-1])
         callbacks = [logging_callback]
-        trace_service = session.experiment.trace_service
         trace_id = str(pipeline_run.id)
-        try:
-            trace_service.initialize(session.external_id, session.experiment.name, str(session.participant.identifier))
-            with trace_service.trace_context(trace_id, "pipeline run", input.json_safe()):
-                callbacks.extend(trace_service.get_langchain_callbacks())
+        with tracer.trace_context(trace_id, "pipeline run", input.json_safe()):
+            try:
+                callbacks.extend(tracer.get_langchain_callbacks())
                 config = RunnableConfig(
                     callbacks=callbacks,
                     configurable={
@@ -248,26 +249,33 @@ class Pipeline(BaseTeamModel, VersionsMixin):
                 output = PipelineState(**output).json_safe()
 
                 pipeline_run.output = output
+                trace_info = tracer.get_current_trace_info()
                 if save_run_to_history and session is not None:
                     metadata = output.get("message_metadata", {})
+                    input_metadata = metadata.get("input", {})
+                    output_metadata = metadata.get("output", {})
+                    if trace_info:
+                        input_metadata.update({"trace_info_1": trace_info})
+                        output_metadata.update({"trace_info_1": trace_info})
                     if save_input_to_history:
                         self._save_message_to_history(
-                            session, input["messages"][-1], ChatMessageType.HUMAN, metadata=metadata.get("input", {})
+                            session, input["messages"][-1], ChatMessageType.HUMAN, metadata=input_metadata
                         )
                     ai_message = self._save_message_to_history(
-                        session, output["messages"][-1], ChatMessageType.AI, metadata=metadata.get("output", {})
+                        session, output["messages"][-1], ChatMessageType.AI, metadata=output_metadata
                     )
                     output["ai_message_id"] = ai_message.id
 
-                trace_service.set_outputs(trace_id, {"message": output["messages"][-1]}, metadata)
-        finally:
-            if pipeline_run.status == PipelineRunStatus.ERROR:
-                logging_callback.logger.debug("Pipeline run failed", input=input["messages"][-1])
-            else:
-                pipeline_run.status = PipelineRunStatus.SUCCESS
-                logging_callback.logger.debug("Pipeline run finished", output=output["messages"][-1])
-            pipeline_run.save()
-            trace_service.end({})
+                tracer.set_outputs(trace_id, {"message": output["messages"][-1]}, metadata)
+            except Exception as e:  # noqa BLE001
+                tracer.set_outputs(trace_id, {"status": "error", "error": str(e)})
+            finally:
+                if pipeline_run.status == PipelineRunStatus.ERROR:
+                    logging_callback.logger.debug("Pipeline run failed", input=input["messages"][-1])
+                else:
+                    pipeline_run.status = PipelineRunStatus.SUCCESS
+                    logging_callback.logger.debug("Pipeline run finished", output=output["messages"][-1])
+                pipeline_run.save()
         return output
 
     def _create_pipeline_run(self, input: PipelineState, session: ExperimentSession) -> "PipelineRun":
