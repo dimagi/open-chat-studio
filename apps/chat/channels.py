@@ -129,7 +129,7 @@ class ChannelBase(ABC):
 
         # Initialize tracing
         self.tracer = self._setup_tracer()
-        self.bot = get_bot(experiment_session, experiment=experiment) if experiment_session else None
+        self._bot = None
 
     @classmethod
     def start_new_session(
@@ -257,7 +257,6 @@ class ChannelBase(ABC):
             raise ParticipantNotAllowedException()
 
         self._ensure_sessions_exists()
-        self.bot = get_bot(self.experiment_session, experiment=self.experiment)
 
     def new_user_message(self, message: BaseMessage) -> str:
         """Handles the message coming from the user. Call this to send bot messages to the user.
@@ -449,11 +448,12 @@ class ChannelBase(ABC):
         with self.tracer.trace_context(trace_id, "audio_synthesis", inputs):
             voice_provider = self.experiment.voice_provider
             synthetic_voice = self.experiment.synthetic_voice
+            processor_experiment = self._get_bot().processor_experiment
             if self.experiment.use_processor_bot_voice and (
-                self.bot.processor_experiment and self.bot.processor_experiment.voice_provider
+                processor_experiment and processor_experiment.voice_provider
             ):
-                voice_provider = self.bot.processor_experiment.voice_provider
-                synthetic_voice = self.bot.processor_experiment.synthetic_voice
+                voice_provider = processor_experiment.voice_provider
+                synthetic_voice = processor_experiment.synthetic_voice
 
             speech_service = voice_provider.get_speech_service()
             try:
@@ -501,8 +501,7 @@ class ChannelBase(ABC):
                 return speech_service.transcribe_audio(audio)
 
     def _get_bot_response(self, message: str) -> str:
-        self.bot = self.bot or get_bot(self.experiment_session, experiment=self.experiment)
-        return self.bot.process_input(message, attachments=self.message.attachments)
+        return self._get_bot().process_input(message, attachments=self.message.attachments)
 
     def _add_message_to_history(self, message: str, message_type: ChatMessageType):
         """Use this to update the chat history when not using the normal bot flow"""
@@ -511,6 +510,11 @@ class ChannelBase(ABC):
             message_type=message_type,
             content=message,
         )
+
+    def _get_bot(self):
+        if not self._bot:
+            self._bot = get_bot(self.experiment_session, experiment=self.experiment)
+        return self._bot
 
     def _ensure_sessions_exists(self):
         """
@@ -524,12 +528,15 @@ class ChannelBase(ABC):
         """
         if not self.experiment_session:
             self._load_latest_session()
+            self._bot = None
 
         if not self.experiment_session:
             self._create_new_experiment_session()
+            self._bot = None
         elif self._is_user_message:
             if self._is_reset_conversation_request() and self.experiment_session.user_already_engaged():
                 self._reset_session()
+                self._bot = None
             if not self.experiment_session.experiment_channel:
                 # This branch will only be entered for channel sessions that were created by the data migration.
                 # These sessions doesn't have experiment channels associated with them, so we need to make sure that
@@ -649,8 +656,7 @@ class ChannelBase(ABC):
 
     def _generate_response_for_user(self, prompt: str) -> str:
         """Generates a response based on the `prompt`."""
-        topic_bot = self.bot or get_bot(self.experiment_session, experiment=self.experiment)
-        return topic_bot.process_input(user_input=prompt, save_input_to_history=False)
+        return self._get_bot().process_input(user_input=prompt, save_input_to_history=False)
 
 
 class WebChannel(ChannelBase):
