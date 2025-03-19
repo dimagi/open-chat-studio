@@ -1,14 +1,10 @@
 import pytest
-from django.contrib.auth import get_user_model
-from django.contrib.auth.models import Permission
-from django.contrib.contenttypes.models import ContentType
 from django.template.response import TemplateResponse
 from django.urls import reverse
 
 from apps.experiments.models import Experiment
 from apps.generics.views import generic_home
 from apps.pipelines.models import Pipeline
-from apps.teams.models import Team
 
 
 @pytest.mark.django_db()
