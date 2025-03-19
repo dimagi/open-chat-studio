@@ -3,31 +3,24 @@ from django.db.models import Q, QuerySet
 
 
 def similarity_search(
-    queryset: QuerySet, search_phase: str, columns: list[str], score=0.2, extra_conditions: Q = None
+    queryset: QuerySet, search_phase: str, columns: list[str], score: float = 0.2, extra_conditions: Q | None = None
 ) -> QuerySet:
     """
-    Performs a similarity search on the queryset based on the search_phase and the columns provided. The result is
-    ordered by the similarity score in descending order.
+    Performs a similarity search on the queryset using trigram similarity.
 
-    :param queryset: The queryset to search on.
-    :param search_phase: The search phase to search for.
-    :param columns: The column names to search on.
-    :param score: The score which at which the result is considered a match.
-    :param extra_conditions: Extra Q conditions to filter on. `extra_conditions` will be OR-ed with the similarity
-    score.
+    Args:
+        queryset: Base queryset to search on
+        search_phase: Search term to match against
+        columns: Database columns to search in
+        score: Minimum similarity score threshold (0 to 1)
+        extra_conditions: Additional filter conditions
+
+    Returns:
+        QuerySet ordered by similarity score
     """
-    extra_conditions = extra_conditions or Q()
+    conditions = extra_conditions or Q()
 
-    total_similarity = None
-    for column in columns:
-        if not total_similarity:
-            total_similarity = TrigramSimilarity(column, search_phase)
-        else:
-            total_similarity += TrigramSimilarity(column, search_phase)
+    # Calculate combined similarity across all columns
+    similarity = sum(TrigramSimilarity(column, search_phase) for column in columns)
 
-    queryset = (
-        queryset.annotate(similarity=total_similarity)
-        .filter(Q(similarity__gt=score) | extra_conditions)
-        .order_by("-similarity")
-    )
-    return queryset
+    return queryset.annotate(similarity=similarity).filter(Q(similarity__gt=score) | conditions).order_by("-similarity")
