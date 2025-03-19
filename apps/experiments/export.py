@@ -34,11 +34,11 @@ def get_filtered_sessions(request, experiment, query_params, include_api=False):
     return sessions_queryset
 
 
-def filtered_export_to_csv(experiment, session_ids):
+def filtered_export_to_csv(experiment, sessions_queryset):
     csv_in_memory = io.StringIO()
     writer = csv.writer(csv_in_memory, delimiter=",", quotechar='"', quoting=csv.QUOTE_MINIMAL)
 
-    queryset = experiment.sessions.filter(id__in=session_ids).prefetch_related(
+    queryset = sessions_queryset.prefetch_related(
         "chat",
         "chat__messages",
         "participant",

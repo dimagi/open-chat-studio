@@ -24,7 +24,6 @@ def apply_dynamic_filters(query_set, request, parsed_params=None):
         filter_column = filter_column[0] if isinstance(filter_column, list) else filter_column
         filter_operator = filter_operator[0] if isinstance(filter_operator, list) else filter_operator
         filter_value = filter_value[0] if isinstance(filter_value, list) else filter_value
-        print(filter_column)
 
         condition = build_filter_condition(filter_column, filter_operator, filter_value)
         if condition:
