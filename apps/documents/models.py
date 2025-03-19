@@ -1,7 +1,6 @@
 from django.db import models
 
 from apps.pipelines.models import Node
-from apps.pipelines.nodes.nodes import LLMResponseWithPrompt
 from apps.teams.models import BaseTeamModel
 from apps.utils.conversions import bytes_to_megabytes
 
@@ -28,4 +27,9 @@ class Repository(BaseTeamModel):
         return list(self.files.values_list("name", flat=True))
 
     def get_references(self) -> list[Node]:
-        return Node.objects.select_related("pipeline").filter(type=LLMResponseWithPrompt.__name__, params__collection_id=str(self.id)).all()
+        return (
+            Node.objects.llm_response_with_prompt_nodes()
+            .select_related("pipeline")
+            .filter(params__collection_id=str(self.id))
+            .all()
+        )
