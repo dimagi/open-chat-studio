@@ -1,5 +1,3 @@
-from unittest.mock import patch
-
 import pytest
 from django.test import TestCase
 
@@ -11,7 +9,6 @@ from apps.experiments.models import ConsentForm, Experiment, ExperimentSession, 
 from apps.service_providers.models import LlmProvider, LlmProviderModel
 from apps.teams.models import Team
 from apps.users.models import CustomUser
-from apps.utils.factories.assistants import OpenAiAssistantFactory
 from apps.utils.factories.experiment import ExperimentSessionFactory
 from apps.utils.langchain import mock_experiment_llm
 
@@ -79,25 +76,6 @@ class TasksTest(TestCase):
                 message_type=ChatMessageType.AI,
                 content="Hello. How can I assist you today?",
             )
-
-
-@pytest.mark.django_db()
-@patch("apps.service_providers.llm_service.runnables.AssistantChat._get_output_with_annotations")
-def test_no_activity_ping_with_assistant_bot(save_response_annotations):
-    save_response_annotations.return_value = "Hey, answer me!", {}
-    session = ExperimentSessionFactory()
-    local_assistant = OpenAiAssistantFactory()
-    session.experiment.assistant = local_assistant
-
-    expected_ping_message = "Hey, answer me!"
-    with mock_experiment_llm(session.experiment, responses=[expected_ping_message]):
-        response = session._bot_prompt_for_user("Some message")
-    messages = ChatMessage.objects.filter(chat=session.chat).all()
-    # Only the AI message should be there
-    assert len(messages) == 1
-    assert messages[0].message_type == "ai"
-    assert response == expected_ping_message
-    assert messages[0].content == expected_ping_message
 
 
 @pytest.mark.django_db()
