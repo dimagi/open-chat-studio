@@ -4,6 +4,8 @@ from collections import defaultdict
 from contextlib import contextmanager
 from typing import TYPE_CHECKING, Any
 
+from .callback import wrap_callback
+
 logger = logging.getLogger("ocs.tracing")
 
 if TYPE_CHECKING:
@@ -174,4 +176,13 @@ class TracingServiceWrapper:
         if self.deactivated:
             return []
 
-        return [tracer.get_langchain_callback() for tracer in self._tracers if tracer.ready]
+        callbacks = []
+        for tracer in self._tracers:
+            if not tracer.ready:
+                continue
+
+            callback = tracer.get_langchain_callback()
+            if callback:
+                callbacks.append(wrap_callback(callback))
+
+        return callbacks

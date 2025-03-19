@@ -110,7 +110,7 @@ class LangFuseTracer(BaseTracer):
 
         # get callback from parent span
         stateful_client = self.spans[next(reversed(self.spans))] if len(self.spans) > 0 else self.trace
-        return CustomCallbackHandler(stateful_client=stateful_client, update_stateful_client=False)
+        return CallbackHandler(stateful_client=stateful_client, update_stateful_client=False)
 
     def _get_current_span(self) -> StatefulClient:
         if len(self.spans) > 0:
