@@ -1718,7 +1718,12 @@ class ExperimentSession(BaseTeamModel):
         from apps.chat.bots import EventBot
 
         bot = EventBot(self, use_experiment)
-        return bot.get_user_message(instruction_prompt)
+        message = bot.get_user_message(instruction_prompt)
+        chat_message = ChatMessage.objects.create(chat=self.chat, message_type=ChatMessageType.AI, content=message)
+        chat_message.add_version_tag(
+            version_number=bot.experiment.version_number, is_a_version=bot.experiment.is_a_version
+        )
+        return message
 
     def try_send_message(self, message: str, fail_silently=True):
         """Tries to send a message to this user session as the bot. Note that `message` will be send to the user
