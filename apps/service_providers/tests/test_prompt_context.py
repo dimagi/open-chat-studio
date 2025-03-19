@@ -16,7 +16,7 @@ def mock_session():
     session.participant.user = None
 
     proxy_mock = Mock()
-    proxy_mock.get.return_value = "participant data"
+    proxy_mock.get.return_value = {"name": "Dimagi", "email": "hello@world.com"}
     proxy_mock.get_timezone.return_value = "UTC"
     session._proxy_mock = proxy_mock
     with patch("apps.service_providers.llm_service.prompt_context.ParticipantDataProxy", return_value=proxy_mock):
@@ -52,12 +52,12 @@ def test_repeated_calls_are_cached(mock_authorized_session):
     proxy_mock.get.assert_not_called()
 
     result = context.get_context(["participant_data"])
-    assert result == {"participant_data": "participant data"}
+    assert result == {"participant_data": {"name": "Dimagi", "email": "hello@world.com"}}
     proxy_mock.get.assert_called_once()
 
     proxy_mock.get.reset_mock()
     result = context.get_context(["participant_data"])
-    assert result == {"participant_data": "participant data"}
+    assert result == {"participant_data": {"name": "Dimagi", "email": "hello@world.com"}}
 
     proxy_mock.get.assert_not_called()
 
@@ -91,7 +91,7 @@ def test_returns_blank_source_material_not_found(mock_get, mock_session):
 def test_retrieves_participant_data_when_authorized(mock_authorized_session):
     context = PromptTemplateContext(mock_authorized_session, 1)
     assert context.is_unauthorized_participant is False
-    assert context.get_participant_data() == "participant data"
+    assert context.get_participant_data() == {"name": "Dimagi", "email": "hello@world.com"}
 
 
 def test_returns_empty_string_when_unauthorized_participant(mock_session):
