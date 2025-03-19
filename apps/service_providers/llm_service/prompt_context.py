@@ -1,3 +1,4 @@
+from functools import cache
 from typing import Any, Self
 
 from django.utils import timezone
@@ -170,6 +171,7 @@ class ParticipantDataProxy:
 
         self.session.participant.update_name_from_data(data)
 
+    @cache
     def get_schedules(self):
         """
         Returns all active scheduled messages for the participant in the current experiment session.
