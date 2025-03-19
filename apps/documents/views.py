@@ -182,6 +182,9 @@ class CollectionListView(BaseObjectListView):
     tab_name = "collections"
     permission_required = "documents.view_repository"
 
+    def get_queryset(self):
+        return super().get_queryset().filter(type=RepositoryType.COLLECTION)
+
 
 class CollectionDetails(BaseDetailsView):
     template_name = "documents/collection_details.html"
