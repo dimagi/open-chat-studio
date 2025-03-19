@@ -3,17 +3,16 @@ import uuid
 from collections import defaultdict
 from contextlib import contextmanager
 from typing import TYPE_CHECKING, Any
+from uuid import UUID
 
+from .base import BaseTracer, EventLevel
 from .callback import wrap_callback
 
-logger = logging.getLogger("ocs.tracing")
-
 if TYPE_CHECKING:
-    from uuid import UUID
-
     from langchain.callbacks.base import BaseCallbackHandler
 
-    from .base import BaseTracer, EventLevel
+
+logger = logging.getLogger("ocs.tracing")
 
 
 class TracingServiceWrapper:
@@ -163,7 +162,7 @@ class TracingServiceWrapper:
             except Exception:  # noqa BLE001
                 logger.exception(f"Error sending event {name}")
 
-    def get_langchain_callbacks(self) -> list[BaseCallbackHandler]:
+    def get_langchain_callbacks(self) -> list["BaseCallbackHandler"]:
         if self.deactivated:
             return []
 

@@ -1,6 +1,9 @@
+from __future__ import annotations
+
 from collections import OrderedDict
 from datetime import UTC, datetime
 from typing import TYPE_CHECKING, Any
+from uuid import UUID
 
 from langfuse.callback import CallbackHandler
 from langfuse.client import StatefulClient
@@ -10,8 +13,6 @@ from typing_extensions import override
 from .base import BaseTracer, EventLevel, TraceInfo
 
 if TYPE_CHECKING:
-    from uuid import UUID
-
     from langchain.callbacks.base import BaseCallbackHandler
 
 

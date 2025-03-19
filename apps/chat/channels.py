@@ -1,3 +1,5 @@
+from __future__ import annotations
+
 import logging
 import re
 from abc import ABC, abstractmethod
@@ -203,7 +205,7 @@ class ChannelBase(ABC):
         pass
 
     @staticmethod
-    def get_channel_class_for_platform(platform: ChannelPlatform | str) -> type["ChannelBase"]:
+    def get_channel_class_for_platform(platform: ChannelPlatform | str) -> type[ChannelBase]:
         if platform == "telegram":
             channel_cls = TelegramChannel
         elif platform == "web":
@@ -225,7 +227,7 @@ class ChannelBase(ABC):
         return channel_cls
 
     @staticmethod
-    def from_experiment_session(experiment_session: ExperimentSession) -> "ChannelBase":
+    def from_experiment_session(experiment_session: ExperimentSession) -> ChannelBase:
         """Given an `experiment_session` instance, returns the correct ChannelBase subclass to use"""
         channel_cls = ChannelBase.get_channel_class_for_platform(experiment_session.experiment_channel.platform)
         return channel_cls(

@@ -1,5 +1,8 @@
+from __future__ import annotations
+
 from collections import OrderedDict
 from typing import TYPE_CHECKING, Any
+from uuid import UUID
 
 from langsmith import Client, RunTree
 from typing_extensions import override
@@ -7,8 +10,6 @@ from typing_extensions import override
 from .base import BaseTracer, EventLevel, TraceInfo
 
 if TYPE_CHECKING:
-    from uuid import UUID
-
     from langchain.callbacks.base import BaseCallbackHandler
 
 

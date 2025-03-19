@@ -1,3 +1,5 @@
+from __future__ import annotations
+
 from typing import TYPE_CHECKING, Any
 
 from langchain.memory import ConversationBufferMemory
@@ -129,7 +131,7 @@ class TopicBot:
             SafetyBot(safety_layer, self.llm, self.source_material) for safety_layer in self.safety_layers
         ]
 
-    def _call_predict(self, input_str, save_input_to_history=True, attachments: list["Attachment"] | None = None):
+    def _call_predict(self, input_str, save_input_to_history=True, attachments: list[Attachment] | None = None):
         if self.child_chains:
             tag, chain = self._get_child_chain(input_str, attachments)
         else:
@@ -170,7 +172,7 @@ class TopicBot:
         self.output_tokens = self.output_tokens + result.completion_tokens
         return result.output
 
-    def _get_child_chain(self, input_str: str, attachments: list["Attachment"] | None = None) -> tuple[str, Any]:
+    def _get_child_chain(self, input_str: str, attachments: list[Attachment] | None = None) -> tuple[str, Any]:
         result = self.chain.invoke(
             input_str,
             config={
@@ -191,7 +193,7 @@ class TopicBot:
         except KeyError:
             return self.default_tag, self.default_child_chain
 
-    def process_input(self, user_input: str, save_input_to_history=True, attachments: list["Attachment"] | None = None):
+    def process_input(self, user_input: str, save_input_to_history=True, attachments: list[Attachment] | None = None):
         @chain
         def main_bot_chain(user_input):
             # human safety layers
@@ -292,10 +294,10 @@ class PipelineBot:
         self.disable_reminder_tools = disable_reminder_tools
         self.tracer = tracer
 
-    def process_input(self, user_input: str, save_input_to_history=True, attachments: list["Attachment"] | None = None):
+    def process_input(self, user_input: str, save_input_to_history=True, attachments: list[Attachment] | None = None):
         attachments = attachments or []
         serializable_attachments = [attachment.model_dump() for attachment in attachments]
-        output = self.experiment.pipeline.invoke(
+        output: PipelineState = self.experiment.pipeline.invoke(
             PipelineState(
                 messages=[user_input],
                 experiment_session=self.session,

@@ -1,11 +1,12 @@
+from __future__ import annotations
+
 from abc import ABC, abstractmethod
 from typing import TYPE_CHECKING, Any, Literal
+from uuid import UUID
 
 from pydantic import BaseModel
 
 if TYPE_CHECKING:
-    from uuid import UUID
-
     from langchain.callbacks.base import BaseCallbackHandler
 
 

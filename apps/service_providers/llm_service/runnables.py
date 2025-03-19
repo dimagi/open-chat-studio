@@ -1,3 +1,5 @@
+from __future__ import annotations
+
 import logging
 import re
 import time
@@ -42,7 +44,7 @@ class GenerationError(Exception):
 
 
 class GenerationCancelled(Exception):
-    def __init__(self, output: "ChainOutput"):
+    def __init__(self, output: ChainOutput):
         self.output = output
 
 
@@ -254,7 +256,7 @@ class AssistantChat(RunnableSerializable[dict, ChainOutput]):
     model_config = ConfigDict(arbitrary_types_allowed=True)
 
     def invoke(
-        self, input: str, config: RunnableConfig | None = None, attachments: list["Attachment"] | None = None
+        self, input: str, config: RunnableConfig | None = None, attachments: list[Attachment] | None = None
     ) -> ChainOutput:
         callback = self.adapter.callback_handler
         config = ensure_config(config)
@@ -472,7 +474,7 @@ class AssistantChat(RunnableSerializable[dict, ChainOutput]):
 
         return file_name, file_link
 
-    def _upload_tool_resource_files(self, attachments: list["Attachment"] | None = None) -> dict[str, list[str]]:
+    def _upload_tool_resource_files(self, attachments: list[Attachment] | None = None) -> dict[str, list[str]]:
         """Uploads the files in `attachments` to OpenAI
 
         Params:
