@@ -26,7 +26,7 @@
                 <dd class="text-sm col-span-2">
                     <span x-show="!editing">{{ current_collections|join:", " }}</span>
                     <div x-cloak x-show="editing">
-                        <select x-model="collections" id="collections-select" name="collections[]" multiple placeholder="Select collections" autocomplete="off">
+                        <select x-model="collections" id="collections-select" name="collections" multiple placeholder="Select collections" autocomplete="off">
                             {% for name in available_collections %}
                                 <option
                                     value="{{ name }}"

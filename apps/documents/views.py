@@ -148,7 +148,7 @@ def edit_file(request, team_slug: str, pk: int):
     file.name = request.POST.get("name")
     file.summary = request.POST.get("summary")
     file.save(update_fields=["name", "summary"])
-    _update_collection_membership(file=file, collection_names=request.POST.getlist("collections[]"))
+    _update_collection_membership(file=file, collection_names=request.POST.getlist("collections"))
 
     return redirect(reverse("documents:repositories", kwargs={"team_slug": team_slug, "tab_name": "files"}))
 
