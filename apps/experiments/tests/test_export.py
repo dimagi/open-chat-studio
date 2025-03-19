@@ -1,6 +1,6 @@
 import csv
 import io
-from unittest.mock import MagicMock, patch
+from unittest.mock import patch
 
 import pytest
 
@@ -20,11 +20,11 @@ from apps.utils.factories.experiment import ExperimentFactory, ExperimentSession
             [
                 {
                     "participant": "user1@example.com",
-                    "message": "Message from user1@example.com",
+                    "message": "Knock knock",
                 },
                 {
                     "participant": "user2@gmail.com",
-                    "message": "Message from user2@gmail.com",
+                    "message": "Who's there?",
                 },
             ],
             [0],  # Include only first session
@@ -34,7 +34,7 @@ from apps.utils.factories.experiment import ExperimentFactory, ExperimentSession
             [
                 {
                     "participant": "support@example.com",
-                    "message": "Critical customer issue",
+                    "message": "hello world!",
                     "date": "2023-07-20",
                 },
             ],
@@ -43,11 +43,10 @@ from apps.utils.factories.experiment import ExperimentFactory, ExperimentSession
     ],
 )
 def test_filtered_export_with_mocked_filter(mock_get_filtered_sessions, session_configs, filtered_indices):
-    """Test the export functionality with a mocked filter function that returns a subset of sessions."""
     experiment = ExperimentFactory()
     team = experiment.team
-
     sessions = []
+
     for config in session_configs:
         session = ExperimentSessionFactory(
             experiment=experiment,
@@ -60,17 +59,17 @@ def test_filtered_export_with_mocked_filter(mock_get_filtered_sessions, session_
             content=config["message"],
             message_type=ChatMessageType.HUMAN,
         )
+
         sessions.append(session)
+    if filtered_indices:
+        filtered_queryset = experiment.sessions.filter(id__in=[sessions[i].id for i in filtered_indices])
+    else:
+        filtered_queryset = experiment.sessions.none()
 
-    filtered_session_ids = [sessions[i].id for i in filtered_indices]
-    mock_queryset = MagicMock()
-    mock_queryset.values_list.return_value = filtered_session_ids
-    mock_get_filtered_sessions.return_value = mock_queryset
-
-    csv_in_memory = filtered_export_to_csv(experiment, filtered_session_ids)
+    csv_in_memory = filtered_export_to_csv(experiment, filtered_queryset)
     csv_content = csv_in_memory.getvalue()
     csv_lines = csv_content.strip().split("\n") if csv_content.strip() else []
-    assert len(csv_lines) == len(filtered_session_ids) + 1
+    assert len(csv_lines) == len(filtered_indices) + 1
 
     if filtered_indices:
         csv_reader = csv.reader(io.StringIO(csv_content))
