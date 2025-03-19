@@ -56,7 +56,7 @@ from apps.experiments.decorators import (
 )
 from apps.experiments.email import send_chat_link_email, send_experiment_invitation
 from apps.experiments.exceptions import ChannelAlreadyUtilizedException
-from apps.experiments.filters import apply_dynamic_filters, get_filter_params
+from apps.experiments.filters import apply_dynamic_filters
 from apps.experiments.forms import (
     ConsentForm,
     ExperimentForm,
@@ -164,8 +164,7 @@ class ExperimentSessionsTableView(SingleTableView, PermissionRequiredMixin):
         )
         if not self.request.GET.get("show-all"):
             query_set = query_set.exclude(experiment_channel__platform=ChannelPlatform.API)
-        filter_params = get_filter_params(self.request)
-        query_set = apply_dynamic_filters(query_set, filter_params)
+        query_set = apply_dynamic_filters(query_set, self.request)
         return query_set
 
 
@@ -1059,9 +1058,8 @@ def generate_chat_export(request, team_slug: str, experiment_id: str):
     experiment = get_object_or_404(Experiment, id=experiment_id)
     parsed_url = urlparse(request.headers.get("HX-Current-URL"))
     query_params = parse_qs(parsed_url.query)
-    filter_params = get_filter_params(request, parsed_params=query_params)
     include_api = request.POST.get("show-all") == "on"
-    task_id = async_export_chat.delay(experiment_id, filter_params, include_api)
+    task_id = async_export_chat.delay(experiment_id, query_params, include_api)
     return TemplateResponse(
         request, "experiments/components/exports.html", {"experiment": experiment, "task_id": task_id}
     )

@@ -8,44 +8,32 @@ from apps.annotations.models import CustomTaggedItem
 from apps.chat.models import Chat, ChatMessage
 
 
-def get_filter_params(request, parsed_params=None):
-    filter_params = {}
+def apply_dynamic_filters(query_set, request, parsed_params=None):
     param_source = parsed_params if parsed_params is not None else request.GET
-    for i in range(30):  # arbitrary number higher than any # of filters we'd expect
+    filter_conditions = Q()
+    filter_applied = False
+
+    for i in range(30):
         filter_column = param_source.get(f"filter_{i}_column")
         filter_operator = param_source.get(f"filter_{i}_operator")
         filter_value = param_source.get(f"filter_{i}_value")
 
         if not all([filter_column, filter_operator, filter_value]):
             break
-        filter_params[f"filter_{i}_column"] = (
-            filter_column[0] if isinstance(filter_column, list) else filter_column
-        )  # needed with parsing url
-        filter_params[f"filter_{i}_operator"] = (
-            filter_operator[0] if isinstance(filter_operator, list) else filter_operator
-        )  # ^
-        filter_params[f"filter_{i}_value"] = filter_value[0] if isinstance(filter_value, list) else filter_value
-    return filter_params
 
+        filter_column = filter_column[0] if isinstance(filter_column, list) else filter_column
+        filter_operator = filter_operator[0] if isinstance(filter_operator, list) else filter_operator
+        filter_value = filter_value[0] if isinstance(filter_value, list) else filter_value
+        print(filter_column)
 
-def apply_dynamic_filters(query_set, filter_params):
-    if filter_params:
-        filter_conditions = Q()
-        filter_applied = False
+        condition = build_filter_condition(filter_column, filter_operator, filter_value)
+        if condition:
+            filter_conditions &= condition
+            filter_applied = True
 
-        for i in range(30):  # Same limit as in get_filter_params
-            filter_column = filter_params.get(f"filter_{i}_column")
-            filter_operator = filter_params.get(f"filter_{i}_operator")
-            filter_value = filter_params.get(f"filter_{i}_value")
+    if filter_applied:
+        query_set = query_set.filter(filter_conditions).distinct()
 
-            if not all([filter_column, filter_operator, filter_value]):
-                continue
-            condition = build_filter_condition(filter_column, filter_operator, filter_value)
-            if condition:
-                filter_conditions &= condition
-                filter_applied = True
-        if filter_applied:
-            query_set = query_set.filter(filter_conditions).distinct()
     return query_set
 
 
