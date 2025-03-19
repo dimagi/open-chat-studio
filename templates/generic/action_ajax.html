@@ -5,7 +5,7 @@
         hx-target="#record-{{ record.id }}"
         hx-swap="outerHTML"
         type="button"
-
+        hx-disabled-elt="this"
         {% if confirm_message %}
           hx-trigger="confirmed"
           onClick="alertify.confirm().setting({
