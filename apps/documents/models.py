@@ -28,4 +28,4 @@ class Repository(BaseTeamModel):
         return list(self.files.values_list("name", flat=True))
 
     def get_references(self) -> list[Node]:
-        return Node.objects.filter(type=LLMResponseWithPrompt.__name__, params__collection_id=str(self.id)).all()
+        return Node.objects.select_related("pipeline").filter(type=LLMResponseWithPrompt.__name__, params__collection_id=str(self.id)).all()
