@@ -27,7 +27,7 @@ from apps.service_providers.llm_service.runnables import (
 from apps.utils.factories.assistants import OpenAiAssistantFactory
 from apps.utils.factories.experiment import ExperimentSessionFactory
 from apps.utils.factories.files import FileFactory
-from apps.utils.langchain import mock_experiment_llm
+from apps.utils.langchain import mock_llm
 
 ASSISTANT_ID = "test_assistant_id"
 
@@ -210,10 +210,8 @@ def test_assistant_includes_file_type_information(
 @patch("apps.service_providers.llm_service.history_managers.ExperimentHistoryManager.save_message_to_history", Mock())
 @patch("apps.service_providers.llm_service.adapters.AssistantAdapter.get_attachments", Mock())
 def test_assistant_runnable_raises_error(session):
-    experiment = session.experiment
-
     error = openai.BadRequestError("test", response=mock.Mock(), body={})
-    with mock_experiment_llm(experiment, [error]):
+    with mock_llm([error]):
         assistant_runnable = create_experiment_runnable(session.experiment, session)
         with pytest.raises(openai.BadRequestError):
             assistant_runnable.invoke("test")
@@ -227,10 +225,8 @@ def test_assistant_runnable_raises_error(session):
 @patch("apps.service_providers.llm_service.history_managers.ExperimentHistoryManager.save_message_to_history", Mock())
 @patch("apps.service_providers.llm_service.adapters.AssistantAdapter.get_attachments", Mock())
 def test_assistant_runnable_handles_cancellation_status(session):
-    experiment = session.experiment
-
     error = ValueError("unexpected status: cancelled")
-    with mock_experiment_llm(experiment, [error]):
+    with mock_llm([error]):
         assistant_runnable = create_experiment_runnable(session.experiment, session)
         with pytest.raises(GenerationCancelled):
             assistant_runnable.invoke("test")
@@ -286,7 +282,7 @@ def test_assistant_runnable_cancels_existing_run(save_response_annotations, resp
     assistant_runnable = create_experiment_runnable(session.experiment, session)
     cancel_run = mock.Mock()
     assistant_runnable.__dict__["_cancel_run"] = cancel_run
-    with mock_experiment_llm(session.experiment, responses):
+    with mock_llm(responses):
         with exception:
             result = assistant_runnable.invoke("test")
 

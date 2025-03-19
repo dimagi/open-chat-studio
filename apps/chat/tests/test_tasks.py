@@ -10,7 +10,7 @@ from apps.service_providers.models import LlmProvider, LlmProviderModel
 from apps.teams.models import Team
 from apps.users.models import CustomUser
 from apps.utils.factories.experiment import ExperimentSessionFactory
-from apps.utils.langchain import mock_experiment_llm
+from apps.utils.langchain import mock_llm
 
 
 class TasksTest(TestCase):
@@ -51,7 +51,7 @@ class TasksTest(TestCase):
 
     def test_getting_ping_message_saves_history(self):
         expected_ping_message = "Hey, answer me!"
-        with mock_experiment_llm(self.experiment, responses=[expected_ping_message]):
+        with mock_llm(responses=[expected_ping_message]):
             response = self.experiment_session._bot_prompt_for_user("Some message")
         messages = ChatMessage.objects.filter(chat=self.experiment_session.chat).all()
         # Only the AI message should be there

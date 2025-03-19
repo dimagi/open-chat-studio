@@ -30,7 +30,7 @@ from apps.experiments.models import (
 from apps.utils.factories.channels import ExperimentChannelFactory
 from apps.utils.factories.experiment import ExperimentFactory, ExperimentSessionFactory
 from apps.utils.factories.team import MembershipFactory
-from apps.utils.langchain import build_fake_llm_service, mock_experiment_llm
+from apps.utils.langchain import build_fake_llm_service, mock_llm
 
 from .message_examples import telegram_messages
 
@@ -232,7 +232,7 @@ def test_reset_conversation_does_not_create_new_session(
 
 
 def _send_user_message_on_channel(channel_instance, user_message: str):
-    with mock_experiment_llm(channel_instance.experiment, responses=["OK"]):
+    with mock_llm(responses=["OK"]):
         channel_instance.new_user_message(user_message)
 
 

@@ -20,7 +20,7 @@ from apps.teams.backends import EXPERIMENT_ADMIN_GROUP, add_user_to_team
 from apps.utils.factories.channels import ExperimentChannelFactory
 from apps.utils.factories.experiment import ExperimentFactory, ParticipantFactory
 from apps.utils.factories.team import TeamWithUsersFactory
-from apps.utils.langchain import mock_experiment_llm
+from apps.utils.langchain import mock_llm
 from apps.utils.tests.clients import ApiTestClient
 
 
@@ -534,7 +534,7 @@ def test_generate_bot_message_and_send(ConnectClient, experiment):
         "prompt_text": "Tell the user to take a break and make a beverege",
     }
     url = reverse("api:trigger_bot")
-    with mock_experiment_llm(None, ["Time to take a break and brew some coffee"], [0]):
+    with mock_llm(["Time to take a break and brew some coffee"], [0]):
         response = client.post(url, json.dumps(data), content_type="application/json")
     assert response.status_code == 200
     connect_client_mock.send_message_to_user.assert_called()
@@ -547,7 +547,7 @@ def test_generate_bot_message_and_send(ConnectClient, experiment):
     assert first_message.content == "Time to take a break and brew some coffee"
 
     # Call it a second time to make sure the session is reused
-    with mock_experiment_llm(None, ["Time to take a break and brew some tea"], [0]):
+    with mock_llm(["Time to take a break and brew some tea"], [0]):
         response = client.post(url, json.dumps(data), content_type="application/json")
     assert response.status_code == 200
     session = ExperimentSession.objects.get(participant=participant_data.participant, experiment=experiment)
@@ -559,7 +559,7 @@ def test_generate_bot_message_and_send(ConnectClient, experiment):
     # Call it a third time, but this time we want to start a new session
     first_session = session
     data["start_new_session"] = True
-    with mock_experiment_llm(None, ["Time to take a break an juice some fruit"], [0]):
+    with mock_llm(["Time to take a break an juice some fruit"], [0]):
         response = client.post(url, json.dumps(data), content_type="application/json")
     assert response.status_code == 200
     first_session.refresh_from_db()
