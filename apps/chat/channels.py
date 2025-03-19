@@ -245,7 +245,7 @@ class ChannelBase(ABC):
             self._user_query = self._extract_user_query()
         return self._user_query
 
-    @cached_property
+    @property
     def trace_inputs(self):
         return {"message": self.message.model_dump()}
 
@@ -253,7 +253,6 @@ class ChannelBase(ABC):
         """Adds the message to the handler in order to extract session information"""
         self.message = message
         self._user_query = None
-        del self.trace_inputs
 
         if not self._participant_is_allowed():
             raise ParticipantNotAllowedException()
