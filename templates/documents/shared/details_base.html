@@ -4,9 +4,11 @@
     method="POST"
     class="m-2 grid grid-cols-4" x-data="{editing: false}">
     {% csrf_token %}
-    {% block detail_content %}
-    {% endblock %}
-    <div class="py-3 col-span-1">
+    <div class="col-span-3">
+        {% block detail_content %}
+        {% endblock %}
+    </div>
+    <div class="py-3">
         <div class="join">
             <button type="button" class="btn btn-sm join-item pl-3" x-show="!editing" @click="editing = true">
                 <i class="fa-solid fa-pencil fa-xs"></i>

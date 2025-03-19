@@ -1,54 +1,52 @@
 {% extends 'documents/shared/details_base.html' %}
 
 {% block detail_content %}
-    <div class="col-span-3">
-        <input x-cloak x-show="editing" name="name" class="input input-bordered" value="{{ object.name }}"></input>
-        <h1 x-show="!editing" class="pg-title">{{ object.name }}</h1>
+    <input x-cloak x-show="editing" name="name" class="input input-bordered" value="{{ object.name }}"></input>
+    <h1 x-show="!editing" class="pg-title">{{ object.name }}</h1>
 
-        <dl class="grid grid-cols-2 gap-1">
-            <div class="py-3 col-span-1">
-                <dt class="text-sm font-medium leading-6">Uploaded at</dt>
-                <dd class="text-sm col-span-2">{{ object.created_at }}</dd>
-            </div>
+    <dl class="grid grid-cols-2 gap-1">
+        <div class="py-3">
+            <dt class="text-sm font-medium">Uploaded at</dt>
+            <dd class="text-sm">{{ object.created_at }}</dd>
+        </div>
 
-            <div class="py-3 col-span-1">
-                <dt class="text-sm font-medium leading-6">Size</dt>
-                <dd class="text-sm col-span-2">{{ object.size_mb }} MB</dd>
-            </div>
+        <div class="py-3">
+            <dt class="text-sm font-medium">Size</dt>
+            <dd class="text-sm">{{ object.size_mb }} MB</dd>
+        </div>
 
-            <div class="py-3 col-span-1">
-                <dt class="text-sm font-medium leading-6">Content Type</dt>
-                <dd class="text-sm col-span-2 overflow-auto">{{ object.content_type }}</dd>
-            </div>
+        <div class="py-3">
+            <dt class="text-sm font-medium">Content Type</dt>
+            <dd class="text-sm overflow-auto">{{ object.content_type }}</dd>
+        </div>
 
-            <div class="py-3 col-span-1" x-data="{collections: {{ current_collections }}}">
-                <dt class="text-sm font-medium leading-6">Collections</dt>
-                <dd class="text-sm col-span-2">
-                    <span x-show="!editing">{{ current_collections|join:", " }}</span>
-                    <div x-cloak x-show="editing">
-                        <select x-model="collections" id="collections-select" name="collections" multiple placeholder="Select collections" autocomplete="off">
-                            {% for name in available_collections %}
-                                <option
-                                    value="{{ name }}"
-                                    {% if name in current_collections %}selected{% endif %}
-                                >
-                                    {{ name }}
-                                </option>
-                            {% endfor %}
-                        </select>
-                    </div>
-                </dd>
-            </div>
+        <div class="py-3" x-data="{collections: {{ current_collections }}}">
+            <dt class="text-sm font-medium">Collections</dt>
+            <dd class="text-sm">
+                <span x-show="!editing">{{ current_collections|join:", " }}</span>
+                <div x-cloak x-show="editing">
+                    <select x-model="collections" id="collections-select" name="collections" multiple placeholder="Select collections" autocomplete="off">
+                        {% for name in available_collections %}
+                            <option
+                                value="{{ name }}"
+                                {% if name in current_collections %}selected{% endif %}
+                            >
+                                {{ name }}
+                            </option>
+                        {% endfor %}
+                    </select>
+                </div>
+            </dd>
+        </div>
 
-            <div class="py-3 col-span-2">
-                <dt class="text-sm font-medium leading-6">Summary</dt>
-                <dd class="text-sm col-span-2">
-                    <textarea name="summary" x-cloak x-show="editing" rows="2" cols="40" class="input input-bordered" maxlength="{{ max_summary_length }}">{{ object.summary }}</textarea>
-                    <span x-show="!editing">{{ object.summary }}</span>
-                </dd>
-            </div>
-        </dl>
-    </div>
+        <div class="py-3 col-span-2">
+            <dt class="text-sm font-medium">Summary</dt>
+            <dd class="text-sm">
+                <textarea name="summary" x-cloak x-show="editing" rows="2" cols="40" class="input input-bordered" maxlength="{{ max_summary_length }}">{{ object.summary }}</textarea>
+                <span x-show="!editing">{{ object.summary }}</span>
+            </dd>
+        </div>
+    </dl>
 {% endblock %}
 
 {% block extra_js %}

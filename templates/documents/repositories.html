@@ -3,17 +3,13 @@
 {% block app %}
     {% load i18n %}
     <div class="app-card" x-data>
-        <div class="grid grid-cols-6">
-            <div class="col-span-5">
-                <div class="flex">
-                    <h1 id="{{ title|slugify }}" class="{{ title_class|default:"pg-title" }} hover:cursor-pointer">
-                        <a href="#{{ title|slugify }}">{{ title }}</a>
-                    </h1>
-                </div>
-            </div>
+        <div class="flex">
+            <h1 id="{{ title|slugify }}" class="{{ title_class|default:"pg-title" }} hover:cursor-pointer">
+                <a href="#{{ title|slugify }}">{{ title }}</a>
+            </h1>
         </div>
 
-        <div class="flex flex-col">
+        <div class="flex flex-col mt-2">
             <div class="join">
                 <a href="{% url 'documents:repositories' request.team.slug 'files' %}" class="btn btn-sm join-item {% if tab_name == 'files' %}btn-active{% endif %}">
                     Files ({{ files_count }})
