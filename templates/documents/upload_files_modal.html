@@ -22,7 +22,7 @@
                 <span class="col-span-1" x-text="file.name"></span>
                 <div class="col-span-1 flex flex-row gap-1 items-center">
                     <textarea
-                        x-model="file_summaries[file.name]"
+                        :name="file.name"
                         class="col-span-1 textarea textarea-bordered w-full placeholder:text-gray-500"
                         maxlength="{{ max_summary_length }}"
                         placeholder="Enter a summary of the file..."
@@ -33,7 +33,6 @@
                 </div>
             </div>
         </template>
-        <input type="hidden" name="file_summaries" :value="JSON.stringify(file_summaries)" />
     </div>
 {% endblock %}
 
@@ -47,13 +46,10 @@
             Alpine.data('modalData', () => ({
                 message: "",
                 uploaded_files: [],
-                file_summaries: {},
                 selected_collection: null,
                 handleFileChange(event) {
                     const files = Array.from(event.target.files);
                     this.uploaded_files.push(...files);
-
-                    files.forEach(file => this.file_summaries[file.name] = "");
 
                     const dataTransfer = new DataTransfer();
                     this.uploaded_files.forEach(file => dataTransfer.items.add(file));

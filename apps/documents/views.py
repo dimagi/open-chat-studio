@@ -1,5 +1,3 @@
-import json
-
 from django.conf import settings
 from django.contrib import messages
 from django.contrib.auth.decorators import permission_required
@@ -112,14 +110,13 @@ def upload_files(request, team_slug: str):
     """Upload files to a collection"""
     # TODO: Check collection size and error if it's too large with the new files added
     files = []
-    file_summaries = json.loads(request.POST["file_summaries"])
     for uploaded_file in request.FILES.getlist("files"):
         files.append(
             File.objects.create(
                 team=request.team,
                 name=uploaded_file.name,
                 file=uploaded_file,
-                summary=file_summaries[uploaded_file.name],
+                summary=request.POST[uploaded_file.name],
                 purpose=FilePurpose.COLLECTION,
             )
         )
