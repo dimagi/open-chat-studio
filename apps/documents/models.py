@@ -20,7 +20,8 @@ class Repository(BaseTeamModel):
     @property
     def size(self) -> float:
         """Returns the size of this repository in megabytes"""
-        return bytes_to_megabytes(self.files.aggregate(bytes=models.Sum("content_size"))["bytes"])
+        bytes = self.files.aggregate(bytes=models.Sum("content_size"))["bytes"] or 0
+        return bytes_to_megabytes(bytes)
 
     @property
     def file_names(self) -> list[str]:
