@@ -894,14 +894,6 @@ class Experiment(BaseTeamModel, VersionsMixin, CustomActionOperationMixin):
                 return None
             return self.llm_provider_model.name
 
-    @property
-    def trace_service(self):
-        from apps.service_providers.tracing.trace_service import TracingService
-
-        if self.trace_provider:
-            return TracingService(self.trace_provider.type, self.trace_provider.config)
-        return TracingService()
-
     def get_api_url(self):
         if self.is_working_version:
             return absolute_url(reverse("api:openai-chat-completions", args=[self.public_id]))
