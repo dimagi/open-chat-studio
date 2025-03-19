@@ -22,8 +22,8 @@ from apps.experiments.models import (
     VoiceResponseBehaviours,
 )
 from apps.experiments.views.experiment import (
-    ExperimentExperimentTableView,
     ExperimentForm,
+    ExperimentTableView,
     _verify_user_or_start_session,
 )
 from apps.teams.backends import add_user_to_team
@@ -439,7 +439,7 @@ class TestExperimentTableView:
 
         request = RequestFactory().get(reverse("experiments:table", args=[team.slug]))
         request.team = team
-        view = ExperimentExperimentTableView()
+        view = ExperimentTableView()
         view.request = request
         assert list(view.get_queryset().all()) == [experiment]
 

@@ -105,7 +105,7 @@ def experiments_home(request, team_slug: str):
     return generic_home(request, team_slug, "Experiments", "experiments:table", "experiments:new")
 
 
-class ExperimentExperimentTableView(BaseExperimentTableView):
+class ExperimentTableView(BaseExperimentTableView):
     model = Experiment
     table_class = ExperimentTable
     permission_required = "experiments.view_experiment"
