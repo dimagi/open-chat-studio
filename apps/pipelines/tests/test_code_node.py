@@ -417,3 +417,82 @@ def test_render_template_with_context_keys(pipeline, experiment_session):
         "participant_data: custom_value"
     )
     assert result["messages"][-1] == expected
+
+
+@django_db_with_data(available_apps=("apps.service_providers",))
+@mock.patch("apps.pipelines.nodes.base.PipelineNode.logger", mock.Mock())
+def test_get_participant_schedules(pipeline, experiment_session):
+    """
+    Test that the get_participant_schedules function correctly retrieves
+    scheduled messages for the experiment session's participant and experiment.
+    """
+    from django.utils import timezone
+
+    from apps.events.models import EventActionType, TimePeriod
+    from apps.utils.factories.events import EventActionFactory, ScheduledMessageFactory
+
+    params = {
+        "name": "Test",
+        "time_period": TimePeriod.DAYS,
+        "frequency": 1,
+        "repetitions": 1,
+        "prompt_text": "",
+        "experiment_id": experiment_session.experiment.id,
+    }
+    event_action = EventActionFactory(params=params, action_type=EventActionType.SCHEDULETRIGGER)
+
+    ScheduledMessageFactory(
+        experiment=experiment_session.experiment,
+        team=experiment_session.team,
+        participant=experiment_session.participant,
+        action=event_action,
+        next_trigger_date=timezone.now(),
+        is_complete=False,
+        cancelled_at=None,
+    )
+    code = """
+def main(input, **kwargs):
+    schedules = get_participant_schedules()
+    return f"Number of schedules: {len(schedules)}"
+"""
+    nodes = [
+        start_node(),
+        code_node(code),
+        end_node(),
+    ]
+
+    assert (
+        (
+            create_runnable(pipeline, nodes).invoke(
+                PipelineState(experiment_session=experiment_session, messages=["hi"])
+            )["messages"][-1]
+        )
+        == "Number of schedules: 1"
+    )
+
+
+@django_db_with_data(available_apps=("apps.service_providers",))
+@mock.patch("apps.pipelines.nodes.base.PipelineNode.logger", mock.Mock())
+def test_get_participant_schedules_empty(pipeline, experiment_session):
+    """
+    Test that the get_participant_schedules function returns an empty list
+    when there are no active scheduled messages.
+    """
+    code = """
+def main(input, **kwargs):
+    schedules = get_participant_schedules()
+    return f"Number of schedules: {len(schedules)}, Empty list: {schedules == []}"
+"""
+    nodes = [
+        start_node(),
+        code_node(code),
+        end_node(),
+    ]
+    assert (
+        (
+            create_runnable(pipeline, nodes).invoke(
+                PipelineState(experiment_session=experiment_session, messages=["hi"])
+            )["messages"][-1]
+        )
+        == "Number of schedules: 0, Empty list: True"
+    )

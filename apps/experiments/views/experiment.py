@@ -56,6 +56,12 @@ from apps.experiments.decorators import (
 )
 from apps.experiments.email import send_chat_link_email, send_experiment_invitation
 from apps.experiments.exceptions import ChannelAlreadyUtilizedException
+from apps.experiments.filters import (
+    build_participant_filter,
+    build_tags_filter,
+    build_timestamp_filter,
+    build_versions_filter,
+)
 from apps.experiments.forms import (
     ConsentForm,
     ExperimentForm,
@@ -161,18 +167,45 @@ class ExperimentSessionsTableView(SingleTableView, PermissionRequiredMixin):
             .filter(team=self.request.team, experiment__id=self.kwargs["experiment_id"])
             .select_related("participant__user")
         )
-
         if not self.request.GET.get("show-all"):
             query_set = query_set.exclude(experiment_channel__platform=ChannelPlatform.API)
-
-        if tags_query := self.request.GET.get("tags"):
-            tags = tags_query.split("&")
-            query_set = query_set.filter(chat__tags__name__in=tags).distinct()
-
-        if participant_identifiers := self.request.GET.get("participants"):
-            participant_identifiers = participant_identifiers.split(",")
-            query_set = query_set.filter(participant__identifier__in=participant_identifiers)
+        query_set = self.apply_dynamic_filters(query_set)
         return query_set
+
+    def apply_dynamic_filters(self, query_set):
+        filter_conditions = Q()
+        filter_applied = False
+
+        for i in range(30):  # arbitrary number higher than any # of filters we'd expect
+            filter_column = self.request.GET.get(f"filter_{i}_column")
+            filter_operator = self.request.GET.get(f"filter_{i}_operator")
+            filter_value = self.request.GET.get(f"filter_{i}_value")
+
+            if not all([filter_column, filter_operator, filter_value]):
+                break
+
+            condition = self.build_filter_condition(filter_column, filter_operator, filter_value)
+            if condition:
+                filter_conditions &= condition
+                filter_applied = True
+
+        if filter_applied:
+            query_set = query_set.filter(filter_conditions).distinct()
+        return query_set
+
+    def build_filter_condition(self, column, operator, value):
+        """Build a Q object for the filter condition based on column, operator and value"""
+        if not value:
+            return None
+        if column == "participant":
+            return build_participant_filter(operator, value)
+        elif column == "last_message":
+            return build_timestamp_filter(operator, value)
+        elif column == "tags":
+            return build_tags_filter(operator, value)
+        elif column == "versions":
+            return build_versions_filter(operator, value)
+        return None
 
 
 class ExperimentVersionsTableView(SingleTableView, PermissionRequiredMixin):
@@ -534,7 +567,8 @@ def single_experiment_home(request, team_slug: str, experiment_id: int):
             "platforms": available_platforms,
             "platform_forms": platform_forms,
             "channels": channels,
-            "available_tags": experiment.team.tag_set.filter(is_system_tag=False),
+            "available_tags": [tag.name for tag in experiment.team.tag_set.filter(is_system_tag=False)],
+            "experiment_versions": experiment.get_version_name_list(),
             "deployed_version": deployed_version,
             **_get_events_context(experiment, team_slug),
             **_get_routes_context(experiment, team_slug),
@@ -893,7 +927,7 @@ def start_session_public(request, team_slug: str, experiment_id: uuid.UUID):
             participant_identifier=identifier,
             timezone=request.session.get("detected_tz", None),
         )
-        return _record_consent_and_redirect(request, team_slug, session)
+        return _record_consent_and_redirect(team_slug, experiment, session)
 
     if request.method == "POST":
         form = ConsentForm(consent, request.POST, initial={"identifier": user.email if user else None})
@@ -919,10 +953,11 @@ def start_session_public(request, team_slug: str, experiment_id: uuid.UUID):
                 return _verify_user_or_start_session(
                     identifier=identifier,
                     request=request,
+                    experiment=experiment,
                     session=session,
                 )
             else:
-                return _record_consent_and_redirect(request, team_slug, session)
+                return _record_consent_and_redirect(team_slug, experiment, session)
     else:
         form = ConsentForm(
             consent,
@@ -973,7 +1008,7 @@ def start_session_public_embed(request, team_slug: str, experiment_id: uuid.UUID
     return redirect("experiments:experiment_chat_embed", team_slug, experiment.public_id, session.external_id)
 
 
-def _verify_user_or_start_session(identifier, request, session):
+def _verify_user_or_start_session(identifier, request, experiment, session):
     """
     Verifies if the user is allowed to access the chat.
 
@@ -987,16 +1022,16 @@ def _verify_user_or_start_session(identifier, request, session):
     """
     team_slug = session.team.slug
     if request.user.is_authenticated:
-        return _record_consent_and_redirect(request, team_slug, session)
+        return _record_consent_and_redirect(team_slug, experiment, session)
 
     if not session.requires_participant_data():
-        return _record_consent_and_redirect(request, team_slug, session)
+        return _record_consent_and_redirect(team_slug, experiment, session)
 
     if session_data := get_chat_session_access_cookie_data(request, fail_silently=True):
         if Participant.objects.filter(
             id=session_data["participant_id"], identifier=identifier, team_id=session.team_id
         ).exists():
-            return _record_consent_and_redirect(request, team_slug, session)
+            return _record_consent_and_redirect(team_slug, experiment, session)
 
     send_chat_link_email(session)
     return TemplateResponse(request=request, template="account/participant_email_verify.html")
@@ -1005,8 +1040,8 @@ def _verify_user_or_start_session(identifier, request, session):
 def verify_public_chat_token(request, team_slug: str, experiment_id: uuid.UUID, token: str):
     try:
         claims = jwt.decode(token, settings.SECRET_KEY, algorithms="HS256")
-        session = get_object_or_404(ExperimentSession, external_id=claims["session"])
-        return _record_consent_and_redirect(request, team_slug, session)
+        session = ExperimentSession.objects.select_related("experiment").get(external_id=claims["session"])
+        return _record_consent_and_redirect(team_slug, session.experiment, session)
     except Exception:
         messages.warning(request=request, message="This link could not be verified")
         return redirect(reverse("experiments:start_session_public", args=(team_slug, experiment_id)))
@@ -1103,7 +1138,7 @@ def send_invitation(request, team_slug: str, experiment_id: int, session_id: str
     )
 
 
-def _record_consent_and_redirect(request, team_slug: str, experiment_session: ExperimentSession):
+def _record_consent_and_redirect(team_slug: str, experiment: Experiment, experiment_session: ExperimentSession):
     # record consent, update status
     experiment_session.consent_date = timezone.now()
     if experiment_session.experiment_version.pre_survey:
@@ -1119,27 +1154,28 @@ def _record_consent_and_redirect(request, team_slug: str, experiment_session: Ex
             args=[team_slug, experiment_session.experiment.public_id, experiment_session.external_id],
         )
     )
-    return set_session_access_cookie(response, experiment_session)
+    return set_session_access_cookie(response, experiment, experiment_session)
 
 
 @experiment_session_view(allowed_states=[SessionStatus.SETUP, SessionStatus.PENDING])
 def start_session_from_invite(request, team_slug: str, experiment_id: uuid.UUID, session_id: str):
-    experiment = get_object_or_404(Experiment, public_id=experiment_id, team=request.team)
-    experiment_session = get_object_or_404(ExperimentSession, experiment=experiment, external_id=session_id)
-    default_version = experiment.default_version
+    default_version = request.experiment.default_version
     consent = default_version.consent_form
 
     initial = {
-        "participant_id": experiment_session.participant.id,
-        "identifier": experiment_session.participant.identifier,
+        "participant_id": request.experiment_session.participant.id,
+        "identifier": request.experiment_session.participant.identifier,
     }
-    if not experiment_session.participant:
+    if not request.experiment_session.participant:
         raise Http404()
+
+    if not consent:
+        return _record_consent_and_redirect(team_slug, request.experiment, request.experiment_session)
 
     if request.method == "POST":
         form = ConsentForm(consent, request.POST, initial=initial)
         if form.is_valid():
-            return _record_consent_and_redirect(request, team_slug, experiment_session)
+            return _record_consent_and_redirect(team_slug, request.experiment, request.experiment_session)
 
     else:
         form = ConsentForm(consent, initial=initial)
