@@ -1,3 +1,5 @@
-from .service import LangFuseTraceService, LangSmithTraceService, TraceService
+__all__ = ["TraceService", "LangFuseTraceService", "LangSmithTraceService"]
 
-__all__ = ["LangFuseTraceService", "TraceService", "LangSmithTraceService"]
+from .base import TraceService
+from .langfuse import LangFuseTraceService
+from .langsmith import LangSmithTraceService

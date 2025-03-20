@@ -13,6 +13,8 @@ from field_audit import audit_fields
 from field_audit.models import AuditingManager
 from pydantic import ValidationError
 
+import apps.service_providers.tracing.langfuse
+import apps.service_providers.tracing.langsmith
 from apps.channels.models import ChannelPlatform
 from apps.experiments.models import SyntheticVoice
 from apps.service_providers import auth_service, const, model_audit_fields, tracing
@@ -467,9 +469,9 @@ class TraceProviderType(models.TextChoices):
     def get_service(self, config: dict) -> tracing.TraceService:
         match self:
             case TraceProviderType.langfuse:
-                return tracing.LangFuseTraceService(self, config)
+                return apps.service_providers.tracing.langfuse.LangFuseTraceService(self, config)
             case TraceProviderType.langsmith:
-                return tracing.LangSmithTraceService(self, config)
+                return apps.service_providers.tracing.langsmith.LangSmithTraceService(self, config)
         raise Exception(f"No tracing service configured for {self}")
 
 
