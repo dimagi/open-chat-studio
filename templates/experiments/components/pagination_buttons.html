@@ -1,13 +1,13 @@
 {% if total_pages > 1 %}
   <div class="flex {% if btn_size == 'sm' %}gap-1{% else %}justify-right{% endif %}">
     {% if page > 1 %}
-      <a href="#"
+      <a href="#table-top"
          class="btn {% if btn_size == 'sm' %}btn-sm{% endif %}"
          hx-get="{% url 'experiments:experiment_session_messages_view' request.team.slug experiment.public_id experiment_session.external_id %}?page=1{% if search %}&search={{ search }}{% endif %}"
          hx-target="#messages-container">
         <i class="fa-solid fa-backward-fast"></i>
       </a>
-      <a href="#"
+      <a href="#table-top"
          class="btn {% if btn_size == 'sm' %}btn-sm{% endif %}"
          hx-get="{% url 'experiments:experiment_session_messages_view' request.team.slug experiment.public_id experiment_session.external_id %}?page={{ page|add:"-1" }}{% if search %}&search={{ search }}{% endif %}"
          hx-target="#messages-container">
@@ -15,13 +15,13 @@
       </a>
     {% endif %}
     {% if page < total_pages %}
-      <a href="#"
+      <a href="#table-top"
          class="btn {% if btn_size == 'sm' %}btn-sm{% endif %}"
          hx-get="{% url 'experiments:experiment_session_messages_view' request.team.slug experiment.public_id experiment_session.external_id %}?page={{ page|add:"1" }}{% if search %}&search={{ search }}{% endif %}"
          hx-target="#messages-container">
         Next <i class="fa-solid fa-forward-step"></i>
       </a>
-      <a href="#"
+      <a href="#table-top"
          class="btn {% if btn_size == 'sm' %}btn-sm{% endif %}"
          hx-get="{% url 'experiments:experiment_session_messages_view' request.team.slug experiment.public_id experiment_session.external_id %}?page={{ total_pages }}{% if search %}&search={{ search }}{% endif %}"
          hx-target="#messages-container">
