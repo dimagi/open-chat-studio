@@ -1,3 +1,5 @@
+from __future__ import annotations
+
 from abc import ABCMeta, abstractmethod
 from typing import Self
 
@@ -66,15 +68,6 @@ class BaseHistoryManager(metaclass=ABCMeta):
 
         return chat_message
 
-    def get_trace_metadata(self) -> dict:
-        if self.trace_service:
-            trace_info = self.trace_service.get_current_trace_info()
-            if trace_info:
-                return {
-                    "trace_info": {**trace_info.model_dump(), "trace_provider": self.trace_service.type},
-                }
-        return {}
-
 
 class ExperimentHistoryManager(BaseHistoryManager):
     def __init__(
@@ -135,16 +128,28 @@ class ExperimentHistoryManager(BaseHistoryManager):
         experiment_tag: str,
         output_message_metadata: dict,
     ):
+        trace_meta = self.get_trace_metadata()
         if save_input_to_history:
-            self.save_message_to_history(input, type_=ChatMessageType.HUMAN, message_metadata=input_message_metadata)
+            self.save_message_to_history(
+                input, type_=ChatMessageType.HUMAN, message_metadata={**input_message_metadata, **trace_meta}
+            )
 
         if output is not None and save_output_to_history:
             self.save_message_to_history(
                 output,
                 type_=ChatMessageType.AI,
-                message_metadata=output_message_metadata,
+                message_metadata={**output_message_metadata, **trace_meta},
                 experiment_tag=experiment_tag,
             )
+
+    def get_trace_metadata(self) -> dict:
+        if self.trace_service:
+            trace_info = self.trace_service.get_current_trace_info()
+            if trace_info:
+                return {
+                    "trace_info": {**trace_info.model_dump(), "trace_provider": self.trace_service.type},
+                }
+        return {}
 
 
 class PipelineHistoryManager(BaseHistoryManager):
@@ -164,7 +169,6 @@ class PipelineHistoryManager(BaseHistoryManager):
         self.history_name = history_name
         self.max_token_limit = max_token_limit
         self.chat_model = chat_model
-        self.trace_service = session.experiment.trace_service if session else None
         self.ai_message = None
 
         self.input_message_metadata = None
