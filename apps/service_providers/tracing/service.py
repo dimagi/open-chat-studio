@@ -2,7 +2,6 @@ from dataclasses import asdict, is_dataclass
 from typing import Any
 
 from django.db.models import Model
-from langchain_core.callbacks.manager import CallbackManager
 from langchain_core.tracers import LangChainTracer
 from pydantic import BaseModel
 
@@ -28,14 +27,8 @@ class TraceService:
     def get_callback(self, participant_id: str, session_id: str):
         raise NotImplementedError
 
-    def update_trace(self, metadata: dict):
-        pass
-
     def get_trace_metadata(self) -> TraceInfo | None:
         return None
-
-    def initialize_from_callback_manager(self, callback_manager: CallbackManager):
-        pass
 
 
 class LangFuseTraceService(TraceService):
@@ -58,25 +51,6 @@ class LangFuseTraceService(TraceService):
 
         self._callback = CallbackWrapper(CallbackHandler(user_id=participant_id, session_id=session_id, **self.config))
         return self._callback
-
-    def initialize_from_callback_manager(self, callback_manager: CallbackManager):
-        """
-        Populates the callback from the callback handler already configured in `callback_manager`. This allows the trace
-        service to reuse existing callbacks.
-        """
-
-        for handler in callback_manager.handlers:
-            if isinstance(handler, CallbackWrapper):
-                self._callback = handler
-
-    def update_trace(self, metadata: dict):
-        if not metadata:
-            return
-
-        if not self._callback:
-            raise ServiceNotInitializedException("Service not initialized.")
-
-        self._callback.trace.update(metadata=metadata)
 
     def get_trace_metadata(self) -> dict[str, str] | None:
         if not self._callback:
