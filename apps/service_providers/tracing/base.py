@@ -1,5 +1,4 @@
 from langchain_core.callbacks import BaseCallbackHandler
-from pydantic import BaseModel
 
 
 class ServiceReentryException(Exception):
@@ -8,11 +7,6 @@ class ServiceReentryException(Exception):
 
 class ServiceNotInitializedException(Exception):
     pass
-
-
-class TraceInfo(BaseModel):
-    trace_id: str
-    trace_url: str
 
 
 class TraceService:
