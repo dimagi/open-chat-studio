@@ -1,0 +1,388 @@
+{% extends 'web/app/app_base.html' %}
+{% load waffle_tags %}
+{% load team_tags %}
+{% load static %}
+{% load form_tags %}
+{% load django_tables2 %}
+{% block breadcrumbs %}
+
+  <div class="text-sm breadcrumbs" aria-label="breadcrumbs">
+    <ul>
+      <li><a href="{% url 'chatbots:chatbots_home' request.team.slug %}">Chatbots</a></li>
+      <li class="pg-breadcrumb-active" aria-current="page">{{ experiment.name }}</li>
+    </ul>
+  </div>
+{% endblock %}
+{% block app %}
+  <div class="app-card">
+    <div class="flex">
+      <div class="flex-1 flex flex-row gap-2">
+        <h1 class="pg-title">{{ experiment.name }}</h1>
+        {% if experiment.is_archived %}
+          <div class="badge badge-warning badge-sm">
+            Archived
+          </div>
+        {% elif deployed_version %}
+          <div class="flex flex-row gap-2">
+            <div class="tooltip" data-tip="Current published version">
+              <a class="badge badge-success badge-sm"
+                 href="#versions">
+                v{{ deployed_version }}
+              </a>
+            </div>
+            <div
+              id="version-status-badge"
+              class="watchVersionChange"
+              hx-get="{% url 'experiments:get_release_status_badge' experiment.team.slug experiment.id %}"
+              hx-trigger="load, version-changed"
+              hx-swap="innerHTML">
+            </div>
+          </div>
+        {% endif %}
+      </div>
+      <div class="justify-self-end">
+        <div class="join">
+          {% if experiment.is_editable %}
+            <div class="tooltip" data-tip="Chat to the bot">
+              <div class="dropdown dropdown-hover">
+                <div tabindex="0" role="button" class="btn btn-primary join-item btn-sm !rounded-l-full">
+                  <i class="fas fa-comment"></i><i class="fa-solid fa-caret-down fa-sm"></i>
+                </div>
+                <ul tabindex="0" class="dropdown-content menu bg-base-100 rounded-box z-[1] w-52 p-2 shadow">
+                  <li>
+                    <form method="post"
+                          action="{% url 'experiments:start_authed_web_session' team.slug experiment.id experiment.version_number %}"
+                          class="inline">
+                      {% csrf_token %}
+                      <button type="submit">Unreleased version</button>
+                    </form>
+                  </li>
+                  <li>
+                    <form method="post"
+                          action="{% url 'experiments:start_authed_web_session' team.slug experiment.id 0 %}"
+                          class="inline">
+                      {% csrf_token %}
+                      <button type="submit">Published version</button>
+                    </form>
+                  </li>
+                </ul>
+              </div>
+            </div>
+            <div class="tooltip" data-tip="Edit">
+              <a class="btn btn-primary join-item btn-sm rounded-r-full"
+                 href="{% url 'chatbots:edit' team.slug experiment.pipeline.id %}">
+                <i class="fa-solid fa-pencil"></i>
+              </a>
+            </div>
+          {% else %}
+            <div class="tooltip" data-tip="View">
+              <a class="btn btn-primary join-item btn-sm rounded-l-full rounded-r-full"
+                 href="{% url 'chatbots:edit' team.slug experiment.id %}">
+                <i class="fa-solid fa-eye"></i>
+              </a>
+            </div>
+          {% endif %}
+        </div>
+      </div>
+    </div>
+    <h2 class="flex-1 pg-subtitle">{{ experiment.description }}</h2>
+    {% if experiment.is_editable %}
+      <div class="my-4">
+        <h3 class="font-bold text-lg inline mr-4">Channels:</h3>
+        <input id="api-url-link" type="hidden" value="{{ experiment.get_api_url }}" />
+        <button class="btn btn-ghost btn-sm no-animation !normal-case" onclick="SiteJS.app.copyToClipboard(this, 'api-url-link')" title="Copy to clipboard">
+          <i class="fa-solid fa-link"></i> API <i class="fa-regular fa-copy fa-sm pg-text-muted"></i>
+        </button>
+        <div class="dropdown dropdown-hover">
+          <div tabindex="0" role="button" class="btn btn-ghost btn-sm !normal-case">
+            <i class="fa-regular fa-window-maximize"></i> Web <i class="fa-solid fa-caret-down fa-sm pg-text-muted"></i>
+          </div>
+          <ul tabindex="0" class="dropdown-content menu bg-base-100 rounded-box z-[1] w-52 p-2 shadow border">
+            {% if experiment.is_public %}
+              <li onclick="sharing_modal.showModal()">
+                <span><i class="fa-solid fa-share-nodes"></i> Share</span>
+              </li>
+            {% endif %}
+            {% if perms.experiments.invite_participants %}
+              <li>
+                <a href="{% url 'experiments:experiment_invitations' team.slug experiment.id %}">
+                  <i class="fa-regular fa-envelope"></i> Invitations
+                </a>
+              </li>
+            {% endif %}
+          </ul>
+        </div>
+        {% if experiment.is_public %}
+          {% include "experiments/share/dialog.html" %}
+        {% endif %}
+      {#  Commented elements included for Tailwind processing #}
+      {#  <i class="fa-brands fa-telegram"></i> #}
+      {#  <i class="fa-brands fa-whatsapp"></i> #}
+        {% for channel in channels %}
+          <div class="btn btn-ghost btn-sm !normal-case" onclick="channel_{{ channel.id }}_modal.showModal()">
+            <span class="tooltip" data-tip="{{ channel.name }}"><i class="fa-brands fa-{{ channel.platform_enum.value }}"></i> {{ channel.platform_enum.label }}</span>
+          </div>
+          <dialog id="channel_{{ channel.id }}_modal" class="modal">
+            <div class="modal-box">
+              <h3 class="font-bold text-lg">Edit {{ platform.label }} Channel</h3>
+              <form method="post" action="{% url "experiments:update_channel" request.team.slug experiment.id channel.id %}"
+                    {# debounce the submit event handler so that disabling the button only happens after submit and the 'action' param is submitted #}
+                    x-data="{ buttonDisabled: false }" x-on:submit.debounce="buttonDisabled = true">
+                {% csrf_token %}
+                {% render_form_fields channel.form %}
+                {% if channel.extra_form %}
+                  <div {% include "generic/attrs.html" with attrs=channel.extra_form.form_attrs %}>
+                    {% render_form_fields channel.extra_form %}
+                  </div>
+                {% endif %}
+                <div class="modal-action">
+                  <button class="btn btn-primary" type="submit" name="action" value="update" x-bind:disabled="buttonDisabled">Update</button>
+                  <button class="btn btn-error" type="submit" name="action" value="delete" x-bind:disabled="buttonDisabled">Delete</button>
+                  <button class="btn" type="button" onclick="channel_{{ channel.id }}_modal.close()" x-bind:disabled="buttonDisabled">Close</button>
+                </div>
+              </form>
+            </div>
+          </dialog>
+        {% endfor %}
+        {% if platforms %}
+          <div class="dropdown">
+            <button tabindex="0" class="btn btn-ghost btn-sm">
+              <i class="fa-regular fa-plus"></i>
+            </button>
+            <ul tabindex="0" class="dropdown-content z-10 menu p-2 shadow bg-base-100 rounded-box w-52 border">
+              {% for platform, available in platforms.items %}
+                <li>
+                  <button
+                    class="disabled:text-gray-600 tooltip tooltip-right"
+                    {% if not available %}
+                      disabled
+                      data-tip="You need to configure your {{ platform|capfirst }} provider to use this channel"
+                    {% endif %}
+                    onclick="{{ platform.value }}_modal.showModal()"
+
+                  >
+                    {{ platform.label }} {% if not available %}
+                    {% endif %}
+                  </button>
+                </li>
+              {% endfor %}
+            </ul>
+          </div>
+          {% for platform, available in platforms.items %}
+            {% if available %}
+              <dialog id="{{ platform.value }}_modal" class="modal">
+                <div class="modal-box">
+                  <h3 class="font-bold text-lg">Link with {{ platform.label }}</h3>
+                  <form method="post" action="{% url "experiments:create_channel" request.team.slug experiment.id %}"
+                        x-data="{ buttonDisabled: false }" x-on:submit="buttonDisabled = true">
+                    {% csrf_token %}
+                    {% render_form_fields platform_forms|dict_lookup:platform %}
+                    {% if platform.extra_form %}
+                      <div {% include "generic/attrs.html" with attrs=platform.extra_form.form_attrs %}>
+                        {% render_form_fields platform.extra_form %}
+                      </div>
+                    {% endif %}
+                    <div class="modal-action">
+                      <span class="loading loading-spinner loading-sm p-3 ml-4" x-show="buttonDisabled" x-cloak></span>
+                      <button class="btn btn-primary" type="submit" x-bind:disabled="buttonDisabled">Create</button>
+                      <button class="btn" type="button" onclick="{{ platform.value }}_modal.close()" x-bind:disabled="buttonDisabled">Close</button>
+                    </div>
+                  </form>
+                </div>
+              </dialog>
+            {% endif %}
+          {% endfor %}
+        {% endif %}
+      </div>
+    {% endif %}
+
+    {% if not can_make_child_routes %}
+      <div class="my-4">
+        <h3 class="font-bold text-lg">Parent Experiments:
+          <span class="ml-2 tooltip" data-tip="This experiment is configured as a child of the following experiments.">
+            <i class="text-sm fa-regular fa-circle-question" ></i>
+          </span>
+        </h3>
+      </div>
+      <div class="p-3 lg:w-3/4">{% render_table parent_routes_table %}</div>
+    {% endif %}
+  </div>
+
+
+  <div role="tablist" class="tabs tabs-bordered">
+    {% if perms.chat.view_chat %}
+      <input type="radio" name="tab_group" role="tab" class="tab" aria-label="Sessions" id="tab-allsessions" checked/>
+      <div role="tabpanel" class="tab-content" id="content-allsessions">
+        <div class="app-card">
+          <div x-data="{tags: '', participants: []}">
+            <div class="flex gap-x-2">
+              {% if perms.experiments.download_chats %}
+                {% include "experiments/components/exports.html" %}
+              {% endif %}
+              <form
+                hx-trigger="load, change"
+                hx-target="#sessions-table"
+                hx-get="{% url 'experiments:sessions-list' request.team.slug experiment.id %}"
+                hx-swap="innerHTML"
+              >
+                <div class="flex gap-2">
+                  <div class="w-72 my-2">
+                    <input x-model="participants" name="participants" id="participants-filter" placeholder="Filter participants...">
+                  </div>
+                  {% if perms.annotations.view_customtaggeditem %}
+                    <div class="w-72 my-2">
+                      <select x-model="tags" id="tag-multiselect-filter" name="tags" multiple
+                              placeholder="Filter tags..."
+                              autocomplete="off">
+                        <option value="">Filter tags...</option>
+                        {% for tag in available_tags %}
+                          <option value="{{ tag.name }}">{{ tag.name }}</option>
+                        {% endfor %}
+                      </select>
+                    </div>
+                  {% endif %}
+                  <div class="form-control">
+                    <label class="label cursor-pointer">
+                      <span class="label-text mr-2">Include API Sessions</span>
+                      <input type="checkbox" name="show-all" class="toggle" />
+                    </label>
+                  </div>
+                </div>
+              </form>
+            </div>
+          </div>
+          <div id="sessions-table"></div>
+        </div>
+      </div>
+    {% endif %}
+
+    <input type="radio" name="tab_group" role="tab" class="tab" aria-label="Versions" id="tab-versions" />
+    <div role="tabpanel" class="tab-content" id="content-versions">
+      <div class="app-card">
+        <div id="versions-table"
+             class="watchVersionChange"
+             hx-trigger="load, version-changed"
+             hx-target="this"
+             hx-get="{% url 'experiments:versions-list' request.team.slug experiment.id %}"
+             hx-swap="innerHTML">
+        </div>
+      </div>
+    </div>
+
+    {% flag "events" %}
+      <input type="radio" name="tab_group" role="tab" class="tab" aria-label="Events" id="tab-events" />
+      <div role="tabpanel" class="tab-content" id="content-events">
+        <div class="app-card">
+          <a class="btn btn-sm btn-outline btn-primary" href="{% url 'experiments:events:static_event_new' team.slug experiment.id %}"><i class="fa-regular fa-plus"></i> Create Static Event</a>
+          <a class="btn btn-sm btn-outline btn-primary" href="{% url 'experiments:events:timeout_event_new' team.slug experiment.id %}"><i class="fa-regular fa-plus"></i> Create Timeout Event</a>
+          {% if show_events %}
+            {% render_table events_table %}
+          {% endif %}
+        </div>
+      </div>
+    {% endflag %}
+
+    {% if not experiment.pipeline %}
+      <input type="radio" name="tab_group" role="tab" class="tab" aria-label="Routes" id="tab-routes"/>
+      <div role="tabpanel" class="tab-content" id="content-routes">
+        <div class="app-card">
+          {% if experiment.assistant %}
+            Assistants cannot be router bots. Please use a normal bot
+          {% elif can_make_child_routes %}
+            {% if experiment.is_editable %}
+              <a class="btn btn-sm btn-outline btn-primary mb-2" href="{% url 'experiments:experiment_route_new' team.slug experiment.id 'processor' %}"><i class="fa-regular fa-plus"></i> Create child route</a>
+            {% endif %}
+            {% render_table child_routes_table %}
+          {% else %}
+            Child experiments cannot have their own routes.
+          {% endif %}
+        </div>
+      </div>
+
+      <input type="radio" name="tab_group" role="tab" class="tab" aria-label="Terminal Bot" id="tab-terminal_bots"/>
+      <div role="tabpanel" class="tab-content" id="content-terminal_bots">
+        <div class="app-card">
+          {% if terminal_bots_table.data|length == 0 and experiment.is_editable%}
+            <a class="btn btn-sm btn-outline btn-primary mb-2" href="{% url 'experiments:experiment_route_new' team.slug experiment.id 'terminal' %}"><i class="fa-regular fa-plus"></i> Add terminal bot</a>
+          {% endif %}
+          {% render_table terminal_bots_table %}
+        </div>
+      </div>
+    {% endif %}
+  </div>
+  <script>
+    function showTabContent(tabId) {
+      const tabContents = document.querySelectorAll('.tab-content');
+      tabContents.forEach(content => content.style.display = 'none');
+      const contentElement = document.getElementById(`content-${tabId}`);
+      if (contentElement) {
+        contentElement.style.display = 'block';
+        history.replaceState(null, '', `#${tabId}`);
+      }
+    }
+
+    function selectTabFromHash() {
+      const tabId = window.location.hash.replace('#', '');
+      const tab = document.getElementById(`tab-${tabId}`);
+      if (tab) {
+        tab.checked = true;
+        showTabContent(tabId);
+      }
+    }
+
+    document.addEventListener('DOMContentLoaded', () => {
+      new TomSelect('#tag-multiselect-filter', {
+        plugins: ["remove_button", "caret_position", "input_autogrow"],
+        maxItems: null,
+        hidePlaceholder: true,
+      });
+
+      new TomSelect('#participants-filter', {
+        plugins: ["remove_button", "caret_position", "input_autogrow"],
+        valueField: 'identifier',
+        searchField: ['name', 'identifier'],
+        hidePlaceholder: true,
+        load: function(query, callback) {
+          const url = '{% url "participants:search" request.team.slug %}?q=' + encodeURIComponent(query);
+          fetch(url)
+            .then(response => response.json())
+            .then(json => {
+              callback(json.results);
+            }).catch(()=>{
+              callback();
+            });
+        },
+        render: {
+          option: function(item, escape) {
+            return `<div class="">
+                      <span class="h4">
+                        ${ escape(item.name || 'No Name') }
+                      </span>
+                      <span class="text-muted"> (${ escape(item.identifier) })</span>
+                    </div>`;
+          },
+          item: function(item, escape) {
+            return `<div class="">
+                      <span class="h4">
+                        ${ escape(item.name || 'No Name') }
+                      </span>
+                      <span class="text-muted"> (${ escape(item.identifier) })</span>
+                    </div>`;
+          }
+        },
+      });
+
+      const tabs = document.querySelectorAll('.tab');
+      tabs.forEach(tab => {
+        tab.addEventListener('change', (event) => {
+          const tabId = event.target.id.replace('tab-', '');
+          showTabContent(tabId);
+        });
+      });
+
+      selectTabFromHash();
+    });
+
+    window.addEventListener('hashchange', selectTabFromHash);
+  </script>
+{% endblock %}

@@ -1,13 +1,19 @@
 from django import views
 from django.contrib import messages
+from django.contrib.auth.decorators import permission_required
 from django.http import HttpResponseRedirect
 from django.shortcuts import get_object_or_404, render
 from django.template.response import TemplateResponse
 from django.urls import reverse
 
+from apps.channels.models import ChannelPlatform
+from apps.experiments.models import Experiment, ExperimentSession
 from apps.files.forms import get_file_formset
+from apps.generics.chips import Chip
 from apps.generics.help import render_help_with_link
 from apps.generics.type_select_form import TypeSelectForm
+from apps.teams.decorators import login_and_team_required
+from apps.experiments.views.experiment import get_events_context, get_routes_context, get_terminal_bots_context
 
 
 class BaseTypeSelectFormView(views.View):
@@ -106,3 +112,59 @@ def generic_home(request, team_slug: str, title: str, table_url_name: str, new_u
             "toggle_archived": True,
         },
     )
+
+
+@login_and_team_required
+@permission_required("experiments.view_experiment", raise_exception=True)
+def base_single_experiment_view(
+    request, team_slug: str, experiment_id: int, template_name: str, active_tab: str, include_bot_type_chip=False
+):
+    experiment = get_object_or_404(Experiment.objects.get_all(), id=experiment_id, team=request.team)
+
+    user_sessions = (
+        ExperimentSession.objects.with_last_message_created_at()
+        .filter(
+            participant__user=request.user,
+            experiment=experiment,
+        )
+        .exclude(experiment_channel__platform=ChannelPlatform.API)
+    )
+
+    channels = experiment.experimentchannel_set.exclude(platform__in=[ChannelPlatform.WEB, ChannelPlatform.API]).all()
+    used_platforms = {channel.platform_enum for channel in channels}
+    available_platforms = ChannelPlatform.for_dropdown(used_platforms, experiment.team)
+
+    platform_forms = {}
+    form_kwargs = {"experiment": experiment}
+    for platform in available_platforms:
+        if platform.form(**form_kwargs):
+            platform_forms[platform] = platform.form(**form_kwargs)
+
+    deployed_version = None
+    if experiment != experiment.default_version:
+        deployed_version = experiment.default_version.version_number
+
+    bot_type_chip = None
+    if include_bot_type_chip:
+        if pipeline := experiment.pipeline:
+            bot_type_chip = Chip(label=f"Pipeline: {pipeline.name}", url=pipeline.get_absolute_url())
+        elif assistant := experiment.assistant:
+            bot_type_chip = Chip(label=f"Assistant: {assistant.name}", url=assistant.get_absolute_url())
+
+    context = {
+        "active_tab": active_tab,
+        "bot_type_chip": bot_type_chip,
+        "experiment": experiment,
+        "user_sessions": user_sessions,
+        "platforms": available_platforms,
+        "platform_forms": platform_forms,
+        "channels": channels,
+        "available_tags": [tag.name for tag in experiment.team.tag_set.filter(is_system_tag=False)],
+        "deployed_version": deployed_version,
+        "experiment_versions": experiment.get_version_name_list(),  # Added in both views
+        **get_events_context(experiment, team_slug),
+        **get_routes_context(experiment, team_slug),
+        **get_terminal_bots_context(experiment, team_slug),
+    }
+
+    return TemplateResponse(request, template_name, context)

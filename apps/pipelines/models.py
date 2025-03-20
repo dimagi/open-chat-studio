@@ -76,10 +76,14 @@ class Pipeline(BaseTeamModel, VersionsMixin):
         return f"v{self.version_number}"
 
     @classmethod
-    def create_default(cls, team):
+    def create_pipeline_with_name(cls, team, name):
+        return cls.create_default(team, name)
+
+    @classmethod
+    def create_default(cls, team, name=None):
         from apps.pipelines.nodes.nodes import EndNode, StartNode
 
-        default_name = "New Pipeline"
+        default_name = "New Pipeline" if name is None else name
         existing_pipeline_count = cls.objects.filter(team=team, name__startswith=default_name).count()
 
         start_id = str(uuid4())
