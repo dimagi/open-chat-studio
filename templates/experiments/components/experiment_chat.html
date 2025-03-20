@@ -134,6 +134,12 @@
               {% if page > 1 %}
                 <a href="#"
                    class="btn"
+                   hx-get="{% url 'experiments:experiment_session_messages_view' request.team.slug experiment.public_id experiment_session.external_id %}?page=1{% if search %}&search={{ search }}{% endif %}"
+                   hx-target="#messages-container">
+                  <i class="fa-solid fa-backward-fast"></i>
+                </a>
+                <a href="#"
+                   class="btn"
                    hx-get="{% url 'experiments:experiment_session_messages_view' request.team.slug experiment.public_id experiment_session.external_id %}?page={{ page|add:"-1" }}{% if search %}&search={{ search }}{% endif %}"
                    hx-target="#messages-container">
                   <i class="fa-solid fa-backward-step"></i> Previous
@@ -145,6 +151,12 @@
                    hx-get="{% url 'experiments:experiment_session_messages_view' request.team.slug experiment.public_id experiment_session.external_id %}?page={{ page|add:"1" }}{% if search %}&search={{ search }}{% endif %}"
                    hx-target="#messages-container">
                   Next <i class="fa-solid fa-forward-step"></i>
+                </a>
+                <a href="#"
+                   class="btn"
+                   hx-get="{% url 'experiments:experiment_session_messages_view' request.team.slug experiment.public_id experiment_session.external_id %}?page={{ total_pages }}{% if search %}&search={{ search }}{% endif %}"
+                   hx-target="#messages-container">
+                  <i class="fa-solid fa-forward-fast"></i>
                 </a>
               {% endif %}
             </div>
