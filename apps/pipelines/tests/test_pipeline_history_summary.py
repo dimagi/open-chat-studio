@@ -4,7 +4,7 @@ import pytest
 from langchain_core.messages import AIMessage, HumanMessage, SystemMessage
 
 from apps.chat.conversation import compress_pipeline_chat_history
-from apps.pipelines.models import PipelineChatHistoryModes, PipelineChatHistoryTypes, PipelineChatMessages
+from apps.pipelines.models import PipelineChatHistoryTypes, PipelineChatMessages
 from apps.utils.factories.experiment import (
     ExperimentSessionFactory,
 )
@@ -57,7 +57,6 @@ def test_compress_history_no_need_for_compression(pipeline_chat_history):
         FakeLlmSimpleTokenCount(responses=["Summary"]),
         max_token_limit=token_limit,
         input_messages=[],
-        history_mode=PipelineChatHistoryModes.SUMMARIZE,
     )
     messages = pipeline_chat_history.get_langchain_messages_until_summary()
     # No summary messages
