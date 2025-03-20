@@ -107,7 +107,7 @@ class Pipeline(BaseTeamModel, VersionsMixin):
         new_pipeline = cls.objects.create(
             team=team,
             data={"nodes": default_nodes, "edges": []},
-            name=f"New Pipeline {existing_pipeline_count + 1}",
+            name=default_name if name else f"New Pipeline {existing_pipeline_count + 1}",
         )
         new_pipeline.update_nodes_from_data()
         return new_pipeline

@@ -20,7 +20,7 @@ class ChatbotForm(forms.ModelForm):
         self.request = request
 
     def save(self, commit=True):
-        pipeline = Pipeline.create_pipeline_with_name(self.request.team, self.fields["name"])
+        pipeline = Pipeline.create_pipeline_with_name(self.request.team, self.cleaned_data["name"])
         experiment = super().save(commit=False)
         experiment.team = self.request.team
         experiment.owner = self.request.user
