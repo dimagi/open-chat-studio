@@ -20,7 +20,7 @@
   {% endif %}
   {% if object.pk %}
     <div id="sync-wrapper" class="flex w-full gap-2"
-         hx-get="{% url 'assistants:check_sync_status' request.team.slug object.pk %}"
+         hx-get="{% url 'assistants:check_syncTURN_status' request.team.slug object.pk %}"
          hx-trigger="load"
          hx-target="#sync-wrapper"
          hx-swap="innerHTML">
@@ -45,6 +45,10 @@
   <div class="mt-2" x-show="builtinTools.indexOf('file_search') >= 0" x-cloak>
     {% render_form_fields form "allow_file_search_attachments" %}
   </div>
+  <!-- Added: Render allow_file_downloads field from OpenAiAssistantForm -->
+  <div class="mt-2" x-show="builtinTools.indexOf('code_interpreter') >= 0 || builtinTools.indexOf('file_search') >= 0" x-cloak>
+    {% render_form_fields form "allow_file_downloads" %}
+  </div>
 
   {% if not object.id %}
     <div class="mt-2" x-show="builtinTools.indexOf('code_interpreter') >= 0" x-cloak>
@@ -59,6 +63,7 @@
   {% if object.id %}
     {% with resources=object.tool_resources.all %}
       <hr class="my-4">
+      {{ resource_formsets.edit_formset.management_form }}
       {% for resource in resources %}
         <div>
           {% url "assistants:add_file" request.team.slug object.id resource.id as upload_url %}

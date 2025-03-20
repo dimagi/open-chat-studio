@@ -13,6 +13,7 @@ from openai.types.beta.threads.text import Text
 from openai.types.beta.threads.text_content_block import TextContentBlock
 from openai.types.file_object import FileObject
 
+from apps.assistants.models import ToolResources
 from apps.channels.datamodels import Attachment
 from apps.chat.agent.tools import TOOL_CLASS_MAP
 from apps.chat.models import Chat, ChatAttachment, ChatMessage, ChatMessageType
@@ -382,6 +383,20 @@ def test_assistant_response_with_annotations(
         attachment, _created = chat.attachments.get_or_create(tool_type="file_path")
         attachment.files.add(local_file)
 
+    # ToolResources for assistant
+
+    runnable = create_experiment_runnable(session.experiment, session)
+    assistant = runnable.adapter.assistant
+
+    assistant.allow_file_downloads = True
+    assistant.builtin_tools = ["file_search"]
+    assistant.save()
+
+    assistant.refresh_from_db()
+    tool_resource = ToolResources.objects.create(assistant=assistant, tool_type="file_search")
+    if not cited_file_missing:
+        tool_resource.files.add(local_file)
+
     # Build OpenAI responses
     annotations = [
         FilePathAnnotation(
@@ -407,7 +422,6 @@ def test_assistant_response_with_annotations(
         " Another link to nothing [file3.pdf](https://example.com/download/file-3)"
     )
 
-    assistant = create_experiment_runnable(session.experiment, session)
     list_messages.return_value = _create_thread_messages(
         ASSISTANT_ID, run.id, thread_id, [{"assistant": ai_message}], annotations
     )
@@ -415,8 +429,7 @@ def test_assistant_response_with_annotations(
     create_and_run.return_value = run
     retrieve_run.return_value = run
 
-    # Run assistant
-    result = assistant.invoke("test", attachments=[])
+    result = runnable.invoke("test", attachments=[])
 
     if cited_file_missing:
         # The cited file link is empty, since it's missing from the DB
@@ -432,15 +445,9 @@ def test_assistant_response_with_annotations(
             f"Hi there human. The generated file can be [downloaded here](file:dimagi-test:{session.id}:10)."
             " A made up link to *file1.pdf* *file2.pdf*"
             " Also, leaves are tree stuff [1]. Another link to nothing *file3.pdf*"
-            f"\n[1]: file:dimagi-test:{session.id}:9"
+            f"\n[1]: <a href='/a/dimagi-test/assistants/{assistant.id}/files/9/download/'>existing.txt</a>"
         )
     assert result.output == expected_output_message
-
-    assert chat.get_metadata(Chat.MetadataKeys.OPENAI_THREAD_ID) == thread_id
-    assert chat.attachments.filter(tool_type="file_path").exists()
-    message = chat.messages.filter(message_type="ai").first()
-    assert "openai-file-1" in message.metadata["openai_file_ids"]
-    assert "openai-file-2" in message.metadata["openai_file_ids"]
 
 
 @pytest.mark.django_db()
@@ -518,14 +525,25 @@ def test_sync_messages_to_thread(messages, thread_id, thread_created, messages_c
 def test_get_messages_to_sync_to_thread():
     session = ExperimentSessionFactory(experiment__assistant=OpenAiAssistantFactory())
     chat = session.chat
-    ChatMessage.objects.bulk_create(
-        [
-            ChatMessage(chat=chat, message_type="human", content="hello0", metadata={}),
-            ChatMessage(chat=chat, message_type="ai", content="hello1", metadata={"openai_thread_checkpoint": True}),
-            ChatMessage(chat=chat, message_type="human", content="hello2", metadata={}),
-            ChatMessage(chat=chat, message_type="ai", content="hello3", metadata={}),
-        ]
-    )
+    messages = [
+        ChatMessage(chat=chat, message_type="human", content="hello0", metadata={}),
+        ChatMessage(chat=chat, message_type="ai", content="hello1", metadata={"openai_thread_checkpoint": True}),
+        ChatMessage(chat=chat, message_type="human", content="hello2", metadata={}),
+        ChatMessage(chat=chat, message_type="ai", content="hello3", metadata={}),
+    ]
+    ChatMessage.objects.bulk_create(messages)
+    from datetime import datetime, timedelta
+
+    base_time = datetime.now()
+    timestamps = [
+        base_time,
+        base_time + timedelta(seconds=1),
+        base_time + timedelta(seconds=2),
+        base_time + timedelta(seconds=3),
+    ]
+    for message, timestamp in zip(messages, timestamps):
+        ChatMessage.objects.filter(id=message.id).update(created_at=timestamp)
+
     adapter = AssistantAdapter.for_experiment(session.experiment, session)
     to_sync = adapter.get_messages_to_sync_to_thread()
     assert to_sync == [

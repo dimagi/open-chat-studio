@@ -5,6 +5,7 @@ from typing import TYPE_CHECKING, Any, Literal
 
 import openai
 from django.db import models, transaction
+from django.urls import reverse
 from langchain.agents import AgentExecutor, create_tool_calling_agent
 from langchain.agents.openai_assistant.base import OpenAIAssistantFinish
 from langchain_core.agents import AgentFinish
@@ -379,7 +380,7 @@ class AssistantChat(RunnableSerializable[dict, ChainOutput]):
                             if self.adapter.citations_enabled:
                                 message_content_value = message_content_value.replace(file_ref_text, f" [{idx}]")
                                 if file_link:
-                                    message_content_value += f"\n[{idx}]: {file_link}"
+                                    message_content_value += f"\n[{idx}]: <a href='{file_link}'>{file_name}</a>"
                                 else:
                                     message_content_value += f"\n\\[{idx}\\]: {file_name}"
                             else:
@@ -441,35 +442,35 @@ class AssistantChat(RunnableSerializable[dict, ChainOutput]):
             logger.exception(ex)
 
     def _get_file_link_for_citation(self, file_id: str, forbidden_file_ids: list[str]) -> tuple[str, str | None]:
-        """Returns a file name and a link constructor for `file_id`. If `file_id` is a member of
-        `forbidden_file_ids`, the link will be empty to prevent unauthorized access.
-        """
-        file_link = ""
-
+        """Returns a file name and a download URL for `file_id`."""
         team = self.adapter.session.team
-        session_id = self.adapter.session.id
         try:
             file = File.objects.get(external_id=file_id, team_id=team.id)
-            file_link = f"file:{team.slug}:{session_id}:{file.id}"
             file_name = file.name
+            if self.adapter.assistant.supports_file_downloads():
+                download_url = reverse("assistants:download_file", args=[team.slug, self.adapter.assistant.id, file.id])
+            else:
+                download_url = None
+            return file_name, download_url
         except File.MultipleObjectsReturned:
             logger.error("Multiple files with the same external ID", extra={"file_id": file_id, "team": team.slug})
             file = File.objects.filter(external_id=file_id, team_id=team.id).first()
             file_name = file.name
+            if self.adapter.assistant.supports_file_downloads():
+                download_url = reverse("assistants:download_file", args=[team.slug, self.adapter.assistant.id, file.id])
+            else:
+                download_url = None
+            return file_name, download_url
         except File.DoesNotExist:
             client = self.adapter.assistant_client
             try:
                 openai_file = client.files.retrieve(file_id=file_id)
                 file_name = openai_file.filename
+                return file_name, None
             except Exception as e:
                 logger.error(f"Failed to retrieve file {file_id} from OpenAI: {e}")
                 file_name = "Unknown File"
-
-        if file_id in forbidden_file_ids:
-            # Don't allow downloading assistant level files
-            return file_name, None
-
-        return file_name, file_link
+                return file_name, None
 
     def _upload_tool_resource_files(self, attachments: list["Attachment"] | None = None) -> dict[str, list[str]]:
         """Uploads the files in `attachments` to OpenAI

@@ -70,6 +70,7 @@ class OpenAiAssistant(BaseTeamModel, VersionsMixin, CustomActionOperationMixin):
 
     allow_file_search_attachments = models.BooleanField(default=True)
     allow_code_interpreter_attachments = models.BooleanField(default=True)
+    allow_file_downloads = models.BooleanField(default=True)
     objects = OpenAiAssistantManager()
     all_objects = AuditingManager()
 
@@ -97,6 +98,11 @@ class OpenAiAssistant(BaseTeamModel, VersionsMixin, CustomActionOperationMixin):
 
     def supports_file_search_attachments(self):
         return "file_search" in self.builtin_tools and self.allow_file_search_attachments
+
+    def supports_file_downloads(self):
+        return (
+            "code_interpreter" in self.builtin_tools or "file_search" in self.builtin_tools
+        ) and self.allow_file_downloads
 
     @property
     def tools_enabled(self):
