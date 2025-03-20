@@ -212,6 +212,7 @@ class TopicBot:
         config = {}
         if self.trace_service:
             callback = self.trace_service.get_callback(
+                trace_name=self.experiment.name,
                 participant_id=str(self.session.participant.identifier),
                 session_id=str(self.session.external_id),
             )

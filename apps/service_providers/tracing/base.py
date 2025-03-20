@@ -20,8 +20,8 @@ class TraceService:
         self.type = type_
         self.config = config
 
-    def get_callback(self, participant_id: str, session_id: str) -> BaseCallbackHandler:
+    def get_callback(self, trace_name: str, participant_id: str, session_id: str) -> BaseCallbackHandler:
         raise NotImplementedError
 
-    def get_trace_metadata(self) -> TraceInfo | None:
-        return None
+    def get_trace_metadata(self) -> dict[str, str]:
+        return {}

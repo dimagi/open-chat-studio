@@ -144,7 +144,7 @@ class ExperimentHistoryManager(BaseHistoryManager):
 
     def get_trace_metadata(self) -> dict:
         if self.trace_service:
-            return self.trace_service.get_trace_metadata() or {}
+            return self.trace_service.get_trace_metadata()
         return {}
 
 

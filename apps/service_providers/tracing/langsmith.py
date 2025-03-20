@@ -11,7 +11,7 @@ if TYPE_CHECKING:
 
 
 class LangSmithTraceService(TraceService):
-    def get_callback(self, participant_id: str, session_id: str) -> BaseCallbackHandler:
+    def get_callback(self, trace_name: str, participant_id: str, session_id: str) -> BaseCallbackHandler:
         from langsmith import Client
 
         client = Client(
