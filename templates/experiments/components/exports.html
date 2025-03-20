@@ -15,7 +15,6 @@
     {% if task_id %}
         <div
             hx-get="{% url 'experiments:get_export_download_link' team.slug experiment.id task_id %}"
-            hx-headers='{"HX-Current-URL": true}'
             hx-trigger="every 2s"
             hx-swap="outerHTML"
             hx-target="#chat-exports"
