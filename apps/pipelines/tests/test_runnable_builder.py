@@ -397,7 +397,8 @@ def test_router_node_prompt(get_llm_service, provider, provider_model, pipeline,
     )
 
     assert len(service.llm.get_call_messages()[0]) == 2
-    assert str(experiment_session.get_participant_data()) in service.llm.get_call_messages()[0][0].content
+    proxy = ParticipantDataProxy(experiment_session)
+    assert str(proxy.get()) in service.llm.get_call_messages()[0][0].content
 
 
 @django_db_with_data(available_apps=("apps.service_providers",))
