@@ -560,7 +560,7 @@ class ChannelBase(ABC):
 
     def _inform_user_of_error(self):
         """Simply tells the user that something went wrong to keep them in the loop.
-        This method wil not raise an error if something went wrong during this operation.
+        This method will not raise an error if something went wrong during this operation.
         """
 
         try:
