@@ -4,30 +4,48 @@
 {% load pagination_tags %}
 
 <div class="max-w-5xl mt-4 border rounded-2xl">
-  {% if perms.annotations.view_customtaggeditem %}
-    <div class="mt-1 max-w-5xl flex items-center gap-2 p-3">
-      <input
-        type="text"
-        name="search"
-        value="{{ search|default:'' }}"
-        class="input input-bordered input-sm w-1/2"
-        placeholder="Search tags..."
-        hx-get="{% url 'experiments:experiment_session_messages_view' request.team.slug experiment.public_id experiment_session.external_id %}"
-        hx-trigger="keyup changed delay:500ms"
-        hx-target="#messages-container"
-        hx-include="[name='search']"
-      >
-      {% if search %}
-        <button
-          class="btn btn-ghost btn-sm"
-          hx-get="{% url 'experiments:experiment_session_messages_view' request.team.slug experiment.public_id experiment_session.external_id %}"
-          hx-target="#messages-container"
-        >
-          <i class="fa-solid fa-times"></i> Clear
-        </button>
+  <div class="mt-1 max-w-5xl flex justify-between p-3">
+    <div class="flex flex-col gap-2">
+      {% if perms.annotations.view_customtaggeditem %}
+        <div class="flex items-center gap-2">
+          <input
+            type="text"
+            name="search"
+            value="{{ search|default:'' }}"
+            class="input input-bordered input-sm w-96"
+            placeholder="Search tags..."
+            hx-get="{% url 'experiments:experiment_session_messages_view' request.team.slug experiment.public_id experiment_session.external_id %}"
+            hx-trigger="keyup changed delay:500ms"
+            hx-target="#messages-container"
+            hx-include="[name='search']"
+          >
+          {% if search %}
+            <button
+              class="btn btn-ghost btn-sm"
+              hx-get="{% url 'experiments:experiment_session_messages_view' request.team.slug experiment.public_id experiment_session.external_id %}"
+              hx-target="#messages-container"
+            >
+              <i class="fa-solid fa-times"></i> Clear
+            </button>
+          {% endif %}
+        </div>
+      {% endif %}
+
+      {% if total_pages > 1 %}
+        <div class="px-1">
+          <p class="text text-sm">
+            Showing <span class="font-semibold">{{ page_size|multiply:page|subtract:page_size|add:1 }}</span> to <span class="font-semibold">{{ page_size|multiply:page|minimum:total_messages }}</span> of <span class="font-semibold">{{ total_messages }}</span> messages
+          </p>
+        </div>
       {% endif %}
     </div>
-  {% endif %}
+
+    {% if total_pages > 1 %}
+      <div class="flex items-center">
+        {% include "experiments/components/pagination_buttons.html" with btn_size="sm" %}
+      </div>
+    {% endif %}
+  </div>
 
   <div class="flow-root">
     <div class="-mx-4 -my-2 overflow-x-auto sm:-mx-6 lg:-mx-8">
@@ -131,34 +149,7 @@
               </div>
             </div>
             <div class="flex justify-right">
-              {% if page > 1 %}
-                <a href="#"
-                   class="btn"
-                   hx-get="{% url 'experiments:experiment_session_messages_view' request.team.slug experiment.public_id experiment_session.external_id %}?page=1{% if search %}&search={{ search }}{% endif %}"
-                   hx-target="#messages-container">
-                  <i class="fa-solid fa-backward-fast"></i>
-                </a>
-                <a href="#"
-                   class="btn"
-                   hx-get="{% url 'experiments:experiment_session_messages_view' request.team.slug experiment.public_id experiment_session.external_id %}?page={{ page|add:"-1" }}{% if search %}&search={{ search }}{% endif %}"
-                   hx-target="#messages-container">
-                  <i class="fa-solid fa-backward-step"></i> Previous
-                </a>
-              {% endif %}
-              {% if page < total_pages %}
-                <a href="#"
-                   class="btn"
-                   hx-get="{% url 'experiments:experiment_session_messages_view' request.team.slug experiment.public_id experiment_session.external_id %}?page={{ page|add:"1" }}{% if search %}&search={{ search }}{% endif %}"
-                   hx-target="#messages-container">
-                  Next <i class="fa-solid fa-forward-step"></i>
-                </a>
-                <a href="#"
-                   class="btn"
-                   hx-get="{% url 'experiments:experiment_session_messages_view' request.team.slug experiment.public_id experiment_session.external_id %}?page={{ total_pages }}{% if search %}&search={{ search }}{% endif %}"
-                   hx-target="#messages-container">
-                  <i class="fa-solid fa-forward-fast"></i>
-                </a>
-              {% endif %}
+              {% include "experiments/components/pagination_buttons.html" %}
             </div>
           </div>
         {% endif %}
