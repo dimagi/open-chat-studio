@@ -47,6 +47,14 @@
       {% endif %}
     </ul>
   </li>
+  {% flag "chatbots" %}
+    <li>
+      <a href="{% url 'chatbots:chatbots_home' request.team.slug %}" {% if active_tab == 'chatbots' %}class="active"{% endif %}>
+        <i class="fas fa-comments"></i>
+        {% translate "Chatbots" %}
+      </a>
+    </li>
+  {% endflag %}
   {% if perms.experiments.view_participant %}
     <li>
       <a href="{% url 'participants:participant_home' request.team.slug %}"

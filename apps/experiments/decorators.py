@@ -27,12 +27,14 @@ def experiment_session_view(allowed_states=None):
             request.experiment = get_object_or_404(
                 Experiment.objects.get_all(), public_id=experiment_id, team=request.team
             )
-            request.experiment_session = get_object_or_404(
-                ExperimentSession,
-                experiment=request.experiment,
-                external_id=session_id,
-                team=request.team,
-            )
+            try:
+                request.experiment_session = ExperimentSession.objects.select_related("participant", "chat").get(
+                    experiment=request.experiment,
+                    external_id=session_id,
+                    team=request.team,
+                )
+            except ExperimentSession.DoesNotExist:
+                raise Http404()
 
             if allowed_states and request.experiment_session.status not in allowed_states:
                 return _redirect_for_state(request, team_slug)
@@ -43,9 +45,9 @@ def experiment_session_view(allowed_states=None):
     return decorator
 
 
-def set_session_access_cookie(response, experiment_session):
+def set_session_access_cookie(response, experiment, experiment_session):
     """Set the session access cookie on the response"""
-    value = _get_access_cookie_data(experiment_session)
+    value = _get_access_cookie_data(experiment, experiment_session)
     value = signing.get_cookie_signer(salt=CHAT_SESSION_ACCESS_SALT).sign_object(value)
     response.set_cookie(
         CHAT_SESSION_ACCESS_COOKIE,
@@ -92,7 +94,7 @@ def verify_session_access_cookie(view):
         except (signing.BadSignature, KeyError):
             raise Http404()
 
-        if not _validate_access_cookie_data(request.experiment_session, access_value):
+        if not _validate_access_cookie_data(request.experiment, request.experiment_session, access_value):
             raise Http404()
 
         return view(request, *args, **kwargs)
@@ -100,17 +102,17 @@ def verify_session_access_cookie(view):
     return _inner
 
 
-def _get_access_cookie_data(experiment_session):
+def _get_access_cookie_data(experiment, experiment_session):
     return {
-        "experiment_id": str(experiment_session.experiment.public_id),
+        "experiment_id": str(experiment.public_id),
         "session_id": str(experiment_session.external_id),
         "participant_id": experiment_session.participant_id,
         "user_id": experiment_session.participant.user_id,
     }
 
 
-def _validate_access_cookie_data(experiment_session, access_data):
-    return _get_access_cookie_data(experiment_session) == access_data
+def _validate_access_cookie_data(experiment, experiment_session, access_data):
+    return _get_access_cookie_data(experiment, experiment_session) == access_data
 
 
 def _redirect_for_state(request, team_slug):

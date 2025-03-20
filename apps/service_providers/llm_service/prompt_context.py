@@ -8,7 +8,7 @@ from apps.utils.time import pretty_date
 
 
 class PromptTemplateContext:
-    def __init__(self, session, source_material_id):
+    def __init__(self, session, source_material_id: int = None):
         self.session = session
         self.source_material_id = source_material_id
         self.context_cache = {}
@@ -34,6 +34,9 @@ class PromptTemplateContext:
 
     def get_source_material(self):
         from apps.experiments.models import SourceMaterial
+
+        if self.source_material_id is None:
+            return ""
 
         try:
             return SourceMaterial.objects.get(id=self.source_material_id).material
@@ -156,7 +159,7 @@ class ParticipantDataProxy:
             self._participant_data, _ = ParticipantData.objects.get_or_create(
                 participant_id=self.session.participant_id,
                 experiment_id=self.session.experiment_id,
-                team_id=self.session.experiment.team_id,
+                team_id=self.session.team_id,
             )
         return self._participant_data
 
@@ -202,4 +205,4 @@ class ParticipantDataProxy:
     def get_timezone(self):
         """Returns the participant's timezone"""
         participant_data = self._get_db_object()
-        return participant_data.get("timezone")
+        return participant_data.data.get("timezone")

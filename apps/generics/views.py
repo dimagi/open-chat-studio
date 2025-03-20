@@ -2,8 +2,11 @@ from django import views
 from django.contrib import messages
 from django.http import HttpResponseRedirect
 from django.shortcuts import get_object_or_404, render
+from django.template.response import TemplateResponse
+from django.urls import reverse
 
 from apps.files.forms import get_file_formset
+from apps.generics.help import render_help_with_link
 from apps.generics.type_select_form import TypeSelectForm
 
 
@@ -80,3 +83,26 @@ class BaseTypeSelectFormView(views.View):
 
     def get_success_url(self) -> str:
         raise NotImplementedError
+
+
+HELP_TEXT_KEYS = {
+    "Experiments": "experiment",
+    "Chatbots": "chatbots",
+}
+
+
+def generic_home(request, team_slug: str, title: str, table_url_name: str, new_url: str):
+    help_key = HELP_TEXT_KEYS.get(title, title.lower())  # Default to lowercase if missing
+    return TemplateResponse(
+        request,
+        "generic/object_home.html",
+        {
+            "active_tab": title.lower(),
+            "title": title,
+            "title_help_content": render_help_with_link("", help_key),
+            "new_object_url": reverse(new_url, args=[team_slug]),
+            "table_url": reverse(table_url_name, args=[team_slug]),
+            "enable_search": True,
+            "toggle_archived": True,
+        },
+    )
