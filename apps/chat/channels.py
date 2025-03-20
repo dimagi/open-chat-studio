@@ -331,9 +331,12 @@ class ChannelBase(ABC):
         self.experiment_session.update_status(SessionStatus.ACTIVE)
         # This is technically the start of the conversation
         if self.experiment.seed_message:
-            topic_bot = self.bot or get_bot(self.experiment_session, experiment=self.experiment)
-            bot_response = topic_bot.process_input(user_input=self.experiment.seed_message, save_input_to_history=False)
-            self.send_message_to_user(bot_response)
+            self._send_seed_message()
+
+    def _send_seed_message(self):
+        topic_bot = self.bot or get_bot(self.experiment_session, experiment=self.experiment)
+        bot_response = topic_bot.process_input(user_input=self.experiment.seed_message, save_input_to_history=False)
+        self.send_message_to_user(bot_response)
 
     def _chat_initiated(self):
         """The user initiated the chat and we need to get their consent before continuing the conversation"""
@@ -566,7 +569,7 @@ class ChannelBase(ABC):
                 "try again later"
             )
         except Exception:  # noqa BLE001
-            logger.exception("Something went wrong while trying to generate anappropriate error message for the user")
+            logger.exception("Something went wrong while trying to generate an appropriate error message for the user")
             bot_message = DEFAULT_ERROR_RESPONSE_TEXT
 
         try:

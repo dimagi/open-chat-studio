@@ -239,16 +239,14 @@ def _send_user_message_on_channel(channel_instance, user_message: str):
 @pytest.mark.django_db()
 @patch("apps.chat.channels.TelegramChannel.submit_input_to_llm", Mock())
 @patch("apps.chat.channels.TelegramChannel._get_bot_response", Mock())
-@patch("apps.chat.channels.TelegramChannel._generate_response_for_user")
+@patch("apps.chat.channels.TelegramChannel._send_seed_message")
 @patch("apps.chat.channels.TelegramChannel.send_text_to_user")
-def test_pre_conversation_flow(send_text_to_user_mock, generate_response_for_user):
+def test_pre_conversation_flow(send_text_to_user_mock, _send_seed_message):
     """This simulates an interaction between a user and the bot. The user initiated the conversation, so the
     user and bot must first go through the pre conversation flow. The following needs to happen:
     - The user must give consent
     - The user must indicate that they filled out the survey
     """
-    bot_response_to_seed_message = "Hi user"
-    generate_response_for_user.return_value = bot_response_to_seed_message
     experiment = ExperimentFactory(conversational_consent_enabled=True)
     channel = TelegramChannel(experiment, ExperimentChannelFactory(experiment=experiment))
     pre_survey = experiment.pre_survey
@@ -287,18 +285,20 @@ def test_pre_conversation_flow(send_text_to_user_mock, generate_response_for_use
     assert channel.experiment_session.status == SessionStatus.PENDING_PRE_SURVEY
     # The bot should be persistent about that survey. Let's make sure it sends it
     assert expected_survey_text in chat.messages.last().content
+
     # The user caves, and says they did fill it out
+    assert _send_seed_message.call_count == 0
     _user_message("1")
     # Check the status
     channel.experiment_session.refresh_from_db()
     assert channel.experiment_session.status == SessionStatus.ACTIVE
-    generate_response_for_user.assert_called()
-    assert send_text_to_user_mock.call_args[0][0] == bot_response_to_seed_message
+    _send_seed_message.assert_called()
 
 
 @pytest.mark.django_db()
 @patch("apps.chat.channels.TelegramChannel.send_text_to_user", Mock())
 @patch("apps.chat.bots.TopicBot", Mock())
+@patch("apps.chat.bots.EventBot.get_user_message", Mock(return_value="error"))
 def test_unsupported_message_type_creates_system_message():
     experiment = ExperimentFactory(conversational_consent_enabled=True)
     channel = TelegramChannel(experiment, ExperimentChannelFactory(experiment=experiment))
@@ -379,9 +379,9 @@ def test_voice_response_behaviour(
 )
 @patch("apps.chat.channels.TelegramChannel.send_text_to_user")
 @patch("apps.chat.channels.TelegramChannel._reply_voice_message")
-@patch("apps.chat.channels.TelegramChannel._generate_response_for_user")
+@patch("apps.chat.bots.EventBot.get_user_message")
 def test_failed_transcription_informs_the_user(
-    _generate_response_for_user,
+    _get_user_message,
     _reply_voice_message,
     send_text_to_user,
     voice_behaviour,
@@ -390,7 +390,7 @@ def test_failed_transcription_informs_the_user(
 ):
     """When we fail to transcribe the user's voice message, we should inform them"""
 
-    _generate_response_for_user.return_value = "Sorry, we could not transcribe your message"
+    _get_user_message.return_value = "Sorry, we could not transcribe your message"
     experiment = telegram_channel.experiment
     experiment.voice_response_behaviour = voice_behaviour
     experiment.save()
@@ -404,11 +404,11 @@ def test_failed_transcription_informs_the_user(
 
 
 @pytest.mark.django_db()
-@patch("apps.chat.channels.TelegramChannel._generate_response_for_user")
+@patch("apps.chat.bots.EventBot.get_user_message")
 @patch("apps.chat.channels.TelegramChannel.send_message_to_user")
 @patch("apps.chat.channels.TelegramChannel.is_message_type_supported")
 def test_any_failure_informs_users(
-    is_message_type_supported, send_message_to_user, _generate_response_for_user, telegram_channel, caplog
+    is_message_type_supported, send_message_to_user, _get_user_message, telegram_channel, caplog
 ):
     """
     Any failure should try and inform the user that something went wrong. The method that does the informing should
@@ -417,7 +417,7 @@ def test_any_failure_informs_users(
 
     is_message_type_supported.side_effect = Exception("Random error")
     # The generate response should fail, causing the default error message to be sent
-    _generate_response_for_user.side_effect = Exception("Generation error")
+    _get_user_message.side_effect = Exception("Generation error")
 
     with pytest.raises(Exception, match="Random error"):
         telegram_channel.new_user_message(telegram_messages.text_message())
