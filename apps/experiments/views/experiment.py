@@ -3,7 +3,7 @@ import logging
 import uuid
 from datetime import datetime
 from typing import cast
-from urllib.parse import quote
+from urllib.parse import parse_qs, quote, urlparse
 
 import jwt
 from celery.result import AsyncResult
@@ -14,7 +14,7 @@ from django.contrib.auth.decorators import permission_required
 from django.contrib.auth.mixins import PermissionRequiredMixin
 from django.core.exceptions import PermissionDenied, ValidationError
 from django.db import transaction
-from django.db.models import Case, Count, IntegerField, Q, When
+from django.db.models import Case, Count, IntegerField, When
 from django.http import FileResponse, Http404, HttpResponse, HttpResponseForbidden, HttpResponseRedirect
 from django.shortcuts import get_object_or_404, redirect, render
 from django.template.response import TemplateResponse
@@ -55,12 +55,7 @@ from apps.experiments.decorators import (
 )
 from apps.experiments.email import send_chat_link_email, send_experiment_invitation
 from apps.experiments.exceptions import ChannelAlreadyUtilizedException
-from apps.experiments.filters import (
-    build_participant_filter,
-    build_tags_filter,
-    build_timestamp_filter,
-    build_versions_filter,
-)
+from apps.experiments.filters import apply_dynamic_filters
 from apps.experiments.forms import (
     ConsentForm,
     ExperimentForm,
@@ -132,43 +127,8 @@ class ExperimentSessionsTableView(SingleTableView, PermissionRequiredMixin):
         )
         if not self.request.GET.get("show-all"):
             query_set = query_set.exclude(experiment_channel__platform=ChannelPlatform.API)
-        query_set = self.apply_dynamic_filters(query_set)
+        query_set = apply_dynamic_filters(query_set, self.request)
         return query_set
-
-    def apply_dynamic_filters(self, query_set):
-        filter_conditions = Q()
-        filter_applied = False
-
-        for i in range(30):  # arbitrary number higher than any # of filters we'd expect
-            filter_column = self.request.GET.get(f"filter_{i}_column")
-            filter_operator = self.request.GET.get(f"filter_{i}_operator")
-            filter_value = self.request.GET.get(f"filter_{i}_value")
-
-            if not all([filter_column, filter_operator, filter_value]):
-                break
-
-            condition = self.build_filter_condition(filter_column, filter_operator, filter_value)
-            if condition:
-                filter_conditions &= condition
-                filter_applied = True
-
-        if filter_applied:
-            query_set = query_set.filter(filter_conditions).distinct()
-        return query_set
-
-    def build_filter_condition(self, column, operator, value):
-        """Build a Q object for the filter condition based on column, operator and value"""
-        if not value:
-            return None
-        if column == "participant":
-            return build_participant_filter(operator, value)
-        elif column == "last_message":
-            return build_timestamp_filter(operator, value)
-        elif column == "tags":
-            return build_tags_filter(operator, value)
-        elif column == "versions":
-            return build_versions_filter(operator, value)
-        return None
 
 
 class ExperimentVersionsTableView(SingleTableView, PermissionRequiredMixin):
@@ -1060,14 +1020,10 @@ def experiment_invitations(request, team_slug: str, experiment_id: int):
 @login_and_team_required
 def generate_chat_export(request, team_slug: str, experiment_id: str):
     experiment = get_object_or_404(Experiment, id=experiment_id)
-    tags = request.POST.get("tags", [])
-    tags = tags.split(",") if tags else []
-
-    participant_identifiers = request.POST.get("participants")
-    if participant_identifiers:
-        participant_identifiers = participant_identifiers.split(",")
-
-    task_id = async_export_chat.delay(experiment_id, tags=tags, participants=participant_identifiers)
+    parsed_url = urlparse(request.headers.get("HX-Current-URL"))
+    query_params = parse_qs(parsed_url.query)
+    include_api = request.POST.get("show-all") == "on"
+    task_id = async_export_chat.delay(experiment_id, query_params, include_api)
     return TemplateResponse(
         request, "experiments/components/exports.html", {"experiment": experiment, "task_id": task_id}
     )
