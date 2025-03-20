@@ -9,6 +9,7 @@ from apps.experiments.models import ExperimentSession
 from apps.pipelines.models import LogEntry, Pipeline, PipelineRunStatus
 from apps.pipelines.nodes.base import PipelineNode, PipelineState
 from apps.pipelines.nodes.nodes import StartNode
+from apps.service_providers.models import TraceProvider
 from apps.utils.factories.experiment import ExperimentSessionFactory
 from apps.utils.factories.pipelines import PipelineFactory
 from apps.utils.pytest import django_db_transactional
@@ -175,3 +176,14 @@ def test_save_input_to_history(save_input_to_history, pipeline: Pipeline, sessio
     assert (
         session.chat.messages.filter(content="Hi", message_type=ChatMessageType.HUMAN).exists() == save_input_to_history
     )
+
+
+@django_db_transactional()
+def test_save_trace_metadata(pipeline: Pipeline, session: ExperimentSession):
+    provider = TraceProvider(type="langfuse", config={})
+    session.experiment.trace_provider = provider
+    pipeline.invoke(PipelineState(messages=["Hi"]), session)
+    human_message = session.chat.messages.filter(message_type=ChatMessageType.HUMAN).first()
+    assert "trace_info" in human_message.metadata
+    ai_message = session.chat.messages.filter(message_type=ChatMessageType.AI).first()
+    assert "trace_info" in ai_message.metadata
