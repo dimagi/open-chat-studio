@@ -43,34 +43,6 @@
       "ui:widget": "none",
       "type": "string"
     },
-    "history_mode": {
-      "enum": [
-        "summarize",
-        "truncate_tokens",
-        "max_history_length"
-      ],
-      "title": "PipelineChatHistoryModes",
-      "type": "string",
-      "default": null,
-      "ui:enumLabels": [
-        "Summarize",
-        "Truncate Tokens",
-        "Max History Length"
-      ],
-      "ui:widget": "history_mode"
-    },
-    "user_max_token_limit": {
-      "default": null,
-      "title": "User Max Token Limit",
-      "ui:widget": "none",
-      "type": "integer"
-    },
-    "max_history_length": {
-      "default": 10,
-      "title": "Max History Length",
-      "type": "integer",
-      "ui:widget": "none"
-    },
     "name": {
       "title": "Node Name",
       "type": "string",
