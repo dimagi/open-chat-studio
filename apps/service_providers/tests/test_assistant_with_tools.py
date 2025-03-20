@@ -140,7 +140,7 @@ def configure_common_mocks(session):
             _create_run(assistant_id, thread_id),  # send call waiting for cancellation
             _create_run(assistant_id, thread_id),  # 3rd call after tool message
         ]
-        list_messages.return_value = _create_thread_messages(
+        list_messages.return_value.data = _create_thread_messages(
             assistant_id, run.id, thread_id, [{"assistant": "ai response"}]
         )
         yield run
