@@ -104,6 +104,7 @@ PROJECT_APPS = [
     "apps.slack",
     "apps.sso",
     "apps.participants",
+    "apps.chatbots",
 ]
 
 SPECIAL_APPS = [
@@ -555,6 +556,7 @@ DOCUMENTATION_LINKS = {
     "node_email": "/concepts/pipelines/nodes/#email",
     "node_extract_structured_data": "/concepts/pipelines/nodes/#extract-structured-data",
     "node_update_participant_data": "/concepts/pipelines/nodes/#update-participant-data",
+    "chatbots": "/concepts/chatbots/",
 }
 # Available in templates as `docs_base_url`. Also see `apps.generics.help` and `generics/help.html`
 DOCUMENTATION_BASE_URL = env("DOCUMENTATION_BASE_URL", default="https://docs.openchatstudio.com")

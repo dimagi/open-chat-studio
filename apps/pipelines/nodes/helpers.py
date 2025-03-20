@@ -21,7 +21,7 @@ def temporary_session(team: Team, user_id: int):
         )
         channel = ExperimentChannel.objects.get_team_web_channel(team)
         chat = Chat.objects.create(team=team, name="Temporary Chat")
-        participant, _ = Participant.objects.get_or_create(user=user, team=team, platform=ChannelPlatform.WEB)
+        participant = Participant.create_anonymous(team=team, platform=ChannelPlatform.WEB)
         experiment_session = ExperimentSession.objects.create(
             team=team,
             experiment=experiment,
