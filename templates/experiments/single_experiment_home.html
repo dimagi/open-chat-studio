@@ -553,14 +553,15 @@
         init() {
           this.loadFiltersFromUrl();
           const urlParams = new URLSearchParams(window.location.search);
-
-          if (urlParams.has('show-all')) {
-            const showAllCheckbox = document.querySelector('input[name="show-all"]');
-            if (showAllCheckbox) {
-              showAllCheckbox.checked = true;
-            }
+          const showAllCheckbox = document.querySelector('input[name="show-all"]');
+          if (urlParams.has('show-all') && showAllCheckbox) {
+            showAllCheckbox.checked = true;
           }
-
+          if (showAllCheckbox) {
+            showAllCheckbox.addEventListener('change', () => {
+              this.triggerFilterChange();
+            });
+          }
           // Always trigger a data load on init to ensure correct data is shown
           this.$nextTick(() => {
             this.triggerFilterChange(false); // Don't update URL again since we just loaded from it
