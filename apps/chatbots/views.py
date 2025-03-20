@@ -8,9 +8,9 @@ from apps.chatbots.tables import ChatbotTable
 from apps.experiments.models import Experiment
 from apps.experiments.views import CreateExperiment
 from apps.experiments.views.experiment import (
-    BaseExperimentView,
+    BaseExperimentView, base_single_experiment_view,
 )
-from apps.generics.views import base_single_experiment_view, generic_home
+from apps.generics.views import generic_home
 from apps.pipelines.views import _pipeline_node_default_values, _pipeline_node_parameter_values, _pipeline_node_schemas
 from apps.service_providers.models import LlmProvider, LlmProviderModel
 from apps.teams.decorators import login_and_team_required
@@ -56,7 +56,7 @@ class CreateChatbot(BaseChatbotView, CreateExperiment, CreateView):
 @permission_required("experiments.view_experiment", raise_exception=True)
 def single_chatbot_home(request, team_slug: str, experiment_id: int):
     return base_single_experiment_view(
-        request, team_slug, experiment_id, "chatbots/single_chatbot_home.html", "chatbots", include_bot_type_chip=False
+        request, team_slug, experiment_id, "chatbots/single_chatbot_home.html", "chatbots"
     )
 
 

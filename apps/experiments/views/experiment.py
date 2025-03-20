@@ -92,7 +92,8 @@ from apps.experiments.views.prompt import PROMPT_DATA_SESSION_KEY
 from apps.files.forms import get_file_formset
 from apps.files.models import File
 from apps.files.views import BaseAddFileHtmxView, BaseDeleteFileView
-from apps.generics.views import base_single_experiment_view, generic_home
+from apps.generics.chips import Chip
+from apps.generics.views import generic_home
 from apps.service_providers.utils import get_llm_provider_choices
 from apps.teams.decorators import login_and_team_required
 from apps.teams.mixins import LoginAndTeamRequiredMixin
@@ -487,20 +488,65 @@ def version_create_status(request, team_slug: str, experiment_id: int):
     )
 
 
+def base_single_experiment_view(request, team_slug, experiment_id, template_name, active_tab):
+    experiment = get_object_or_404(Experiment.objects.get_all(), id=experiment_id, team=request.team)
+
+    user_sessions = (
+        ExperimentSession.objects.with_last_message_created_at()
+        .filter(participant__user=request.user, experiment=experiment)
+        .exclude(experiment_channel__platform=ChannelPlatform.API)
+    )
+    channels = experiment.experimentchannel_set.exclude(platform__in=[ChannelPlatform.WEB, ChannelPlatform.API]).all()
+    used_platforms = {channel.platform_enum for channel in channels}
+    available_platforms = ChannelPlatform.for_dropdown(used_platforms, experiment.team)
+
+    platform_forms = {}
+    form_kwargs = {"experiment": experiment}
+    for platform in available_platforms:
+        if platform.form(**form_kwargs):
+            platform_forms[platform] = platform.form(**form_kwargs)
+
+    deployed_version = None
+    if experiment != experiment.default_version:
+        deployed_version = experiment.default_version.version_number
+
+    bot_type_chip = None
+    if active_tab == "experiments":
+        if pipeline := experiment.pipeline:
+            bot_type_chip = Chip(label=f"Pipeline: {pipeline.name}", url=pipeline.get_absolute_url())
+        elif assistant := experiment.assistant:
+            bot_type_chip = Chip(label=f"Assistant: {assistant.name}", url=assistant.get_absolute_url())
+    elif active_tab == "chatbots" and experiment.pipeline:
+        bot_type_chip = Chip(label=f"Pipeline: {experiment.pipeline.name}", url=experiment.pipeline.get_absolute_url())
+
+    context = {
+        "active_tab": active_tab,
+        "bot_type_chip": bot_type_chip,
+        "experiment": experiment,
+        "user_sessions": user_sessions,
+        "platforms": available_platforms,
+        "platform_forms": platform_forms,
+        "channels": channels,
+        "available_tags": [tag.name for tag in experiment.team.tag_set.filter(is_system_tag=False)],
+        "experiment_versions": experiment.get_version_name_list(),
+        "deployed_version": deployed_version,
+        **_get_events_context(experiment, team_slug),
+        **_get_routes_context(experiment, team_slug),
+        **_get_terminal_bots_context(experiment, team_slug),
+    }
+
+    return TemplateResponse(request, template_name, context)
+
+
 @login_and_team_required
 @permission_required("experiments.view_experiment", raise_exception=True)
 def single_experiment_home(request, team_slug: str, experiment_id: int):
     return base_single_experiment_view(
-        request,
-        team_slug,
-        experiment_id,
-        "experiments/single_experiment_home.html",
-        "experiments",
-        include_bot_type_chip=True,
+        request, team_slug, experiment_id, "experiments/single_experiment_home.html", "experiments"
     )
 
 
-def get_events_context(experiment: Experiment, team_slug: str):
+def _get_events_context(experiment: Experiment, team_slug: str):
     combined_events = []
     static_events = (
         StaticTrigger.objects.filter(experiment=experiment)
@@ -537,7 +583,7 @@ def get_events_context(experiment: Experiment, team_slug: str):
     return {"show_events": len(combined_events) > 0, "events_table": EventsTable(combined_events)}
 
 
-def get_routes_context(experiment: Experiment, team_slug: str):
+def _get_routes_context(experiment: Experiment, team_slug: str):
     route_type = ExperimentRouteType.PROCESSOR
     parent_links = experiment.parent_links.filter(type=route_type).all()
     return {
@@ -547,7 +593,7 @@ def get_routes_context(experiment: Experiment, team_slug: str):
     }
 
 
-def get_terminal_bots_context(experiment: Experiment, team_slug: str):
+def _get_terminal_bots_context(experiment: Experiment, team_slug: str):
     return {
         "terminal_bots_table": TerminalBotsTable(
             experiment.child_links.filter(type=ExperimentRouteType.TERMINAL).all()
