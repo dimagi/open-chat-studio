@@ -31,7 +31,7 @@ class TraceService:
     def update_trace(self, metadata: dict):
         pass
 
-    def get_current_trace_info(self) -> TraceInfo | None:
+    def get_trace_metadata(self) -> TraceInfo | None:
         return None
 
     def initialize_from_callback_manager(self, callback_manager: CallbackManager):
@@ -78,15 +78,18 @@ class LangFuseTraceService(TraceService):
 
         self._callback.trace.update(metadata=metadata)
 
-    def get_current_trace_info(self) -> TraceInfo | None:
+    def get_trace_metadata(self) -> dict[str, str] | None:
         if not self._callback:
             raise ServiceNotInitializedException("Service not initialized.")
 
         if self._callback.trace:
-            return TraceInfo(
-                trace_id=self._callback.trace.id,
-                trace_url=self._callback.trace.get_trace_url(),
-            )
+            return {
+                "trace_info": {
+                    "trace_id": self._callback.trace.id,
+                    "trace_url": self._callback.trace.get_trace_url(),
+                },
+                "trace_provider": self.type,
+            }
 
 
 class LangSmithTraceService(TraceService):

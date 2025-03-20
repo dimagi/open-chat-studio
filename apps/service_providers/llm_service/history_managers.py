@@ -144,11 +144,7 @@ class ExperimentHistoryManager(BaseHistoryManager):
 
     def get_trace_metadata(self) -> dict:
         if self.trace_service:
-            trace_info = self.trace_service.get_current_trace_info()
-            if trace_info:
-                return {
-                    "trace_info": {**trace_info.model_dump(), "trace_provider": self.trace_service.type},
-                }
+            return self.trace_service.get_trace_metadata() or {}
         return {}
 
 
