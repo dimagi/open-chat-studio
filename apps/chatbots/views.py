@@ -8,7 +8,8 @@ from apps.chatbots.tables import ChatbotTable
 from apps.experiments.models import Experiment
 from apps.experiments.views import CreateExperiment
 from apps.experiments.views.experiment import (
-    BaseExperimentView, base_single_experiment_view,
+    BaseExperimentView,
+    base_single_experiment_view,
 )
 from apps.generics.views import generic_home
 from apps.pipelines.views import _pipeline_node_default_values, _pipeline_node_parameter_values, _pipeline_node_schemas
