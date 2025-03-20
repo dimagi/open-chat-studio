@@ -44,8 +44,6 @@ def session(request):
     local_assistant.has_custom_actions = lambda *args, **kwargs: False
 
     session.experiment.assistant = local_assistant
-    session.get_participant_data = lambda *args, **kwargs: None
-    session.get_participant_timezone = lambda *args, **kwargs: ""
     return session
 
 

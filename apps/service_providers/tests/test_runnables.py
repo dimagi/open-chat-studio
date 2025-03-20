@@ -36,8 +36,10 @@ def session(fake_llm_service):
     session.experiment.get_llm_service = lambda: fake_llm_service
 
     session.experiment.tools = [AgentTools.MOVE_SCHEDULED_MESSAGE_DATE]
-    session.get_participant_data = lambda *args, **kwargs: {"name": "Tester"}
-    return session
+    proxy_mock = mock.Mock()
+    proxy_mock.get.return_value = {"name": "Tester"}
+    with patch("apps.service_providers.llm_service.prompt_context.ParticipantDataProxy", return_value=proxy_mock):
+        yield session
 
 
 @pytest.fixture()
