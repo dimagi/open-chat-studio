@@ -347,9 +347,6 @@ class AssistantChat(RunnableSerializable[dict, ChainOutput]):
             team_id=team.id, id__in=models.Subquery(assistant_file_ids)
         ).values_list("external_id", flat=True)
 
-        tool_resources = ToolResources.objects.filter(assistant=self.adapter.assistant).first()
-        allow_downloads = tool_resources.allow_file_downloads if tool_resources else False
-
         file_ids = set()
         image_file_attachments = []
         file_path_attachments = []
@@ -369,7 +366,7 @@ class AssistantChat(RunnableSerializable[dict, ChainOutput]):
                     message_content_value = message_content.text.value
 
                     annotations = message_content.text.annotations
-                    for idx, annotation in enumerate(annotations):
+                    for idx, annotation in enumerate(annotations, 1):
                         file_id = None
                         file_ref_text = annotation.text
                         if annotation.type == "file_citation":
@@ -382,10 +379,8 @@ class AssistantChat(RunnableSerializable[dict, ChainOutput]):
                             # Original citation text example:【6:0†source】
                             if self.adapter.citations_enabled:
                                 message_content_value = message_content_value.replace(file_ref_text, f" [{idx}]")
-                                if file_link and allow_downloads:
+                                if file_link:
                                     message_content_value += f"\n[{idx}]: <a href='{file_link}'>{file_name}</a>"
-                                elif file_link:
-                                    message_content_value += f"\n[{idx}]: {file_name} (download not permitted)"
                                 else:
                                     message_content_value += f"\n\\[{idx}\\]: {file_name}"
                             else:
@@ -449,17 +444,22 @@ class AssistantChat(RunnableSerializable[dict, ChainOutput]):
     def _get_file_link_for_citation(self, file_id: str, forbidden_file_ids: list[str]) -> tuple[str, str | None]:
         """Returns a file name and a download URL for `file_id`."""
         team = self.adapter.session.team
-        # session_id = self.adapter.session.id
         try:
             file = File.objects.get(external_id=file_id, team_id=team.id)
             file_name = file.name
-            download_url = reverse("assistants:download_file", args=[team.slug, self.adapter.assistant.id, file.id])
+            if self.adapter.assistant.supports_file_downloads():
+                download_url = reverse("assistants:download_file", args=[team.slug, self.adapter.assistant.id, file.id])
+            else:
+                download_url = None
             return file_name, download_url
         except File.MultipleObjectsReturned:
             logger.error("Multiple files with the same external ID", extra={"file_id": file_id, "team": team.slug})
             file = File.objects.filter(external_id=file_id, team_id=team.id).first()
             file_name = file.name
-            download_url = reverse("assistants:download_file", args=[team.slug, self.adapter.assistant.id, file.id])
+            if self.adapter.assistant.supports_file_downloads():
+                download_url = reverse("assistants:download_file", args=[team.slug, self.adapter.assistant.id, file.id])
+            else:
+                download_url = None
             return file_name, download_url
         except File.DoesNotExist:
             client = self.adapter.assistant_client

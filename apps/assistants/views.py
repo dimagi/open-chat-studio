@@ -349,8 +349,7 @@ class DownloadFileView(View):
         assistant = get_object_or_404(OpenAiAssistant, id=assistant_id, team__slug=team_slug)
         file_obj = get_object_or_404(File, id=file_id, team__slug=team_slug)
 
-        tool_resource = ToolResources.objects.filter(assistant=assistant, files=file_obj).first()
-        if not tool_resource or not tool_resource.allow_file_downloads:
+        if not assistant.supports_file_downloads():
             return HttpResponseForbidden("File downloads are not allowed for this assistant.")
 
         return FileResponse(file_obj.file.open(), as_attachment=True, filename=file_obj.name)

@@ -20,7 +20,7 @@
   {% endif %}
   {% if object.pk %}
     <div id="sync-wrapper" class="flex w-full gap-2"
-         hx-get="{% url 'assistants:check_sync_status' request.team.slug object.pk %}"
+         hx-get="{% url 'assistants:check_syncTURN_status' request.team.slug object.pk %}"
          hx-trigger="load"
          hx-target="#sync-wrapper"
          hx-swap="innerHTML">
@@ -45,21 +45,17 @@
   <div class="mt-2" x-show="builtinTools.indexOf('file_search') >= 0" x-cloak>
     {% render_form_fields form "allow_file_search_attachments" %}
   </div>
+  <!-- Added: Render allow_file_downloads field from OpenAiAssistantForm -->
+  <div class="mt-2" x-show="builtinTools.indexOf('code_interpreter') >= 0 || builtinTools.indexOf('file_search') >= 0" x-cloak>
+    {% render_form_fields form "allow_file_downloads" %}
+  </div>
 
   {% if not object.id %}
     <div class="mt-2" x-show="builtinTools.indexOf('code_interpreter') >= 0" x-cloak>
       {% include "files/partials/file_formset.html" with form_title="Code Interpreter Files" prefix="code_interpreter" %}
-      <div class="mt-2">
-        {{ resource_formsets.code_interpreter_form.allow_file_downloads.label_tag }}
-        {{ resource_formsets.code_interpreter_form.allow_file_downloads }}
-      </div>
     </div>
     <div class="mt-2" x-show="builtinTools.indexOf('file_search') >= 0" x-cloak>
       {% include "files/partials/file_formset.html" with form_title="File Search Files" prefix="file_search" %}
-      <div class="mt-2">
-        {{ resource_formsets.file_search_form.allow_file_downloads.label_tag }}
-        {{ resource_formsets.file_search_form.allow_file_downloads }}
-      </div>
     </div>
   {% endif %}
 {% endblock form %}
@@ -73,13 +69,7 @@
           {% url "assistants:add_file" request.team.slug object.id resource.id as upload_url %}
           {% url "assistants:remove_file" request.team.slug object.id resource.id '000' as delete_url %}
           {% with files_title=resource.label|add:" Files" %}
-            {% include "files/partials/file_list.html" with files=resource.files.all nested=False prefix=resource.tool_type multiple=True%}
-            <div class="mt-2">
-              {% with form=resource_formsets.edit_formset.forms|slice:forloop.counter0|first %}
-                {{ form.allow_file_downloads.label_tag }}
-                {{ form.allow_file_downloads }}
-              {% endwith %}
-            </div>
+            {% include "files/partials/file_list.html" with files=resource.files.all nested=False prefix=resource.tool_type multiple=True %}
           {% endwith %}
         </div>
       {% endfor %}
