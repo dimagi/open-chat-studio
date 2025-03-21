@@ -209,7 +209,7 @@ def new_collection(request, team_slug: str):
 
 
 @login_and_team_required
-@permission_required("documents.delete_repository")
+@permission_required("documents.delete_collection")
 def delete_collection(request, team_slug: str, id: int):
     collection = get_object_or_404(Collection, team__slug=team_slug, id=id)
     if pipeline_nodes := collection.get_references():
