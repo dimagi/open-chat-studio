@@ -263,7 +263,7 @@
              class="watchVersionChange"
              hx-trigger="load, version-changed"
              hx-target="this"
-             hx-get="{% url 'experiments:versions-list' request.team.slug experiment.id %}"
+             hx-get="{% url 'chatbots:versions-list' request.team.slug experiment.id  %}"
              hx-swap="innerHTML">
         </div>
       </div>
@@ -273,8 +273,8 @@
       <input type="radio" name="tab_group" role="tab" class="tab" aria-label="Events" id="tab-events" />
       <div role="tabpanel" class="tab-content" id="content-events">
         <div class="app-card">
-          <a class="btn btn-sm btn-outline btn-primary" href="{% url 'experiments:events:static_event_new' team.slug experiment.id %}"><i class="fa-regular fa-plus"></i> Create Static Event</a>
-          <a class="btn btn-sm btn-outline btn-primary" href="{% url 'experiments:events:timeout_event_new' team.slug experiment.id %}"><i class="fa-regular fa-plus"></i> Create Timeout Event</a>
+          <a class="btn btn-sm btn-outline btn-primary" href="{% url 'chatbots:events:static_event_new' team.slug experiment.id %}"><i class="fa-regular fa-plus"></i> Create Static Event</a>
+          <a class="btn btn-sm btn-outline btn-primary" href="{% url 'chatbots:events:timeout_event_new' team.slug experiment.id %}"><i class="fa-regular fa-plus"></i> Create Timeout Event</a>
           {% if show_events %}
             {% render_table events_table %}
           {% endif %}

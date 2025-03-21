@@ -194,6 +194,7 @@ class ExperimentSessionsTable(tables.Table):
 
 
 class ExperimentVersionsTable(tables.Table):
+    origin = "experiments"
     version_number = columns.TemplateColumn(
         template_name="experiments/components/experiment_version_cell.html", verbose_name="Version Number"
     )
@@ -205,6 +206,7 @@ class ExperimentVersionsTable(tables.Table):
         template_name="experiments/components/experiment_version_actions.html",
         verbose_name="",
         attrs={"td": {"class": "overflow-visible"}},
+        extra_context={},
     )
 
     class Meta:
@@ -216,6 +218,11 @@ class ExperimentVersionsTable(tables.Table):
 
     def render_created_at(self, record):
         return record.created_at if record.working_version_id else ""
+
+    def __init__(self, *args, **kwargs):
+        origin = kwargs.pop("entity_type", "experiments")
+        self.base_columns["actions"].extra_context = {"origin": origin}
+        super().__init__(*args, **kwargs)
 
 
 def _get_route_url(url_name, request, record, value):

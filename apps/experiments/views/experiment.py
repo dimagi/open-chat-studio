@@ -530,7 +530,7 @@ def base_single_experiment_view(request, team_slug, experiment_id, template_name
         "available_tags": [tag.name for tag in experiment.team.tag_set.filter(is_system_tag=False)],
         "experiment_versions": experiment.get_version_name_list(),
         "deployed_version": deployed_version,
-        **_get_events_context(experiment, team_slug),
+        **_get_events_context(experiment, team_slug, request.origin),
         **_get_routes_context(experiment, team_slug),
         **_get_terminal_bots_context(experiment, team_slug),
     }
@@ -546,7 +546,7 @@ def single_experiment_home(request, team_slug: str, experiment_id: int):
     )
 
 
-def _get_events_context(experiment: Experiment, team_slug: str):
+def _get_events_context(experiment: Experiment, team_slug: str, origin=None):
     combined_events = []
     static_events = (
         StaticTrigger.objects.filter(experiment=experiment)
@@ -580,7 +580,7 @@ def _get_events_context(experiment: Experiment, team_slug: str):
         combined_events.append({**event, "team_slug": team_slug})
     for event in timeout_events:
         combined_events.append({**event, "type": "__timeout__", "team_slug": team_slug})
-    return {"show_events": len(combined_events) > 0, "events_table": EventsTable(combined_events)}
+    return {"show_events": len(combined_events) > 0, "events_table": EventsTable(combined_events, origin=origin)}
 
 
 def _get_routes_context(experiment: Experiment, team_slug: str):
