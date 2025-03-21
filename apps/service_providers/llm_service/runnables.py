@@ -442,11 +442,24 @@ class AssistantChat(RunnableSerializable[dict, ChainOutput]):
             logger.exception(ex)
 
     def _get_file_link_for_citation(self, file_id: str, forbidden_file_ids: list[str]) -> tuple[str, str | None]:
-        """Returns a file name and a download URL for `file_id`."""
+        """
+        Returns a file name and a download URL for `file_id`.
+
+        If the assistant does not support file downloads and the file is in `forbidden_file_ids`,
+        the download URL will be None to prevent unauthorized access. Generated files are allowed
+        to be downloaded if the assistant supports file downloads.
+        Returns:
+            A tuple of (file_name, download_url), where:
+            - file_name is the name of the file.
+            - download_url is a direct URL to download the file if the assistant supports file downloads
+              and the file is not forbidden; otherwise, None.
+        """
         team = self.adapter.session.team
         try:
             file = File.objects.get(external_id=file_id, team_id=team.id)
             file_name = file.name
+            if file_id in forbidden_file_ids and not self.adapter.assistant.supports_file_downloads():
+                return file_name, None
             if self.adapter.assistant.supports_file_downloads():
                 download_url = reverse("assistants:download_file", args=[team.slug, self.adapter.assistant.id, file.id])
             else:
@@ -456,6 +469,8 @@ class AssistantChat(RunnableSerializable[dict, ChainOutput]):
             logger.error("Multiple files with the same external ID", extra={"file_id": file_id, "team": team.slug})
             file = File.objects.filter(external_id=file_id, team_id=team.id).first()
             file_name = file.name
+            if file_id in forbidden_file_ids and not self.adapter.assistant.supports_file_downloads():
+                return file_name, None
             if self.adapter.assistant.supports_file_downloads():
                 download_url = reverse("assistants:download_file", args=[team.slug, self.adapter.assistant.id, file.id])
             else:
