@@ -2,10 +2,17 @@ import mimetypes
 import pathlib
 
 import magic
+from django.conf import settings
 from django.core.files.base import ContentFile
 from django.db import models
 
 from apps.teams.models import BaseTeamModel
+from apps.utils.conversions import bytes_to_megabytes
+
+
+class FilePurpose(models.TextChoices):
+    ASSISTANT = "assistant", "Assistant"
+    COLLECTION = "collection", "Collection"
 
 
 class File(BaseTeamModel):
@@ -17,6 +24,8 @@ class File(BaseTeamModel):
     content_type = models.CharField(blank=True)
     schema = models.JSONField(default=dict, blank=True)
     expiry_date = models.DateTimeField(null=True)
+    summary = models.TextField(max_length=settings.MAX_SUMMARY_LENGTH, blank=True)  # This is roughly 1 short paragraph
+    purpose = models.CharField(max_length=255, choices=FilePurpose.choices)
 
     @classmethod
     def from_external_source(cls, filename, external_file, external_id, external_source, team_id):
@@ -66,6 +75,11 @@ class File(BaseTeamModel):
             return mimetypes.guess_type(filename)[0] or "application/octet-stream"
         except Exception:
             return "application/octet-stream"
+
+    @property
+    def size_mb(self) -> float:
+        """Returns the size of this file in megabytes"""
+        return bytes_to_megabytes(self.content_size)
 
     def save(self, *args, **kwargs):
         if self.file:

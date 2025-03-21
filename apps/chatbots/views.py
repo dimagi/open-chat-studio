@@ -6,7 +6,7 @@ from apps.experiments.models import Experiment
 from apps.experiments.views.experiment import BaseExperimentView
 from apps.generics.views import generic_home
 from apps.teams.decorators import login_and_team_required
-from apps.utils.BaseExperimentTableView import BaseExperimentTableView
+from apps.utils.base_experiment_table_view import BaseExperimentTableView
 
 
 @login_and_team_required

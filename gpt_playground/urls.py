@@ -44,6 +44,7 @@ team_urlpatterns = [
     path("participants/", include("apps.participants.urls")),
     path("slack/", include("apps.slack.urls")),
     path("help/", include("apps.help.urls")),
+    path("documents/", include("apps.documents.urls")),
     path("chatbots/", include("apps.chatbots.urls")),
 ]
 

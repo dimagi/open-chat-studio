@@ -79,6 +79,7 @@ CONTENT_TYPES = {
     "teams": ["invitation", "membership", "team"],
     "annotations": ["tag", "customtaggeditem", "usercomment"],
     "participants": [],
+    "documents": ["collection"],
     "chatbots": [],
 }
 
@@ -164,6 +165,7 @@ GROUPS = [
             AppPermSetDef("channels", ALL),
             AppPermSetDef("annotations", ALL),
             CustomPermissionSetDef("experiments", CUSTOM_PERMISSIONS["experiments"]),
+            CustomPermissionSetDef("documents", ALL),
         ],
     ),
     GroupDef(

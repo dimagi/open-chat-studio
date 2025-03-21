@@ -1,0 +1,25 @@
+{% extends 'documents/shared/details_base.html' %}
+
+{% block detail_content %}
+    <input x-cloak x-show="editing" name="name" class="input input-bordered" value="{{ object.name }}"></input>
+    <h1 x-show="!editing" class="pg-title">{{ object.name }}</h1>
+
+    <dl class="grid grid-cols-2 gap-1">
+        <div class="py-3">
+            <dt class="text-sm font-medium">Uploaded at</dt>
+            <dd class="text-sm">{{ object.created_at }}</dd>
+        </div>
+
+        <div class="py-3">
+            <dt class="text-sm font-medium">Total Size</dt>
+            <dd class="text-sm">{{ object.size }} MB</dd>
+        </div>
+
+        <div class="py-3">
+            <dt class="text-sm font-medium">Files ({{ object.files.count }})</dt>
+            <dd class="text-sm">
+                {{ object.file_names|join:', ' }}
+            </dd>
+        </div>
+    </dl>
+{% endblock %}

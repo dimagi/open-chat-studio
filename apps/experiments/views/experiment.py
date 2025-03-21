@@ -92,7 +92,7 @@ from apps.generics.views import generic_home
 from apps.service_providers.utils import get_llm_provider_choices
 from apps.teams.decorators import login_and_team_required
 from apps.teams.mixins import LoginAndTeamRequiredMixin
-from apps.utils.BaseExperimentTableView import BaseExperimentTableView
+from apps.utils.base_experiment_table_view import BaseExperimentTableView
 
 DEFAULT_ERROR_MESSAGE = (
     "Sorry something went wrong. This was likely an intermittent error related to load."
