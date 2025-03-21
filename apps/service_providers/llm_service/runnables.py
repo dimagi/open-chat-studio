@@ -5,6 +5,7 @@ from typing import TYPE_CHECKING, Any, Literal
 
 import openai
 from django.db import models, transaction
+from django.urls import reverse
 from langchain.agents import AgentExecutor, create_tool_calling_agent
 from langchain.agents.openai_assistant.base import OpenAIAssistantFinish
 from langchain_core.agents import AgentFinish
@@ -337,15 +338,9 @@ class AssistantChat(RunnableSerializable[dict, ChainOutput]):
         from apps.assistants.sync import get_and_store_openai_file
 
         client = self.adapter.assistant_client
-
-        # We only want to the last message so that don't show 'thinking' messages
-        # Don't iterate to avoid loading more pages
-        messages_list = client.beta.threads.messages.list(thread_id, run_id=run_id, order="desc", limit=1).data
-        if not messages_list:
-            return "", []
-
         chat = self.adapter.session.chat
         session_id = self.adapter.session.id
+
         team = self.adapter.session.team
         assistant_file_ids = ToolResources.objects.filter(assistant=self.adapter.assistant).values_list("files")
         assistant_files_ids = File.objects.filter(
@@ -356,63 +351,62 @@ class AssistantChat(RunnableSerializable[dict, ChainOutput]):
         image_file_attachments = []
         file_path_attachments = []
         output_message = ""
+        for message in client.beta.threads.messages.list(thread_id, run_id=run_id):
+            for message_content in message.content:
+                if message_content.type == "image_file":
+                    if created_file := self._create_image_file_from_image_message(client, message_content.image_file):
+                        image_file_attachments.append(created_file)
+                        file_ids.add(created_file.external_id)
 
-        message = messages_list[0]
-        for message_content in message.content:
-            if message_content.type == "image_file":
-                if created_file := self._create_image_file_from_image_message(client, message_content.image_file):
-                    image_file_attachments.append(created_file)
-                    file_ids.add(created_file.external_id)
+                        team_slug = team.slug
+                        file_link = f"file:{team_slug}:{session_id}:{created_file.id}"
+                        output_message += f"![{created_file.name}]({file_link})\n"
 
-                    team_slug = team.slug
-                    file_link = f"file:{team_slug}:{session_id}:{created_file.id}"
-                    output_message += f"![{created_file.name}]({file_link})\n"
+                elif message_content.type == "text":
+                    message_content_value = message_content.text.value
 
-            elif message_content.type == "text":
-                message_content_value = message_content.text.value
+                    annotations = message_content.text.annotations
+                    for idx, annotation in enumerate(annotations):
+                        file_id = None
+                        file_ref_text = annotation.text
+                        if annotation.type == "file_citation":
+                            file_citation = annotation.file_citation
+                            file_id = file_citation.file_id
+                            file_name, file_link = self._get_file_link_for_citation(
+                                file_id=file_id, forbidden_file_ids=assistant_files_ids
+                            )
 
-                annotations = message_content.text.annotations
-                for idx, annotation in enumerate(annotations):
-                    file_id = None
-                    file_ref_text = annotation.text
-                    if annotation.type == "file_citation":
-                        file_citation = annotation.file_citation
-                        file_id = file_citation.file_id
-                        file_name, file_link = self._get_file_link_for_citation(
-                            file_id=file_id, forbidden_file_ids=assistant_files_ids
-                        )
-
-                        # Original citation text example:【6:0†source】
-                        if self.adapter.citations_enabled:
-                            message_content_value = message_content_value.replace(file_ref_text, f" [{idx}]")
-                            if file_link:
-                                message_content_value += f"\n[{idx}]: {file_link}"
+                            # Original citation text example:【6:0†source】
+                            if self.adapter.citations_enabled:
+                                message_content_value = message_content_value.replace(file_ref_text, f" [{idx}]")
+                                if file_link:
+                                    message_content_value += f"\n[{idx}]: <a href='{file_link}'>{file_name}</a>"
+                                else:
+                                    message_content_value += f"\n\\[{idx}\\]: {file_name}"
                             else:
-                                message_content_value += f"\n\\[{idx}\\]: {file_name}"
-                        else:
-                            message_content_value = message_content_value.replace(file_ref_text, "")
+                                message_content_value = message_content_value.replace(file_ref_text, "")
 
-                    elif annotation.type == "file_path":
-                        file_path = annotation.file_path
-                        file_id = file_path.file_id
-                        created_file = get_and_store_openai_file(
-                            client=client,
-                            file_id=file_id,
-                            team_id=team.id,
-                        )
-                        # Original citation text example: sandbox:/mnt/data/the_file.csv.
-                        # This is the link part in what looks like
-                        # [Download the CSV file](sandbox:/mnt/data/the_file.csv)
-                        message_content_value = message_content_value.replace(
-                            file_ref_text, f"file:{team.slug}:{session_id}:{created_file.id}"
-                        )
-                        file_path_attachments.append(created_file)
-                    file_ids.add(file_id)
+                        elif annotation.type == "file_path":
+                            file_path = annotation.file_path
+                            file_id = file_path.file_id
+                            created_file = get_and_store_openai_file(
+                                client=client,
+                                file_id=file_id,
+                                team_id=team.id,
+                            )
+                            # Original citation text example: sandbox:/mnt/data/the_file.csv.
+                            # This is the link part in what looks like
+                            # [Download the CSV file](sandbox:/mnt/data/the_file.csv)
+                            message_content_value = message_content_value.replace(
+                                file_ref_text, f"file:{team.slug}:{session_id}:{created_file.id}"
+                            )
+                            file_path_attachments.append(created_file)
+                        file_ids.add(file_id)
 
-                output_message += message_content_value + "\n"
-            else:
-                # Ignore any other type for now
-                pass
+                    output_message += message_content_value + "\n"
+                else:
+                    # Ignore any other type for now
+                    pass
 
         # Attach the generated files to the chat object as an annotation
         if file_path_attachments:
@@ -448,35 +442,50 @@ class AssistantChat(RunnableSerializable[dict, ChainOutput]):
             logger.exception(ex)
 
     def _get_file_link_for_citation(self, file_id: str, forbidden_file_ids: list[str]) -> tuple[str, str | None]:
-        """Returns a file name and a link constructor for `file_id`. If `file_id` is a member of
-        `forbidden_file_ids`, the link will be empty to prevent unauthorized access.
         """
-        file_link = ""
+        Returns a file name and a download URL for `file_id`.
 
+        If the assistant does not support file downloads and the file is in `forbidden_file_ids`,
+        the download URL will be None to prevent unauthorized access. Generated files are allowed
+        to be downloaded if the assistant supports file downloads.
+        Returns:
+            A tuple of (file_name, download_url), where:
+            - file_name is the name of the file.
+            - download_url is a direct URL to download the file if the assistant supports file downloads
+              and the file is not forbidden; otherwise, None.
+        """
         team = self.adapter.session.team
-        session_id = self.adapter.session.id
         try:
             file = File.objects.get(external_id=file_id, team_id=team.id)
-            file_link = f"file:{team.slug}:{session_id}:{file.id}"
             file_name = file.name
+            if file_id in forbidden_file_ids and not self.adapter.assistant.supports_file_downloads():
+                return file_name, None
+            if self.adapter.assistant.supports_file_downloads():
+                download_url = reverse("assistants:download_file", args=[team.slug, self.adapter.assistant.id, file.id])
+            else:
+                download_url = None
+            return file_name, download_url
         except File.MultipleObjectsReturned:
             logger.error("Multiple files with the same external ID", extra={"file_id": file_id, "team": team.slug})
             file = File.objects.filter(external_id=file_id, team_id=team.id).first()
             file_name = file.name
+            if file_id in forbidden_file_ids and not self.adapter.assistant.supports_file_downloads():
+                return file_name, None
+            if self.adapter.assistant.supports_file_downloads():
+                download_url = reverse("assistants:download_file", args=[team.slug, self.adapter.assistant.id, file.id])
+            else:
+                download_url = None
+            return file_name, download_url
         except File.DoesNotExist:
             client = self.adapter.assistant_client
             try:
                 openai_file = client.files.retrieve(file_id=file_id)
                 file_name = openai_file.filename
+                return file_name, None
             except Exception as e:
                 logger.error(f"Failed to retrieve file {file_id} from OpenAI: {e}")
                 file_name = "Unknown File"
-
-        if file_id in forbidden_file_ids:
-            # Don't allow downloading assistant level files
-            return file_name, None
-
-        return file_name, file_link
+                return file_name, None
 
     def _upload_tool_resource_files(self, attachments: list["Attachment"] | None = None) -> dict[str, list[str]]:
         """Uploads the files in `attachments` to OpenAI
