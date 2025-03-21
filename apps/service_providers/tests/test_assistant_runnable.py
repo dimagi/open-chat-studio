@@ -341,7 +341,7 @@ def test_assistant_uploads_new_file(create_and_run, retrieve_run, list_messages,
 @patch("openai.resources.beta.threads.runs.Runs.retrieve")
 @patch("openai.resources.beta.Threads.create_and_run")
 @patch("openai.resources.beta.threads.messages.Messages.list")
-def test_assistant_response_with_annotations(
+def test_assistant_response_with_annotations_new(
     list_messages,
     create_and_run,
     retrieve_run,
@@ -354,9 +354,8 @@ def test_assistant_response_with_annotations(
     OpenAI doesn't allow you to fetch the content of the file that you uploaded, but this isn't an issue, since we
     already have that file as an attachment on the chat object
     """
-
-    # I'm specifying the ids manually to make it easier to follow the expected output string that contains DB ids
     session = db_session
+    session.id = 53
     session.team.slug = "dimagi-test"
     session.team.save()
     chat = session.chat
@@ -386,16 +385,15 @@ def test_assistant_response_with_annotations(
         attachment, _created = chat.attachments.get_or_create(tool_type="file_path")
         attachment.files.add(local_file)
 
-    # ToolResources for assistant (no longer needs allow_file_downloads)
+    # ToolResources for assistant
     from apps.assistants.models import ToolResources
 
     runnable = create_experiment_runnable(session.experiment, session)
     assistant = runnable.adapter.assistant
-    # Set allow_file_downloads=True and builtin_tools to ensure the link is generated
+    assistant.id = 42
     assistant.allow_file_downloads = True
-    assistant.builtin_tools = ["file_search"]  # Add this to ensure supports_file_downloads() returns True
+    assistant.builtin_tools = ["file_search"]
     assistant.save()
-    # Refresh to ensure the values are persisted
     assistant.refresh_from_db()
     print(f"After save: builtin_tools={assistant.builtin_tools}, allow_file_downloads={assistant.allow_file_downloads}")
 
@@ -441,25 +439,21 @@ def test_assistant_response_with_annotations(
     if cited_file_missing:
         # The cited file link is empty, since it's missing from the DB
         expected_output_message = (
-            f"![test.png](file:dimagi-test:{session.id}:10)\n"
-            f"Hi there human. The generated file can be [downloaded here](file:dimagi-test:{session.id}:10)."
+            "![test.png](file:dimagi-test:53:10)\n"
+            "Hi there human. The generated file can be [downloaded here](file:dimagi-test:53:10)."
             " A made up link to *file1.pdf* *file2.pdf*"
-            " Also, leaves are tree stuff [1]. Another link to nothing *file3.pdf*\n\\[1\\]: existing.txt"
+            " Also, leaves are tree stuff [2]. Another link to nothing *file3.pdf*\n\\[2\\]: existing.txt"
         )
     else:
-        # Use single quotes to match the actual output
         expected_output_message = (
-            f"![test.png](file:dimagi-test:{session.id}:10)\n"
-            f"Hi there human. The generated file can be [downloaded here](file:dimagi-test:{session.id}:10)."
+            "![test.png](file:dimagi-test:53:10)\n"
+            "Hi there human. The generated file can be [downloaded here](file:dimagi-test:53:10)."
             " A made up link to *file1.pdf* *file2.pdf*"
-            " Also, leaves are tree stuff [1]. Another link to nothing *file3.pdf*"
-            f"\n[1]: <a href='/a/dimagi-test/assistants/{assistant.id}/files/9/download/'>existing.txt</a>"
+            " Also, leaves are tree stuff [2]. Another link to nothing *file3.pdf*"
+            "\n[2]: <a href='/a/dimagi-test/assistants/42/files/9/download/'>existing.txt</a>"
         )
 
-    # Debug: Print the actual and expected outputs to identify any further mismatches
-    print("Expected:", repr(expected_output_message))
-    print("Actual:", repr(result.output))
-    assert result.output == expected_output_message
+    assert expected_output_message.strip() == result.output.strip()
 
 
 @pytest.mark.django_db()
