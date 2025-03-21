@@ -5,7 +5,7 @@ from apps.documents import views
 app_name = "documents"
 
 urlpatterns = [
-    path("<slug:tab_name>", views.RepositoryHome.as_view(), name="repositories"),
+    path("<slug:tab_name>", views.CollectionsHome.as_view(), name="collections"),
     # Files
     path("files/", views.FileListView.as_view(), name="files_list"),
     path("files/upload", views.upload_files, name="upload_files"),

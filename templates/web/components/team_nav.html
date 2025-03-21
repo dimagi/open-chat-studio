@@ -48,9 +48,9 @@
     </ul>
   </li>
   {% flag "document_management" %}
-    {% if perms.documents.view_repository %}
+    {% if perms.documents.view_collection %}
       <li>
-        <a href="{% url 'documents:repositories' request.team.slug 'files' %}"
+        <a href="{% url 'documents:collections' request.team.slug 'files' %}"
            {% if active_tab == 'manage_files' %}class="active"{% endif %}>
           <i class="fa fa-folder" aria-hidden="true"></i></i>
         {% translate "Manage Files" %}

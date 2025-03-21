@@ -79,7 +79,7 @@ CONTENT_TYPES = {
     "teams": ["invitation", "membership", "team"],
     "annotations": ["tag", "customtaggeditem", "usercomment"],
     "participants": [],
-    "documents": ["repository"],
+    "documents": ["collection"],
     "chatbots": [],
 }
 

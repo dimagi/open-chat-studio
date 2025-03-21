@@ -4,21 +4,16 @@ from apps.teams.models import BaseTeamModel
 from apps.utils.conversions import bytes_to_megabytes
 
 
-class RepositoryType(models.TextChoices):
-    COLLECTION = "collection", "Collection"
-
-
-class Repository(BaseTeamModel):
+class Collection(BaseTeamModel):
     name = models.CharField(max_length=255)
-    type = models.CharField(choices=RepositoryType.choices, default=RepositoryType.COLLECTION)
     files = models.ManyToManyField("files.File", blank=False)
 
     class Meta:
-        constraints = [models.UniqueConstraint(fields=["team", "type", "name"], name="unique_repository_per_team")]
+        constraints = [models.UniqueConstraint(fields=["team", "name"], name="unique_collection_per_team")]
 
     @property
     def size(self) -> float:
-        """Returns the size of this repository in megabytes"""
+        """Returns the size of this collection in megabytes"""
         bytes = self.files.aggregate(bytes=models.Sum("content_size"))["bytes"] or 0
         return bytes_to_megabytes(bytes)
 

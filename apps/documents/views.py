@@ -8,14 +8,14 @@ from django.urls import reverse
 from django.views.decorators.http import require_POST
 from django.views.generic import DetailView, ListView, TemplateView
 
-from apps.documents.models import Repository, RepositoryType
+from apps.documents.models import Collection
 from apps.files.models import File, FilePurpose
 from apps.teams.decorators import login_and_team_required
 from apps.teams.mixins import LoginAndTeamRequiredMixin
 from apps.utils.search import similarity_search
 
 
-class RepositoryHome(LoginAndTeamRequiredMixin, TemplateView):
+class CollectionsHome(LoginAndTeamRequiredMixin, TemplateView):
     template_name = "documents/repositories.html"
 
     def get_context_data(self, team_slug: str, tab_name: str, **kwargs):
@@ -30,16 +30,11 @@ class RepositoryHome(LoginAndTeamRequiredMixin, TemplateView):
             "files_count": File.objects.filter(team__slug=team_slug, purpose=FilePurpose.COLLECTION).count(),
             "max_summary_length": settings.MAX_SUMMARY_LENGTH,
             "supported_file_types": settings.MEDIA_SUPPORTED_FILE_TYPES,
-            "collections_count": Repository.objects.filter(
-                team__slug=team_slug, type=RepositoryType.COLLECTION
-            ).count(),
+            "collections_count": self.request.team.collection_set.count(),
         }
 
         if tab_name == "files":
-            context["collections"] = Repository.objects.filter(
-                team__slug=team_slug, type=RepositoryType.COLLECTION
-            ).all()
-
+            context["collections"] = self.request.team.collection_set.all()
         return context
 
 
@@ -86,7 +81,7 @@ class FileDetails(BaseDetailsView):
     def get_context_data(self, *args, **kwargs):
         context = super().get_context_data(*args, **kwargs)
         file = self.get_object()
-        collection_names = file.repository_set.filter(type=RepositoryType.COLLECTION).values_list("name", flat=True)
+        collection_names = file.collection_set.values_list("name", flat=True)
         context["current_collections"] = list(collection_names)
         context["max_summary_length"] = settings.MAX_SUMMARY_LENGTH
 
@@ -96,9 +91,7 @@ class FileDetails(BaseDetailsView):
         context["delete_url"] = reverse(
             "documents:delete_file", kwargs={"team_slug": self.kwargs["team_slug"], "pk": file.id}
         )
-        context["available_collections"] = Repository.objects.filter(
-            team__slug=self.kwargs["team_slug"], type=RepositoryType.COLLECTION
-        ).values_list("name", flat=True)
+        context["available_collections"] = self.request.team.collection_set.values_list("name", flat=True)
         return context
 
 
@@ -121,11 +114,9 @@ def upload_files(request, team_slug: str):
             )
         )
 
-    repo = Repository.objects.get(
-        type=RepositoryType.COLLECTION, team=request.team, name=request.POST.get("collection_name")
-    )
+    repo = request.team.collection_set.filter(name=request.POST.get("collection_name"))
     repo.files.add(*files)
-    return redirect(reverse("documents:repositories", kwargs={"team_slug": team_slug, "tab_name": "files"}))
+    return redirect(reverse("documents:collections", kwargs={"team_slug": team_slug, "tab_name": "files"}))
 
 
 @login_and_team_required
@@ -133,7 +124,7 @@ def upload_files(request, team_slug: str):
 def delete_file(request, team_slug: str, pk: int):
     file = get_object_or_404(File, team__slug=team_slug, id=pk)
     file.delete()
-    return redirect(reverse("documents:repositories", kwargs={"team_slug": team_slug, "tab_name": "files"}))
+    return redirect(reverse("documents:collections", kwargs={"team_slug": team_slug, "tab_name": "files"}))
 
 
 @require_POST
@@ -147,48 +138,43 @@ def edit_file(request, team_slug: str, pk: int):
     file.save(update_fields=["name", "summary"])
     _update_collection_membership(file=file, collection_names=request.POST.getlist("collections"))
 
-    return redirect(reverse("documents:repositories", kwargs={"team_slug": team_slug, "tab_name": "files"}))
+    return redirect(reverse("documents:collections", kwargs={"team_slug": team_slug, "tab_name": "files"}))
 
 
 def _update_collection_membership(file: File, collection_names: list[str]):
     """Handles updating the collections a file belongs to"""
-    collections = Repository.objects.filter(
-        team__id=file.team_id, type=RepositoryType.COLLECTION, name__in=collection_names
-    ).values_list("id", flat=True)
+    collections = file.team.collection_set.filter(name__in=collection_names).values_list("id", flat=True)
 
-    existing_collections = set(file.repository_set.filter(type=RepositoryType.COLLECTION).values_list("id", flat=True))
+    existing_collections = set(file.collection_set.values_list("id", flat=True))
     new_collections = set(collections) - existing_collections
     collections_to_remove_files_from = existing_collections - set(collections)
 
-    RepoFileClass = Repository.files.through
+    RepoFileClass = Collection.files.through
 
     # Handle new collections
     repo_files = []
     for id in new_collections:
-        repo_files.append(RepoFileClass(file=file, repository_id=id))
+        repo_files.append(RepoFileClass(file=file, collection_id=id))
 
     RepoFileClass.objects.bulk_create(repo_files)
 
     # Handle outdated collections
-    RepoFileClass.objects.filter(file=file, repository_id__in=collections_to_remove_files_from).delete()
+    RepoFileClass.objects.filter(file=file, collection_id__in=collections_to_remove_files_from).delete()
 
 
 class CollectionListView(BaseObjectListView):
     template_name = "documents/shared/list.html"
-    model = Repository
+    model = Collection
     paginate_by = 10
     details_url_name = "documents:collection_details"
     tab_name = "collections"
-    permission_required = "documents.view_repository"
-
-    def get_queryset(self):
-        return super().get_queryset().filter(type=RepositoryType.COLLECTION)
+    permission_required = "documents.view_collection"
 
 
 class CollectionDetails(BaseDetailsView):
     template_name = "documents/collection_details.html"
-    model = Repository
-    permission_required = "documents.view_repository"
+    model = Collection
+    permission_required = "documents.view_collection"
 
     def get_queryset(self):
         return super().get_queryset().filter(team__slug=self.kwargs["team_slug"])
@@ -207,30 +193,30 @@ class CollectionDetails(BaseDetailsView):
 
 @require_POST
 @login_and_team_required
-@permission_required("documents.add_repository")
+@permission_required("documents.add_collection")
 @transaction.atomic()
 def new_collection(request, team_slug: str):
     """Create a new collection"""
     try:
-        Repository.objects.create(type=RepositoryType.COLLECTION, team=request.team, name=request.POST.get("name"))
+        Collection.objects.create(team=request.team, name=request.POST.get("name"))
     except IntegrityError:
         messages.error(request, "A collection with that name already exists.")
-    return redirect(reverse("documents:repositories", kwargs={"team_slug": team_slug, "tab_name": "collections"}))
+    return redirect(reverse("documents:collections", kwargs={"team_slug": team_slug, "tab_name": "collections"}))
 
 
 @login_and_team_required
-@permission_required("documents.delete_repository")
+@permission_required("documents.delete_collection")
 def delete_collection(request, team_slug: str, pk: int):
-    collection = get_object_or_404(Repository, team__slug=team_slug, id=pk, type=RepositoryType.COLLECTION)
+    collection = get_object_or_404(Collection, team__slug=team_slug, id=pk)
     collection.delete()
-    return redirect(reverse("documents:repositories", kwargs={"team_slug": team_slug, "tab_name": "collections"}))
+    return redirect(reverse("documents:collections", kwargs={"team_slug": team_slug, "tab_name": "collections"}))
 
 
 @require_POST
 @login_and_team_required
-@permission_required("documents.change_repository")
+@permission_required("documents.change_collection")
 def edit_collection(request, team_slug: str, pk: int):
-    collection = get_object_or_404(Repository, team__slug=team_slug, id=pk, type=RepositoryType.COLLECTION)
+    collection = get_object_or_404(Collection, team__slug=team_slug, id=pk)
     collection.name = request.POST["name"]
     collection.save(update_fields=["name"])
-    return redirect(reverse("documents:repositories", kwargs={"team_slug": team_slug, "tab_name": "collections"}))
+    return redirect(reverse("documents:collections", kwargs={"team_slug": team_slug, "tab_name": "collections"}))

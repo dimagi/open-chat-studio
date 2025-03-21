@@ -11,10 +11,10 @@
 
         <div class="flex flex-col mt-2">
             <div class="join">
-                <a href="{% url 'documents:repositories' request.team.slug 'files' %}" class="btn btn-sm join-item {% if tab_name == 'files' %}btn-active{% endif %}">
+                <a href="{% url 'documents:collections' request.team.slug 'files' %}" class="btn btn-sm join-item {% if tab_name == 'files' %}btn-active{% endif %}">
                     Files ({{ files_count }})
                 </a>
-                <a href="{% url 'documents:repositories' request.team.slug 'collections' %}" class="btn btn-sm join-item {% if tab_name == 'collections' %}btn-active{% endif %}">
+                <a href="{% url 'documents:collections' request.team.slug 'collections' %}" class="btn btn-sm join-item {% if tab_name == 'collections' %}btn-active{% endif %}">
                     Collections ({{ collections_count }})
                 </a>
             </div>
