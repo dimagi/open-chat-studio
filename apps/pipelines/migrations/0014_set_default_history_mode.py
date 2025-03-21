@@ -2,13 +2,13 @@
 
 from django.db import migrations
 from apps.pipelines.models import PipelineChatHistoryModes
-from apps.pipelines.nodes.nodes import StartNode, EndNode
+from apps.pipelines.nodes.nodes import LLMResponseWithPrompt, RouterNode
 
 CHUNK_SIZE = 100
 
 def _set_default_history_mode(apps, schema_editor):
     Node = apps.get_model('pipelines', 'Node')
-    node_queryset = Node.objects.exclude(type__in=[StartNode.__name__, EndNode.__name__])
+    node_queryset = Node.objects.filter(type__in=[LLMResponseWithPrompt.__name__, RouterNode.__name__])
     nodes = []
     for node in node_queryset.iterator(chunk_size=CHUNK_SIZE):
         node.params['history_mode'] = PipelineChatHistoryModes.SUMMARIZE
