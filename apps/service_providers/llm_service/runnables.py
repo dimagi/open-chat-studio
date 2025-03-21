@@ -366,7 +366,7 @@ class AssistantChat(RunnableSerializable[dict, ChainOutput]):
                     message_content_value = message_content.text.value
 
                     annotations = message_content.text.annotations
-                    for idx, annotation in enumerate(annotations, 1):
+                    for idx, annotation in enumerate(annotations):
                         file_id = None
                         file_ref_text = annotation.text
                         if annotation.type == "file_citation":

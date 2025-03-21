@@ -13,6 +13,7 @@ from openai.types.beta.threads.text import Text
 from openai.types.beta.threads.text_content_block import TextContentBlock
 from openai.types.file_object import FileObject
 
+from apps.assistants.models import ToolResources
 from apps.channels.datamodels import Attachment
 from apps.chat.agent.tools import TOOL_CLASS_MAP
 from apps.chat.models import Chat, ChatAttachment, ChatMessage, ChatMessageType
@@ -341,7 +342,7 @@ def test_assistant_uploads_new_file(create_and_run, retrieve_run, list_messages,
 @patch("openai.resources.beta.threads.runs.Runs.retrieve")
 @patch("openai.resources.beta.Threads.create_and_run")
 @patch("openai.resources.beta.threads.messages.Messages.list")
-def test_assistant_response_with_annotations_new(
+def test_assistant_response_with_annotations(
     list_messages,
     create_and_run,
     retrieve_run,
@@ -355,8 +356,8 @@ def test_assistant_response_with_annotations_new(
     already have that file as an attachment on the chat object
     """
 
+    # I'm specifying the ids manually to make it easier to follow the expected output string that contains DB ids
     session = db_session
-    session.id = 53
     session.team.slug = "dimagi-test"
     session.team.save()
     chat = session.chat
@@ -387,17 +388,15 @@ def test_assistant_response_with_annotations_new(
         attachment.files.add(local_file)
 
     # ToolResources for assistant
-    from apps.assistants.models import ToolResources
 
     runnable = create_experiment_runnable(session.experiment, session)
     assistant = runnable.adapter.assistant
-    assistant.id = 42
+
     assistant.allow_file_downloads = True
     assistant.builtin_tools = ["file_search"]
     assistant.save()
-    assistant.refresh_from_db()
-    print(f"After save: builtin_tools={assistant.builtin_tools}, allow_file_downloads={assistant.allow_file_downloads}")
 
+    assistant.refresh_from_db()
     tool_resource = ToolResources.objects.create(assistant=assistant, tool_type="file_search")
     if not cited_file_missing:
         tool_resource.files.add(local_file)
@@ -439,21 +438,20 @@ def test_assistant_response_with_annotations_new(
     if cited_file_missing:
         # The cited file link is empty, since it's missing from the DB
         expected_output_message = (
-            "![test.png](file:dimagi-test:53:10)\n"
-            "Hi there human. The generated file can be [downloaded here](file:dimagi-test:53:10)."
+            f"![test.png](file:dimagi-test:{session.id}:10)\n"
+            f"Hi there human. The generated file can be [downloaded here](file:dimagi-test:{session.id}:10)."
             " A made up link to *file1.pdf* *file2.pdf*"
-            " Also, leaves are tree stuff [2]. Another link to nothing *file3.pdf*\n\\[2\\]: existing.txt"
+            " Also, leaves are tree stuff [1]. Another link to nothing *file3.pdf*\n\\[1\\]: existing.txt"
         )
     else:
         expected_output_message = (
-            "![test.png](file:dimagi-test:53:10)\n"
-            "Hi there human. The generated file can be [downloaded here](file:dimagi-test:53:10)."
+            f"![test.png](file:dimagi-test:{session.id}:10)\n"
+            f"Hi there human. The generated file can be [downloaded here](file:dimagi-test:{session.id}:10)."
             " A made up link to *file1.pdf* *file2.pdf*"
-            " Also, leaves are tree stuff [2]. Another link to nothing *file3.pdf*"
-            "\n[2]: <a href='/a/dimagi-test/assistants/42/files/9/download/'>existing.txt</a>"
+            " Also, leaves are tree stuff [1]. Another link to nothing *file3.pdf*"
+            f"\n[1]: <a href='/a/dimagi-test/assistants/{assistant.id}/files/9/download/'>existing.txt</a>"
         )
-
-    assert expected_output_message.strip() == result.output.strip()
+    assert result.output == expected_output_message
 
 
 @pytest.mark.django_db()
@@ -489,7 +487,7 @@ def test_assistant_response_with_image_file_content_block(
 
     thread_id = "test_thread_id"
     run = _create_run(ASSISTANT_ID, thread_id)
-    list_messages.return_value.data = _create_thread_messages(ASSISTANT_ID, run.id, thread_id, [{"assistant": "Ola"}])
+    list_messages.return_value = _create_thread_messages(ASSISTANT_ID, run.id, thread_id, [{"assistant": "Ola"}])
     create_and_run.return_value = run
     retrieve_run.return_value = run
     assistant = create_experiment_runnable(db_session.experiment, db_session)
