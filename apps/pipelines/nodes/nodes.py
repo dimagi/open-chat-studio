@@ -144,7 +144,7 @@ class HistoryMixin(LLMResponseMixin):
         ),
     )
     history_mode: PipelineChatHistoryModes = Field(
-        None,
+        default=PipelineChatHistoryModes.SUMMARIZE,
         json_schema_extra=UiSchema(widget=Widgets.history_mode, enum_labels=PipelineChatHistoryModes.labels),
     )
     user_max_token_limit: int | None = Field(
