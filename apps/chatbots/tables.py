@@ -1,5 +1,6 @@
 import django_tables2 as tables
 from django.conf import settings
+from django.urls import reverse
 from django_tables2 import columns
 
 from apps.experiments.models import Experiment
@@ -13,6 +14,7 @@ class ChatbotTable(tables.Table):
     owner = columns.Column(accessor="owner__username", verbose_name="Created By")
     actions = columns.TemplateColumn(
         template_name="experiments/components/experiment_actions_column.html",
+        extra_context={"edit_url": "chatbots:edit", "use_pipeline_id": True},
     )
 
     class Meta:
@@ -20,8 +22,8 @@ class ChatbotTable(tables.Table):
         fields = ("name",)
         row_attrs = {
             **settings.DJANGO_TABLES2_ROW_ATTRS,
-            "data-redirect-url": lambda record: (
-                record.get_absolute_url() if hasattr(record, "get_absolute_url") else ""
+            "data-redirect-url": lambda record: reverse(
+                "chatbots:single_chatbot_home", args=[record.team.slug, record.id]
             ),
         }
         orderable = False

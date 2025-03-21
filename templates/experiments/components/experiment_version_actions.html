@@ -16,7 +16,7 @@
       </form>
     {% endif %}
     <button class="btn btn-sm btn-outline btn-primary"
-            hx-get="{% url 'experiments:experiment-version-details' team_slug=team.slug experiment_id=record.working_version_id version_number=record.version_number %}"
+            hx-get="{% if origin == 'chatbots' %}{% url 'chatbots:version-details' team_slug=team.slug experiment_id=record.working_version_id version_number=record.version_number %}{% else %}{% url 'experiments:experiment-version-details' team_slug=team.slug experiment_id=record.working_version_id version_number=record.version_number %}{% endif %}"
             hx-target="#modal-content"
             hx-trigger="click"
             hx-swap="innerHTML"
@@ -25,7 +25,7 @@
     </button>
   {% else %}
     {% if record.is_editable %}
-      {% include 'experiments/create_version_button.html' with experiment=record %}
+      {% include 'experiments/create_version_button.html' with experiment=record origin=origin %}
     {% endif %}
   {% endif %}
 </div>

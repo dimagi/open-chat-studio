@@ -133,6 +133,7 @@ MIDDLEWARE = [
     "apps.audit.middleware.AuditTransactionMiddleware",
     "apps.web.htmx_middleware.HtmxMessageMiddleware",
     "tz_detect.middleware.TimezoneMiddleware",
+    "apps.generics.middleware.OriginDetectionMiddleware",
 ]
 
 ROOT_URLCONF = "gpt_playground.urls"
