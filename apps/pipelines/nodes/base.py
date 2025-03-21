@@ -203,7 +203,6 @@ class Widgets(StrEnum):
     llm_provider_model = "llm_provider_model"
     history = "history"
     keywords = "keywords"
-    history_mode = "history_mode"
 
 
 class OptionsSource(StrEnum):
