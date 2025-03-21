@@ -28,6 +28,8 @@ anyio==4.4.0
     #   openai
 asgiref==3.8.1
     # via django
+async-timeout==5.0.1
+    # via redis
 attrs==23.1.0
     # via
     #   aiohttp
@@ -293,7 +295,7 @@ langchain-openai==0.2.3
     # via -r requirements.in
 langchain-text-splitters==0.3.0
     # via langchain
-langfuse==2.52.1
+langfuse==2.59.7
     # via -r requirements.in
 langgraph==0.2.35
     # via -r requirements.in
@@ -471,6 +473,7 @@ requests==2.32.3
     #   huggingface-hub
     #   langchain
     #   langchain-community
+    #   langfuse
     #   langsmith
     #   pytelegrambotapi
     #   requests-oauthlib

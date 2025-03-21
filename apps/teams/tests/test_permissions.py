@@ -49,6 +49,7 @@ IGNORE_APPS = {
     "help",
     "humanize",
     "messages",
+    "microsoft",  # allauth
     "otp_static",
     "otp_totp",
     "redis",  # heath_check.redis
@@ -60,6 +61,7 @@ IGNORE_APPS = {
     "sites",
     "slack",
     "socialaccount",
+    "sso",
     "staticfiles",
     "taggit",
     "template_partials",

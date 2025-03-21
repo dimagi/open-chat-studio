@@ -13,6 +13,12 @@ class Migration(migrations.Migration):
         migrations.AddField(
             model_name='file',
             name='summary',
-            field=models.TextField(blank=True, max_length=400),
+            field=models.TextField(blank=True, max_length=1024),
+        ),
+        migrations.AddField(
+            model_name='file',
+            name='purpose',
+            field=models.CharField(choices=[('assistant', 'Assistant'), ('collection', 'Collection')], default='assistant', max_length=255),
+            preserve_default=False,
         ),
     ]

@@ -13,15 +13,5 @@ class EmailAsUsernameAdapter(AllAuthOtpAdapter):
         user_field(user, app_settings.USER_MODEL_USERNAME_FIELD, user_email(user))
 
 
-class NoNewUsersAccountAdapter(EmailAsUsernameAdapter):
-    """
-    Adapter that can be used to disable public sign-ups for your app.
-    """
-
-    def is_open_for_signup(self, request):
-        # see https://stackoverflow.com/a/29799664/8207
-        return False
-
-
 class AccountAdapter(EmailAsUsernameAdapter):
     pass

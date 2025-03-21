@@ -17,7 +17,7 @@
               {% translate "Create account" %}
             </a>
           {% endif %}
-          <a class="btn btn-outline btn-secondary w-44" href="{% url 'account_login' %}">
+          <a class="btn btn-outline btn-secondary w-44" href="{% url login_url_name|default:"account_login" %}">
             {% translate "Sign In" %}
           </a>
         </p>

@@ -196,7 +196,7 @@ class ChannelBase(ABC):
         pass
 
     @staticmethod
-    def get_channel_class_for_platform(platform: ChannelPlatform) -> "ChannelBase":
+    def get_channel_class_for_platform(platform: ChannelPlatform | str) -> type["ChannelBase"]:
         if platform == "telegram":
             channel_cls = TelegramChannel
         elif platform == "web":
@@ -266,7 +266,8 @@ class ChannelBase(ABC):
         try:
             self._add_message(message)
         except ParticipantNotAllowedException:
-            return self.send_message_to_user("Sorry, you are not allowed to chat to this bot")
+            self.send_message_to_user("Sorry, you are not allowed to chat to this bot")
+            return ""
 
         try:
             if not self.is_message_type_supported():
@@ -843,11 +844,29 @@ class CommCareConnectChannel(ChannelBase):
         experiment_session: ExperimentSession | None = None,
     ):
         super().__init__(experiment, experiment_channel, experiment_session)
+        self._check_consent(strict=False)
         self.client = CommCareConnectClient()
 
+    def _check_consent(self, strict=True):
+        # This is a failsafe, checks should also happen earlier in the process
+        if self.experiment_session:
+            try:
+                participant_data = self.participant_data
+            except ParticipantData.DoesNotExist:
+                if strict:
+                    raise ChannelException("Participant has not given consent to chat") from None
+                else:
+                    return
+
+            if not participant_data.system_metadata.get("consent", False):
+                raise ChannelException("Participant has not given consent to chat")
+
+    def _ensure_sessions_exists(self):
+        super()._ensure_sessions_exists()
+        self._check_consent()
+
     def send_text_to_user(self, text: str):
-        if self.participant_data.system_metadata.get("consent", False) is False:
-            raise ChannelException("Participant has not given consent to chat")
+        self._check_consent()
         self.client.send_message_to_user(
             channel_id=self.connect_channel_id, message=text, encryption_key=self.encryption_key
         )
@@ -868,10 +887,9 @@ class CommCareConnectChannel(ChannelBase):
 
     @cached_property
     def encryption_key(self) -> bytes:
-        key = self.participant_data.get_encryption_key_bytes()
-        if not key:
-            raise ChannelException(f"Encryption key is missing for participant {self.participant_identifier}")
-        return key
+        if not self.participant_data.encryption_key:
+            self.participant_data.generate_encryption_key()
+        return self.participant_data.get_encryption_key_bytes()
 
 
 def _start_experiment_session(
