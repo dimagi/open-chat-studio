@@ -3,6 +3,7 @@
 <ul x-data="{selected_item: null}">
     {% for object in page_obj %}
         <li
+            id="record-{{ object.id }}"
             class="text-left px-3 py-3 border-b border-base-300 hover:cursor-pointer"
             hx-get="{% url details_url_name request.team.slug object.id %}"
             hx-trigger="click"
