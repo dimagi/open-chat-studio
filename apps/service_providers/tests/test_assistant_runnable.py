@@ -354,6 +354,7 @@ def test_assistant_response_with_annotations_new(
     OpenAI doesn't allow you to fetch the content of the file that you uploaded, but this isn't an issue, since we
     already have that file as an attachment on the chat object
     """
+
     session = db_session
     session.id = 53
     session.team.slug = "dimagi-test"
@@ -425,7 +426,6 @@ def test_assistant_response_with_annotations_new(
         " Also, leaves are tree stuff【6:0†source】."
         " Another link to nothing [file3.pdf](https://example.com/download/file-3)"
     )
-
 
     list_messages.return_value = _create_thread_messages(
         ASSISTANT_ID, run.id, thread_id, [{"assistant": ai_message}], annotations
