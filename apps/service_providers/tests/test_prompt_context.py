@@ -87,7 +87,8 @@ def test_retrieves_media_successfully():
     collection.files.add(file1, file2)
     context = PromptTemplateContext(session=None, source_material_id=None, collection_id=collection.id)
     expected_media_summaries = (
-        f"File ({file1.id}): {file1.summary}\n----------\nFile ({file2.id}): {file2.summary}\n----------"
+        f"* File (id={file1.id}, content_type={file1.content_type}): {file1.summary}\n\n"
+        f"* File (id={file2.id}, content_type={file2.content_type}): {file2.summary}\n"
     )
     assert context.get_media_summaries() == expected_media_summaries
 
