@@ -46,6 +46,7 @@ def add_temp_state_messages(left: dict, right: dict):
 
 
 def merge_dicts(left: dict, right: dict):
+    # TODO: Use a recursive merge strategy
     return {**left, **right}
 
 

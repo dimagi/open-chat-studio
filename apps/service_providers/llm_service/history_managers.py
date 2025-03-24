@@ -1,5 +1,4 @@
 from abc import ABCMeta, abstractmethod
-from collections import defaultdict
 from typing import Self
 
 from langchain_core.language_models.chat_models import BaseChatModel
@@ -164,11 +163,14 @@ class PipelineHistoryManager(BaseHistoryManager):
         self.trace_service = session.experiment.trace_service if session else None
         self.ai_message = None
 
-        self.input_message_metadata = defaultdict(list)
-        self.output_message_metadata = defaultdict(list)
+        self.input_message_metadata = {}
+        self.output_message_metadata = {}
 
     def attach_file_id(self, file_id: str):
         """Callback method used by a tool to attach a file id to the output message"""
+        if "ocs_attachment_file_ids" not in self.output_message_metadata:
+            self.output_message_metadata["ocs_attachment_file_ids"] = []
+
         self.output_message_metadata["ocs_attachment_file_ids"].append(file_id)
 
     @classmethod
