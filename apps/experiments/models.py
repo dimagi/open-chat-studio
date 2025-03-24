@@ -601,6 +601,11 @@ class AgentTools(models.TextChoices):
     def reminder_tools(cls) -> list[Self]:
         return [cls.RECURRING_REMINDER, cls.ONE_OFF_REMINDER, cls.DELETE_REMINDER, cls.MOVE_SCHEDULED_MESSAGE_DATE]
 
+    @staticmethod
+    def user_tool_choices() -> list["AgentTools"]:
+        """Returns the set of tools that a user should be able to attach to the bot"""
+        return [(tool.value, tool.label) for tool in AgentTools if tool != AgentTools.ATTACH_MEDIA]
+
 
 @audit_fields(*model_audit_fields.EXPERIMENT_FIELDS, audit_special_queryset_writes=True)
 class Experiment(BaseTeamModel, VersionsMixin, CustomActionOperationMixin):

@@ -219,7 +219,7 @@ class BaseExperimentView(LoginAndTeamRequiredMixin, PermissionRequiredMixin):
                 "button_text": self.button_title,
                 "active_tab": "experiments",
                 "experiment_type": experiment_type,
-                "available_tools": AgentTools.choices,
+                "available_tools": AgentTools.user_tool_choices(),
                 "team_participant_identifiers": team_participant_identifiers,
                 "disable_version_button": disable_version_button,
             },
