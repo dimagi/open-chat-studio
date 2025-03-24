@@ -4,7 +4,7 @@ from unittest import mock
 import pytest
 
 from apps.channels.datamodels import Attachment
-from apps.experiments.models import Participant, ParticipantData
+from apps.experiments.models import ExperimentSession, Participant, ParticipantData
 from apps.files.models import File
 from apps.pipelines.exceptions import PipelineNodeBuildError, PipelineNodeRunError
 from apps.pipelines.nodes.base import PipelineState
@@ -58,7 +58,12 @@ def test_code_node(pipeline, code, input, output):
         code_node(code),
         end_node(),
     ]
-    assert create_runnable(pipeline, nodes).invoke(PipelineState(messages=[input]))["messages"][-1] == output
+    assert (
+        create_runnable(pipeline, nodes).invoke(
+            PipelineState(messages=[input], experiment_session=ExperimentSession())
+        )["messages"][-1]
+        == output
+    )
 
 
 EXTRA_FUNCTION = """
@@ -128,7 +133,9 @@ def test_code_node_runtime_errors(pipeline, code, input, error):
         end_node(),
     ]
     with pytest.raises(PipelineNodeRunError, match=error):
-        create_runnable(pipeline, nodes).invoke(PipelineState(messages=[input]))["messages"][-1]
+        create_runnable(pipeline, nodes).invoke(
+            PipelineState(messages=[input], experiment_session=ExperimentSession())
+        )["messages"][-1]
 
 
 @django_db_with_data(available_apps=("apps.service_providers",))
