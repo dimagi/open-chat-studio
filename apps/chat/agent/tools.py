@@ -176,7 +176,7 @@ class UpdateParticipantDataTool(CustomBaseTool):
 
 class AttachMediaTool(CustomBaseTool):
     name: str = AgentTools.ATTACH_MEDIA
-    description: str = "Attach media to the chat"
+    description: str = "Attach a media file to your response"
     requires_session: bool = True
     args_schema: type[schemas.AttachMediaSchema] = schemas.AttachMediaSchema
     callback: Callable | None = None
