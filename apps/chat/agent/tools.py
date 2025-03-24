@@ -21,6 +21,13 @@ if TYPE_CHECKING:
     from apps.assistants.models import OpenAiAssistant
 
 
+SUCCESSFUL_ATTACHMENT_MESSAGE: str = """"
+    File {file_id} is attached. You can use this markdown link to reference it in your response:
+    `[{name}](file:{team_slug}:{session_id}:{file_id})` or `![](file:{team_slug}:{session_id}:{file_id})`
+    if it is an image.
+"""
+
+
 class CustomBaseTool(BaseTool):
     experiment_session: ExperimentSession | None = None
     # Some tools like the reminder requires a chat session id in order to get back to the user later
@@ -190,10 +197,17 @@ class AttachMediaTool(CustomBaseTool):
 
     @transaction.atomic
     def action(self, file_id: int) -> str:
+        from apps.files.models import File
+
         try:
+            file = File.objects.get(id=file_id)
             self.chat_attachment.files.add(file_id)
             self.callback(file_id)
-            return f"File id '{file_id}' is attached"
+            return SUCCESSFUL_ATTACHMENT_MESSAGE.format(
+                name=file.name, file_id=file_id, session_id=self.experiment_session.id, team_slug=file.team.slug
+            )
+        except File.DoesNotExist:
+            return f"File '{file_id}' does not exist"
         except utils.IntegrityError:
             return f"Unable to attach file '{file_id}' to the message"
 
