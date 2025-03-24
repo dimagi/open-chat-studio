@@ -1598,6 +1598,7 @@ class ExperimentSession(BaseTeamModel):
         null=True,
         blank=True,
     )
+    state = models.JSONField(default=dict)
 
     class Meta:
         ordering = ["-created_at"]
