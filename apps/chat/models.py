@@ -1,5 +1,4 @@
 from enum import StrEnum
-from functools import cache
 from urllib.parse import quote
 
 from django.db import models
@@ -50,10 +49,6 @@ class Chat(BaseTeamModel, TaggedModelMixin, UserCommentsMixin):
             yield message
             if with_summaries and message.summary:
                 yield message.get_summary_message()
-
-    @cache
-    def get_attached_files(self, file_ids: list[int]):
-        return list(File.objects.filter(chatattachment__chat=self, id__in=file_ids))
 
 
 class ChatMessageType(models.TextChoices):
@@ -183,19 +178,16 @@ class ChatMessage(BaseModel, TaggedModelMixin, UserCommentsMixin):
             "ocs_attachment_file_ids": [1,2,3, ...],
         }
         """
-        files = []
-        allowed_file_ids = []
+        files_queryset = File.objects.filter(chatattachment__chat=self.chat)
 
         if external_file_ids := self.metadata.get("openai_file_ids", []):
-            allowed_file_ids.extend(File.objects.filter(external_id__in=external_file_ids).values_list("id", flat=True))
+            files_queryset = files_queryset.filter(external_id__in=external_file_ids)
 
         if file_ids := self.metadata.get("ocs_attachment_file_ids", []):
             # ocs attachments doesn't have external ids
-            allowed_file_ids.extend(file_ids)
+            files_queryset = files_queryset.filter(id__in=file_ids)
 
-        files = self.chat.get_attached_files(tuple(allowed_file_ids))
-
-        return files
+        return files_queryset.all()
 
     def get_metadata(self, key: str):
         return self.metadata.get(key, None)
