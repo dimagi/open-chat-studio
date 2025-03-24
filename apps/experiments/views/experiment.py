@@ -1,4 +1,3 @@
-import json
 import logging
 import uuid
 from datetime import datetime
@@ -22,7 +21,6 @@ from django.urls import reverse
 from django.utils import timezone
 from django.utils.html import format_html
 from django.utils.safestring import mark_safe
-from django.utils.translation import gettext
 from django.views.decorators.clickjacking import xframe_options_exempt
 from django.views.decorators.csrf import csrf_exempt
 from django.views.decorators.http import require_POST
@@ -93,7 +91,7 @@ from apps.files.forms import get_file_formset
 from apps.files.models import File
 from apps.files.views import BaseAddFileHtmxView, BaseDeleteFileView
 from apps.generics.chips import Chip
-from apps.generics.views import generic_home
+from apps.generics.views import generic_home, paginate_session, render_session_details
 from apps.service_providers.utils import get_llm_provider_choices
 from apps.teams.decorators import login_and_team_required
 from apps.teams.mixins import LoginAndTeamRequiredMixin
@@ -706,7 +704,9 @@ def start_authed_web_session(request, team_slug: str, experiment_id: int, versio
 
 
 @login_and_team_required
-def experiment_chat_session(request, team_slug: str, experiment_id: int, session_id: int, version_number: int):
+def experiment_chat_session(
+    request, team_slug: str, experiment_id: int, session_id: int, version_number: int, active_tab: str = "experiments"
+):
     experiment = get_object_or_404(Experiment, id=experiment_id, team=request.team)
     session = get_object_or_404(
         ExperimentSession, participant__user=request.user, experiment_id=experiment_id, id=session_id
@@ -725,7 +725,7 @@ def experiment_chat_session(request, team_slug: str, experiment_id: int, session
     return TemplateResponse(
         request,
         "experiments/experiment_chat.html",
-        {"experiment": experiment, "session": session, "active_tab": "experiments", **version_specific_vars},
+        {"experiment": experiment, "session": session, "active_tab": active_tab, **version_specific_vars},
     )
 
 
@@ -1018,7 +1018,7 @@ def verify_public_chat_token(request, team_slug: str, experiment_id: uuid.UUID, 
 
 @login_and_team_required
 @permission_required("experiments.invite_participants", raise_exception=True)
-def experiment_invitations(request, team_slug: str, experiment_id: int):
+def experiment_invitations(request, team_slug: str, experiment_id: int, origin="experiments"):
     experiment = get_object_or_404(Experiment, id=experiment_id, team=request.team)
     experiment_version = experiment.default_version
     sessions = experiment.sessions.order_by("-created_at").filter(
@@ -1054,9 +1054,12 @@ def experiment_invitations(request, team_slug: str, experiment_id: int):
         "experiment_name": experiment_version.name,
         "experiment_description": experiment_version.description,
     }
+    template_name = (
+        "chatbots/chatbot_invitations.html" if origin == "chatbots" else "experiments/experiment_invitations.html"
+    )
     return TemplateResponse(
         request,
-        "experiments/experiment_invitations.html",
+        template_name,
         {"invitation_form": form, "experiment": experiment, "sessions": sessions, **version_specific_vars},
     )
 
@@ -1309,57 +1312,25 @@ def experiment_complete(request, team_slug: str, experiment_id: uuid.UUID, sessi
 @experiment_session_view()
 @verify_session_access_cookie
 def experiment_session_details_view(request, team_slug: str, experiment_id: uuid.UUID, session_id: str):
-    session = request.experiment_session
-    experiment = request.experiment
-
-    return TemplateResponse(
+    return render_session_details(
         request,
-        "experiments/experiment_session_view.html",
-        {
-            "experiment": experiment,
-            "experiment_session": session,
-            "active_tab": "experiments",
-            "details": [
-                (gettext("Participant"), session.get_participant_chip()),
-                (gettext("Status"), session.get_status_display),
-                (gettext("Started"), session.consent_date or session.created_at),
-                (gettext("Ended"), session.ended_at or "-"),
-                (gettext("Experiment"), experiment.name),
-                (gettext("Platform"), session.get_platform_name),
-            ],
-            "available_tags": [t.name for t in Tag.objects.filter(team__slug=team_slug, is_system_tag=False).all()],
-            "event_triggers": [
-                {
-                    "event_logs": trigger.event_logs.filter(session=session).order_by("-created_at").all(),
-                    "trigger": trigger,
-                }
-                for trigger in experiment.event_triggers
-            ],
-            "participant_data": json.dumps(session.participant_data_from_experiment, indent=4),
-            "participant_schedules": session.participant.get_schedules_for_experiment(
-                experiment, as_dict=True, include_inactive=True
-            ),
-            "participant_id": session.participant_id,
-        },
+        team_slug,
+        experiment_id,
+        session_id,
+        active_tab="experiments",
+        template_path="experiments/experiment_session_view.html",
     )
 
 
-@experiment_session_view()
 @login_and_team_required
 def experiment_session_pagination_view(request, team_slug: str, experiment_id: uuid.UUID, session_id: str):
-    session = request.experiment_session
-    experiment = request.experiment
-    query = ExperimentSession.objects.exclude(external_id=session_id).filter(experiment=experiment)
-    if request.GET.get("dir", "next") == "next":
-        next_session = query.filter(created_at__gte=session.created_at).order_by("created_at").first()
-    else:
-        next_session = query.filter(created_at__lte=session.created_at).order_by("created_at").last()
-
-    if not next_session:
-        messages.warning(request, "No more sessions to paginate")
-        return redirect("experiments:experiment_session_view", team_slug, experiment_id, session_id)
-
-    return redirect("experiments:experiment_session_view", team_slug, experiment_id, next_session.external_id)
+    return paginate_session(
+        request,
+        team_slug,
+        experiment_id,
+        session_id,
+        view_name="experiments:experiment_session_view",
+    )
 
 
 def download_file(request, team_slug: str, session_id: int, pk: int):

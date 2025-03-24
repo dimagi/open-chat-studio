@@ -1,21 +1,30 @@
+import uuid
+
 from django.contrib.auth.decorators import permission_required
 from django.contrib.auth.mixins import PermissionRequiredMixin
+from django.http import HttpResponseRedirect
+from django.shortcuts import get_object_or_404
 from django.urls import reverse
+from django.views.decorators.http import require_POST
 from django.views.generic import CreateView, TemplateView
 
+from apps.chat.channels import WebChannel
 from apps.chatbots.forms import ChatbotForm
-from apps.chatbots.tables import ChatbotTable
+from apps.chatbots.tables import ChatbotSessionsTable, ChatbotTable
+from apps.experiments.decorators import experiment_session_view, verify_session_access_cookie
 from apps.experiments.models import Experiment
 from apps.experiments.tables import ExperimentVersionsTable
-from apps.experiments.views import CreateExperiment, ExperimentVersionsTableView
+from apps.experiments.views import CreateExperiment, ExperimentSessionsTableView, ExperimentVersionsTableView
 from apps.experiments.views.experiment import (
     BaseExperimentView,
     CreateExperimentVersion,
     base_single_experiment_view,
+    experiment_chat_session,
+    experiment_invitations,
     experiment_version_details,
     version_create_status,
 )
-from apps.generics.views import generic_home
+from apps.generics.views import generic_home, paginate_session, render_session_details
 from apps.pipelines.views import _pipeline_node_default_values, _pipeline_node_parameter_values, _pipeline_node_schemas
 from apps.service_providers.models import LlmProvider, LlmProviderModel
 from apps.teams.decorators import login_and_team_required
@@ -122,3 +131,57 @@ def chatbot_version_create_status(
     experiment_id: int,
 ):
     return version_create_status(request, team_slug, experiment_id)
+
+
+class ChatbotSessionsTableView(ExperimentSessionsTableView):
+    table_class = ChatbotSessionsTable
+
+
+@experiment_session_view()
+@verify_session_access_cookie
+def chatbot_session_details_view(request, team_slug: str, experiment_id: uuid.UUID, session_id: str):
+    return render_session_details(
+        request,
+        team_slug,
+        experiment_id,
+        session_id,
+        active_tab="chatbots",
+        template_path="chatbots/chatbot_session_view.html",
+        session_type="Chatbot",
+    )
+
+
+@login_and_team_required
+def chatbot_chat_session(request, team_slug: str, experiment_id: int, session_id: int, version_number: int):
+    return experiment_chat_session(request, team_slug, experiment_id, session_id, version_number, "chatbots")
+
+
+@login_and_team_required
+def chatbot_session_pagination_view(request, team_slug: str, experiment_id: uuid.UUID, session_id: str):
+    return paginate_session(
+        request,
+        team_slug,
+        experiment_id,
+        session_id,
+        view_name="chatbots:chatbot_session_view",
+    )
+
+
+@require_POST
+@login_and_team_required
+def start_authed_web_session(request, team_slug: str, experiment_id: int, version_number: int):
+    experiment = get_object_or_404(Experiment, id=experiment_id, team=request.team)
+    session = WebChannel.start_new_session(
+        working_experiment=experiment,
+        participant_user=request.user,
+        participant_identifier=request.user.email,
+        timezone=request.session.get("detected_tz", None),
+        version=version_number,
+    )
+    return HttpResponseRedirect(
+        reverse("chatbots:chatbot_chat_session", args=[team_slug, experiment_id, version_number, session.id])
+    )
+
+
+def chatbot_invitations(request, team_slug: str, experiment_id: int):
+    return experiment_invitations(request, team_slug, experiment_id, "chatbots")

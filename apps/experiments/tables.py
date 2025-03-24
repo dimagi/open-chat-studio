@@ -24,7 +24,7 @@ class ExperimentTable(tables.Table):
     type = columns.Column(orderable=False, empty_values=())
     actions = columns.TemplateColumn(
         template_name="experiments/components/experiment_actions_column.html",
-        extra_context={"edit_url": "experiments:edit", "use_pipeline_id": False},
+        extra_context={"type": "experiments", "use_pipeline_id": False},
     )
 
     class Meta:

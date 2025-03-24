@@ -51,7 +51,7 @@
                 <ul tabindex="0" class="dropdown-content menu bg-base-100 rounded-box z-[1] w-52 p-2 shadow">
                   <li>
                     <form method="post"
-                          action="{% url 'experiments:start_authed_web_session' team.slug experiment.id experiment.version_number %}"
+                          action="{% url 'chatbots:start_authed_web_session' team.slug experiment.id experiment.version_number %}"
                           class="inline">
                       {% csrf_token %}
                       <button type="submit">Unreleased version</button>
@@ -59,7 +59,7 @@
                   </li>
                   <li>
                     <form method="post"
-                          action="{% url 'experiments:start_authed_web_session' team.slug experiment.id 0 %}"
+                          action="{% url 'chatbots:start_authed_web_session' team.slug experiment.id 0 %}"
                           class="inline">
                       {% csrf_token %}
                       <button type="submit">Published version</button>
@@ -105,7 +105,7 @@
             {% endif %}
             {% if perms.experiments.invite_participants %}
               <li>
-                <a href="{% url 'experiments:experiment_invitations' team.slug experiment.id %}">
+                <a href="{% url 'chatbots:chatbots_invitations' team.slug experiment.id %}">
                   <i class="fa-regular fa-envelope"></i> Invitations
                 </a>
               </li>
@@ -222,7 +222,7 @@
               <form
                 hx-trigger="load, change"
                 hx-target="#sessions-table"
-                hx-get="{% url 'experiments:sessions-list' request.team.slug experiment.id %}"
+                hx-get="{% url 'chatbots:sessions-list' request.team.slug experiment.id %}"
                 hx-swap="innerHTML"
               >
                 <div class="flex gap-2">
