@@ -1,10 +1,12 @@
+from __future__ import annotations
+
 import logging
 import re
 from abc import ABC, abstractmethod
 from enum import Enum
 from functools import cached_property
 from io import BytesIO
-from typing import ClassVar
+from typing import TYPE_CHECKING, ClassVar
 
 import emoji
 import requests
@@ -40,6 +42,9 @@ from apps.service_providers.speech_service import SynthesizedAudio
 from apps.slack.utils import parse_session_external_id
 from apps.users.models import CustomUser
 
+if TYPE_CHECKING:
+    from apps.channels.models import BaseMessage
+
 logger = logging.getLogger("ocs.channels")
 
 USER_CONSENT_TEXT = "1"
@@ -62,7 +67,7 @@ def strip_urls_and_emojis(text: str) -> tuple[str, list[str]]:
     for url in urls:
         text = text.replace(url, "")
 
-    return text, urls
+    return text, list(urls)
 
 
 class MESSAGE_TYPES(Enum):
@@ -118,8 +123,8 @@ class ChannelBase(ABC):
         self.experiment = experiment
         self.experiment_channel = experiment_channel
         self.experiment_session = experiment_session
-        self.message = None
-        self._user_query = None
+        self.message: BaseMessage = None
+        self._user_query: str | None = None
         self.bot = get_bot(experiment_session, experiment=experiment) if experiment_session else None
         self._participant_identifier = experiment_session.participant.identifier if experiment_session else None
         self._is_user_message = False
@@ -196,7 +201,7 @@ class ChannelBase(ABC):
         pass
 
     @staticmethod
-    def get_channel_class_for_platform(platform: ChannelPlatform | str) -> type["ChannelBase"]:
+    def get_channel_class_for_platform(platform: ChannelPlatform | str) -> type[ChannelBase]:
         if platform == "telegram":
             channel_cls = TelegramChannel
         elif platform == "web":
@@ -218,7 +223,7 @@ class ChannelBase(ABC):
         return channel_cls
 
     @staticmethod
-    def from_experiment_session(experiment_session: ExperimentSession) -> "ChannelBase":
+    def from_experiment_session(experiment_session: ExperimentSession) -> ChannelBase:
         """Given an `experiment_session` instance, returns the correct ChannelBase subclass to use"""
         channel_cls = ChannelBase.get_channel_class_for_platform(experiment_session.experiment_channel.platform)
         return channel_cls(
@@ -236,7 +241,7 @@ class ChannelBase(ABC):
             self._user_query = self._extract_user_query()
         return self._user_query
 
-    def _add_message(self, message):
+    def _add_message(self, message: BaseMessage):
         """Adds the message to the handler in order to extract session information"""
         self._user_query = None
         self.message = message
@@ -247,7 +252,7 @@ class ChannelBase(ABC):
         self._ensure_sessions_exists()
         self.bot = get_bot(self.experiment_session, experiment=self.experiment)
 
-    def new_user_message(self, message) -> str:
+    def new_user_message(self, message: BaseMessage) -> str:
         """Handles the message coming from the user. Call this to send bot messages to the user.
         The `message` here will probably be some object, depending on the channel being used.
         """
@@ -262,7 +267,7 @@ class ChannelBase(ABC):
             return True
         return self.experiment.is_participant_allowed(self.participant_identifier)
 
-    def _new_user_message(self, message) -> str:
+    def _new_user_message(self, message: BaseMessage) -> str:
         try:
             self._add_message(message)
         except ParticipantNotAllowedException:
@@ -443,6 +448,7 @@ class ChannelBase(ABC):
             speech_service = self.experiment.voice_provider.get_speech_service()
             if speech_service.supports_transcription:
                 return speech_service.transcribe_audio(audio)
+        return "Unable to transcribe audio"
 
     def _get_bot_response(self, message: str) -> str:
         self.bot = self.bot or get_bot(self.experiment_session, experiment=self.experiment)
