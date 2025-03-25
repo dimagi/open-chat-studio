@@ -1,5 +1,8 @@
 from __future__ import annotations
 
+import atexit
+import logging
+import threading
 import time
 from threading import RLock
 from typing import TYPE_CHECKING, Any
@@ -11,6 +14,9 @@ from .callback import wrap_callback
 if TYPE_CHECKING:
     from langchain.callbacks.base import BaseCallbackHandler
     from langfuse import Langfuse
+
+
+logger = logging.getLogger("ocs.tracing.langfuse")
 
 
 class LangFuseTraceService(TraceService):
@@ -65,36 +71,69 @@ class ClientManager:
     On requests for a client it will also remove any clients that have been inactive for a
     certain amount of time."""
 
-    def __init__(self, stale_timeout=300) -> None:
+    def __init__(self, stale_timeout=300, prune_interval=60, max_clients=20) -> None:
         self.clients: dict[int, tuple[float, Any]] = {}
         self.stale_timeout = stale_timeout
+        self.max_clients = max_clients
+        self.prune_interval = prune_interval
         self.lock = RLock()
+        self._start_prune_thread()
 
     def get(self, config: dict) -> Langfuse:
+        from langfuse import Langfuse
+
         key = hash(frozenset(config.items()))
         with self.lock:
             if key not in self.clients:
-                client = self._create_client(config)
+                logger.debug("Creating new client with key '%s'", key)
+                client = Langfuse(**config)
             else:
                 client = self.clients[key][1]
-                self._prune_stale(key)
             self.clients[key] = (time.time(), client)
         return client
 
-    def _create_client(self, config: dict):
-        from langfuse import Langfuse
+    def _start_prune_thread(self):
+        self._prune_thread = threading.Thread(target=self._prune_worker, daemon=True)
+        self._prune_thread.start()
 
-        return Langfuse(**config)
+    def _prune_worker(self):
+        while True:
+            time.sleep(self.prune_interval)
+            logger.debug("Pruning clients...")
+            self._prune_stale()
 
-    def _prune_stale(self, exclude_key):
+    def _prune_stale(self):
+        for key in list(self.clients.keys()):
+            timestamp, client = self.clients[key]
+            if time.time() - timestamp > self.stale_timeout:
+                logger.debug("Pruning old client with key '%s'", key)
+                self._remove_client(key, client)
+
+        if len(self.clients) > self.max_clients:
+            # remove the oldest clients until we are below the max
+            sorted_clients = sorted(self.clients.items(), key=lambda x: x[1][0])
+            clients_to_remove = sorted_clients[: len(self.clients) - self.max_clients]
+            logger.debug("Pruned %d clients above max limit", len(clients_to_remove))
+            for key, (_, client) in clients_to_remove:
+                self._remove_client(key, client)
+
+    def _remove_client(self, key, client):
         with self.lock:
-            for key in list(self.clients.keys()):
-                if key == exclude_key:
-                    continue
-                timestamp, client = self.clients[key]
-                if time.time() - timestamp > self.stale_timeout:
-                    client.shutdown()
-                    self.clients.pop(key)
+            self.clients.pop(key)
+        client.shutdown()
+
+    def shutdown(self):
+        with self.lock:
+            logger.debug("Shutting down all langfuse clients (%s)", len(self.clients))
+            for key, (_, client) in self.clients.items():
+                client.shutdown()
+            self.clients = {}
 
 
 client_manager = ClientManager()
+
+
+@atexit.register
+def _shutdown():
+    """Shutdown the client manager when the program exits."""
+    client_manager.shutdown()
