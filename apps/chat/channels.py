@@ -691,9 +691,6 @@ class WhatsappChannel(ChannelBase):
             text, from_=from_number, to=to_number, platform=ChannelPlatform.WHATSAPP
         )
 
-    def get_chat_id_from_message(self, message):
-        return message.chat_id
-
     @property
     def voice_replies_supported(self) -> bool:
         # TODO: Update turn-python library to support this
@@ -721,9 +718,6 @@ class SureAdhereChannel(ChannelBase):
     def send_text_to_user(self, text: str):
         to_patient = self.participant_identifier
         self.messaging_service.send_text_message(text, to=to_patient, platform=ChannelPlatform.SUREADHERE)
-
-    def get_chat_id_from_message(self, message):
-        return message.chat_id
 
     @property
     def supported_message_types(self):
