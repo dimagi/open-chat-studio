@@ -95,7 +95,7 @@ def test_retrieves_media_successfully():
     assert context.get_media_summaries() == expected_media_summaries
 
 
-@patch("apps.documents.models.Repository.objects.collections")
+@patch("apps.documents.models.Collection.objects.get")
 def test_returns_blank_when_collection_not_found(collections_mock):
     collections_mock.side_effect = Collection.DoesNotExist
     context = PromptTemplateContext(session=None, source_material_id=1, collection_id=999)

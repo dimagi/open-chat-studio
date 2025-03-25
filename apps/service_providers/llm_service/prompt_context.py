@@ -7,7 +7,7 @@ from apps.utils.time import pretty_date
 
 
 class PromptTemplateContext:
-    def __init__(self, session, source_material_id: int, collection_id: int = None):
+    def __init__(self, session, source_material_id: int = None, collection_id: int = None):
         self.session = session
         self.source_material_id = source_material_id
         self.collection_id = collection_id
@@ -49,10 +49,10 @@ class PromptTemplateContext:
         * File (27): summary1
         * File (28): summary2
         """
-        from apps.documents.models import Repository
+        from apps.documents.models import Collection
 
         try:
-            repo = Repository.objects.collections().get(id=self.collection_id)
+            repo = Collection.objects.get(id=self.collection_id)
             file_info = repo.files.values_list("id", "summary", "content_type")
             return "\n".join(
                 [
@@ -60,7 +60,7 @@ class PromptTemplateContext:
                     for id, summary, content_type in file_info
                 ]
             )
-        except Repository.DoesNotExist:
+        except Collection.DoesNotExist:
             return ""
 
     def get_participant_data(self):
