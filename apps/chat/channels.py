@@ -124,7 +124,6 @@ class ChannelBase(ABC):
         self.experiment_channel = experiment_channel
         self.experiment_session = experiment_session
         self.message: BaseMessage = None
-        self.bot = get_bot(experiment_session, experiment=experiment) if experiment_session else None
         self._participant_identifier = experiment_session.participant.identifier if experiment_session else None
         self._is_user_message = False
 
@@ -152,6 +151,10 @@ class ChannelBase(ABC):
     @cached_property
     def messaging_service(self):
         return self.experiment_channel.messaging_provider.get_messaging_service()
+
+    @cached_property
+    def bot(self):
+        return get_bot(self.experiment_session, experiment=self.experiment)
 
     @property
     def participant_identifier(self) -> str:
@@ -245,13 +248,17 @@ class ChannelBase(ABC):
         except AttributeError:
             pass
 
+        try:
+            del self.bot
+        except AttributeError:
+            pass
+
         self.message = message
 
         if not self._participant_is_allowed():
             raise ParticipantNotAllowedException()
 
         self._ensure_sessions_exists()
-        self.bot = get_bot(self.experiment_session, experiment=self.experiment)
 
     def new_user_message(self, message: BaseMessage) -> str:
         """Handles the message coming from the user. Call this to send bot messages to the user.
@@ -340,8 +347,7 @@ class ChannelBase(ABC):
             self._send_seed_message()
 
     def _send_seed_message(self):
-        topic_bot = self.bot or get_bot(self.experiment_session, experiment=self.experiment)
-        bot_response = topic_bot.process_input(user_input=self.experiment.seed_message, save_input_to_history=False)
+        bot_response = self.bot.process_input(user_input=self.experiment.seed_message, save_input_to_history=False)
         self.send_message_to_user(bot_response)
 
     def _chat_initiated(self):
@@ -452,7 +458,6 @@ class ChannelBase(ABC):
         return "Unable to transcribe audio"
 
     def _get_bot_response(self, message: str) -> str:
-        self.bot = self.bot or get_bot(self.experiment_session, experiment=self.experiment)
         return self.bot.process_input(message, attachments=self.message.attachments)
 
     def _add_message_to_history(self, message: str, message_type: ChatMessageType):
