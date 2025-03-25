@@ -12,7 +12,7 @@ class PromptVars(models.TextChoices):
     PARTICIPANT_DATA = "participant_data"
     SOURCE_MATERIAL = "source_material"
     CURRENT_DATETIME = "current_datetime"
-    MEDIA = "media"
+    COLLECTION = "collection"
 
 
 PROMPT_VARS_REQUIRED_BY_TOOL = {
@@ -21,11 +21,6 @@ PROMPT_VARS_REQUIRED_BY_TOOL = {
     AgentTools.ONE_OFF_REMINDER: [PromptVars.CURRENT_DATETIME],
     AgentTools.RECURRING_REMINDER: [PromptVars.CURRENT_DATETIME],
     AgentTools.UPDATE_PARTICIPANT_DATA: [PromptVars.PARTICIPANT_DATA],
-}
-
-PROMPT_VAR_CONTEXT_VAR_MAP = {
-    PromptVars.SOURCE_MATERIAL: "source_material",
-    PromptVars.MEDIA: "collection",
 }
 
 
@@ -92,16 +87,16 @@ def _ensure_tool_variables_are_present(prompt_text, prompt_variables, tools, pro
 
 def _ensure_component_variables_are_present(context: dict, prompt_variables: set, prompt_key: str):
     """Ensure that linked components are referenced by the prompt"""
-    for prompt_var, context_var in PROMPT_VAR_CONTEXT_VAR_MAP.items():
-        if context.get(context_var) and prompt_var not in prompt_variables:
+    for prompt_var in [PromptVars.SOURCE_MATERIAL, PromptVars.COLLECTION]:
+        if context.get(prompt_var) and prompt_var not in prompt_variables:
             raise ValidationError({prompt_key: f"Prompt expects {prompt_var} variable."})
 
 
 def _ensure_variable_components_are_present(context: dict, prompt_variables: set, prompt_key: str):
     """Ensures that all variables in the prompt are referencing valid values."""
-    for prompt_var, context_var in PROMPT_VAR_CONTEXT_VAR_MAP.items():
-        if prompt_var in prompt_variables and context.get(context_var) is None:
-            raise ValidationError({prompt_key: f"{prompt_var} variable is specified, but {context_var} is missing"})
+    for prompt_var in [PromptVars.SOURCE_MATERIAL, PromptVars.COLLECTION]:
+        if prompt_var in prompt_variables and context.get(prompt_var) is None:
+            raise ValidationError({prompt_key: f"{prompt_var} variable is specified, but {prompt_var} is missing"})
 
     return prompt_variables
 
