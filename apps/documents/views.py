@@ -114,9 +114,10 @@ def upload_files(request, team_slug: str):
             )
         )
 
-    repo = request.team.collection_set.filter(name=request.POST.get("collection_name"))
-    repo.files.add(*files)
-    return redirect(reverse("documents:collections", kwargs={"team_slug": team_slug, "tab_name": "files"}))
+    if colection_name := request.POST.get("collection_name"):
+        repo = request.team.collection_set.get(name=colection_name)
+        repo.files.add(*files)
+    return redirect("documents:collections", team_slug=team_slug, tab_name="files")
 
 
 @login_and_team_required
@@ -124,7 +125,7 @@ def upload_files(request, team_slug: str):
 def delete_file(request, team_slug: str, pk: int):
     file = get_object_or_404(File, team__slug=team_slug, id=pk)
     file.delete()
-    return redirect(reverse("documents:collections", kwargs={"team_slug": team_slug, "tab_name": "files"}))
+    return redirect("documents:collections", team_slug=team_slug, tab_name="files")
 
 
 @require_POST
@@ -138,7 +139,7 @@ def edit_file(request, team_slug: str, pk: int):
     file.save(update_fields=["name", "summary"])
     _update_collection_membership(file=file, collection_names=request.POST.getlist("collections"))
 
-    return redirect(reverse("documents:collections", kwargs={"team_slug": team_slug, "tab_name": "files"}))
+    return redirect("documents:collections", team_slug=team_slug, tab_name="files")
 
 
 def _update_collection_membership(file: File, collection_names: list[str]):
