@@ -20,7 +20,7 @@ from django_tables2 import SingleTableView
 
 from apps.assistants.models import OpenAiAssistant
 from apps.custom_actions.form_utils import get_custom_action_operation_choices
-from apps.documents.models import Repository, RepositoryType
+from apps.documents.models import Collection
 from apps.experiments.models import AgentTools, Experiment, SourceMaterial
 from apps.pipelines.flow import FlowPipelineData
 from apps.pipelines.models import Pipeline, PipelineRun
@@ -128,7 +128,7 @@ def _pipeline_node_parameter_values(team, llm_providers, llm_provider_models):
     """Returns the possible values for each input type"""
     source_materials = SourceMaterial.objects.filter(team=team).values("id", "topic").all()
     assistants = OpenAiAssistant.objects.working_versions_queryset().filter(team=team).values("id", "name").all()
-    collections = Repository.objects.filter(team=team, type=RepositoryType.COLLECTION).values("id", "name").all()
+    collections = Collection.objects.filter(team=team).values("id", "name").all()
 
     def _option(value, label, type_=None, edit_url: str | None = None):
         data = {"value": value, "label": label}

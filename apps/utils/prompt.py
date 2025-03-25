@@ -31,7 +31,7 @@ PROMPT_VAR_CONTEXT_VAR_MAP = {
 
 def _inspect_prompt(context: str, prompt_key) -> tuple[set, str]:
     """Inspects the prompt text to extract the variables used in it."""
-    prompt_variables = []
+    prompt_variables = set()
     prompt_text = context.get(prompt_key, "")
     try:
         for literal, field_name, format_spec, conversion in Formatter().parse(prompt_text):
