@@ -9,6 +9,7 @@ from .callback import wrap_callback
 
 if TYPE_CHECKING:
     from langchain.callbacks.base import BaseCallbackHandler
+    from langfuse import Langfuse
 
 
 class LangFuseTraceService(TraceService):
@@ -67,7 +68,7 @@ class ClientManager:
         self.clients: dict[int, tuple[float, Any]] = {}
         self.stale_timeout = stale_timeout
 
-    def get(self, config: dict) -> Any:
+    def get(self, config: dict) -> Langfuse:
         key = hash(frozenset(config.items()))
         if key not in self.clients:
             client = self._create_client(config)
