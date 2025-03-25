@@ -245,9 +245,12 @@ class AssistantAdapter(BaseAdapter):
 
     def get_input_message_metadata(self, resource_file_mapping: dict[str, list[str]]) -> dict:
         file_ids = set([file_id for file_ids in resource_file_mapping.values() for file_id in file_ids])
-        return self.get_output_message_metadata(list(file_ids))
+        return self._get_openai_metadata(list(file_ids))
 
     def get_output_message_metadata(self, annotation_file_ids: list) -> dict:
+        return self._get_openai_metadata(annotation_file_ids)
+
+    def _get_openai_metadata(self, annotation_file_ids: list):
         return {"openai_thread_checkpoint": True, "openai_file_ids": annotation_file_ids}
 
     def get_messages_to_sync_to_thread(self):
