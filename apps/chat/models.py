@@ -2,6 +2,7 @@ from enum import StrEnum
 from urllib.parse import quote
 
 from django.db import models
+from django.db.models import Q
 from django.utils.functional import classproperty
 from langchain_core.messages import BaseMessage, messages_from_dict
 
@@ -181,8 +182,6 @@ class ChatMessage(BaseModel, TaggedModelMixin, UserCommentsMixin):
         if not self.chat_id:
             # Summary messages are not saved to the DB, so they don't have a chat_id
             return []
-
-        from django.db.models import Q
 
         external_ids = []
         ids = []
