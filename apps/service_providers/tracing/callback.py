@@ -1,5 +1,5 @@
 from dataclasses import asdict, is_dataclass
-from typing import Any, cast
+from typing import Any
 
 from django.db.models import Model
 from langchain_core.callbacks import BaseCallbackHandler
@@ -28,8 +28,12 @@ class CallbackWrapper(Proxy):
 
 
 def wrap_callback(callback: BaseCallbackHandler) -> BaseCallbackHandler:
-    """Wrap a callback handler to ensure that dict values are serializable."""
-    return cast(CallbackWrapper(callback), BaseCallbackHandler)
+    """Wrap a callback handler to ensure that dict values are serializable.
+
+    This method is really just for type compatibility with the original code.
+    Note that using `cast` breaks the callback somehow. Presumably langchain is doing
+    some magic with the type annotations."""
+    return CallbackWrapper(callback)  # type: ignore
 
 
 def serialize_input_output_dict(data: dict[Any, Any]) -> dict[Any, Any]:

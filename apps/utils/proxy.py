@@ -13,4 +13,4 @@ class Proxy(Generic[T]):
         self.target: T = target
 
     def __getattr__(self, item):
-        return getattr(self.callback, item)
+        return getattr(self.target, item)
