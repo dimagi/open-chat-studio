@@ -243,6 +243,7 @@ class Pipeline(BaseTeamModel, VersionsMixin):
                 callbacks.append(trace_service_callback)
 
             config = RunnableConfig(
+                run_name=session.experiment.name,
                 callbacks=callbacks,
                 configurable={
                     "disabled_tools": AgentTools.reminder_tools() if disable_reminder_tools else [],
