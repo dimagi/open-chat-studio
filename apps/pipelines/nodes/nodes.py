@@ -785,14 +785,8 @@ class AssistantNode(PipelineNode):
         return [att for att in state.get("temp_state", {}).get("attachments", []) if att.upload_to_assistant]
 
     def _get_assistant_runnable(self, assistant: OpenAiAssistant, session: ExperimentSession, node_id: str):
-        trace_service = session.experiment.trace_service
-        if trace_service:
-            trace_service.initialize_from_callback_manager(self._config.get("callbacks"))
-
         history_manager = PipelineHistoryManager.for_assistant()
-        adapter = AssistantAdapter.for_pipeline(
-            session=session, node=self, trace_service=trace_service, disabled_tools=self.disabled_tools
-        )
+        adapter = AssistantAdapter.for_pipeline(session=session, node=self, disabled_tools=self.disabled_tools)
 
         allowed_tools = adapter.get_allowed_tools()
         if len(adapter.tools) != len(allowed_tools):
