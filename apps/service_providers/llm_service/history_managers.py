@@ -128,17 +128,14 @@ class ExperimentHistoryManager(BaseHistoryManager):
         experiment_tag: str,
         output_message_metadata: dict,
     ):
-        trace_meta = self.get_trace_metadata()
         if save_input_to_history:
-            self.save_message_to_history(
-                input, type_=ChatMessageType.HUMAN, message_metadata={**input_message_metadata, **trace_meta}
-            )
+            self.save_message_to_history(input, type_=ChatMessageType.HUMAN, message_metadata=input_message_metadata)
 
         if output is not None and save_output_to_history:
             self.save_message_to_history(
                 output,
                 type_=ChatMessageType.AI,
-                message_metadata={**output_message_metadata, **trace_meta},
+                message_metadata=output_message_metadata,
                 experiment_tag=experiment_tag,
             )
 

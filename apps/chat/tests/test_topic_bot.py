@@ -75,18 +75,21 @@ def test_tracing_service():
     session = ExperimentSessionFactory()
     provider = TraceProvider(type="langfuse", config={})
     session.experiment.trace_provider = provider
-    service = "apps.service_providers.tracing.service.LangFuseTraceService"
+    service = "apps.service_providers.tracing.LangFuseTraceService"
     with (
         patch(f"{service}.get_callback") as mock_get_callback,
-        patch(f"{service}.get_current_trace_info") as mock_get_trace_info,
+        patch(f"{service}.get_trace_metadata") as get_trace_metadata,
         mock_llm(responses=["response"]),
     ):
+        get_trace_metadata.return_value = {"trace": "demo"}
         bot = TopicBot(session)
         assert bot.process_input("test") == "response"
         mock_get_callback.assert_called_once_with(
-            participant_id=session.participant.identifier, session_id=str(session.external_id)
+            trace_name=session.experiment.name,
+            participant_id=session.participant.identifier,
+            session_id=str(session.external_id),
         )
-        assert mock_get_trace_info.call_count == 2
+        assert get_trace_metadata.call_count == 2
     bot.process_input("test")
 
 
