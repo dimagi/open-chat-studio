@@ -8,6 +8,48 @@ from apps.annotations.models import CustomTaggedItem
 from apps.chat.models import Chat, ChatMessage
 
 
+def apply_dynamic_filters(query_set, request, parsed_params=None):
+    param_source = parsed_params if parsed_params is not None else request.GET
+    filter_conditions = Q()
+    filter_applied = False
+
+    for i in range(30):
+        filter_column = param_source.get(f"filter_{i}_column")
+        filter_operator = param_source.get(f"filter_{i}_operator")
+        filter_value = param_source.get(f"filter_{i}_value")
+
+        if not all([filter_column, filter_operator, filter_value]):
+            break
+
+        filter_column = filter_column[0] if isinstance(filter_column, list) else filter_column
+        filter_operator = filter_operator[0] if isinstance(filter_operator, list) else filter_operator
+        filter_value = filter_value[0] if isinstance(filter_value, list) else filter_value
+
+        condition = build_filter_condition(filter_column, filter_operator, filter_value)
+        if condition:
+            filter_conditions &= condition
+            filter_applied = True
+
+    if filter_applied:
+        query_set = query_set.filter(filter_conditions).distinct()
+
+    return query_set
+
+
+def build_filter_condition(column, operator, value):
+    if not value:
+        return None
+    if column == "participant":
+        return build_participant_filter(operator, value)
+    elif column == "last_message":
+        return build_timestamp_filter(operator, value)
+    elif column == "tags":
+        return build_tags_filter(operator, value)
+    elif column == "versions":
+        return build_versions_filter(operator, value)
+    return None
+
+
 def build_participant_filter(operator, value):
     """Build filter condition for participant"""
     if operator == "equals":

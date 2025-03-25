@@ -1,6 +1,5 @@
 import logging
 import time
-from datetime import timedelta
 
 from celery.app import shared_task
 from django.core.files.base import ContentFile
@@ -12,7 +11,7 @@ from taskbadger.celery import Task as TaskbadgerTask
 from apps.channels.datamodels import Attachment, BaseMessage
 from apps.chat.bots import create_conversation
 from apps.chat.channels import WebChannel
-from apps.experiments.export import experiment_to_csv
+from apps.experiments.export import filtered_export_to_csv, get_filtered_sessions
 from apps.experiments.models import Experiment, ExperimentSession, PromptBuilderHistory, SourceMaterial
 from apps.files.models import File
 from apps.service_providers.models import LlmProvider, LlmProviderModel
@@ -24,18 +23,18 @@ logger = logging.getLogger("ocs.experiments")
 
 
 @shared_task(bind=True, base=TaskbadgerTask)
-def async_export_chat(self, experiment_id: int, tags: list[str] = None, participants: list[str] = None) -> dict:
+def async_export_chat(self, experiment_id: int, query_params: dict, include_api: bool) -> dict:
     experiment = Experiment.objects.get(id=experiment_id)
-    csv_in_memory = experiment_to_csv(experiment, tags, participants)
-    uploaded_file = ContentFile(content=csv_in_memory.getvalue().encode("utf-8"), name="chat_export.csv")
-    file = File.objects.create(
-        name=uploaded_file.name,
-        content_type="text/csv",
-        file=uploaded_file,
+    filtered_sessions = get_filtered_sessions(self.request, experiment, query_params, include_api)
+    csv_in_memory = filtered_export_to_csv(experiment, filtered_sessions)
+    filename = f"{experiment.name} Chat Export {timezone.now().strftime('%Y-%m-%d_%H-%M-%S')}.csv"
+    file_obj = File.objects.create(
+        name=filename,
         team=experiment.team,
-        expiry_date=timezone.now() + timedelta(days=1),
+        content_type="text/csv",
+        file=ContentFile(csv_in_memory.getvalue().encode("utf-8"), name=filename),
     )
-    return {"file_id": file.id}
+    return {"file_id": file_obj.id}
 
 
 @shared_task(bind=True, base=TaskbadgerTask)

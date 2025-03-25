@@ -2,7 +2,8 @@ import csv
 import io
 
 from apps.annotations.models import Tag, UserComment
-from apps.experiments.models import Experiment
+from apps.experiments.filters import apply_dynamic_filters
+from apps.experiments.models import ExperimentSession
 
 
 def _format_tags(tags: list[Tag]) -> str:
@@ -17,8 +18,27 @@ def _format_comments(user_comments: list[UserComment]) -> str:
     return " | ".join([str(comment) for comment in user_comments])
 
 
-def experiment_to_message_export_rows(experiment: Experiment, tags: list[str] = None, participants: list[str] = None):
-    queryset = experiment.sessions.prefetch_related(
+def get_filtered_sessions(request, experiment, query_params, include_api=False):
+    from apps.channels.models import ChannelPlatform
+
+    sessions_queryset = (
+        ExperimentSession.objects.with_last_message_created_at()
+        .filter(experiment=experiment)
+        .select_related("participant__user")
+    )
+
+    if not include_api:
+        sessions_queryset = sessions_queryset.exclude(experiment_channel__platform=ChannelPlatform.API)
+    sessions_queryset = apply_dynamic_filters(sessions_queryset, request, parsed_params=query_params)
+
+    return sessions_queryset
+
+
+def filtered_export_to_csv(experiment, sessions_queryset):
+    csv_in_memory = io.StringIO()
+    writer = csv.writer(csv_in_memory, delimiter=",", quotechar='"', quoting=csv.QUOTE_MINIMAL)
+
+    queryset = sessions_queryset.prefetch_related(
         "chat",
         "chat__messages",
         "participant",
@@ -28,12 +48,7 @@ def experiment_to_message_export_rows(experiment: Experiment, tags: list[str] = 
         "chat__messages__comments",
         "chat__messages__comments__user",
     )
-    if tags:
-        queryset = queryset.filter(chat__tags__name__in=tags)
-    if participants:
-        queryset = queryset.filter(participant__identifier__in=participants)
-
-    yield [
+    header = [
         "Message ID",
         "Message Date",
         "Message Type",
@@ -51,10 +66,11 @@ def experiment_to_message_export_rows(experiment: Experiment, tags: list[str] = 
         "Message Tags",
         "Message Comments",
     ]
+    writer.writerow(header)
 
     for session in queryset:
         for message in session.chat.messages.all():
-            yield [
+            row = [
                 message.id,
                 message.created_at,
                 message.message_type,
@@ -72,11 +88,5 @@ def experiment_to_message_export_rows(experiment: Experiment, tags: list[str] = 
                 _format_tags(message.tags.all()),
                 _format_comments(message.comments.all()),
             ]
-
-
-def experiment_to_csv(experiment: Experiment, tags: list[str] = None, participants: list[str] = None) -> io.StringIO:
-    csv_in_memory = io.StringIO()
-    writer = csv.writer(csv_in_memory, delimiter=",", quotechar='"', quoting=csv.QUOTE_MINIMAL)
-    for row in experiment_to_message_export_rows(experiment, tags=tags, participants=participants):
-        writer.writerow(row)
+            writer.writerow(row)
     return csv_in_memory
