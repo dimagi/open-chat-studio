@@ -211,8 +211,8 @@ def new_collection(request, team_slug: str):
 
 @login_and_team_required
 @permission_required("documents.delete_collection")
-def delete_collection(request, team_slug: str, id: int):
-    collection = get_object_or_404(Collection, team__slug=team_slug, id=id)
+def delete_collection(request, team_slug: str, pk: int):
+    collection = get_object_or_404(Collection, team__slug=team_slug, id=pk)
     if pipeline_nodes := collection.get_references():
         response = render_to_string(
             "assistants/partials/referenced_objects.html",
