@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 import time
-from threading import Lock
+from threading import RLock
 from typing import TYPE_CHECKING, Any
 
 from . import TraceService
@@ -65,12 +65,10 @@ class ClientManager:
     On requests for a client it will also remove any clients that have been inactive for a
     certain amount of time."""
 
-    from threading import Lock
-
     def __init__(self, stale_timeout=300) -> None:
         self.clients: dict[int, tuple[float, Any]] = {}
         self.stale_timeout = stale_timeout
-        self.lock = Lock()
+        self.lock = RLock()
 
     def get(self, config: dict) -> Langfuse:
         key = hash(frozenset(config.items()))
@@ -79,8 +77,8 @@ class ClientManager:
                 client = self._create_client(config)
             else:
                 client = self.clients[key][1]
+                self._prune_stale(key)
             self.clients[key] = (time.time(), client)
-        self._prune_stale(key)
         return client
 
     def _create_client(self, config: dict):
