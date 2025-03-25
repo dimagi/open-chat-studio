@@ -20,7 +20,7 @@ from apps.teams.backends import EXPERIMENT_ADMIN_GROUP, add_user_to_team
 from apps.utils.factories.channels import ExperimentChannelFactory
 from apps.utils.factories.experiment import ExperimentFactory, ParticipantFactory
 from apps.utils.factories.team import TeamWithUsersFactory
-from apps.utils.langchain import build_fake_llm_service
+from apps.utils.langchain import mock_llm
 from apps.utils.tests.clients import ApiTestClient
 
 
@@ -299,7 +299,7 @@ def test_update_participant_data_and_setup_connect_channels(httpx_mock):
     httpx_mock.add_response(
         method="POST",
         url=f"{settings.COMMCARE_CONNECT_SERVER_URL}/messaging/create_channel/",
-        json={"channel_id": created_connect_channel_id},
+        json={"channel_id": created_connect_channel_id, "consent": True},
     )
 
     team = TeamWithUsersFactory()
@@ -373,7 +373,7 @@ def test_update_participant_data_and_setup_connect_channels(httpx_mock):
     assert request_data["channel_source"] == "bot1"
     assert Participant.objects.filter(identifier="CONNECTID_2").exists()
     data = ParticipantData.objects.get(participant__identifier="CONNECTID_2", experiment_id=experiment1.id)
-    assert data.system_metadata["commcare_connect_channel_id"] == created_connect_channel_id
+    assert data.system_metadata == {"commcare_connect_channel_id": created_connect_channel_id, "consent": True}
 
 
 @pytest.mark.django_db()
@@ -499,16 +499,13 @@ def _setup_participant_data(
 
 @pytest.mark.django_db()
 @override_settings(CELERY_TASK_ALWAYS_EAGER=True)
-@patch("apps.experiments.models.Experiment.get_llm_service")
 @patch("apps.chat.channels.CommCareConnectClient")
-def test_generate_bot_message_and_send(ConnectClient, get_llm_service, experiment):
+def test_generate_bot_message_and_send(ConnectClient, experiment):
     """
     Test that a bot message is generated and sent to a participant. If there isn't a session for the participant yet,
     we expect one to be created. The generated bot message should be saved as an AI message, but the prompt should not
     be saved.
     """
-    fake_llm_service = build_fake_llm_service(responses=["Time to take a break an brew some coffee"], token_counts=[0])
-    get_llm_service.return_value = fake_llm_service
     connect_client_mock = ConnectClient.return_value
 
     connect_id = uuid.uuid4().hex
@@ -534,33 +531,36 @@ def test_generate_bot_message_and_send(ConnectClient, get_llm_service, experimen
         "identifier": connect_id,
         "platform": ChannelPlatform.COMMCARE_CONNECT,
         "experiment": str(experiment.public_id),
-        "prompt_text": "Tell the user to take a break and make coffee",
+        "prompt_text": "Tell the user to take a break and make a beverege",
     }
     url = reverse("api:trigger_bot")
-    response = client.post(url, json.dumps(data), content_type="application/json")
+    with mock_llm(["Time to take a break and brew some coffee"], [0]):
+        response = client.post(url, json.dumps(data), content_type="application/json")
     assert response.status_code == 200
     connect_client_mock.send_message_to_user.assert_called()
     kwargs = connect_client_mock.send_message_to_user.call_args.kwargs
-    assert kwargs["message"] == "Time to take a break an brew some coffee"
+    assert kwargs["message"] == "Time to take a break and brew some coffee"
     session = ExperimentSession.objects.get(participant=participant_data.participant, experiment=experiment)
     assert session.chat.messages.count() == 1
     first_message = session.chat.messages.first()
     assert first_message.message_type == "ai"
-    assert first_message.content == "Time to take a break an brew some coffee"
+    assert first_message.content == "Time to take a break and brew some coffee"
 
     # Call it a second time to make sure the session is reused
-    response = client.post(url, json.dumps(data), content_type="application/json")
+    with mock_llm(["Time to take a break and brew some tea"], [0]):
+        response = client.post(url, json.dumps(data), content_type="application/json")
     assert response.status_code == 200
     session = ExperimentSession.objects.get(participant=participant_data.participant, experiment=experiment)
     assert session.chat.messages.count() == 2
     last_message = session.chat.messages.last()
     assert last_message.message_type == "ai"
-    assert last_message.content == "Time to take a break an brew some coffee"
+    assert last_message.content == "Time to take a break and brew some tea"
 
     # Call it a third time, but this time we want to start a new session
     first_session = session
     data["start_new_session"] = True
-    response = client.post(url, json.dumps(data), content_type="application/json")
+    with mock_llm(["Time to take a break an juice some fruit"], [0]):
+        response = client.post(url, json.dumps(data), content_type="application/json")
     assert response.status_code == 200
     first_session.refresh_from_db()
     assert first_session.status == SessionStatus.PENDING_REVIEW
@@ -572,4 +572,4 @@ def test_generate_bot_message_and_send(ConnectClient, get_llm_service, experimen
     assert new_session.chat.messages.count() == 1
     last_message = new_session.chat.messages.last()
     assert last_message.message_type == "ai"
-    assert last_message.content == "Time to take a break an brew some coffee"
+    assert last_message.content == "Time to take a break an juice some fruit"

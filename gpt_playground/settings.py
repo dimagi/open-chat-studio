@@ -56,6 +56,7 @@ THIRD_PARTY_APPS = [
     "allauth",  # allauth account/registration management
     "allauth.account",
     "allauth.socialaccount",
+    "allauth.socialaccount.providers.microsoft",
     "django_otp",
     "django_otp.plugins.otp_totp",
     "django_otp.plugins.otp_static",
@@ -101,7 +102,9 @@ PROJECT_APPS = [
     "apps.annotations",
     "apps.pipelines",
     "apps.slack",
+    "apps.sso",
     "apps.participants",
+    "apps.chatbots",
 ]
 
 SPECIAL_APPS = [
@@ -149,6 +152,7 @@ TEMPLATES = [
         "DIRS": [
             BASE_DIR / "templates",
         ],
+        "APP_DIRS": True,
         "OPTIONS": {
             "context_processors": [
                 "django.template.context_processors.debug",
@@ -197,7 +201,7 @@ else:
 # Django recommends overriding the user model even if you don't think you need to because it makes
 # future changes much easier.
 AUTH_USER_MODEL = "users.CustomUser"
-LOGIN_URL = "account_login"
+LOGIN_URL = "sso:login"
 LOGIN_REDIRECT_URL = "/"
 
 # Password validation
@@ -223,7 +227,7 @@ SIGNUP_ENABLED = env("SIGNUP_ENABLED", default=False)
 if SIGNUP_ENABLED:
     ACCOUNT_ADAPTER = "apps.teams.adapter.AcceptInvitationAdapter"
 else:
-    ACCOUNT_ADAPTER = "apps.users.adapter.NoNewUsersAccountAdapter"
+    ACCOUNT_ADAPTER = "apps.teams.adapter.NoNewUsersAccountAdapter"
 ACCOUNT_AUTHENTICATION_METHOD = "email"
 ACCOUNT_EMAIL_REQUIRED = True
 ACCOUNT_EMAIL_SUBJECT_PREFIX = ""
@@ -236,6 +240,16 @@ ACCOUNT_LOGOUT_ON_GET = True
 ACCOUNT_LOGIN_ON_EMAIL_CONFIRMATION = True
 ACCOUNT_FORMS = {
     "signup": "apps.teams.forms.TeamSignupForm",
+}
+SOCIALACCOUNT_ADAPTER = "apps.sso.adapter.SsoAccountAdapter"
+SOCIALACCOUNT_FORMS = {
+    "signup": "apps.sso.forms.SsoSignupForm",
+}
+SOCIALACCOUNT_PROVIDERS = {
+    "microsoft": {
+        "SCOPE": ["openid", "profile", "email", "User.Read"],
+        "AUTH_PARAMS": {"claims": '{"id_token": {"login_hint": null}}'},
+    }
 }
 
 # User signup configuration: change to "mandatory" to require users to confirm email before signing in.
@@ -542,6 +556,7 @@ DOCUMENTATION_LINKS = {
     "node_email": "/concepts/pipelines/nodes/#email",
     "node_extract_structured_data": "/concepts/pipelines/nodes/#extract-structured-data",
     "node_update_participant_data": "/concepts/pipelines/nodes/#update-participant-data",
+    "chatbots": "/concepts/chatbots/",
 }
 # Available in templates as `docs_base_url`. Also see `apps.generics.help` and `generics/help.html`
 DOCUMENTATION_BASE_URL = env("DOCUMENTATION_BASE_URL", default="https://docs.openchatstudio.com")
@@ -553,8 +568,8 @@ API_KEY_CUSTOM_HEADER = "HTTP_X_API_KEY"
 FIELD_AUDIT_AUDITORS = ["apps.audit.auditors.AuditContextProvider"]
 FIELD_AUDIT_TEAM_EXEMPT_VIEWS = [
     "account_reset_password_from_key",
-    "teams:signup_after_invite",
-    "account_login",
+    "sso:signup_after_invite",
+    LOGIN_URL,
 ]
 FIELD_AUDIT_REQUEST_ID_HEADERS = [
     "X-Request-ID",  # Heroku
@@ -614,3 +629,10 @@ COMMCARE_CONNECT_GET_CONNECT_ID_URL = f"{COMMCARE_CONNECT_SERVER_URL}/o/userinfo
 
 # AI helper
 AI_HELPER_API_KEY = env("AI_HELPER_API_KEY", default="")
+
+
+# Document Management
+MAX_SUMMARY_LENGTH = 1024
+MEDIA_SUPPORTED_FILE_TYPES = (
+    ".txt,.pdf,.doc,.docx,.xls,.xlsx,.csv,.jpg,.jpeg,.png,.gif,.bmp,.webp,.svg,.mp4,.mov,.avi,.mp3,.wav"
+)

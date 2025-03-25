@@ -37,7 +37,7 @@ langchain-anthropic
 langchain-openai
 langchain_google_genai
 langchain-community>=0.3,<0.4
-langfuse
+langfuse>=2.59.7
 langgraph>=0.2.20,<0.3
 loguru
 openai

@@ -22,7 +22,7 @@ def temporary_session(team: Team, user_id: int):
         )
         channel = ExperimentChannel.objects.get_team_web_channel(team)
         chat = Chat.objects.create(team=team, name="Temporary Chat")
-        participant, _ = Participant.objects.get_or_create(user=user, team=team, platform=ChannelPlatform.WEB)
+        participant = Participant.create_anonymous(team=team, platform=ChannelPlatform.WEB)
         experiment_session = ExperimentSession.objects.create(
             team=team,
             experiment=experiment,
@@ -65,3 +65,28 @@ class ParticipantDataProxy:
         participant_data.save(update_fields=["data"])
 
         self.session.participant.update_name_from_data(data)
+
+    def get_schedules(self):
+        """
+        Returns all active scheduled messages for the participant in the current experiment session.
+        """
+        from apps.events.models import ScheduledMessage
+
+        experiment = self.session.experiment_id
+        participant = self.session.participant_id
+        team = self.session.experiment.team
+        messages = (
+            ScheduledMessage.objects.filter(
+                experiment_id=experiment,
+                participant_id=participant,
+                team=team,
+                is_complete=False,
+                cancelled_at=None,
+            )
+            .select_related("action")
+            .order_by("created_at")
+        )
+        scheduled_messages = []
+        for message in messages:
+            scheduled_messages.append(message.as_dict())
+        return scheduled_messages

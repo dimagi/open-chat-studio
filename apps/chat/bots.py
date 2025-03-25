@@ -1,3 +1,4 @@
+import textwrap
 from typing import TYPE_CHECKING, Any
 
 from langchain.memory import ConversationBufferMemory
@@ -13,6 +14,8 @@ from apps.events.models import StaticTriggerType
 from apps.events.tasks import enqueue_static_triggers
 from apps.experiments.models import Experiment, ExperimentRoute, ExperimentSession, SafetyLayer
 from apps.pipelines.nodes.base import PipelineState
+from apps.service_providers.llm_service.default_models import get_default_model
+from apps.service_providers.llm_service.prompt_context import PromptTemplateContext
 from apps.service_providers.llm_service.runnables import create_experiment_runnable
 
 if TYPE_CHECKING:
@@ -309,3 +312,70 @@ class PipelineBot:
 
     def get_ai_message_id(self) -> int:
         return self.ai_message_id
+
+
+class EventBot:
+    SYSTEM_PROMPT = textwrap.dedent(
+        """
+    Your role is to generate messages to send to users. These could be reminders
+    or prompts to help them complete their tasks. The text that you generate will be sent
+    to the user in a chat message.
+
+    You should generate the message in the language of the user.
+
+    This is the data we have about the user:
+    ```
+    {participant_data}
+    ```
+
+    The current date and time is: {current_datetime}
+    
+    Here are the most recent messages in the conversation:
+    ```
+    {conversation_history}
+    ```
+    """
+    )
+
+    def __init__(self, session: ExperimentSession, experiment: Experiment):
+        self.session = session
+        self.experiment = experiment or session.experiment_version
+
+    def get_user_message(self, event_prompt: str):
+        provider = self.llm_provider
+        if not provider:
+            raise Exception("No LLM provider found")
+
+        model = get_default_model(provider.type)
+
+        service = provider.get_llm_service()
+        llm = service.get_chat_model(model.name, 0.7)
+        response = llm.invoke(
+            [
+                {"role": "system", "content": self.system_prompt},
+                {"role": "user", "content": f"Generate the message for the user based on this text: {event_prompt}"},
+            ]
+        )
+        return response.content
+
+    @property
+    def llm_provider(self):
+        if self.experiment.llm_provider:
+            return self.experiment.llm_provider
+
+        # If no LLM provider is set, use the first one in the team
+        return self.experiment.team.llmprovider_set.first()
+
+    @property
+    def system_prompt(self):
+        context = PromptTemplateContext(self.session, None).get_context(["participant_data", "current_datetime"])
+        context["conversation_history"] = self.get_conversation_history()
+        return self.SYSTEM_PROMPT.format(**context)
+
+    def get_conversation_history(self):
+        messages = []
+        for message in self.session.chat.message_iterator(with_summaries=False):
+            messages.append(f"{message.role}: {message.content}")
+            if len(messages) > 10:
+                break
+        return "\n".join(reversed(messages))
