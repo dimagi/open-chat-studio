@@ -46,8 +46,19 @@ def add_temp_state_messages(left: dict, right: dict):
 
 
 def merge_dicts(left: dict, right: dict):
-    # TODO: Use a recursive merge strategy
-    return {**left, **right}
+    """
+    Merge two dictionaries, combining values for the same key into a list. The value of any key is expected to be a list
+    """
+    output = {**left}
+    for key, value in right.items():
+        if key in output:
+            if isinstance(output[key], list):
+                output[key] = list(set(output[key]) | set(value))
+            else:
+                output[key] = [output[key], value]
+        else:
+            output[key] = value
+    return output
 
 
 class TempState(TypedDict):

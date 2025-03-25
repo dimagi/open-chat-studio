@@ -11,7 +11,7 @@ from apps.channels.datamodels import Attachment
 from apps.experiments.models import ParticipantData
 from apps.pipelines.exceptions import PipelineBuildError, PipelineNodeBuildError
 from apps.pipelines.logging import LoggingCallbackHandler
-from apps.pipelines.nodes.base import PipelineState
+from apps.pipelines.nodes.base import PipelineState, merge_dicts
 from apps.pipelines.nodes.helpers import ParticipantDataProxy
 from apps.pipelines.nodes.nodes import EndNode, StartNode, StaticRouterNode
 from apps.pipelines.tests.utils import (
@@ -1038,3 +1038,16 @@ def test_pipeline_history_manager_metadata_storage(get_llm_service, pipeline):
     )
     assert history_manager.input_message_metadata == input_metadata
     assert history_manager.output_message_metadata == output_metadata
+
+
+@pytest.mark.parametrize(
+    ("left", "right", "expected"),
+    [
+        ({}, {"key": [1]}, {"key": [1]}),
+        ({"key": [1]}, {"key": [2]}, {"key": [1, 2]}),
+        ({"key": [1]}, {"key": [1]}, {"key": [1]}),
+        ({"keyA": [1]}, {"keyB": [2]}, {"keyA": [1], "keyB": [2]}),
+    ],
+)
+def test_merge_dicts(left, right, expected):
+    assert merge_dicts(left, right) == expected
