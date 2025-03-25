@@ -23,6 +23,9 @@ PROMPT_VARS_REQUIRED_BY_TOOL = {
     AgentTools.UPDATE_PARTICIPANT_DATA: [PromptVars.PARTICIPANT_DATA],
 }
 
+# These prompt variables require resources to be specified by the user
+PROMPT_VARS_REQUIRING_RESOURCES = [PromptVars.SOURCE_MATERIAL, PromptVars.COLLECTION]
+
 
 def _inspect_prompt(context: str, prompt_key) -> tuple[set, str]:
     """Inspects the prompt text to extract the variables used in it."""
@@ -87,14 +90,14 @@ def _ensure_tool_variables_are_present(prompt_text, prompt_variables, tools, pro
 
 def _ensure_component_variables_are_present(context: dict, prompt_variables: set, prompt_key: str):
     """Ensure that linked components are referenced by the prompt"""
-    for prompt_var in [PromptVars.SOURCE_MATERIAL, PromptVars.COLLECTION]:
+    for prompt_var in PROMPT_VARS_REQUIRING_RESOURCES:
         if context.get(prompt_var) and prompt_var not in prompt_variables:
             raise ValidationError({prompt_key: f"Prompt expects {prompt_var} variable."})
 
 
 def _ensure_variable_components_are_present(context: dict, prompt_variables: set, prompt_key: str):
     """Ensures that all variables in the prompt are referencing valid values."""
-    for prompt_var in [PromptVars.SOURCE_MATERIAL, PromptVars.COLLECTION]:
+    for prompt_var in PROMPT_VARS_REQUIRING_RESOURCES:
         if prompt_var in prompt_variables and context.get(prompt_var) is None:
             raise ValidationError({prompt_key: f"{prompt_var} variable is specified, but {prompt_var} is missing"})
 
