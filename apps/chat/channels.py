@@ -16,7 +16,7 @@ from telebot.util import antiflood, smart_split
 from apps.channels import audio
 from apps.channels.clients.connect_client import CommCareConnectClient
 from apps.channels.models import ChannelPlatform, ExperimentChannel
-from apps.chat.bots import get_bot
+from apps.chat.bots import EventBot, get_bot
 from apps.chat.exceptions import (
     AudioSynthesizeException,
     ChannelException,
@@ -331,8 +331,12 @@ class ChannelBase(ABC):
         self.experiment_session.update_status(SessionStatus.ACTIVE)
         # This is technically the start of the conversation
         if self.experiment.seed_message:
-            bot_response = self._generate_response_for_user(self.experiment.seed_message)
-            self.send_message_to_user(bot_response)
+            self._send_seed_message()
+
+    def _send_seed_message(self):
+        topic_bot = self.bot or get_bot(self.experiment_session, experiment=self.experiment)
+        bot_response = topic_bot.process_input(user_input=self.experiment.seed_message, save_input_to_history=False)
+        self.send_message_to_user(bot_response)
 
     def _chat_initiated(self):
         """The user initiated the chat and we need to get their consent before continuing the conversation"""
@@ -550,35 +554,28 @@ class ChannelBase(ABC):
             message_type=ChatMessageType.SYSTEM,
             content=f"The user sent an unsupported message type: {self.message.content_type_unparsed}",
         )
-        return self._generate_response_for_user(
+        return EventBot(self.experiment_session, self.experiment).get_user_message(
             UNSUPPORTED_MESSAGE_BOT_PROMPT.format(supported_types=self.supported_message_types)
         )
 
     def _inform_user_of_error(self):
-        """Simply tells the user that something went wrong to keep them in the loop. This method wil not raise an error
-        if something went wrong during this operation.
+        """Simply tells the user that something went wrong to keep them in the loop.
+        This method will not raise an error if something went wrong during this operation.
         """
 
         try:
-            bot_message = self._generate_response_for_user(
-                """
-                Tell the user that something went wrong while processing their message and that they should
-                try again later
-                """
+            bot_message = EventBot(self.experiment_session, self.experiment).get_user_message(
+                "Tell the user that something went wrong while processing their message and that they should "
+                "try again later"
             )
-        except Exception:
+        except Exception:  # noqa BLE001
             logger.exception("Something went wrong while trying to generate an appropriate error message for the user")
             bot_message = DEFAULT_ERROR_RESPONSE_TEXT
 
         try:
             self.send_message_to_user(bot_message)
-        except Exception:
+        except Exception:  # noqa BLE001
             logger.exception("Something went wrong while trying to inform the user of an error")
-
-    def _generate_response_for_user(self, prompt: str) -> str:
-        """Generates a response based on the `prompt`."""
-        topic_bot = self.bot or get_bot(self.experiment_session, experiment=self.experiment)
-        return topic_bot.process_input(user_input=prompt, save_input_to_history=False)
 
 
 class WebChannel(ChannelBase):

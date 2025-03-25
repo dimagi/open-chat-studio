@@ -27,7 +27,7 @@ from apps.service_providers.llm_service.runnables import (
 from apps.utils.factories.assistants import OpenAiAssistantFactory
 from apps.utils.factories.experiment import ExperimentSessionFactory
 from apps.utils.factories.files import FileFactory
-from apps.utils.langchain import mock_experiment_llm
+from apps.utils.langchain import mock_llm
 
 ASSISTANT_ID = "test_assistant_id"
 
@@ -83,7 +83,7 @@ def test_assistant_conversation_new_chat(
     create_and_run.return_value = run
     retrieve_run.return_value = run
 
-    list_messages.return_value = _create_thread_messages(
+    list_messages.return_value.data = _create_thread_messages(
         ASSISTANT_ID, run.id, thread_id, [{"assistant": "ai response"}]
     )
 
@@ -118,7 +118,9 @@ def test_assistant_conversation_existing_chat(
     run = _create_run(ASSISTANT_ID, thread_id)
     create_run.return_value = run
     retrieve_run.return_value = run
-    list_messages.return_value = _create_thread_messages(ASSISTANT_ID, run.id, thread_id, [{"assistant": ai_response}])
+    list_messages.return_value.data = _create_thread_messages(
+        ASSISTANT_ID, run.id, thread_id, [{"assistant": ai_response}]
+    )
 
     assistant_runnable = create_experiment_runnable(session.experiment, session)
     result = assistant_runnable.invoke("test")
@@ -154,7 +156,7 @@ def test_assistant_conversation_input_formatting(
     run = _create_run(ASSISTANT_ID, thread_id)
     create_and_run.return_value = run
     retrieve_run.return_value = run
-    list_messages.return_value = _create_thread_messages(
+    list_messages.return_value.data = _create_thread_messages(
         ASSISTANT_ID, run.id, thread_id, [{"assistant": "ai response"}]
     )
 
@@ -185,7 +187,9 @@ def test_assistant_includes_file_type_information(
     create_and_run.return_value = run
     retrieve_run.return_value = run
     get_file_type_info.return_value = [{"file-12345": "application/fmt"}]
-    list_messages.return_value = _create_thread_messages(ASSISTANT_ID, run.id, thread_id, [{"assistant": ai_response}])
+    list_messages.return_value.data = _create_thread_messages(
+        ASSISTANT_ID, run.id, thread_id, [{"assistant": ai_response}]
+    )
     assistant = session.experiment.assistant
     assistant.instructions = "Help the user"
     assistant.include_file_info = True
@@ -210,10 +214,8 @@ def test_assistant_includes_file_type_information(
 @patch("apps.service_providers.llm_service.history_managers.ExperimentHistoryManager.save_message_to_history", Mock())
 @patch("apps.service_providers.llm_service.adapters.AssistantAdapter.get_attachments", Mock())
 def test_assistant_runnable_raises_error(session):
-    experiment = session.experiment
-
     error = openai.BadRequestError("test", response=mock.Mock(), body={})
-    with mock_experiment_llm(experiment, [error]):
+    with mock_llm([error]):
         assistant_runnable = create_experiment_runnable(session.experiment, session)
         with pytest.raises(openai.BadRequestError):
             assistant_runnable.invoke("test")
@@ -227,10 +229,8 @@ def test_assistant_runnable_raises_error(session):
 @patch("apps.service_providers.llm_service.history_managers.ExperimentHistoryManager.save_message_to_history", Mock())
 @patch("apps.service_providers.llm_service.adapters.AssistantAdapter.get_attachments", Mock())
 def test_assistant_runnable_handles_cancellation_status(session):
-    experiment = session.experiment
-
     error = ValueError("unexpected status: cancelled")
-    with mock_experiment_llm(experiment, [error]):
+    with mock_llm([error]):
         assistant_runnable = create_experiment_runnable(session.experiment, session)
         with pytest.raises(GenerationCancelled):
             assistant_runnable.invoke("test")
@@ -286,7 +286,7 @@ def test_assistant_runnable_cancels_existing_run(save_response_annotations, resp
     assistant_runnable = create_experiment_runnable(session.experiment, session)
     cancel_run = mock.Mock()
     assistant_runnable.__dict__["_cancel_run"] = cancel_run
-    with mock_experiment_llm(session.experiment, responses):
+    with mock_llm(responses):
         with exception:
             result = assistant_runnable.invoke("test")
 
@@ -316,7 +316,7 @@ def test_assistant_uploads_new_file(create_and_run, retrieve_run, list_messages,
     run = _create_run(ASSISTANT_ID, thread_id)
     create_and_run.return_value = run
     retrieve_run.return_value = run
-    list_messages.return_value = _create_thread_messages(
+    list_messages.return_value.data = _create_thread_messages(
         ASSISTANT_ID, run.id, thread_id, [{"assistant": "ai response"}]
     )
 
@@ -412,7 +412,7 @@ def test_assistant_response_with_annotations(
     )
 
     assistant = create_experiment_runnable(session.experiment, session)
-    list_messages.return_value = _create_thread_messages(
+    list_messages.return_value.data = _create_thread_messages(
         ASSISTANT_ID, run.id, thread_id, [{"assistant": ai_message}], annotations
     )
 
@@ -480,7 +480,7 @@ def test_assistant_response_with_image_file_content_block(
 
     thread_id = "test_thread_id"
     run = _create_run(ASSISTANT_ID, thread_id)
-    list_messages.return_value = _create_thread_messages(ASSISTANT_ID, run.id, thread_id, [{"assistant": "Ola"}])
+    list_messages.return_value.data = _create_thread_messages(ASSISTANT_ID, run.id, thread_id, [{"assistant": "Ola"}])
     create_and_run.return_value = run
     retrieve_run.return_value = run
     assistant = create_experiment_runnable(db_session.experiment, db_session)
@@ -626,3 +626,38 @@ def test_input_message_is_saved_on_chain_error(sync_messages_to_thread, db_sessi
     assert (
         ChatMessage.objects.filter(chat__experiment_session=db_session, message_type=ChatMessageType.HUMAN).count() == 1
     )
+
+
+@pytest.mark.django_db()
+@patch("openai.resources.beta.threads.runs.Runs.retrieve")
+@patch("openai.resources.beta.Threads.create_and_run")
+@patch("openai.resources.beta.threads.messages.Messages.list")
+def test_assistant_empty_messages_list(
+    list_messages,
+    create_and_run,
+    retrieve_run,
+    db_session,
+):
+    """
+    Test that _get_output_with_annotations handles the case where no messages are returned.
+    """
+    # Set up session
+    session = db_session
+
+    # Set up OpenAI thread and run
+    thread_id = "test_thread_id"
+    run = _create_run(ASSISTANT_ID, thread_id)
+    create_and_run.return_value = run
+    retrieve_run.return_value = run
+
+    # Mock an empty messages list
+    list_messages.return_value.data = []
+
+    # Create the assistant runnable
+    assistant = create_experiment_runnable(session.experiment, session)
+
+    # Run the assistant - it should return an empty string for output
+    result = assistant.invoke("test")
+
+    # Verify that an empty output was returned
+    assert result.output == ""

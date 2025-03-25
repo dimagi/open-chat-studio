@@ -51,7 +51,7 @@
       ],
       "title": "PipelineChatHistoryModes",
       "type": "string",
-      "default": null,
+      "default": "summarize",
       "ui:enumLabels": [
         "Summarize",
         "Truncate Tokens",
