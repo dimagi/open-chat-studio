@@ -211,7 +211,7 @@ class OpenAiAssistant(BaseTeamModel, VersionsMixin, CustomActionOperationMixin):
     def get_related_pipeline_node_queryset(self, assistant_ids: list = None):
         """Returns working version pipelines with assistant nodes containing the assistant ids"""
         assistant_ids = assistant_ids if assistant_ids else [str(self.id)]
-        return Node.objects.filter(type="AssistantNode").filter(
+        return Node.objects.assistant_nodes().filter(
             pipeline__working_version_id=None,
             params__assistant_id__in=assistant_ids,
             is_archived=False,
@@ -222,7 +222,7 @@ class OpenAiAssistant(BaseTeamModel, VersionsMixin, CustomActionOperationMixin):
         """Returns published experiment versions referenced by versioned pipelines with assistant nodes
         containing the assistant ids"""
         assistant_ids = assistant_ids if assistant_ids else [str(self.id)]
-        nodes = Node.objects.filter(type="AssistantNode").filter(
+        nodes = Node.objects.assistant_nodes().filter(
             pipeline__working_version_id__isnull=False,
             params__assistant_id__in=assistant_ids,
             is_archived=False,

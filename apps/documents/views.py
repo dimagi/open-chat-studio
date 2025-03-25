@@ -3,13 +3,16 @@ from django.contrib import messages
 from django.contrib.auth.decorators import permission_required
 from django.contrib.auth.mixins import PermissionRequiredMixin
 from django.db import IntegrityError, transaction
+from django.http import HttpResponse
 from django.shortcuts import get_object_or_404, redirect
+from django.template.loader import render_to_string
 from django.urls import reverse
 from django.views.decorators.http import require_POST
 from django.views.generic import DetailView, ListView, TemplateView
 
 from apps.documents.models import Collection
 from apps.files.models import File, FilePurpose
+from apps.generics.chips import Chip
 from apps.teams.decorators import login_and_team_required
 from apps.teams.mixins import LoginAndTeamRequiredMixin
 from apps.utils.search import similarity_search
@@ -125,7 +128,8 @@ def upload_files(request, team_slug: str):
 def delete_file(request, team_slug: str, pk: int):
     file = get_object_or_404(File, team__slug=team_slug, id=pk)
     file.delete()
-    return redirect("documents:collections", team_slug=team_slug, tab_name="files")
+    messages.success(request, "File deleted")
+    return HttpResponse()
 
 
 @require_POST
@@ -207,10 +211,23 @@ def new_collection(request, team_slug: str):
 
 @login_and_team_required
 @permission_required("documents.delete_collection")
-def delete_collection(request, team_slug: str, pk: int):
-    collection = get_object_or_404(Collection, team__slug=team_slug, id=pk)
-    collection.delete()
-    return redirect(reverse("documents:collections", kwargs={"team_slug": team_slug, "tab_name": "collections"}))
+def delete_collection(request, team_slug: str, id: int):
+    collection = get_object_or_404(Collection, team__slug=team_slug, id=id)
+    if pipeline_nodes := collection.get_references():
+        response = render_to_string(
+            "assistants/partials/referenced_objects.html",
+            context={
+                "object_name": "collection",
+                "pipeline_nodes": [
+                    Chip(label=node.pipeline.name, url=node.pipeline.get_absolute_url()) for node in pipeline_nodes
+                ],
+            },
+        )
+        return HttpResponse(response, headers={"HX-Reswap": "none"}, status=400)
+    else:
+        collection.delete()
+        messages.success(request, "Collection deleted")
+        return HttpResponse()
 
 
 @require_POST
