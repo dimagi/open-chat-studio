@@ -124,7 +124,6 @@ class ChannelBase(ABC):
         self.experiment_channel = experiment_channel
         self.experiment_session = experiment_session
         self.message: BaseMessage = None
-        self._user_query: str | None = None
         self.bot = get_bot(experiment_session, experiment=experiment) if experiment_session else None
         self._participant_identifier = experiment_session.participant.identifier if experiment_session else None
         self._is_user_message = False
@@ -232,18 +231,20 @@ class ChannelBase(ABC):
             experiment_session=experiment_session,
         )
 
-    @property
+    @cached_property
     def user_query(self):
         """Returns the user query, extracted from whatever (supported) message type was used to convey the
         message
         """
-        if not self._user_query:
-            self._user_query = self._extract_user_query()
-        return self._user_query
+        return self._extract_user_query()
 
     def _add_message(self, message: BaseMessage):
         """Adds the message to the handler in order to extract session information"""
-        self._user_query = None
+        try:
+            del self.user_query
+        except AttributeError:
+            pass
+
         self.message = message
 
         if not self._participant_is_allowed():
