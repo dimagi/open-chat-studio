@@ -1,5 +1,5 @@
 from unittest import mock
-from unittest.mock import patch
+from unittest.mock import Mock, patch
 
 import pytest
 
@@ -79,6 +79,7 @@ def test_tracing_service():
     with (
         patch(f"{service}.get_callback") as mock_get_callback,
         patch(f"{service}.get_trace_metadata") as get_trace_metadata,
+        patch(f"{service}.end", Mock()),
         mock_llm(responses=["response"]),
     ):
         get_trace_metadata.return_value = {"trace": "demo"}
