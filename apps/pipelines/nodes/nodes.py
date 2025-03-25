@@ -907,9 +907,24 @@ class CodeNode(PipelineNode):
                 "get_participant_schedules": participant_data_proxy.get_schedules,
                 "get_temp_state_key": self._get_temp_state_key(state),
                 "set_temp_state_key": self._set_temp_state_key(state),
+                "get_session_state_key": self._get_session_state_key(state["experiment_session"]),
+                "set_session_state_key": self._set_session_state_key(state["experiment_session"]),
             }
         )
         return custom_globals
+
+    def _get_session_state_key(self, session: ExperimentSession):
+        def get_session_state_key(key_name: str):
+            return session.state.get(key_name)
+
+        return get_session_state_key
+
+    def _set_session_state_key(self, session: ExperimentSession):
+        def set_session_state_key(key_name: str, value):
+            session.state[key_name] = value
+            session.save(update_fields=["state"])
+
+        return set_session_state_key
 
     def _get_temp_state_key(self, state: PipelineState):
         def get_temp_state_key(key_name: str):

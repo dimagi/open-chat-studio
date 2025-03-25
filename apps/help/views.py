@@ -81,6 +81,14 @@ def code_completion(user_query, current_code, error=None, iteration_count=0) -> 
             Sets the value of the temporary state key with the given name to the provided data.
             This will override any existing data for the key unless the key is read-only, in which case
             an error will be raised. Read-only keys are: `user_input`, `outputs`, `attachments`.
+
+        def get_session_state_key(key_name: str) -> str | None:
+            Returns the value of the session state's key with the given name.
+            If the key does not exist, it returns `None`.
+
+        def set_session_state_key(key_name: str, data: Any) -> None:
+            Sets the value of the session state's key with the given name to the provided data.
+            This will override any existing data.
         ```
         
         Return only the Python code and nothing else. Do not enclose it in triple quotes or have any other
