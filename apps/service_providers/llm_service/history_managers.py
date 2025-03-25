@@ -30,44 +30,6 @@ class BaseHistoryManager(metaclass=ABCMeta):
     ):
         pass
 
-    def save_message_to_history(
-        self,
-        message: str,
-        type_: ChatMessageType,
-        message_metadata: dict | None = None,
-        experiment_tag: str | None = None,
-    ):
-        """
-        Create a chat message and appends the file ids from each resource to the `openai_file_ids` array in the
-        chat message metadata.
-        Example resource_file_mapping: {"resource1": ["file1", "file2"], "resource2": ["file3", "file4"]}
-        """
-        metadata = self.get_trace_metadata()
-        metadata = metadata | (message_metadata or {})
-        chat_message = ChatMessage.objects.create(
-            chat=self.session.chat,
-            message_type=type_.value,
-            content=message,
-            metadata=metadata,
-        )
-
-        if experiment_tag:
-            tag, _ = Tag.objects.get_or_create(
-                name=experiment_tag,
-                team=self.session.team,
-                is_system_tag=True,
-                category=TagCategories.BOT_RESPONSE,
-            )
-            chat_message.add_tag(tag, team=self.session.team, added_by=None)
-
-        if type_ == ChatMessageType.AI:
-            self.ai_message = chat_message
-            chat_message.add_version_tag(
-                version_number=self.experiment_version_number, is_a_version=self.experiment_is_a_version
-            )
-
-        return chat_message
-
 
 class ExperimentHistoryManager(BaseHistoryManager):
     def __init__(
@@ -138,6 +100,44 @@ class ExperimentHistoryManager(BaseHistoryManager):
                 message_metadata=output_message_metadata,
                 experiment_tag=experiment_tag,
             )
+
+    def save_message_to_history(
+        self,
+        message: str,
+        type_: ChatMessageType,
+        message_metadata: dict | None = None,
+        experiment_tag: str | None = None,
+    ):
+        """
+        Create a chat message and appends the file ids from each resource to the `openai_file_ids` array in the
+        chat message metadata.
+        Example resource_file_mapping: {"resource1": ["file1", "file2"], "resource2": ["file3", "file4"]}
+        """
+        metadata = self.get_trace_metadata()
+        metadata = metadata | (message_metadata or {})
+        chat_message = ChatMessage.objects.create(
+            chat=self.session.chat,
+            message_type=type_.value,
+            content=message,
+            metadata=metadata,
+        )
+
+        if experiment_tag:
+            tag, _ = Tag.objects.get_or_create(
+                name=experiment_tag,
+                team=self.session.team,
+                is_system_tag=True,
+                category=TagCategories.BOT_RESPONSE,
+            )
+            chat_message.add_tag(tag, team=self.session.team, added_by=None)
+
+        if type_ == ChatMessageType.AI:
+            self.ai_message = chat_message
+            chat_message.add_version_tag(
+                version_number=self.experiment_version_number, is_a_version=self.experiment_is_a_version
+            )
+
+        return chat_message
 
     def get_trace_metadata(self) -> dict:
         if self.trace_service:
