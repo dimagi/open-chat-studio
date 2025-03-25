@@ -178,16 +178,23 @@ class ChatMessage(BaseModel, TaggedModelMixin, UserCommentsMixin):
             "ocs_attachment_file_ids": [1,2,3, ...],
         }
         """
-        files_queryset = File.objects.filter(chatattachment__chat=self.chat)
+        if not self.chat_id:
+            # Summary messages are not saved to the DB, so they don't have a chat_id
+            return []
+
+        from django.db.models import Q
+
+        external_ids = []
+        ids = []
 
         if external_file_ids := self.metadata.get("openai_file_ids", []):
-            files_queryset = files_queryset.filter(external_id__in=external_file_ids)
+            external_ids.extend(external_file_ids)
 
         if file_ids := self.metadata.get("ocs_attachment_file_ids", []):
             # ocs attachments doesn't have external ids
-            files_queryset = files_queryset.filter(id__in=file_ids)
+            ids.extend(file_ids)
 
-        return files_queryset.all()
+        return File.objects.filter(Q(id__in=ids) | Q(external_id__in=external_ids), chatattachment__chat=self.chat)
 
     def get_metadata(self, key: str):
         return self.metadata.get(key, None)
