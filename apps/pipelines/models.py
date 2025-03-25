@@ -270,6 +270,8 @@ class Pipeline(BaseTeamModel, VersionsMixin):
                 )
                 output["ai_message_id"] = ai_message.id
         finally:
+            if trace_service:
+                trace_service.end()
             if pipeline_run.status == PipelineRunStatus.ERROR:
                 logging_callback.logger.debug("Pipeline run failed", input=input["messages"][-1])
             else:
