@@ -6,7 +6,7 @@ from django.http import HttpResponseRedirect
 from django.shortcuts import get_object_or_404
 from django.urls import reverse
 from django.views.decorators.http import require_POST
-from django.views.generic import CreateView, TemplateView
+from django.views.generic import TemplateView
 
 from apps.chat.channels import WebChannel
 from apps.chatbots.forms import ChatbotForm
@@ -48,16 +48,19 @@ class ChatbotExperimentTableView(BaseExperimentTableView):
         return queryset.filter(pipeline__isnull=False)
 
 
-class BaseChatbotView(BaseExperimentView):
+# class BaseChatbotView(BaseExperimentView):
+#     template_name = "chatbots/chatbot_form.html"
+#     form_class = ChatbotForm
+#     active_tab = "chatbots"
+#
+#     def get_success_url(self):
+#         return reverse("chatbots:edit", args=[self.request.team.slug, self.object.pipeline.id])
+
+
+class CreateChatbot(CreateExperiment, BaseExperimentView):
     template_name = "chatbots/chatbot_form.html"
     form_class = ChatbotForm
     active_tab = "chatbots"
-
-    def get_success_url(self):
-        return reverse("chatbots:edit", args=[self.request.team.slug, self.object.pipeline.id])
-
-
-class CreateChatbot(BaseChatbotView, CreateExperiment, CreateView):
     title = "Create Chatbot"
     button_title = "Create"
     permission_required = "experiments.add_experiment"

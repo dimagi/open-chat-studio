@@ -1,6 +1,6 @@
 from django import forms
+from django.db import transaction
 
-from apps.custom_actions.form_utils import set_custom_actions
 from apps.experiments.models import Experiment
 from apps.pipelines.models import Pipeline
 
@@ -19,6 +19,7 @@ class ChatbotForm(forms.ModelForm):
         super().__init__(*args, **kwargs)
         self.request = request
 
+    @transaction.atomic()
     def save(self, commit=True):
         pipeline = Pipeline.create_pipeline_with_name(self.request.team, self.cleaned_data["name"])
         experiment = super().save(commit=False)
@@ -27,6 +28,5 @@ class ChatbotForm(forms.ModelForm):
         experiment.pipeline = pipeline
         if commit:
             experiment.save()
-            set_custom_actions(experiment, self.cleaned_data.get("custom_action_operations"))
             self.save_m2m()
         return experiment

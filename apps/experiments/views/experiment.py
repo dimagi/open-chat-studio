@@ -486,7 +486,7 @@ def version_create_status(request, team_slug: str, experiment_id: int):
     )
 
 
-def base_single_experiment_view(request, team_slug, experiment_id, template_name, active_tab):
+def base_single_experiment_view(request, team_slug, experiment_id, template_name, active_tab) -> HttpResponse:
     experiment = get_object_or_404(Experiment.objects.get_all(), id=experiment_id, team=request.team)
 
     user_sessions = (
@@ -514,8 +514,6 @@ def base_single_experiment_view(request, team_slug, experiment_id, template_name
             bot_type_chip = Chip(label=f"Pipeline: {pipeline.name}", url=pipeline.get_absolute_url())
         elif assistant := experiment.assistant:
             bot_type_chip = Chip(label=f"Assistant: {assistant.name}", url=assistant.get_absolute_url())
-    elif active_tab == "chatbots" and experiment.pipeline:
-        bot_type_chip = Chip(label=f"Pipeline: {experiment.pipeline.name}", url=experiment.pipeline.get_absolute_url())
 
     context = {
         "active_tab": active_tab,
