@@ -36,6 +36,13 @@ function configureTomSelect() {
       plugins: ["remove_button", "caret_position", "input_autogrow"],
       maxItems: null,
       create: true,
+      createFilter: (input) => {
+        if (input.length > 100) {
+          el.tomselect.dropdown_content.innerHTML = `<div class="ts-error-message" style="color: red; padding: 5px;">Tag name too long. Maximum 100 characters allowed.</div>`;
+          return false;
+        }
+        return true;
+      },
       onItemAdd: addTag('onItemAdd', objectInfo),
       onItemRemove: removeTag('onItemRemove', objectInfo),
       onBlur: () => {

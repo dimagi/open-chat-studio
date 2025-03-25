@@ -3,42 +3,26 @@
 {% block app %}
     {% load i18n %}
     <div class="app-card" x-data>
-        <div class="grid grid-cols-6">
-            <div class="col-span-5">
-                <div class="flex">
-                    <h1 id="{{ title|slugify }}" class="{{ title_class|default:"pg-title" }} hover:cursor-pointer">
-                        <a href="#{{ title|slugify }}">{{ title }}</a>
-                    </h1>
-                </div>
-            </div>
+        <div class="flex">
+            <h1 id="{{ title|slugify }}" class="{{ title_class|default:"pg-title" }} hover:cursor-pointer">
+                <a href="#{{ title|slugify }}">{{ title }}</a>
+            </h1>
         </div>
 
-        <div role="tablist" class="tabs tabs-bordered">
-            <input
-                type="radio"
-                name="repository"
-                role="tab"
-                class="tab"
-                aria-label="Files ({{ files_count }})"
-                @click="window.location.href = '{% url 'documents:repositories' request.team.slug 'files' %}'"
-                {% if tab_name == "files" %}checked="checked"{% endif %}
-            />
-            <div role="tabpanel" class="tab-content p-10">
+        <div class="flex flex-col mt-2">
+            <div class="join">
+                <a href="{% url 'documents:collections' request.team.slug 'files' %}" class="btn btn-sm join-item {% if tab_name == 'files' %}btn-active{% endif %}">
+                    Files ({{ files_count }})
+                </a>
+                <a href="{% url 'documents:collections' request.team.slug 'collections' %}" class="btn btn-sm join-item {% if tab_name == 'collections' %}btn-active{% endif %}">
+                    Collections ({{ collections_count }})
+                </a>
+            </div>
+            <div>
                 {% if tab_name == "files" %}
                     {% include 'documents/shared/tab_content.html' with object_list_url=files_list_url add_new_modal_template='documents/upload_files_modal.html' add_new_modal_title="Upload files" modal_submit_url=upload_files_url %}
                 {% endif %}
-            </div>
 
-            <input
-                type="radio"
-                name="repository"
-                role="tab"
-                class="tab"
-                aria-label="Collections ({{ collections_count }})"
-                @click="window.location.href = '{% url 'documents:repositories' request.team.slug 'collections' %}'"
-                {% if tab_name == "collections" %}checked="checked"{% endif %}
-            />
-            <div role="tabpanel" class="tab-content p-10">
                 {% if tab_name == "collections" %}
                     {% include 'documents/shared/tab_content.html' with object_list_url=collections_list_url add_new_modal_template='documents/new_collection_modal.html' add_new_modal_title="New Collection" modal_submit_url=new_collection_url %}
                 {% endif %}

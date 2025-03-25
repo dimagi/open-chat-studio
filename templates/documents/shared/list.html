@@ -3,12 +3,13 @@
 <ul x-data="{selected_item: null}">
     {% for object in page_obj %}
         <li
+            id="record-{{ object.id }}"
             class="text-left px-3 py-3 border-b border-base-300 hover:cursor-pointer"
             hx-get="{% url details_url_name request.team.slug object.id %}"
             hx-trigger="click"
             hx-target="#{{ tab_name }}_details"
             @click="selected_item = {{ object.id }}"
-            :class="selected_item === {{ object.id }} ? 'bg-gray-500': 'hover:bg-base-200'"
+            :class="selected_item === {{ object.id }} ? 'bg-base-200': 'hover:bg-base-200'"
         >
             <div class="flex justify-between">
                 <span>{{ object.name }}</span>

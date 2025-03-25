@@ -14,7 +14,20 @@ from django.contrib.postgres.fields import ArrayField
 from django.core.exceptions import FieldDoesNotExist
 from django.core.validators import MaxValueValidator, MinValueValidator, validate_email
 from django.db import models, transaction
-from django.db.models import BooleanField, Case, Count, OuterRef, Q, Subquery, UniqueConstraint, When
+from django.db.models import (
+    BooleanField,
+    Case,
+    CharField,
+    Count,
+    F,
+    OuterRef,
+    Q,
+    Subquery,
+    UniqueConstraint,
+    Value,
+    When,
+)
+from django.db.models.functions import Cast, Concat
 from django.template.loader import get_template
 from django.urls import reverse
 from django.utils import timezone
@@ -53,19 +66,45 @@ class VersionFieldDisplayFormatters:
         return ", ".join([entry for entry in arr])
 
     @staticmethod
-    def format_trigger(trigger) -> str:
-        string = "If"
-        if trigger.trigger_type == "TimeoutTrigger":
-            seconds = seconds_to_human(trigger.delay)
-            string = f"{string} no response for {seconds}"
-        else:
-            string = f"{string} {trigger.get_type_display().lower()}"
-
-        trigger_action = trigger.action.get_action_type_display().lower()
-        return f"{string} then {trigger_action}"
+    def format_trigger(triggers) -> str:
+        if isinstance(triggers, VersionField):
+            triggers = triggers.raw_value
+        if not isinstance(triggers, list):
+            triggers = [triggers]
+        result_strings = []
+        for field in triggers:
+            if isinstance(field, VersionField):
+                field = field.raw_value
+            static_trigger = getattr(field, "raw_value", field)
+            string = "If"
+            if static_trigger.trigger_type == "TimeoutTrigger":
+                seconds = seconds_to_human(static_trigger.delay)
+                string = f"{string} no response for {seconds}"
+            else:
+                string = f"{string} {static_trigger.get_type_display().lower()}"
+            trigger_action = static_trigger.action.get_action_type_display().lower()
+            result_strings.append(f"{string} then {trigger_action}")
+        return "; ".join(result_strings) if result_strings else "No triggers found"
 
     @staticmethod
     def format_route(route) -> str:
+        if isinstance(route, VersionField):
+            route = route.raw_value
+        if isinstance(route, list):
+            formatted_routes = []
+            for r in route:
+                if isinstance(r, VersionField):
+                    r = r.raw_value
+                if isinstance(r, ExperimentRoute):
+                    formatted_routes.append(VersionFieldDisplayFormatters._format_single_route(r))
+            return "\n".join(formatted_routes) if formatted_routes else "Invalid route data"
+        if isinstance(route, ExperimentRoute):
+            return VersionFieldDisplayFormatters._format_single_route(route)
+        return "Invalid route data"
+
+    @staticmethod
+    def _format_single_route(route) -> str:
+        """Formats a single ExperimentRoute"""
         if route.type == ExperimentRouteType.PROCESSOR:
             string = f'Route to "{route.child}" using the "{route.keyword}" keyword.'
             if route.is_default:
@@ -266,6 +305,16 @@ class VersionsMixin:
         if self.is_working_version:
             return "unreleased"
         return f"v{self.version_number}"
+
+    def get_version_name_list(self):
+        """Returns list of version names in form of v + version number including working version."""
+        versions_list = list(
+            self.versions.annotate(
+                friendly_name=Concat(Value("v"), Cast(F("version_number"), output_field=CharField()))
+            ).values_list("friendly_name", flat=True)
+        )
+        versions_list.append(f"v{self.version_number}")
+        return versions_list
 
 
 @audit_fields(*model_audit_fields.SOURCE_MATERIAL_FIELDS, audit_special_queryset_writes=True)
@@ -1018,7 +1067,6 @@ class Experiment(BaseTeamModel, VersionsMixin, CustomActionOperationMixin):
         """
         Returns a `Version` instance representing the experiment version.
         """
-
         return VersionDetails(
             instance=self,
             fields=[
@@ -1119,13 +1167,13 @@ class Experiment(BaseTeamModel, VersionsMixin, CustomActionOperationMixin):
                 VersionField(
                     group_name="Triggers",
                     name="static_triggers",
-                    queryset=self.static_triggers,
+                    queryset=self.static_triggers.all(),
                     to_display=VersionFieldDisplayFormatters.format_trigger,
                 ),
                 VersionField(
                     group_name="Triggers",
                     name="timeout_triggers",
-                    queryset=self.timeout_triggers,
+                    queryset=self.timeout_triggers.all(),
                     to_display=VersionFieldDisplayFormatters.format_trigger,
                 ),
                 # Routing
@@ -1556,9 +1604,13 @@ class ExperimentSession(BaseTeamModel):
         null=True,
         blank=True,
     )
+    state = models.JSONField(default=dict)
 
     class Meta:
         ordering = ["-created_at"]
+
+    def __str__(self):
+        return f"ExperimentSession(id={self.external_id})"
 
     def save(self, *args, **kwargs):
         if not hasattr(self, "chat"):
@@ -1670,10 +1722,15 @@ class ExperimentSession(BaseTeamModel):
         """Sends the `instruction_prompt` along with the chat history to the LLM to formulate an appropriate prompt
         message. The response from the bot will be saved to the chat history.
         """
-        from apps.chat.bots import get_bot
+        from apps.chat.bots import EventBot
 
-        bot = get_bot(self, experiment=use_experiment, disable_tools=True)
-        return bot.process_input(user_input=instruction_prompt, save_input_to_history=False)
+        bot = EventBot(self, use_experiment)
+        message = bot.get_user_message(instruction_prompt)
+        chat_message = ChatMessage.objects.create(chat=self.chat, message_type=ChatMessageType.AI, content=message)
+        chat_message.add_version_tag(
+            version_number=bot.experiment.version_number, is_a_version=bot.experiment.is_a_version
+        )
+        return message
 
     def try_send_message(self, message: str, fail_silently=True):
         """Tries to send a message to this user session as the bot. Note that `message` will be send to the user

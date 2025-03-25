@@ -43,7 +43,15 @@ class PipelineManager(VersionsObjectManagerMixin, models.Manager):
 
 
 class NodeObjectManager(VersionsObjectManagerMixin, models.Manager):
-    pass
+    def llm_response_with_prompt_nodes(self):
+        from apps.pipelines.nodes.nodes import LLMResponseWithPrompt
+
+        return self.get_queryset().filter(type=LLMResponseWithPrompt.__name__)
+
+    def assistant_nodes(self):
+        from apps.pipelines.nodes.nodes import AssistantNode
+
+        return self.get_queryset().filter(type=AssistantNode.__name__)
 
 
 class Pipeline(BaseTeamModel, VersionsMixin):
@@ -519,6 +527,12 @@ class PipelineChatHistoryTypes(models.TextChoices):
     NAMED = "named", "Named"
     GLOBAL = "global", "Global"
     NONE = "none", "No History"
+
+
+class PipelineChatHistoryModes(models.TextChoices):
+    SUMMARIZE = "summarize", "Summarize"
+    TRUNCATE_TOKENS = "truncate_tokens", "Truncate Tokens"
+    MAX_HISTORY_LENGTH = "max_history_length", "Max History Length"
 
 
 class PipelineChatHistory(BaseModel):

@@ -3,6 +3,7 @@ from functools import wraps
 from django.conf import settings
 from django.http import Http404, HttpResponseRedirect
 from django.urls import reverse
+from django.utils.http import url_has_allowed_host_and_scheme
 
 from apps.web.superuser_utils import apply_temporary_superuser_access, has_temporary_superuser_access
 
@@ -20,7 +21,10 @@ def login_and_team_required(view_func):
     @wraps(view_func)
     def _inner(request, *args, **kwargs):
         if not valid_auth_and_membership(request):
-            return HttpResponseRedirect("{}?next={}".format(reverse("account_login"), request.path))
+            next_url = request.get_full_path()
+            if not url_has_allowed_host_and_scheme(next_url, allowed_hosts={request.get_host()}):
+                next_url = "/"
+            return HttpResponseRedirect(f"{reverse(settings.LOGIN_URL)}?next={next_url}")
         return view_func(request, *args, **kwargs)
 
     return _inner

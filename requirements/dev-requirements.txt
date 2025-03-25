@@ -66,6 +66,8 @@ packaging==23.2
     #   -c requirements.txt
     #   build
     #   pytest
+pip==25.0.1
+    # via pip-tools
 pip-tools==7.4.1
     # via -r dev-requirements.in
 platformdirs==4.3.6
@@ -126,3 +128,6 @@ watchfiles==1.0.4
     # via -r dev-requirements.in
 wheel==0.44.0
     # via pip-tools
+
+# The following packages were excluded from the output:
+# setuptools

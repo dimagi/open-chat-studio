@@ -7,7 +7,7 @@ from apps.utils.time import pretty_date
 
 
 class PromptTemplateContext:
-    def __init__(self, session, source_material_id, collection_id: int = None):
+    def __init__(self, session, source_material_id: int, collection_id: int = None):
         self.session = session
         self.source_material_id = source_material_id
         self.collection_id = collection_id
@@ -34,6 +34,9 @@ class PromptTemplateContext:
 
     def get_source_material(self):
         from apps.experiments.models import SourceMaterial
+
+        if self.source_material_id is None:
+            return ""
 
         try:
             return SourceMaterial.objects.get(id=self.source_material_id).material

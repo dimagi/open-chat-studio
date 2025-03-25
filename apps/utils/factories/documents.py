@@ -3,6 +3,6 @@ import factory
 
 class CollectionFactory(factory.django.DjangoModelFactory):
     class Meta:
-        model = "documents.Repository"
+        model = "documents.Collection"
 
     team = factory.SubFactory("apps.utils.factories.team.TeamFactory")

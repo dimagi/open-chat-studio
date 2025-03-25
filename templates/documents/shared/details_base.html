@@ -1,25 +1,27 @@
+{% load actions %}
+
 <form
     id="detail-form"
     action="{{ edit_url }}"
     method="POST"
     class="m-2 grid grid-cols-4" x-data="{editing: false}">
     {% csrf_token %}
-    {% block detail_content %}
-    {% endblock %}
-    <div class="py-3 col-span-1">
+    <div class="col-span-3">
+        {% block detail_content %}
+        {% endblock %}
+    </div>
+    <div class="py-3">
         <div class="join">
             <button type="button" class="btn btn-sm join-item pl-3" x-show="!editing" @click="editing = true">
-                Edit <i class="fa-solid fa-pencil fa-xs"></i>
+                <i class="fa-solid fa-pencil fa-xs"></i>
             </button>
             <button type="submit" class="btn btn-sm join-item" x-cloak x-show="editing">
-                Update <i class="fa-solid fa-check fa-xs"></i>
+                <i class="fa-solid fa-check fa-xs"></i>
             </button>
-            <a type="button" class="btn btn-sm join-item" x-show="!editing" href="{{ delete_url }}">
-                <i class="fa-solid fa-trash htmx-hide"></i>
-            </a>
             <button type="button" @click="editing = false" class="btn btn-sm join-item" x-cloak x-show="editing">
-                Cancel
+                <i class="fa-solid fa-ban fa-xs"></i>
             </button>
+            {% include "generic/action_ajax.html" with title="Delete" action_url=delete_url confirm_message="Are you sure?" icon_class='fa fa-trash' action_id="delete" hx_method="get" record=object %}
         </div>
     </div>
 </form>
