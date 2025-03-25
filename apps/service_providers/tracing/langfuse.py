@@ -21,6 +21,7 @@ class LangFuseTraceService(TraceService):
 
     def __init__(self, type_, config: dict):
         super().__init__(type_, config)
+        self.client = None
         self.trace = None
 
     def get_callback(self, trace_name: str, participant_id: str, session_id: str) -> BaseCallbackHandler:
@@ -29,12 +30,11 @@ class LangFuseTraceService(TraceService):
         if self.trace:
             raise ServiceReentryException("Service does not support reentrant use.")
 
-        client = client_manager.get(self.config)
-        trace = client.trace(name=trace_name, session_id=session_id, user_id=participant_id)
-        self.trace = trace
+        self.client = client_manager.get(self.config)
+        self.trace = self.client.trace(name=trace_name, session_id=session_id, user_id=participant_id)
         callback = CallbackHandler(
-            stateful_client=trace,
-            update_stateful_client=False,
+            stateful_client=self.trace,
+            update_stateful_client=True,
             user_id=participant_id,
             session_id=session_id,
         )
@@ -51,6 +51,11 @@ class LangFuseTraceService(TraceService):
             },
             "trace_provider": self.type,
         }
+
+    def end(self):
+        if not self.client:
+            raise ServiceNotInitializedException("Service not initialized.")
+        self.client.flush()
 
 
 class ClientManager:

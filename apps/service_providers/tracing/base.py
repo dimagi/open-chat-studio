@@ -19,3 +19,6 @@ class TraceService:
 
     def get_trace_metadata(self) -> dict[str, str]:
         return {}
+
+    def end(self):
+        pass

@@ -224,7 +224,12 @@ class TopicBot:
                     "session-id": str(self.session.external_id),
                 },
             }
-        return main_bot_chain.invoke(user_input, config=config)
+
+        try:
+            return main_bot_chain.invoke(user_input, config=config)
+        finally:
+            if self.trace_service:
+                self.trace_service.end()
 
     def get_ai_message_id(self) -> int | None:
         """Returns the generated AI message's ID. The caller can use this to fetch more information on this message"""
