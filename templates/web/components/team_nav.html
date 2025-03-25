@@ -47,6 +47,17 @@
       {% endif %}
     </ul>
   </li>
+  {% flag "document_management" %}
+    {% if perms.documents.view_collection %}
+      <li>
+        <a href="{% url 'documents:collections' request.team.slug 'files' %}"
+           {% if active_tab == 'manage_files' %}class="active"{% endif %}>
+          <i class="fa fa-folder" aria-hidden="true"></i></i>
+        {% translate "Manage Files" %}
+      </a>
+      </li>
+    {% endif %}
+  {% endflag %}
   {% flag "chatbots" %}
     <li>
       <a href="{% url 'chatbots:chatbots_home' request.team.slug %}" {% if active_tab == 'chatbots' %}class="active"{% endif %}>

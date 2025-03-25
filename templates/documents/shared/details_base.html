@@ -1,0 +1,30 @@
+<form
+    id="detail-form"
+    action="{{ edit_url }}"
+    method="POST"
+    class="m-2 grid grid-cols-4" x-data="{editing: false}">
+    {% csrf_token %}
+    <div class="col-span-3">
+        {% block detail_content %}
+        {% endblock %}
+    </div>
+    <div class="py-3">
+        <div class="join">
+            <button type="button" class="btn btn-sm join-item pl-3" x-show="!editing" @click="editing = true">
+                <i class="fa-solid fa-pencil fa-xs"></i>
+            </button>
+            <button type="submit" class="btn btn-sm join-item" x-cloak x-show="editing">
+                <i class="fa-solid fa-check fa-xs"></i>
+            </button>
+            <a type="button" class="btn btn-sm join-item" x-show="!editing" href="{{ delete_url }}">
+                <i class="fa-solid fa-trash htmx-hide"></i>
+            </a>
+            <button type="button" @click="editing = false" class="btn btn-sm join-item" x-cloak x-show="editing">
+                <i class="fa-solid fa-ban fa-xs"></i>
+            </button>
+        </div>
+    </div>
+</form>
+
+{% block extra_js %}
+{% endblock %}

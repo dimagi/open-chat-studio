@@ -3,6 +3,8 @@ from django.contrib.postgres.search import TrigramSimilarity
 from django.db.models import Q
 from django_tables2 import SingleTableView
 
+from apps.utils.search import similarity_search
+
 
 class BaseExperimentTableView(SingleTableView, PermissionRequiredMixin):
     paginate_by = 25
@@ -20,6 +22,12 @@ class BaseExperimentTableView(SingleTableView, PermissionRequiredMixin):
 
         search = self.request.GET.get("search")
         if search:
+            query_set = similarity_search(
+                query_set,
+                search_phase=search,
+                columns=["name", "description"],
+                extra_conditions=Q(owner__username__icontains=search),
+            )
             name_similarity = TrigramSimilarity("name", search)
             description_similarity = TrigramSimilarity("description", search)
             query_set = (

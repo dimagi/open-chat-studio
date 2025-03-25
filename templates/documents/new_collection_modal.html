@@ -1,0 +1,24 @@
+{% extends 'documents/shared/modal_body.html' %}
+
+{% block modal_body %}
+    <div class="mt-2 flex flex-col gap-5 form-control w-full">
+        <label class="label font-bold" for="id_name">Name</label>
+        <input class="input input-bordered" type="text" x-model="name" name="name" maxlength="128" required id="id_name">
+    </div>
+{% endblock %}
+
+{% block submit_button %}
+    <button class="btn btn-primary mt-2" :disabled="name.length === 0">Create</button>
+{% endblock %}
+
+
+
+{% block extra_js %}
+    <script>
+        document.addEventListener('alpine:init', () => {
+            Alpine.data('modalData', () => ({
+                name: "",
+            }))
+        })
+    </script>
+{% endblock %}
