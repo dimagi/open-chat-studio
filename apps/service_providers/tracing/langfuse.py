@@ -99,10 +99,13 @@ class ClientManager:
     def _prune_worker(self):
         while True:
             time.sleep(self.prune_interval)
-            logger.debug("Pruning clients...")
             self._prune_stale()
 
     def _prune_stale(self):
+        if not self.clients:
+            return
+
+        logger.debug("Pruning clients...")
         for key in list(self.clients.keys()):
             timestamp, client = self.clients[key]
             if time.time() - timestamp > self.stale_timeout:
@@ -123,6 +126,9 @@ class ClientManager:
         client.shutdown()
 
     def shutdown(self):
+        if not self.clients:
+            return
+
         with self.lock:
             logger.debug("Shutting down all langfuse clients (%s)", len(self.clients))
             for key, (_, client) in self.clients.items():
