@@ -1,3 +1,5 @@
+import re
+
 from django.conf import settings
 from django.utils.html import format_html
 from django.utils.safestring import mark_safe
@@ -24,3 +26,21 @@ def render_help_with_link(help_content: str, docs_link: str):
         docs_link=docs_link,
         help_content=help_content,
     )
+
+
+def replace_markdown_links_with_its_name(text: str) -> str:
+    """
+    Replaces all markdown links where the link part is an OCS markdown link with the link name.
+    Example:
+    [moonlight](file:team_slug:1:2) -> moonlight
+    ![daylight](file:team_slug:1:2) -> moonlight
+    """
+    name = ""
+    new_text = text
+    match_iter = re.finditer(r"!?\[(?P<link_name>.*?)\]\(file:[^)]+\)", text)
+    for match in match_iter:
+        name = match.groupdict()["link_name"]
+        match_ref = text[match.start() : match.end()]
+        new_text = new_text.replace(match_ref, name)
+
+    return new_text

@@ -38,6 +38,7 @@ from apps.experiments.models import (
     VoiceResponseBehaviours,
 )
 from apps.files.models import File
+from apps.generics.help import replace_markdown_links_with_its_name
 from apps.service_providers.llm_service.runnables import GenerationCancelled
 from apps.service_providers.speech_service import SynthesizedAudio
 from apps.slack.utils import parse_session_external_id
@@ -436,9 +437,10 @@ class ChannelBase(ABC):
         message_text = ai_message.content
 
         attached_files = ai_message.get_attached_files()
-        # By now the message is saved to the history, so we can safely replace our custom link with the file name
-        # for file in attached_files:
-        #     message_text = replace_markdown_links_with_its_name(message_text)
+
+        if self.experiment_channel.platform != ChannelPlatform.WEB:
+            for file in attached_files:
+                message_text = replace_markdown_links_with_its_name(message_text)
 
         self.send_message_to_user(bot_message=message_text, attached_files=attached_files)
 
