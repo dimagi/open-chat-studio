@@ -21,6 +21,22 @@ export const createJsonEditor = (element) => {
   } else {
     console.error('json-editor element missing data-target-field attribute')
   }
+
+  const errorContainer = document.createElement('div');
+  errorContainer.className = 'json-editor-error text-error text-sm mt-1';
+  element.parentNode.insertBefore(errorContainer, element.nextSibling);
+
+  const updateErrorStatus = (view) => {
+    const errors = diagnosticCount(view.state);
+    if (disableElt) {
+      disableElt.disabled = errors > 0
+    }
+    if (errors > 0) {
+      errorContainer.textContent = `Invalid JSON: ${errors} error(s) found`;
+    } else {
+      errorContainer.textContent = '';
+    }
+  }
   let timeout = null;
   const view = new EditorView({
     doc: initialValue || "",
@@ -39,14 +55,10 @@ export const createJsonEditor = (element) => {
           if (timeout) {
             clearTimeout(timeout)
           }
-          if (disableElt) {
-            disableElt.disabled = diagnosticCount(v.state) > 0
-          }
+          updateErrorStatus(view)
           // wait until linter has finished
           timeout = setTimeout(() => {
-            if (disableElt) {
-              disableElt.disabled = diagnosticCount(view.state) > 0
-            }
+            updateErrorStatus(view)
           }, 500)
           target.dispatchEvent(new Event('change', {bubbles: true}))
         }
