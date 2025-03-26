@@ -268,7 +268,7 @@ class LLMResponseWithPrompt(LLMResponse, HistoryMixin):
             "prompt": self.prompt,
             "source_material": self.source_material_id,
             "tools": self.tools,
-            "collection": self.collection_id,
+            "media": self.collection_id,
         }
         try:
             validate_prompt_variables(context=context, prompt_key="prompt", known_vars=set(PromptVars.values))

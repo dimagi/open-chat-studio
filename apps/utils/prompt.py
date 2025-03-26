@@ -12,7 +12,7 @@ class PromptVars(models.TextChoices):
     PARTICIPANT_DATA = "participant_data"
     SOURCE_MATERIAL = "source_material"
     CURRENT_DATETIME = "current_datetime"
-    COLLECTION = "collection"
+    MEDIA = "media"
 
 
 PROMPT_VARS_REQUIRED_BY_TOOL = {
@@ -24,7 +24,7 @@ PROMPT_VARS_REQUIRED_BY_TOOL = {
 }
 
 # These prompt variables require resources to be specified by the user
-PROMPT_VARS_REQUIRING_RESOURCES = [PromptVars.SOURCE_MATERIAL, PromptVars.COLLECTION]
+PROMPT_VARS_REQUIRING_RESOURCES = [PromptVars.SOURCE_MATERIAL, PromptVars.MEDIA]
 
 
 def _inspect_prompt(context: str, prompt_key) -> tuple[set, str]:
