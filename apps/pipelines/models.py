@@ -262,10 +262,16 @@ class Pipeline(BaseTeamModel, VersionsMixin):
             if save_run_to_history and session is not None:
                 if save_input_to_history:
                     self._save_message_to_history(
-                        session, input["messages"][-1], ChatMessageType.HUMAN, metadata=output["input_message_metadata"]
+                        session,
+                        input["messages"][-1],
+                        ChatMessageType.HUMAN,
+                        metadata=output.get("input_message_metadata", {}),
                     )
                 ai_message = self._save_message_to_history(
-                    session, output["messages"][-1], ChatMessageType.AI, metadata=output["output_message_metadata"]
+                    session,
+                    output["messages"][-1],
+                    ChatMessageType.AI,
+                    metadata=output.get("output_message_metadata", {}),
                 )
                 output["ai_message_id"] = ai_message.id
         finally:
