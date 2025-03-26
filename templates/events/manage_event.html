@@ -20,8 +20,10 @@
                 {% csrf_token %}
                 {% block form %}
                     <h1 class="pg-title">Event Details</h1>
-                    {% if trigger_form.type %}
+                    {% if event_type == 'statictrigger' %}
                         {% render_field trigger_form.type xmodel="triggerType" %}
+                    {% else %}
+                        {% render_form_fields trigger_form %}
                     {% endif %}
                     {% render_form_fields action_form.primary %}
                     {% for key, form in action_form.secondary.items %}
