@@ -870,6 +870,11 @@ export function HistoryModeWidget(props: WidgetParams) {
   const maxHistoryLength = concatenate(props.nodeParams["max_history_length"]);
   const initialHistoryMode = concatenate(props.nodeParams["history_mode"]);
   const [historyMode, setHistoryMode] = useState(initialHistoryMode || "summarize");
+  const llmProviderId = concatenate(props.nodeParams["llm_provider_model_id"]);
+  const {parameterValues} = getCachedData();
+  const models = parameterValues.LlmProviderModelId
+  const model = models.filter(m => m.value === llmProviderId)
+  const defaultMaxTokens = model[0]?.max_token_limit;
 
   const historyModeHelpTexts: Record<string, string> = {
     summarize:"If the token count exceeds the limit, older messages will be summarized while keeping the last few messages intact.",
@@ -908,7 +913,7 @@ export function HistoryModeWidget(props: WidgetParams) {
               name="user_max_token_limit"
               type="number"
               onChange={props.updateParamValue}
-              value={userMaxTokenLimit || ""}
+              value={userMaxTokenLimit || defaultMaxTokens || ""}
             />
             <small className ="text-muted mt-2">Maximum number of tokens before messages are summarized or truncated.</small>
           </InputField>
