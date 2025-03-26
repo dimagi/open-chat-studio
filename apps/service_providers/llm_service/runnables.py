@@ -52,8 +52,7 @@ def create_experiment_runnable(
 
     if assistant := experiment.assistant:
         history_manager = ExperimentHistoryManager.for_assistant(session=session, experiment=experiment)
-        assistant_adapter = AssistantAdapter.for_experiment(experiment, session, trace_service)
-        runnable = None
+        assistant_adapter = AssistantAdapter.for_experiment(experiment, session)
         if assistant.tools_enabled and not disable_tools:
             runnable = AgentAssistantChat(adapter=assistant_adapter, history_manager=history_manager)
         else:
@@ -74,8 +73,7 @@ def create_experiment_runnable(
         trace_service=trace_service,
     )
 
-    runnable = None
-    chat_adapter = ChatAdapter.for_experiment(experiment=experiment, session=session, trace_service=trace_service)
+    chat_adapter = ChatAdapter.for_experiment(experiment=experiment, session=session)
     if experiment.tools_enabled and not disable_tools:
         runnable = AgentLLMChat(adapter=chat_adapter, history_manager=history_manager)
     else:
@@ -337,9 +335,15 @@ class AssistantChat(RunnableSerializable[dict, ChainOutput]):
         from apps.assistants.sync import get_and_store_openai_file
 
         client = self.adapter.assistant_client
+
+        # We only want to the last message so that don't show 'thinking' messages
+        # Don't iterate to avoid loading more pages
+        messages_list = client.beta.threads.messages.list(thread_id, run_id=run_id, order="desc", limit=1).data
+        if not messages_list:
+            return "", []
+
         chat = self.adapter.session.chat
         session_id = self.adapter.session.id
-
         team = self.adapter.session.team
         assistant_file_ids = ToolResources.objects.filter(assistant=self.adapter.assistant).values_list("files")
         assistant_files_ids = File.objects.filter(
@@ -350,62 +354,63 @@ class AssistantChat(RunnableSerializable[dict, ChainOutput]):
         image_file_attachments = []
         file_path_attachments = []
         output_message = ""
-        for message in client.beta.threads.messages.list(thread_id, run_id=run_id):
-            for message_content in message.content:
-                if message_content.type == "image_file":
-                    if created_file := self._create_image_file_from_image_message(client, message_content.image_file):
-                        image_file_attachments.append(created_file)
-                        file_ids.add(created_file.external_id)
 
-                        team_slug = team.slug
-                        file_link = f"file:{team_slug}:{session_id}:{created_file.id}"
-                        output_message += f"![{created_file.name}]({file_link})\n"
+        message = messages_list[0]
+        for message_content in message.content:
+            if message_content.type == "image_file":
+                if created_file := self._create_image_file_from_image_message(client, message_content.image_file):
+                    image_file_attachments.append(created_file)
+                    file_ids.add(created_file.external_id)
 
-                elif message_content.type == "text":
-                    message_content_value = message_content.text.value
+                    team_slug = team.slug
+                    file_link = f"file:{team_slug}:{session_id}:{created_file.id}"
+                    output_message += f"![{created_file.name}]({file_link})\n"
 
-                    annotations = message_content.text.annotations
-                    for idx, annotation in enumerate(annotations):
-                        file_id = None
-                        file_ref_text = annotation.text
-                        if annotation.type == "file_citation":
-                            file_citation = annotation.file_citation
-                            file_id = file_citation.file_id
-                            file_name, file_link = self._get_file_link_for_citation(
-                                file_id=file_id, forbidden_file_ids=assistant_files_ids
-                            )
+            elif message_content.type == "text":
+                message_content_value = message_content.text.value
 
-                            # Original citation text example:【6:0†source】
-                            if self.adapter.citations_enabled:
-                                message_content_value = message_content_value.replace(file_ref_text, f" [{idx}]")
-                                if file_link:
-                                    message_content_value += f"\n[{idx}]: {file_link}"
-                                else:
-                                    message_content_value += f"\n\\[{idx}\\]: {file_name}"
+                annotations = message_content.text.annotations
+                for idx, annotation in enumerate(annotations):
+                    file_id = None
+                    file_ref_text = annotation.text
+                    if annotation.type == "file_citation":
+                        file_citation = annotation.file_citation
+                        file_id = file_citation.file_id
+                        file_name, file_link = self._get_file_link_for_citation(
+                            file_id=file_id, forbidden_file_ids=assistant_files_ids
+                        )
+
+                        # Original citation text example:【6:0†source】
+                        if self.adapter.citations_enabled:
+                            message_content_value = message_content_value.replace(file_ref_text, f" [{idx}]")
+                            if file_link:
+                                message_content_value += f"\n[{idx}]: {file_link}"
                             else:
-                                message_content_value = message_content_value.replace(file_ref_text, "")
+                                message_content_value += f"\n\\[{idx}\\]: {file_name}"
+                        else:
+                            message_content_value = message_content_value.replace(file_ref_text, "")
 
-                        elif annotation.type == "file_path":
-                            file_path = annotation.file_path
-                            file_id = file_path.file_id
-                            created_file = get_and_store_openai_file(
-                                client=client,
-                                file_id=file_id,
-                                team_id=team.id,
-                            )
-                            # Original citation text example: sandbox:/mnt/data/the_file.csv.
-                            # This is the link part in what looks like
-                            # [Download the CSV file](sandbox:/mnt/data/the_file.csv)
-                            message_content_value = message_content_value.replace(
-                                file_ref_text, f"file:{team.slug}:{session_id}:{created_file.id}"
-                            )
-                            file_path_attachments.append(created_file)
-                        file_ids.add(file_id)
+                    elif annotation.type == "file_path":
+                        file_path = annotation.file_path
+                        file_id = file_path.file_id
+                        created_file = get_and_store_openai_file(
+                            client=client,
+                            file_id=file_id,
+                            team_id=team.id,
+                        )
+                        # Original citation text example: sandbox:/mnt/data/the_file.csv.
+                        # This is the link part in what looks like
+                        # [Download the CSV file](sandbox:/mnt/data/the_file.csv)
+                        message_content_value = message_content_value.replace(
+                            file_ref_text, f"file:{team.slug}:{session_id}:{created_file.id}"
+                        )
+                        file_path_attachments.append(created_file)
+                    file_ids.add(file_id)
 
-                    output_message += message_content_value + "\n"
-                else:
-                    # Ignore any other type for now
-                    pass
+                output_message += message_content_value + "\n"
+            else:
+                # Ignore any other type for now
+                pass
 
         # Attach the generated files to the chat object as an annotation
         if file_path_attachments:

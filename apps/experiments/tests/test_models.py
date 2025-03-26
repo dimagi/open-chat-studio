@@ -382,14 +382,14 @@ class TestExperimentSession:
 
     @pytest.mark.parametrize("fail_silently", [True, False])
     @patch("apps.chat.channels.ChannelBase.from_experiment_session")
-    @patch("apps.chat.bots.TopicBot.process_input")
-    def test_ad_hoc_message(self, process_input, from_experiment_session, fail_silently, experiment_session):
+    @patch("apps.chat.bots.EventBot.get_user_message")
+    def test_ad_hoc_message(self, get_user_message, from_experiment_session, fail_silently, experiment_session):
         mock_channel = Mock()
         mock_channel.send_message_to_user = Mock()
         if not fail_silently:
             mock_channel.send_message_to_user.side_effect = Exception("Cannot send message")
         from_experiment_session.return_value = mock_channel
-        process_input.return_value = "We're testing"
+        get_user_message.return_value = "We're testing"
 
         def _test():
             experiment_session.ad_hoc_bot_message(

@@ -45,6 +45,7 @@ def _create_event_view(trigger_form_class, request, team_slug: str, experiment_i
     context = {
         "action_form": action_form,
         "trigger_form": trigger_form,
+        "event_type": trigger_form_class._meta.model._meta.model_name,
     }
     return render(request, "events/manage_event.html", context)
 
