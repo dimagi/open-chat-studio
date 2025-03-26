@@ -37,7 +37,6 @@ from apps.pipelines.nodes.base import (
     Widgets,
     deprecated_node,
 )
-from apps.pipelines.nodes.helpers import ParticipantDataProxy
 from apps.pipelines.tasks import send_email_from_pipeline
 from apps.service_providers.exceptions import ServiceProviderConfigError
 from apps.service_providers.llm_service.adapters import AssistantAdapter, ChatAdapter
@@ -92,7 +91,7 @@ class RenderTemplate(PipelineNode):
                             or [],
                         }
                     )
-                proxy = ParticipantDataProxy(exp_session)
+                proxy = self.get_participant_data_proxy(state)
                 content["participant_data"] = proxy.get() or {}
 
             template = env.from_string(self.template_string)
@@ -485,7 +484,7 @@ class StaticRouterNode(RouterMixin, Passthrough):
         from apps.service_providers.llm_service.prompt_context import SafeAccessWrapper
 
         if self.data_source == self.DataSource.participant_data:
-            data = ParticipantDataProxy.from_state(state).get()
+            data = self.get_participant_data_proxy(state).get()
         else:
             data = state["temp_state"]
 
@@ -886,7 +885,7 @@ class CodeNode(PipelineNode):
 
         custom_globals = safe_globals.copy()
 
-        participant_data_proxy = ParticipantDataProxy.from_state(state)
+        participant_data_proxy = self.get_participant_data_proxy(state)
         custom_globals.update(
             {
                 "__builtins__": self._get_custom_builtins(),
