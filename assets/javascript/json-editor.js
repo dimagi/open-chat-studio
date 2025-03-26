@@ -63,7 +63,7 @@ class JsonEditor {
    */
   createErrorContainer() {
     this.errorContainer = document.createElement('div');
-    this.errorContainer.className = 'json-editor-error text-error text-sm mt-1';
+    this.errorContainer.className = 'json-editor-error text-error text-sm mt-1 transition-opacity duration-200 opacity-0';
     this.element.parentNode.insertBefore(this.errorContainer, this.element.nextSibling);
   }
   
@@ -73,6 +73,7 @@ class JsonEditor {
   setupEventListeners() {
     this.element.addEventListener('htmx:beforeRequest', () => {
       if (this.view) {
+        this.element.classList.add('opacity-60', 'cursor-not-allowed');
         this.view.dispatch({
           effects: this.readOnly.reconfigure(EditorState.readOnly.of(true))
         });
@@ -81,6 +82,7 @@ class JsonEditor {
 
     this.element.addEventListener('htmx:afterRequest', () => {
       if (this.view) {
+        this.element.classList.remove('opacity-60', 'cursor-not-allowed');
         this.view.dispatch({
           effects: this.readOnly.reconfigure(EditorState.readOnly.of(false))
         });
@@ -89,9 +91,70 @@ class JsonEditor {
   }
   
   /**
+   * Format the current JSON content
+   */
+  formatJSON() {
+    try {
+      // Get current content
+      const content = this.view.state.doc.toString();
+      
+      // Parse and re-stringify with formatting
+      const formatted = JSON.stringify(JSON.parse(content), null, 2);
+      
+      // Replace editor content
+      this.view.dispatch({
+        changes: {
+          from: 0,
+          to: this.view.state.doc.length,
+          insert: formatted
+        }
+      });
+      
+      // Show success indicator
+      const indicator = document.createElement('div');
+      indicator.className = 'absolute right-2 bottom-2 bg-success text-white text-xs py-1 px-2 rounded-md opacity-0 transition-opacity';
+      indicator.textContent = 'Formatted';
+      indicator.style.zIndex = '10';
+      this.element.appendChild(indicator);
+      
+      // Animate in then out
+      setTimeout(() => indicator.classList.remove('opacity-0'), 10);
+      setTimeout(() => {
+        indicator.classList.add('opacity-0');
+        setTimeout(() => indicator.remove(), 300);
+      }, 1500);
+      
+      return true;
+    } catch (e) {
+      // Update error container
+      this.errorContainer.textContent = `Format failed: ${e.message}`;
+      this.errorContainer.classList.remove('opacity-0');
+      
+      setTimeout(() => {
+        this.errorContainer.classList.add('opacity-0');
+      }, 3000);
+      
+      return false;
+    }
+  }
+  
+  /**
    * Create CodeMirror editor instance
    */
   createEditor() {
+    // Add Tailwind styling to the editor container
+    this.element.classList.add('border', 'rounded-md', 'overflow-hidden', 'shadow-sm', 'focus-within:ring-2', 'focus-within:ring-primary-focus', 'bg-base-100', 'relative');
+    
+    // Create format button
+    const formatBtn = document.createElement('button');
+    formatBtn.className = 'absolute bottom-2 right-2 z-10 text-xs bg-base-200 hover:bg-base-300 text-base-content px-2 py-1 rounded transition-colors';
+    formatBtn.textContent = 'Format';
+    formatBtn.addEventListener('click', (e) => {
+      e.preventDefault();
+      this.formatJSON();
+    });
+    this.element.appendChild(formatBtn);
+    
     this.view = new EditorView({
       doc: this.initialValue || "",
       parent: this.element,
@@ -101,7 +164,26 @@ class JsonEditor {
         linter(jsonParseLinter(), { delay: 250 }),
         lintGutter(),
         this.readOnly.of(EditorState.readOnly.of(false)),
-        EditorView.updateListener.of(this.handleEditorUpdate.bind(this))
+        EditorView.updateListener.of(this.handleEditorUpdate.bind(this)),
+        EditorView.theme({
+          "&": {
+            fontSize: "0.9rem",
+            height: "100%",
+            minHeight: "10rem",
+            maxHeight: "20rem"
+          },
+        }),
+        // Keyboard shortcut for formatting
+        EditorView.domEventHandlers({
+          keydown: (e) => {
+            // Alt+Shift+F for formatting
+            if (e.altKey && e.shiftKey && e.key === 'F') {
+              this.formatJSON();
+              return true;
+            }
+            return false;
+          }
+        })
       ]
     });
   }
