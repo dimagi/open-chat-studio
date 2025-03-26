@@ -180,6 +180,7 @@ class ParticipantDataProxy:
         """
         if self._scheduled_messages is None:
             from apps.events.models import ScheduledMessage
+
             experiment = self.session.experiment_id
             participant = self.session.participant_id
             team = self.session.experiment.team
