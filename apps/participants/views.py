@@ -109,7 +109,12 @@ class EditParticipantData(LoginAndTeamRequiredMixin, TemplateView, PermissionReq
     def post(self, request, team_slug, participant_id, experiment_id):
         experiment = get_object_or_404(Experiment, team__slug=team_slug, id=experiment_id)
         participant = get_object_or_404(Participant, team__slug=team_slug, id=participant_id)
-        new_data = json.loads(request.POST["participant-data"])
+        try:
+            new_data = json.loads(request.POST["participant-data"])
+        except json.JSONDecodeError:
+            return JsonResponse({"error": "Data must be a valid JSON object"}, status=400)
+        if not isinstance(new_data, dict):
+            return JsonResponse({"error": "Data must be a valid JSON object"}, status=400)
         ParticipantData.objects.update_or_create(
             participant=participant,
             experiment_id=experiment_id,

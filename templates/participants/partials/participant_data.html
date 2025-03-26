@@ -3,6 +3,7 @@
         {% csrf_token %}
         <div class="mb-4">
             <textarea x-model="data" x-on:input="validJson = isValidJSON(data)" name="participant-data" id="{{ experiment }}-data" class="textarea textarea-bordered mt-1 block w-full h-96">{{ participant_data|escape }}</textarea>
+            <p x-cloak x-show="!validJson" class="text-error text-sm mt-1">Data must be a valid JSON object</p>
         </div>
         <div class="flex items-center justify-between">
             <button class="btn btn-primary" id="submit-{{ experiment }}" type="submit" :disabled="!validJson">Update</button>

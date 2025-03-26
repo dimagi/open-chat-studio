@@ -45,8 +45,8 @@
 <script>
   function isValidJSON(data) {
     try {
-      JSON.parse(data);
-      return true;
+      const jsonData = JSON.parse(data);
+      return jsonData instanceof Object;
     } catch (err) {
       return false;
     }
