@@ -13,6 +13,7 @@ import requests
 from django.db import transaction
 from django.http import Http404
 from telebot import TeleBot
+from telebot.types import InputFile
 from telebot.util import antiflood, smart_split
 
 from apps.channels import audio
@@ -713,8 +714,18 @@ class TelegramChannel(ChannelBase):
         )
 
     def send_text_to_user(self, text: str, attached_files: list[File] = None):
+        attached_files = attached_files or []
+
         for message_text in smart_split(text):
             antiflood(self.telegram_bot.send_message, self.participant_identifier, text=message_text)
+
+        # TODO: For large files, send a link instead
+        for file in attached_files:
+            # Send a chat action for each file to keep the user in the loop
+            self.telegram_bot.send_chat_action(chat_id=self.participant_identifier, action="upload_document")
+            antiflood(
+                self.telegram_bot.send_document, chat_id=self.participant_identifier, document=InputFile(file.file.path)
+            )
 
     def get_message_audio(self) -> BytesIO:
         file_url = self.telegram_bot.get_file_url(self.message.media_id)
@@ -741,7 +752,7 @@ class WhatsappChannel(ChannelBase):
         from_number = self.experiment_channel.extra_data.get("number")
         to_number = self.participant_identifier
         self.messaging_service.send_text_message(
-            text, from_=from_number, to=to_number, platform=ChannelPlatform.WHATSAPP
+            text, from_=from_number, to=to_number, platform=ChannelPlatform.WHATSAPP, attached_files=attached_files
         )
 
     @property
