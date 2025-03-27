@@ -6,5 +6,5 @@ app_name = "files"
 
 urlpatterns = [
     path("<int:pk>/", views.FileView.as_view(), name="base"),
-    path("public/<int:pk>/download/", views.download_file, name="public_download"),
+    path("public/<int:pk>/download/", views.public_file_download, name="public_download"),
 ]

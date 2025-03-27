@@ -153,7 +153,7 @@ class BaseDeleteFileView(LoginAndTeamRequiredMixin, View, PermissionRequiredMixi
         return HttpResponse()
 
 
-def download_file(request, team_slug: str, pk: int):
+def public_file_download(request, team_slug: str, pk: int):
     resource = get_object_or_404(File, id=pk, team__slug=team_slug)
     try:
         file = resource.file.open()
