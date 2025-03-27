@@ -491,9 +491,9 @@ def base_single_experiment_view(request, team_slug, experiment_id, template_name
         "deployed_version": deployed_version,
         **_get_events_context(experiment, team_slug, request.origin),
         **_get_routes_context(experiment, team_slug),
-        **_get_terminal_bots_context(experiment, team_slug),
     }
-
+    if active_tab != "chatbots":
+        context.update(**_get_terminal_bots_context(experiment, team_slug))
     return TemplateResponse(request, template_name, context)
 
 

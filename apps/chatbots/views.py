@@ -48,22 +48,18 @@ class ChatbotExperimentTableView(BaseExperimentTableView):
         return queryset.filter(pipeline__isnull=False)
 
 
-# class BaseChatbotView(BaseExperimentView):
-#     template_name = "chatbots/chatbot_form.html"
-#     form_class = ChatbotForm
-#     active_tab = "chatbots"
-#
-#     def get_success_url(self):
-#         return reverse("chatbots:edit", args=[self.request.team.slug, self.object.pipeline.id])
-
-
 class CreateChatbot(CreateExperiment, BaseExperimentView):
     template_name = "chatbots/chatbot_form.html"
     form_class = ChatbotForm
-    active_tab = "chatbots"
     title = "Create Chatbot"
     button_title = "Create"
     permission_required = "experiments.add_experiment"
+
+    @property
+    def extra_context(self):
+        context = super().extra_context
+        context["active_tab"] = "chatbots"
+        return context
 
     def get_success_url(self):
         return reverse("chatbots:edit", args=[self.request.team.slug, self.object.pipeline.id])
@@ -124,6 +120,7 @@ class ChatbotVersionsTableView(ExperimentVersionsTableView):
 
 
 @login_and_team_required
+@permission_required("experiments.view_experiment", raise_exception=True)
 def chatbot_version_details(request, team_slug: str, experiment_id: int, version_number: int):
     return experiment_version_details(request, team_slug, experiment_id, version_number)
 

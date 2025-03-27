@@ -1,4 +1,5 @@
 import pytest
+from django.test import RequestFactory
 
 from apps.chatbots.forms import ChatbotForm
 from apps.experiments.models import Experiment
@@ -9,7 +10,10 @@ from apps.pipelines.models import Pipeline
 def test_chatbot_form_valid_data(team_with_users):
     team = team_with_users
     user = team.members.first()
-    request = type("Request", (object,), {"team": team, "user": user})()
+    request = RequestFactory().get("/")
+    request.team = team
+    request.user = user
+
     form_data = {
         "name": "Test Chatbot",
         "description": "A chatbot for testing",
@@ -28,7 +32,10 @@ def test_chatbot_form_valid_data(team_with_users):
 def test_chatbot_form_missing_name(team_with_users):
     team = team_with_users
     user = team.members.first()
-    request = type("Request", (object,), {"team": team, "user": user})()
+    request = RequestFactory().get("/")
+    request.team = team
+    request.user = user
+
     form_data = {
         "name": "",  # Missing name
         "description": "A chatbot without a name",
@@ -44,7 +51,9 @@ def test_chatbot_form_missing_name(team_with_users):
 def test_chatbot_form_pipeline_creation(team_with_users):
     team = team_with_users
     user = team.members.first()
-    request = type("Request", (object,), {"team": team, "user": user})()
+    request = RequestFactory().get("/")
+    request.user = user
+    request.team = team
     form_data = {
         "name": "Chatbot with Pipeline",
         "description": "Testing pipeline creation",
