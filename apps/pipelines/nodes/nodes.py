@@ -16,7 +16,7 @@ from langchain_core.messages import BaseMessage
 from langchain_core.prompts import MessagesPlaceholder, PromptTemplate
 from langchain_core.runnables import RunnableLambda, RunnablePassthrough
 from langchain_text_splitters import RecursiveCharacterTextSplitter
-from pydantic import BaseModel, Field, create_model, field_validator
+from pydantic import BaseModel, Field, create_model, field_validator, model_validator
 from pydantic.config import ConfigDict
 from pydantic_core import PydanticCustomError
 from pydantic_core.core_schema import FieldValidationInfo
@@ -247,6 +247,13 @@ class LLMResponseWithPrompt(LLMResponse, HistoryMixin):
         default="You are a helpful assistant. Answer the user's query as best you can",
         json_schema_extra=UiSchema(widget=Widgets.expandable_text),
     )
+    collection_id: int | None = Field(
+        None,
+        title="Media",
+        json_schema_extra=UiSchema(
+            widget=Widgets.select, options_source=OptionsSource.collection, flag_required="document_management"
+        ),
+    )
     tools: list[str] = Field(
         default_factory=list,
         description="The tools to enable for the bot",
@@ -258,16 +265,22 @@ class LLMResponseWithPrompt(LLMResponse, HistoryMixin):
         json_schema_extra=UiSchema(widget=Widgets.multiselect, options_source=OptionsSource.custom_actions),
     )
 
-    @field_validator("tools", mode="before")
-    def check_prompt_variables(cls, value: str, info: FieldValidationInfo):
-        if not value:
-            return []
-        context = {"prompt": info.data["prompt"], "source_material": info.data["source_material_id"], "tools": value}
+    @model_validator(mode="after")
+    def check_prompt_variables(self):
+        context = {
+            "prompt": self.prompt,
+            "source_material": self.source_material_id,
+            "tools": self.tools,
+            "media": self.collection_id,
+        }
         try:
-            validate_prompt_variables(form_data=context, prompt_key="prompt", known_vars=set(PromptVars.values))
+            validate_prompt_variables(context=context, prompt_key="prompt", known_vars=set(PromptVars.values))
         except ValidationError as e:
-            raise PydanticCustomError("invalid_prompt", e.error_dict["prompt"][0].message)
-        return value
+            raise PydanticCustomError("invalid_prompt", e.error_dict["prompt"][0].message, {"field": "prompt"})
+
+    @field_validator("tools", mode="before")
+    def ensure_value(cls, value: str):
+        return value or []
 
     @field_validator("custom_actions", mode="before")
     def validate_custom_actions(cls, value):

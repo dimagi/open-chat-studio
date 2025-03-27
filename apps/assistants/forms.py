@@ -71,7 +71,7 @@ class OpenAiAssistantForm(forms.ModelForm):
     def clean(self):
         cleaned_data = super().clean()
         validate_prompt_variables(
-            form_data=cleaned_data,
+            context=cleaned_data,
             prompt_key="instructions",
             known_vars=OpenAiAssistant.ALLOWED_INSTRUCTIONS_VARIABLES,
         )

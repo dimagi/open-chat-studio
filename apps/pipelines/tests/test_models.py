@@ -108,6 +108,7 @@ class TestPipeline:
         llm_node = llm_response_with_prompt_node(
             str(provider.id),
             str(provider_model.id),
+            source_material_id=1,
             prompt="Help the user. User data: {participant_data}. Source material: {source_material}",
             history_type="global",
         )
