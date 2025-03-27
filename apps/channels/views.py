@@ -129,7 +129,6 @@ def _new_api_message(request, experiment_id: uuid, version=None):
     session = None
     if session_id := message_data.get("session"):
         try:
-            # TODO: Support ability to select a specific version
             experiment = Experiment.objects.get(public_id=experiment_id)
             session = ExperimentSession.objects.select_related("experiment", "experiment_channel").get(
                 external_id=session_id,
