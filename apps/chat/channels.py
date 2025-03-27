@@ -381,7 +381,11 @@ class ChannelBase(ABC):
         ]
 
     def _user_gave_consent(self) -> bool:
-        return self.user_query.strip() == USER_CONSENT_TEXT
+        return (
+            self.message
+            and self.message.content_type == MESSAGE_TYPES.TEXT
+            and self.message.message_text.strip() == USER_CONSENT_TEXT
+        )
 
     def _extract_user_query(self) -> str:
         if self.message.content_type == MESSAGE_TYPES.VOICE:
@@ -554,10 +558,14 @@ class ChannelBase(ABC):
         )
 
     def _is_reset_conversation_request(self):
-        return self.user_query.lower().strip() == ExperimentChannel.RESET_COMMAND
+        return (
+            self.message
+            and self.message.content_type == MESSAGE_TYPES.TEXT
+            and self.message.message_text.lower().strip() == ExperimentChannel.RESET_COMMAND
+        )
 
     def is_message_type_supported(self) -> bool:
-        return self.message.content_type is not None and self.message.content_type in self.supported_message_types
+        return self.message and self.message.content_type in self.supported_message_types
 
     def _unsupported_message_type_response(self):
         """Generates a suitable response to the user when they send unsupported messages"""
