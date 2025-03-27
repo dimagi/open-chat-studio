@@ -122,8 +122,8 @@ class ChannelBase(ABC):
     ):
         self.experiment = experiment
         self.experiment_channel = experiment_channel
-        self.experiment_session = experiment_session
-        self.message: BaseMessage = None
+        self._experiment_session = experiment_session
+        self._message: BaseMessage = None
         self._participant_identifier = experiment_session.participant.identifier if experiment_session else None
         self._is_user_message = False
 
@@ -148,13 +148,40 @@ class ChannelBase(ABC):
             session_external_id,
         )
 
+    @property
+    def experiment_session(self):
+        return self._experiment_session
+
+    @experiment_session.setter
+    def experiment_session(self, value):
+        self._experiment_session = value
+        self.reset_bot()
+
+    @property
+    def message(self):
+        return self._message
+
+    @message.setter
+    def message(self, value):
+        self._message = value
+        self.reset_bot()
+        self.reset_user_query()
+
     @cached_property
     def messaging_service(self):
         return self.experiment_channel.messaging_provider.get_messaging_service()
 
     @cached_property
     def bot(self):
+        if not self.experiment_session:
+            raise ChannelException("Bot cannot be accessed without an experiment session")
         return get_bot(self.experiment_session, experiment=self.experiment)
+
+    def reset_bot(self):
+        try:
+            del self.bot
+        except AttributeError:
+            pass
 
     @property
     def participant_identifier(self) -> str:
@@ -241,18 +268,14 @@ class ChannelBase(ABC):
         """
         return self._extract_user_query()
 
-    def _add_message(self, message: BaseMessage):
-        """Adds the message to the handler in order to extract session information"""
+    def reset_user_query(self):
         try:
             del self.user_query
         except AttributeError:
             pass
 
-        try:
-            del self.bot
-        except AttributeError:
-            pass
-
+    def _add_message(self, message: BaseMessage):
+        """Adds the message to the handler in order to extract session information"""
         self.message = message
 
         if not self._participant_is_allowed():
