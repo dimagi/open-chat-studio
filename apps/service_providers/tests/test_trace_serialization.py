@@ -1,6 +1,6 @@
 from apps.channels.datamodels import Attachment
 from apps.experiments.models import ExperimentSession
-from apps.service_providers.tracing.service import serialize_input_output_dict
+from apps.service_providers.tracing.callback import serialize_input_output_dict
 
 
 def test_serialize_trace_data():

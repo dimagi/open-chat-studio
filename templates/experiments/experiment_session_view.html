@@ -42,7 +42,7 @@
     </div>
 
     <div role="tablist" class="mt-4 tabs tabs-bordered max-w-5xl">
-      <input type="radio" name="experiment_tabs-{{ session.id }}" role="tab" class="tab" aria-label="Messages" checked/>
+      <input type="radio" name="experiment_tabs-{{ experiment_session.id }}" role="tab" class="tab" aria-label="Messages" checked/>
       <div role="tabpanel" class="tab-content pt-3">
         <div id="messages-container" class="min-w-full">
           <div class="flex items-center justify-center p-10">
@@ -51,21 +51,27 @@
           </div>
         </div>
         {% if perms.experiments.view_participantdata %}
-          <input type="radio" name="experiment_tabs-{{ session.id }}" role="tab" class="tab" aria-label="Participant Data" />
+          <input type="radio" name="experiment_tabs-{{ experiment_session.id }}" role="tab" class="tab" aria-label="Participant Data" />
           <div role="tabpanel" class="tab-content pt-3">
             <div class="p-3 border rounded-lg">
             <pre><code class="text-sm">{{ participant_data|escape }}</code></pre>
             </div>
           </div>
-          <input type="radio" name="experiment_tabs-{{ session.id }}" role="tab" class="tab" aria-label="Participant Schedules" />
+          <input type="radio" name="experiment_tabs-{{ experiment_session.id }}" role="tab" class="tab" aria-label="Participant Schedules" />
           <div role="tabpanel" class="tab-content pt-3">
             <div class="border rounded-lg divide-y">
               {% include "participants/partials/participant_schedules.html" %}
             </div>
           </div>
         {% endif %}
+        <input type="radio" name="experiment_tabs-{{ experiment_session.id }}" role="tab" class="tab" aria-label="Session State" />
+        <div role="tabpanel" class="tab-content pt-3">
+          <div class="p-3 border rounded-lg">
+            <pre><code class="text-sm">{{ experiment_session.state|escape }}</code></pre>
+          </div>
+        </div>
         {% if perms.events.view_eventlog %}
-          <input type="radio" name="experiment_tabs-{{ session.id }}" role="tab" class="tab" aria-label="Experiment Events"/>
+          <input type="radio" name="experiment_tabs-{{ experiment_session.id }}" role="tab" class="tab" aria-label="Experiment Events"/>
           <div role="tabpanel" class="tab-content pt-3">
             {% for event_trigger in event_triggers %}
               <div class="max-w-5xl mt-4 border rounded-2xl">
@@ -75,7 +81,6 @@
           </div>
         {% endif %}
       </div>
-
     </div>
 {% endblock %}
 

@@ -104,6 +104,7 @@ PROJECT_APPS = [
     "apps.slack",
     "apps.sso",
     "apps.participants",
+    "apps.chatbots",
 ]
 
 SPECIAL_APPS = [
@@ -555,6 +556,7 @@ DOCUMENTATION_LINKS = {
     "node_email": "/concepts/pipelines/nodes/#email",
     "node_extract_structured_data": "/concepts/pipelines/nodes/#extract-structured-data",
     "node_update_participant_data": "/concepts/pipelines/nodes/#update-participant-data",
+    "chatbots": "/concepts/chatbots/",
 }
 # Available in templates as `docs_base_url`. Also see `apps.generics.help` and `generics/help.html`
 DOCUMENTATION_BASE_URL = env("DOCUMENTATION_BASE_URL", default="https://docs.openchatstudio.com")
@@ -627,3 +629,10 @@ COMMCARE_CONNECT_GET_CONNECT_ID_URL = f"{COMMCARE_CONNECT_SERVER_URL}/o/userinfo
 
 # AI helper
 AI_HELPER_API_KEY = env("AI_HELPER_API_KEY", default="")
+
+
+# Document Management
+MAX_SUMMARY_LENGTH = 1024
+MEDIA_SUPPORTED_FILE_TYPES = (
+    ".txt,.pdf,.doc,.docx,.xls,.xlsx,.csv,.jpg,.jpeg,.png,.gif,.bmp,.webp,.svg,.mp4,.mov,.avi,.mp3,.wav"
+)

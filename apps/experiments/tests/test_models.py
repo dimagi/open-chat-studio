@@ -19,6 +19,7 @@ from apps.experiments.models import (
     SafetyLayer,
     SyntheticVoice,
 )
+from apps.service_providers.llm_service.prompt_context import ParticipantDataProxy
 from apps.utils.factories.assistants import OpenAiAssistantFactory
 from apps.utils.factories.events import (
     EventActionFactory,
@@ -362,7 +363,8 @@ class TestExperimentSession:
             team=participant.team,
             data={"first_name": "Jimmy"},
         )
-        data = session.get_participant_data()
+        data_proxy = ParticipantDataProxy(session)
+        data = data_proxy.get()
         assert data == {
             "name": participant.name,
             "first_name": "Jimmy",
@@ -371,53 +373,23 @@ class TestExperimentSession:
         participant_data.data["name"] = "James Newman"
         participant_data.save()
 
-        del session.participant_data_from_experiment
-        data = session.get_participant_data()
+        data_proxy = ParticipantDataProxy(session)
+        data = data_proxy.get()
         assert data == {
             "name": "James Newman",
             "first_name": "Jimmy",
         }
 
-    @freeze_time("2022-01-01 08:00:00")
-    @pytest.mark.parametrize("use_participant_tz", [False, True])
-    def test_get_participant_data_timezone(self, use_participant_tz):
-        participant = ParticipantFactory()
-        session = ExperimentSessionFactory(participant=participant, team=participant.team)
-        event_action = event_action, params = self._construct_event_action(
-            time_period=TimePeriod.DAYS, experiment_id=session.experiment.id
-        )
-        ScheduledMessageFactory(
-            experiment=session.experiment,
-            team=session.team,
-            participant=session.participant,
-            action=event_action,
-        )
-        ParticipantData.objects.create(
-            experiment=session.experiment,
-            participant=participant,
-            team=participant.team,
-            data={"name": "Tester", "timezone": "Africa/Johannesburg"},
-        )
-        expected_data = {
-            "name": "Tester",
-            "timezone": "Africa/Johannesburg",
-        }
-        participant_data = session.get_participant_data(use_participant_tz=use_participant_tz)
-        # test_get_participant_scheduled_messages is testing the schedule format, so pop it so we don't have to update
-        # this test as well when we update the string representation of the schedule
-        participant_data.pop("scheduled_messages")
-        assert participant_data == expected_data
-
     @pytest.mark.parametrize("fail_silently", [True, False])
     @patch("apps.chat.channels.ChannelBase.from_experiment_session")
-    @patch("apps.chat.bots.TopicBot.process_input")
-    def test_ad_hoc_message(self, process_input, from_experiment_session, fail_silently, experiment_session):
+    @patch("apps.chat.bots.EventBot.get_user_message")
+    def test_ad_hoc_message(self, get_user_message, from_experiment_session, fail_silently, experiment_session):
         mock_channel = Mock()
         mock_channel.send_message_to_user = Mock()
         if not fail_silently:
             mock_channel.send_message_to_user.side_effect = Exception("Cannot send message")
         from_experiment_session.return_value = mock_channel
-        process_input.return_value = "We're testing"
+        get_user_message.return_value = "We're testing"
 
         def _test():
             experiment_session.ad_hoc_bot_message(

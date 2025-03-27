@@ -12,8 +12,7 @@ from apps.experiments.models import ParticipantData
 from apps.pipelines.exceptions import PipelineBuildError, PipelineNodeBuildError
 from apps.pipelines.logging import LoggingCallbackHandler
 from apps.pipelines.nodes.base import PipelineState
-from apps.pipelines.nodes.helpers import ParticipantDataProxy
-from apps.pipelines.nodes.nodes import EndNode, StartNode, StaticRouterNode
+from apps.pipelines.nodes.nodes import EndNode, RouterNode, StartNode, StaticRouterNode
 from apps.pipelines.tests.utils import (
     assistant_node,
     boolean_node,
@@ -32,6 +31,7 @@ from apps.pipelines.tests.utils import (
     state_key_router_node,
 )
 from apps.service_providers.llm_service.history_managers import PipelineHistoryManager
+from apps.service_providers.llm_service.prompt_context import ParticipantDataProxy
 from apps.service_providers.llm_service.runnables import ChainOutput
 from apps.utils.factories.assistants import OpenAiAssistantFactory
 from apps.utils.factories.experiment import (
@@ -372,6 +372,33 @@ def test_router_node(get_llm_service, provider, provider_model, pipeline, experi
     assert output["messages"][-1] == "D d"
     output = runnable.invoke(PipelineState(messages=["z"], experiment_session=experiment_session))
     assert output["messages"][-1] == "A z"
+
+
+@pytest.mark.django_db()
+@mock.patch("apps.service_providers.models.LlmProvider.get_llm_service")
+def test_router_node_prompt(get_llm_service, provider, provider_model, pipeline, experiment_session):
+    service = build_fake_llm_echo_service()
+    get_llm_service.return_value = service
+
+    node = RouterNode(
+        name="test router",
+        prompt="PD: {participant_data}\nDT: {current_datetime}",
+        keywords=["A"],
+        llm_provider_id=provider.id,
+        llm_provider_model_id=provider_model.id,
+    )
+    node.process_conditional(
+        PipelineState(
+            outputs={"123": {}},
+            messages=["a"],
+            experiment_session=experiment_session,
+        ),
+        node_id="123",
+    )
+
+    assert len(service.llm.get_call_messages()[0]) == 2
+    proxy = ParticipantDataProxy(experiment_session)
+    assert str(proxy.get()) in service.llm.get_call_messages()[0][0].content
 
 
 @django_db_with_data(available_apps=("apps.service_providers",))

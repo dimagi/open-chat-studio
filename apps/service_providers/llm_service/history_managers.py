@@ -1,3 +1,5 @@
+from __future__ import annotations
+
 from abc import ABCMeta, abstractmethod
 from typing import Self
 
@@ -27,6 +29,77 @@ class BaseHistoryManager(metaclass=ABCMeta):
         output_message_metadata: dict,
     ):
         pass
+
+
+class ExperimentHistoryManager(BaseHistoryManager):
+    def __init__(
+        self,
+        session: ExperimentSession,
+        experiment: Experiment | None = None,
+        max_token_limit: int | None = None,
+        chat_model: BaseChatModel | None = None,
+        trace_service=None,
+        history_mode: str | None = None,
+    ):
+        self.session = session
+        self.max_token_limit = max_token_limit
+        self.chat_model = chat_model
+        self.trace_service = trace_service
+        self.ai_message = None
+        self.history_mode = history_mode
+
+        # TODO: Think about passing this in as context metadata rather
+        self.experiment_version_number = experiment.version_number
+        self.experiment_is_a_version = experiment.is_a_version
+
+    @classmethod
+    def for_llm_chat(
+        cls,
+        session: ExperimentSession,
+        experiment: Experiment,
+        trace_service=None,
+    ) -> Self:
+        return cls(
+            session=session,
+            experiment=experiment,
+            max_token_limit=experiment.max_token_limit,
+            chat_model=experiment.get_chat_model(),
+            trace_service=trace_service or experiment.trace_service,
+        )
+
+    @classmethod
+    def for_assistant(cls, session: ExperimentSession, experiment: Experiment) -> Self:
+        return cls(session=session, experiment=experiment)
+
+    def get_chat_history(self, input_messages: list):
+        return compress_chat_history(
+            self.session.chat,
+            llm=self.chat_model,
+            max_token_limit=self.max_token_limit,
+            input_messages=input_messages,
+            history_mode=self.history_mode,
+        )
+
+    def add_messages_to_history(
+        self,
+        input: str,
+        save_input_to_history: bool,
+        input_message_metadata: dict,
+        output: str,
+        save_output_to_history: bool,
+        experiment_tag: str,
+        output_message_metadata: dict,
+    ):
+        if save_input_to_history:
+            self.save_message_to_history(input, type_=ChatMessageType.HUMAN, message_metadata=input_message_metadata)
+
+        if output is not None and save_output_to_history:
+            self.save_message_to_history(
+                output,
+                type_=ChatMessageType.AI,
+                message_metadata=output_message_metadata,
+                experiment_tag=experiment_tag,
+            )
 
     def save_message_to_history(
         self,
@@ -68,80 +141,8 @@ class BaseHistoryManager(metaclass=ABCMeta):
 
     def get_trace_metadata(self) -> dict:
         if self.trace_service:
-            trace_info = self.trace_service.get_current_trace_info()
-            if trace_info:
-                return {
-                    "trace_info": {**trace_info.model_dump(), "trace_provider": self.trace_service.type},
-                }
+            return self.trace_service.get_trace_metadata()
         return {}
-
-
-class ExperimentHistoryManager(BaseHistoryManager):
-    def __init__(
-        self,
-        session: ExperimentSession,
-        experiment: Experiment | None = None,
-        max_token_limit: int | None = None,
-        chat_model: BaseChatModel | None = None,
-        trace_service=None,
-    ):
-        self.session = session
-        self.max_token_limit = max_token_limit
-        self.chat_model = chat_model
-        self.trace_service = trace_service
-        self.ai_message = None
-
-        # TODO: Think about passing this in as context metadata rather
-        self.experiment_version_number = experiment.version_number
-        self.experiment_is_a_version = experiment.is_a_version
-
-    @classmethod
-    def for_llm_chat(
-        cls,
-        session: ExperimentSession,
-        experiment: Experiment,
-        trace_service=None,
-    ) -> Self:
-        return cls(
-            session=session,
-            experiment=experiment,
-            max_token_limit=experiment.max_token_limit,
-            chat_model=experiment.get_chat_model(),
-            trace_service=trace_service or experiment.trace_service,
-        )
-
-    @classmethod
-    def for_assistant(cls, session: ExperimentSession, experiment: Experiment) -> Self:
-        return cls(session=session, experiment=experiment)
-
-    def get_chat_history(self, input_messages: list):
-        return compress_chat_history(
-            self.session.chat,
-            llm=self.chat_model,
-            max_token_limit=self.max_token_limit,
-            input_messages=input_messages,
-        )
-
-    def add_messages_to_history(
-        self,
-        input: str,
-        save_input_to_history: bool,
-        input_message_metadata: dict,
-        output: str,
-        save_output_to_history: bool,
-        experiment_tag: str,
-        output_message_metadata: dict,
-    ):
-        if save_input_to_history:
-            self.save_message_to_history(input, type_=ChatMessageType.HUMAN, message_metadata=input_message_metadata)
-
-        if output is not None and save_output_to_history:
-            self.save_message_to_history(
-                output,
-                type_=ChatMessageType.AI,
-                message_metadata=output_message_metadata,
-                experiment_tag=experiment_tag,
-            )
 
 
 class PipelineHistoryManager(BaseHistoryManager):
@@ -153,6 +154,7 @@ class PipelineHistoryManager(BaseHistoryManager):
         history_name: str | None = None,
         max_token_limit: int | None = None,
         chat_model: BaseChatModel | None = None,
+        history_mode: str | None = None,
     ):
         self.session = session
         self.node_id = node_id
@@ -160,11 +162,11 @@ class PipelineHistoryManager(BaseHistoryManager):
         self.history_name = history_name
         self.max_token_limit = max_token_limit
         self.chat_model = chat_model
-        self.trace_service = session.experiment.trace_service if session else None
         self.ai_message = None
 
         self.input_message_metadata = None
         self.output_message_metadata = None
+        self.history_mode = history_mode
 
     @classmethod
     def for_llm_chat(

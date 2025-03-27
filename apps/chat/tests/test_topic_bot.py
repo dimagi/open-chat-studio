@@ -1,5 +1,5 @@
 from unittest import mock
-from unittest.mock import patch
+from unittest.mock import Mock, patch
 
 import pytest
 
@@ -9,7 +9,7 @@ from apps.chat.models import ChatMessage, ChatMessageType
 from apps.experiments.models import ExperimentRoute, ExperimentRouteType, ExperimentSession, SafetyLayer
 from apps.service_providers.models import TraceProvider
 from apps.utils.factories.experiment import ExperimentFactory, ExperimentSessionFactory
-from apps.utils.langchain import build_fake_llm_service, mock_experiment_llm
+from apps.utils.langchain import build_fake_llm_service, mock_llm
 
 
 @pytest.mark.django_db()
@@ -49,7 +49,7 @@ def test_bot_with_terminal_bot(get_output_check_cancellation):
 
     expected = "Sorry I can't help with that."
     bot = TopicBot(session)
-    with mock_experiment_llm(experiment, responses=[expected]):
+    with mock_llm(responses=[expected]):
         bot.process_input("What are we going to do?")
 
     assert session.chat.messages.count() == 2
@@ -75,18 +75,22 @@ def test_tracing_service():
     session = ExperimentSessionFactory()
     provider = TraceProvider(type="langfuse", config={})
     session.experiment.trace_provider = provider
-    service = "apps.service_providers.tracing.service.LangFuseTraceService"
+    service = "apps.service_providers.tracing.LangFuseTraceService"
     with (
         patch(f"{service}.get_callback") as mock_get_callback,
-        patch(f"{service}.get_current_trace_info") as mock_get_trace_info,
-        mock_experiment_llm(None, responses=["response"]),
+        patch(f"{service}.get_trace_metadata") as get_trace_metadata,
+        patch(f"{service}.end", Mock()),
+        mock_llm(responses=["response"]),
     ):
+        get_trace_metadata.return_value = {"trace": "demo"}
         bot = TopicBot(session)
         assert bot.process_input("test") == "response"
         mock_get_callback.assert_called_once_with(
-            participant_id=session.participant.identifier, session_id=str(session.external_id)
+            trace_name=session.experiment.name,
+            participant_id=session.participant.identifier,
+            session_id=str(session.external_id),
         )
-        assert mock_get_trace_info.call_count == 2
+        assert get_trace_metadata.call_count == 2
     bot.process_input("test")
 
 
@@ -113,7 +117,7 @@ def test_tracing_service_reentry():
         assert bot.process_input("test") == response
         mock_service.get_callback.assert_called_once()
 
-    with mock_experiment_llm(None, responses=["response1", "response2"]):
+    with mock_llm(responses=["response1", "response2"]):
         _run_bot_with_wrapped_service(session, "response1")
 
         # reload the session from the DB
