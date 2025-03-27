@@ -344,7 +344,7 @@ class AssistantChat(RunnableSerializable[dict, ChainOutput]):
         chat = self.adapter.session.chat
         session_id = self.adapter.session.id
         team = self.adapter.session.team
-        restricted_file_ids = self.adapter.get_restricted_file_ids()
+        assistant_file_ids = self.adapter.get_assistant_file_ids()
 
         file_ids = set()
         image_file_attachments = []
@@ -373,7 +373,9 @@ class AssistantChat(RunnableSerializable[dict, ChainOutput]):
                         file_citation = annotation.file_citation
                         file_id = file_citation.file_id
                         file_name, file_link = self._get_file_link_for_citation(
-                            file_id=file_id, forbidden_file_ids=restricted_file_ids
+                            file_id=file_id,
+                            assistant_file_ids=assistant_file_ids,
+                            allow_assistant_file_downloads=self.adapter.allow_assistant_file_downloads,
                         )
 
                         # Original citation text example:【6:0†source】
@@ -441,22 +443,25 @@ class AssistantChat(RunnableSerializable[dict, ChainOutput]):
         except Exception as ex:
             logger.exception(ex)
 
-    def _get_file_link_for_citation(self, file_id: str, forbidden_file_ids: list[str]) -> tuple[str, str | None]:
+    def _get_file_link_for_citation(
+        self, file_id: str, assistant_file_ids: list[str], allow_assistant_file_downloads: bool
+    ) -> tuple[str, str | None]:
         """Returns a file name and a link constructor for `file_id`. If `file_id` is a member of
         `forbidden_file_ids`, the link will be empty to prevent unauthorized access.
         """
         file_link = ""
 
         team = self.adapter.session.team
-        session_id = self.adapter.session.id
+        assistant_id = self.adapter.assistant.id
+        link_prefix = "assistant_file" if file_id in assistant_file_ids else "file"
         try:
             file = File.objects.get(external_id=file_id, team_id=team.id)
-            file_link = f"file:{team.slug}:{session_id}:{file.id}"
+            file_link = f"{link_prefix}:{team.slug}:{assistant_id}:{file.id}"
             file_name = file.name
         except File.MultipleObjectsReturned:
             logger.error("Multiple files with the same external ID", extra={"file_id": file_id, "team": team.slug})
             file = File.objects.filter(external_id=file_id, team_id=team.id).first()
-            file_link = f"file:{team.slug}:{session_id}:{file.id}"
+            file_link = f"{link_prefix}:{team.slug}:{assistant_id}:{file.id}"
             file_name = file.name
         except File.DoesNotExist:
             client = self.adapter.assistant_client
@@ -467,7 +472,7 @@ class AssistantChat(RunnableSerializable[dict, ChainOutput]):
                 logger.error(f"Failed to retrieve file {file_id} from OpenAI: {e}")
                 file_name = "Unknown File"
 
-        if file_id in forbidden_file_ids:
+        if not allow_assistant_file_downloads and file_id in assistant_file_ids:
             # Don't allow downloading assistant level files
             return file_name, None
 

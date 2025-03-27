@@ -274,13 +274,14 @@ class AssistantAdapter(BaseAdapter):
     def get_openai_assistant(self) -> OpenAIAssistantRunnable:
         return self.assistant.get_assistant()
 
-    def get_restricted_file_ids(self) -> list[str]:
-        if self.assistant.allow_file_downloads:
-            return []
-
+    def get_assistant_file_ids(self) -> list[str]:
         assistant_file_ids = ToolResources.objects.filter(assistant=self.assistant).values_list("files")
         return list(
             File.objects.filter(team_id=self.team.id, id__in=models.Subquery(assistant_file_ids)).values_list(
                 "external_id", flat=True
             )
         )
+
+    @property
+    def allow_assistant_file_downloads(self):
+        return self.assistant.allow_file_downloads
