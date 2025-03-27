@@ -11,6 +11,7 @@ from apps.channels.datamodels import TurnWhatsappMessage, TwilioMessage
 from apps.channels.models import ChannelPlatform
 from apps.channels.tasks import handle_turn_message, handle_twilio_message
 from apps.chat.channels import MESSAGE_TYPES
+from apps.chat.models import ChatMessage
 from apps.service_providers.speech_service import SynthesizedAudio
 from apps.utils.factories.channels import ExperimentChannelFactory
 
@@ -80,7 +81,7 @@ class TestTwilio:
         with patch("apps.service_providers.messaging_service.TwilioService.s3_client"), patch(
             "apps.service_providers.messaging_service.TwilioService.client"
         ):
-            get_llm_response_mock.return_value = "Hi"
+            get_llm_response_mock.return_value = ChatMessage(content="Hi")
             get_voice_transcript_mock.return_value = "Hi"
 
             handle_twilio_message(message_data=incoming_message, request_uri="", signature="")
@@ -130,7 +131,7 @@ class TestTurnio:
     ):
         """Test that the turnio integration can use the WhatsappChannel implementation"""
         synthesize_voice_mock.return_value = SynthesizedAudio(audio=BytesIO(b"123"), duration=10, format="mp3")
-        _get_bot_response.return_value = "Hi"
+        _get_bot_response.return_value = ChatMessage(content="Hi")
         get_voice_transcript_mock.return_value = "Hi"
         handle_turn_message(experiment_id=turnio_whatsapp_channel.experiment.public_id, message_data=incoming_message)
         if message_type == "text":

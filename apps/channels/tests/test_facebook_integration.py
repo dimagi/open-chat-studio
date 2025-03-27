@@ -9,6 +9,7 @@ from apps.channels.datamodels import TwilioMessage
 from apps.channels.models import ChannelPlatform
 from apps.channels.tasks import handle_twilio_message
 from apps.chat.channels import MESSAGE_TYPES
+from apps.chat.models import ChatMessage
 from apps.service_providers.speech_service import SynthesizedAudio
 from apps.utils.factories.channels import ExperimentChannelFactory
 
@@ -74,7 +75,7 @@ class TestTwilio:
         with patch("apps.service_providers.messaging_service.TwilioService.s3_client"), patch(
             "apps.service_providers.messaging_service.TwilioService.client"
         ):
-            get_llm_response_mock.return_value = "Hi"
+            get_llm_response_mock.return_value = ChatMessage(content="Hi")
             get_voice_transcript_mock.return_value = "Hi"
 
             handle_twilio_message(message_data=incoming_message, request_uri="", signature="")

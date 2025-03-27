@@ -18,7 +18,7 @@ from apps.chat.channels import (
     strip_urls_and_emojis,
 )
 from apps.chat.exceptions import VersionedExperimentSessionsNotAllowedException
-from apps.chat.models import ChatMessageType
+from apps.chat.models import ChatMessage, ChatMessageType
 from apps.experiments.models import (
     ExperimentRoute,
     ExperimentSession,
@@ -44,9 +44,15 @@ def telegram_channel(db):
     return channel
 
 
+def chat_message_mock():
+    chat_message_mock = Mock()
+    chat_message_mock.get_attached_files.return_value = []
+    return chat_message_mock
+
+
 @pytest.mark.django_db()
 @patch("apps.chat.channels.TelegramChannel.send_text_to_user", Mock())
-@patch("apps.chat.channels.TelegramChannel._get_bot_response", Mock())
+@patch("apps.chat.channels.TelegramChannel._get_bot_response", Mock(return_value=chat_message_mock()))
 def test_incoming_message_adds_channel_info(telegram_channel):
     """When an `experiment_session` is created, channel specific info like `identifier` and
     `experiment_channel` should also be added to the `experiment_session`
@@ -65,7 +71,7 @@ def test_incoming_message_adds_channel_info(telegram_channel):
 
 @pytest.mark.django_db()
 @patch("apps.chat.channels.TelegramChannel.send_text_to_user", Mock())
-@patch("apps.chat.channels.TelegramChannel._get_bot_response", Mock())
+@patch("apps.chat.channels.TelegramChannel._get_bot_response", Mock(return_value=chat_message_mock()))
 def test_channel_added_for_experiment_session(telegram_channel):
     """Ensure that the experiment session gets a link to the experimentt channel that this is using"""
     chat_id = 123123
@@ -78,7 +84,7 @@ def test_channel_added_for_experiment_session(telegram_channel):
 
 @pytest.mark.django_db()
 @patch("apps.chat.channels.TelegramChannel.send_text_to_user", Mock())
-@patch("apps.chat.channels.TelegramChannel._get_bot_response", Mock())
+@patch("apps.chat.channels.TelegramChannel._get_bot_response", Mock(return_value=chat_message_mock()))
 def test_incoming_message_uses_existing_experiment_session(telegram_channel):
     """Approach: Simulate messages coming in after one another in order to test this behaviour"""
     chat_id = 12312331
@@ -111,7 +117,7 @@ def test_incoming_message_uses_existing_experiment_session(telegram_channel):
 
 @pytest.mark.django_db()
 @patch("apps.chat.channels.TelegramChannel.send_text_to_user", Mock())
-@patch("apps.chat.channels.TelegramChannel._get_bot_response", Mock())
+@patch("apps.chat.channels.TelegramChannel._get_bot_response", Mock(return_value=chat_message_mock()))
 def test_non_active_sessions_are_not_resused(telegram_channel):
     """
     Sessions that were ended should not be reused when the user sends a new message. Rather, a new session should be
@@ -238,7 +244,7 @@ def _send_user_message_on_channel(channel_instance, user_message: str):
 
 @pytest.mark.django_db()
 @patch("apps.chat.channels.TelegramChannel.submit_input_to_llm", Mock())
-@patch("apps.chat.channels.TelegramChannel._get_bot_response", Mock())
+@patch("apps.chat.channels.TelegramChannel._get_bot_response", Mock(return_value=chat_message_mock()))
 @patch("apps.chat.channels.TelegramChannel._send_seed_message")
 @patch("apps.chat.channels.TelegramChannel.send_text_to_user")
 def test_pre_conversation_flow(send_text_to_user_mock, _send_seed_message):
@@ -357,7 +363,7 @@ def test_voice_response_behaviour(
     telegram_channel,
 ):
     get_voice_transcript.return_value = "Hello bot. Please assist me"
-    get_llm_response.return_value = "Hello user. No"
+    get_llm_response.return_value = ChatMessage(content="Hello user. No")
     experiment = telegram_channel.experiment
     experiment.voice_response_behaviour = voice_behaviour
     experiment.save()
@@ -442,7 +448,7 @@ def test_reply_with_text_when_synthetic_voice_not_specified(
     telegram_channel,
 ):
     get_voice_transcript.return_value = "Hello bot. Please assist me"
-    get_llm_response.return_value = "Hello user. No"
+    get_llm_response.return_value = ChatMessage(content="Hello user. No")
     experiment = telegram_channel.experiment
     experiment.voice_response_behaviour = VoiceResponseBehaviours.ALWAYS
     # Let's remove the synthetic voice and see what happens
@@ -461,7 +467,7 @@ def test_reply_with_text_when_synthetic_voice_not_specified(
     [(telegram_messages.audio_message, "voice"), (telegram_messages.text_message, "text")],
 )
 @patch("apps.chat.channels.TelegramChannel.send_text_to_user", Mock())
-@patch("apps.chat.channels.TelegramChannel._get_bot_response", Mock())
+@patch("apps.chat.channels.TelegramChannel._get_bot_response", Mock(return_value=chat_message_mock()))
 @patch("apps.chat.channels.TelegramChannel._add_message_to_history", Mock())
 def test_user_query_extracted_for_pre_conversation_flow(message_func, message_type):
     """The user query need to be available during the pre-conversation flow. Simply looking at `message_text` for
@@ -531,7 +537,7 @@ def test_missing_channel_raises_error(twilio_provider):
 @patch("apps.chat.channels.TelegramChannel._get_bot_response")
 def test_participant_reused_across_experiments(_get_bot_response):
     """A single participant should be linked to multiple sessions per team"""
-    _get_bot_response.return_value = "Hi human"
+    _get_bot_response.return_value = ChatMessage(content="Hi human")
     chat_id = 123
 
     # User chats to experiment 1
@@ -649,8 +655,10 @@ def test_voice_response_with_urls(
     telegram_channel,
 ):
     get_voice_transcript.return_value = "Hello bot. Give me a URL"
-    get_llm_response.return_value = (
-        "Here are two urls for you: [this](http://example.co.za?key1=1&key2=2) and [https://some.com](https://some.com)"
+    get_llm_response.return_value = ChatMessage(
+        content=(
+            "Here are two urls for you: [this](http://example.co.za?key1=1&key2=2) and [https://some.com](https://some.com)"
+        )
     )
     experiment = telegram_channel.experiment
     experiment.voice_response_behaviour = VoiceResponseBehaviours.ALWAYS
@@ -871,7 +879,7 @@ class TestBaseChannelMethods:
         assert channel_base.participant_identifier == "Alpha"
 
     @patch("apps.chat.channels.TelegramChannel.send_text_to_user", Mock())
-    @patch("apps.chat.channels.TelegramChannel._get_bot_response", Mock())
+    @patch("apps.chat.channels.TelegramChannel._get_bot_response", Mock(return_value=chat_message_mock()))
     def test_new_sessions_are_linked_to_the_working_experiment(self, experiment):
         working_version = experiment
         channel = ExperimentChannelFactory(experiment=working_version)

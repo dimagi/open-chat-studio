@@ -4,6 +4,7 @@ import pytest
 from django.urls import reverse
 
 from apps.channels.models import ChannelPlatform, ExperimentChannel
+from apps.chat.models import ChatMessage
 from apps.experiments.models import ExperimentSession, Participant
 from apps.utils.factories.experiment import ExperimentFactory, ExperimentSessionFactory
 from apps.utils.factories.team import TeamWithUsersFactory
@@ -20,7 +21,7 @@ def experiment(db):
 @pytest.mark.django_db()
 @patch("apps.chat.channels.ApiChannel._get_bot_response")
 def test_new_message_creates_a_channel_and_participant(get_llm_response_mock, experiment, client):
-    get_llm_response_mock.return_value = "Hi user"
+    get_llm_response_mock.return_value = ChatMessage(content="Hi user")
 
     channels_queryset = ExperimentChannel.objects.filter(team=experiment.team, platform=ChannelPlatform.API)
     assert not channels_queryset.exists()
@@ -47,7 +48,7 @@ def test_new_message_creates_a_channel_and_participant(get_llm_response_mock, ex
 @patch("apps.chat.channels.ApiChannel._load_latest_session")
 @patch("apps.chat.channels.ApiChannel._get_bot_response")
 def test_new_message_with_existing_session(get_llm_response_mock, _load_latest_session, experiment, client):
-    get_llm_response_mock.return_value = "Hi user"
+    get_llm_response_mock.return_value = ChatMessage(content="Hi user")
 
     user = experiment.team.members.first()
     participant, _ = Participant.objects.get_or_create(

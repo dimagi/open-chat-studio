@@ -293,7 +293,7 @@ class ChannelBase(ABC):
 
         self._ensure_sessions_exists()
 
-    def new_user_message(self, message: BaseMessage) -> str:
+    def new_user_message(self, message: BaseMessage) -> ChatMessage:
         """Handles the message coming from the user. Call this to send bot messages to the user.
         The `message` here will probably be some object, depending on the channel being used.
         """
@@ -308,7 +308,7 @@ class ChannelBase(ABC):
             return True
         return self.experiment.is_participant_allowed(self.participant_identifier)
 
-    def _new_user_message(self, message: BaseMessage) -> str:
+    def _new_user_message(self, message: BaseMessage) -> ChatMessage:
         try:
             self._add_message(message)
         except ParticipantNotAllowedException:
@@ -334,8 +334,7 @@ class ChannelBase(ABC):
                     self.experiment_session.update_status(SessionStatus.ACTIVE)
 
             enqueue_static_triggers.delay(self.experiment_session.id, StaticTriggerType.NEW_HUMAN_MESSAGE)
-            response = self._handle_supported_message()
-            return response
+            return self._handle_supported_message()
         except Exception as e:
             self._inform_user_of_error()
             raise e
@@ -454,7 +453,7 @@ class ChannelBase(ABC):
 
         # Returning the response here is a bit of a hack to support chats through the web UI while trying to
         # use a coherent interface to manage / handle user messages
-        return ai_message.content
+        return ai_message
 
     def _handle_unsupported_message(self):
         return self.send_text_to_user(self._unsupported_message_type_response())

@@ -3,6 +3,7 @@ from unittest.mock import patch
 import pytest
 from django.urls import reverse
 
+from apps.chat.models import ChatMessage
 from apps.utils.factories.experiment import ExperimentFactory
 from apps.utils.factories.team import TeamWithUsersFactory
 from apps.utils.tests.clients import ApiTestClient
@@ -36,7 +37,7 @@ def test_create_new_session_and_post_message(mock_response, experiment):
     assert response.status_code == 201, response_json
     session_id = response_json["id"]
 
-    mock_response.return_value = "Fido"
+    mock_response.return_value = ChatMessage(content="Fido")
     new_message_url = reverse("channels:new_api_message", kwargs={"experiment_id": experiment_id})
     response = client.post(
         new_message_url, data={"message": "What should I call my dog?", "session": session_id}, format="json"

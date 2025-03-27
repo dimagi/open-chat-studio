@@ -7,6 +7,7 @@ from apps.channels.datamodels import SureAdhereMessage
 from apps.channels.models import ChannelPlatform
 from apps.channels.tasks import handle_sureadhere_message
 from apps.chat.channels import MESSAGE_TYPES
+from apps.chat.models import ChatMessage
 from apps.utils.factories.channels import ExperimentChannelFactory
 
 from .message_examples import sureadhere_messages
@@ -48,7 +49,7 @@ class TestSureAdhere:
         message_type,
         sureadhere_channel,
     ):
-        get_llm_response_mock.return_value = "Hi"
+        get_llm_response_mock.return_value = ChatMessage(content="Hi")
         handle_sureadhere_message(
             sureadhere_tenant_id=sureadhere_channel.extra_data["sureadhere_tenant_id"], message_data=incoming_message
         )
