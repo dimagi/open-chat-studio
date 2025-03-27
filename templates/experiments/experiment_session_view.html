@@ -46,8 +46,9 @@
       <div role="tabpanel" class="tab-content pt-3">
         <div id="messages-container" class="min-w-full"
              hx-get="{% url 'experiments:experiment_session_messages_view' request.team.slug experiment.public_id experiment_session.external_id %}"
-             hx-trigger="revealed once">
-          <div class="flex items-center justify-center p-10">
+             hx-trigger="revealed once"
+             hx-indicator="#messages-initial-loading">
+          <div id="messages-initial-loading" class="flex items-center justify-center p-10">
             <span class="loading loading-spinner"></span>
           </div>
         </div>

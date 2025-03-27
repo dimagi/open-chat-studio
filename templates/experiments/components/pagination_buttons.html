@@ -5,13 +5,17 @@
         <a href="#table-top"
            class="btn join-item {% if btn_size == 'sm' %}btn-sm{% endif %}"
            hx-get="{% url 'experiments:experiment_session_messages_view' request.team.slug experiment.public_id experiment_session.external_id %}{% querystring page=1 search=search %}"
-           hx-target="#messages-container">
+           hx-target="#messages-container"
+           hx-indicator="#messages-loading"
+           hx-disabled-elt=".join a">
           <i class="fa-solid fa-backward-fast"></i>
         </a>
         <a href="#table-top"
            class="btn join-item {% if btn_size == 'sm' %}btn-sm{% endif %}"
            hx-get="{% url 'experiments:experiment_session_messages_view' request.team.slug experiment.public_id experiment_session.external_id %}{% querystring page=page|add:'-1' search=search %}"
-           hx-target="#messages-container">
+           hx-target="#messages-container"
+           hx-indicator="#messages-loading"
+           hx-disabled-elt=".join a">
           <i class="fa-solid fa-backward-step"></i> Previous
         </a>
       {% endif %}
@@ -19,16 +23,24 @@
         <a href="#table-top"
            class="btn join-item {% if btn_size == 'sm' %}btn-sm{% endif %}"
            hx-get="{% url 'experiments:experiment_session_messages_view' request.team.slug experiment.public_id experiment_session.external_id %}{% querystring page=page|add:'1' search=search %}"
-           hx-target="#messages-container">
+           hx-target="#messages-container"
+           hx-indicator="#messages-loading"
+           hx-disabled-elt=".join a">
           Next <i class="fa-solid fa-forward-step"></i>
         </a>
         <a href="#table-top"
            class="btn join-item {% if btn_size == 'sm' %}btn-sm{% endif %}"
            hx-get="{% url 'experiments:experiment_session_messages_view' request.team.slug experiment.public_id experiment_session.external_id %}{% querystring page=total_pages search=search %}"
-           hx-target="#messages-container">
+           hx-target="#messages-container"
+           hx-indicator="#messages-loading"
+           hx-disabled-elt=".join a">
           <i class="fa-solid fa-forward-fast"></i>
         </a>
       {% endif %}
     </div>
   </div>
 {% endif %}
+
+<div id="messages-loading" class="htmx-indicator flex items-center gap-2 mt-2">
+  <span class="loading loading-spinner loading-sm"></span>
+</div>
