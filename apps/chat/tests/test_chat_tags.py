@@ -1,14 +1,6 @@
-from unittest.mock import patch
-
 import pytest
 
 from apps.chat.templatetags.chat_tags import render_markdown
-
-
-@pytest.fixture()
-def mock_reverse():
-    with patch("django.urls.reverse") as mock_reverse:
-        yield mock_reverse
 
 
 def test_render_markdown():
@@ -56,8 +48,29 @@ def test_render_markdown_special_characters():
     assert result == "<p>Special characters: &lt;, &gt;, &amp;</p>"
 
 
-def test_render_image_markdown(mock_reverse):
-    mock_reverse.return_value = "/mocked/url"
-    markdown_text = "![Image](file:example-team:1234:5678)"
+@pytest.mark.parametrize(
+    ("markdown_text", "expected_result"),
+    [
+        ("[Link Text](http://example.com)", '<p><a href="http://example.com" target="_blank">Link Text</a></p>'),
+        ("![Image](http://example.com/image.jpg)", '<p><img alt="Image" src="http://example.com/image.jpg" /></p>'),
+        (
+            "[Link Text](file:example-team:1234:5678)",
+            '<p><a href="/a/example-team/experiments/1234/file/5678/" target="_blank">Link Text</a></p>',
+        ),
+        (
+            "![Image](file:example-team:1234:5678)",
+            '<p><img alt="Image" src="/a/example-team/experiments/1234/file/5678/" /></p>',
+        ),
+        (
+            "[Link Text][0]\n[0]: file:example-team:1234:5678",
+            '<p><a href="/a/example-team/experiments/1234/file/5678/" target="_blank"/>Link Text</a></p>',
+        ),
+        (
+            "![Image][0]\n[0]: file:example-team:1234:5678",
+            '<p><img alt="Image" src="/a/example-team/experiments/1234/file/5678/" /></p>',
+        ),
+    ],
+)
+def test_render_links(markdown_text, expected_result):
     result = render_markdown(markdown_text)
-    assert result == '<p><img alt="Image" src="/a/example-team/experiments/1234/file/5678/" /></p>'
+    assert result == expected_result
