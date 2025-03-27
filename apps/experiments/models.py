@@ -1776,23 +1776,6 @@ class ExperimentSession(BaseTeamModel):
 
         return ", ".join(version_tags)
 
-    def get_participant_timezone(self):
-        participant_data = self.participant_data_from_experiment
-        return participant_data.get("timezone")
-
-    def get_participant_data(self, use_participant_tz=False):
-        """Returns the participant's data. If `use_participant_tz` is `True`, the dates of the scheduled messages
-        will be represented in the timezone that the participant is in if that information is available"""
-        participant_data = self.participant_data_from_experiment
-        as_timezone = None
-        if use_participant_tz:
-            as_timezone = self.get_participant_timezone()
-
-        scheduled_messages = self.participant.get_schedules_for_experiment(self.experiment, as_timezone=as_timezone)
-        if scheduled_messages:
-            participant_data = {**participant_data, "scheduled_messages": scheduled_messages}
-        return self.participant.global_data | participant_data
-
     def get_experiment_version_number(self) -> int:
         """
         Returns the version that is being chatted to. If it's the default version, return 0 which is the default

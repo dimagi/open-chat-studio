@@ -15,7 +15,7 @@ from apps.experiments.models import Experiment, PromptBuilderHistory, SourceMate
 from apps.experiments.tasks import get_prompt_builder_response_task
 from apps.service_providers.models import LlmProviderModel
 from apps.service_providers.utils import get_llm_provider_choices
-from apps.teams.decorators import login_and_team_required
+from apps.teams.decorators import login_and_team_required, team_required
 
 PROMPT_DATA_SESSION_KEY = "prompt_data"
 
@@ -82,6 +82,7 @@ def experiments_prompt_builder_get_message(request, team_slug: str):
     return JsonResponse({"task_id": result.task_id})
 
 
+@team_required
 def get_prompt_builder_message_response(request, team_slug: str):
     task_id = request.GET.get("task_id")
     progress = Progress(AsyncResult(task_id))
