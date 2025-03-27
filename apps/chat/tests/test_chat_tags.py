@@ -51,23 +51,45 @@ def test_render_markdown_special_characters():
 @pytest.mark.parametrize(
     ("markdown_text", "expected_result"),
     [
-        ("[Link Text](http://example.com)", '<p><a href="http://example.com" target="_blank">Link Text</a></p>'),
-        ("![Image](http://example.com/image.jpg)", '<p><img alt="Image" src="http://example.com/image.jpg" /></p>'),
-        (
+        pytest.param(
+            "[Link Text](http://example.com)",
+            '<p><a href="http://example.com" target="_blank">Link Text</a></p>',
+            id="link",
+        ),
+        pytest.param(
+            "![Image](http://example.com/image.jpg)",
+            '<p><img alt="Image" src="http://example.com/image.jpg" /></p>',
+            id="image",
+        ),
+        pytest.param(
             "[Link Text](file:example-team:1234:5678)",
             '<p><a href="/a/example-team/experiments/1234/file/5678/" target="_blank">Link Text</a></p>',
+            id="custom_link",
         ),
-        (
+        pytest.param(
             "![Image](file:example-team:1234:5678)",
             '<p><img alt="Image" src="/a/example-team/experiments/1234/file/5678/" /></p>',
+            id="custom_image",
         ),
-        (
+        pytest.param(
             "[Link Text][0]\n[0]: file:example-team:1234:5678",
-            '<p><a href="/a/example-team/experiments/1234/file/5678/" target="_blank"/>Link Text</a></p>',
+            '<p><a href="/a/example-team/experiments/1234/file/5678/" target="_blank">Link Text</a></p>',
+            id="reference_link",
         ),
-        (
+        pytest.param(
             "![Image][0]\n[0]: file:example-team:1234:5678",
             '<p><img alt="Image" src="/a/example-team/experiments/1234/file/5678/" /></p>',
+            id="reference_image",
+        ),
+        pytest.param(
+            "[0]\n[0]: file:example-team:1234:5678",
+            '<p><a href="/a/example-team/experiments/1234/file/5678/" target="_blank">0</a></p>',
+            id="short_reference_link",
+        ),
+        pytest.param(
+            "![0]\n[0]: file:example-team:1234:5678",
+            '<p><img alt="0" src="/a/example-team/experiments/1234/file/5678/" /></p>',
+            id="short_reference_image",
         ),
     ],
 )
