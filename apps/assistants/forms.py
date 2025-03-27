@@ -37,11 +37,13 @@ class OpenAiAssistantForm(forms.ModelForm):
             "temperature",
             "allow_file_search_attachments",
             "allow_code_interpreter_attachments",
+            "allow_file_downloads",
             "top_p",
         ]
         labels = {
             "allow_file_search_attachments": "Allow ad-hoc files to be uploaded for file search",
             "allow_code_interpreter_attachments": "Allow ad-hoc files to be uploaded for code interpreter",
+            "allow_file_downloads": "Allow files cited in the response to be downloaded",
         }
 
     def __init__(self, request, *args, **kwargs):
