@@ -149,20 +149,20 @@ class ChannelBase(ABC):
         )
 
     @property
-    def experiment_session(self):
+    def experiment_session(self) -> ExperimentSession:
         return self._experiment_session
 
     @experiment_session.setter
-    def experiment_session(self, value):
+    def experiment_session(self, value: ExperimentSession):
         self._experiment_session = value
         self.reset_bot()
 
     @property
-    def message(self):
+    def message(self) -> BaseMessage:
         return self._message
 
     @message.setter
-    def message(self, value):
+    def message(self, value: BaseMessage):
         self._message = value
         self.reset_bot()
         self.reset_user_query()
@@ -262,7 +262,7 @@ class ChannelBase(ABC):
         )
 
     @cached_property
-    def user_query(self):
+    def user_query(self) -> str:
         """Returns the user query, extracted from whatever (supported) message type was used to convey the
         message
         """
