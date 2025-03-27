@@ -52,8 +52,7 @@ def create_experiment_runnable(
 
     if assistant := experiment.assistant:
         history_manager = ExperimentHistoryManager.for_assistant(session=session, experiment=experiment)
-        assistant_adapter = AssistantAdapter.for_experiment(experiment, session, trace_service)
-        runnable = None
+        assistant_adapter = AssistantAdapter.for_experiment(experiment, session)
         if assistant.tools_enabled and not disable_tools:
             runnable = AgentAssistantChat(adapter=assistant_adapter, history_manager=history_manager)
         else:
@@ -74,8 +73,7 @@ def create_experiment_runnable(
         trace_service=trace_service,
     )
 
-    runnable = None
-    chat_adapter = ChatAdapter.for_experiment(experiment=experiment, session=session, trace_service=trace_service)
+    chat_adapter = ChatAdapter.for_experiment(experiment=experiment, session=session)
     if experiment.tools_enabled and not disable_tools:
         runnable = AgentLLMChat(adapter=chat_adapter, history_manager=history_manager)
     else:

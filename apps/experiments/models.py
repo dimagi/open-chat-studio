@@ -11,7 +11,7 @@ import markdown
 import pytz
 from django.conf import settings
 from django.contrib.postgres.fields import ArrayField
-from django.core.exceptions import FieldDoesNotExist
+from django.core.exceptions import FieldDoesNotExist, ValidationError
 from django.core.validators import MaxValueValidator, MinValueValidator, validate_email
 from django.db import models, transaction
 from django.db.models import (
@@ -1518,10 +1518,16 @@ class ParticipantDataObjectManager(models.Manager):
         return super().get_queryset().filter(experiment_id=experiment_id, team=experiment.team)
 
 
+def validate_json_dict(value):
+    """Participant data must be a dict"""
+    if not isinstance(value, dict):
+        raise ValidationError("JSON object must be a dictionary")
+
+
 class ParticipantData(BaseTeamModel):
     objects = ParticipantDataObjectManager()
     participant = models.ForeignKey(Participant, on_delete=models.CASCADE, related_name="data_set")
-    data = encrypt(models.JSONField(default=dict))
+    data = encrypt(models.JSONField(default=dict, validators=[validate_json_dict]))
     experiment = models.ForeignKey(Experiment, on_delete=models.CASCADE)
     system_metadata = models.JSONField(default=dict)
     encryption_key = encrypt(
@@ -1674,6 +1680,9 @@ class ExperimentSession(BaseTeamModel):
         return self.status == SessionStatus.COMPLETE
 
     def update_status(self, new_status: SessionStatus, commit: bool = True):
+        if self.status == new_status:
+            return
+
         self.status = new_status
         if commit:
             self.save()
@@ -1775,23 +1784,6 @@ class ExperimentSession(BaseTeamModel):
             return ""
 
         return ", ".join(version_tags)
-
-    def get_participant_timezone(self):
-        participant_data = self.participant_data_from_experiment
-        return participant_data.get("timezone")
-
-    def get_participant_data(self, use_participant_tz=False):
-        """Returns the participant's data. If `use_participant_tz` is `True`, the dates of the scheduled messages
-        will be represented in the timezone that the participant is in if that information is available"""
-        participant_data = self.participant_data_from_experiment
-        as_timezone = None
-        if use_participant_tz:
-            as_timezone = self.get_participant_timezone()
-
-        scheduled_messages = self.participant.get_schedules_for_experiment(self.experiment, as_timezone=as_timezone)
-        if scheduled_messages:
-            participant_data = {**participant_data, "scheduled_messages": scheduled_messages}
-        return self.participant.global_data | participant_data
 
     def get_experiment_version_number(self) -> int:
         """

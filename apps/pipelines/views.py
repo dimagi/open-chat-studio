@@ -30,6 +30,7 @@ from apps.pipelines.tasks import get_response_for_pipeline_test_message
 from apps.service_providers.models import LlmProvider, LlmProviderModel
 from apps.teams.decorators import login_and_team_required
 from apps.teams.mixins import LoginAndTeamRequiredMixin
+from apps.teams.models import Flag
 
 from ..generics.chips import Chip
 from ..generics.help import render_help_with_link
@@ -83,12 +84,17 @@ class EditPipeline(LoginAndTeamRequiredMixin, TemplateView, PermissionRequiredMi
         data = super().get_context_data(**kwargs)
         llm_providers = LlmProvider.objects.filter(team=self.request.team).values("id", "name", "type").all()
         llm_provider_models = LlmProviderModel.objects.for_team(self.request.team).all()
+        ui_feature_flags = ["document_management"]
+
         return {
             **data,
             "pipeline_id": kwargs["pk"],
             "node_schemas": _pipeline_node_schemas(),
             "parameter_values": _pipeline_node_parameter_values(self.request.team, llm_providers, llm_provider_models),
             "default_values": _pipeline_node_default_values(llm_providers, llm_provider_models),
+            "flags_enabled": [
+                flag for flag in ui_feature_flags if Flag.get(flag).is_active_for_team(self.request.team)
+            ],
         }
 
 

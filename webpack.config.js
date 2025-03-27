@@ -12,6 +12,7 @@ module.exports = {
     adminDashboard: './assets/javascript/admin-dashboard.js',
     'tagMultiselect': './assets/javascript/tag-multiselect.js',
     'tokenCounter': './assets/javascript/tiktoken.js',
+    'jsonEditor': './assets/javascript/json-editor.js',
   },
   output: {
     path: path.resolve(__dirname, './static'),

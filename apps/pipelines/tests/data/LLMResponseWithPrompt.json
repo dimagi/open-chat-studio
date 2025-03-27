@@ -92,6 +92,7 @@
     "collection_id": {
       "default": null,
       "title": "Media",
+      "ui:flagRequired": "document_management",
       "ui:optionsSource": "collection",
       "ui:widget": "select",
       "type": "integer"

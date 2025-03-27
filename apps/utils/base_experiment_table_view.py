@@ -3,10 +3,11 @@ from django.contrib.postgres.search import TrigramSimilarity
 from django.db.models import Q
 from django_tables2 import SingleTableView
 
+from apps.teams.mixins import LoginAndTeamRequiredMixin
 from apps.utils.search import similarity_search
 
 
-class BaseExperimentTableView(SingleTableView, PermissionRequiredMixin):
+class BaseExperimentTableView(LoginAndTeamRequiredMixin, SingleTableView, PermissionRequiredMixin):
     paginate_by = 25
     template_name = "table/single_table.html"
 

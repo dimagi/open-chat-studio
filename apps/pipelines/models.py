@@ -243,14 +243,17 @@ class Pipeline(BaseTeamModel, VersionsMixin):
         logging_callback.logger.debug("Starting pipeline run", input=input["messages"][-1])
         try:
             callbacks = [logging_callback]
-            if trace_service := session.experiment.trace_service:
+            trace_service = session.experiment.trace_service
+            if trace_service:
                 trace_service_callback = trace_service.get_callback(
+                    trace_name=session.experiment.name,
                     participant_id=str(session.participant.identifier),
                     session_id=str(session.external_id),
                 )
                 callbacks.append(trace_service_callback)
 
             config = RunnableConfig(
+                run_name=session.experiment.name,
                 callbacks=callbacks,
                 configurable={
                     "disabled_tools": AgentTools.reminder_tools() if disable_reminder_tools else [],
@@ -260,21 +263,24 @@ class Pipeline(BaseTeamModel, VersionsMixin):
             output = PipelineState(**output).json_safe()
             pipeline_run.output = output
             if save_run_to_history and session is not None:
+                input_metadata = output.get("input_message_metadata", {})
+                output_metadata = output.get("output_message_metadata", {})
+                trace_metadata = trace_service.get_trace_metadata() if trace_service else None
+                if trace_metadata:
+                    input_metadata.update(trace_metadata)
+                    output_metadata.update(trace_metadata)
+
                 if save_input_to_history:
                     self._save_message_to_history(
-                        session,
-                        input["messages"][-1],
-                        ChatMessageType.HUMAN,
-                        metadata=output.get("input_message_metadata", {}),
+                        session, input["messages"][-1], ChatMessageType.HUMAN, metadata=input_metadata
                     )
                 ai_message = self._save_message_to_history(
-                    session,
-                    output["messages"][-1],
-                    ChatMessageType.AI,
-                    metadata=output.get("output_message_metadata", {}),
+                    session, output["messages"][-1], ChatMessageType.AI, metadata=output_metadata
                 )
                 output["ai_message_id"] = ai_message.id
         finally:
+            if trace_service:
+                trace_service.end()
             if pipeline_run.status == PipelineRunStatus.ERROR:
                 logging_callback.logger.debug("Pipeline run failed", input=input["messages"][-1])
             else:

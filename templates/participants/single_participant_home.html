@@ -1,4 +1,11 @@
 {% extends 'web/app/app_base.html' %}
+{% load static %}
+{% block page_js %}
+  <script src="{% static 'js/jsonEditor-bundle.js' %}"></script>
+  <script>
+    SiteJS.jsonEditor.initJsonEditors();
+  </script>
+{% endblock %}
 
 {% block breadcrumbs %}
   <div class="text-sm breadcrumbs" aria-label="breadcrumbs">

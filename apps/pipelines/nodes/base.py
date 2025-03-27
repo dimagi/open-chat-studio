@@ -14,6 +14,7 @@ from typing_extensions import TypedDict
 from apps.experiments.models import ExperimentSession
 from apps.pipelines.exceptions import PipelineNodeRunError
 from apps.pipelines.logging import LoggingCallbackHandler, noop_logger
+from apps.service_providers.llm_service.prompt_context import ParticipantDataProxy
 
 logger = logging.getLogger("ocs.pipelines")
 
@@ -194,6 +195,9 @@ class PipelineNode(BaseModel, ABC):
         """A mapping from the output handles on the frontend to the return values of _process_conditional"""
         raise NotImplementedError
 
+    def get_participant_data_proxy(self, state: PipelineState) -> "ParticipantDataProxy":
+        return ParticipantDataProxy.from_state(state)
+
     @cached_property
     def logger(self):
         for handler in self._config["callbacks"].handlers:
@@ -241,6 +245,7 @@ class UiSchema(BaseModel):
     # Use this with 'select' type fields to indicate where the options should come from
     # See `apps.pipelines.views._pipeline_node_parameter_values`
     options_source: OptionsSource = None
+    flag_required: str = None
 
     def __call__(self, schema: JsonDict):
         if self.widget:
@@ -249,6 +254,8 @@ class UiSchema(BaseModel):
             schema["ui:enumLabels"] = self.enum_labels
         if self.options_source:
             schema["ui:optionsSource"] = self.options_source
+        if self.flag_required:
+            schema["ui:flagRequired"] = self.flag_required
 
 
 class NodeSchema(BaseModel):
