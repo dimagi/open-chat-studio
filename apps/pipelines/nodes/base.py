@@ -223,6 +223,7 @@ class UiSchema(BaseModel):
     # Use this with 'select' type fields to indicate where the options should come from
     # See `apps.pipelines.views._pipeline_node_parameter_values`
     options_source: OptionsSource = None
+    flag_required: str = None
 
     def __call__(self, schema: JsonDict):
         if self.widget:
@@ -231,6 +232,8 @@ class UiSchema(BaseModel):
             schema["ui:enumLabels"] = self.enum_labels
         if self.options_source:
             schema["ui:optionsSource"] = self.options_source
+        if self.flag_required:
+            schema["ui:flagRequired"] = self.flag_required
 
 
 class NodeSchema(BaseModel):

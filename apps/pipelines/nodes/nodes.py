@@ -249,7 +249,11 @@ class LLMResponseWithPrompt(LLMResponse, HistoryMixin):
         json_schema_extra=UiSchema(widget=Widgets.expandable_text),
     )
     collection_id: int | None = Field(
-        None, title="Media", json_schema_extra=UiSchema(widget=Widgets.select, options_source=OptionsSource.collection)
+        None,
+        title="Media",
+        json_schema_extra=UiSchema(
+            widget=Widgets.select, options_source=OptionsSource.collection, flag_required="document_management"
+        ),
     )
     tools: list[str] = Field(
         default_factory=list,
