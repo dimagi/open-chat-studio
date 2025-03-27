@@ -872,7 +872,7 @@ export function HistoryModeWidget(props: WidgetParams) {
   const [historyMode, setHistoryMode] = useState(initialHistoryMode || "summarize");
   const llmProviderId = concatenate(props.nodeParams["llm_provider_model_id"]);
   const {parameterValues} = getCachedData();
-  const models = parameterValues.LlmProviderModelId;
+  const models = parameterValues.LlmProviderModelId as LlmProviderModel[];
   const model = models.filter(m => String(m.value) === String(llmProviderId));
   const defaultMaxTokens = model.length > 0 && model[0].max_token_limit !== undefined ? model[0].max_token_limit : 0;
   const historyModeHelpTexts: Record<string, string> = {
