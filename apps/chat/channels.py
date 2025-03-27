@@ -446,8 +446,8 @@ class ChannelBase(ABC):
         attached_files = ai_message.get_attached_files() or []
 
         if self.experiment_channel.platform != ChannelPlatform.WEB:
-            for file in attached_files:
-                message_text = replace_markdown_links_with_its_name(message_text)
+            ai_message.content = replace_markdown_links_with_its_name(message_text)
+            ai_message.save(update_fields=["content"])
 
         self.send_message_to_user(bot_message=message_text, attached_files=attached_files)
 
