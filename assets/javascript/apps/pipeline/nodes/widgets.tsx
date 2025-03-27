@@ -3,7 +3,7 @@ import CodeMirror from '@uiw/react-codemirror';
 import {python} from "@codemirror/lang-python";
 import {githubDark, githubLight} from "@uiw/codemirror-theme-github";
 import {CompletionContext, snippetCompletion as snip} from '@codemirror/autocomplete'
-import {TypedOption} from "../types/nodeParameterValues";
+import {TypedOption, LlmProviderModel} from "../types/nodeParameterValues";
 import usePipelineStore from "../stores/pipelineStore";
 import {classNames, concatenate, getCachedData, getDocumentationLink, getSelectOptions} from "../utils";
 import {JsonSchema, NodeParams, PropertySchema} from "../types/nodeParams";
