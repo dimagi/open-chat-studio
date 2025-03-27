@@ -1674,6 +1674,9 @@ class ExperimentSession(BaseTeamModel):
         return self.status == SessionStatus.COMPLETE
 
     def update_status(self, new_status: SessionStatus, commit: bool = True):
+        if self.status == new_status:
+            return
+
         self.status = new_status
         if commit:
             self.save()
