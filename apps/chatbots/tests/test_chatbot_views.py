@@ -292,6 +292,7 @@ def test_chatbot_sessions_table_view(team_with_users):
     )
     request.user = user
     request.team = team
+    request.team_membership = get_team_membership_for_request(request)
 
     view = ChatbotSessionsTableView.as_view()
     response = view(request, team_slug=team.slug, experiment_id=experiment.id)
