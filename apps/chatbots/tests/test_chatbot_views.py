@@ -118,8 +118,8 @@ def test_get_success_url(team_with_users):
     view.kwargs = {"experiment_id": experiment.id}
 
     success_url = view.get_success_url()
-    expected_url = f"{reverse('chatbots:single_chatbot_home',
-    kwargs={'team_slug': team.slug, 'experiment_id': experiment.id})}#versions"
+    url = "chatbots:single_chatbot_home"
+    expected_url = f"{reverse(url,kwargs={'team_slug': team.slug, 'experiment_id': experiment.id})}#versions"
     assert success_url == expected_url
 
 
