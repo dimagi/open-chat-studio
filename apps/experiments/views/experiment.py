@@ -1204,30 +1204,25 @@ def experiment_session_messages_view(request, team_slug: str, experiment_id: uui
     page = int(request.GET.get("page", 1))
     search = request.GET.get("search", "")
     page_size = 100
-    all_messages = session.get_messages_for_display()
-
+    messages_queryset = ChatMessage.objects.filter(chat=session.chat).all().order_by("created_at")
     if search:
-        filtered_messages = [
-            msg for msg in all_messages if any(search.lower() in tag.lower() for tag in msg.all_tag_names())
-        ]
-    else:
-        filtered_messages = all_messages
+        messages_queryset = messages_queryset.filter(tags__name__icontains=search).distinct()
 
-    total_messages = len(filtered_messages)
+    total_messages = messages_queryset.count()
     total_pages = max(1, (total_messages + page_size - 1) // page_size)
     page = max(1, min(page, total_pages))
     start_idx = (page - 1) * page_size
     end_idx = start_idx + page_size
-
+    paginated_messages = messages_queryset[start_idx:end_idx]
     context = {
         "experiment_session": session,
         "experiment": experiment,
-        "messages": filtered_messages[start_idx:end_idx],
+        "messages": paginated_messages,
         "page": page,
         "total_pages": total_pages,
         "total_messages": total_messages,
         "page_size": page_size,
-        "page_start_index": (page - 1) * page_size,
+        "page_start_index": start_idx,
         "search": search,
         "available_tags": [t.name for t in Tag.objects.filter(team__slug=team_slug, is_system_tag=False).all()],
     }
