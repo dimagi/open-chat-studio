@@ -151,3 +151,12 @@ class BaseDeleteFileView(LoginAndTeamRequiredMixin, View, PermissionRequiredMixi
     def get_success_response(self, file):
         messages.success(self.request, "File Deleted")
         return HttpResponse()
+
+
+def download_file(request, team_slug: str, pk: int):
+    resource = get_object_or_404(File, id=pk, team__slug=team_slug)
+    try:
+        file = resource.file.open()
+        return FileResponse(file, as_attachment=True, filename=resource.file.name)
+    except FileNotFoundError:
+        raise Http404()

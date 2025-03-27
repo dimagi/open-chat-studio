@@ -13,7 +13,6 @@ import requests
 from django.db import transaction
 from django.http import Http404
 from telebot import TeleBot
-from telebot.types import InputFile
 from telebot.util import antiflood, smart_split
 
 from apps.channels import audio
@@ -232,6 +231,14 @@ class ChannelBase(ABC):
         """Callback indicating that the user input will now be given to the LLM"""
         pass
 
+    def append_attachment_links(self, text: str, attachments: list[File]) -> str:
+        """Appends the links of the attachments to the text"""
+        if not attachments:
+            return text
+
+        links = [file.public_link() for file in attachments]
+        return "{text}\n\n{links}".format(text=text, links="\n".join(links))
+
     @staticmethod
     def get_channel_class_for_platform(platform: ChannelPlatform | str) -> type[ChannelBase]:
         if platform == "telegram":
@@ -437,7 +444,7 @@ class ChannelBase(ABC):
         ai_message = self._get_bot_response(message=self.user_query)
         message_text = ai_message.content
 
-        attached_files = ai_message.get_attached_files()
+        attached_files = ai_message.get_attached_files() or []
 
         if self.experiment_channel.platform != ChannelPlatform.WEB:
             for file in attached_files:
@@ -453,7 +460,7 @@ class ChannelBase(ABC):
         return self.send_text_to_user(self._unsupported_message_type_response())
 
     def _reply_voice_message(self, text: str, attached_files: list[File] = None):
-        text, extracted_urls = strip_urls_and_emojis(text)
+        text, link_attachments = strip_urls_and_emojis(text)
 
         voice_provider = self.experiment.voice_provider
         synthetic_voice = self.experiment.synthetic_voice
@@ -471,9 +478,12 @@ class ChannelBase(ABC):
             logger.exception(e)
             self.send_text_to_user(text)
 
-        if extracted_urls:
-            urls_text = "\n".join(extracted_urls)
-            self.send_text_to_user(urls_text)
+        if attached_files:
+            link_attachments.extend([file.public_link() for file in attached_files])
+
+        if link_attachments:
+            link_attachments_text = "\n".join(link_attachments)
+            self.send_text_to_user(link_attachments_text)
 
     def _get_voice_transcript(self) -> str:
         # Indicate to the user that the bot is busy processing the message
@@ -714,18 +724,10 @@ class TelegramChannel(ChannelBase):
         )
 
     def send_text_to_user(self, text: str, attached_files: list[File] = None):
-        attached_files = attached_files or []
+        text = self.append_attachment_links(text, attached_files)
 
         for message_text in smart_split(text):
             antiflood(self.telegram_bot.send_message, self.participant_identifier, text=message_text)
-
-        # TODO: For large files, send a link instead
-        for file in attached_files:
-            # Send a chat action for each file to keep the user in the loop
-            self.telegram_bot.send_chat_action(chat_id=self.participant_identifier, action="upload_document")
-            antiflood(
-                self.telegram_bot.send_document, chat_id=self.participant_identifier, document=InputFile(file.file.path)
-            )
 
     def get_message_audio(self) -> BytesIO:
         file_url = self.telegram_bot.get_file_url(self.message.media_id)
@@ -749,6 +751,7 @@ class TelegramChannel(ChannelBase):
 
 class WhatsappChannel(ChannelBase):
     def send_text_to_user(self, text: str, attached_files: list[File] = None):
+        text = self.append_attachment_links(text, attached_files)
         from_number = self.experiment_channel.extra_data.get("number")
         to_number = self.participant_identifier
         self.messaging_service.send_text_message(
@@ -780,6 +783,7 @@ class WhatsappChannel(ChannelBase):
 
 class SureAdhereChannel(ChannelBase):
     def send_text_to_user(self, text: str, attached_files: list[File] = None):
+        text = self.append_attachment_links(text, attached_files)
         to_patient = self.participant_identifier
         self.messaging_service.send_text_message(text, to=to_patient, platform=ChannelPlatform.SUREADHERE)
 
@@ -798,6 +802,7 @@ class SureAdhereChannel(ChannelBase):
 
 class FacebookMessengerChannel(ChannelBase):
     def send_text_to_user(self, text: str, attached_files: list[File] = None):
+        text = self.append_attachment_links(text, attached_files)
         from_ = self.experiment_channel.extra_data.get("page_id")
         self.messaging_service.send_text_message(
             text, from_=from_, to=self.participant_identifier, platform=ChannelPlatform.FACEBOOK
@@ -872,6 +877,8 @@ class SlackChannel(ChannelBase):
         self.send_response_to_user = send_response_to_user
 
     def send_text_to_user(self, text: str, attached_files: list[File] = None):
+        text = self.append_attachment_links(text, attached_files)
+
         if not self.send_response_to_user:
             return
 
@@ -928,6 +935,7 @@ class CommCareConnectChannel(ChannelBase):
 
     def send_text_to_user(self, text: str, attached_files: list[File] = None):
         self._check_consent()
+        text = self.append_attachment_links(text, attached_files)
         self.client.send_message_to_user(
             channel_id=self.connect_channel_id, message=text, encryption_key=self.encryption_key
         )

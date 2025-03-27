@@ -5,9 +5,11 @@ import magic
 from django.conf import settings
 from django.core.files.base import ContentFile
 from django.db import models
+from django.urls import reverse
 
 from apps.teams.models import BaseTeamModel
 from apps.utils.conversions import bytes_to_megabytes
+from apps.web.meta import absolute_url
 
 
 class FilePurpose(models.TextChoices):
@@ -107,3 +109,6 @@ class File(BaseTeamModel):
             new_file.file = new_file_file
         new_file.save()
         return new_file
+
+    def public_link(self) -> str:
+        return absolute_url(reverse("files:public_download", args=[self.team.slug, self.id]))
