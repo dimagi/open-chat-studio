@@ -7,7 +7,6 @@ from django.urls import reverse
 
 from apps.chatbots.tables import ChatbotSessionsTable
 from apps.chatbots.views import (
-    BaseChatbotView,
     ChatbotSessionsTableView,
     ChatbotVersionsTableView,
     CreateChatbotVersion,
@@ -55,28 +54,6 @@ def test_chatbot_experiment_table_view(client, team_with_users):
     assert response.status_code == 200
     assert "Test 2" in response.content.decode()
     assert "Test 1" not in response.content.decode()
-
-
-@pytest.mark.django_db()
-def test_base_chatbot_view_success_url(team_with_users):
-    """Test that BaseChatbotView returns the correct success URL."""
-    team = team_with_users
-    user = team.members.first()
-    pipeline = Pipeline.objects.create(team=team, name="Test Pipeline", data={"nodes": [], "edges": []})
-    experiment = Experiment.objects.create(
-        name="Test Experiment", description="Test Description", owner=user, team=team, pipeline=pipeline
-    )
-    factory = RequestFactory()
-    request = factory.get(reverse("chatbots:edit", args=[team.slug, pipeline.id]))
-    request.team = team
-    request.user = user
-
-    view = BaseChatbotView()
-    view.request = request
-    view.object = experiment
-
-    expected_url = reverse("chatbots:edit", args=[team.slug, pipeline.id])
-    assert view.get_success_url() == expected_url
 
 
 @pytest.mark.django_db()
@@ -139,7 +116,8 @@ def test_get_success_url(team_with_users):
     view.kwargs = {"experiment_id": experiment.id}
 
     success_url = view.get_success_url()
-    expected_url = f"{reverse('chatbots:single_chatbot_home', kwargs={'team_slug': team.slug, 'experiment_id': experiment.id})}#versions"
+    expected_url = f"{reverse('chatbots:single_chatbot_home',
+    kwargs={'team_slug': team.slug, 'experiment_id': experiment.id})}#versions"
     assert success_url == expected_url
 
 
@@ -206,7 +184,7 @@ def test_chatbot_session_pagination_view(team_with_users):
     request_next = factory.get(
         reverse(
             "chatbots:chatbot_session_pagination_view",
-            kwargs={"team_slug": team.slug, "experiment_id": experiment.id, "session_id": session_1.external_id},
+            kwargs={"team_slug": team.slug, "experiment_id": experiment.public_id, "session_id": session_1.external_id},
         ),
         {"dir": "next"},
     )
@@ -226,7 +204,7 @@ def test_chatbot_session_pagination_view(team_with_users):
     request_prev = factory.get(
         reverse(
             "chatbots:chatbot_session_pagination_view",
-            kwargs={"team_slug": team.slug, "experiment_id": experiment.id, "session_id": session_2.external_id},
+            kwargs={"team_slug": team.slug, "experiment_id": experiment.public_id, "session_id": session_2.external_id},
         ),
         {"dir": "previous"},
     )
@@ -245,7 +223,7 @@ def test_chatbot_session_pagination_view(team_with_users):
     request_no_next = factory.get(
         reverse(
             "chatbots:chatbot_session_pagination_view",
-            kwargs={"team_slug": team.slug, "experiment_id": experiment.id, "session_id": session_3.external_id},
+            kwargs={"team_slug": team.slug, "experiment_id": experiment.public_id, "session_id": session_3.external_id},
         ),
         {"dir": "next"},
     )
@@ -268,7 +246,7 @@ def test_chatbot_session_pagination_view(team_with_users):
     request_no_prev = factory.get(
         reverse(
             "chatbots:chatbot_session_pagination_view",
-            kwargs={"team_slug": team.slug, "experiment_id": experiment.id, "session_id": session_1.external_id},
+            kwargs={"team_slug": team.slug, "experiment_id": experiment.public_id, "session_id": session_1.external_id},
         ),
         {"dir": "previous"},
     )
@@ -291,7 +269,6 @@ def test_chatbot_session_pagination_view(team_with_users):
 
 @pytest.mark.django_db()
 def test_chatbot_sessions_table_view(team_with_users):
-    # Setup
     team = team_with_users
     user = team.members.first()
 
@@ -302,13 +279,6 @@ def test_chatbot_sessions_table_view(team_with_users):
         team=team,
     )
 
-    session = ExperimentSession.objects.create(
-        experiment=experiment,
-        external_id="session1",
-        created_at="2025-03-01T10:00:00Z",
-        team=team,
-    )
-
     factory = RequestFactory()
     request = factory.get(
         reverse("chatbots:sessions-list", kwargs={"team_slug": team.slug, "experiment_id": experiment.id})
@@ -316,7 +286,6 @@ def test_chatbot_sessions_table_view(team_with_users):
     request.user = user
     request.team = team
 
-    # Test view class
     view = ChatbotSessionsTableView.as_view()
     response = view(request, team_slug=team.slug, experiment_id=experiment.id)
     assert response.status_code == 200
