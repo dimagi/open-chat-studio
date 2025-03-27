@@ -873,9 +873,11 @@ export function HistoryModeWidget(props: WidgetParams) {
   const llmProviderId = concatenate(props.nodeParams["llm_provider_model_id"]);
   const {parameterValues} = getCachedData();
   const models = parameterValues.LlmProviderModelId
-  const model = models.filter(m => m.value === llmProviderId)
+  const model = models.filter(m => String(m.value) === String(llmProviderId));
   const defaultMaxTokens = model[0]?.max_token_limit;
-
+  console.log(models)
+  console.log(llmProviderId)
+  console.log(model)
   const historyModeHelpTexts: Record<string, string> = {
     summarize:"If the token count exceeds the limit, older messages will be summarized while keeping the last few messages intact.",
     truncate_tokens:"If the token count exceeds the limit, older messages will be removed until the token count is below the limit.",
