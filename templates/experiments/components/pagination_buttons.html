@@ -1,32 +1,34 @@
 {% if total_pages > 1 %}
-  <div class="flex {% if btn_size == 'sm' %}gap-1{% else %}justify-right{% endif %}">
-    {% if page > 1 %}
-      <a href="#table-top"
-         class="btn {% if btn_size == 'sm' %}btn-sm{% endif %}"
-         hx-get="{% url 'experiments:experiment_session_messages_view' request.team.slug experiment.public_id experiment_session.external_id %}{% querystring page=1 search=search %}"
-         hx-target="#messages-container">
-        <i class="fa-solid fa-backward-fast"></i>
-      </a>
-      <a href="#table-top"
-         class="btn {% if btn_size == 'sm' %}btn-sm{% endif %}"
-         hx-get="{% url 'experiments:experiment_session_messages_view' request.team.slug experiment.public_id experiment_session.external_id %}{% querystring page=page|add:'-1' search=search %}"
-         hx-target="#messages-container">
-        <i class="fa-solid fa-backward-step"></i> Previous
-      </a>
-    {% endif %}
-    {% if page < total_pages %}
-      <a href="#table-top"
-         class="btn {% if btn_size == 'sm' %}btn-sm{% endif %}"
-         hx-get="{% url 'experiments:experiment_session_messages_view' request.team.slug experiment.public_id experiment_session.external_id %}{% querystring page=page|add:'1' search=search %}"
-         hx-target="#messages-container">
-        Next <i class="fa-solid fa-forward-step"></i>
-      </a>
-      <a href="#table-top"
-         class="btn {% if btn_size == 'sm' %}btn-sm{% endif %}"
-         hx-get="{% url 'experiments:experiment_session_messages_view' request.team.slug experiment.public_id experiment_session.external_id %}{% querystring page=total_pages search=search %}"
-         hx-target="#messages-container">
-        <i class="fa-solid fa-forward-fast"></i>
-      </a>
-    {% endif %}
+  <div class="{% if btn_size == 'sm' %}flex gap-1{% else %}flex justify-end{% endif %}">
+    <div class="join">
+      {% if page > 1 %}
+        <a href="#table-top"
+           class="btn join-item {% if btn_size == 'sm' %}btn-sm{% endif %}"
+           hx-get="{% url 'experiments:experiment_session_messages_view' request.team.slug experiment.public_id experiment_session.external_id %}{% querystring page=1 search=search %}"
+           hx-target="#messages-container">
+          <i class="fa-solid fa-backward-fast"></i>
+        </a>
+        <a href="#table-top"
+           class="btn join-item {% if btn_size == 'sm' %}btn-sm{% endif %}"
+           hx-get="{% url 'experiments:experiment_session_messages_view' request.team.slug experiment.public_id experiment_session.external_id %}{% querystring page=page|add:'-1' search=search %}"
+           hx-target="#messages-container">
+          <i class="fa-solid fa-backward-step"></i> Previous
+        </a>
+      {% endif %}
+      {% if page < total_pages %}
+        <a href="#table-top"
+           class="btn join-item {% if btn_size == 'sm' %}btn-sm{% endif %}"
+           hx-get="{% url 'experiments:experiment_session_messages_view' request.team.slug experiment.public_id experiment_session.external_id %}{% querystring page=page|add:'1' search=search %}"
+           hx-target="#messages-container">
+          Next <i class="fa-solid fa-forward-step"></i>
+        </a>
+        <a href="#table-top"
+           class="btn join-item {% if btn_size == 'sm' %}btn-sm{% endif %}"
+           hx-get="{% url 'experiments:experiment_session_messages_view' request.team.slug experiment.public_id experiment_session.external_id %}{% querystring page=total_pages search=search %}"
+           hx-target="#messages-container">
+          <i class="fa-solid fa-forward-fast"></i>
+        </a>
+      {% endif %}
+    </div>
   </div>
 {% endif %}
