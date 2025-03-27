@@ -528,6 +528,18 @@ function CodeNodeEditor(
       detail: "Gets the value for the given key from the temporary state",
       boost: 1
     }),
+    get_session_state: snip("get_session_state_key(\"${key_name}\")", {
+      label: "get_session_state_key",
+      type: "keyword",
+      detail: "Gets the value for the given key from the session's state",
+      boost: 1
+    }),
+    set_session_state: snip("set_session_state_key(\"${key_name}\", ${data})", {
+      label: "set_session_state_key",
+      type: "keyword",
+      detail: "Sets the given key in the session's state. Overwrites the current value",
+      boost: 1
+    }),
   }
 
   function pythonCompletions(context: CompletionContext) {

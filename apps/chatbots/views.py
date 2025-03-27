@@ -29,7 +29,7 @@ from apps.pipelines.views import _pipeline_node_default_values, _pipeline_node_p
 from apps.service_providers.models import LlmProvider, LlmProviderModel
 from apps.teams.decorators import login_and_team_required
 from apps.teams.mixins import LoginAndTeamRequiredMixin
-from apps.utils.BaseExperimentTableView import BaseExperimentTableView
+from apps.utils.base_experiment_table_view import BaseExperimentTableView
 
 
 @login_and_team_required

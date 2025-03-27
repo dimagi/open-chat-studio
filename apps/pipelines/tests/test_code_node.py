@@ -4,7 +4,7 @@ from unittest import mock
 import pytest
 
 from apps.channels.datamodels import Attachment
-from apps.experiments.models import Participant, ParticipantData
+from apps.experiments.models import ExperimentSession, Participant, ParticipantData
 from apps.files.models import File
 from apps.pipelines.exceptions import PipelineNodeBuildError, PipelineNodeRunError
 from apps.pipelines.nodes.base import PipelineState
@@ -58,7 +58,12 @@ def test_code_node(pipeline, code, input, output):
         code_node(code),
         end_node(),
     ]
-    assert create_runnable(pipeline, nodes).invoke(PipelineState(messages=[input]))["messages"][-1] == output
+    assert (
+        create_runnable(pipeline, nodes).invoke(
+            PipelineState(messages=[input], experiment_session=ExperimentSession())
+        )["messages"][-1]
+        == output
+    )
 
 
 EXTRA_FUNCTION = """
@@ -128,7 +133,9 @@ def test_code_node_runtime_errors(pipeline, code, input, error):
         end_node(),
     ]
     with pytest.raises(PipelineNodeRunError, match=error):
-        create_runnable(pipeline, nodes).invoke(PipelineState(messages=[input]))["messages"][-1]
+        create_runnable(pipeline, nodes).invoke(
+            PipelineState(messages=[input], experiment_session=ExperimentSession())
+        )["messages"][-1]
 
 
 @django_db_with_data(available_apps=("apps.service_providers",))
@@ -496,3 +503,27 @@ def main(input, **kwargs):
         )
         == "Number of schedules: 0, Empty list: True"
     )
+
+
+@django_db_with_data(available_apps=("apps.service_providers",))
+@mock.patch("apps.pipelines.nodes.base.PipelineNode.logger", mock.Mock())
+def test_get_and_set_session_state(pipeline, experiment_session):
+    assert experiment_session.state.get("message_count") is None
+    input = "hello"
+    code_set = """
+def main(input, **kwargs):
+    msg_count = get_session_state_key("message_count") or 1
+    set_session_state_key("message_count", msg_count + 1)
+    return input
+    """
+    nodes = [
+        start_node(),
+        code_node(code_set),
+        end_node(),
+    ]
+    create_runnable(pipeline, nodes).invoke(PipelineState(experiment_session=experiment_session, messages=[input]))[
+        "messages"
+    ][-1]
+
+    experiment_session.refresh_from_db()
+    assert experiment_session.state["message_count"] == 2

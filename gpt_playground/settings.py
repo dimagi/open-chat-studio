@@ -630,3 +630,10 @@ COMMCARE_CONNECT_GET_CONNECT_ID_URL = f"{COMMCARE_CONNECT_SERVER_URL}/o/userinfo
 
 # AI helper
 AI_HELPER_API_KEY = env("AI_HELPER_API_KEY", default="")
+
+
+# Document Management
+MAX_SUMMARY_LENGTH = 1024
+MEDIA_SUPPORTED_FILE_TYPES = (
+    ".txt,.pdf,.doc,.docx,.xls,.xlsx,.csv,.jpg,.jpeg,.png,.gif,.bmp,.webp,.svg,.mp4,.mov,.avi,.mp3,.wav"
+)

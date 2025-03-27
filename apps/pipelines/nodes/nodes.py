@@ -37,7 +37,6 @@ from apps.pipelines.nodes.base import (
     Widgets,
     deprecated_node,
 )
-from apps.pipelines.nodes.helpers import ParticipantDataProxy
 from apps.pipelines.tasks import send_email_from_pipeline
 from apps.service_providers.exceptions import ServiceProviderConfigError
 from apps.service_providers.llm_service.adapters import AssistantAdapter, ChatAdapter
@@ -92,7 +91,7 @@ class RenderTemplate(PipelineNode):
                             or [],
                         }
                     )
-                proxy = ParticipantDataProxy(exp_session)
+                proxy = self.get_participant_data_proxy(state)
                 content["participant_data"] = proxy.get() or {}
 
             template = env.from_string(self.template_string)
@@ -144,7 +143,7 @@ class HistoryMixin(LLMResponseMixin):
         ),
     )
     history_mode: PipelineChatHistoryModes = Field(
-        None,
+        default=PipelineChatHistoryModes.SUMMARIZE,
         json_schema_extra=UiSchema(widget=Widgets.history_mode, enum_labels=PipelineChatHistoryModes.labels),
     )
     user_max_token_limit: int | None = Field(
@@ -485,7 +484,7 @@ class StaticRouterNode(RouterMixin, Passthrough):
         from apps.service_providers.llm_service.prompt_context import SafeAccessWrapper
 
         if self.data_source == self.DataSource.participant_data:
-            data = ParticipantDataProxy.from_state(state).get()
+            data = self.get_participant_data_proxy(state).get()
         else:
             data = state["temp_state"]
 
@@ -785,14 +784,8 @@ class AssistantNode(PipelineNode):
         return [att for att in state.get("temp_state", {}).get("attachments", []) if att.upload_to_assistant]
 
     def _get_assistant_runnable(self, assistant: OpenAiAssistant, session: ExperimentSession, node_id: str):
-        trace_service = session.experiment.trace_service
-        if trace_service:
-            trace_service.initialize_from_callback_manager(self._config.get("callbacks"))
-
         history_manager = PipelineHistoryManager.for_assistant()
-        adapter = AssistantAdapter.for_pipeline(
-            session=session, node=self, trace_service=trace_service, disabled_tools=self.disabled_tools
-        )
+        adapter = AssistantAdapter.for_pipeline(session=session, node=self, disabled_tools=self.disabled_tools)
 
         allowed_tools = adapter.get_allowed_tools()
         if len(adapter.tools) != len(allowed_tools):
@@ -892,7 +885,7 @@ class CodeNode(PipelineNode):
 
         custom_globals = safe_globals.copy()
 
-        participant_data_proxy = ParticipantDataProxy.from_state(state)
+        participant_data_proxy = self.get_participant_data_proxy(state)
         custom_globals.update(
             {
                 "__builtins__": self._get_custom_builtins(),
@@ -907,9 +900,24 @@ class CodeNode(PipelineNode):
                 "get_participant_schedules": participant_data_proxy.get_schedules,
                 "get_temp_state_key": self._get_temp_state_key(state),
                 "set_temp_state_key": self._set_temp_state_key(state),
+                "get_session_state_key": self._get_session_state_key(state["experiment_session"]),
+                "set_session_state_key": self._set_session_state_key(state["experiment_session"]),
             }
         )
         return custom_globals
+
+    def _get_session_state_key(self, session: ExperimentSession):
+        def get_session_state_key(key_name: str):
+            return session.state.get(key_name)
+
+        return get_session_state_key
+
+    def _set_session_state_key(self, session: ExperimentSession):
+        def set_session_state_key(key_name: str, value):
+            session.state[key_name] = value
+            session.save(update_fields=["state"])
+
+        return set_session_state_key
 
     def _get_temp_state_key(self, state: PipelineState):
         def get_temp_state_key(key_name: str):

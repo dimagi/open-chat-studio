@@ -10,7 +10,7 @@ from apps.service_providers.models import TraceProvider
 from apps.utils.factories.assistants import OpenAiAssistantFactory
 from apps.utils.factories.experiment import ExperimentFactory, ExperimentSessionFactory
 from apps.utils.factories.team import TeamFactory
-from apps.utils.langchain import build_fake_llm_service, mock_experiment_llm
+from apps.utils.langchain import build_fake_llm_service, mock_llm
 
 
 @pytest.mark.django_db()
@@ -47,7 +47,7 @@ def test_experiment_routing_with_tracing():
     session = ExperimentSessionFactory(experiment=experiment)
     provider = TraceProvider(type="langfuse", config={})
     session.experiment.trace_provider = provider
-    with mock_experiment_llm(None, responses=["anything", "How can I help today?"], token_counts=[0]) as fake_service:
+    with mock_llm(responses=["anything", "How can I help today?"], token_counts=[0]) as fake_service:
         bot = TopicBot(session)
         response = bot.process_input("Hi")
     assert response == "How can I help today?"

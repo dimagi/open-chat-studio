@@ -1598,6 +1598,7 @@ class ExperimentSession(BaseTeamModel):
         null=True,
         blank=True,
     )
+    state = models.JSONField(default=dict)
 
     class Meta:
         ordering = ["-created_at"]
@@ -1715,10 +1716,15 @@ class ExperimentSession(BaseTeamModel):
         """Sends the `instruction_prompt` along with the chat history to the LLM to formulate an appropriate prompt
         message. The response from the bot will be saved to the chat history.
         """
-        from apps.chat.bots import get_bot
+        from apps.chat.bots import EventBot
 
-        bot = get_bot(self, experiment=use_experiment, disable_tools=True)
-        return bot.process_input(user_input=instruction_prompt, save_input_to_history=False)
+        bot = EventBot(self, use_experiment)
+        message = bot.get_user_message(instruction_prompt)
+        chat_message = ChatMessage.objects.create(chat=self.chat, message_type=ChatMessageType.AI, content=message)
+        chat_message.add_version_tag(
+            version_number=bot.experiment.version_number, is_a_version=bot.experiment.is_a_version
+        )
+        return message
 
     def try_send_message(self, message: str, fail_silently=True):
         """Tries to send a message to this user session as the bot. Note that `message` will be send to the user
@@ -1763,23 +1769,6 @@ class ExperimentSession(BaseTeamModel):
             return ""
 
         return ", ".join(version_tags)
-
-    def get_participant_timezone(self):
-        participant_data = self.participant_data_from_experiment
-        return participant_data.get("timezone")
-
-    def get_participant_data(self, use_participant_tz=False):
-        """Returns the participant's data. If `use_participant_tz` is `True`, the dates of the scheduled messages
-        will be represented in the timezone that the participant is in if that information is available"""
-        participant_data = self.participant_data_from_experiment
-        as_timezone = None
-        if use_participant_tz:
-            as_timezone = self.get_participant_timezone()
-
-        scheduled_messages = self.participant.get_schedules_for_experiment(self.experiment, as_timezone=as_timezone)
-        if scheduled_messages:
-            participant_data = {**participant_data, "scheduled_messages": scheduled_messages}
-        return self.participant.global_data | participant_data
 
     def get_experiment_version_number(self) -> int:
         """

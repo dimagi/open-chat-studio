@@ -33,10 +33,10 @@ def test_handle_user_message(process_input, slack_channel):
 
 
 @pytest.mark.django_db()
-@patch("apps.chat.bots.TopicBot.process_input")
+@patch("apps.chat.bots.EventBot.get_user_message")
 @patch("apps.chat.channels.SlackChannel.messaging_service")
-def test_ad_hoc_bot_message(messaging_service, process_input, slack_channel):
-    process_input.return_value = "Hi"
+def test_ad_hoc_bot_message(messaging_service, get_user_message, slack_channel):
+    get_user_message.return_value = "Hi"
     session = SlackChannel.start_new_session(
         slack_channel.experiment,
         slack_channel,
