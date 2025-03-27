@@ -2,7 +2,7 @@ import dataclasses
 import functools
 from collections import defaultdict
 from enum import Enum
-from typing import Any
+from typing import Any, Literal
 
 from django import forms
 from django.db import models
@@ -42,6 +42,10 @@ class ServiceProviderType:
     subtype: Enum
 
     primary_fields: list[str]
+
+    def get_permission(self, action: Literal["view", "add", "change", "delete"]) -> Any:
+        assert action in ("view", "add", "change", "delete")
+        return f"{self.model._meta.app_label}.{action}_{self.model._meta.model_name}"
 
 
 class ServiceProvider(ServiceProviderType, Enum):

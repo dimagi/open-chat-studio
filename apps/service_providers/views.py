@@ -2,7 +2,8 @@ from collections import defaultdict
 
 from django.conf import settings
 from django.contrib.auth.decorators import login_required, permission_required
-from django.core.exceptions import ValidationError
+from django.contrib.auth.mixins import PermissionRequiredMixin
+from django.core.exceptions import PermissionDenied, ValidationError
 from django.db import transaction
 from django.http import HttpResponse, HttpResponseBadRequest
 from django.shortcuts import get_object_or_404, render, resolve_url
@@ -22,6 +23,7 @@ from apps.utils.deletion import get_related_objects
 from ..generics.chips import Chip
 from ..generics.views import BaseTypeSelectFormView
 from ..teams.decorators import login_and_team_required
+from ..teams.mixins import LoginAndTeamRequiredMixin
 from .utils import ServiceProvider, get_service_provider_config_form
 
 
@@ -32,9 +34,14 @@ class ServiceProviderMixin:
         return ServiceProvider[type_]
 
 
-class ServiceProviderTableView(SingleTableView, ServiceProviderMixin):
+class ServiceProviderTableView(
+    LoginAndTeamRequiredMixin, SingleTableView, ServiceProviderMixin, PermissionRequiredMixin
+):
     paginate_by = 25
     template_name = "table/single_table.html"
+
+    def get_permission_required(self):
+        return (self.provider_type.get_permission("view"),)
 
     def get_queryset(self):
         return self.provider_type.model.objects.filter(team=self.request.team)
@@ -48,8 +55,11 @@ def matches_blocking_deletion_condition(obj):
 
 
 @require_http_methods(["DELETE"])
+@login_and_team_required
 def delete_service_provider(request, team_slug: str, provider_type: str, pk: int):
     provider = ServiceProvider[provider_type]
+    if not request.user.has_perm(provider.get_permission("delete")):
+        raise PermissionDenied()
     service_config = get_object_or_404(provider.model, team=request.team, pk=pk)
     related_objects = get_related_objects(service_config)
 
@@ -115,7 +125,14 @@ def remove_file(request, team_slug: str, provider_type: str, pk: int, file_id: i
     return HttpResponse()
 
 
-class CreateServiceProvider(BaseTypeSelectFormView, ServiceProviderMixin):
+class CreateServiceProvider(
+    LoginAndTeamRequiredMixin, BaseTypeSelectFormView, ServiceProviderMixin, PermissionRequiredMixin
+):
+    def get_permission_required(self):
+        if self.kwargs.get("pk"):
+            return (self.provider_type.get_permission("change"),)
+        return (self.provider_type.get_permission("add"),)
+
     @property
     def extra_context(self):
         return {"active_tab": "manage-team", "title": self.provider_type.label}

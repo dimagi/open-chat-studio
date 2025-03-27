@@ -90,7 +90,7 @@ from apps.files.views import BaseAddFileHtmxView, BaseDeleteFileView
 from apps.generics.chips import Chip
 from apps.generics.views import generic_home
 from apps.service_providers.utils import get_llm_provider_choices
-from apps.teams.decorators import login_and_team_required
+from apps.teams.decorators import login_and_team_required, team_required
 from apps.teams.mixins import LoginAndTeamRequiredMixin
 from apps.utils.base_experiment_table_view import BaseExperimentTableView
 
@@ -112,12 +112,12 @@ class ExperimentTableView(BaseExperimentTableView):
     permission_required = "experiments.view_experiment"
 
 
-class ExperimentSessionsTableView(SingleTableView, PermissionRequiredMixin):
+class ExperimentSessionsTableView(LoginAndTeamRequiredMixin, SingleTableView, PermissionRequiredMixin):
     model = ExperimentSession
     paginate_by = 25
     table_class = ExperimentSessionsTable
     template_name = "table/single_table.html"
-    permission_required = "annotations.view_customtaggeditem"
+    permission_required = "experiments.view_experimentsession"
 
     def get_queryset(self):
         query_set = (
@@ -131,7 +131,7 @@ class ExperimentSessionsTableView(SingleTableView, PermissionRequiredMixin):
         return query_set
 
 
-class ExperimentVersionsTableView(SingleTableView, PermissionRequiredMixin):
+class ExperimentVersionsTableView(LoginAndTeamRequiredMixin, SingleTableView, PermissionRequiredMixin):
     model = Experiment
     paginate_by = 25
     table_class = ExperimentVersionsTable
@@ -800,12 +800,13 @@ def get_message_response(request, team_slug: str, experiment_id: uuid.UUID, sess
     )
 
 
+@team_required
 def poll_messages(request, team_slug: str, experiment_id: int, session_id: int):
     user = get_real_user_or_none(request.user)
     params = request.GET.dict()
     since_param = params.get("since")
     experiment_session = get_object_or_404(
-        ExperimentSession, participant__user=user, experiment_id=experiment_id, id=session_id, team__slug=team_slug
+        ExperimentSession, participant__user=user, experiment_id=experiment_id, id=session_id, team=request.team
     )
 
     since = timezone.now()
@@ -832,6 +833,7 @@ def poll_messages(request, team_slug: str, experiment_id: int, session_id: int):
     )
 
 
+@team_required
 def start_session_public(request, team_slug: str, experiment_id: uuid.UUID):
     try:
         experiment = get_object_or_404(Experiment, public_id=experiment_id, team=request.team)
@@ -912,6 +914,7 @@ def start_session_public(request, team_slug: str, experiment_id: uuid.UUID):
 
 
 @xframe_options_exempt
+@team_required
 def start_session_public_embed(request, team_slug: str, experiment_id: uuid.UUID):
     """Special view for starting sessions from embedded widgets. This will ignore consent and pre-surveys and
     will ALWAYS create anonymous participants."""
@@ -963,6 +966,7 @@ def _verify_user_or_start_session(identifier, request, experiment, session):
     return TemplateResponse(request=request, template="account/participant_email_verify.html")
 
 
+@team_required
 def verify_public_chat_token(request, team_slug: str, experiment_id: uuid.UUID, token: str):
     try:
         claims = jwt.decode(token, settings.SECRET_KEY, algorithms="HS256")
@@ -1315,6 +1319,7 @@ def experiment_session_pagination_view(request, team_slug: str, experiment_id: u
     return redirect("experiments:experiment_session_view", team_slug, experiment_id, next_session.external_id)
 
 
+@team_required
 def download_file(request, team_slug: str, session_id: int, pk: int):
     resource = get_object_or_404(
         File, id=pk, team__slug=team_slug, chatattachment__chat__experiment_session__id=session_id
