@@ -186,7 +186,7 @@ class AttachMediaTool(CustomBaseTool):
     description: str = "Attach a media file to your response"
     requires_session: bool = True
     args_schema: type[schemas.AttachMediaSchema] = schemas.AttachMediaSchema
-    callback: Callable | None = None
+    callback: Callable[[str], None]
 
     @cached_property
     def chat_attachment(self) -> ChatAttachment:
