@@ -32,7 +32,7 @@ from field_audit.models import AuditAction
 from waffle import flag_is_active
 
 from apps.annotations.models import Tag
-from apps.assistants.sync import get_diff_with_openai_assistant, get_out_of_sync_files
+from apps.assistants.sync import OpenAiSyncError, get_diff_with_openai_assistant, get_out_of_sync_files
 from apps.channels.datamodels import Attachment, AttachmentType
 from apps.channels.exceptions import ExperimentChannelException
 from apps.channels.forms import ChannelForm
@@ -395,12 +395,15 @@ class CreateExperimentVersion(LoginAndTeamRequiredMixin, CreateView):
 
         return HttpResponseRedirect(self.get_success_url())
 
-    def _check_pipleline_and_assistant_for_errors(self) -> tuple:
+    def _check_pipleline_and_assistant_for_errors(self) -> str:
         """Checks if the pipeline or assistant has errors before creating a new version."""
         experiment = self.get_object()
 
-        if self._is_assistant_out_of_sync(experiment):
-            return "Assistant is out of sync with OpenAI. Please update the assistant first."
+        try:
+            if self._is_assistant_out_of_sync(experiment):
+                return "Assistant is out of sync with OpenAI. Please update the assistant first."
+        except OpenAiSyncError as e:
+            return str(e)
 
         if pipeline := experiment.pipeline:
             errors = pipeline.validate()
