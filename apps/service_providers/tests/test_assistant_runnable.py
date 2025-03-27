@@ -428,15 +428,15 @@ def test_assistant_response_with_annotations(
             f"![test.png](file:dimagi-test:{session.id}:10)\n"
             f"Hi there human. The generated file can be [downloaded here](file:dimagi-test:{session.id}:10)."
             " A made up link to *file1.pdf* *file2.pdf*"
-            " Also, leaves are tree stuff [1]. Another link to nothing *file3.pdf*\n\\[1\\]: existing.txt"
+            " Also, leaves are tree stuff[^1]. Another link to nothing *file3.pdf*\n\\[^1\\]: existing.txt"
         )
     else:
         expected_output_message = (
             f"![test.png](file:dimagi-test:{session.id}:10)\n"
             f"Hi there human. The generated file can be [downloaded here](file:dimagi-test:{session.id}:10)."
             " A made up link to *file1.pdf* *file2.pdf*"
-            " Also, leaves are tree stuff [1]. Another link to nothing *file3.pdf*"
-            f"\n[1]: file:dimagi-test:{session.id}:9"
+            " Also, leaves are tree stuff[^1]. Another link to nothing *file3.pdf*"
+            f"\n[^1]: [existing.txt](file:dimagi-test:{session.id}:9)"
         )
     assert result.output == expected_output_message
 
@@ -498,10 +498,11 @@ def test_assistant_response_with_annotations_and_assistant_file(
 
     if allow_file_downloads:
         expected_output_message = (
-            f"Is this the file you're looking for: [0].\n[0]: file:{session.team.slug}:{session.id}:{assistant_file.id}"
+            f"Is this the file you're looking for:[^0]."
+            f"\n[^0]: [test.png](assistant_file:{session.team.slug}:{session.id}:{assistant_file.id})"
         )
     else:
-        expected_output_message = "Is this the file you're looking for: [0].\n\\[0\\]: test.png"
+        expected_output_message = "Is this the file you're looking for:[^0].\n\\[^0\\]: test.png"
     assert result.output == expected_output_message
 
     assert chat.get_metadata(Chat.MetadataKeys.OPENAI_THREAD_ID) == thread_id

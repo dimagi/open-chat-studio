@@ -380,11 +380,11 @@ class AssistantChat(RunnableSerializable[dict, ChainOutput]):
 
                         # Original citation text example:【6:0†source】
                         if self.adapter.citations_enabled:
-                            message_content_value = message_content_value.replace(file_ref_text, f" [{idx}]")
+                            message_content_value = message_content_value.replace(file_ref_text, f"[^{idx}]")
                             if file_link:
-                                message_content_value += f"\n[{idx}]: {file_link}"
+                                message_content_value += f"\n[^{idx}]: [{file_name}]({file_link})"
                             else:
-                                message_content_value += f"\n\\[{idx}\\]: {file_name}"
+                                message_content_value += f"\n\\[^{idx}\\]: {file_name}"
                         else:
                             message_content_value = message_content_value.replace(file_ref_text, "")
 
@@ -452,16 +452,17 @@ class AssistantChat(RunnableSerializable[dict, ChainOutput]):
         file_link = ""
 
         team = self.adapter.session.team
-        assistant_id = self.adapter.assistant.id
         link_prefix = "assistant_file" if file_id in assistant_file_ids else "file"
+        owner_id = self.adapter.assistant.id if file_id in assistant_file_ids else self.adapter.session.id
+
         try:
             file = File.objects.get(external_id=file_id, team_id=team.id)
-            file_link = f"{link_prefix}:{team.slug}:{assistant_id}:{file.id}"
+            file_link = f"{link_prefix}:{team.slug}:{owner_id}:{file.id}"
             file_name = file.name
         except File.MultipleObjectsReturned:
             logger.error("Multiple files with the same external ID", extra={"file_id": file_id, "team": team.slug})
             file = File.objects.filter(external_id=file_id, team_id=team.id).first()
-            file_link = f"{link_prefix}:{team.slug}:{assistant_id}:{file.id}"
+            file_link = f"{link_prefix}:{team.slug}:{owner_id}:{file.id}"
             file_name = file.name
         except File.DoesNotExist:
             client = self.adapter.assistant_client

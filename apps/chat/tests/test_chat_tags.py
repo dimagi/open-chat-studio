@@ -96,3 +96,8 @@ def test_render_markdown_special_characters():
 def test_render_links(markdown_text, expected_result):
     result = render_markdown(markdown_text)
     assert result == expected_result
+
+
+def test_footnote():
+    result = render_markdown("Footnotes[^1]\n[^1]: [file name](file:example-team:1234:5678)")
+    assert '<a href="/a/example-team/experiments/1234/file/5678/" target="_blank">file name</a>' in result
