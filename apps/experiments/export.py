@@ -65,11 +65,13 @@ def filtered_export_to_csv(experiment, sessions_queryset):
         "Participant Public ID",
         "Message Tags",
         "Message Comments",
+        "Trace ID",
     ]
     writer.writerow(header)
 
     for session in queryset:
         for message in session.chat.messages.all():
+            trace_id = message.trace_info.get("trace_id", "") if message.trace_info else ""
             row = [
                 message.id,
                 message.created_at,
@@ -87,6 +89,7 @@ def filtered_export_to_csv(experiment, sessions_queryset):
                 session.participant.public_id,
                 _format_tags(message.tags.all()),
                 _format_comments(message.comments.all()),
+                trace_id,
             ]
             writer.writerow(row)
     return csv_in_memory
