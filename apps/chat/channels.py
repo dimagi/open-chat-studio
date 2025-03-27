@@ -38,7 +38,6 @@ from apps.experiments.models import (
     VoiceResponseBehaviours,
 )
 from apps.files.models import File
-from apps.generics.help import replace_markdown_links_with_its_name
 from apps.service_providers.llm_service.runnables import GenerationCancelled
 from apps.service_providers.speech_service import SynthesizedAudio
 from apps.slack.utils import parse_session_external_id
@@ -232,11 +231,26 @@ class ChannelBase(ABC):
         pass
 
     def append_attachment_links(self, text: str, attachments: list[File]) -> str:
-        """Appends the links of the attachments to the text"""
+        """
+        Appends the links of the attachments to the text.
+
+        Example:
+        ```
+            This is a cat
+        ```
+        becomes
+
+        ```
+            This is a cat
+
+            cat.jpg
+            https://example.com/cat.jpg
+        ```
+        """
         if not attachments:
             return text
 
-        links = [file.public_link() for file in attachments]
+        links = [f"{file.name}\n{file.public_link()}\n" for file in attachments]
         return "{text}\n\n{links}".format(text=text, links="\n".join(links))
 
     @staticmethod
@@ -441,15 +455,10 @@ class ChannelBase(ABC):
     def _handle_supported_message(self):
         self.submit_input_to_llm()
         ai_message = self._get_bot_response(message=self.user_query)
-        message_text = ai_message.content
 
         attached_files = ai_message.get_attached_files() or []
 
-        if self.experiment_channel.platform != ChannelPlatform.WEB:
-            ai_message.content = replace_markdown_links_with_its_name(message_text)
-            ai_message.save(update_fields=["content"])
-
-        self.send_message_to_user(bot_message=message_text, attached_files=attached_files)
+        self.send_message_to_user(bot_message=ai_message.content, attached_files=attached_files)
 
         # Returning the response here is a bit of a hack to support chats through the web UI while trying to
         # use a coherent interface to manage / handle user messages
