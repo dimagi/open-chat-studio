@@ -1,8 +1,9 @@
-from typing import Any
+from typing import Any, Self
 
 from django.utils import timezone
 
 from apps.channels.models import ChannelPlatform
+from apps.experiments.models import ParticipantData
 from apps.utils.time import pretty_date
 
 
@@ -11,6 +12,7 @@ class PromptTemplateContext:
         self.session = session
         self.source_material_id = source_material_id
         self.context_cache = {}
+        self.participant_data_proxy = ParticipantDataProxy(self.session)
 
     @property
     def factories(self):
@@ -45,11 +47,11 @@ class PromptTemplateContext:
         if self.is_unauthorized_participant:
             data = ""
         else:
-            data = self.session.get_participant_data(use_participant_tz=True) or ""
+            data = self.participant_data_proxy.get() or ""
         return SafeAccessWrapper(data)
 
     def get_current_datetime(self):
-        return pretty_date(timezone.now(), self.session.get_participant_timezone())
+        return pretty_date(timezone.now(), self.participant_data_proxy.get_timezone())
 
     @property
     def is_unauthorized_participant(self):
@@ -137,3 +139,68 @@ class SafeAccessWrapper(dict):
 
 
 EMPTY = SafeAccessWrapper(None)
+
+
+class ParticipantDataProxy:
+    """Allows multiple access without needing to re-fetch from the DB"""
+
+    def __init__(self, experiment_session):
+        self.session = experiment_session
+        self._participant_data = None
+        self._scheduled_messages = None
+
+    @classmethod
+    def from_state(cls, pipeline_state) -> Self:
+        # using `.get` here for the sake of tests. In practice the session should always be present
+        return cls(pipeline_state.get("experiment_session"))
+
+    def _get_db_object(self):
+        if not self._participant_data:
+            self._participant_data, _ = ParticipantData.objects.get_or_create(
+                participant_id=self.session.participant_id,
+                experiment_id=self.session.experiment_id,
+                team_id=self.session.team_id,
+            )
+        return self._participant_data
+
+    def get(self):
+        data = self._get_db_object().data
+        return self.session.participant.global_data | data
+
+    def set(self, data):
+        if not isinstance(data, dict):
+            raise ValueError("Data must be a dictionary")
+        participant_data = self._get_db_object()
+        participant_data.data = data
+        participant_data.save(update_fields=["data"])
+
+        self.session.participant.update_name_from_data(data)
+
+    def get_schedules(self):
+        """
+        Returns all active scheduled messages for the participant in the current experiment session.
+        """
+        if self._scheduled_messages is None:
+            from apps.events.models import ScheduledMessage
+
+            experiment = self.session.experiment_id
+            participant = self.session.participant_id
+            team = self.session.experiment.team
+            messages = (
+                ScheduledMessage.objects.filter(
+                    experiment_id=experiment,
+                    participant_id=participant,
+                    team=team,
+                    is_complete=False,
+                    cancelled_at=None,
+                )
+                .select_related("action")
+                .order_by("created_at")
+            )
+            self._scheduled_messages = [message.as_dict() for message in messages]
+        return self._scheduled_messages
+
+    def get_timezone(self):
+        """Returns the participant's timezone"""
+        participant_data = self._get_db_object()
+        return participant_data.data.get("timezone")

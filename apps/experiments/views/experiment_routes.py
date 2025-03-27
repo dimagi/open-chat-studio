@@ -1,6 +1,7 @@
 from typing import Any
 
 from django.contrib import messages
+from django.contrib.auth.mixins import PermissionRequiredMixin
 from django.http import HttpResponse
 from django.shortcuts import get_object_or_404
 from django.urls import reverse
@@ -12,7 +13,8 @@ from apps.experiments.models import Experiment, ExperimentRoute, ExperimentRoute
 from apps.teams.mixins import LoginAndTeamRequiredMixin
 
 
-class CreateExperimentRoute(CreateView):
+class CreateExperimentRoute(LoginAndTeamRequiredMixin, CreateView, PermissionRequiredMixin):
+    permission_required = "experiments.add_experimentroute"
     model = ExperimentRoute
     template_name = "generic/object_form.html"
     extra_context = {
@@ -49,7 +51,8 @@ class CreateExperimentRoute(CreateView):
         return super().form_valid(form)
 
 
-class EditExperimentRoute(UpdateView):
+class EditExperimentRoute(LoginAndTeamRequiredMixin, UpdateView, PermissionRequiredMixin):
+    permission_required = "experiments.change_experimentroute"
     model = ExperimentRoute
     template_name = "generic/object_form.html"
     extra_context = {
@@ -77,7 +80,9 @@ class EditExperimentRoute(UpdateView):
         return f"{url}#routes"
 
 
-class DeleteExperimentRoute(LoginAndTeamRequiredMixin, View):
+class DeleteExperimentRoute(LoginAndTeamRequiredMixin, View, PermissionRequiredMixin):
+    permission_required = "experiments.delete_experimentroute"
+
     def delete(self, request, team_slug: str, pk: int, experiment_id: int):
         experiment_route = get_object_or_404(ExperimentRoute, id=pk, parent_id=experiment_id, team=request.team)
         experiment_route.archive()

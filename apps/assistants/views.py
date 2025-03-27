@@ -166,10 +166,13 @@ def check_sync_status(request, team_slug, pk):
     error = None
     try:
         diffs = get_diff_with_openai_assistant(assistant)
+        files_missing_local, files_missing_remote = get_out_of_sync_files(assistant)
     except OpenAiSyncError as e:
         error = str(e)
         diffs = []
-    files_missing_local, files_missing_remote = get_out_of_sync_files(assistant)
+        files_missing_local = []
+        files_missing_remote = []
+
     context = {
         "diffs": diffs,
         "object": assistant,

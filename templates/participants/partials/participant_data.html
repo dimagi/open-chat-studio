@@ -1,11 +1,15 @@
 {% if perms.experiments.change_participantdata %}
-    <form x-data="{data: '{{ participant_data|escapejs }}', validJson: false}" x-init="validJson = isValidJSON(data)" method="post" action="{% url 'participants:edit-participant-data' experiment.team.slug participant.id experiment.id %}">
+    <form hx-post="{% url 'participants:edit-participant-data' experiment.team.slug participant.id experiment.id %}">
         {% csrf_token %}
         <div class="mb-4">
-            <textarea x-model="data" x-on:input="validJson = isValidJSON(data)" name="participant-data" id="{{ experiment }}-data" class="textarea textarea-bordered mt-1 block w-full h-96">{{ participant_data|escape }}</textarea>
+            <textarea name="participant-data" id="{{ experiment }}-data" class="textarea textarea-bordered mt-1 block w-full h-96">{{ participant_data|escape }}</textarea>
         </div>
+        <div class="json-editor w-full mb-4" data-target-field="textarea[name='participant-data']" data-disable-elt="#submit-{{ experiment.id }}"></div>
+        {% if error %}
+            <p class="text-error text-sm mt-1">{{ error }}</p>
+        {% endif %}
         <div class="flex items-center justify-between">
-            <button class="btn btn-primary" id="submit-{{ experiment }}" type="submit" :disabled="!validJson">Update</button>
+            <button class="btn btn-primary" id="submit-{{ experiment.id }}" type="submit">Update</button>
         </div>
     </form>
 {% else %}
