@@ -14,10 +14,5 @@ def subtract(value, arg):
 
 
 @register.filter
-def add(value, arg):
-    return int(value) + int(arg)
-
-
-@register.filter
 def minimum(value, arg):
     return min(int(value), int(arg))
