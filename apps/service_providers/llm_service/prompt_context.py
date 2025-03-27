@@ -168,6 +168,8 @@ class ParticipantDataProxy:
         return self.session.participant.global_data | data
 
     def set(self, data):
+        if not isinstance(data, dict):
+            raise ValueError("Data must be a dictionary")
         participant_data = self._get_db_object()
         participant_data.data = data
         participant_data.save(update_fields=["data"])
