@@ -71,7 +71,10 @@ new_api_message_request_serializer = inline_serializer(
 
 new_api_message_response_serializer = inline_serializer(
     "NewAPIMessageResponse",
-    fields={"response": serializers.CharField(label="AI response")},
+    fields={
+        "response": serializers.CharField(label="AI response"),
+        "attachments": serializers.ListField(label="List of file URLs", child=serializers.CharField()),
+    },
 )
 
 
@@ -146,7 +149,7 @@ def _new_api_message(request, experiment_id: uuid, version=None):
         experiment = get_object_or_404(Experiment, public_id=experiment_id, team=request.team)
         experiment_channel = ExperimentChannel.objects.get_team_api_channel(request.team)
     experiment_version = experiment.get_version(version) if version is not None else experiment.default_version
-    chat_message = tasks.handle_api_message(
+    ai_response = tasks.handle_api_message(
         request.user,
         experiment_version,
         experiment_channel,
@@ -154,7 +157,11 @@ def _new_api_message(request, experiment_id: uuid, version=None):
         participant_id,
         session,
     )
-    return Response(data={"response": chat_message.content})
+
+    attached_files = ai_response.get_attached_files() or []
+    return Response(
+        data={"response": ai_response.content, "attachments": [file.public_link() for file in attached_files]}
+    )
 
 
 @require_POST
