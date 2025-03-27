@@ -4,7 +4,7 @@ import time
 from typing import TYPE_CHECKING, Any, Literal
 
 import openai
-from django.db import models, transaction
+from django.db import transaction
 from langchain.agents import AgentExecutor, create_tool_calling_agent
 from langchain.agents.openai_assistant.base import OpenAIAssistantFinish
 from langchain_core.agents import AgentFinish
@@ -21,7 +21,6 @@ from langchain_core.runnables import (
 from langchain_core.runnables.config import merge_configs
 from pydantic import ConfigDict
 
-from apps.assistants.models import ToolResources
 from apps.chat.agent.openapi_tool import ToolArtifact
 from apps.experiments.models import Experiment, ExperimentSession
 from apps.files.models import File
@@ -345,10 +344,7 @@ class AssistantChat(RunnableSerializable[dict, ChainOutput]):
         chat = self.adapter.session.chat
         session_id = self.adapter.session.id
         team = self.adapter.session.team
-        assistant_file_ids = ToolResources.objects.filter(assistant=self.adapter.assistant).values_list("files")
-        assistant_files_ids = File.objects.filter(
-            team_id=team.id, id__in=models.Subquery(assistant_file_ids)
-        ).values_list("external_id", flat=True)
+        restricted_file_ids = self.adapter.get_restricted_file_ids()
 
         file_ids = set()
         image_file_attachments = []
@@ -377,7 +373,7 @@ class AssistantChat(RunnableSerializable[dict, ChainOutput]):
                         file_citation = annotation.file_citation
                         file_id = file_citation.file_id
                         file_name, file_link = self._get_file_link_for_citation(
-                            file_id=file_id, forbidden_file_ids=assistant_files_ids
+                            file_id=file_id, forbidden_file_ids=restricted_file_ids
                         )
 
                         # Original citation text example:【6:0†source】
@@ -460,6 +456,7 @@ class AssistantChat(RunnableSerializable[dict, ChainOutput]):
         except File.MultipleObjectsReturned:
             logger.error("Multiple files with the same external ID", extra={"file_id": file_id, "team": team.slug})
             file = File.objects.filter(external_id=file_id, team_id=team.id).first()
+            file_link = f"file:{team.slug}:{session_id}:{file.id}"
             file_name = file.name
         except File.DoesNotExist:
             client = self.adapter.assistant_client
