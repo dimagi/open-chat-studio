@@ -499,7 +499,7 @@ def test_assistant_response_with_annotations_and_assistant_file(
     if allow_file_downloads:
         expected_output_message = (
             f"Is this the file you're looking for:[^0]."
-            f"\n[^0]: [test.png](assistant_file:{session.team.slug}:{session.id}:{assistant_file.id})"
+            f"\n[^0]: [test.png](assistant_file:{session.team.slug}:{local_assistant.id}:{assistant_file.id})"
         )
     else:
         expected_output_message = "Is this the file you're looking for:[^0].\n\\[^0\\]: test.png"
