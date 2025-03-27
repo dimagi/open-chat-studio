@@ -1,9 +1,9 @@
 import pytest
 from django.urls import reverse
 
-from apps.chatbots.tables import ChatbotTable, chatbot_chip_action
+from apps.chatbots.tables import ChatbotTable
 from apps.experiments.models import Experiment, ExperimentSession
-from apps.generics.actions import Action
+from apps.generics.actions import Action, chip_action
 
 
 @pytest.mark.django_db()
@@ -53,7 +53,13 @@ def test_chatbot_chip_action(team_with_users):
         team=team,
     )
 
-    action = chatbot_chip_action(label="Session Details")
+    def custom_url_factory(*args):
+        return reverse(
+            "chatbots:chatbot_session_view",
+            args=[team.slug, experiment.public_id, session.external_id],
+        )
+
+    action = chip_action(label="Session Details", url_factory=custom_url_factory)
 
     assert isinstance(action, Action)
     assert action.label == "Session Details"

@@ -1,4 +1,6 @@
 class OriginDetectionMiddleware:
+    """This is a temporary middleware to aid in the migration from 'experiments' to 'chatbots'"""
+
     def __init__(self, get_response):
         self.get_response = get_response
 

@@ -91,7 +91,7 @@ class EditChatbot(LoginAndTeamRequiredMixin, TemplateView, PermissionRequiredMix
 
 
 class CreateChatbotVersion(CreateExperimentVersion):
-    permission_required = "experiment.add_experiment"
+    permission_required = "experiments.add_experiment"
     pk_url_kwarg = "experiment_id"
     template_name = "experiments/create_version_form.html"
 
