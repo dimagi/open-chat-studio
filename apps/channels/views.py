@@ -7,15 +7,19 @@ from django.shortcuts import get_object_or_404
 from django.views.decorators.csrf import csrf_exempt
 from django.views.decorators.http import require_POST
 from drf_spectacular.types import OpenApiTypes
-from drf_spectacular.utils import OpenApiParameter, extend_schema, inline_serializer
-from rest_framework import serializers, status
+from drf_spectacular.utils import OpenApiParameter, extend_schema
+from rest_framework import status
 from rest_framework.decorators import api_view
 from rest_framework.response import Response
 
 from apps.api.permissions import verify_hmac
 from apps.channels import tasks
 from apps.channels.models import ChannelPlatform, ExperimentChannel
-from apps.channels.serializers import CommCareConnectMessageSerializer
+from apps.channels.serializers import (
+    ApiMessageSerializer,
+    ApiResponseMessageSerializer,
+    CommCareConnectMessageSerializer,
+)
 from apps.experiments.models import Experiment, ExperimentSession, ParticipantData
 
 
@@ -61,23 +65,6 @@ def new_turn_message(request, experiment_id: uuid):
     return HttpResponse()
 
 
-new_api_message_request_serializer = inline_serializer(
-    "NewAPIMessage",
-    fields={
-        "message": serializers.CharField(label="User message"),
-        "session": serializers.CharField(required=False, label="Optional session ID"),
-    },
-)
-
-new_api_message_response_serializer = inline_serializer(
-    "NewAPIMessageResponse",
-    fields={
-        "response": serializers.CharField(label="AI response"),
-        "attachments": serializers.ListField(label="List of file URLs", child=serializers.CharField()),
-    },
-)
-
-
 def new_api_message_schema(versioned: bool):
     operation_id = "new_api_message"
     summary = "New API Message"
@@ -106,8 +93,8 @@ def new_api_message_schema(versioned: bool):
         operation_id=operation_id,
         summary=summary,
         tags=["Channels"],
-        request=new_api_message_request_serializer,
-        responses={200: new_api_message_response_serializer},
+        request=ApiMessageSerializer(),
+        responses={200: ApiResponseMessageSerializer()},
         parameters=parameters,
     )
 
@@ -160,7 +147,10 @@ def _new_api_message(request, experiment_id: uuid, version=None):
 
     attached_files = ai_response.get_attached_files() or []
     return Response(
-        data={"response": ai_response.content, "attachments": [file.public_link() for file in attached_files]}
+        data={
+            "response": ai_response.content,
+            "attachments": [{"file_name": file.name, "link": file.public_link()} for file in attached_files],
+        }
     )
 
 
