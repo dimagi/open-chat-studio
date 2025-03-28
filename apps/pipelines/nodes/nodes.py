@@ -477,6 +477,7 @@ class StaticRouterNode(RouterMixin, Passthrough):
     class DataSource(TextChoices):
         participant_data = "participant_data", "Participant Data"
         temp_state = "temp_state", "Temporary State"
+        session_state = "session_state", "Session State"
 
     model_config = ConfigDict(
         json_schema_extra=NodeSchema(
@@ -496,10 +497,13 @@ class StaticRouterNode(RouterMixin, Passthrough):
     def _process_conditional(self, state: PipelineState, node_id=None):
         from apps.service_providers.llm_service.prompt_context import SafeAccessWrapper
 
-        if self.data_source == self.DataSource.participant_data:
-            data = self.get_participant_data_proxy(state).get()
-        else:
-            data = state["temp_state"]
+        match self.data_source:
+            case self.DataSource.participant_data:
+                data = self.get_participant_data_proxy(state).get()
+            case self.DataSource.temp_state:
+                data = state["temp_state"]
+            case self.DataSource.session_state:
+                data = state["experiment_session"].state
 
         formatted_key = f"{{data.{self.route_key}}}"
         try:
