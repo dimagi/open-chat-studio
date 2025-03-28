@@ -110,5 +110,5 @@ class File(BaseTeamModel):
         new_file.save()
         return new_file
 
-    def public_link(self) -> str:
-        return absolute_url(reverse("files:public_download", args=[self.team.slug, self.id]))
+    def download_link(self, experiment_session_id: int) -> str:
+        return absolute_url(reverse("experiments:download_file", args=[self.team.slug, experiment_session_id, self.id]))

@@ -149,7 +149,7 @@ def _new_api_message(request, experiment_id: uuid, version=None):
     return Response(
         data={
             "response": ai_response.content,
-            "attachments": [{"file_name": file.name, "link": file.public_link()} for file in attached_files],
+            "attachments": [{"file_name": file.name, "link": file.download_link()} for file in attached_files],
         }
     )
 

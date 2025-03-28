@@ -250,7 +250,7 @@ class ChannelBase(ABC):
         if not attachments:
             return text
 
-        links = [f"{file.name}\n{file.public_link()}\n" for file in attachments]
+        links = [f"{file.name}\n{file.download_link(self.experiment_session.id)}\n" for file in attachments]
         return "{text}\n\n{links}".format(text=text, links="\n".join(links))
 
     @staticmethod
@@ -487,7 +487,7 @@ class ChannelBase(ABC):
             self.send_text_to_user(text)
 
         if attached_files:
-            link_attachments.extend([file.public_link() for file in attached_files])
+            link_attachments.extend([file.download_link(self.experiment_session.id) for file in attached_files])
 
         if link_attachments:
             link_attachments_text = "\n".join(link_attachments)
