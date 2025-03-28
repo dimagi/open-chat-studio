@@ -43,4 +43,4 @@ def test_create_new_session_and_post_message(mock_response, experiment):
         new_message_url, data={"message": "What should I call my dog?", "session": session_id}, format="json"
     )
     assert response.status_code == 200, response.json()
-    assert response.json() == {"response": "Fido"}
+    assert response.json() == {"response": "Fido", "attachments": []}

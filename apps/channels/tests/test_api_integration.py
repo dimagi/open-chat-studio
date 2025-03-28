@@ -35,7 +35,7 @@ def test_new_message_creates_a_channel_and_participant(get_llm_response_mock, ex
         content_type="application/json",
     )
     assert response.status_code == 200
-    assert response.json() == {"response": "Hi user"}
+    assert response.json() == {"response": "Hi user", "attachments": []}
     channels = channels_queryset.all()
     assert len(channels) == 1
     participant = Participant.objects.get(identifier=user.email, team=experiment.team, user=user)
@@ -65,7 +65,7 @@ def test_new_message_with_existing_session(get_llm_response_mock, _load_latest_s
         content_type="application/json",
     )
     assert response.status_code == 200
-    assert response.json() == {"response": "Hi user"}
+    assert response.json() == {"response": "Hi user", "attachments": []}
 
     # check that no new sessions were created
     assert not ExperimentSession.objects.exclude(id=session.id).exists()
