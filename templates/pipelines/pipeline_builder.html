@@ -1,5 +1,6 @@
 {% extends 'web/app/app_base.html' %}
 {% load static %}
+
 {% block page_head %}
   <link rel="stylesheet" href="{% static 'css/pipeline.css' %}">
   <style>
@@ -18,25 +19,98 @@
       top: 50%;
       transform: translate(0, -50%);
     }
+    /* Fullscreen button styles */
+    .fullscreen-toggle {
+      transition: background-color 0.2s ease;
+      position: absolute;
+      top: 8px;
+      right: 8px;
+      padding: 8px;
+      background-color: #e5e7eb; /* bg-gray-200 */
+      border-radius: 4px;
+      z-index: 10;
+    }
+    .fullscreen-toggle:hover {
+      background-color: #d1d5db; /* hover:bg-gray-300 */
+    }
+    .fullscreen-toggle svg {
+      pointer-events: none;
+    }
+    /* Ensure pipeline container takes full space in fullscreen */
+    :fullscreen #pipelines-container {
+      width: 100%;
+      height: 100%;
+    }
   </style>
 {% endblock page_head %}
+
 {% block breadcrumbs %}
 {% endblock %}
+
 {% block app %}
-  <div class="max-w-7xl mx-auto" id="pipelineBuilder">
+  <div class="flex-1 relative" id="pipelines-container">
+    <!-- Fullscreen toggle button -->
+    <button class="fullscreen-toggle" title="Toggle Full Screen">
+      <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+        <path
+          id="fullscreen-enter-icon"
+          stroke-linecap="round"
+          stroke-linejoin="round"
+          stroke-width="2"
+          d="M4 8V4m0 0h4M4 4l5 5m11-1V4m0 0h-4m4 0l-5 5M4 16v4m0 0h4m-4 0l5-5m11 5v-4m0 0h-4m4 0l-5-5"
+        />
+      </svg>
+    </button>
+    <!-- Pipeline builder content -->
+    <div class="max-w-7xl mx-auto" id="pipelineBuilder"></div>
   </div>
 {% endblock %}
+
 {% block page_js %}
   {{ parameter_values|json_script:"parameter-values" }}
   {{ default_values|json_script:"default-values" }}
   {{ node_schemas|json_script:"node-schemas" }}
-  {{ flags_enabled|json_script:"flags-enabled" }}
   <script src="{% static 'js/pipeline-bundle.js' %}"></script>
   <script type="module">
     window.DOCUMENTATION_BASE_URL = '{{ docs_base_url }}';
     document.addEventListener('DOMContentLoaded', () => {
+      // Render the pipeline
       SiteJS.pipeline.renderPipeline("#pipelineBuilder", "{{ request.team.slug }}", {{ pipeline_id }});
-    }
-    )
+
+      // Fullscreen functionality
+      const toggleButton = document.querySelector('.fullscreen-toggle');
+      const container = document.getElementById('pipelines-container');
+      const sidebar = document.querySelector('.w-64');
+      const icon = document.getElementById('fullscreen-enter-icon');
+
+      function toggleFullScreen() {
+        if (!document.fullscreenElement) {
+          container.requestFullscreen().then(() => {
+            if (sidebar) sidebar.classList.add('hidden');
+            icon.setAttribute('d', 'M6 18L18 6M6 6l12 12'); // Exit fullscreen icon
+          }).catch(err => console.error('Fullscreen request failed:', err));
+        } else {
+          document.exitFullscreen().then(() => {
+            if (sidebar) sidebar.classList.remove('hidden');
+            icon.setAttribute('d', 'M4 8V4m0 0h4M4 4l5 5m11-1V4m0 0h-4m4 0l-5 5M4 16v4m0 0h4m-4 0l5-5m11 5v-4m0 0h-4m4 0l-5-5'); // Enter fullscreen icon
+          }).catch(err => console.error('Exit fullscreen failed:', err));
+        }
+      }
+
+      toggleButton.addEventListener('click', toggleFullScreen);
+
+      document.addEventListener('fullscreenchange', () => {
+        if (!document.fullscreenElement && sidebar) {
+          sidebar.classList.remove('hidden');
+          icon.setAttribute('d', 'M4 8V4m0 0h4M4 4l5 5m11-1V4m0 0h-4m4 0l-5 5M4 16v4m0 0h4m-4 0l5-5m11 5v-4m0 0h-4m4 0l-5-5');
+        }
+      });
+
+      document.addEventListener('keydown', (event) => {
+        if (event.key === 'Escape' && document.fullscreenElement) {
+          toggleFullScreen();
+        }
+      });
+    });
   </script>
 {% endblock %}
