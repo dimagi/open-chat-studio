@@ -90,3 +90,35 @@ def test_new_message_to_another_users_session(experiment, client):
         content_type="application/json",
     )
     assert response.status_code == 404
+
+
+@pytest.mark.django_db()
+@patch("apps.chat.channels.ApiChannel._get_bot_response")
+def test_create_new_session_and_post_message(mock_response, experiment):
+    user = experiment.team.members.first()
+
+    client = ApiTestClient(user, experiment.team)
+    response = client.get(reverse("api:experiment-list"))
+    assert response.status_code == 200
+
+    experiment_id = response.json()["results"][0]["id"]
+
+    data = {
+        "experiment": experiment_id,
+        "messages": [
+            {"role": "assistant", "content": "hi"},
+            {"role": "user", "content": "hello"},
+        ],
+    }
+    response = client.post(reverse("api:session-list"), data=data, format="json")
+    response_json = response.json()
+    assert response.status_code == 201, response_json
+    session_id = response_json["id"]
+
+    mock_response.return_value = ChatMessage(content="Fido")
+    new_message_url = reverse("channels:new_api_message", kwargs={"experiment_id": experiment_id})
+    response = client.post(
+        new_message_url, data={"message": "What should I call my dog?", "session": session_id}, format="json"
+    )
+    assert response.status_code == 200, response.json()
+    assert response.json() == {"response": "Fido", "attachments": []}

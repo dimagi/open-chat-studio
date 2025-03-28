@@ -145,11 +145,15 @@ def _new_api_message(request, experiment_id: uuid, version=None):
         session,
     )
 
-    attached_files = ai_response.get_attached_files() or []
+    attachments = []
+    if attached_files := ai_response.get_attached_files():
+        session_id = session_id or ExperimentSession.objects.get(chat=ai_response.chat).id
+        attachments = [{"file_name": file.name, "link": file.download_link(session_id)} for file in attached_files]
+
     return Response(
         data={
             "response": ai_response.content,
-            "attachments": [{"file_name": file.name, "link": file.download_link()} for file in attached_files],
+            "attachments": attachments,
         }
     )
 
