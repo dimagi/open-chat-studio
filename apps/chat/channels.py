@@ -763,7 +763,7 @@ class WhatsappChannel(ChannelBase):
         from_number = self.experiment_channel.extra_data.get("number")
         to_number = self.participant_identifier
         self.messaging_service.send_text_message(
-            text, from_=from_number, to=to_number, platform=ChannelPlatform.WHATSAPP, attached_files=attached_files
+            text=text, from_=from_number, to=to_number, platform=ChannelPlatform.WHATSAPP, attached_files=attached_files
         )
 
     @property
@@ -793,7 +793,7 @@ class SureAdhereChannel(ChannelBase):
     def send_text_to_user(self, text: str, attached_files: list[File] = None):
         text = self.append_attachment_links(text, attached_files)
         to_patient = self.participant_identifier
-        self.messaging_service.send_text_message(text, to=to_patient, platform=ChannelPlatform.SUREADHERE)
+        self.messaging_service.send_text_message(text=text, to=to_patient, platform=ChannelPlatform.SUREADHERE)
 
     @property
     def supported_message_types(self):
@@ -813,7 +813,7 @@ class FacebookMessengerChannel(ChannelBase):
         text = self.append_attachment_links(text, attached_files)
         from_ = self.experiment_channel.extra_data.get("page_id")
         self.messaging_service.send_text_message(
-            text, from_=from_, to=self.participant_identifier, platform=ChannelPlatform.FACEBOOK
+            text=text, from_=from_, to=self.participant_identifier, platform=ChannelPlatform.FACEBOOK
         )
 
     @property

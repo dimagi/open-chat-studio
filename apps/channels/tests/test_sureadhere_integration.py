@@ -1,4 +1,4 @@
-from unittest.mock import patch
+from unittest.mock import Mock, patch
 
 import pytest
 from django.urls import reverse
@@ -6,9 +6,11 @@ from django.urls import reverse
 from apps.channels.datamodels import SureAdhereMessage
 from apps.channels.models import ChannelPlatform
 from apps.channels.tasks import handle_sureadhere_message
-from apps.chat.channels import MESSAGE_TYPES
+from apps.chat.channels import MESSAGE_TYPES, SureAdhereChannel
 from apps.chat.models import ChatMessage
 from apps.utils.factories.channels import ExperimentChannelFactory
+from apps.utils.factories.experiment import ExperimentSessionFactory
+from apps.utils.factories.files import FileFactory
 
 from .message_examples import sureadhere_messages
 
@@ -63,3 +65,24 @@ class TestSureAdhere:
         response = client.post(url, data=message, content_type="application/json")
         assert response.status_code == 200
         handle_sureadhere_message_task.assert_not_called()
+
+
+@pytest.mark.django_db()
+def test_attachment_links_attached_to_message(experiment):
+    session = ExperimentSessionFactory(experiment_channel__platform=ChannelPlatform.SUREADHERE, experiment=experiment)
+    channel = SureAdhereChannel.from_experiment_session(session)
+    channel.messaging_service = Mock()
+    files = FileFactory.create_batch(2)
+    channel.send_text_to_user("Hi there", attached_files=files)
+    call_kwargs = channel.messaging_service.send_text_message.call_args[1]
+    final_message = call_kwargs["text"]
+
+    expected_final_message = f"""Hi there
+
+{files[0].name}
+{files[0].download_link(session.id)}
+
+{files[1].name}
+{files[1].download_link(session.id)}
+"""
+    assert final_message == expected_final_message

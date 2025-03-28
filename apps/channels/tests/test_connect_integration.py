@@ -18,6 +18,7 @@ from apps.chat.channels import CommCareConnectChannel
 from apps.experiments.models import ParticipantData
 from apps.utils.factories.channels import ExperimentChannelFactory
 from apps.utils.factories.experiment import ExperimentSessionFactory, ParticipantFactory
+from apps.utils.factories.files import FileFactory
 
 
 def _setup_participant(experiment) -> tuple:
@@ -186,3 +187,33 @@ class TestCommCareConnectChannel:
         participant_data.refresh_from_db()
         assert key is not None
         assert participant_data.get_encryption_key_bytes() == key
+
+
+@pytest.mark.django_db()
+@override_settings(COMMCARE_CONNECT_SERVER_SECRET="123", COMMCARE_CONNECT_SERVER_ID="123")
+def test_attachment_links_attached_to_message(experiment):
+    _, _, _, part_data = _setup_participant(experiment)
+    session = ExperimentSessionFactory(
+        experiment_channel__platform=ChannelPlatform.COMMCARE_CONNECT,
+        participant=part_data.participant,
+        experiment=experiment,
+    )
+    channel = CommCareConnectChannel.from_experiment_session(session)
+    channel.client = Mock()
+    files = FileFactory.create_batch(2)
+    channel.send_text_to_user("Hi there", attached_files=files)
+    call_kwargs = channel.client.send_message_to_user.call_args[1]
+
+    final_message = call_kwargs["message"]
+
+    original_message = "Hi there"
+
+    expected_final_message = f"""{original_message}
+
+{files[0].name}
+{files[0].download_link(session.id)}
+
+{files[1].name}
+{files[1].download_link(session.id)}
+"""
+    assert final_message == expected_final_message
