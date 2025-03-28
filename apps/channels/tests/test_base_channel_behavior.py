@@ -35,6 +35,11 @@ from apps.utils.langchain import build_fake_llm_service, mock_llm
 from .message_examples import telegram_messages
 
 
+class TestChannel(ChannelBase):
+    def send_text_to_user(self):
+        pass
+
+
 @pytest.fixture()
 def telegram_channel(db):
     experiment = ExperimentFactory(conversational_consent_enabled=False)
@@ -851,72 +856,68 @@ def test_participant_authorization(
         assert send_text_to_user.call_args[0][0] == "Sorry, you are not allowed to chat to this bot"
 
 
-class TestChannel(ChannelBase):
-    def send_text_to_user(self):
-        pass
-
-
 @pytest.mark.django_db()
-class TestBaseChannelMethods:
-    """Unit tests for the methods of the ChannelBase class"""
+def test_participant_identifier_determination():
+    """
+    Test participant identifier is fetched from the cached value, otherwise from the session, and lastly from the
+    user message
+    """
+    session = ExperimentSessionFactory(participant__identifier="Alpha")
+    exp_channel = ExperimentChannelFactory(experiment=session.experiment)
+    channel_base = TestChannel(experiment=session.experiment, experiment_channel=exp_channel)
+    channel_base.message = telegram_messages.text_message(chat_id="Beta")
 
-    def test_participant_identifier_determination(self):
-        """
-        Test participant identifier is fetched from the cached value, otherwise from the session, and lastly from the
-        user message
-        """
-        session = ExperimentSessionFactory(participant__identifier="Alpha")
-        exp_channel = ExperimentChannelFactory(experiment=session.experiment)
-        channel_base = TestChannel(experiment=session.experiment, experiment_channel=exp_channel)
-        channel_base.message = telegram_messages.text_message(chat_id="Beta")
+    assert channel_base.participant_identifier == "Beta"
+    assert channel_base._participant_identifier == "Beta"
+    # Reset cached value
+    channel_base._participant_identifier = None
+    # Set the session and check that the identifier is fetched from the session
+    channel_base.experiment_session = session
+    assert channel_base.participant_identifier == "Alpha"
 
-        assert channel_base.participant_identifier == "Beta"
-        assert channel_base._participant_identifier == "Beta"
-        # Reset cached value
-        channel_base._participant_identifier = None
-        # Set the session and check that the identifier is fetched from the session
-        channel_base.experiment_session = session
-        assert channel_base.participant_identifier == "Alpha"
 
-    @patch("apps.chat.channels.TelegramChannel.send_text_to_user", Mock())
-    @patch("apps.chat.channels.TelegramChannel._get_bot_response", Mock(return_value=chat_message_mock()))
-    def test_new_sessions_are_linked_to_the_working_experiment(self, experiment):
-        working_version = experiment
-        channel = ExperimentChannelFactory(experiment=working_version)
-        new_version = working_version.create_new_version()
+@patch("apps.chat.channels.TelegramChannel.send_text_to_user", Mock())
+@patch("apps.chat.channels.TelegramChannel._get_bot_response", Mock(return_value=chat_message_mock()))
+def test_new_sessions_are_linked_to_the_working_experiment(experiment):
+    working_version = experiment
+    channel = ExperimentChannelFactory(experiment=working_version)
+    new_version = working_version.create_new_version()
 
-        telegram = TelegramChannel(experiment=new_version, experiment_channel=channel)
-        telegram.telegram_bot = Mock()
-        telegram.new_user_message(telegram_messages.text_message())
+    telegram = TelegramChannel(experiment=new_version, experiment_channel=channel)
+    telegram.telegram_bot = Mock()
+    telegram.new_user_message(telegram_messages.text_message())
 
-        # Check that the working experiment is linked to the session
-        assert ExperimentSession.objects.filter(experiment=working_version).exists()
-        assert not ExperimentSession.objects.filter(experiment=new_version).exists()
+    # Check that the working experiment is linked to the session
+    assert ExperimentSession.objects.filter(experiment=working_version).exists()
+    assert not ExperimentSession.objects.filter(experiment=new_version).exists()
 
-    def test_can_start_a_session_with_working_experiment(self, experiment):
-        assert experiment.is_a_version is False
-        channel = ExperimentChannelFactory(experiment=experiment)
-        session = ChannelBase.start_new_session(experiment, channel, participant_identifier="testy-pie")
-        assert session.experiment == experiment
 
-    def test_cannot_start_a_session_with_an_experiment_version(self, experiment):
-        channel = ExperimentChannelFactory(experiment=experiment)
-        new_version = experiment.create_new_version()
-        assert new_version.is_a_version is True
-        with pytest.raises(VersionedExperimentSessionsNotAllowedException):
-            ChannelBase.start_new_session(new_version, channel, participant_identifier="testy-pie")
+def test_can_start_a_session_with_working_experiment(experiment):
+    assert experiment.is_a_version is False
+    channel = ExperimentChannelFactory(experiment=experiment)
+    session = ChannelBase.start_new_session(experiment, channel, participant_identifier="testy-pie")
+    assert session.experiment == experiment
 
-    @pytest.mark.parametrize("new_session", [True, False])
-    def test_ensure_session_exists_for_participant(self, new_session, experiment):
-        experiment_channel = ExperimentChannelFactory(experiment=experiment)
-        if new_session:
-            ExperimentSessionFactory(
-                experiment=experiment, participant__identifier="testy-pie", experiment_channel=experiment_channel
-            )
-        channel_base = TestChannel(experiment=experiment, experiment_channel=experiment_channel)
-        channel_base.ensure_session_exists_for_participant(identifier="testy-pie", new_session=new_session)
 
-        if new_session:
-            assert ExperimentSession.objects.filter(participant__identifier="testy-pie").count() == 2
-        else:
-            assert ExperimentSession.objects.filter(participant__identifier="testy-pie").count() == 1
+def test_cannot_start_a_session_with_an_experiment_version(experiment):
+    channel = ExperimentChannelFactory(experiment=experiment)
+    new_version = experiment.create_new_version()
+    assert new_version.is_a_version is True
+    with pytest.raises(VersionedExperimentSessionsNotAllowedException):
+        ChannelBase.start_new_session(new_version, channel, participant_identifier="testy-pie")
+
+
+@pytest.mark.parametrize("new_session", [True, False])
+def test_ensure_session_exists_for_participant(new_session, experiment):
+    experiment_channel = ExperimentChannelFactory(experiment=experiment)
+    if new_session:
+        ExperimentSessionFactory(
+            experiment=experiment, participant__identifier="testy-pie", experiment_channel=experiment_channel
+        )
+    channel_base = TestChannel(experiment=experiment, experiment_channel=experiment_channel)
+    channel_base.ensure_session_exists_for_participant(identifier="testy-pie", new_session=new_session)
+
+    if new_session:
+        assert ExperimentSession.objects.filter(participant__identifier="testy-pie").count() == 2
+    else:
+        assert ExperimentSession.objects.filter(participant__identifier="testy-pie").count() == 1
