@@ -433,7 +433,7 @@ paths:
         content:
           application/json:
             schema:
-              $ref: '#/components/schemas/NewAPIMessage'
+              $ref: '#/components/schemas/ApiMessage'
         required: true
       security:
       - apiKeyAuth: []
@@ -443,7 +443,7 @@ paths:
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/NewAPIMessageResponse'
+                $ref: '#/components/schemas/ApiResponseMessage'
           description: ''
   /channels/api/{experiment_id}/v{version}/incoming_message:
     post:
@@ -472,7 +472,7 @@ paths:
         content:
           application/json:
             schema:
-              $ref: '#/components/schemas/NewAPIMessage'
+              $ref: '#/components/schemas/ApiMessage'
         required: true
       security:
       - apiKeyAuth: []
@@ -482,10 +482,45 @@ paths:
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/NewAPIMessageResponse'
+                $ref: '#/components/schemas/ApiResponseMessage'
           description: ''
 components:
   schemas:
+    ApiMessage:
+      type: object
+      properties:
+        message:
+          type: string
+          title: User message
+        session:
+          type: string
+          title: Optional session ID
+      required:
+      - message
+    ApiResponseAttachment:
+      type: object
+      properties:
+        file_name:
+          type: string
+        link:
+          type: string
+      required:
+      - file_name
+      - link
+    ApiResponseMessage:
+      type: object
+      properties:
+        response:
+          type: string
+          title: AI response
+        attachments:
+          type: array
+          items:
+            $ref: '#/components/schemas/ApiResponseAttachment'
+          title: List of file URLs
+      required:
+      - attachments
+      - response
     ChatCompletionResponseChoices:
       type: object
       properties:
@@ -737,25 +772,6 @@ components:
         * `system` - system
         * `user` - user
         * `assistant` - assistant
-    NewAPIMessage:
-      type: object
-      properties:
-        message:
-          type: string
-          title: User message
-        session:
-          type: string
-          title: Optional session ID
-      required:
-      - message
-    NewAPIMessageResponse:
-      type: object
-      properties:
-        response:
-          type: string
-          title: AI response
-      required:
-      - response
     ObjectEnum:
       enum:
       - chat.completion

@@ -18,6 +18,7 @@ from apps.chat.channels import (
     TelegramChannel,
     WhatsappChannel,
 )
+from apps.chat.models import ChatMessage
 from apps.experiments.models import ParticipantData
 from apps.service_providers.models import MessagingProviderType
 from apps.teams.utils import current_team
@@ -145,7 +146,7 @@ def handle_turn_message(self, experiment_id: uuid, message_data: dict):
 
 def handle_api_message(
     user, experiment_version, experiment_channel, message_text: str, participant_id: str, session=None
-):
+) -> ChatMessage:
     """Synchronously handles the message coming from the API"""
     message = BaseMessage(participant_id=participant_id, message_text=message_text)
     channel = ApiChannel(

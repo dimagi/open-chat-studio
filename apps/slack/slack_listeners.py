@@ -79,7 +79,7 @@ def _respond_to_message(event, channel_id, thread_ts, experiment_channel, experi
     # Set `send_response_to_user` to `False` to prevent it sending the message since we're going to send
     # it here using the already authenticated client.
     ocs_channel = SlackChannel(experiment.default_version, experiment_channel, session, send_response_to_user=False)
-    response = ocs_channel.new_user_message(message)
+    response = ocs_channel.new_user_message(message).content
     context.say(response, thread_ts=thread_ts)
 
 

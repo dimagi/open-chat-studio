@@ -18,7 +18,7 @@ from apps.chat.channels import (
     strip_urls_and_emojis,
 )
 from apps.chat.exceptions import VersionedExperimentSessionsNotAllowedException
-from apps.chat.models import ChatMessageType
+from apps.chat.models import ChatMessage, ChatMessageType
 from apps.experiments.models import (
     ExperimentRoute,
     ExperimentSession,
@@ -35,6 +35,11 @@ from apps.utils.langchain import build_fake_llm_service, mock_llm
 from .message_examples import telegram_messages
 
 
+class TestChannel(ChannelBase):
+    def send_text_to_user(self):
+        pass
+
+
 @pytest.fixture()
 def telegram_channel(db):
     experiment = ExperimentFactory(conversational_consent_enabled=False)
@@ -44,9 +49,15 @@ def telegram_channel(db):
     return channel
 
 
+def chat_message_mock():
+    chat_message_mock = Mock()
+    chat_message_mock.get_attached_files.return_value = []
+    return chat_message_mock
+
+
 @pytest.mark.django_db()
 @patch("apps.chat.channels.TelegramChannel.send_text_to_user", Mock())
-@patch("apps.chat.channels.TelegramChannel._get_bot_response", Mock())
+@patch("apps.chat.channels.TelegramChannel._get_bot_response", Mock(return_value=chat_message_mock()))
 def test_incoming_message_adds_channel_info(telegram_channel):
     """When an `experiment_session` is created, channel specific info like `identifier` and
     `experiment_channel` should also be added to the `experiment_session`
@@ -65,7 +76,7 @@ def test_incoming_message_adds_channel_info(telegram_channel):
 
 @pytest.mark.django_db()
 @patch("apps.chat.channels.TelegramChannel.send_text_to_user", Mock())
-@patch("apps.chat.channels.TelegramChannel._get_bot_response", Mock())
+@patch("apps.chat.channels.TelegramChannel._get_bot_response", Mock(return_value=chat_message_mock()))
 def test_channel_added_for_experiment_session(telegram_channel):
     """Ensure that the experiment session gets a link to the experimentt channel that this is using"""
     chat_id = 123123
@@ -78,7 +89,7 @@ def test_channel_added_for_experiment_session(telegram_channel):
 
 @pytest.mark.django_db()
 @patch("apps.chat.channels.TelegramChannel.send_text_to_user", Mock())
-@patch("apps.chat.channels.TelegramChannel._get_bot_response", Mock())
+@patch("apps.chat.channels.TelegramChannel._get_bot_response", Mock(return_value=chat_message_mock()))
 def test_incoming_message_uses_existing_experiment_session(telegram_channel):
     """Approach: Simulate messages coming in after one another in order to test this behaviour"""
     chat_id = 12312331
@@ -111,7 +122,7 @@ def test_incoming_message_uses_existing_experiment_session(telegram_channel):
 
 @pytest.mark.django_db()
 @patch("apps.chat.channels.TelegramChannel.send_text_to_user", Mock())
-@patch("apps.chat.channels.TelegramChannel._get_bot_response", Mock())
+@patch("apps.chat.channels.TelegramChannel._get_bot_response", Mock(return_value=chat_message_mock()))
 def test_non_active_sessions_are_not_resused(telegram_channel):
     """
     Sessions that were ended should not be reused when the user sends a new message. Rather, a new session should be
@@ -238,7 +249,7 @@ def _send_user_message_on_channel(channel_instance, user_message: str):
 
 @pytest.mark.django_db()
 @patch("apps.chat.channels.TelegramChannel.submit_input_to_llm", Mock())
-@patch("apps.chat.channels.TelegramChannel._get_bot_response", Mock())
+@patch("apps.chat.channels.TelegramChannel._get_bot_response", Mock(return_value=chat_message_mock()))
 @patch("apps.chat.channels.TelegramChannel._send_seed_message")
 @patch("apps.chat.channels.TelegramChannel.send_text_to_user")
 def test_pre_conversation_flow(send_text_to_user_mock, _send_seed_message):
@@ -357,7 +368,7 @@ def test_voice_response_behaviour(
     telegram_channel,
 ):
     get_voice_transcript.return_value = "Hello bot. Please assist me"
-    get_llm_response.return_value = "Hello user. No"
+    get_llm_response.return_value = ChatMessage(content="Hello user. No")
     experiment = telegram_channel.experiment
     experiment.voice_response_behaviour = voice_behaviour
     experiment.save()
@@ -442,7 +453,7 @@ def test_reply_with_text_when_synthetic_voice_not_specified(
     telegram_channel,
 ):
     get_voice_transcript.return_value = "Hello bot. Please assist me"
-    get_llm_response.return_value = "Hello user. No"
+    get_llm_response.return_value = ChatMessage(content="Hello user. No")
     experiment = telegram_channel.experiment
     experiment.voice_response_behaviour = VoiceResponseBehaviours.ALWAYS
     # Let's remove the synthetic voice and see what happens
@@ -461,7 +472,7 @@ def test_reply_with_text_when_synthetic_voice_not_specified(
     [(telegram_messages.audio_message, "voice"), (telegram_messages.text_message, "text")],
 )
 @patch("apps.chat.channels.TelegramChannel.send_text_to_user", Mock())
-@patch("apps.chat.channels.TelegramChannel._get_bot_response", Mock())
+@patch("apps.chat.channels.TelegramChannel._get_bot_response", Mock(return_value=chat_message_mock()))
 @patch("apps.chat.channels.TelegramChannel._add_message_to_history", Mock())
 def test_user_query_extracted_for_pre_conversation_flow(message_func, message_type):
     """The user query need to be available during the pre-conversation flow. Simply looking at `message_text` for
@@ -531,7 +542,7 @@ def test_missing_channel_raises_error(twilio_provider):
 @patch("apps.chat.channels.TelegramChannel._get_bot_response")
 def test_participant_reused_across_experiments(_get_bot_response):
     """A single participant should be linked to multiple sessions per team"""
-    _get_bot_response.return_value = "Hi human"
+    _get_bot_response.return_value = ChatMessage(content="Hi human")
     chat_id = 123
 
     # User chats to experiment 1
@@ -649,8 +660,10 @@ def test_voice_response_with_urls(
     telegram_channel,
 ):
     get_voice_transcript.return_value = "Hello bot. Give me a URL"
-    get_llm_response.return_value = (
-        "Here are two urls for you: [this](http://example.co.za?key1=1&key2=2) and [https://some.com](https://some.com)"
+    get_llm_response.return_value = ChatMessage(
+        content=(
+            "Here are two urls for you: [this](http://example.co.za?key1=1&key2=2) and [https://some.com](https://some.com)"
+        )
     )
     experiment = telegram_channel.experiment
     experiment.voice_response_behaviour = VoiceResponseBehaviours.ALWAYS
@@ -843,72 +856,68 @@ def test_participant_authorization(
         assert send_text_to_user.call_args[0][0] == "Sorry, you are not allowed to chat to this bot"
 
 
-class TestChannel(ChannelBase):
-    def send_text_to_user(self):
-        pass
-
-
 @pytest.mark.django_db()
-class TestBaseChannelMethods:
-    """Unit tests for the methods of the ChannelBase class"""
+def test_participant_identifier_determination():
+    """
+    Test participant identifier is fetched from the cached value, otherwise from the session, and lastly from the
+    user message
+    """
+    session = ExperimentSessionFactory(participant__identifier="Alpha")
+    exp_channel = ExperimentChannelFactory(experiment=session.experiment)
+    channel_base = TestChannel(experiment=session.experiment, experiment_channel=exp_channel)
+    channel_base.message = telegram_messages.text_message(chat_id="Beta")
 
-    def test_participant_identifier_determination(self):
-        """
-        Test participant identifier is fetched from the cached value, otherwise from the session, and lastly from the
-        user message
-        """
-        session = ExperimentSessionFactory(participant__identifier="Alpha")
-        exp_channel = ExperimentChannelFactory(experiment=session.experiment)
-        channel_base = TestChannel(experiment=session.experiment, experiment_channel=exp_channel)
-        channel_base.message = telegram_messages.text_message(chat_id="Beta")
+    assert channel_base.participant_identifier == "Beta"
+    assert channel_base._participant_identifier == "Beta"
+    # Reset cached value
+    channel_base._participant_identifier = None
+    # Set the session and check that the identifier is fetched from the session
+    channel_base.experiment_session = session
+    assert channel_base.participant_identifier == "Alpha"
 
-        assert channel_base.participant_identifier == "Beta"
-        assert channel_base._participant_identifier == "Beta"
-        # Reset cached value
-        channel_base._participant_identifier = None
-        # Set the session and check that the identifier is fetched from the session
-        channel_base.experiment_session = session
-        assert channel_base.participant_identifier == "Alpha"
 
-    @patch("apps.chat.channels.TelegramChannel.send_text_to_user", Mock())
-    @patch("apps.chat.channels.TelegramChannel._get_bot_response", Mock())
-    def test_new_sessions_are_linked_to_the_working_experiment(self, experiment):
-        working_version = experiment
-        channel = ExperimentChannelFactory(experiment=working_version)
-        new_version = working_version.create_new_version()
+@patch("apps.chat.channels.TelegramChannel.send_text_to_user", Mock())
+@patch("apps.chat.channels.TelegramChannel._get_bot_response", Mock(return_value=chat_message_mock()))
+def test_new_sessions_are_linked_to_the_working_experiment(experiment):
+    working_version = experiment
+    channel = ExperimentChannelFactory(experiment=working_version)
+    new_version = working_version.create_new_version()
 
-        telegram = TelegramChannel(experiment=new_version, experiment_channel=channel)
-        telegram.telegram_bot = Mock()
-        telegram.new_user_message(telegram_messages.text_message())
+    telegram = TelegramChannel(experiment=new_version, experiment_channel=channel)
+    telegram.telegram_bot = Mock()
+    telegram.new_user_message(telegram_messages.text_message())
 
-        # Check that the working experiment is linked to the session
-        assert ExperimentSession.objects.filter(experiment=working_version).exists()
-        assert not ExperimentSession.objects.filter(experiment=new_version).exists()
+    # Check that the working experiment is linked to the session
+    assert ExperimentSession.objects.filter(experiment=working_version).exists()
+    assert not ExperimentSession.objects.filter(experiment=new_version).exists()
 
-    def test_can_start_a_session_with_working_experiment(self, experiment):
-        assert experiment.is_a_version is False
-        channel = ExperimentChannelFactory(experiment=experiment)
-        session = ChannelBase.start_new_session(experiment, channel, participant_identifier="testy-pie")
-        assert session.experiment == experiment
 
-    def test_cannot_start_a_session_with_an_experiment_version(self, experiment):
-        channel = ExperimentChannelFactory(experiment=experiment)
-        new_version = experiment.create_new_version()
-        assert new_version.is_a_version is True
-        with pytest.raises(VersionedExperimentSessionsNotAllowedException):
-            ChannelBase.start_new_session(new_version, channel, participant_identifier="testy-pie")
+def test_can_start_a_session_with_working_experiment(experiment):
+    assert experiment.is_a_version is False
+    channel = ExperimentChannelFactory(experiment=experiment)
+    session = ChannelBase.start_new_session(experiment, channel, participant_identifier="testy-pie")
+    assert session.experiment == experiment
 
-    @pytest.mark.parametrize("new_session", [True, False])
-    def test_ensure_session_exists_for_participant(self, new_session, experiment):
-        experiment_channel = ExperimentChannelFactory(experiment=experiment)
-        if new_session:
-            ExperimentSessionFactory(
-                experiment=experiment, participant__identifier="testy-pie", experiment_channel=experiment_channel
-            )
-        channel_base = TestChannel(experiment=experiment, experiment_channel=experiment_channel)
-        channel_base.ensure_session_exists_for_participant(identifier="testy-pie", new_session=new_session)
 
-        if new_session:
-            assert ExperimentSession.objects.filter(participant__identifier="testy-pie").count() == 2
-        else:
-            assert ExperimentSession.objects.filter(participant__identifier="testy-pie").count() == 1
+def test_cannot_start_a_session_with_an_experiment_version(experiment):
+    channel = ExperimentChannelFactory(experiment=experiment)
+    new_version = experiment.create_new_version()
+    assert new_version.is_a_version is True
+    with pytest.raises(VersionedExperimentSessionsNotAllowedException):
+        ChannelBase.start_new_session(new_version, channel, participant_identifier="testy-pie")
+
+
+@pytest.mark.parametrize("new_session", [True, False])
+def test_ensure_session_exists_for_participant(new_session, experiment):
+    experiment_channel = ExperimentChannelFactory(experiment=experiment)
+    if new_session:
+        ExperimentSessionFactory(
+            experiment=experiment, participant__identifier="testy-pie", experiment_channel=experiment_channel
+        )
+    channel_base = TestChannel(experiment=experiment, experiment_channel=experiment_channel)
+    channel_base.ensure_session_exists_for_participant(identifier="testy-pie", new_session=new_session)
+
+    if new_session:
+        assert ExperimentSession.objects.filter(participant__identifier="testy-pie").count() == 2
+    else:
+        assert ExperimentSession.objects.filter(participant__identifier="testy-pie").count() == 1
