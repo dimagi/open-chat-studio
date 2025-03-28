@@ -1,14 +1,6 @@
-from unittest.mock import patch
-
 import pytest
 
 from apps.chat.templatetags.chat_tags import render_markdown
-
-
-@pytest.fixture()
-def mock_reverse():
-    with patch("django.urls.reverse") as mock_reverse:
-        yield mock_reverse
 
 
 def test_render_markdown():
@@ -56,8 +48,56 @@ def test_render_markdown_special_characters():
     assert result == "<p>Special characters: &lt;, &gt;, &amp;</p>"
 
 
-def test_render_image_markdown(mock_reverse):
-    mock_reverse.return_value = "/mocked/url"
-    markdown_text = "![Image](file:example-team:1234:5678)"
+@pytest.mark.parametrize(
+    ("markdown_text", "expected_result"),
+    [
+        pytest.param(
+            "[Link Text](http://example.com)",
+            '<p><a href="http://example.com" target="_blank">Link Text</a></p>',
+            id="link",
+        ),
+        pytest.param(
+            "![Image](http://example.com/image.jpg)",
+            '<p><img alt="Image" src="http://example.com/image.jpg" /></p>',
+            id="image",
+        ),
+        pytest.param(
+            "[Link Text](file:example-team:1234:5678)",
+            '<p><a href="/a/example-team/experiments/1234/file/5678/" target="_blank">Link Text</a></p>',
+            id="custom_link",
+        ),
+        pytest.param(
+            "![Image](file:example-team:1234:5678)",
+            '<p><img alt="Image" src="/a/example-team/experiments/1234/file/5678/" /></p>',
+            id="custom_image",
+        ),
+        pytest.param(
+            "[Link Text][0]\n[0]: file:example-team:1234:5678",
+            '<p><a href="/a/example-team/experiments/1234/file/5678/" target="_blank">Link Text</a></p>',
+            id="reference_link",
+        ),
+        pytest.param(
+            "![Image][0]\n[0]: file:example-team:1234:5678",
+            '<p><img alt="Image" src="/a/example-team/experiments/1234/file/5678/" /></p>',
+            id="reference_image",
+        ),
+        pytest.param(
+            "[0]\n[0]: file:example-team:1234:5678",
+            '<p><a href="/a/example-team/experiments/1234/file/5678/" target="_blank">0</a></p>',
+            id="short_reference_link",
+        ),
+        pytest.param(
+            "![0]\n[0]: file:example-team:1234:5678",
+            '<p><img alt="0" src="/a/example-team/experiments/1234/file/5678/" /></p>',
+            id="short_reference_image",
+        ),
+    ],
+)
+def test_render_links(markdown_text, expected_result):
     result = render_markdown(markdown_text)
-    assert result == '<p><img alt="Image" src="/a/example-team/experiments/1234/file/5678/" /></p>'
+    assert result == expected_result
+
+
+def test_footnote():
+    result = render_markdown("Footnotes[^1]\n[^1]: [file name](file:example-team:1234:5678)")
+    assert '<a href="/a/example-team/experiments/1234/file/5678/" target="_blank">file name</a>' in result

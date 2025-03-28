@@ -13,6 +13,7 @@ from openai.types.beta.threads.text import Text
 from openai.types.beta.threads.text_content_block import TextContentBlock
 from openai.types.file_object import FileObject
 
+from apps.assistants.models import ToolResources
 from apps.channels.datamodels import Attachment
 from apps.chat.agent.tools import TOOL_CLASS_MAP
 from apps.chat.models import Chat, ChatAttachment, ChatMessage, ChatMessageType
@@ -422,19 +423,20 @@ def test_assistant_response_with_annotations(
 
     if cited_file_missing:
         # The cited file link is empty, since it's missing from the DB
+        # This is because we can't get the file content from OpenAI
         expected_output_message = (
             f"![test.png](file:dimagi-test:{session.id}:10)\n"
             f"Hi there human. The generated file can be [downloaded here](file:dimagi-test:{session.id}:10)."
             " A made up link to *file1.pdf* *file2.pdf*"
-            " Also, leaves are tree stuff [1]. Another link to nothing *file3.pdf*\n\\[1\\]: existing.txt"
+            " Also, leaves are tree stuff[^1]. Another link to nothing *file3.pdf*\n\\[^1\\]: existing.txt"
         )
     else:
         expected_output_message = (
             f"![test.png](file:dimagi-test:{session.id}:10)\n"
             f"Hi there human. The generated file can be [downloaded here](file:dimagi-test:{session.id}:10)."
             " A made up link to *file1.pdf* *file2.pdf*"
-            " Also, leaves are tree stuff [1]. Another link to nothing *file3.pdf*"
-            f"\n[1]: file:dimagi-test:{session.id}:9"
+            " Also, leaves are tree stuff[^1]. Another link to nothing *file3.pdf*"
+            f"\n[^1]: [existing.txt](file:dimagi-test:{session.id}:9)"
         )
     assert result.output == expected_output_message
 
@@ -443,6 +445,69 @@ def test_assistant_response_with_annotations(
     message = chat.messages.filter(message_type="ai").first()
     assert "openai-file-1" in message.metadata["openai_file_ids"]
     assert "openai-file-2" in message.metadata["openai_file_ids"]
+
+
+@pytest.mark.django_db()
+@pytest.mark.parametrize("allow_file_downloads", [False, True])
+@patch("openai.resources.beta.threads.runs.Runs.retrieve")
+@patch("openai.resources.beta.Threads.create_and_run")
+@patch("openai.resources.beta.threads.messages.Messages.list")
+def test_assistant_response_with_annotations_and_assistant_file(
+    list_messages,
+    create_and_run,
+    retrieve_run,
+    allow_file_downloads,
+):
+    """Test that cited files are rendered correctly in AI messsages"""
+
+    local_assistant = OpenAiAssistantFactory(assistant_id=ASSISTANT_ID, allow_file_downloads=allow_file_downloads)
+    session = ExperimentSessionFactory(experiment__assistant=local_assistant)
+    chat = session.chat
+    external_file_id = "openai-file-1"
+    assistant_file = FileFactory(team=session.team, external_id=external_file_id, name="test.png")
+    search_resource = ToolResources.objects.create(
+        tool_type="file_search", assistant=local_assistant, extra={"vector_store_id": "123"}
+    )
+    search_resource.files.set([assistant_file])
+
+    thread_id = "test_thread_id"
+    run = _create_run(ASSISTANT_ID, thread_id)
+
+    # Build OpenAI responses
+    annotations = [
+        FileCitationAnnotation(
+            end_index=174,
+            file_citation=FileCitation(file_id=external_file_id, quote=""),
+            start_index=134,
+            text="【6:0†source】",
+            type="file_citation",
+        ),
+    ]
+
+    ai_message = "Is this the file you're looking for:【6:0†source】."
+    assistant = create_experiment_runnable(session.experiment, session)
+    list_messages.return_value.data = _create_thread_messages(
+        ASSISTANT_ID, run.id, thread_id, [{"assistant": ai_message}], annotations, include_image_file=False
+    )
+
+    create_and_run.return_value = run
+    retrieve_run.return_value = run
+
+    # Run assistant
+    result = assistant.invoke("test", attachments=[])
+
+    if allow_file_downloads:
+        expected_output_message = (
+            f"Is this the file you're looking for:[^0]."
+            f"\n[^0]: [test.png](assistant_file:{session.team.slug}:{local_assistant.id}:{assistant_file.id})"
+        )
+    else:
+        expected_output_message = "Is this the file you're looking for:[^0].\n\\[^0\\]: test.png"
+    assert result.output == expected_output_message
+
+    assert chat.get_metadata(Chat.MetadataKeys.OPENAI_THREAD_ID) == thread_id
+    message = chat.messages.filter(message_type="ai").first()
+    assert external_file_id in message.metadata["openai_file_ids"]
 
 
 @pytest.mark.django_db()
@@ -546,7 +611,12 @@ def _get_assistant_mocked_history_recording(session, get_attachments_return_valu
 
 
 def _create_thread_messages(
-    assistant_id, run_id, thread_id, messages: list[dict[str, str]], annotations: list | None = None
+    assistant_id,
+    run_id,
+    thread_id,
+    messages: list[dict[str, str]],
+    annotations: list | None = None,
+    include_image_file=True,
 ):
     """
     Create a list of ThreadMessage objects from a list of message dictionaries:
@@ -555,22 +625,32 @@ def _create_thread_messages(
         {"assistant": "hi"},
     ]
     """
+
+    def get_content(message):
+        content = (
+            [
+                ImageFileContentBlock(
+                    type="image_file",
+                    image_file=ImageFile(file_id="test_file_id"),
+                )
+            ]
+            if include_image_file
+            else []
+        )
+        return content + [
+            TextContentBlock(
+                text=Text(annotations=annotations if annotations else [], value=list(message.values())[0]),
+                type="text",
+            ),
+        ]
+
     return [
         ThreadMessage(
             id="test",
             assistant_id=assistant_id,
             metadata={},
             created_at=0,
-            content=[
-                ImageFileContentBlock(
-                    type="image_file",
-                    image_file=ImageFile(file_id="test_file_id"),
-                ),
-                TextContentBlock(
-                    text=Text(annotations=annotations if annotations else [], value=list(message.values())[0]),
-                    type="text",
-                ),
-            ],
+            content=get_content(message),
             object="thread.message",
             role=list(message)[0],
             run_id=run_id,

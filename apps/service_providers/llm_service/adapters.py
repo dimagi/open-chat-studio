@@ -9,17 +9,20 @@ Classes:
 Usage:
     Use the `for_experiment` or `for_pipeline` class methods to instantiate `ChatAdapter` or `AssistantAdapter`.
 """
+
 from abc import ABCMeta
 from functools import cached_property
 from typing import TYPE_CHECKING, Self
 
+from django.db import models
 from langchain_core.prompts import PromptTemplate, get_template_variables
 from langchain_core.tools import BaseTool
 
-from apps.assistants.models import OpenAiAssistant
+from apps.assistants.models import OpenAiAssistant, ToolResources
 from apps.chat.agent.tools import get_assistant_tools, get_tools
 from apps.chat.models import Chat
 from apps.experiments.models import Experiment, ExperimentSession
+from apps.files.models import File
 from apps.service_providers.llm_service.main import LlmService, OpenAIAssistantRunnable
 from apps.service_providers.llm_service.prompt_context import PromptTemplateContext
 
@@ -234,7 +237,7 @@ class AssistantAdapter(BaseAdapter):
 
     def get_file_type_info(self, attachments: list) -> list:
         if not self.assistant.include_file_info:
-            return ""
+            return []
         file_type_info = []
         for att in attachments:
             file_type_info.extend([{file.external_id: file.content_type} for file in att.files.all()])
@@ -270,3 +273,15 @@ class AssistantAdapter(BaseAdapter):
 
     def get_openai_assistant(self) -> OpenAIAssistantRunnable:
         return self.assistant.get_assistant()
+
+    def get_assistant_file_ids(self) -> list[str]:
+        assistant_file_ids = ToolResources.objects.filter(assistant=self.assistant).values_list("files")
+        return list(
+            File.objects.filter(team_id=self.team.id, id__in=models.Subquery(assistant_file_ids)).values_list(
+                "external_id", flat=True
+            )
+        )
+
+    @property
+    def allow_assistant_file_downloads(self):
+        return self.assistant.allow_file_downloads

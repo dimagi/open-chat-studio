@@ -70,6 +70,7 @@ class OpenAiAssistant(BaseTeamModel, VersionsMixin, CustomActionOperationMixin):
 
     allow_file_search_attachments = models.BooleanField(default=True)
     allow_code_interpreter_attachments = models.BooleanField(default=True)
+    allow_file_downloads = models.BooleanField(default=False)
     objects = OpenAiAssistantManager()
     all_objects = AuditingManager()
 
