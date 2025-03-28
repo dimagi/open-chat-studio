@@ -1,6 +1,6 @@
 import csv
 import io
-from unittest.mock import patch
+from unittest.mock import Mock, patch
 
 import pytest
 
@@ -79,3 +79,52 @@ def test_filtered_export_with_mocked_filter(mock_get_filtered_sessions, session_
             message = session_configs[i]["message"]
             matching_rows = [row for row in rows if message in row]
             assert len(matching_rows) > 0, f"Message for session {i} not found in CSV"
+
+
+def test_trace_id_export():
+    # Mock experiment and session
+    experiment = Mock(
+        public_id="exp123", name="Test Experiment", get_llm_provider_model_name=Mock(return_value="test-llm")
+    )
+    session = Mock(
+        external_id="session123",
+        get_platform_name=Mock(return_value="TestPlatform"),
+        participant=Mock(name="Test Participant", identifier="participant123", public_id="public123"),
+        chat=Mock(tags=Mock(all=Mock(return_value=[])), comments=Mock(all=Mock(return_value=[]))),
+    )
+
+    session.chat.messages.all.return_value = [
+        Mock(
+            id="msg1",
+            message_type="human",
+            content="Hello",
+            metadata={"trace_info": {"trace_id": "trace123"}},
+            trace_info={"trace_id": "trace123"},
+            tags=Mock(all=Mock(return_value=[])),
+            comments=Mock(all=Mock(return_value=[])),
+            chat=session.chat,
+        ),
+        Mock(
+            id="msg2",
+            message_type="ai",
+            content="Hi",
+            metadata={},
+            trace_info=None,
+            tags=Mock(all=Mock(return_value=[])),
+            comments=Mock(all=Mock(return_value=[])),
+            chat=session.chat,
+        ),
+    ]
+
+    rows = list(
+        csv.reader(
+            io.StringIO(
+                filtered_export_to_csv(experiment, Mock(prefetch_related=Mock(return_value=[session]))).getvalue()
+            ),
+            delimiter=",",
+        )
+    )
+
+    assert "Trace ID" in rows[0], "Trace ID not in header"
+    assert rows[1][-1] == "trace123", "Trace ID not exported correctly"
+    assert rows[2][-1] == "", "Empty trace ID not handled correctly"
