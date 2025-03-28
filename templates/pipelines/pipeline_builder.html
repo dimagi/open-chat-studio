@@ -1,6 +1,5 @@
 {% extends 'web/app/app_base.html' %}
 {% load static %}
-
 {% block page_head %}
   <link rel="stylesheet" href="{% static 'css/pipeline.css' %}">
   <style>
@@ -19,7 +18,6 @@
       top: 50%;
       transform: translate(0, -50%);
     }
-    /* Fullscreen button styles */
     .fullscreen-toggle {
       transition: background-color 0.2s ease;
       position: absolute;
@@ -36,20 +34,16 @@
     .fullscreen-toggle svg {
       pointer-events: none;
     }
-    /* Ensure pipeline container takes full space in fullscreen */
     :fullscreen #pipelines-container {
       width: 100%;
       height: 100%;
     }
   </style>
 {% endblock page_head %}
-
 {% block breadcrumbs %}
 {% endblock %}
-
 {% block app %}
   <div class="flex-1 relative" id="pipelines-container">
-    <!-- Fullscreen toggle button -->
     <button class="fullscreen-toggle" title="Toggle Full Screen">
       <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
         <path
@@ -61,11 +55,9 @@
         />
       </svg>
     </button>
-    <!-- Pipeline builder content -->
     <div class="max-w-7xl mx-auto" id="pipelineBuilder"></div>
   </div>
 {% endblock %}
-
 {% block page_js %}
   {{ parameter_values|json_script:"parameter-values" }}
   {{ default_values|json_script:"default-values" }}
@@ -74,10 +66,7 @@
   <script type="module">
     window.DOCUMENTATION_BASE_URL = '{{ docs_base_url }}';
     document.addEventListener('DOMContentLoaded', () => {
-      // Render the pipeline
       SiteJS.pipeline.renderPipeline("#pipelineBuilder", "{{ request.team.slug }}", {{ pipeline_id }});
-
-      // Fullscreen functionality
       const toggleButton = document.querySelector('.fullscreen-toggle');
       const container = document.getElementById('pipelines-container');
       const sidebar = document.querySelector('.w-64');
@@ -98,14 +87,12 @@
       }
 
       toggleButton.addEventListener('click', toggleFullScreen);
-
       document.addEventListener('fullscreenchange', () => {
         if (!document.fullscreenElement && sidebar) {
           sidebar.classList.remove('hidden');
           icon.setAttribute('d', 'M4 8V4m0 0h4M4 4l5 5m11-1V4m0 0h-4m4 0l-5 5M4 16v4m0 0h4m-4 0l5-5m11 5v-4m0 0h-4m4 0l-5-5');
         }
       });
-
       document.addEventListener('keydown', (event) => {
         if (event.key === 'Escape' && document.fullscreenElement) {
           toggleFullScreen();
