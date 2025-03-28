@@ -153,6 +153,7 @@ class BaseDeleteFileView(LoginAndTeamRequiredMixin, View, PermissionRequiredMixi
         return HttpResponse()
 
 
+# TODO: Team required decorator
 def public_file_download(request, team_slug: str, pk: int):
     resource = get_object_or_404(File, id=pk, team__slug=team_slug)
     try:
