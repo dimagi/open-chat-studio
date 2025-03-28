@@ -1,4 +1,4 @@
-from unittest.mock import patch
+from unittest.mock import Mock, patch
 
 import pytest
 from django.urls import reverse
@@ -7,6 +7,7 @@ from apps.channels.models import ChannelPlatform, ExperimentChannel
 from apps.chat.models import ChatMessage
 from apps.experiments.models import ExperimentSession, Participant
 from apps.utils.factories.experiment import ExperimentFactory, ExperimentSessionFactory
+from apps.utils.factories.files import FileFactory
 from apps.utils.factories.team import TeamWithUsersFactory
 from apps.utils.tests.clients import ApiTestClient
 
@@ -122,3 +123,26 @@ def test_create_new_session_and_post_message(mock_response, experiment):
     )
     assert response.status_code == 200, response.json()
     assert response.json() == {"response": "Fido", "attachments": []}
+
+
+@pytest.mark.django_db()
+@patch("apps.chat.channels.ApiChannel._get_bot_response")
+def test_attachments_returned(mock_response, experiment):
+    user = experiment.team.members.first()
+
+    session = ExperimentSessionFactory()
+    file = FileFactory()
+    mock_chat_message = Mock(chat=session.chat)
+    mock_chat_message.content = "Fido"
+    mock_chat_message.get_attached_files.return_value = [file]
+    mock_response.return_value = mock_chat_message
+
+    client = ApiTestClient(user, experiment.team)
+
+    new_message_url = reverse("channels:new_api_message", kwargs={"experiment_id": experiment.public_id})
+    response = client.post(new_message_url, data={"message": "What should I call my dog?"}, format="json")
+
+    assert response.json() == {
+        "response": "Fido",
+        "attachments": [{"file_name": file.name, "link": file.download_link(session.id)}],
+    }
