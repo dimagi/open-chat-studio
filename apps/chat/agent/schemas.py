@@ -52,3 +52,7 @@ class ScheduledMessageSchema(BaseModel):
 class UpdateUserDataSchema(BaseModel):
     key: str = Field(description="The key in the user data to update")
     value: Any = Field(None, description="The new value of the user data")
+
+
+class AttachMediaSchema(BaseModel):
+    file_id: int = Field(description="The file id of the media to attach")

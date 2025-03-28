@@ -181,7 +181,7 @@ def _pipeline_node_parameter_values(team, llm_providers, llm_provider_models):
                 for collection in collections
             ]
         ),
-        OptionsSource.agent_tools: [_option(AgentTools.value, AgentTools.label) for AgentTools in AgentTools],
+        OptionsSource.agent_tools: [_option(value, label) for value, label in AgentTools.user_tool_choices()],
         OptionsSource.custom_actions: [_option(val, display_val) for val, display_val in custom_action_operations],
     }
 

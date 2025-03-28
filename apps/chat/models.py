@@ -1,8 +1,8 @@
 from enum import StrEnum
-from functools import cache
 from urllib.parse import quote
 
 from django.db import models
+from django.db.models import Q
 from django.utils.functional import classproperty
 from langchain_core.messages import BaseMessage, messages_from_dict
 
@@ -50,10 +50,6 @@ class Chat(BaseTeamModel, TaggedModelMixin, UserCommentsMixin):
             yield message
             if with_summaries and message.summary:
                 yield message.get_summary_message()
-
-    @cache
-    def get_attached_files(self):
-        return list(File.objects.filter(chatattachment__chat=self))
 
 
 class ChatMessageType(models.TextChoices):
@@ -179,14 +175,25 @@ class ChatMessage(BaseModel, TaggedModelMixin, UserCommentsMixin):
 
         Message metadata example:
         {
-            "openai_file_ids": ["file_id_1", "file_id_2", ...]
+            "openai_file_ids": ["file_id_1", "file_id_2", ...],
+            "ocs_attachment_file_ids": [1,2,3, ...],
         }
         """
-        if file_ids := self.metadata.get("openai_file_ids", []):
-            # We should not show files that are on the assistant level. Users should only be able to download
-            # those on the thread (chat) level, since they uploaded them
-            return [file for file in self.chat.get_attached_files() if file.external_id in file_ids]
-        return []
+        if not self.chat_id:
+            # Summary messages are not saved to the DB, so they don't have a chat_id
+            return []
+
+        external_ids = []
+        ids = []
+
+        if external_file_ids := self.metadata.get("openai_file_ids", []):
+            external_ids.extend(external_file_ids)
+
+        if file_ids := self.metadata.get("ocs_attachment_file_ids", []):
+            # ocs attachments doesn't have external ids
+            ids.extend(file_ids)
+
+        return File.objects.filter(Q(id__in=ids) | Q(external_id__in=external_ids), chatattachment__chat=self.chat)
 
     def get_metadata(self, key: str):
         return self.metadata.get(key, None)

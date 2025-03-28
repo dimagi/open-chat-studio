@@ -70,6 +70,7 @@ class ChatAdapter(BaseAdapter):
         input_formatter: str | None = None,
         source_material_id: int | None = None,
         save_message_metadata_only=False,
+        collection_id: int | None = None,
     ):
         self.session = session
         self.provider_model_name = provider_model_name
@@ -83,7 +84,7 @@ class ChatAdapter(BaseAdapter):
         self.source_material_id = source_material_id
 
         self.team = session.team
-        self.template_context = PromptTemplateContext(session, source_material_id)
+        self.template_context = PromptTemplateContext(session, source_material_id, collection_id)
         self.save_message_metadata_only = save_message_metadata_only
 
     @classmethod
@@ -123,6 +124,7 @@ class ChatAdapter(BaseAdapter):
             input_formatter="{input}",
             source_material_id=node.source_material_id,
             save_message_metadata_only=True,
+            collection_id=node.collection_id,
         )
 
     def get_chat_model(self):

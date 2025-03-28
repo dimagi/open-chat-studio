@@ -379,6 +379,9 @@ class TestUpdateParticipantDataTool:
         assert session.participant_data_from_experiment == {"test": value}
 
 
-@pytest.mark.parametrize("tool", list(AgentTools))
-def test_tools_present(tool):
-    assert tool in TOOL_CLASS_MAP
+def test_tools_present():
+    non_user_facing_tools = [AgentTools.ATTACH_MEDIA]
+    for tool in AgentTools.values:
+        if tool in non_user_facing_tools:
+            continue
+        assert tool in TOOL_CLASS_MAP

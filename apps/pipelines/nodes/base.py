@@ -46,6 +46,22 @@ def add_temp_state_messages(left: dict, right: dict):
     return output
 
 
+def merge_dicts(left: dict, right: dict):
+    """
+    Merge two dictionaries, combining values for the same key into a list. The value of any key is expected to be a list
+    """
+    output = {**left}
+    for key, value in right.items():
+        if key in output:
+            if isinstance(output[key], list):
+                output[key] = list(set(output[key]) | set(value))
+            else:
+                output[key] = [output[key], value]
+        else:
+            output[key] = value
+    return output
+
+
 class TempState(TypedDict):
     user_input: str
     outputs: dict
@@ -58,8 +74,9 @@ class PipelineState(dict):
     experiment_session: ExperimentSession
     pipeline_version: int
     temp_state: Annotated[TempState, add_temp_state_messages]
+    input_message_metadata: Annotated[dict, merge_dicts]
+    output_message_metadata: Annotated[dict, merge_dicts]
     ai_message_id: int | None = None
-    message_metadata: dict | None = None
     attachments: list = Field(default=[])
 
     def json_safe(self):
@@ -78,6 +95,7 @@ class PipelineState(dict):
         kwargs["temp_state"] = {"outputs": {node_name: output}}
         if output is not None:
             kwargs["messages"] = [output]
+
         return cls(**kwargs)
 
 

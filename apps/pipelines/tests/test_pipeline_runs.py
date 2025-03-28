@@ -65,6 +65,8 @@ def test_running_pipeline_creates_run(pipeline: Pipeline, session: ExperimentSes
             "user_input": "foo",
             "attachments": serialized_attachments,
         },
+        input_message_metadata={},
+        output_message_metadata={},
     )
 
     assert len(run.log["entries"]) == 8

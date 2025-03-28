@@ -304,7 +304,7 @@ class LLMResponseWithPrompt(LLMResponse, HistoryMixin):
         )
 
         node = Node.objects.get(flow_id=node_id, pipeline__version_number=pipeline_version)
-        tools = get_node_tools(node, session)
+        tools = get_node_tools(node, session, attachment_callback=history_manager.attach_file_id)
         chat_adapter = ChatAdapter.for_pipeline(
             session=session,
             node=self,
@@ -327,7 +327,12 @@ class LLMResponseWithPrompt(LLMResponse, HistoryMixin):
 
         # Invoke runnable
         result = chat.invoke(input=input)
-        return PipelineState.from_node_output(node_name=self.name, node_id=node_id, output=result.output)
+        return PipelineState.from_node_output(
+            node_name=self.name,
+            node_id=node_id,
+            output=result.output,
+            output_message_metadata=history_manager.output_message_metadata,
+        )
 
 
 class SendEmail(PipelineNode):
@@ -787,10 +792,8 @@ class AssistantNode(PipelineNode):
             node_name=self.name,
             node_id=node_id,
             output=output,
-            message_metadata={
-                "input": runnable.history_manager.input_message_metadata or {},
-                "output": runnable.history_manager.output_message_metadata or {},
-            },
+            input_message_metadata=runnable.history_manager.input_message_metadata or {},
+            output_message_metadata=runnable.history_manager.output_message_metadata or {},
         )
 
     def _get_attachments(self, state) -> list:

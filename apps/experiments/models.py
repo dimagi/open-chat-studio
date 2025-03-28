@@ -644,10 +644,16 @@ class AgentTools(models.TextChoices):
     DELETE_REMINDER = "delete-reminder", gettext("Delete Reminder")
     MOVE_SCHEDULED_MESSAGE_DATE = "move-scheduled-message-date", gettext("Move Reminder Date")
     UPDATE_PARTICIPANT_DATA = "update-user-data", gettext("Update Participant Data")
+    ATTACH_MEDIA = "attach-media", gettext("Attach Media")
 
     @classmethod
     def reminder_tools(cls) -> list[Self]:
         return [cls.RECURRING_REMINDER, cls.ONE_OFF_REMINDER, cls.DELETE_REMINDER, cls.MOVE_SCHEDULED_MESSAGE_DATE]
+
+    @staticmethod
+    def user_tool_choices() -> list["AgentTools"]:
+        """Returns the set of tools that a user should be able to attach to the bot"""
+        return [(tool.value, tool.label) for tool in AgentTools if tool != AgentTools.ATTACH_MEDIA]
 
 
 @audit_fields(*model_audit_fields.EXPERIMENT_FIELDS, audit_special_queryset_writes=True)

@@ -175,7 +175,7 @@ class BaseExperimentView(LoginAndTeamRequiredMixin, PermissionRequiredMixin):
                 "button_text": self.button_title,
                 "active_tab": "experiments",
                 "experiment_type": experiment_type,
-                "available_tools": AgentTools.choices,
+                "available_tools": AgentTools.user_tool_choices(),
                 "team_participant_identifiers": team_participant_identifiers,
                 "disable_version_button": disable_version_button,
             },
@@ -786,6 +786,11 @@ def get_message_response(request, team_slug: str, experiment_id: uuid.UUID, sess
     elif progress["complete"]:
         message_details["error_msg"] = DEFAULT_ERROR_MESSAGE
 
+    attached_files = []
+    message = message_details.get("message")
+    if isinstance(message, ChatMessage):
+        attached_files = message.get_attached_files()
+
     return TemplateResponse(
         request,
         "experiments/chat/chat_message_response.html",
@@ -796,6 +801,7 @@ def get_message_response(request, team_slug: str, experiment_id: uuid.UUID, sess
             "message_details": message_details,
             "skip_render": skip_render,
             "last_message_datetime": last_message and quote(last_message.created_at.isoformat()),
+            "attachments": attached_files,
         },
     )
 
