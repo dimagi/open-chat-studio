@@ -22,7 +22,7 @@ if TYPE_CHECKING:
     from apps.assistants.models import OpenAiAssistant
 
 
-SUCCESSFUL_ATTACHMENT_MESSAGE: str = "File {file_id} is attached to your response"
+SUCCESSFUL_ATTACHMENT_MESSAGE: str = "File {file_id} ({name}) is attached to your response"
 
 CREATE_LINK_TEXT = """You can use this markdown link to reference it in your response:
     `[{name}](file:{team_slug}:{session_id}:{file_id})` or `![](file:{team_slug}:{session_id}:{file_id})`
@@ -205,7 +205,7 @@ class AttachMediaTool(CustomBaseTool):
             file = File.objects.get(id=file_id)
             self.chat_attachment.files.add(file_id)
             self.callback(file_id)
-            response = SUCCESSFUL_ATTACHMENT_MESSAGE.format(file_id=file_id)
+            response = SUCCESSFUL_ATTACHMENT_MESSAGE.format(file_id=file_id, name=file.name)
 
             if self.experiment_session.experiment_channel.platform == ChannelPlatform.WEB:
                 # Only the web platform is able to render these links
@@ -214,7 +214,7 @@ class AttachMediaTool(CustomBaseTool):
                 )
                 response = f"{response}. {link_text}"
             else:
-                response = f"{response}. Do not use markdown links for this file."
+                response = f"{response}. Do not use markdown links to reference the file."
             return response
         except File.DoesNotExist:
             return f"File '{file_id}' does not exist"
