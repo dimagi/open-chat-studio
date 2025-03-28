@@ -136,10 +136,11 @@ def _pipeline_node_parameter_values(team, llm_providers, llm_provider_models):
     assistants = OpenAiAssistant.objects.working_versions_queryset().filter(team=team).values("id", "name").all()
     collections = Collection.objects.filter(team=team).values("id", "name").all()
 
-    def _option(value, label, type_=None, edit_url: str | None = None):
+    def _option(value, label, type_=None, edit_url: str | None = None, max_token_limit=None):
         data = {"value": value, "label": label}
         data = data | ({"type": type_} if type_ else {})
         data = data | ({"edit_url": edit_url} if edit_url else {})
+        data = data | ({"max_token_limit": max_token_limit} if max_token_limit else {})
         return data
 
     def _get_assistant_url(assistant_id: int):
@@ -155,7 +156,10 @@ def _pipeline_node_parameter_values(team, llm_providers, llm_provider_models):
 
     return {
         "LlmProviderId": [_option(provider["id"], provider["name"], provider["type"]) for provider in llm_providers],
-        "LlmProviderModelId": [_option(provider.id, str(provider), provider.type) for provider in llm_provider_models],
+        "LlmProviderModelId": [
+            _option(provider.id, str(provider), provider.type, None, provider.max_token_limit)
+            for provider in llm_provider_models
+        ],
         OptionsSource.source_material: (
             [_option("", "Select a topic")]
             + [_option(material["id"], material["topic"]) for material in source_materials]
