@@ -195,19 +195,7 @@
         {% endif %}
       </div>
     {% endif %}
-
-    {% if not can_make_child_routes %}
-      <div class="my-4">
-        <h3 class="font-bold text-lg">Parent Experiments:
-          <span class="ml-2 tooltip" data-tip="This experiment is configured as a child of the following experiments.">
-            <i class="text-sm fa-regular fa-circle-question" ></i>
-          </span>
-        </h3>
-      </div>
-      <div class="p-3 lg:w-3/4">{% render_table parent_routes_table %}</div>
-    {% endif %}
   </div>
-
 
   <div role="tablist" class="tabs tabs-bordered">
     {% if perms.chat.view_chat %}
@@ -281,34 +269,6 @@
         </div>
       </div>
     {% endflag %}
-
-    {% if not experiment.pipeline %}
-      <input type="radio" name="tab_group" role="tab" class="tab" aria-label="Routes" id="tab-routes"/>
-      <div role="tabpanel" class="tab-content" id="content-routes">
-        <div class="app-card">
-          {% if experiment.assistant %}
-            Assistants cannot be router bots. Please use a normal bot
-          {% elif can_make_child_routes %}
-            {% if experiment.is_editable %}
-              <a class="btn btn-sm btn-outline btn-primary mb-2" href="{% url 'experiments:experiment_route_new' team.slug experiment.id 'processor' %}"><i class="fa-regular fa-plus"></i> Create child route</a>
-            {% endif %}
-            {% render_table child_routes_table %}
-          {% else %}
-            Child experiments cannot have their own routes.
-          {% endif %}
-        </div>
-      </div>
-
-      <input type="radio" name="tab_group" role="tab" class="tab" aria-label="Terminal Bot" id="tab-terminal_bots"/>
-      <div role="tabpanel" class="tab-content" id="content-terminal_bots">
-        <div class="app-card">
-          {% if terminal_bots_table.data|length == 0 and experiment.is_editable%}
-            <a class="btn btn-sm btn-outline btn-primary mb-2" href="{% url 'experiments:experiment_route_new' team.slug experiment.id 'terminal' %}"><i class="fa-regular fa-plus"></i> Add terminal bot</a>
-          {% endif %}
-          {% render_table terminal_bots_table %}
-        </div>
-      </div>
-    {% endif %}
   </div>
   <script>
     function showTabContent(tabId) {
