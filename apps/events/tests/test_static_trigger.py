@@ -2,7 +2,7 @@ from datetime import timedelta
 from unittest import mock
 
 import pytest
-from django.test import override_settings
+from django.test import RequestFactory, override_settings
 from django.utils import timezone
 
 from apps.chat.models import Chat, ChatMessage, ChatMessageType
@@ -88,12 +88,16 @@ def test_delete():
         action=EventAction.objects.create(action_type=EventActionType.END_CONVERSATION),
         type=StaticTriggerType.LAST_TIMEOUT,
     )
+    request = RequestFactory().get("/")
+    request.origin = "chatbots"
+
     _delete_event_view(
         trigger_type="static",
-        request=None,
+        request=request,
         team_slug=experiment.team.slug,
         experiment_id=experiment.id,
         trigger_id=static_trigger.id,
     )
+
     static_trigger.refresh_from_db()
     assert static_trigger.is_archived, "The static trigger should be archived"

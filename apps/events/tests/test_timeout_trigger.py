@@ -2,7 +2,7 @@ from datetime import timedelta
 from unittest import mock
 
 import pytest
-from django.test import override_settings
+from django.test import RequestFactory, override_settings
 from freezegun import freeze_time
 
 from apps.chat.models import Chat, ChatMessage, ChatMessageType
@@ -345,9 +345,11 @@ def test_delete():
         action=EventAction.objects.create(action_type=EventActionType.LOG),
         delay=10 * 60,
     )
+    request = RequestFactory().get("/")
+    request.origin = "chatbots"
     _delete_event_view(
         trigger_type="timeout",
-        request=None,
+        request=request,
         team_slug=experiment.team.slug,
         experiment_id=experiment.id,
         trigger_id=timeout_trigger.id,

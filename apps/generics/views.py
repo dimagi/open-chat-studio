@@ -1,10 +1,16 @@
+import json
+
 from django import views
 from django.contrib import messages
 from django.http import HttpResponseRedirect
-from django.shortcuts import get_object_or_404, render
+from django.shortcuts import get_object_or_404, redirect, render
 from django.template.response import TemplateResponse
 from django.urls import reverse
+from django.utils.translation import gettext
 
+from apps.annotations.models import Tag
+from apps.experiments.decorators import experiment_session_view
+from apps.experiments.models import ExperimentSession
 from apps.files.forms import get_file_formset
 from apps.generics.help import render_help_with_link
 from apps.generics.type_select_form import TypeSelectForm
@@ -106,3 +112,56 @@ def generic_home(request, team_slug: str, title: str, table_url_name: str, new_u
             "toggle_archived": True,
         },
     )
+
+
+def render_session_details(
+    request, team_slug, experiment_id, session_id, active_tab, template_path, session_type="Experiment"
+):
+    session = request.experiment_session
+    experiment = request.experiment
+
+    return TemplateResponse(
+        request,
+        template_path,
+        {
+            "experiment": experiment,
+            "experiment_session": session,
+            "active_tab": active_tab,
+            "details": [
+                (gettext("Participant"), session.get_participant_chip()),
+                (gettext("Status"), session.get_status_display),
+                (gettext("Started"), session.consent_date or session.created_at),
+                (gettext("Ended"), session.ended_at or "-"),
+                (gettext(session_type), experiment.name),
+                (gettext("Platform"), session.get_platform_name),
+            ],
+            "available_tags": [t.name for t in Tag.objects.filter(team__slug=team_slug, is_system_tag=False).all()],
+            "event_triggers": [
+                {
+                    "event_logs": trigger.event_logs.filter(session=session).order_by("-created_at").all(),
+                    "trigger": trigger,
+                }
+                for trigger in experiment.event_triggers
+            ],
+            "participant_data": json.dumps(session.participant_data_from_experiment, indent=4),
+            "participant_schedules": session.participant.get_schedules_for_experiment(
+                experiment, as_dict=True, include_inactive=True
+            ),
+            "participant_id": session.participant_id,
+        },
+    )
+
+
+@experiment_session_view()
+def paginate_session(request, team_slug, experiment_id, session_id, view_name):
+    session = request.experiment_session
+    experiment = request.experiment
+    query = ExperimentSession.objects.exclude(external_id=session_id).filter(experiment=experiment)
+    if request.GET.get("dir", "next") == "next":
+        next_session = query.filter(created_at__gte=session.created_at).order_by("created_at").first()
+    else:
+        next_session = query.filter(created_at__lte=session.created_at).order_by("created_at").last()
+    if not next_session:
+        messages.warning(request, "No more sessions to paginate")
+        return redirect(view_name, team_slug, experiment_id, session_id)
+    return redirect(view_name, team_slug, experiment_id, next_session.external_id)
