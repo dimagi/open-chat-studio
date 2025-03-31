@@ -8,10 +8,12 @@ from apps.teams.utils import current_team
 
 def test_change_context():
     request = AuthedRequest()
-    assert AuditContextProvider().change_context(request) == {
-        "user_type": USER_TYPE_REQUEST,
-        "username": request.user.username,
-    }
+    # Force the team to be None
+    with current_team(None):
+        assert AuditContextProvider().change_context(request) == {
+            "user_type": USER_TYPE_REQUEST,
+            "username": request.user.username,
+        }
 
 
 def test_change_context_returns_none_without_request():
