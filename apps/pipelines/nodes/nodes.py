@@ -4,7 +4,7 @@ import json
 import logging
 import random
 import time
-from typing import Annotated, Literal
+from typing import Annotated, Literal, Self
 
 import tiktoken
 from django.conf import settings
@@ -268,7 +268,7 @@ class LLMResponseWithPrompt(LLMResponse, HistoryMixin):
     )
 
     @model_validator(mode="after")
-    def check_prompt_variables(self):
+    def check_prompt_variables(self) -> Self:
         context = {
             "prompt": self.prompt,
             "source_material": self.source_material_id,
@@ -277,6 +277,7 @@ class LLMResponseWithPrompt(LLMResponse, HistoryMixin):
         }
         try:
             validate_prompt_variables(context=context, prompt_key="prompt", known_vars=set(PromptVars.values))
+            return self
         except ValidationError as e:
             raise PydanticCustomError("invalid_prompt", e.error_dict["prompt"][0].message, {"field": "prompt"})
 
