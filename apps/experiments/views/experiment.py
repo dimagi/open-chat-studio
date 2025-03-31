@@ -1,11 +1,13 @@
 import json
 import logging
+import traceback
 import uuid
 from datetime import datetime
 from typing import cast
 from urllib.parse import parse_qs, quote, urlparse
 
 import jwt
+import sentry_sdk
 from celery.result import AsyncResult
 from celery_progress.backend import Progress
 from django.conf import settings
@@ -29,6 +31,7 @@ from django.views.decorators.http import require_POST
 from django.views.generic import CreateView, UpdateView
 from django_tables2 import SingleTableView
 from field_audit.models import AuditAction
+from jwt.exceptions import DecodeError, ExpiredSignatureError, InvalidTokenError
 from waffle import flag_is_active
 
 from apps.annotations.models import Tag
@@ -98,6 +101,8 @@ DEFAULT_ERROR_MESSAGE = (
     "Sorry something went wrong. This was likely an intermittent error related to load."
     "Please try again, and wait a few minutes if this keeps happening."
 )
+
+logger = logging.getLogger("ocs.experiments.views")
 
 
 @login_and_team_required
@@ -974,11 +979,58 @@ def _verify_user_or_start_session(identifier, request, experiment, session):
 
 @team_required
 def verify_public_chat_token(request, team_slug: str, experiment_id: uuid.UUID, token: str):
+    logger.info(
+        f"Starting token verification for experiment_id={experiment_id}, token prefix={token[:10] if token else 'None'}"
+    )
+
     try:
-        claims = jwt.decode(token, settings.SECRET_KEY, algorithms="HS256")
-        session = ExperimentSession.objects.select_related("experiment").get(external_id=claims["session"])
-        return _record_consent_and_redirect(team_slug, session.experiment, session)
-    except Exception:
+        logger.info("Attempting to decode JWT token")
+        try:
+            claims = jwt.decode(token, settings.SECRET_KEY, algorithms="HS256")
+            logger.info(f"JWT successfully decoded. Claims: {claims}")
+        except ExpiredSignatureError:
+            logger.error("Token has expired")
+            messages.warning(request=request, message="This verification link has expired. Please request a new one.")
+            return redirect(reverse("experiments:start_session_public", args=(team_slug, experiment_id)))
+        except DecodeError:
+            logger.error(f"Token could not be decoded: {token[:15]}...")
+            messages.warning(request=request, message="Invalid verification link")
+            return redirect(reverse("experiments:start_session_public", args=(team_slug, experiment_id)))
+        except InvalidTokenError as e:
+            logger.error(f"Invalid token error: {str(e)}")
+            messages.warning(request=request, message="This verification link is invalid")
+            return redirect(reverse("experiments:start_session_public", args=(team_slug, experiment_id)))
+
+        logger.info(f"Looking up session with external_id={claims.get('session', 'missing_session_key')}")
+        try:
+            session = ExperimentSession.objects.select_related("experiment").get(external_id=claims["session"])
+            logger.info(f"Session found: id={session.id}, status={session.status}")
+        except KeyError:
+            logger.error("Session key missing from token claims")
+            messages.warning(request=request, message="Malformed verification link")
+            return redirect(reverse("experiments:start_session_public", args=(team_slug, experiment_id)))
+        except ExperimentSession.DoesNotExist:
+            logger.error(f"No session found with external_id={claims.get('session')}")
+            messages.warning(request=request, message="Session not found or expired")
+            return redirect(reverse("experiments:start_session_public", args=(team_slug, experiment_id)))
+
+        logger.info(f"Recording consent for session id={session.id}")
+        try:
+            return _record_consent_and_redirect(team_slug, session.experiment, session)
+        except Exception as e:
+            logger.error(f"Error in record_consent_and_redirect: {str(e)}")
+            logger.error(traceback.format_exc())
+            messages.warning(request=request, message="Error processing consent")
+            return redirect(reverse("experiments:start_session_public", args=(team_slug, experiment_id)))
+
+    except Exception as e:
+        sentry_sdk.capture_exception(
+            e,
+            extra={
+                "experiment_id": str(experiment_id),
+                "token_prefix": token[:10] if token else None,
+            },
+        )
         messages.warning(request=request, message="This link could not be verified")
         return redirect(reverse("experiments:start_session_public", args=(team_slug, experiment_id)))
 
