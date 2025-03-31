@@ -1074,6 +1074,7 @@ def test_pipeline_history_manager_metadata_storage(get_llm_service, pipeline):
         ({"key": [1]}, {"key": [2]}, {"key": [1, 2]}),
         ({"key": [1]}, {"key": [1]}, {"key": [1]}),
         ({"keyA": [1]}, {"keyB": [2]}, {"keyA": [1], "keyB": [2]}),
+        ({"keyA": True}, {"keyA": False}, {"keyA": False}),
     ],
 )
 def test_merge_dicts(left, right, expected):
