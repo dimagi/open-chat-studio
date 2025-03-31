@@ -4,7 +4,7 @@ import json
 import logging
 import random
 import time
-from typing import Literal
+from typing import Annotated, Literal
 
 import tiktoken
 from django.conf import settings
@@ -16,7 +16,7 @@ from langchain_core.messages import BaseMessage
 from langchain_core.prompts import MessagesPlaceholder, PromptTemplate
 from langchain_core.runnables import RunnableLambda, RunnablePassthrough
 from langchain_text_splitters import RecursiveCharacterTextSplitter
-from pydantic import BaseModel, Field, create_model, field_validator, model_validator
+from pydantic import BaseModel, BeforeValidator, Field, create_model, field_validator, model_validator
 from pydantic.config import ConfigDict
 from pydantic_core import PydanticCustomError
 from pydantic_core.core_schema import FieldValidationInfo
@@ -50,6 +50,8 @@ from apps.service_providers.llm_service.runnables import (
 )
 from apps.service_providers.models import LlmProviderModel
 from apps.utils.prompt import OcsPromptTemplate, PromptVars, validate_prompt_variables
+
+OptionalInt = Annotated[int | None, BeforeValidator(lambda x: None if x == "" else x)]
 
 
 class RenderTemplate(PipelineNode):
@@ -240,14 +242,14 @@ class LLMResponseWithPrompt(LLMResponse, HistoryMixin):
         json_schema_extra=NodeSchema(label="LLM", documentation_link=settings.DOCUMENTATION_LINKS["node_llm"])
     )
 
-    source_material_id: int | None = Field(
+    source_material_id: OptionalInt = Field(
         None, json_schema_extra=UiSchema(widget=Widgets.select, options_source=OptionsSource.source_material)
     )
     prompt: str = Field(
         default="You are a helpful assistant. Answer the user's query as best you can",
         json_schema_extra=UiSchema(widget=Widgets.expandable_text),
     )
-    collection_id: int | None = Field(
+    collection_id: OptionalInt = Field(
         None,
         title="Media",
         json_schema_extra=UiSchema(

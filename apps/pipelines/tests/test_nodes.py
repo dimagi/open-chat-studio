@@ -1,8 +1,8 @@
 import pytest
-from pydantic import BaseModel
+from pydantic import BaseModel, TypeAdapter
 from pydantic_core import ValidationError
 
-from apps.pipelines.nodes.nodes import SendEmail, StructuredDataSchemaValidatorMixin
+from apps.pipelines.nodes.nodes import OptionalInt, SendEmail, StructuredDataSchemaValidatorMixin
 
 
 class TestStructuredDataSchemaValidatorMixin:
@@ -45,3 +45,16 @@ class TestSendEmailInputValidation:
     def test_invalid_recipient_list(self, recipient_list):
         with pytest.raises(ValidationError, match="Invalid list of emails addresses"):
             SendEmail(name="email", recipient_list=recipient_list, subject="Test Subject")
+
+
+def test_optional_int_type():
+    ta = TypeAdapter(OptionalInt)
+    assert ta.validate_python(1) == 1
+    assert ta.validate_python(None) is None
+    assert ta.validate_python("") is None
+
+    with pytest.raises(ValidationError):
+        ta.validate_python(1.2)
+
+    with pytest.raises(ValidationError):
+        ta.validate_python("test")
