@@ -418,18 +418,23 @@ class Node(BaseModel, VersionsMixin, CustomActionOperationMixin):
         and update the `assistant_id` in the node params to the new assistant version id.
         """
         from apps.assistants.models import OpenAiAssistant
-        from apps.pipelines.nodes.nodes import AssistantNode
-
-        assistant_node_name = AssistantNode.__name__
+        from apps.documents.models import Collection
+        from apps.pipelines.nodes.nodes import AssistantNode, LLMResponseWithPrompt
 
         new_version = super().create_new_version(save=False)
 
-        if self.type == assistant_node_name and new_version.params.get("assistant_id"):
+        if self.type == AssistantNode.__name__ and new_version.params.get("assistant_id"):
             assistant = OpenAiAssistant.objects.get(id=new_version.params.get("assistant_id"))
             if not assistant.is_a_version:
                 assistant_version = assistant.create_new_version()
                 # convert to string to be consistent with values from the UI
                 new_version.params["assistant_id"] = str(assistant_version.id)
+
+        if self.type == LLMResponseWithPrompt.__name__:
+            if collection_id := self.params["collection_id"]:
+                collection = Collection.objects.get(id=collection_id)
+                collection_version = collection.create_new_version()
+                new_version.params["collection_id"] = str(collection_version.id)
 
         new_version.save()
         self._copy_custom_action_operations_to_new_version(new_node=new_version)
@@ -465,6 +470,7 @@ class Node(BaseModel, VersionsMixin, CustomActionOperationMixin):
     @property
     def version_details(self) -> VersionDetails:
         from apps.assistants.models import OpenAiAssistant
+        from apps.documents.models import Collection
         from apps.experiments.models import VersionFieldDisplayFormatters
 
         node_name = self.params.get("name", self.type)
@@ -484,7 +490,12 @@ class Node(BaseModel, VersionsMixin, CustomActionOperationMixin):
                 case "assistant_id":
                     name = "assistant"
                     # Load the assistant, since it is being versioned
-                    value = OpenAiAssistant.objects.filter(id=value).first()
+                    if value:
+                        value = OpenAiAssistant.objects.filter(id=value).first()
+                case "collection_id":
+                    name = "media"
+                    if value:
+                        value = Collection.objects.filter(id=value).first()
 
             param_versions.append(
                 VersionField(group_name=node_name, name=name, raw_value=value, to_display=display_formatter)

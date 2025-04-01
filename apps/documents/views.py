@@ -30,14 +30,16 @@ class CollectionsHome(LoginAndTeamRequiredMixin, TemplateView):
             "upload_files_url": reverse("documents:upload_files", kwargs={"team_slug": team_slug}),
             "collections_list_url": reverse("documents:collections_list", kwargs={"team_slug": team_slug}),
             "new_collection_url": reverse("documents:new_collection", kwargs={"team_slug": team_slug}),
-            "files_count": File.objects.filter(team__slug=team_slug, purpose=FilePurpose.COLLECTION).count(),
+            "files_count": File.objects.filter(
+                team__slug=team_slug, is_version=False, purpose=FilePurpose.COLLECTION
+            ).count(),
             "max_summary_length": settings.MAX_SUMMARY_LENGTH,
             "supported_file_types": settings.MEDIA_SUPPORTED_FILE_TYPES,
-            "collections_count": self.request.team.collection_set.count(),
+            "collections_count": self.request.team.collection_set.filter(is_version=False).count(),
         }
 
         if tab_name == "files":
-            context["collections"] = self.request.team.collection_set.all()
+            context["collections"] = self.request.team.collection_set.filter(is_version=False).all()
         return context
 
 
@@ -66,7 +68,7 @@ class FileListView(BaseObjectListView):
     permission_required = "files.view_file"
 
     def get_queryset(self):
-        return super().get_queryset().filter(purpose=FilePurpose.COLLECTION)
+        return super().get_queryset().filter(purpose=FilePurpose.COLLECTION, is_version=False)
 
 
 class BaseDetailsView(LoginAndTeamRequiredMixin, DetailView, PermissionRequiredMixin):
@@ -79,13 +81,14 @@ class FileDetails(BaseDetailsView):
     permission_required = "files.view_file"
 
     def get_queryset(self):
-        return super().get_queryset().filter(team__slug=self.kwargs["team_slug"])
+        return super().get_queryset().filter(team__slug=self.kwargs["team_slug"], is_version=False)
 
     def get_context_data(self, *args, **kwargs):
         context = super().get_context_data(*args, **kwargs)
         file = self.get_object()
-        collection_names = file.collection_set.values_list("name", flat=True)
-        context["current_collections"] = list(collection_names)
+        collections = file.collection_set.filter(is_version=False).all()
+        context["current_collection_ids"] = [col.id for col in collections]
+        context["current_collection_names"] = [col.name for col in collections]
         context["max_summary_length"] = settings.MAX_SUMMARY_LENGTH
 
         context["edit_url"] = reverse(
@@ -94,7 +97,7 @@ class FileDetails(BaseDetailsView):
         context["delete_url"] = reverse(
             "documents:delete_file", kwargs={"team_slug": self.kwargs["team_slug"], "pk": file.id}
         )
-        context["available_collections"] = self.request.team.collection_set.values_list("name", flat=True)
+        context["available_collections"] = self.request.team.collection_set.filter(is_version=False)
         return context
 
 
@@ -118,7 +121,7 @@ def upload_files(request, team_slug: str):
         )
 
     if colection_name := request.POST.get("collection_name"):
-        repo = request.team.collection_set.get(name=colection_name)
+        repo = request.team.collection_set.get(name=colection_name, is_version=False)
         repo.files.add(*files)
     return redirect("documents:collections", team_slug=team_slug, tab_name="files")
 
@@ -141,14 +144,14 @@ def edit_file(request, team_slug: str, pk: int):
     file.name = request.POST.get("name")
     file.summary = request.POST.get("summary")
     file.save(update_fields=["name", "summary"])
-    _update_collection_membership(file=file, collection_names=request.POST.getlist("collections"))
+    _update_collection_membership(file=file, collection_ids=request.POST.getlist("collections"))
 
     return redirect("documents:collections", team_slug=team_slug, tab_name="files")
 
 
-def _update_collection_membership(file: File, collection_names: list[str]):
+def _update_collection_membership(file: File, collection_ids: list[str]):
     """Handles updating the collections a file belongs to"""
-    collections = file.team.collection_set.filter(name__in=collection_names).values_list("id", flat=True)
+    collections = file.team.collection_set.filter(id__in=collection_ids, is_version=False).values_list("id", flat=True)
 
     existing_collections = set(file.collection_set.values_list("id", flat=True))
     new_collections = set(collections) - existing_collections
@@ -175,6 +178,9 @@ class CollectionListView(BaseObjectListView):
     tab_name = "collections"
     permission_required = "documents.view_collection"
 
+    def get_queryset(self):
+        return super().get_queryset().filter(is_version=False)
+
 
 class CollectionDetails(BaseDetailsView):
     template_name = "documents/collection_details.html"
@@ -182,7 +188,7 @@ class CollectionDetails(BaseDetailsView):
     permission_required = "documents.view_collection"
 
     def get_queryset(self):
-        return super().get_queryset().filter(team__slug=self.kwargs["team_slug"])
+        return super().get_queryset().filter(team__slug=self.kwargs["team_slug"], is_version=False)
 
     def get_context_data(self, *args, **kwargs):
         context = super().get_context_data(*args, **kwargs)

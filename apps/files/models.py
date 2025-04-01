@@ -6,7 +6,7 @@ from django.conf import settings
 from django.core.files.base import ContentFile
 from django.db import models
 
-from apps.experiments.versioning import VersionsMixin, VersionsObjectManagerMixin
+from apps.experiments.versioning import VersionDetails, VersionField, VersionsMixin, VersionsObjectManagerMixin
 from apps.teams.models import BaseTeamModel
 from apps.utils.conversions import bytes_to_megabytes
 
@@ -124,3 +124,13 @@ class File(BaseTeamModel, VersionsMixin):
             new_file.file = new_file_file
         new_file.save()
         return new_file
+
+    @property
+    def version_details(self) -> VersionDetails:
+        return VersionDetails(
+            instance=self,
+            fields=[
+                VersionField(group_name="General", name="name", raw_value=self.name),
+                VersionField(group_name="General", name="summary", raw_value=self.summary),
+            ],
+        )

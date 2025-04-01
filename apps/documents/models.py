@@ -1,6 +1,6 @@
-from django.db import models
+from django.db import models, transaction
 
-from apps.experiments.versioning import VersionsMixin, VersionsObjectManagerMixin
+from apps.experiments.versioning import VersionDetails, VersionField, VersionsMixin, VersionsObjectManagerMixin
 from apps.pipelines.models import Node
 from apps.teams.models import BaseTeamModel
 from apps.utils.conversions import bytes_to_megabytes
@@ -51,3 +51,26 @@ class Collection(BaseTeamModel, VersionsMixin):
             .filter(params__collection_id=str(self.id))
             .all()
         )
+
+    @property
+    def version_details(self) -> VersionDetails:
+        return VersionDetails(
+            instance=self,
+            fields=[
+                VersionField(group_name="General", name="name", raw_value=self.name),
+                VersionField(group_name="General", name="files", queryset=self.files.all()),
+            ],
+        )
+
+    @transaction.atomic()
+    def create_new_version(self, save=True):
+        version_number = self.version_number
+        self.version_number = version_number + 1
+        self.save(update_fields=["version_number"])
+
+        new_version = super().create_new_version(save=False)
+        new_version.version_number = version_number
+        new_version.save()
+
+        new_version.files.set(self.files.all())
+        return new_version
