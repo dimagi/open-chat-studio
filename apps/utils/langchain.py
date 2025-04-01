@@ -11,6 +11,7 @@ from langchain_core.callbacks import BaseCallbackHandler, CallbackManagerForLLMR
 from langchain_core.language_models import BaseLanguageModel
 from langchain_core.messages import AIMessage, AIMessageChunk, BaseMessage, BaseMessageChunk
 from langchain_core.outputs import ChatGeneration, ChatGenerationChunk, ChatResult
+from langchain_core.prompt_values import ChatPromptValue
 from langchain_core.runnables import RunnableConfig, RunnableLambda, RunnableSerializable
 from langchain_core.utils.function_calling import convert_to_openai_tool
 from openai import OpenAI
@@ -67,14 +68,33 @@ class FakeLlm(FakeListChatModel):
     def bind_tools(self, tools, *args, **kwargs):
         return self.bind(tools=[convert_to_openai_tool(tool) for tool in tools])
 
-    def with_structured_output(self, schema) -> dict:
-        """with_structured_output should return a runnable that returns a dictionary, so we simply replace the LLM
-        with a runnable lambda that returns the dictionary that we specified when we built the FakeLlm:
+    def with_structured_output(self, schema) -> RunnableSerializable:
+        """with_structured_output returns a runnable that handles both regular message inputs and ChatPromptValue
+        inputs, converting the result to the schema's expected format.
 
-        Example:
+        Examples:
             FakeLlm(responses=[{"name": "John"}]).with_structured_output(...) -> {"name": "John"}
+            FakeLlm(responses=["keyword"]).with_structured_output(router_schema) -> {"route": "keyword"}
+            FakeLlm(responses=[AIMessage(content="value")]).with_structured_output(...) -> {"route": "value"}
         """
-        return RunnableLambda(lambda message, *args, **kwargs: self._call([message]))
+
+        def _structured_output_handler(input_value, *args, **kwargs):
+            if isinstance(input_value, ChatPromptValue):
+                messages = input_value.messages
+            else:
+                messages = [input_value]
+            result = self._call(messages, *args, **kwargs)
+
+            if isinstance(result, dict):
+                return result
+            elif isinstance(result, str):
+                return {"route": result.lower()}
+            elif isinstance(result, BaseMessage):
+                return {"route": result.content.lower()}
+            else:
+                return {"route": self.responses[0].lower() if self.responses else "default"}
+
+        return RunnableLambda(_structured_output_handler)
 
 
 @dataclasses.dataclass

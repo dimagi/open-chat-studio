@@ -481,7 +481,20 @@ class RouterNode(RouterMixin, Passthrough, HistoryMixin):
         router_schema = self._create_router_schema()
         chain = prompt | llm.with_structured_output(router_schema)
         result = chain.invoke(context, config=self._config)
-        keyword = result.route
+
+        valid_keywords = [k.lower() for k in self.keywords]
+        default_keyword = self.keywords[0].lower()
+        try:
+            keyword = (
+                getattr(result, "route", None)
+                or (result.get("route") if isinstance(result, dict) else None)
+                or self._get_keyword(str(result))
+            )
+        except Exception:
+            keyword = None
+
+        if not keyword or keyword not in valid_keywords:
+            keyword = default_keyword
 
         if session:
             self._save_history(session, node_id, node_input, keyword)
