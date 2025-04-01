@@ -38,35 +38,6 @@ class ChatbotTable(tables.Table):
         return record.name
 
 
-# def chatbot_chip_action(
-#     label: str = None,
-#     label_factory: Callable[[Any, Any], str] = None,
-#     required_permissions: list = None,
-#     display_condition: callable = None,
-# ):
-#     if not label and not label_factory:
-#
-#         def label_factory(record, value):
-#             return str(value)
-#
-#     def url_factory(_, __, record, value):
-#         return reverse(
-#             "chatbots:chatbot_session_view",
-#             args=[record.team.slug, record.experiment.public_id, record.external_id],
-#         )
-#
-#     return Action(
-#         url_name="",
-#         url_factory=url_factory,
-#         label=label,
-#         label_factory=label_factory,
-#         icon_class="fa-solid fa-external-link",
-#         button_style="",
-#         required_permissions=required_permissions,
-#         display_condition=display_condition,
-#     )
-
-
 def chatbot_url_factory(_, __, record, value):
     return reverse(
         "chatbots:chatbot_session_view",

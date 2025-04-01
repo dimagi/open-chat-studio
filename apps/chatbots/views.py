@@ -125,6 +125,8 @@ def chatbot_version_details(request, team_slug: str, experiment_id: int, version
     return experiment_version_details(request, team_slug, experiment_id, version_number)
 
 
+@login_and_team_required
+@permission_required("experiments.view_experiment", raise_exception=True)
 def chatbot_version_create_status(
     request,
     team_slug: str,
