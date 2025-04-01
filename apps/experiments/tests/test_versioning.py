@@ -2,8 +2,8 @@ from unittest.mock import patch
 
 import pytest
 
-from apps.experiments.models import Experiment, VersionsMixin
-from apps.experiments.versioning import VersionDetails, VersionField, differs
+from apps.experiments.models import Experiment
+from apps.experiments.versioning import VersionDetails, VersionField, VersionsMixin, differs
 from apps.pipelines.models import Node
 from apps.utils.factories.events import EventActionFactory, EventActionType, StaticTriggerFactory
 from apps.utils.factories.experiment import ExperimentFactory, ExperimentSessionFactory

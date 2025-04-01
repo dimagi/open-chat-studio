@@ -15,8 +15,8 @@ from pydantic import ConfigDict
 from apps.chat.models import ChatMessage, ChatMessageType
 from apps.custom_actions.form_utils import set_custom_actions
 from apps.custom_actions.mixins import CustomActionOperationMixin
-from apps.experiments.models import ExperimentSession, VersionsMixin, VersionsObjectManagerMixin
-from apps.experiments.versioning import VersionDetails, VersionField
+from apps.experiments.models import ExperimentSession
+from apps.experiments.versioning import VersionDetails, VersionField, VersionsMixin, VersionsObjectManagerMixin
 from apps.pipelines.exceptions import PipelineBuildError
 from apps.pipelines.executor import patch_executor
 from apps.pipelines.flow import Flow, FlowNode, FlowNodeData
