@@ -10,6 +10,7 @@ class CollectionObjectManager(VersionsObjectManagerMixin, models.Manager):
     pass
 
 
+# TODO: Audit
 class Collection(BaseTeamModel, VersionsMixin):
     name = models.CharField(max_length=255)
     files = models.ManyToManyField("files.File", blank=False)
@@ -72,5 +73,9 @@ class Collection(BaseTeamModel, VersionsMixin):
         new_version.version_number = version_number
         new_version.save()
 
-        new_version.files.set(self.files.all())
+        file_versions = []
+        for file in self.files.iterator(chunk_size=15):
+            file_versions.append(file.create_new_version())
+
+        new_version.files.add(*file_versions)
         return new_version

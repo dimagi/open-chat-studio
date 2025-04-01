@@ -6,8 +6,10 @@ import pytest
 from apps.channels.models import ExperimentChannel
 from apps.events.models import EventActionType
 from apps.experiments.models import Experiment, ExperimentSession, Participant
+from apps.pipelines.nodes.nodes import AssistantNode, LLMResponseWithPrompt
 from apps.pipelines.tests.utils import create_runnable, end_node, llm_response_with_prompt_node, start_node
 from apps.utils.factories.assistants import OpenAiAssistantFactory
+from apps.utils.factories.documents import CollectionFactory
 from apps.utils.factories.events import EventActionFactory, ExperimentFactory, StaticTriggerFactory
 from apps.utils.factories.pipelines import NodeFactory, PipelineFactory
 from apps.utils.factories.service_provider_factories import (
@@ -34,23 +36,24 @@ def test_archive_pipeline_archives_nodes_as_well():
 class TestNode:
     @pytest.mark.parametrize("versioned_assistant_linked", [True, False])
     @patch("apps.assistants.sync.push_assistant_to_openai", Mock())
-    def test_versioning_assistant_node(self, versioned_assistant_linked):
+    def test_versioning_node_creates_an_assistant_version(self, versioned_assistant_linked):
         """
         Versioning an assistant node should version the assistant as well, but only when the linked assistant is not
         already a version
         """
+        node_type = AssistantNode.__name__
         assistant = OpenAiAssistantFactory()
         if versioned_assistant_linked:
             assistant = assistant.create_new_version()
 
         pipeline = PipelineFactory()
-        NodeFactory(type="AssistantNode", pipeline=pipeline, params={"assistant_id": str(assistant.id)})
-        assert pipeline.node_set.filter(type="AssistantNode").exists()
+        NodeFactory(type=node_type, pipeline=pipeline, params={"assistant_id": str(assistant.id)})
+        assert pipeline.node_set.filter(type=node_type).exists()
 
         pipeline.create_new_version()
 
-        original_node = pipeline.node_set.get(type="AssistantNode")
-        node_version = pipeline.versions.first().node_set.get(type="AssistantNode")
+        original_node = pipeline.node_set.get(type=node_type)
+        node_version = pipeline.versions.first().node_set.get(type=node_type)
         assistant_version = assistant if versioned_assistant_linked else assistant.versions.first()
 
         original_node_assistant_id = original_node.params["assistant_id"]
@@ -62,6 +65,15 @@ class TestNode:
             assert original_node_assistant_id != node_version_assistant_id
             assert original_node_assistant_id == str(assistant.id)
             assert node_version_assistant_id == str(assistant_version.id)
+
+    def test_versioning_node_creates_a_collection_version(self):
+        node_type = LLMResponseWithPrompt.__name__
+        collection = CollectionFactory()
+        pipeline = PipelineFactory()
+        node = NodeFactory(type=node_type, pipeline=pipeline, params={"collection_id": str(collection.id)})
+
+        pipeline.create_new_version()
+        assert node.versions.first().params["collection_id"] == str(collection.versions.first().id)
 
 
 class TestPipeline:
