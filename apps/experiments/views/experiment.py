@@ -968,8 +968,10 @@ def _verify_user_or_start_session(identifier, request, experiment, session):
         ).exists():
             return _record_consent_and_redirect(team_slug, experiment, session)
 
-    send_chat_link_email(session)
-    return TemplateResponse(request=request, template="account/participant_email_verify.html")
+    token_expiry: datetime = send_chat_link_email(session)
+    return TemplateResponse(
+        request=request, template="account/participant_email_verify.html", context={"token_expiry": token_expiry}
+    )
 
 
 @team_required
@@ -978,6 +980,9 @@ def verify_public_chat_token(request, team_slug: str, experiment_id: uuid.UUID, 
         claims = jwt.decode(token, settings.SECRET_KEY, algorithms="HS256")
         session = ExperimentSession.objects.select_related("experiment").get(external_id=claims["session"])
         return _record_consent_and_redirect(team_slug, session.experiment, session)
+    except jwt.exceptions.ExpiredSignatureError:
+        messages.warning(request=request, message="This link has expired")
+        return redirect(reverse("experiments:start_session_public", args=(team_slug, experiment_id)))
     except Exception:
         messages.warning(request=request, message="This link could not be verified")
         return redirect(reverse("experiments:start_session_public", args=(team_slug, experiment_id)))
