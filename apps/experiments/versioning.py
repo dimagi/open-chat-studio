@@ -310,6 +310,7 @@ class VersionDetails:
 
 class VersionsMixin:
     """A model mixin that needs to be added to the model that will be versioned"""
+
     DEFAULT_EXCLUDED_KEYS = ["id", "created_at", "updated_at", "working_version", "versions", "version_number"]
 
     @transaction.atomic()
@@ -394,6 +395,7 @@ class VersionsMixin:
 
 class VersionsObjectManagerMixin:
     """A manager mixin that needs to be added to the model manager that will be versioned"""
+
     def get_all(self):
         """A method to return all experiments whether it is deprecated or not"""
         return super().get_queryset()

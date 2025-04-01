@@ -1,16 +1,38 @@
 from django.db import models
 
+from apps.experiments.versioning import VersionsMixin, VersionsObjectManagerMixin
 from apps.pipelines.models import Node
 from apps.teams.models import BaseTeamModel
 from apps.utils.conversions import bytes_to_megabytes
 
 
-class Collection(BaseTeamModel):
+class CollectionObjectManager(VersionsObjectManagerMixin, models.Manager):
+    pass
+
+
+class Collection(BaseTeamModel, VersionsMixin):
     name = models.CharField(max_length=255)
     files = models.ManyToManyField("files.File", blank=False)
+    working_version = models.ForeignKey(
+        "self",
+        on_delete=models.CASCADE,
+        null=True,
+        blank=True,
+        related_name="versions",
+    )
+    is_archived = models.BooleanField(default=False)
+    objects = CollectionObjectManager()
+    version_number = models.PositiveIntegerField(default=1)
 
     class Meta:
-        constraints = [models.UniqueConstraint(fields=["team", "name"], name="unique_collection_per_team")]
+        constraints = [
+            models.UniqueConstraint(
+                fields=["team", "name", "version_number"], name="unique_collection_version_per_team"
+            )
+        ]
+
+    def __str__(self) -> str:
+        return f"{self.name}"
 
     @property
     def size(self) -> float:
