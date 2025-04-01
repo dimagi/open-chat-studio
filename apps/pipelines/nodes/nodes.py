@@ -13,7 +13,7 @@ from django.core.validators import validate_email
 from django.db.models import TextChoices
 from jinja2.sandbox import SandboxedEnvironment
 from langchain_core.messages import BaseMessage
-from langchain_core.prompts import MessagesPlaceholder, PromptTemplate
+from langchain_core.prompts import ChatPromptTemplate, MessagesPlaceholder, PromptTemplate
 from langchain_core.runnables import RunnableLambda, RunnablePassthrough
 from langchain_text_splitters import RecursiveCharacterTextSplitter
 from pydantic import BaseModel, BeforeValidator, Field, create_model, field_validator, model_validator
@@ -41,6 +41,7 @@ from apps.pipelines.tasks import send_email_from_pipeline
 from apps.service_providers.exceptions import ServiceProviderConfigError
 from apps.service_providers.llm_service.adapters import AssistantAdapter, ChatAdapter
 from apps.service_providers.llm_service.history_managers import PipelineHistoryManager
+from apps.service_providers.llm_service.prompt_context import PromptTemplateContext
 from apps.service_providers.llm_service.runnables import (
     AgentAssistantChat,
     AgentLLMChat,
@@ -49,7 +50,7 @@ from apps.service_providers.llm_service.runnables import (
     SimpleLLMChat,
 )
 from apps.service_providers.models import LlmProviderModel
-from apps.utils.prompt import OcsPromptTemplate, PromptVars, validate_prompt_variables
+from apps.utils.prompt import PromptVars, validate_prompt_variables
 
 OptionalInt = Annotated[int | None, BeforeValidator(lambda x: None if x == "" else x)]
 
@@ -430,6 +431,14 @@ class RouterMixin(BaseModel):
         else:
             return self.keywords[0].lower()
 
+    def _create_router_schema(self):
+        """Create a Pydantic model for structured router output"""
+        routes = [keyword.lower() for keyword in self.keywords]
+
+        return create_model(
+            "RouterOutput", route=(Literal[tuple(routes)], Field(description="Selected routing destination"))
+        )
+
     def get_output_map(self):
         """Returns a mapping of the form:
         {"output_1": "keyword 1", "output_2": "keyword_2", ...} where keywords are defined by the user
@@ -447,7 +456,6 @@ class RouterNode(RouterMixin, Passthrough, HistoryMixin):
             field_order=["llm_provider_id", "llm_temperature", "history_type", "prompt", "keywords"],
         )
     )
-
     prompt: str = Field(
         default="You are an extremely helpful router",
         min_length=1,
@@ -455,14 +463,13 @@ class RouterNode(RouterMixin, Passthrough, HistoryMixin):
     )
 
     def _process_conditional(self, state: PipelineState, node_id=None):
-        from apps.service_providers.llm_service.prompt_context import PromptTemplateContext
-
-        prompt = OcsPromptTemplate.from_messages(
+        prompt = ChatPromptTemplate.from_messages(
             [("system", self.prompt), MessagesPlaceholder("history", optional=True), ("human", "{input}")]
         )
 
         session: ExperimentSession = state["experiment_session"]
         node_input = state["messages"][-1]
+
         context = {"input": node_input}
         context.update(PromptTemplateContext(session).get_context(prompt.input_variables))
 
@@ -470,12 +477,15 @@ class RouterNode(RouterMixin, Passthrough, HistoryMixin):
             input_messages = prompt.format_messages(**context)
             context["history"] = self._get_history(session, node_id, input_messages)
 
-        chain = prompt | self.get_chat_model()
-
+        llm = self.get_chat_model()
+        router_schema = self._create_router_schema()
+        chain = prompt | llm.with_structured_output(router_schema)
         result = chain.invoke(context, config=self._config)
-        keyword = self._get_keyword(result.content)
+        keyword = result.route
+
         if session:
             self._save_history(session, node_id, node_input, keyword)
+
         return keyword
 
 
