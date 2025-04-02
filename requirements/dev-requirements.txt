@@ -93,7 +93,7 @@ pytest==7.4.4
     #   pytest-xdist
 pytest-cov==6.0.0
     # via -r dev-requirements.in
-pytest-django==4.9.0
+pytest-django==4.10.0
     # via -r dev-requirements.in
 pytest-httpx==0.24.0
     # via -r dev-requirements.in
