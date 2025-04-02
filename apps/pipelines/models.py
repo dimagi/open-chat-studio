@@ -439,7 +439,7 @@ class Node(BaseModel, VersionsMixin, CustomActionOperationMixin):
                 new_version.params["assistant_id"] = str(assistant_version.id)
 
         if self.type == LLMResponseWithPrompt.__name__:
-            if collection_id := self.params["collection_id"]:
+            if collection_id := self.params.get("collection_id"):
                 collection = Collection.objects.get(id=collection_id)
                 collection_version = collection.create_new_version()
                 new_version.params["collection_id"] = str(collection_version.id)

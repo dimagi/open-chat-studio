@@ -15,7 +15,6 @@ class CollectionObjectManager(VersionsObjectManagerMixin, AuditingManager):
 
 @audit_fields(
     "name",
-    "files",
     audit_special_queryset_writes=True,
 )
 class Collection(BaseTeamModel, VersionsMixin):
