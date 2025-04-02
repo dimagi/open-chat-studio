@@ -392,6 +392,15 @@ class VersionsMixin:
         versions_list.append(f"v{self.version_number}")
         return versions_list
 
+    def compare_with_latest(self) -> bool:
+        """
+        Returns a boolean if the versioned object differs from its lastest version
+        """
+        version = self.version_details
+        if prev_version := self.latest_version:
+            version.compare(prev_version.version_details, early_abort=True)
+        return version.fields_changed
+
 
 class VersionsObjectManagerMixin:
     """A manager mixin that needs to be added to the model manager that will be versioned"""

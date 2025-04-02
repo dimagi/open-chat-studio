@@ -35,7 +35,8 @@ class Collection(BaseTeamModel, VersionsMixin):
     class Meta:
         constraints = [
             models.UniqueConstraint(
-                fields=["team", "name", "version_number"], name="unique_collection_version_per_team"
+                fields=["team", "name", "version_number", "working_version_id"],
+                name="unique_collection_version_per_team",
             )
         ]
 

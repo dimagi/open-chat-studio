@@ -35,10 +35,10 @@ def test_archive_pipeline_archives_nodes_as_well():
 
 
 @pytest.mark.django_db()
-class TestNode:
+class TestVersioningNodes:
     @pytest.mark.parametrize("versioned_assistant_linked", [True, False])
     @patch("apps.assistants.sync.push_assistant_to_openai", Mock())
-    def test_versioning_node_creates_an_assistant_version(self, versioned_assistant_linked):
+    def test_version_assistant_node(self, versioned_assistant_linked):
         """
         Versioning an assistant node should version the assistant as well, but only when the linked assistant is not
         already a version
@@ -68,14 +68,19 @@ class TestNode:
             assert original_node_assistant_id == str(assistant.id)
             assert node_version_assistant_id == str(assistant_version.id)
 
-    def test_versioning_node_creates_a_collection_version(self):
+    def test_version_llm_with_prompt_node(self):
         node_type = LLMResponseWithPrompt.__name__
         collection = CollectionFactory()
         pipeline = PipelineFactory()
         node = NodeFactory(type=node_type, pipeline=pipeline, params={"collection_id": str(collection.id)})
 
+        # Versioning it should version the collection as well
+        pipeline.create_new_version()
+
+        # Versioning it without changes to the collection should not version the collection
         pipeline.create_new_version()
         assert node.versions.first().params["collection_id"] == str(collection.versions.first().id)
+        assert node.versions.last().params["collection_id"] == str(collection.versions.first().id)
 
 
 @pytest.mark.django_db()

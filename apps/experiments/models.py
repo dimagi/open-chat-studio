@@ -846,15 +846,6 @@ class Experiment(BaseTeamModel, VersionsMixin, CustomActionOperationMixin):
     def get_fields_to_exclude(self):
         return super().get_fields_to_exclude() + ["is_default_version", "public_id", "version_description"]
 
-    def compare_with_latest(self):
-        """
-        Returns a boolean if the experiment differs from the lastest version
-        """
-        version = self.version_details
-        if prev_version := self.latest_version:
-            version.compare(prev_version.version_details, early_abort=True)
-        return version.fields_changed
-
     @transaction.atomic()
     def archive(self):
         """
