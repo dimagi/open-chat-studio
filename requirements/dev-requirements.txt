@@ -28,7 +28,7 @@ exceptiongroup==1.2.2
     #   pytest
 execnet==2.1.1
     # via pytest-xdist
-factory-boy==3.3.1
+factory-boy==3.3.3
     # via -r dev-requirements.in
 faker==30.8.1
     # via factory-boy
