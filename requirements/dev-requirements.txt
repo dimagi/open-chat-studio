@@ -63,7 +63,7 @@ iniconfig==2.0.0
     # via pytest
 invoke==2.2.0
     # via -r dev-requirements.in
-mock==5.1.0
+mock==5.2.0
     # via -r dev-requirements.in
 nodeenv==1.9.1
     # via pre-commit
