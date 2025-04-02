@@ -94,8 +94,8 @@ class FileDetails(BaseDetailsView):
         context["edit_url"] = reverse(
             "documents:edit_file", kwargs={"team_slug": self.kwargs["team_slug"], "pk": file.id}
         )
-        context["delete_url"] = reverse(
-            "documents:delete_file", kwargs={"team_slug": self.kwargs["team_slug"], "pk": file.id}
+        context["archive_url"] = reverse(
+            "documents:archive_file", kwargs={"team_slug": self.kwargs["team_slug"], "pk": file.id}
         )
         context["available_collections"] = self.request.team.collection_set.filter(is_version=False)
         return context
@@ -128,11 +128,22 @@ def upload_files(request, team_slug: str):
 
 @login_and_team_required
 @permission_required("files.delete_file")
-def delete_file(request, team_slug: str, pk: int):
+def archive_file(request, team_slug: str, pk: int):
     file = get_object_or_404(File, team__slug=team_slug, id=pk)
-    file.delete()
-    messages.success(request, "File deleted")
-    return HttpResponse()
+
+    if collections := file.get_collection_references():
+        response = render_to_string(
+            "assistants/partials/referenced_objects.html",
+            context={
+                "object_name": "file",
+                "pipeline_nodes": [Chip(label=col.name, url=col.get_absolute_url()) for col in collections],
+            },
+        )
+        return HttpResponse(response, headers={"HX-Reswap": "none"}, status=400)
+    else:
+        file.archive()
+        messages.success(request, "File archived")
+        return HttpResponse()
 
 
 @require_POST
@@ -196,8 +207,8 @@ class CollectionDetails(BaseDetailsView):
         context["edit_url"] = reverse(
             "documents:edit_collection", kwargs={"team_slug": self.kwargs["team_slug"], "pk": collection.id}
         )
-        context["delete_url"] = reverse(
-            "documents:delete_collection", kwargs={"team_slug": self.kwargs["team_slug"], "pk": collection.id}
+        context["archive_url"] = reverse(
+            "documents:archive_collection", kwargs={"team_slug": self.kwargs["team_slug"], "pk": collection.id}
         )
         return context
 
@@ -217,22 +228,22 @@ def new_collection(request, team_slug: str):
 
 @login_and_team_required
 @permission_required("documents.delete_collection")
-def delete_collection(request, team_slug: str, pk: int):
+def archive_collection(request, team_slug: str, pk: int):
     collection = get_object_or_404(Collection, team__slug=team_slug, id=pk)
-    if pipeline_nodes := collection.get_references():
+    if nodes := collection.get_node_references():
         response = render_to_string(
             "assistants/partials/referenced_objects.html",
             context={
                 "object_name": "collection",
                 "pipeline_nodes": [
-                    Chip(label=node.pipeline.name, url=node.pipeline.get_absolute_url()) for node in pipeline_nodes
+                    Chip(label=node.pipeline.name, url=node.pipeline.get_absolute_url()) for node in nodes.all()
                 ],
             },
         )
         return HttpResponse(response, headers={"HX-Reswap": "none"}, status=400)
     else:
-        collection.delete()
-        messages.success(request, "Collection deleted")
+        collection.archive()
+        messages.success(request, "Collection archived")
         return HttpResponse()
 
 

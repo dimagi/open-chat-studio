@@ -1,11 +1,12 @@
 from django.db import models, transaction
+from django.urls import reverse
 from field_audit import audit_fields
 from field_audit.models import AuditingManager
 
 from apps.experiments.versioning import VersionDetails, VersionField, VersionsMixin, VersionsObjectManagerMixin
-from apps.pipelines.models import Node
 from apps.teams.models import BaseTeamModel
 from apps.utils.conversions import bytes_to_megabytes
+from apps.utils.deletion import get_related_pipelines_queryset
 
 
 class CollectionObjectManager(VersionsObjectManagerMixin, AuditingManager):
@@ -51,13 +52,8 @@ class Collection(BaseTeamModel, VersionsMixin):
     def file_names(self) -> list[str]:
         return list(self.files.values_list("name", flat=True))
 
-    def get_references(self) -> list[Node]:
-        return (
-            Node.objects.llm_response_with_prompt_nodes()
-            .select_related("pipeline")
-            .filter(params__collection_id=str(self.id))
-            .all()
-        )
+    def get_node_references(self) -> models.QuerySet:
+        return get_related_pipelines_queryset(self, "collection_id").distinct()
 
     @property
     def version_details(self) -> VersionDetails:
@@ -85,3 +81,6 @@ class Collection(BaseTeamModel, VersionsMixin):
 
         new_version.files.add(*file_versions)
         return new_version
+
+    def get_absolute_url(self):
+        return reverse("documents:collections", args=[self.team.slug, "collections"])

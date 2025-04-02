@@ -98,6 +98,16 @@ class File(BaseTeamModel, VersionsMixin):
         """Returns the size of this file in megabytes"""
         return bytes_to_megabytes(self.content_size)
 
+    @property
+    def version_details(self) -> VersionDetails:
+        return VersionDetails(
+            instance=self,
+            fields=[
+                VersionField(group_name="General", name="name", raw_value=self.name),
+                VersionField(group_name="General", name="summary", raw_value=self.summary),
+            ],
+        )
+
     def save(self, *args, **kwargs):
         if self.file:
             self.content_size = self.file.size
@@ -125,12 +135,5 @@ class File(BaseTeamModel, VersionsMixin):
         new_file.save()
         return new_file
 
-    @property
-    def version_details(self) -> VersionDetails:
-        return VersionDetails(
-            instance=self,
-            fields=[
-                VersionField(group_name="General", name="name", raw_value=self.name),
-                VersionField(group_name="General", name="summary", raw_value=self.summary),
-            ],
-        )
+    def get_collection_references(self):
+        return self.collection_set.all()
