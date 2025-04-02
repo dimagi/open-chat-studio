@@ -108,7 +108,7 @@ pyyaml==6.0.1
     # via
     #   -c requirements.txt
     #   pre-commit
-ruff==0.7.1
+ruff==0.11.2
     # via -r dev-requirements.in
 six==1.16.0
     # via
