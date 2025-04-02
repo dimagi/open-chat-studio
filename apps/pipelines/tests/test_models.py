@@ -3,7 +3,9 @@ from unittest.mock import Mock, patch
 
 import pytest
 
+from apps.assistants.models import OpenAiAssistant
 from apps.channels.models import ExperimentChannel
+from apps.documents.models import Collection
 from apps.events.models import EventActionType
 from apps.experiments.models import Experiment, ExperimentSession, Participant
 from apps.pipelines.nodes.nodes import AssistantNode, LLMResponseWithPrompt
@@ -74,6 +76,51 @@ class TestNode:
 
         pipeline.create_new_version()
         assert node.versions.first().params["collection_id"] == str(collection.versions.first().id)
+
+
+@pytest.mark.django_db()
+class TestArchivingNodes:
+    @patch("apps.assistants.sync.push_assistant_to_openai", Mock())
+    def test_archive_assistant_node(self):
+        assistant = OpenAiAssistantFactory()
+        pipeline = PipelineFactory()
+        node = NodeFactory(type=AssistantNode.__name__, pipeline=pipeline, params={"assistant_id": str(assistant.id)})
+        node_version = node.create_new_version()
+
+        # Archiving the working version should not archive the assistant
+        node.archive()
+        assistant.refresh_from_db()
+        assert assistant.is_archived is False
+
+        # Archiving the working version should archive the assistant
+        node_version.archive()
+        assert OpenAiAssistant.objects.get_all().filter(working_version_id=assistant.id, is_archived=True).exists()
+
+    def test_archive_llm_response_with_prompt_node(self):
+        """
+        Archiving this node should archive the related collection as well when this node is a version and the collection
+        exists
+        """
+        collection = CollectionFactory()
+        pipeline = PipelineFactory()
+        node = NodeFactory(
+            type=LLMResponseWithPrompt.__name__, pipeline=pipeline, params={"collection_id": str(collection.id)}
+        )
+        version_with_instance = node.create_new_version()
+        node.params["collection_id"] = ""
+        version_without_instance = node.create_new_version()
+
+        # Archiving the working version should not archive the collection
+        node.archive()
+        collection.refresh_from_db()
+        assert collection.is_archived is False
+
+        # Archiving this version should archive the collection
+        version_with_instance.archive()
+        assert Collection.objects.get_all().filter(working_version_id=collection.id, is_archived=True).exists()
+
+        # Archiving this version should not error
+        version_without_instance.archive()
 
 
 class TestPipeline:

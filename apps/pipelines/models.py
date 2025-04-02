@@ -2,6 +2,7 @@ from collections import defaultdict
 from collections.abc import Iterator
 from datetime import datetime
 from functools import cached_property
+from typing import TypedDict
 from uuid import uuid4
 
 import pydantic
@@ -25,6 +26,13 @@ from apps.pipelines.nodes.base import PipelineState
 from apps.pipelines.nodes.helpers import temporary_session
 from apps.teams.models import BaseTeamModel
 from apps.utils.models import BaseModel
+
+
+class ModelParamSpec(TypedDict):
+    """A helper class to hold the parameter name and model of those that are data base records"""
+
+    param_name: str
+    model_cls: VersionsMixin
 
 
 class PipelineManager(VersionsObjectManagerMixin, models.Manager):
@@ -458,14 +466,11 @@ class Node(BaseModel, VersionsMixin, CustomActionOperationMixin):
         Archiving a node will also archive the assistant if it is an assistant node. The node's versions will be
         archived when the pipeline they belong to is archived.
         """
-        from apps.assistants.models import OpenAiAssistant
-
         super().archive()
-        if self.is_a_version and self.type == "AssistantNode":
-            assistant_id = self.params.get("assistant_id")
-            if assistant_id:
-                assistant = OpenAiAssistant.objects.get(id=assistant_id)
-                assistant.archive()
+        if not self.is_a_version:
+            return
+
+        self._archive_related_params()
 
     @property
     def version_details(self) -> VersionDetails:
@@ -509,6 +514,28 @@ class Node(BaseModel, VersionsMixin, CustomActionOperationMixin):
     def requires_attachment_tool(self) -> bool:
         """When a collection is linked, the attachment tool is required"""
         return self.params.get("collection_id") is not None
+
+    def _archive_related_params(self):
+        """
+        Archive related params that were also versioned along with this node
+        """
+        from apps.assistants.models import OpenAiAssistant
+        from apps.documents.models import Collection
+        from apps.pipelines.nodes import nodes
+
+        model_param_specs = {
+            nodes.AssistantNode.__name__: [ModelParamSpec(param_name="assistant_id", model_cls=OpenAiAssistant)],
+            nodes.LLMResponseWithPrompt.__name__: [
+                ModelParamSpec(param_name="collection_id", model_cls=Collection)
+                # TODO: Custom actions needed
+            ],
+        }
+
+        for spec in model_param_specs.get(self.type, []):
+            if instance_id := self.params[spec["param_name"]]:
+                instance_cls = spec["model_cls"]
+                obj = instance_cls.objects.get(id=instance_id)
+                obj.archive()
 
 
 class PipelineRunStatus(models.TextChoices):

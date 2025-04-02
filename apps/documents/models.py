@@ -29,8 +29,9 @@ class Collection(BaseTeamModel, VersionsMixin):
         related_name="versions",
     )
     is_archived = models.BooleanField(default=False)
-    objects = CollectionObjectManager()
     version_number = models.PositiveIntegerField(default=1)
+
+    objects = CollectionObjectManager()
 
     class Meta:
         constraints = [
