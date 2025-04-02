@@ -1,4 +1,6 @@
 from django.db import models, transaction
+from field_audit import audit_fields
+from field_audit.models import AuditingManager
 
 from apps.experiments.versioning import VersionDetails, VersionField, VersionsMixin, VersionsObjectManagerMixin
 from apps.pipelines.models import Node
@@ -6,11 +8,15 @@ from apps.teams.models import BaseTeamModel
 from apps.utils.conversions import bytes_to_megabytes
 
 
-class CollectionObjectManager(VersionsObjectManagerMixin, models.Manager):
+class CollectionObjectManager(VersionsObjectManagerMixin, AuditingManager):
     pass
 
 
-# TODO: Audit
+@audit_fields(
+    "name",
+    "files",
+    audit_special_queryset_writes=True,
+)
 class Collection(BaseTeamModel, VersionsMixin):
     name = models.CharField(max_length=255)
     files = models.ManyToManyField("files.File", blank=False)
