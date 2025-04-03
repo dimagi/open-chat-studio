@@ -2,6 +2,8 @@
 {% load static %}
 {% block page_head %}
   <link rel="stylesheet" href="{% static 'css/pipeline.css' %}">
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css" integrity="sha512-..." crossorigin="anonymous" referrerpolicy="no-referrer" />
+  <script src="https://cdn.jsdelivr.net/npm/alpinejs@3.x.x/dist/cdn.min.js" defer></script>
   <style>
     .react-flow__handle {
       width: 16px;
@@ -24,17 +26,22 @@
       top: 8px;
       right: 8px;
       padding: 8px;
-      background-color: #e5e7eb; /* bg-gray-200 */
+      background-color: #e5e7eb;
       border-radius: 4px;
       z-index: 10;
     }
     .fullscreen-toggle:hover {
-      background-color: #d1d5db; /* hover:bg-gray-300 */
-    }
-    .fullscreen-toggle svg {
-      pointer-events: none;
+      background-color: #d1d5db;
     }
     :fullscreen #pipelines-container {
+      width: 100%;
+      height: 100%;
+      position: fixed;
+      top: 0;
+      left: 0;
+      background-color: #1a202c;
+    }
+    :fullscreen #pipelineBuilder {
       width: 100%;
       height: 100%;
     }
@@ -43,20 +50,28 @@
 {% block breadcrumbs %}
 {% endblock %}
 {% block app %}
-  <div class="flex-1 relative" id="pipelines-container">
-    <button class="fullscreen-toggle" title="Toggle Full Screen">
-      <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-        <path
-          id="fullscreen-enter-icon"
-          stroke-linecap="round"
-          stroke-linejoin="round"
-          stroke-width="2"
-          d="M4 8V4m0 0h4M4 4l5 5m11-1V4m0 0h-4m4 0l-5 5M4 16v4m0 0h4m-4 0l5-5m11 5v-4m0 0h-4m4 0l-5-5"
-        />
-      </svg>
+  <div class="flex-1 relative" id="pipelines-container" x-data="{ isFullscreen: false }" x-init="
+                                                                                                 $watch('isFullscreen', (value) => {
+                                                                                                 if (value) {
+                                                                                                 $el.requestFullscreen().catch(err => console.error('Fullscreen failed:', err));
+                                                                                                 if (sidebar) sidebar.classList.add('hidden');
+                                                                                                 } else {
+                                                                                                 document.exitFullscreen().catch(err => console.error('Exit fullscreen failed:', err));
+                                                                                                 if (sidebar) sidebar.classList.remove('hidden');
+                                                                                                 }
+                                                                                                 })
+                                                                                                ">
+    <button
+      class="fullscreen-toggle"
+      title="Toggle Full Screen"
+      @click="isFullscreen = !isFullscreen"
+      x-on:fullscreenchange="isFullscreen = !!document.fullscreenElement"
+    >
+      <i :class="isFullscreen ? 'fas fa-compress' : 'fas fa-expand'" class="w-5 h-5"></i>
     </button>
     <div class="max-w-7xl mx-auto" id="pipelineBuilder"></div>
   </div>
+  <aside class="w-64 hidden" x-ref="sidebar">Sidebar content here</aside>
 {% endblock %}
 {% block page_js %}
   {{ parameter_values|json_script:"parameter-values" }}
@@ -67,36 +82,8 @@
     window.DOCUMENTATION_BASE_URL = '{{ docs_base_url }}';
     document.addEventListener('DOMContentLoaded', () => {
       SiteJS.pipeline.renderPipeline("#pipelineBuilder", "{{ request.team.slug }}", {{ pipeline_id }});
-      const toggleButton = document.querySelector('.fullscreen-toggle');
-      const container = document.getElementById('pipelines-container');
-      const sidebar = document.querySelector('.w-64');
-      const icon = document.getElementById('fullscreen-enter-icon');
-
-      function toggleFullScreen() {
-        if (!document.fullscreenElement) {
-          container.requestFullscreen().then(() => {
-            if (sidebar) sidebar.classList.add('hidden');
-            icon.setAttribute('d', 'M6 18L18 6M6 6l12 12'); // Exit fullscreen icon
-          }).catch(err => console.error('Fullscreen request failed:', err));
-        } else {
-          document.exitFullscreen().then(() => {
-            if (sidebar) sidebar.classList.remove('hidden');
-            icon.setAttribute('d', 'M4 8V4m0 0h4M4 4l5 5m11-1V4m0 0h-4m4 0l-5 5M4 16v4m0 0h4m-4 0l5-5m11 5v-4m0 0h-4m4 0l-5-5'); // Enter fullscreen icon
-          }).catch(err => console.error('Exit fullscreen failed:', err));
-        }
-      }
-
-      toggleButton.addEventListener('click', toggleFullScreen);
       document.addEventListener('fullscreenchange', () => {
-        if (!document.fullscreenElement && sidebar) {
-          sidebar.classList.remove('hidden');
-          icon.setAttribute('d', 'M4 8V4m0 0h4M4 4l5 5m11-1V4m0 0h-4m4 0l-5 5M4 16v4m0 0h4m-4 0l5-5m11 5v-4m0 0h-4m4 0l-5-5');
-        }
-      });
-      document.addEventListener('keydown', (event) => {
-        if (event.key === 'Escape' && document.fullscreenElement) {
-          toggleFullScreen();
-        }
+        SiteJS.pipeline.renderPipeline("#pipelineBuilder", "{{ request.team.slug }}", {{ pipeline_id }});
       });
     });
   </script>
