@@ -75,7 +75,7 @@ def test_attachment_links_attached_to_message(experiment):
     files = FileFactory.create_batch(2)
     channel.send_text_to_user("Hi there", attached_files=files)
     call_kwargs = channel.messaging_service.send_text_message.call_args[1]
-    final_message = call_kwargs["text"]
+    final_message = call_kwargs["message"]
 
     expected_final_message = f"""Hi there
 
