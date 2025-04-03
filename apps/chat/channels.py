@@ -162,6 +162,10 @@ class ChannelBase(ABC):
     def message(self) -> BaseMessage:
         return self._message
 
+    @property
+    def supports_multimedia(self) -> bool:
+        return False
+
     @message.setter
     def message(self, value: BaseMessage):
         self._message = value
@@ -486,7 +490,9 @@ class ChannelBase(ABC):
             logger.exception(e)
             self.send_text_to_user(text)
 
-        if attached_files:
+        # If the channel supports multimedia, it will send these attachments directly
+
+        if attached_files and not self.supports_multimedia:
             link_attachments.extend([file.download_link(self.experiment_session.id) for file in attached_files])
 
         if link_attachments:
