@@ -2,6 +2,8 @@
 {% load static %}
 {% block page_head %}
   <link rel="stylesheet" href="{% static 'css/pipeline.css' %}">
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css" integrity="sha512-..." crossorigin="anonymous" referrerpolicy="no-referrer" />
+  <script src="https://cdn.jsdelivr.net/npm/alpinejs@3.x.x/dist/cdn.min.js" defer></script>
   <style>
     .react-flow__handle {
       width: 16px;
@@ -18,25 +20,71 @@
       top: 50%;
       transform: translate(0, -50%);
     }
+    .fullscreen-toggle {
+      transition: background-color 0.2s ease;
+      position: absolute;
+      top: 8px;
+      right: 8px;
+      padding: 8px;
+      background-color: #e5e7eb;
+      border-radius: 4px;
+      z-index: 10;
+    }
+    .fullscreen-toggle:hover {
+      background-color: #d1d5db;
+    }
+    :fullscreen #pipelines-container {
+      width: 100%;
+      height: 100%;
+      position: fixed;
+      top: 0;
+      left: 0;
+      background-color: #1a202c;
+    }
+    :fullscreen #pipelineBuilder {
+      width: 100%;
+      height: 100%;
+    }
   </style>
 {% endblock page_head %}
 {% block breadcrumbs %}
 {% endblock %}
 {% block app %}
-  <div class="max-w-7xl mx-auto" id="pipelineBuilder">
+  <div class="flex-1 relative" id="pipelines-container" x-data="{ isFullscreen: false }" x-init="
+                                                                                                 $watch('isFullscreen', (value) => {
+                                                                                                 if (value) {
+                                                                                                 $el.requestFullscreen().catch(err => console.error('Fullscreen failed:', err));
+                                                                                                 if (sidebar) sidebar.classList.add('hidden');
+                                                                                                 } else {
+                                                                                                 document.exitFullscreen().catch(err => console.error('Exit fullscreen failed:', err));
+                                                                                                 if (sidebar) sidebar.classList.remove('hidden');
+                                                                                                 }
+                                                                                                 })
+                                                                                                ">
+    <button
+      class="fullscreen-toggle"
+      title="Toggle Full Screen"
+      @click="isFullscreen = !isFullscreen"
+      x-on:fullscreenchange="isFullscreen = !!document.fullscreenElement"
+    >
+      <i :class="isFullscreen ? 'fas fa-compress' : 'fas fa-expand'" class="w-5 h-5"></i>
+    </button>
+    <div class="max-w-7xl mx-auto" id="pipelineBuilder"></div>
   </div>
+  <aside class="w-64 hidden" x-ref="sidebar">Sidebar content here</aside>
 {% endblock %}
 {% block page_js %}
   {{ parameter_values|json_script:"parameter-values" }}
   {{ default_values|json_script:"default-values" }}
   {{ node_schemas|json_script:"node-schemas" }}
-  {{ flags_enabled|json_script:"flags-enabled" }}
   <script src="{% static 'js/pipeline-bundle.js' %}"></script>
   <script type="module">
     window.DOCUMENTATION_BASE_URL = '{{ docs_base_url }}';
     document.addEventListener('DOMContentLoaded', () => {
       SiteJS.pipeline.renderPipeline("#pipelineBuilder", "{{ request.team.slug }}", {{ pipeline_id }});
-    }
-    )
+      document.addEventListener('fullscreenchange', () => {
+        SiteJS.pipeline.renderPipeline("#pipelineBuilder", "{{ request.team.slug }}", {{ pipeline_id }});
+      });
+    });
   </script>
 {% endblock %}
