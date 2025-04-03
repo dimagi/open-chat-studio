@@ -31,6 +31,7 @@ class MessagingService(pydantic.BaseModel):
     _type: ClassVar[str]
     _supported_platforms: ClassVar[list]
     voice_replies_supported: ClassVar[bool] = False
+    supports_multimedia: ClassVar[bool] = False
     supported_message_types: ClassVar[list] = []
 
     def send_text_message(self, message: str, from_: str, to: str, platform: ChannelPlatform, **kwargs):
@@ -56,6 +57,7 @@ class TwilioService(MessagingService):
     _type: ClassVar[str] = "twilio"
     supported_platforms: ClassVar[list] = [ChannelPlatform.WHATSAPP, ChannelPlatform.FACEBOOK]
     supported_message_types = [MESSAGE_TYPES.TEXT, MESSAGE_TYPES.VOICE]
+    supports_multimedia: ClassVar[bool] = True
 
     account_sid: str
     auth_token: str
@@ -108,17 +110,40 @@ class TwilioService(MessagingService):
             ExpiresIn=360,
         )
 
-    def send_text_message(self, message: str, from_: str, to: str, platform: ChannelPlatform, **kwargs):
+    def _parse_addressing_params(self, platform: ChannelPlatform, from_: str, to: str):
         prefix = self.TWILIO_CHANNEL_PREFIXES[platform]
+        return f"{prefix}:{from_}", f"{prefix}:{to}"
+
+    def send_text_message(
+        self, message: str, from_: str, to: str, platform: ChannelPlatform, attached_files: dict, **kwargs
+    ):
+        from_, to = self._parse_addressing_params(platform, from_=from_, to=to)
+
         for message_text in smart_split(message, chars_per_string=self.MESSAGE_CHARACTER_LIMIT):
-            self.client.messages.create(from_=f"{prefix}:{from_}", body=message_text, to=f"{prefix}:{to}")
+            self.client.messages.create(from_=from_, body=message_text, to=to)
+
+        self._send_attachments(from_, to, attached_files)
 
     def send_voice_message(
-        self, synthetic_voice: SynthesizedAudio, from_: str, to: str, platform: ChannelPlatform, **kwargs
+        self,
+        synthetic_voice: SynthesizedAudio,
+        from_: str,
+        to: str,
+        platform: ChannelPlatform,
+        attached_files: dict,
+        **kwargs,
     ):
-        prefix = self.TWILIO_CHANNEL_PREFIXES[platform]
+        from_, to = self._parse_addressing_params(platform, from_=from_, to=to)
+
         public_url = self._upload_audio_file(synthetic_voice)
-        self.client.messages.create(from_=f"{prefix}:{from_}", to=f"{prefix}:{to}", media_url=[public_url])
+        self.client.messages.create(from_=from_, to=to, media_url=[public_url])
+
+        self._send_attachments(from_, to, attached_files)
+
+    def _send_attachments(self, from_: str, to: str, attached_files: dict):
+        """Sends the attachments"""
+        for name, download_link in attached_files.items():
+            self.client.messages.create(from_=from_, to=to, body=name, media_url=download_link)
 
     def get_message_audio(self, message: TwilioMessage) -> BytesIO:
         auth = (self.account_sid, self.auth_token)

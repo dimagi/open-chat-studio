@@ -764,22 +764,36 @@ class TelegramChannel(ChannelBase):
 
 
 class WhatsappChannel(ChannelBase):
+    def _get_file_links(self, attached_files: list[File] = None) -> dict:
+        attachments = {}
+        if attached_files:
+            for file in attached_files:
+                attachments[file.name] = file.download_link(self.experiment_session.id)
+
+        return attachments
+
     def send_text_to_user(self, text: str, attached_files: list[File] = None):
-        text = self.append_attachment_links(text, attached_files)
         from_number = self.experiment_channel.extra_data.get("number")
         to_number = self.participant_identifier
+
+        extra_kwargs = {}
+        if self.supports_multimedia:
+            extra_kwargs["attached_files"] = self._get_file_links(attached_files)
+        else:
+            text = self.append_attachment_links(text, attached_files)
+
         self.messaging_service.send_text_message(
-            message=text,
-            from_=from_number,
-            to=to_number,
-            platform=ChannelPlatform.WHATSAPP,
-            attached_files=attached_files,
+            message=text, from_=from_number, to=to_number, platform=ChannelPlatform.WHATSAPP, **extra_kwargs
         )
 
     @property
     def voice_replies_supported(self) -> bool:
         # TODO: Update turn-python library to support this
         return self.messaging_service.voice_replies_supported
+
+    @property
+    def supports_multimedia(self) -> bool:
+        return self.messaging_service.supports_multimedia
 
     @property
     def supported_message_types(self):
@@ -794,8 +808,13 @@ class WhatsappChannel(ChannelBase):
         """
         from_number = self.experiment_channel.extra_data["number"]
         to_number = self.participant_identifier
+
+        extra_kwargs = {}
+        if self.messaging_service.supports_multimedia:
+            extra_kwargs["attached_files"] = self._get_file_links(attached_files)
+
         self.messaging_service.send_voice_message(
-            synthetic_voice, from_=from_number, to=to_number, platform=ChannelPlatform.WHATSAPP
+            synthetic_voice, from_=from_number, to=to_number, platform=ChannelPlatform.WHATSAPP, **extra_kwargs
         )
 
 
