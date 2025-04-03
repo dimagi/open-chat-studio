@@ -164,7 +164,6 @@ class FakeLlmEcho(FakeLlmSimpleTokenCount):
 
     def _call(self, messages: list[BaseMessage], *args, **kwargs) -> str | BaseMessage:
         """Returns "{system_message} {user_message}" """
-
         self.calls.append(mock.call(messages, *args, **kwargs))
 
         user_message = messages[-1].content
@@ -174,6 +173,21 @@ class FakeLlmEcho(FakeLlmSimpleTokenCount):
             return user_message
 
         return f"{system_message} {user_message}" if self.include_system_message else user_message
+
+    def with_structured_output(self, schema) -> RunnableSerializable:
+        """Creates a runnable that returns objects with a 'route' attribute for router schemas."""
+
+        def _structured_output_handler(input_value, *args, **kwargs):
+            if isinstance(input_value, ChatPromptValue):
+                messages = input_value.messages
+            else:
+                messages = [input_value]
+            self._call(messages, *args, **kwargs)
+            user_message = messages[-1].content.lower() if messages else ""
+            if hasattr(schema, "__annotations__") and "route" in schema.__annotations__:
+                return type("RouterOutput", (), {"route": user_message})
+
+        return RunnableLambda(_structured_output_handler)
 
 
 @contextmanager

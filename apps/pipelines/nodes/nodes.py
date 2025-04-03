@@ -485,11 +485,7 @@ class RouterNode(RouterMixin, Passthrough, HistoryMixin):
         valid_keywords = [k.lower() for k in self.keywords]
         default_keyword = self.keywords[0].lower()
         try:
-            keyword = (
-                getattr(result, "route", None)
-                or (result.get("route") if isinstance(result, dict) else None)
-                or self._get_keyword(str(result))
-            )
+            keyword = getattr(result, "route", None)
         except Exception:
             keyword = None
 
