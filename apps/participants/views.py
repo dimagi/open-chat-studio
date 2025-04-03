@@ -109,12 +109,32 @@ class EditParticipantData(LoginAndTeamRequiredMixin, TemplateView, PermissionReq
     def post(self, request, team_slug, participant_id, experiment_id):
         experiment = get_object_or_404(Experiment, team__slug=team_slug, id=experiment_id)
         participant = get_object_or_404(Participant, team__slug=team_slug, id=participant_id)
-        new_data = json.loads(request.POST["participant-data"])
-        ParticipantData.objects.update_or_create(
-            participant=participant,
-            experiment_id=experiment_id,
-            team=request.team,
-            defaults={"team": experiment.team, "data": new_data},
+        error = ""
+        raw_data = request.POST["participant-data"]
+        try:
+            new_data = json.loads(raw_data)
+        except json.JSONDecodeError:
+            error = "Data must be a valid JSON object"
+        else:
+            if not isinstance(new_data, dict):
+                error = "Data must be a valid JSON object"
+
+        if not error:
+            ParticipantData.objects.update_or_create(
+                participant=participant,
+                experiment_id=experiment_id,
+                team=request.team,
+                defaults={"team": experiment.team, "data": new_data},
+            )
+        return render(
+            request,
+            "participants/partials/participant_data.html",
+            {
+                "experiment": experiment,
+                "participant": participant,
+                "participant_data": json.dumps(new_data, indent=4) if not error else raw_data,
+                "error": error,
+            },
         )
         return redirect(
             reverse(

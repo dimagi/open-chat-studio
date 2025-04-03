@@ -31,6 +31,7 @@ const localCache = {
   nodeSchemas: null as unknown as Map<string, JsonSchema>,
   parameterValues: null as unknown as NodeParameterValues,
   defaultValues: null as unknown as Record<string, any>,
+  flagsEnabled: null as unknown as Array<string>,
 };
 
 export const getCachedData: () => typeof localCache = () => {
@@ -39,6 +40,7 @@ export const getCachedData: () => typeof localCache = () => {
     localCache.defaultValues = JSON.parse(document.getElementById("default-values")?.textContent || "{}");
     const schemas = JSON.parse(document.getElementById("node-schemas")?.textContent || "[]");
     localCache.nodeSchemas = new Map(schemas.map((schema: any) => [schema.title, schema]));
+    localCache.flagsEnabled = JSON.parse(document.getElementById("flags-enabled")?.textContent || "[]");
   }
   return localCache;
 };

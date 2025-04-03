@@ -49,7 +49,7 @@ def test_chatbot_experiment_table_view(client, team_with_users):
         owner=user,
         team=team,
     )
-    client.login(username="testuser", password="testpass")
+    client.force_login(user)
     url = reverse("chatbots:table", args=[team.slug])
     response = client.get(url)
 

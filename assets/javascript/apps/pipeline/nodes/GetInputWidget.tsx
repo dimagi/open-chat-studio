@@ -2,6 +2,8 @@ import React from "react";
 import {JsonSchema, NodeParams} from "../types/nodeParams";
 import usePipelineStore from "../stores/pipelineStore";
 import {getWidget} from "./widgets";
+import {getCachedData} from "../utils";
+
 
 type GetWidgetsParams = {
   schema: JsonSchema;
@@ -126,6 +128,13 @@ export const getInputWidget = (params: InputWidgetParams) => {
      */
     return <></>
   }
+
+  const {flagsEnabled} = getCachedData();
+  const requiredFlag = params.schema.properties[params.name]["ui:flagRequired"]
+  if (requiredFlag && !flagsEnabled.includes(requiredFlag)) {
+    return <></>
+  }
+
   const widgetSchema = params.schema.properties[params.name];
   const widgetOrType = widgetSchema["ui:widget"] || widgetSchema.type;
   if (widgetOrType == 'none') {

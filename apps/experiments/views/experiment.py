@@ -88,7 +88,7 @@ from apps.files.views import BaseAddFileHtmxView, BaseDeleteFileView
 from apps.generics.chips import Chip
 from apps.generics.views import generic_home, paginate_session, render_session_details
 from apps.service_providers.utils import get_llm_provider_choices
-from apps.teams.decorators import login_and_team_required
+from apps.teams.decorators import login_and_team_required, team_required
 from apps.teams.mixins import LoginAndTeamRequiredMixin
 from apps.utils.base_experiment_table_view import BaseExperimentTableView
 
@@ -110,12 +110,12 @@ class ExperimentTableView(BaseExperimentTableView):
     permission_required = "experiments.view_experiment"
 
 
-class ExperimentSessionsTableView(SingleTableView, PermissionRequiredMixin):
+class ExperimentSessionsTableView(LoginAndTeamRequiredMixin, SingleTableView, PermissionRequiredMixin):
     model = ExperimentSession
     paginate_by = 25
     table_class = ExperimentSessionsTable
     template_name = "table/single_table.html"
-    permission_required = "annotations.view_customtaggeditem"
+    permission_required = "experiments.view_experimentsession"
 
     def get_queryset(self):
         query_set = (
@@ -129,7 +129,7 @@ class ExperimentSessionsTableView(SingleTableView, PermissionRequiredMixin):
         return query_set
 
 
-class ExperimentVersionsTableView(SingleTableView, PermissionRequiredMixin):
+class ExperimentVersionsTableView(LoginAndTeamRequiredMixin, SingleTableView, PermissionRequiredMixin):
     model = Experiment
     paginate_by = 25
     table_class = ExperimentVersionsTable
@@ -173,7 +173,7 @@ class BaseExperimentView(LoginAndTeamRequiredMixin, PermissionRequiredMixin):
                 "button_text": self.button_title,
                 "active_tab": "experiments",
                 "experiment_type": experiment_type,
-                "available_tools": AgentTools.choices,
+                "available_tools": AgentTools.user_tool_choices(),
                 "team_participant_identifiers": team_participant_identifiers,
                 "disable_version_button": disable_version_button,
             },
@@ -791,6 +791,11 @@ def get_message_response(request, team_slug: str, experiment_id: uuid.UUID, sess
     elif progress["complete"]:
         message_details["error_msg"] = DEFAULT_ERROR_MESSAGE
 
+    attached_files = []
+    message = message_details.get("message")
+    if isinstance(message, ChatMessage):
+        attached_files = message.get_attached_files()
+
     return TemplateResponse(
         request,
         "experiments/chat/chat_message_response.html",
@@ -801,16 +806,18 @@ def get_message_response(request, team_slug: str, experiment_id: uuid.UUID, sess
             "message_details": message_details,
             "skip_render": skip_render,
             "last_message_datetime": last_message and quote(last_message.created_at.isoformat()),
+            "attachments": attached_files,
         },
     )
 
 
+@team_required
 def poll_messages(request, team_slug: str, experiment_id: int, session_id: int):
     user = get_real_user_or_none(request.user)
     params = request.GET.dict()
     since_param = params.get("since")
     experiment_session = get_object_or_404(
-        ExperimentSession, participant__user=user, experiment_id=experiment_id, id=session_id, team__slug=team_slug
+        ExperimentSession, participant__user=user, experiment_id=experiment_id, id=session_id, team=request.team
     )
 
     since = timezone.now()
@@ -837,6 +844,7 @@ def poll_messages(request, team_slug: str, experiment_id: int, session_id: int):
     )
 
 
+@team_required
 def start_session_public(request, team_slug: str, experiment_id: uuid.UUID):
     try:
         experiment = get_object_or_404(Experiment, public_id=experiment_id, team=request.team)
@@ -917,6 +925,7 @@ def start_session_public(request, team_slug: str, experiment_id: uuid.UUID):
 
 
 @xframe_options_exempt
+@team_required
 def start_session_public_embed(request, team_slug: str, experiment_id: uuid.UUID):
     """Special view for starting sessions from embedded widgets. This will ignore consent and pre-surveys and
     will ALWAYS create anonymous participants."""
@@ -964,15 +973,21 @@ def _verify_user_or_start_session(identifier, request, experiment, session):
         ).exists():
             return _record_consent_and_redirect(team_slug, experiment, session)
 
-    send_chat_link_email(session)
-    return TemplateResponse(request=request, template="account/participant_email_verify.html")
+    token_expiry: datetime = send_chat_link_email(session)
+    return TemplateResponse(
+        request=request, template="account/participant_email_verify.html", context={"token_expiry": token_expiry}
+    )
 
 
+@team_required
 def verify_public_chat_token(request, team_slug: str, experiment_id: uuid.UUID, token: str):
     try:
         claims = jwt.decode(token, settings.SECRET_KEY, algorithms="HS256")
         session = ExperimentSession.objects.select_related("experiment").get(external_id=claims["session"])
         return _record_consent_and_redirect(team_slug, session.experiment, session)
+    except jwt.exceptions.ExpiredSignatureError:
+        messages.warning(request=request, message="This link has expired")
+        return redirect(reverse("experiments:start_session_public", args=(team_slug, experiment_id)))
     except Exception:
         messages.warning(request=request, message="This link could not be verified")
         return redirect(reverse("experiments:start_session_public", args=(team_slug, experiment_id)))
@@ -1203,6 +1218,45 @@ def _experiment_chat_ui(request, embedded=False):
     )
 
 
+@experiment_session_view()
+@verify_session_access_cookie
+def experiment_session_messages_view(request, team_slug: str, experiment_id: uuid.UUID, session_id: str):
+    """View for loading paginated messages with HTMX"""
+    session = request.experiment_session
+    experiment = request.experiment
+    page = int(request.GET.get("page", 1))
+    search = request.GET.get("search", "")
+    page_size = 100
+    messages_queryset = ChatMessage.objects.filter(chat=session.chat).all().order_by("created_at")
+    if search:
+        messages_queryset = messages_queryset.filter(tags__name__icontains=search).distinct()
+
+    total_messages = messages_queryset.count()
+    total_pages = max(1, (total_messages + page_size - 1) // page_size)
+    page = max(1, min(page, total_pages))
+    start_idx = (page - 1) * page_size
+    end_idx = start_idx + page_size
+    paginated_messages = messages_queryset[start_idx:end_idx]
+    context = {
+        "experiment_session": session,
+        "experiment": experiment,
+        "messages": paginated_messages,
+        "page": page,
+        "total_pages": total_pages,
+        "total_messages": total_messages,
+        "page_size": page_size,
+        "page_start_index": start_idx,
+        "search": search,
+        "available_tags": [t.name for t in Tag.objects.filter(team__slug=team_slug, is_system_tag=False).all()],
+    }
+
+    return TemplateResponse(
+        request,
+        "experiments/components/experiment_chat.html",
+        context,
+    )
+
+
 @experiment_session_view(allowed_states=[SessionStatus.ACTIVE, SessionStatus.SETUP])
 @verify_session_access_cookie
 @require_POST
@@ -1291,6 +1345,7 @@ def experiment_session_pagination_view(request, team_slug: str, experiment_id: u
     )
 
 
+@team_required
 def download_file(request, team_slug: str, session_id: int, pk: int):
     resource = get_object_or_404(
         File, id=pk, team__slug=team_slug, chatattachment__chat__experiment_session__id=session_id

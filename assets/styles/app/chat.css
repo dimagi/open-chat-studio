@@ -14,6 +14,9 @@
   .message-contents pre {
     @apply whitespace-pre-wrap
   }
+  .message-contents hr {
+    @apply my-0 border-t border-gray-200;
+  }
 
   .chat-message-system {
     @apply chat-message bg-blue-100;

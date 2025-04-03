@@ -1,10 +1,12 @@
+from __future__ import annotations
+
 import logging
 import re
 from abc import ABC, abstractmethod
 from enum import Enum
 from functools import cached_property
 from io import BytesIO
-from typing import ClassVar
+from typing import TYPE_CHECKING, ClassVar
 
 import emoji
 import requests
@@ -40,6 +42,9 @@ from apps.service_providers.speech_service import SynthesizedAudio
 from apps.slack.utils import parse_session_external_id
 from apps.users.models import CustomUser
 
+if TYPE_CHECKING:
+    from apps.channels.models import BaseMessage
+
 logger = logging.getLogger("ocs.channels")
 
 USER_CONSENT_TEXT = "1"
@@ -62,7 +67,7 @@ def strip_urls_and_emojis(text: str) -> tuple[str, list[str]]:
     for url in urls:
         text = text.replace(url, "")
 
-    return text, urls
+    return text, list(urls)
 
 
 class MESSAGE_TYPES(Enum):
@@ -117,10 +122,8 @@ class ChannelBase(ABC):
     ):
         self.experiment = experiment
         self.experiment_channel = experiment_channel
-        self.experiment_session = experiment_session
-        self.message = None
-        self._user_query = None
-        self.bot = get_bot(experiment_session, experiment=experiment) if experiment_session else None
+        self._experiment_session = experiment_session
+        self._message: BaseMessage = None
         self._participant_identifier = experiment_session.participant.identifier if experiment_session else None
         self._is_user_message = False
 
@@ -145,9 +148,40 @@ class ChannelBase(ABC):
             session_external_id,
         )
 
+    @property
+    def experiment_session(self) -> ExperimentSession:
+        return self._experiment_session
+
+    @experiment_session.setter
+    def experiment_session(self, value: ExperimentSession):
+        self._experiment_session = value
+        self.reset_bot()
+
+    @property
+    def message(self) -> BaseMessage:
+        return self._message
+
+    @message.setter
+    def message(self, value: BaseMessage):
+        self._message = value
+        self.reset_bot()
+        self.reset_user_query()
+
     @cached_property
     def messaging_service(self):
         return self.experiment_channel.messaging_provider.get_messaging_service()
+
+    @cached_property
+    def bot(self):
+        if not self.experiment_session:
+            raise ChannelException("Bot cannot be accessed without an experiment session")
+        return get_bot(self.experiment_session, experiment=self.experiment)
+
+    def reset_bot(self):
+        try:
+            del self.bot
+        except AttributeError:
+            pass
 
     @property
     def participant_identifier(self) -> str:
@@ -196,7 +230,7 @@ class ChannelBase(ABC):
         pass
 
     @staticmethod
-    def get_channel_class_for_platform(platform: ChannelPlatform | str) -> type["ChannelBase"]:
+    def get_channel_class_for_platform(platform: ChannelPlatform | str) -> type[ChannelBase]:
         if platform == "telegram":
             channel_cls = TelegramChannel
         elif platform == "web":
@@ -218,7 +252,7 @@ class ChannelBase(ABC):
         return channel_cls
 
     @staticmethod
-    def from_experiment_session(experiment_session: ExperimentSession) -> "ChannelBase":
+    def from_experiment_session(experiment_session: ExperimentSession) -> ChannelBase:
         """Given an `experiment_session` instance, returns the correct ChannelBase subclass to use"""
         channel_cls = ChannelBase.get_channel_class_for_platform(experiment_session.experiment_channel.platform)
         return channel_cls(
@@ -227,27 +261,29 @@ class ChannelBase(ABC):
             experiment_session=experiment_session,
         )
 
-    @property
-    def user_query(self):
+    @cached_property
+    def user_query(self) -> str:
         """Returns the user query, extracted from whatever (supported) message type was used to convey the
         message
         """
-        if not self._user_query:
-            self._user_query = self._extract_user_query()
-        return self._user_query
+        return self._extract_user_query()
 
-    def _add_message(self, message):
+    def reset_user_query(self):
+        try:
+            del self.user_query
+        except AttributeError:
+            pass
+
+    def _add_message(self, message: BaseMessage):
         """Adds the message to the handler in order to extract session information"""
-        self._user_query = None
         self.message = message
 
         if not self._participant_is_allowed():
             raise ParticipantNotAllowedException()
 
         self._ensure_sessions_exists()
-        self.bot = get_bot(self.experiment_session, experiment=self.experiment)
 
-    def new_user_message(self, message) -> str:
+    def new_user_message(self, message: BaseMessage) -> str:
         """Handles the message coming from the user. Call this to send bot messages to the user.
         The `message` here will probably be some object, depending on the channel being used.
         """
@@ -262,7 +298,7 @@ class ChannelBase(ABC):
             return True
         return self.experiment.is_participant_allowed(self.participant_identifier)
 
-    def _new_user_message(self, message) -> str:
+    def _new_user_message(self, message: BaseMessage) -> str:
         try:
             self._add_message(message)
         except ParticipantNotAllowedException:
@@ -334,8 +370,7 @@ class ChannelBase(ABC):
             self._send_seed_message()
 
     def _send_seed_message(self):
-        topic_bot = self.bot or get_bot(self.experiment_session, experiment=self.experiment)
-        bot_response = topic_bot.process_input(user_input=self.experiment.seed_message, save_input_to_history=False)
+        bot_response = self.bot.process_input(user_input=self.experiment.seed_message, save_input_to_history=False)
         self.send_message_to_user(bot_response)
 
     def _chat_initiated(self):
@@ -369,7 +404,11 @@ class ChannelBase(ABC):
         ]
 
     def _user_gave_consent(self) -> bool:
-        return self.user_query.strip() == USER_CONSENT_TEXT
+        return (
+            self.message
+            and self.message.content_type == MESSAGE_TYPES.TEXT
+            and self.message.message_text.strip() == USER_CONSENT_TEXT
+        )
 
     def _extract_user_query(self) -> str:
         if self.message.content_type == MESSAGE_TYPES.VOICE:
@@ -443,9 +482,9 @@ class ChannelBase(ABC):
             speech_service = self.experiment.voice_provider.get_speech_service()
             if speech_service.supports_transcription:
                 return speech_service.transcribe_audio(audio)
+        return "Unable to transcribe audio"
 
     def _get_bot_response(self, message: str) -> str:
-        self.bot = self.bot or get_bot(self.experiment_session, experiment=self.experiment)
         return self.bot.process_input(message, attachments=self.message.attachments)
 
     def _add_message_to_history(self, message: str, message_type: ChatMessageType):
@@ -542,10 +581,14 @@ class ChannelBase(ABC):
         )
 
     def _is_reset_conversation_request(self):
-        return self.user_query.lower().strip() == ExperimentChannel.RESET_COMMAND
+        return (
+            self.message
+            and self.message.content_type == MESSAGE_TYPES.TEXT
+            and self.message.message_text.lower().strip() == ExperimentChannel.RESET_COMMAND
+        )
 
     def is_message_type_supported(self) -> bool:
-        return self.message.content_type is not None and self.message.content_type in self.supported_message_types
+        return self.message and self.message.content_type in self.supported_message_types
 
     def _unsupported_message_type_response(self):
         """Generates a suitable response to the user when they send unsupported messages"""
@@ -685,9 +728,6 @@ class WhatsappChannel(ChannelBase):
             text, from_=from_number, to=to_number, platform=ChannelPlatform.WHATSAPP
         )
 
-    def get_chat_id_from_message(self, message):
-        return message.chat_id
-
     @property
     def voice_replies_supported(self) -> bool:
         # TODO: Update turn-python library to support this
@@ -715,9 +755,6 @@ class SureAdhereChannel(ChannelBase):
     def send_text_to_user(self, text: str):
         to_patient = self.participant_identifier
         self.messaging_service.send_text_message(text, to=to_patient, platform=ChannelPlatform.SUREADHERE)
-
-    def get_chat_id_from_message(self, message):
-        return message.chat_id
 
     @property
     def supported_message_types(self):

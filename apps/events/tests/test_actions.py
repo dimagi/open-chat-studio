@@ -70,6 +70,8 @@ def test_end_conversation_runs_pipeline(session, pipeline):
                 "attachments": [],
                 "outputs": {"start": output_message, "end": output_message},
             },
+            "input_message_metadata": {},
+            "output_message_metadata": {},
         }
     )
     assert pipeline.runs.count() == 1

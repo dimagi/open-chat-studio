@@ -166,7 +166,9 @@ class Pipeline(BaseTeamModel, VersionsMixin):
             try:
                 node_class.model_validate(node.params)
             except pydantic.ValidationError as e:
-                errors[node.flow_id] = {err["loc"][0]: err["msg"] for err in e.errors()}
+                for error in e.errors():
+                    field = error["loc"][0] if error["loc"] else error["ctx"]["field"]
+                    errors[node.flow_id][field] = error["msg"]
 
         name_to_flow_id = defaultdict(list)
         for node in nodes:
@@ -265,9 +267,8 @@ class Pipeline(BaseTeamModel, VersionsMixin):
             output = PipelineState(**output).json_safe()
             pipeline_run.output = output
             if save_run_to_history and session is not None:
-                metadata = output.get("message_metadata", {})
-                input_metadata = metadata.get("input", {})
-                output_metadata = metadata.get("output", {})
+                input_metadata = output.get("input_message_metadata", {})
+                output_metadata = output.get("output_message_metadata", {})
                 trace_metadata = trace_service.get_trace_metadata() if trace_service else None
                 if trace_metadata:
                     input_metadata.update(trace_metadata)
@@ -497,6 +498,10 @@ class Node(BaseModel, VersionsMixin, CustomActionOperationMixin):
             instance=self,
             fields=param_versions,
         )
+
+    def requires_attachment_tool(self) -> bool:
+        """When a collection is linked, the attachment tool is required"""
+        return self.params.get("collection_id") is not None
 
 
 class PipelineRunStatus(models.TextChoices):
