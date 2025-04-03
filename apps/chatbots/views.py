@@ -2,13 +2,13 @@ import uuid
 
 from django.contrib.auth.decorators import permission_required
 from django.contrib.auth.mixins import PermissionRequiredMixin
+from django.db import transaction
 from django.http import HttpResponseRedirect
 from django.shortcuts import get_object_or_404
 from django.urls import reverse
 from django.views.decorators.clickjacking import xframe_options_exempt
 from django.views.decorators.http import require_POST
 from django.views.generic import TemplateView
-from django.db import transaction
 
 from apps.chat.channels import WebChannel
 from apps.chatbots.forms import ChatbotForm
@@ -200,10 +200,12 @@ def start_authed_web_session(request, team_slug: str, experiment_id: int, versio
     )
 
 
+@login_and_team_required
 def chatbot_invitations(request, team_slug: str, experiment_id: int):
     return experiment_invitations(request, team_slug, experiment_id, "chatbots")
 
 
+@login_and_team_required
 def start_chatbot_session_public(request, team_slug: str, experiment_id: uuid.UUID):
     return start_session_public(request, team_slug, experiment_id)
 

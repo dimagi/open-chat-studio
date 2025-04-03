@@ -837,6 +837,7 @@ def poll_messages(request, team_slug: str, experiment_id: int, session_id: int):
     )
 
 
+@login_and_team_required
 def start_session_public(request, team_slug: str, experiment_id: uuid.UUID):
     try:
         experiment = get_object_or_404(Experiment, public_id=experiment_id, team=request.team)
