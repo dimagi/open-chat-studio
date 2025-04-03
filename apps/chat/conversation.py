@@ -313,7 +313,9 @@ def _get_new_summary(llm, pruned_memory, summary, max_token_limit, first_call=Tr
         return summary
     if first_call:
         pruned_memory = [
-            HumanMessage(" ".join(msg.content.split()[:1000]) + " ..." if len(msg.content.split()) > 1000 else msg.content)
+            HumanMessage(
+                " ".join(msg.content.split()[:1000]) + " ..." if len(msg.content.split()) > 1000 else msg.content
+            )
             for msg in pruned_memory
             if msg.content
         ]

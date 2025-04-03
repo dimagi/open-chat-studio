@@ -270,3 +270,28 @@ def test_truncate_tokens():
     assert llm.get_num_tokens_from_messages(new_history) + input_message_tokens <= max_token_limit
     remaining_after_pruning = [{"content": "Another one"}, {"content": "Final message"}]
     assert new_history == remaining_after_pruning
+
+
+def test_get_new_summary_with_large_message():
+    """Test that messages over 1000 words are trimmed and a summary is correctly generated in one pass."""
+    llm = FakeLlmSimpleTokenCount(responses=["Summary"])
+    llm.max_token_limit = 2000
+    long_message = " ".join(["word"] * 1200)
+    pruned_memory = [HumanMessage(long_message)]
+    prompt_tokens, _ = _get_summary_tokens_with_context(llm, None, [])
+
+    new_summary = _get_new_summary(llm, pruned_memory, None, llm.max_token_limit)
+
+    assert new_summary == "Summary"
+    assert len(llm.get_calls()) == 1
+
+
+def test_get_new_summary_with_large_message_max_recursion_limit_exceeded():
+    """Test if token count of single message exceeds max_token_limit then max recursion depth limit is exceeded"""
+    llm = FakeLlmSimpleTokenCount(responses=["Summary"])
+    llm.max_token_limit = 500
+    long_message = " ".join(["word"] * 1200)
+    pruned_memory = [HumanMessage(long_message)]
+    prompt_tokens, _ = _get_summary_tokens_with_context(llm, None, [])
+    with pytest.raises(RecursionError):
+        _get_new_summary(llm, pruned_memory, None, llm.max_token_limit)
