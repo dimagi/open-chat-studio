@@ -649,7 +649,7 @@ class ChannelBase(ABC):
         try:
             bot_message = EventBot(self.experiment_session, self.experiment).get_user_message(
                 "Tell the user that something went wrong while processing their message and that they should "
-                "try again later"
+                "try again later. Do this in the language they are speaking in."
             )
         except Exception:  # noqa BLE001
             logger.exception("Something went wrong while trying to generate an appropriate error message for the user")
