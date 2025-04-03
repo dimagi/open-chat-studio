@@ -148,7 +148,8 @@ def _new_api_message(request, experiment_id: uuid, version=None):
     attachments = []
     if attached_files := ai_response.get_attached_files():
         attachments = [
-            {"file_name": file.name, "link": file.download_link(ai_response.chat.session_id)} for file in attached_files
+            {"file_name": file.name, "link": file.download_link(ai_response.chat.experiment_session.id)}
+            for file in attached_files
         ]
 
     return Response(

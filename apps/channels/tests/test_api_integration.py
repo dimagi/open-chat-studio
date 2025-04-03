@@ -132,8 +132,7 @@ def test_attachments_returned(mock_response, experiment):
 
     session = ExperimentSessionFactory()
     file = FileFactory()
-    mock_chat_message = Mock(chat=session.chat)
-    mock_chat_message.content = "Fido"
+    mock_chat_message = Mock(spec=ChatMessage, chat=session.chat, content="Fido")
     mock_chat_message.get_attached_files.return_value = [file]
     mock_response.return_value = mock_chat_message
 
