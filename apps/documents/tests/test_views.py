@@ -21,7 +21,7 @@ def test_update_collection_membership(team):
     assert repo2 in repo_set
     assert repo3 not in repo_set
     # This should remove the file from repo1 and add it to repo3 while leaving repo2 as-is
-    _update_collection_membership(file, ["repo2", "repo3"])
+    _update_collection_membership(file, [repo2.id, repo3.id])
 
     repo_set = file.collection_set.all()
     assert repo1 not in repo_set
