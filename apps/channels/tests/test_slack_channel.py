@@ -6,6 +6,7 @@ from mock.mock import patch
 from apps.channels.datamodels import SlackMessage
 from apps.channels.models import ChannelPlatform, ExperimentChannel
 from apps.chat.channels import SlackChannel
+from apps.chat.models import ChatMessage, ChatMessageType
 from apps.slack.utils import make_session_external_id
 from apps.utils.factories.channels import ExperimentChannelFactory
 
@@ -13,7 +14,7 @@ from apps.utils.factories.channels import ExperimentChannelFactory
 @pytest.mark.django_db()
 @patch("apps.chat.bots.TopicBot.process_input")
 def test_handle_user_message(process_input, slack_channel):
-    process_input.return_value = "Hi"
+    process_input.return_value = ChatMessage(content="Hi", message_type=ChatMessageType.AI)
     session = SlackChannel.start_new_session(
         slack_channel.experiment,
         slack_channel,

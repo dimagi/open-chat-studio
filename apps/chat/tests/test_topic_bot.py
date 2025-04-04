@@ -31,7 +31,7 @@ def test_safety_response(is_safe_mock):
         response = bot.process_input("It's my way or the highway!")
 
     mock_get_safe_response.assert_called()
-    assert response == expected
+    assert response.content == expected
 
 
 @pytest.mark.django_db()
@@ -84,7 +84,7 @@ def test_tracing_service():
     ):
         get_trace_metadata.return_value = {"trace": "demo"}
         bot = TopicBot(session)
-        assert bot.process_input("test") == "response"
+        assert bot.process_input("test").content == "response"
         mock_get_callback.assert_called_once_with(
             trace_name=session.experiment.name,
             participant_id=session.participant.identifier,
@@ -114,7 +114,7 @@ def test_tracing_service_reentry():
         mock_service = mock.Mock(wraps=bot.trace_service)
         bot.trace_service = mock_service
 
-        assert bot.process_input("test") == response
+        assert bot.process_input("test").content == response
         mock_service.get_callback.assert_called_once()
 
     with mock_llm(responses=["response1", "response2"]):

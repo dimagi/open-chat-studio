@@ -133,6 +133,7 @@ class PipelineStartAction(EventActionHandlerBase):
             messages = [session.chat.messages.last().to_langchain_message()]
 
         input = "\n".join(f"{message.type}: {message.content}" for message in messages)
-        return pipeline.invoke(
+        output = pipeline.invoke(
             PipelineState(messages=[input], experiment_session=session), session, save_run_to_history=False
         )
+        return output.content
