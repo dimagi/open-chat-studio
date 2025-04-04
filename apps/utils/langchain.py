@@ -85,14 +85,17 @@ class FakeLlm(FakeListChatModel):
                 messages = [input_value]
             result = self._call(messages, *args, **kwargs)
 
+            is_router_schema = hasattr(schema, "__annotations__") and "route" in schema.__annotations__
             if isinstance(result, dict):
                 return result
             elif isinstance(result, str):
-                return {"route": result.lower()}
-            elif isinstance(result, BaseMessage):
-                return {"route": result.content.lower()}
+                route_value = result.lower()
+                return type("RouterOutput", (), {"route": route_value}) if is_router_schema else {"route": route_value}
             else:
-                return {"route": self.responses[0].lower() if self.responses else "default"}
+                default_route = self.responses[0].lower() if self.responses else "default"
+                return (
+                    type("RouterOutput", (), {"route": default_route}) if is_router_schema else {"route": default_route}
+                )
 
         return RunnableLambda(_structured_output_handler)
 
@@ -173,21 +176,6 @@ class FakeLlmEcho(FakeLlmSimpleTokenCount):
             return user_message
 
         return f"{system_message} {user_message}" if self.include_system_message else user_message
-
-    def with_structured_output(self, schema) -> RunnableSerializable:
-        """Creates a runnable that returns objects with a 'route' attribute for router schemas."""
-
-        def _structured_output_handler(input_value, *args, **kwargs):
-            if isinstance(input_value, ChatPromptValue):
-                messages = input_value.messages
-            else:
-                messages = [input_value]
-            self._call(messages, *args, **kwargs)
-            user_message = messages[-1].content.lower() if messages else ""
-            if hasattr(schema, "__annotations__") and "route" in schema.__annotations__:
-                return type("RouterOutput", (), {"route": user_message})
-
-        return RunnableLambda(_structured_output_handler)
 
 
 @contextmanager
