@@ -21,6 +21,8 @@ from apps.channels import audio
 from apps.channels.datamodels import TurnWhatsappMessage, TwilioMessage
 from apps.channels.models import ChannelPlatform
 from apps.chat.channels import MESSAGE_TYPES
+from apps.files.models import File
+from apps.service_providers import supported_mime_types
 from apps.service_providers.exceptions import ServiceProviderConfigError
 from apps.service_providers.speech_service import SynthesizedAudio
 
@@ -58,6 +60,7 @@ class TwilioService(MessagingService):
     supported_platforms: ClassVar[list] = [ChannelPlatform.WHATSAPP, ChannelPlatform.FACEBOOK]
     supported_message_types = [MESSAGE_TYPES.TEXT, MESSAGE_TYPES.VOICE]
     supports_multimedia: ClassVar[bool] = True
+    max_file_size_mb: ClassVar[int] = 16
 
     account_sid: str
     auth_token: str
@@ -114,15 +117,11 @@ class TwilioService(MessagingService):
         prefix = self.TWILIO_CHANNEL_PREFIXES[platform]
         return f"{prefix}:{from_}", f"{prefix}:{to}"
 
-    def send_text_message(
-        self, message: str, from_: str, to: str, platform: ChannelPlatform, attached_files: dict, **kwargs
-    ):
+    def send_text_message(self, message: str, from_: str, to: str, platform: ChannelPlatform, **kwargs):
         from_, to = self._parse_addressing_params(platform, from_=from_, to=to)
 
         for message_text in smart_split(message, chars_per_string=self.MESSAGE_CHARACTER_LIMIT):
             self.client.messages.create(from_=from_, body=message_text, to=to)
-
-        self._send_attachments(from_, to, attached_files)
 
     def send_voice_message(
         self,
@@ -139,11 +138,6 @@ class TwilioService(MessagingService):
         self.client.messages.create(from_=from_, to=to, media_url=[public_url])
 
         self._send_attachments(from_, to, attached_files)
-
-    def _send_attachments(self, from_: str, to: str, attached_files: dict):
-        """Sends the attachments"""
-        for name, download_link in attached_files.items():
-            self.client.messages.create(from_=from_, to=to, body=name, media_url=download_link)
 
     def get_message_audio(self, message: TwilioMessage) -> BytesIO:
         auth = (self.account_sid, self.auth_token)
@@ -163,6 +157,18 @@ class TwilioService(MessagingService):
             return True
 
         return number in self._get_account_numbers()
+
+    def send_files_to_user(self, from_: str, to: str, file_name_link_map: dict):
+        # Sends the files to the user
+        for name, download_link in file_name_link_map.items():
+            self.client.messages.create(from_=from_, to=to, body=name, media_url=download_link)
+
+    def _can_send_file(self, file: File) -> bool:
+        print("File size is", file.size_mb)
+        print("File content type is", file.content_type)
+        answer = file.size_mb <= self.max_file_size_mb and file.content_type in supported_mime_types.TWILIO
+        print(f"File is supported?: {answer}")
+        return answer
 
 
 class TurnIOService(MessagingService):
@@ -192,6 +198,10 @@ class TurnIOService(MessagingService):
         response = self.client.media.get_media(message.media_id)
         ogg_audio = BytesIO(response.content)
         return audio.convert_audio(ogg_audio, target_format="wav", source_format="ogg")
+
+    def _can_send_file(self, file: File) -> bool:
+        # When support for Turn.IO is added, this should be updated
+        return False
 
 
 class SureAdhereService(MessagingService):
