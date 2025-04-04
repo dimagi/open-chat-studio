@@ -13,6 +13,7 @@ from apps.chat.conversation import (
     compress_chat_history,
     truncate_tokens,
 )
+from apps.chat.exceptions import ChatException
 from apps.chat.models import Chat, ChatMessage, ChatMessageType
 from apps.pipelines.models import PipelineChatHistoryModes
 from apps.utils.langchain import FakeLlm
@@ -286,12 +287,12 @@ def test_get_new_summary_with_large_message():
     assert len(llm.get_calls()) == 1
 
 
-def test_get_new_summary_with_large_message_max_recursion_limit_exceeded():
+def test_get_new_summary_with_large_message_raises_chat_exception():
     """Test if token count of single message exceeds max_token_limit then max recursion depth limit is exceeded"""
     llm = FakeLlmSimpleTokenCount(responses=["Summary"])
     llm.max_token_limit = 500
     long_message = " ".join(["word"] * 1200)
     pruned_memory = [HumanMessage(long_message)]
     prompt_tokens, _ = _get_summary_tokens_with_context(llm, None, [])
-    with pytest.raises(RecursionError):
+    with pytest.raises(ChatException):
         _get_new_summary(llm, pruned_memory, None, llm.max_token_limit)

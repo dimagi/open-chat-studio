@@ -15,6 +15,7 @@ from langchain_core.prompts import (
     SystemMessagePromptTemplate,
 )
 
+from apps.chat.exceptions import ChatException
 from apps.chat.models import Chat, ChatMessage, ChatMessageType
 from apps.pipelines.models import PipelineChatHistory, PipelineChatHistoryModes, PipelineChatMessages
 from apps.utils.prompt import OcsPromptTemplate
@@ -327,7 +328,10 @@ def _get_new_summary(llm, pruned_memory, summary, max_token_limit, first_call=Tr
         tokens, context = _get_summary_tokens_with_context(llm, summary, pruned_memory)
 
     if not context["new_lines"]:
-        log.error(SUMMARY_TOO_LARGE_ERROR_MESSAGE)
+        if first_call:
+            log.error(SUMMARY_TOO_LARGE_ERROR_MESSAGE)
+        else:
+            raise ChatException("Unable to compress history")
         # If the summary is too large, discard it and compute a new summary from the pruned memory
         return _get_new_summary(llm, next_batch, None, max_token_limit, False)
 
