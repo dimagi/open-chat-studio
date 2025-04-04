@@ -280,8 +280,7 @@ class Pipeline(BaseTeamModel, VersionsMixin):
                 )
                 pipeline_output = ai_message
             else:
-                # Return the pipeline state. This is currently for logging purposes only.
-                pipeline_output = output
+                pipeline_output = ChatMessage(content=output)
         finally:
             if trace_service:
                 trace_service.end()
