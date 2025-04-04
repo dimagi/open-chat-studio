@@ -11,7 +11,7 @@ from apps.channels.datamodels import Attachment
 from apps.experiments.models import ParticipantData
 from apps.pipelines.exceptions import PipelineBuildError, PipelineNodeBuildError
 from apps.pipelines.logging import LoggingCallbackHandler
-from apps.pipelines.nodes.base import PipelineState
+from apps.pipelines.nodes.base import PipelineState, merge_dicts
 from apps.pipelines.nodes.nodes import EndNode, RouterNode, StartNode, StaticRouterNode
 from apps.pipelines.tests.utils import (
     assistant_node,
@@ -154,7 +154,10 @@ def test_llm_with_prompt_response(
             prompt="Node 1: Use this {source_material} to answer questions about {participant_data}.",
         ),
         llm_response_with_prompt_node(
-            str(provider.id), str(provider_model.id), source_material_id=str(source_material.id), prompt="Node 2:"
+            str(provider.id),
+            str(provider_model.id),
+            source_material_id=str(source_material.id),
+            prompt="Node 2: {source_material}",
         ),
         end_node(),
     ]
@@ -162,7 +165,7 @@ def test_llm_with_prompt_response(
         PipelineState(messages=[user_input], experiment_session=experiment_session, pipeline_version=1)
     )["messages"][-1]
     expected_output = (
-        f"Node 2: Node 1: Use this {source_material.material} to answer questions "
+        f"Node 2: {source_material.material} Node 1: Use this {source_material.material} to answer questions "
         f"about {participant_data.data}. {user_input}"
     )
     assert output == expected_output
@@ -452,12 +455,25 @@ def main(input, **kwargs):
 
 
 @django_db_with_data(available_apps=("apps.service_providers",))
+@pytest.mark.parametrize(
+    "data_source", [StaticRouterNode.DataSource.participant_data, StaticRouterNode.DataSource.session_state]
+)
 @mock.patch("apps.pipelines.nodes.base.PipelineNode.logger", mock.Mock())
-def test_static_router_participant_data(pipeline, experiment_session):
+def test_static_router_participant_data(data_source, pipeline, experiment_session):
+    def _update_participant_data(session, data):
+        ParticipantDataProxy(session).set(data)
+
+    def _update_session_state(session, data):
+        session.state = data
+        session.save(update_fields=["state"])
+
+    DATA_SOURCE_UPDATERS = {
+        StaticRouterNode.DataSource.participant_data: _update_participant_data,
+        StaticRouterNode.DataSource.session_state: _update_session_state,
+    }
+
     start = start_node()
-    router = state_key_router_node(
-        "route_to", ["first", "second"], data_source=StaticRouterNode.DataSource.participant_data
-    )
+    router = state_key_router_node("route_to", ["first", "second"], data_source=data_source)
     template_a = render_template_node("A {{ input }}")
     template_b = render_template_node("B {{ input }}")
     end = end_node()
@@ -481,16 +497,16 @@ def test_static_router_participant_data(pipeline, experiment_session):
     ]
     runnable = create_runnable(pipeline, nodes, edges)
 
-    ParticipantDataProxy(experiment_session).set({"route_to": "first"})
+    DATA_SOURCE_UPDATERS[data_source](experiment_session, {"route_to": "first"})
     output = runnable.invoke(PipelineState(messages=["Hi"], experiment_session=experiment_session))
     assert output["messages"][-1] == "A Hi"
 
-    ParticipantDataProxy(experiment_session).set({"route_to": "second"})
+    DATA_SOURCE_UPDATERS[data_source](experiment_session, {"route_to": "second"})
     output = runnable.invoke(PipelineState(messages=["Hi"], experiment_session=experiment_session))
     assert output["messages"][-1] == "B Hi"
 
     # default route
-    ParticipantDataProxy(experiment_session).set({})
+    DATA_SOURCE_UPDATERS[data_source](experiment_session, {})
     output = runnable.invoke(PipelineState(messages=["Hi"], experiment_session=experiment_session))
     assert output["messages"][-1] == "A Hi"
 
@@ -699,19 +715,27 @@ def _run_data_extract_and_update_pipeline(session, provider, pipeline, extracted
         runnable.invoke(state)
 
 
+def assistant_node_runnable_mock(
+    output: str, input_message_metadata: dict = None, output_message_metadata: dict = None
+):
+    """A mock for an assistant node runnable that returns the given output and metadata."""
+    runnable_mock = Mock()
+    runnable_mock.invoke.return_value = ChainOutput(output=output, prompt_tokens=30, completion_tokens=20)
+    runnable_mock.history_manager = Mock()
+    runnable_mock.history_manager.input_message_metadata = input_message_metadata or {}
+    runnable_mock.history_manager.output_message_metadata = output_message_metadata or {}
+    return runnable_mock
+
+
 @pytest.mark.django_db()
 @pytest.mark.parametrize("tools_enabled", [True, False])
 @patch("apps.pipelines.nodes.nodes.AssistantNode._get_assistant_runnable")
 def test_assistant_node(get_assistant_runnable, tools_enabled):
-    runnable_mock = Mock()
-    runnable_mock.invoke = lambda *args, **kwargs: ChainOutput(
-        output="Hi there human", prompt_tokens=30, completion_tokens=20
+    runnable_mock = assistant_node_runnable_mock(
+        output="Hi there human",
+        input_message_metadata={"test": "metadata"},
+        output_message_metadata={"test": "metadata"},
     )
-
-    runnable_mock.history_manager = Mock()
-    runnable_mock.history_manager.input_message_metadata = {"test": "metadata"}
-    runnable_mock.history_manager.output_message_metadata = {"test": "metadata"}
-
     get_assistant_runnable.return_value = runnable_mock
 
     pipeline = PipelineFactory()
@@ -724,16 +748,15 @@ def test_assistant_node(get_assistant_runnable, tools_enabled):
         attachments=[],
     )
     output_state = runnable.invoke(state)
-    assert output_state["message_metadata"]["input"] == {"test": "metadata"}
-    assert output_state["message_metadata"]["output"] == {"test": "metadata"}
+    assert output_state["input_message_metadata"] == {"test": "metadata"}
+    assert output_state["output_message_metadata"] == {"test": "metadata"}
     assert output_state["messages"][-1] == "Hi there human"
 
 
 @pytest.mark.django_db()
 @patch("apps.pipelines.nodes.nodes.AssistantNode._get_assistant_runnable")
 def test_assistant_node_attachments(get_assistant_runnable):
-    runnable_mock = Mock()
-    runnable_mock.invoke.return_value = ChainOutput(output="Hi there human", prompt_tokens=30, completion_tokens=20)
+    runnable_mock = assistant_node_runnable_mock(output="Hi there human")
     get_assistant_runnable.return_value = runnable_mock
 
     pipeline = PipelineFactory()
@@ -758,13 +781,11 @@ def test_assistant_node_attachments(get_assistant_runnable):
 @django_db_with_data(available_apps=("apps.service_providers",))
 @patch("apps.pipelines.nodes.nodes.AssistantNode._get_assistant_runnable")
 def test_assistant_node_raises(get_assistant_runnable):
-    runnable_mock = Mock()
-    runnable_mock.invoke = lambda *args, **kwargs: ChainOutput(
-        output="Hi there human", prompt_tokens=30, completion_tokens=20
+    runnable_mock = runnable_mock = assistant_node_runnable_mock(
+        output="Hi there human",
+        input_message_metadata={"test": "metadata"},
+        output_message_metadata={"test": "metadata"},
     )
-    runnable_mock.history_manager = Mock()
-    runnable_mock.history_manager.input_message_metadata = {"test": "metadata"}
-    runnable_mock.history_manager.output_message_metadata = {"test": "metadata"}
     get_assistant_runnable.return_value = runnable_mock
 
     pipeline = PipelineFactory()
@@ -1033,8 +1054,8 @@ def test_assistant_node_empty_metadata_handling(get_llm_service, pipeline):
             attachments=[],
         )
         output_state = runnable.invoke(state)
-    assert output_state["message_metadata"]["input"] == {}
-    assert output_state["message_metadata"]["output"] == {}
+    assert output_state["input_message_metadata"] == {}
+    assert output_state["output_message_metadata"] == {}
     assert output_state["messages"][-1] == "How are you doing?"
 
 
@@ -1057,3 +1078,17 @@ def test_pipeline_history_manager_metadata_storage(get_llm_service, pipeline):
     )
     assert history_manager.input_message_metadata == input_metadata
     assert history_manager.output_message_metadata == output_metadata
+
+
+@pytest.mark.parametrize(
+    ("left", "right", "expected"),
+    [
+        ({}, {"key": [1]}, {"key": [1]}),
+        ({"key": [1]}, {"key": [2]}, {"key": [1, 2]}),
+        ({"key": [1]}, {"key": [1]}, {"key": [1]}),
+        ({"keyA": [1]}, {"keyB": [2]}, {"keyA": [1], "keyB": [2]}),
+        ({"keyA": True}, {"keyA": False}, {"keyA": False}),
+    ],
+)
+def test_merge_dicts(left, right, expected):
+    assert merge_dicts(left, right) == expected

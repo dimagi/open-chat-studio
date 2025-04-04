@@ -1,13 +1,16 @@
 import logging
+from collections.abc import Callable
 from datetime import datetime, timedelta
+from functools import cached_property
 from typing import TYPE_CHECKING, Any, Union
 
-from django.db import transaction
+from django.db import transaction, utils
 from langchain_community.utilities.openapi import OpenAPISpec
 from langchain_core.tools import BaseTool
 
 from apps.chat.agent import schemas
 from apps.chat.agent.openapi_tool import openapi_spec_op_to_function_def
+from apps.chat.models import ChatAttachment
 from apps.events.forms import ScheduledMessageConfigForm
 from apps.events.models import ScheduledMessage, TimePeriod
 from apps.experiments.models import AgentTools, Experiment, ExperimentSession, ParticipantData
@@ -16,6 +19,13 @@ from apps.utils.time import pretty_date
 
 if TYPE_CHECKING:
     from apps.assistants.models import OpenAiAssistant
+
+
+SUCCESSFUL_ATTACHMENT_MESSAGE: str = """"
+    File {file_id} is attached. You can use this markdown link to reference it in your response:
+    `[{name}](file:{team_slug}:{session_id}:{file_id})` or `![](file:{team_slug}:{session_id}:{file_id})`
+    if it is an image.
+"""
 
 
 class CustomBaseTool(BaseTool):
@@ -171,6 +181,37 @@ class UpdateParticipantDataTool(CustomBaseTool):
         return "Success"
 
 
+class AttachMediaTool(CustomBaseTool):
+    name: str = AgentTools.ATTACH_MEDIA
+    description: str = "Attach a media file to your response"
+    requires_session: bool = True
+    args_schema: type[schemas.AttachMediaSchema] = schemas.AttachMediaSchema
+    callback: Callable[[str], None]
+
+    @cached_property
+    def chat_attachment(self) -> ChatAttachment:
+        chat_attachment, _ = ChatAttachment.objects.get_or_create(
+            chat=self.experiment_session.chat, tool_type="ocs_attachments"
+        )
+        return chat_attachment
+
+    @transaction.atomic
+    def action(self, file_id: int) -> str:
+        from apps.files.models import File
+
+        try:
+            file = File.objects.get(id=file_id)
+            self.chat_attachment.files.add(file_id)
+            self.callback(file_id)
+            return SUCCESSFUL_ATTACHMENT_MESSAGE.format(
+                name=file.name, file_id=file_id, session_id=self.experiment_session.id, team_slug=file.team.slug
+            )
+        except File.DoesNotExist:
+            return f"File '{file_id}' does not exist"
+        except utils.IntegrityError:
+            return f"Unable to attach file '{file_id}' to the message"
+
+
 def _move_datetime_to_new_weekday_and_time(date: datetime, new_weekday: int, new_hour: int, new_minute: int):
     current_weekday = date.weekday()
     day_diff = new_weekday - current_weekday
@@ -246,9 +287,14 @@ def get_assistant_tools(assistant, experiment_session: ExperimentSession | None 
     return tools
 
 
-def get_node_tools(node: Node, experiment_session: ExperimentSession | None = None) -> list[BaseTool]:
+def get_node_tools(
+    node: Node, experiment_session: ExperimentSession | None = None, attachment_callback: Callable | None = None
+) -> list[BaseTool]:
     tools = get_tool_instances(node.params.get("tools") or [], experiment_session)
     tools.extend(get_custom_action_tools(node))
+    if node.requires_attachment_tool():
+        tools.append(AttachMediaTool(experiment_session=experiment_session, callback=attachment_callback))
+
     return tools
 
 

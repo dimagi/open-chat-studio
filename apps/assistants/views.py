@@ -2,9 +2,9 @@ import logging
 
 from django.contrib import messages
 from django.contrib.auth.mixins import PermissionRequiredMixin
-from django.db import transaction
+from django.db import models, transaction
 from django.db.models import Q
-from django.http import HttpResponse, HttpResponseRedirect
+from django.http import FileResponse, Http404, HttpResponse, HttpResponseRedirect
 from django.shortcuts import get_object_or_404, render
 from django.template.loader import render_to_string
 from django.urls import reverse
@@ -20,8 +20,9 @@ from apps.service_providers.utils import get_llm_provider_choices
 from apps.teams.mixins import LoginAndTeamRequiredMixin
 from apps.utils.tables import render_table_row
 
+from ..files.models import File
 from ..generics.chips import Chip
-from ..teams.decorators import login_and_team_required
+from ..teams.decorators import login_and_team_required, team_required
 from .forms import ImportAssistantForm, OpenAiAssistantForm, ToolResourceFileFormsets
 from .models import OpenAiAssistant, ToolResources
 from .sync import (
@@ -328,3 +329,22 @@ class DeleteFileFromAssistant(BaseDeleteFileView):
         if delete_file_from_openai(client, file):
             file.save()
         return HttpResponse()
+
+
+@team_required
+def download_file(request, team_slug: str, pk: int, file_id: int):
+    assistant = get_object_or_404(OpenAiAssistant, id=pk)
+    if not assistant.allow_file_downloads:
+        raise Http404()
+
+    assistant_file_ids = ToolResources.objects.filter(assistant=assistant).values_list("files")
+    try:
+        file = File.objects.filter(team=request.team, id__in=models.Subquery(assistant_file_ids)).get(id=file_id)
+    except File.DoesNotExist:
+        raise Http404()
+
+    try:
+        file = file.file.open()
+        return FileResponse(file, as_attachment=True, filename=file.name)
+    except FileNotFoundError:
+        raise Http404()

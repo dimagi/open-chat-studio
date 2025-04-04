@@ -164,9 +164,16 @@ class PipelineHistoryManager(BaseHistoryManager):
         self.chat_model = chat_model
         self.ai_message = None
 
-        self.input_message_metadata = None
-        self.output_message_metadata = None
+        self.input_message_metadata = {}
+        self.output_message_metadata = {}
         self.history_mode = history_mode
+
+    def attach_file_id(self, file_id: str):
+        """Callback method used by a tool to attach a file id to the output message"""
+        if "ocs_attachment_file_ids" not in self.output_message_metadata:
+            self.output_message_metadata["ocs_attachment_file_ids"] = []
+
+        self.output_message_metadata["ocs_attachment_file_ids"].append(file_id)
 
     @classmethod
     def for_llm_chat(
@@ -225,7 +232,7 @@ class PipelineHistoryManager(BaseHistoryManager):
         self, input: str, input_message_metadata: dict, output: str, output_message_metadata: dict, *args, **kwargs
     ):
         self.input_message_metadata = input_message_metadata
-        self.output_message_metadata = output_message_metadata
+        self.output_message_metadata = self.output_message_metadata | output_message_metadata
 
         if self.history_type == PipelineChatHistoryTypes.NONE:
             return

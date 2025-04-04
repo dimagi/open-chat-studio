@@ -115,7 +115,7 @@ def compress_chat_history(
     max_token_limit: int,
     input_messages: list,
     keep_history_len: int = 10,
-    history_mode: str = None,
+    history_mode: str = PipelineChatHistoryModes.SUMMARIZE,
 ) -> list[BaseMessage]:
     history_messages = chat.get_langchain_messages_until_summary()
     try:
@@ -178,7 +178,7 @@ def _compress_chat_history(
     max_token_limit: int,
     input_messages: list,
     keep_history_len: int = 10,
-    history_mode: str = None,
+    history_mode: str = PipelineChatHistoryModes.SUMMARIZE,
 ) -> tuple[list[BaseMessage], BaseMessage | None, str | None]:
     """Compresses the chat history to be less than max_token_limit tokens long. This will summarize the history
     if necessary and save the summary to the DB.
@@ -254,7 +254,12 @@ def summarize_history(llm, history, max_token_limit, input_message_tokens, summa
 
 
 def compress_chat_history_from_messages(
-    llm, history, keep_history_len: int, max_token_limit: int, input_messages: list, history_mode: str = None
+    llm,
+    history,
+    keep_history_len: int,
+    max_token_limit: int,
+    input_messages: list,
+    history_mode: str = PipelineChatHistoryModes.SUMMARIZE,
 ):
     """
     Handles chat history compression based on selected mode:

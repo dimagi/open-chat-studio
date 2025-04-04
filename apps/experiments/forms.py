@@ -117,7 +117,9 @@ class ExperimentForm(forms.ModelForm):
     prompt_text = forms.CharField(widget=forms.Textarea(attrs={"rows": 6}), required=False)
     input_formatter = forms.CharField(widget=forms.Textarea(attrs={"rows": 2}), required=False)
     seed_message = forms.CharField(widget=forms.Textarea(attrs={"rows": 2}), required=False)
-    tools = forms.MultipleChoiceField(widget=forms.CheckboxSelectMultiple, choices=AgentTools.choices, required=False)
+    tools = forms.MultipleChoiceField(
+        widget=forms.CheckboxSelectMultiple, choices=AgentTools.user_tool_choices(), required=False
+    )
     custom_action_operations = forms.MultipleChoiceField(widget=forms.CheckboxSelectMultiple, required=False)
 
     class Meta:
@@ -255,7 +257,7 @@ class ExperimentForm(forms.ModelForm):
             raise forms.ValidationError(errors)
 
         validate_prompt_variables(
-            form_data=cleaned_data,
+            context=cleaned_data,
             prompt_key="prompt_text",
             known_vars=set(PromptVars.values),
         )

@@ -12,6 +12,7 @@ class PromptVars(models.TextChoices):
     PARTICIPANT_DATA = "participant_data"
     SOURCE_MATERIAL = "source_material"
     CURRENT_DATETIME = "current_datetime"
+    MEDIA = "media"
 
 
 PROMPT_VARS_REQUIRED_BY_TOOL = {
@@ -22,15 +23,14 @@ PROMPT_VARS_REQUIRED_BY_TOOL = {
     AgentTools.UPDATE_PARTICIPANT_DATA: [PromptVars.PARTICIPANT_DATA],
 }
 
+# These prompt variables require resources to be specified by the user
+PROMPT_VARS_REQUIRING_RESOURCES = [PromptVars.SOURCE_MATERIAL, PromptVars.MEDIA]
 
-def validate_prompt_variables(form_data, prompt_key: str, known_vars: set):
-    prompt_text = form_data.get(prompt_key, "")
-    tools = form_data.get("tools", [])
 
-    if not prompt_text and not tools:
-        return set()
-
+def _inspect_prompt(context: str, prompt_key) -> tuple[set, str]:
+    """Inspects the prompt text to extract the variables used in it."""
     prompt_variables = set()
+    prompt_text = context.get(prompt_key, "")
     try:
         for literal, field_name, format_spec, conversion in Formatter().parse(prompt_text):
             if field_name is not None:
@@ -46,32 +46,60 @@ def validate_prompt_variables(form_data, prompt_key: str, known_vars: set):
     except ValueError as e:
         raise ValidationError({prompt_key: f"Invalid format in prompt: {e}"})
 
+    return prompt_variables, prompt_text
+
+
+def validate_prompt_variables(context, prompt_key: str, known_vars: set):
+    """Ensures that the variables expected by the prompt has values and that only those in `known_vars` are allowed
+    to be used, otherwise a `ValidationError` is thrown.
+    """
+    prompt_variables, prompt_text = _inspect_prompt(context, prompt_key)
+    tools = context.get("tools", [])
+
+    if not prompt_text and not tools:
+        return set()
+
     unknown = prompt_variables - known_vars
     if unknown:
         raise ValidationError({prompt_key: f"Prompt contains unknown variables: {', '.join(unknown)}"})
 
-    if not form_data.get("source_material") and "source_material" in prompt_variables:
-        raise ValidationError({prompt_key: "Prompt expects source_material but it is not provided."})
-    elif form_data.get("source_material") and "source_material" not in prompt_variables:
-        raise ValidationError({prompt_key: "source_material variable expected since source material is specified"})
-
-    if tools:
-        required_prompt_variables = []
-        for tool_name in tools:
-            required_prompt_variables.extend(PROMPT_VARS_REQUIRED_BY_TOOL[AgentTools(tool_name)])
-        missing_vars = set(required_prompt_variables) - prompt_variables
-        if missing_vars:
-            raise ValidationError(
-                {prompt_key: f"Tools require {', '.join(missing_vars)}. Please include them in your prompt."}
-            )
-        if not prompt_text and required_prompt_variables:
-            raise ValidationError(
-                {prompt_key: f"Tools {tools} require a prompt with variables, but the prompt is empty."}
-            )
+    _ensure_component_variables_are_present(context, prompt_variables, prompt_key)
+    _ensure_variable_components_are_present(context, prompt_variables, prompt_key)
+    _ensure_tool_variables_are_present(prompt_text, prompt_variables, tools, prompt_key)
 
     for var in prompt_variables:
         if prompt_text.count(f"{{{var}}}") > 1:
             raise ValidationError({prompt_key: f"Variable {var} is used more than once."})
+
+
+def _ensure_tool_variables_are_present(prompt_text, prompt_variables, tools, prompt_key):
+    if not tools:
+        return
+
+    required_prompt_variables = []
+    for tool_name in tools:
+        required_prompt_variables.extend(PROMPT_VARS_REQUIRED_BY_TOOL[AgentTools(tool_name)])
+    missing_vars = set(required_prompt_variables) - prompt_variables
+    if missing_vars:
+        raise ValidationError(
+            {prompt_key: f"Tools require {', '.join(missing_vars)}. Please include them in your prompt."}
+        )
+    if not prompt_text and required_prompt_variables:
+        raise ValidationError({prompt_key: f"Tools {tools} require a prompt with variables, but the prompt is empty."})
+
+
+def _ensure_component_variables_are_present(context: dict, prompt_variables: set, prompt_key: str):
+    """Ensure that linked components are referenced by the prompt"""
+    for prompt_var in PROMPT_VARS_REQUIRING_RESOURCES:
+        if context.get(prompt_var) and prompt_var not in prompt_variables:
+            raise ValidationError({prompt_key: f"Prompt expects {prompt_var} variable."})
+
+
+def _ensure_variable_components_are_present(context: dict, prompt_variables: set, prompt_key: str):
+    """Ensures that all variables in the prompt are referencing valid values."""
+    for prompt_var in PROMPT_VARS_REQUIRING_RESOURCES:
+        if prompt_var in prompt_variables and context.get(prompt_var) is None:
+            raise ValidationError({prompt_key: f"{prompt_var} variable is specified, but {prompt_var} is missing"})
 
     return prompt_variables
 

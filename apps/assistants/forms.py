@@ -21,7 +21,9 @@ INSTRUCTIONS_HELP_TEXT = """
 
 class OpenAiAssistantForm(forms.ModelForm):
     builtin_tools = forms.MultipleChoiceField(widget=forms.CheckboxSelectMultiple, choices=get_assistant_tool_options())
-    tools = forms.MultipleChoiceField(widget=forms.CheckboxSelectMultiple, choices=AgentTools.choices, required=False)
+    tools = forms.MultipleChoiceField(
+        widget=forms.CheckboxSelectMultiple, choices=AgentTools.user_tool_choices(), required=False
+    )
     custom_action_operations = forms.MultipleChoiceField(widget=forms.CheckboxSelectMultiple, required=False)
 
     class Meta:
@@ -37,11 +39,13 @@ class OpenAiAssistantForm(forms.ModelForm):
             "temperature",
             "allow_file_search_attachments",
             "allow_code_interpreter_attachments",
+            "allow_file_downloads",
             "top_p",
         ]
         labels = {
             "allow_file_search_attachments": "Allow ad-hoc files to be uploaded for file search",
             "allow_code_interpreter_attachments": "Allow ad-hoc files to be uploaded for code interpreter",
+            "allow_file_downloads": "Allow files cited in the response to be downloaded",
         }
 
     def __init__(self, request, *args, **kwargs):
@@ -71,7 +75,7 @@ class OpenAiAssistantForm(forms.ModelForm):
     def clean(self):
         cleaned_data = super().clean()
         validate_prompt_variables(
-            form_data=cleaned_data,
+            context=cleaned_data,
             prompt_key="instructions",
             known_vars=OpenAiAssistant.ALLOWED_INSTRUCTIONS_VARIABLES,
         )

@@ -20,6 +20,7 @@ from django_tables2 import SingleTableView
 
 from apps.assistants.models import OpenAiAssistant
 from apps.custom_actions.form_utils import get_custom_action_operation_choices
+from apps.documents.models import Collection
 from apps.experiments.models import AgentTools, Experiment, SourceMaterial
 from apps.pipelines.flow import FlowPipelineData
 from apps.pipelines.models import Pipeline, PipelineRun
@@ -29,6 +30,7 @@ from apps.pipelines.tasks import get_response_for_pipeline_test_message
 from apps.service_providers.models import LlmProvider, LlmProviderModel
 from apps.teams.decorators import login_and_team_required
 from apps.teams.mixins import LoginAndTeamRequiredMixin
+from apps.teams.models import Flag
 
 from ..generics.chips import Chip
 from ..generics.help import render_help_with_link
@@ -82,12 +84,17 @@ class EditPipeline(LoginAndTeamRequiredMixin, TemplateView, PermissionRequiredMi
         data = super().get_context_data(**kwargs)
         llm_providers = LlmProvider.objects.filter(team=self.request.team).values("id", "name", "type").all()
         llm_provider_models = LlmProviderModel.objects.for_team(self.request.team).all()
+        ui_feature_flags = ["document_management"]
+
         return {
             **data,
             "pipeline_id": kwargs["pk"],
             "node_schemas": _pipeline_node_schemas(),
             "parameter_values": _pipeline_node_parameter_values(self.request.team, llm_providers, llm_provider_models),
             "default_values": _pipeline_node_default_values(llm_providers, llm_provider_models),
+            "flags_enabled": [
+                flag for flag in ui_feature_flags if Flag.get(flag).is_active_for_team(self.request.team)
+            ],
         }
 
 
@@ -127,11 +134,13 @@ def _pipeline_node_parameter_values(team, llm_providers, llm_provider_models):
     """Returns the possible values for each input type"""
     source_materials = SourceMaterial.objects.filter(team=team).values("id", "topic").all()
     assistants = OpenAiAssistant.objects.working_versions_queryset().filter(team=team).values("id", "name").all()
+    collections = Collection.objects.filter(team=team).values("id", "name").all()
 
-    def _option(value, label, type_=None, edit_url: str | None = None):
+    def _option(value, label, type_=None, edit_url: str | None = None, max_token_limit=None):
         data = {"value": value, "label": label}
         data = data | ({"type": type_} if type_ else {})
         data = data | ({"edit_url": edit_url} if edit_url else {})
+        data = data | ({"max_token_limit": max_token_limit} if max_token_limit else {})
         return data
 
     def _get_assistant_url(assistant_id: int):
@@ -147,7 +156,10 @@ def _pipeline_node_parameter_values(team, llm_providers, llm_provider_models):
 
     return {
         "LlmProviderId": [_option(provider["id"], provider["name"], provider["type"]) for provider in llm_providers],
-        "LlmProviderModelId": [_option(provider.id, str(provider), provider.type) for provider in llm_provider_models],
+        "LlmProviderModelId": [
+            _option(provider.id, str(provider), provider.type, None, provider.max_token_limit)
+            for provider in llm_provider_models
+        ],
         OptionsSource.source_material: (
             [_option("", "Select a topic")]
             + [_option(material["id"], material["topic"]) for material in source_materials]
@@ -163,7 +175,17 @@ def _pipeline_node_parameter_values(team, llm_providers, llm_provider_models):
                 for assistant in assistants
             ]
         ),
-        OptionsSource.agent_tools: [_option(AgentTools.value, AgentTools.label) for AgentTools in AgentTools],
+        OptionsSource.collection: (
+            [_option("", "Select a Collection")]
+            + [
+                _option(
+                    value=collection["id"],
+                    label=collection["name"],
+                )
+                for collection in collections
+            ]
+        ),
+        OptionsSource.agent_tools: [_option(value, label) for value, label in AgentTools.user_tool_choices()],
         OptionsSource.custom_actions: [_option(val, display_val) for val, display_val in custom_action_operations],
     }
 
