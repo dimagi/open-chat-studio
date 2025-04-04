@@ -94,7 +94,7 @@ def test_attachment_links_attached_to_message(experiment):
     channel = FacebookMessengerChannel.from_experiment_session(session)
     channel.messaging_service = Mock()
     files = FileFactory.create_batch(2)
-    channel.send_text_to_user("Hi there", attached_files=files)
+    channel._reply_text_message("Hi there", linkify_files=files)
     call_kwargs = channel.messaging_service.send_text_message.call_args[1]
     final_message = call_kwargs["message"]
 

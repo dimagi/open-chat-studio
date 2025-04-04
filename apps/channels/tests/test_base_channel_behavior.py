@@ -39,6 +39,9 @@ class TestChannel(ChannelBase):
     def send_text_to_user(self):
         pass
 
+    def send_voice_to_user(self, *args, **kwargs):
+        pass
+
 
 @pytest.fixture()
 def telegram_channel(db):
