@@ -866,7 +866,7 @@ def start_session_public(request, team_slug: str, experiment_id: uuid.UUID):
             participant_identifier=identifier,
             timezone=request.session.get("detected_tz", None),
         )
-        return _record_consent_and_redirect(team_slug, experiment, session)
+        return _record_consent_and_redirect(team_slug, experiment, session, request.origin)
 
     if request.method == "POST":
         form = ConsentForm(consent, request.POST, initial={"identifier": user.email if user else None})
@@ -945,7 +945,10 @@ def start_session_public_embed(request, team_slug: str, experiment_id: uuid.UUID
         participant_identifier=participant.identifier,
         timezone=request.session.get("detected_tz", None),
     )
-    return redirect("experiments:experiment_chat_embed", team_slug, experiment.public_id, session.external_id)
+    redirect_url = (
+        "chatbots:chatbot_chat_embed" if request.origin == "chatbots" else "experiments:experiment_chat_embed"
+    )
+    return redirect(redirect_url, team_slug, experiment.public_id, session.external_id)
 
 
 def _verify_user_or_start_session(identifier, request, experiment, session):
@@ -1083,7 +1086,9 @@ def send_invitation(request, team_slug: str, experiment_id: int, session_id: str
     )
 
 
-def _record_consent_and_redirect(team_slug: str, experiment: Experiment, experiment_session: ExperimentSession):
+def _record_consent_and_redirect(
+    team_slug: str, experiment: Experiment, experiment_session: ExperimentSession, origin="experiments"
+):
     # record consent, update status
     experiment_session.consent_date = timezone.now()
     if experiment_session.experiment_version.pre_survey:
@@ -1091,7 +1096,7 @@ def _record_consent_and_redirect(team_slug: str, experiment: Experiment, experim
         redirect_url_name = "experiments:experiment_pre_survey"
     else:
         experiment_session.status = SessionStatus.ACTIVE
-        redirect_url_name = "experiments:experiment_chat"
+        redirect_url_name = "chatbots:chatbot_chat" if origin == "chatbots" else "experiments:experiment_chat"
     experiment_session.save()
     response = HttpResponseRedirect(
         reverse(
@@ -1211,7 +1216,7 @@ def _experiment_chat_ui(request, embedded=False):
         {
             "experiment": request.experiment,
             "session": request.experiment_session,
-            "active_tab": "experiments",
+            "active_tab": "chatbots" if request.origin == "chatbots" else "experiments",
             "embedded": embedded,
             **version_specific_vars,
         },

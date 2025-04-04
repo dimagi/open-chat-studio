@@ -84,11 +84,11 @@ class Pipeline(BaseTeamModel, VersionsMixin):
         return f"v{self.version_number}"
 
     @classmethod
-    def create_pipeline_with_name(cls, team, name):
-        return cls.create_default(team, name)
+    def create_default_pipeline_with_name(cls, team, name, llm_provider_id=None, llm_provider_model=None):
+        return cls.create_default(team, name, llm_provider_id, llm_provider_model)
 
     @classmethod
-    def create_default(cls, team, name=None):
+    def create_default(cls, team, name=None, llm_provider_id=None, llm_provider_model=None):
         from apps.pipelines.nodes.nodes import EndNode, StartNode
 
         default_name = "New Pipeline" if name is None else name
@@ -111,10 +111,60 @@ class Pipeline(BaseTeamModel, VersionsMixin):
             position={"x": 1000, "y": 200},
             data=FlowNodeData(id=end_id, type=EndNode.__name__, params={"name": "end"}),
         )
-        default_nodes = [start_node.model_dump(), end_node.model_dump()]
+        if llm_provider_id and llm_provider_model:
+            llm_id = f"LLMResponseWithPrompt-{uuid4().hex[:5]}"
+            llm_node = FlowNode(
+                id=llm_id,
+                type="pipelineNode",
+                position={"x": 300, "y": 0},
+                data=FlowNodeData(
+                    id=llm_id,
+                    type="LLMResponseWithPrompt",
+                    label="LLM",
+                    params={
+                        "name": llm_id,
+                        "llm_provider_id": llm_provider_id,
+                        "llm_provider_model_id": llm_provider_model.id,
+                        "llm_temperature": 0.7,
+                        "history_type": "none",
+                        "history_name": None,
+                        "history_mode": "summarize",
+                        "user_max_token_limit": llm_provider_model.max_token_limit,
+                        "max_history_length": 10,
+                        "source_material_id": None,
+                        "prompt": "You are a helpful assistant. Answer the user's query as best you can.",
+                        "tools": None,
+                        "custom_actions": None,
+                        "keywords": [""],
+                    },
+                ),
+            )
+            edges = [
+                {
+                    "id": f"edge-{start_id}-{llm_id}",
+                    "source": start_id,
+                    "target": llm_id,
+                    "sourceHandle": "output",
+                    "targetHandle": "input",
+                },
+                {
+                    "id": f"edge-{llm_id}-{end_id}",
+                    "source": llm_id,
+                    "target": end_id,
+                    "sourceHandle": "output",
+                    "targetHandle": "input",
+                },
+            ]
+        else:
+            llm_node = None
+            edges = []
+        default_nodes = [start_node.model_dump()]
+        if llm_node:
+            default_nodes.append(llm_node.model_dump())
+        default_nodes.append(end_node.model_dump())
         new_pipeline = cls.objects.create(
             team=team,
-            data={"nodes": default_nodes, "edges": []},
+            data={"nodes": default_nodes, "edges": edges},
             name=default_name if name else f"New Pipeline {existing_pipeline_count + 1}",
         )
         new_pipeline.update_nodes_from_data()

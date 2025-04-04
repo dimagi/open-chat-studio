@@ -113,7 +113,7 @@
           </ul>
         </div>
         {% if experiment.is_public %}
-          {% include "experiments/share/dialog.html" %}
+          {% include "experiments/share/dialog.html" with origin="chatbots" %}
         {% endif %}
       {#  Commented elements included for Tailwind processing #}
       {#  <i class="fa-brands fa-telegram"></i> #}

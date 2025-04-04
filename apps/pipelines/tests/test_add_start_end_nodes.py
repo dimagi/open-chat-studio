@@ -1,3 +1,6 @@
+from unittest.mock import MagicMock
+from uuid import uuid4
+
 import pytest
 
 from apps.pipelines.migrations.utils.migrate_start_end_nodes import (
@@ -351,3 +354,60 @@ def test_remove_nodes(version_before_removing_node, team):
         assert node.versions.count() == 1
     else:
         assert Node.objects.get_all().filter(flow_id=passthrough_2["id"]).count() == 0
+
+
+@django_db_transactional()
+def test_pipeline_creation_without_llm(team):
+    pipeline = Pipeline.create_default(team=team)
+
+    assert pipeline.name == "New Pipeline 1"
+    assert "nodes" in pipeline.data
+    assert "edges" in pipeline.data
+    assert len(pipeline.data["nodes"]) == 2
+    assert len(pipeline.data["edges"]) == 0
+    node_types = [node["data"]["type"] for node in pipeline.data["nodes"]]
+    assert "StartNode" in node_types
+    assert "EndNode" in node_types
+
+
+@django_db_transactional()
+def test_pipeline_creation_with_llm(team):
+    mock_llm_provider = MagicMock(id=str(uuid4()))
+    mock_llm_model = MagicMock(id=str(uuid4()), max_token_limit=2048)
+
+    pipeline = Pipeline.create_default(
+        team=team,
+        llm_provider_id=mock_llm_provider.id,
+        llm_provider_model=mock_llm_model,
+    )
+
+    assert "nodes" in pipeline.data
+    assert "edges" in pipeline.data
+    assert len(pipeline.data["nodes"]) == 3
+    llm_node = next(node for node in pipeline.data["nodes"] if node["data"]["type"] == "LLMResponseWithPrompt")
+    params = llm_node["data"]["params"]
+    assert params["llm_provider_id"] == mock_llm_provider.id
+    assert params["llm_provider_model_id"] == mock_llm_model.id
+    assert params["llm_temperature"] == 0.7
+    assert params["user_max_token_limit"] == mock_llm_model.max_token_limit
+
+
+@django_db_transactional()
+def test_pipeline_edge_connections(team):
+    mock_llm_provider = MagicMock(id=str(uuid4()))
+    mock_llm_model = MagicMock(id=str(uuid4()), max_token_limit=2048)
+
+    pipeline = Pipeline.create_default(
+        team=team,
+        llm_provider_id=mock_llm_provider.id,
+        llm_provider_model=mock_llm_model,
+    )
+
+    edges = pipeline.data["edges"]
+    assert len(edges) == 2
+    start_to_llm = edges[0]
+    llm_to_end = edges[1]
+    assert start_to_llm["sourceHandle"] == "output"
+    assert start_to_llm["targetHandle"] == "input"
+    assert llm_to_end["sourceHandle"] == "output"
+    assert llm_to_end["targetHandle"] == "input"

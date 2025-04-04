@@ -5,7 +5,11 @@
       <a role="tab" class="tab" @click="tab = 'tab-embed'" :class="{ 'tab-active': tab === 'tab-embed' }">Embed</a>
     </div>
     <div x-cloak x-show="tab === 'tab-link'">
-      {% url 'experiments:start_session_public' team.slug experiment.public_id as public_link %}
+      {% if origin == "chatbots" %}
+        {% url 'chatbots:start_session_public' team.slug experiment.public_id as public_link %}
+      {% else %}
+        {% url 'experiments:start_session_public' team.slug experiment.public_id as public_link %}
+      {% endif %}
       <div class="w-full my-4">
         <p class="my-4">Share this link with participants:</p>
         <pre class="w-full max-w-min whitespace-pre-wrap overflow-x-scroll"><code>{% absolute_url public_link %}</code></pre>
@@ -19,8 +23,8 @@
         <script>
           async function copyEmbed(callee, type) {
             const code = {
-              iframe: `{% include "experiments/share/iframe.html" %}`,
-              widget: `{% include "experiments/share/widget.html" %}`,
+              iframe: `{% include "experiments/share/iframe.html" with origin=origin %}`,
+              widget: `{% include "experiments/share/widget.html" with origin=origin %}`,
             }[type]
             await SiteJS.app.copyTextToClipboard(callee, code)
           }
