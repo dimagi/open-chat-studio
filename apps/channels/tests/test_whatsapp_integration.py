@@ -10,9 +10,12 @@ from django.urls import reverse
 from apps.channels.datamodels import TurnWhatsappMessage, TwilioMessage
 from apps.channels.models import ChannelPlatform
 from apps.channels.tasks import handle_turn_message, handle_twilio_message
-from apps.chat.channels import MESSAGE_TYPES
+from apps.chat.channels import MESSAGE_TYPES, WhatsappChannel
+from apps.chat.models import ChatMessage
 from apps.service_providers.speech_service import SynthesizedAudio
 from apps.utils.factories.channels import ExperimentChannelFactory
+from apps.utils.factories.experiment import ExperimentSessionFactory
+from apps.utils.factories.files import FileFactory
 
 from .message_examples import turnio_messages, twilio_messages
 
@@ -80,7 +83,7 @@ class TestTwilio:
         with patch("apps.service_providers.messaging_service.TwilioService.s3_client"), patch(
             "apps.service_providers.messaging_service.TwilioService.client"
         ):
-            get_llm_response_mock.return_value = "Hi"
+            get_llm_response_mock.return_value = ChatMessage(content="Hi")
             get_voice_transcript_mock.return_value = "Hi"
 
             handle_twilio_message(message_data=incoming_message, request_uri="", signature="")
@@ -130,7 +133,7 @@ class TestTurnio:
     ):
         """Test that the turnio integration can use the WhatsappChannel implementation"""
         synthesize_voice_mock.return_value = SynthesizedAudio(audio=BytesIO(b"123"), duration=10, format="mp3")
-        _get_bot_response.return_value = "Hi"
+        _get_bot_response.return_value = ChatMessage(content="Hi")
         get_voice_transcript_mock.return_value = "Hi"
         handle_turn_message(experiment_id=turnio_whatsapp_channel.experiment.public_id, message_data=incoming_message)
         if message_type == "text":
@@ -159,3 +162,24 @@ class TestTurnio:
         response = client.post(url, data=message, content_type="application/json")
         response.status_code == 200
         handle_turn_message_task.assert_not_called()
+
+
+@pytest.mark.django_db()
+def test_attachment_links_attached_to_message(experiment):
+    session = ExperimentSessionFactory(experiment_channel__platform=ChannelPlatform.WHATSAPP, experiment=experiment)
+    channel = WhatsappChannel.from_experiment_session(session)
+    channel.messaging_service = Mock()
+    files = FileFactory.create_batch(2)
+    channel.send_text_to_user("Hi there", attached_files=files)
+    call_kwargs = channel.messaging_service.send_text_message.call_args[1]
+    final_message = call_kwargs["message"]
+
+    expected_final_message = f"""Hi there
+
+{files[0].name}
+{files[0].download_link(session.id)}
+
+{files[1].name}
+{files[1].download_link(session.id)}
+"""
+    assert final_message == expected_final_message

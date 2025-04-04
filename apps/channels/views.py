@@ -7,15 +7,19 @@ from django.shortcuts import get_object_or_404
 from django.views.decorators.csrf import csrf_exempt
 from django.views.decorators.http import require_POST
 from drf_spectacular.types import OpenApiTypes
-from drf_spectacular.utils import OpenApiParameter, extend_schema, inline_serializer
-from rest_framework import serializers, status
+from drf_spectacular.utils import OpenApiParameter, extend_schema
+from rest_framework import status
 from rest_framework.decorators import api_view
 from rest_framework.response import Response
 
 from apps.api.permissions import verify_hmac
 from apps.channels import tasks
 from apps.channels.models import ChannelPlatform, ExperimentChannel
-from apps.channels.serializers import CommCareConnectMessageSerializer
+from apps.channels.serializers import (
+    ApiMessageSerializer,
+    ApiResponseMessageSerializer,
+    CommCareConnectMessageSerializer,
+)
 from apps.experiments.models import Experiment, ExperimentSession, ParticipantData
 
 
@@ -61,20 +65,6 @@ def new_turn_message(request, experiment_id: uuid):
     return HttpResponse()
 
 
-new_api_message_request_serializer = inline_serializer(
-    "NewAPIMessage",
-    fields={
-        "message": serializers.CharField(label="User message"),
-        "session": serializers.CharField(required=False, label="Optional session ID"),
-    },
-)
-
-new_api_message_response_serializer = inline_serializer(
-    "NewAPIMessageResponse",
-    fields={"response": serializers.CharField(label="AI response")},
-)
-
-
 def new_api_message_schema(versioned: bool):
     operation_id = "new_api_message"
     summary = "New API Message"
@@ -103,8 +93,8 @@ def new_api_message_schema(versioned: bool):
         operation_id=operation_id,
         summary=summary,
         tags=["Channels"],
-        request=new_api_message_request_serializer,
-        responses={200: new_api_message_response_serializer},
+        request=ApiMessageSerializer(),
+        responses={200: ApiResponseMessageSerializer()},
         parameters=parameters,
     )
 
@@ -129,7 +119,6 @@ def _new_api_message(request, experiment_id: uuid, version=None):
     session = None
     if session_id := message_data.get("session"):
         try:
-            # TODO: Support ability to select a specific version
             experiment = Experiment.objects.get(public_id=experiment_id)
             session = ExperimentSession.objects.select_related("experiment", "experiment_channel").get(
                 external_id=session_id,
@@ -147,7 +136,7 @@ def _new_api_message(request, experiment_id: uuid, version=None):
         experiment = get_object_or_404(Experiment, public_id=experiment_id, team=request.team)
         experiment_channel = ExperimentChannel.objects.get_team_api_channel(request.team)
     experiment_version = experiment.get_version(version) if version is not None else experiment.default_version
-    response = tasks.handle_api_message(
+    ai_response = tasks.handle_api_message(
         request.user,
         experiment_version,
         experiment_channel,
@@ -155,7 +144,20 @@ def _new_api_message(request, experiment_id: uuid, version=None):
         participant_id,
         session,
     )
-    return Response(data={"response": response})
+
+    attachments = []
+    if attached_files := ai_response.get_attached_files():
+        attachments = [
+            {"file_name": file.name, "link": file.download_link(ai_response.chat.experiment_session.id)}
+            for file in attached_files
+        ]
+
+    return Response(
+        data={
+            "response": ai_response.content,
+            "attachments": attachments,
+        }
+    )
 
 
 @require_POST
