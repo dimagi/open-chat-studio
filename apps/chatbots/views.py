@@ -207,6 +207,7 @@ def chatbot_chat(request, team_slug: str, experiment_id: uuid.UUID, session_id: 
 
 
 @xframe_options_exempt
+@team_required
 def start_chatbot_session_public_embed(request, team_slug: str, experiment_id: uuid.UUID):
     return start_session_public_embed(request, team_slug, experiment_id)
 
