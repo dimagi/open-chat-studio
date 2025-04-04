@@ -9,7 +9,7 @@ from pydantic import ValidationError
 from apps.annotations.models import TagCategories
 from apps.chat.conversation import BasicConversation, Conversation
 from apps.chat.exceptions import ChatException
-from apps.chat.models import ChatMessageType
+from apps.chat.models import ChatMessage, ChatMessageType
 from apps.events.models import StaticTriggerType
 from apps.events.tasks import enqueue_static_triggers
 from apps.experiments.models import Experiment, ExperimentRoute, ExperimentSession, SafetyLayer
@@ -207,7 +207,7 @@ class TopicBot:
                     enqueue_static_triggers.delay(self.session.id, StaticTriggerType.BOT_SAFETY_LAYER_TRIGGERED)
                     return self._get_safe_response(safety_bot.safety_layer)
 
-            return response
+            return self.generator_chain.history_manager.ai_message
 
         config = {}
         if self.trace_service:
@@ -230,11 +230,6 @@ class TopicBot:
         finally:
             if self.trace_service:
                 self.trace_service.end()
-
-    def get_ai_message_id(self) -> int | None:
-        """Returns the generated AI message's ID. The caller can use this to fetch more information on this message"""
-        if self.generator_chain and self.generator_chain.history_manager.ai_message:
-            return self.generator_chain.history_manager.ai_message.id
 
     def _get_safe_response(self, safety_layer: SafetyLayer):
         if safety_layer.prompt_to_bot:
@@ -296,13 +291,14 @@ class PipelineBot:
     def __init__(self, session: ExperimentSession, experiment: Experiment, disable_reminder_tools=False):
         self.experiment = experiment
         self.session = session
-        self.ai_message_id = None
         self.disable_reminder_tools = disable_reminder_tools
 
-    def process_input(self, user_input: str, save_input_to_history=True, attachments: list["Attachment"] | None = None):
+    def process_input(
+        self, user_input: str, save_input_to_history=True, attachments: list["Attachment"] | None = None
+    ) -> ChatMessage:
         attachments = attachments or []
         serializable_attachments = [attachment.model_dump() for attachment in attachments]
-        output: PipelineState = self.experiment.pipeline.invoke(
+        return self.experiment.pipeline.invoke(
             PipelineState(
                 messages=[user_input],
                 experiment_session=self.session,
@@ -313,11 +309,6 @@ class PipelineBot:
             save_input_to_history=save_input_to_history,
             disable_reminder_tools=self.disable_reminder_tools,
         )
-        self.ai_message_id = output["ai_message_id"]
-        return output["messages"][-1]
-
-    def get_ai_message_id(self) -> int:
-        return self.ai_message_id
 
 
 class EventBot:
