@@ -246,10 +246,10 @@ class TopicBot:
             self.generator_chain.history_manager.ai_message.add_system_tag(
                 safety_layer.name, tag_category=TagCategories.SAFETY_LAYER_RESPONSE
             )
-        return bot_response
+        return self.generator_chain.history_manager.ai_message
 
-    def _save_message_to_history(self, message: str, message_type: ChatMessageType):
-        self.chain.history_manager.save_message_to_history(message, type_=message_type)
+    def _save_message_to_history(self, message: str, message_type: ChatMessageType) -> ChatMessage:
+        return self.chain.history_manager.save_message_to_history(message, type_=message_type)
 
 
 class SafetyBot:
