@@ -59,7 +59,7 @@ def test_llm_with_node_history(get_llm_service, provider, pipeline, experiment_s
     user_input = "The User Input"
     runnable.invoke(PipelineState(messages=[user_input], experiment_session=experiment_session, pipeline_version=1))[
         "messages"
-    ][-1]
+    ]
     expected_call_messages = [
         [("system", "Node 1:"), ("human", user_input)],
         [("system", "Node 2:"), ("human", f"Node 1: {user_input}")],
@@ -215,12 +215,12 @@ def test_global_history(get_llm_service, provider, pipeline, experiment_session)
     output_1 = experiment.pipeline.invoke(
         PipelineState(messages=[user_input], experiment_session=experiment_session, pipeline_version=1),
         experiment_session,
-    )["messages"][-1]
+    )
     user_input_2 = "Saying more stuff"
     output_2 = experiment.pipeline.invoke(
         PipelineState(messages=[user_input_2], experiment_session=experiment_session, pipeline_version=1),
         experiment_session,
-    )["messages"][-1]
+    )
 
     user_input_3 = "Tell me something interesting"
     experiment.pipeline.invoke(
@@ -237,7 +237,7 @@ def test_global_history(get_llm_service, provider, pipeline, experiment_session)
         [
             ("system", "Node 1:"),
             ("human", user_input),  # Input into Node 1 from the first run.
-            ("ai", output_1),  # The output from the whole pipeline from the first run
+            ("ai", output_1.content),  # The output from the whole pipeline from the first run
             ("human", user_input_2),
         ],
         # Second interaction with Node 2. Only the history of Node 2 is inserted.
@@ -251,9 +251,9 @@ def test_global_history(get_llm_service, provider, pipeline, experiment_session)
         [
             ("system", "Node 1:"),
             ("human", user_input),
-            ("ai", output_1),
+            ("ai", output_1.content),  # The output from the whole pipeline from the first run
             ("human", user_input_2),
-            ("ai", output_2),
+            ("ai", output_2.content),
             ("human", user_input_3),
         ],
         # Third interaction with Node 2. Only the history of Node 2 is inserted.
@@ -300,13 +300,9 @@ def test_llm_with_named_history(get_llm_service, provider, pipeline, experiment_
     runnable = create_runnable(pipeline, nodes)
 
     user_input = "The User Input"
-    runnable.invoke(PipelineState(messages=[user_input], experiment_session=experiment_session, pipeline_version=1))[
-        "messages"
-    ][-1]
+    runnable.invoke(PipelineState(messages=[user_input], experiment_session=experiment_session, pipeline_version=1))
     user_input_2 = "Second User Input"
-    runnable.invoke(PipelineState(messages=[user_input_2], experiment_session=experiment_session, pipeline_version=1))[
-        "messages"
-    ][-1]
+    runnable.invoke(PipelineState(messages=[user_input_2], experiment_session=experiment_session, pipeline_version=1))
 
     expected_call_messages = [
         # First call to Node 1
@@ -369,13 +365,9 @@ def test_llm_with_no_history(get_llm_service, provider, pipeline, experiment_ses
     runnable = create_runnable(pipeline, nodes)
 
     user_input = "The User Input"
-    runnable.invoke(PipelineState(messages=[user_input], experiment_session=experiment_session, pipeline_version=1))[
-        "messages"
-    ][-1]
+    runnable.invoke(PipelineState(messages=[user_input], experiment_session=experiment_session, pipeline_version=1))
     user_input_2 = "Second User Input"
-    runnable.invoke(PipelineState(messages=[user_input_2], experiment_session=experiment_session, pipeline_version=1))[
-        "messages"
-    ][-1]
+    runnable.invoke(PipelineState(messages=[user_input_2], experiment_session=experiment_session, pipeline_version=1))
 
     expected_call_messages = [
         # First call to Node 1
