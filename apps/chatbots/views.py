@@ -32,7 +32,7 @@ from apps.experiments.views.experiment import (
 from apps.generics.views import generic_home, paginate_session, render_session_details
 from apps.pipelines.views import _pipeline_node_default_values, _pipeline_node_parameter_values, _pipeline_node_schemas
 from apps.service_providers.models import LlmProvider, LlmProviderModel
-from apps.teams.decorators import login_and_team_required
+from apps.teams.decorators import login_and_team_required, team_required
 from apps.teams.mixins import LoginAndTeamRequiredMixin
 from apps.utils.base_experiment_table_view import BaseExperimentTableView
 
@@ -195,7 +195,7 @@ def chatbot_invitations(request, team_slug: str, experiment_id: int):
     return experiment_invitations(request, team_slug, experiment_id, "chatbots")
 
 
-@login_and_team_required
+@team_required
 def start_chatbot_session_public(request, team_slug: str, experiment_id: uuid.UUID):
     return start_session_public(request, team_slug, experiment_id)
 
