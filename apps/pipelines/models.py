@@ -279,6 +279,9 @@ class Pipeline(BaseTeamModel, VersionsMixin):
                     session, output["messages"][-1], ChatMessageType.AI, metadata=output_metadata
                 )
                 pipeline_output = ai_message
+            else:
+                # Return the pipeline state. This is currently for logging purposes only.
+                pipeline_output = output
         finally:
             if trace_service:
                 trace_service.end()
