@@ -2,7 +2,6 @@ import uuid
 
 from django.contrib.auth.decorators import permission_required
 from django.contrib.auth.mixins import PermissionRequiredMixin
-from django.db import transaction
 from django.http import HttpResponseRedirect
 from django.shortcuts import get_object_or_404
 from django.urls import reverse
@@ -69,15 +68,6 @@ class CreateChatbot(CreateExperiment, BaseExperimentView):
 
     def get_success_url(self):
         return reverse("chatbots:edit", args=[self.request.team.slug, self.object.pipeline.id])
-
-    def form_valid(self, form, file_formset):
-        """Overrides CreateExperiment's form_valid to skip experiment version creation"""
-        with transaction.atomic():
-            self.object = form.save()
-            if file_formset:
-                files = file_formset.save(self.request)
-                self.object.files.set(files)
-        return HttpResponseRedirect(self.get_success_url())
 
 
 @login_and_team_required

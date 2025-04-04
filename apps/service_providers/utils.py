@@ -5,6 +5,7 @@ from enum import Enum
 from typing import Any
 
 from django import forms
+from django.core.exceptions import ObjectDoesNotExist
 from django.db import models
 from django.db.models import Field
 from django_tables2 import tables
@@ -135,3 +136,19 @@ def get_llm_provider_choices(team) -> dict[int, dict[str, list[dict[str, Any]]]]
             "supports_assistants": provider.type_enum.supports_assistants,
         }
     return providers
+
+
+def get_first_llm_provider():
+    try:
+        return LlmProvider.objects.order_by("id").first()
+    except ObjectDoesNotExist:
+        return None
+
+
+def get_first_llm_provider_model(llm_provider):
+    try:
+        if llm_provider:
+            model = LlmProviderModel.objects.filter(type=llm_provider.type).order_by("id").first()
+            return model
+    except ObjectDoesNotExist:
+        return None
