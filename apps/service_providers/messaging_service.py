@@ -129,15 +129,12 @@ class TwilioService(MessagingService):
         from_: str,
         to: str,
         platform: ChannelPlatform,
-        attached_files: dict,
         **kwargs,
     ):
         from_, to = self._parse_addressing_params(platform, from_=from_, to=to)
 
         public_url = self._upload_audio_file(synthetic_voice)
         self.client.messages.create(from_=from_, to=to, media_url=[public_url])
-
-        self._send_attachments(from_, to, attached_files)
 
     def get_message_audio(self, message: TwilioMessage) -> BytesIO:
         auth = (self.account_sid, self.auth_token)
@@ -164,10 +161,7 @@ class TwilioService(MessagingService):
             self.client.messages.create(from_=from_, to=to, body=name, media_url=download_link)
 
     def _can_send_file(self, file: File) -> bool:
-        print("File size is", file.size_mb)
-        print("File content type is", file.content_type)
         answer = file.size_mb <= self.max_file_size_mb and file.content_type in supported_mime_types.TWILIO
-        print(f"File is supported?: {answer}")
         return answer
 
 

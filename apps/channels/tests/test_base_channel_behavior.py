@@ -20,7 +20,6 @@ from apps.chat.channels import (
 from apps.chat.exceptions import VersionedExperimentSessionsNotAllowedException
 from apps.chat.models import ChatMessage, ChatMessageType
 from apps.experiments.models import (
-    Experiment,
     ExperimentRoute,
     ExperimentSession,
     Participant,
@@ -28,7 +27,6 @@ from apps.experiments.models import (
     SessionStatus,
     VoiceResponseBehaviours,
 )
-from apps.files.models import File
 from apps.utils.factories.channels import ExperimentChannelFactory
 from apps.utils.factories.experiment import ExperimentFactory, ExperimentSessionFactory
 from apps.utils.factories.team import MembershipFactory
@@ -926,23 +924,3 @@ def test_ensure_session_exists_for_participant(new_session, experiment):
         assert ExperimentSession.objects.filter(participant__identifier="testy-pie").count() == 2
     else:
         assert ExperimentSession.objects.filter(participant__identifier="testy-pie").count() == 1
-
-
-@pytest.mark.parametrize("channel_supports_multimedia", [True, False])
-def test_voice_messages_with_attachments(channel_supports_multimedia, experiment):
-    """
-    If the channel do not support multimedia, a voice message will be accomanied by a text message with links to the
-    attachments. If the channel supports multimedia, the the attachments will be sent directly.
-    """
-    experiment = Mock(spec=Experiment, use_processor_bot_voice=False)
-    file = Mock(spec=File, download_link=lambda *args, **kwargs: "https://example")
-
-    TestChannel.supports_multimedia = property(lambda self: channel_supports_multimedia)
-    channel = TestChannel(experiment=experiment, experiment_channel=Mock(), experiment_session=Mock(id=1))
-    channel.send_text_to_user = Mock()
-
-    channel._reply_voice_message(text="Hello", attached_files=[file])
-    if channel_supports_multimedia:
-        channel.send_text_to_user.assert_not_called()
-    else:
-        assert channel.send_text_to_user.mock_calls[0].args[0] == "https://example"

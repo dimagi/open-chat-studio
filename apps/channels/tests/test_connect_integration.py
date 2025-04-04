@@ -201,7 +201,7 @@ def test_attachment_links_attached_to_message(experiment):
     channel = CommCareConnectChannel.from_experiment_session(session)
     channel.client = Mock()
     files = FileFactory.create_batch(2)
-    channel.send_text_to_user("Hi there", attached_files=files)
+    channel._reply_text_message("Hi there", linkify_files=files)
     call_kwargs = channel.client.send_message_to_user.call_args[1]
 
     final_message = call_kwargs["message"]

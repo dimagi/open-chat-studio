@@ -99,12 +99,15 @@ class TestTwilio:
         """
         Test that the bot's response is sent along with a message for each attachment
         """
-        channel = ExperimentChannelFactory(platform=ChannelPlatform.WHATSAPP, messaging_provider=twilio_provider)
+        channel = ExperimentChannelFactory(
+            platform=ChannelPlatform.WHATSAPP, messaging_provider=twilio_provider, extra_data={"number": "123"}
+        )
         session = ExperimentSessionFactory(experiment_channel=channel, experiment=experiment)
         channel = WhatsappChannel.from_experiment_session(session)
         file1 = FileFactory(name="f1")
         file2 = FileFactory(name="f2")
-        channel.send_text_to_user("Hi there", attached_files=[file1, file2])
+        channel.send_text_to_user("Hi there")
+        channel.send_files_to_user([file1, file2])
 
         message_call = twilio_client_mock.messages.create.mock_calls[0]
         attachment_call_1 = twilio_client_mock.messages.create.mock_calls[1]
@@ -193,7 +196,7 @@ class TestTurnio:
         session = ExperimentSessionFactory(experiment_channel=turnio_whatsapp_channel, experiment=experiment)
         channel = WhatsappChannel.from_experiment_session(session)
         files = FileFactory.create_batch(2)
-        channel.send_text_to_user("Hi there", attached_files=files)
+        channel._reply_text_message("Hi there", linkify_files=files)
         call_args = turnio_client.messages.send_text.mock_calls[0].args
         final_message = call_args[1]
 

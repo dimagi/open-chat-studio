@@ -213,7 +213,7 @@ class ChannelBase(ABC):
         )
 
     @abstractmethod
-    def send_text_to_user(self, text: str, attachments: list[File]):
+    def send_text_to_user(self, text: str):
         """Channel specific way of sending text back to the user"""
         raise NotImplementedError()
 
@@ -483,7 +483,8 @@ class ChannelBase(ABC):
 
             try:
                 self._reply_voice_message(bot_message)
-                self.send_text_to_user(urls)
+                if urls:
+                    self.send_text_to_user(urls)
             except AudioSynthesizeException as e:
                 logger.exception(e)
                 bot_message = f"{bot_message}\n\n{urls}"
@@ -686,6 +687,7 @@ class ChannelBase(ABC):
                 "Tell the user that something went wrong while processing their message and that they should "
                 "try again later. Do this in the language they are speaking in."
             )
+            raise Exception("Blah blah")
         except Exception:  # noqa BLE001
             logger.exception("Something went wrong while trying to generate an appropriate error message for the user")
             bot_message = DEFAULT_ERROR_RESPONSE_TEXT
@@ -834,7 +836,7 @@ class WhatsappChannel(ChannelBase):
         self.send_text_to_user(f'I heard: "{transcript}"')
 
     def send_text_to_user(self, text: str):
-        from_number = self.experiment_channel.extra_data.get("number")
+        from_number = self.experiment_channel.extra_data["number"]
         to_number = self.participant_identifier
 
         self.messaging_service.send_text_message(
@@ -853,6 +855,8 @@ class WhatsappChannel(ChannelBase):
         )
 
     def send_files_to_user(self, files: list[File]):
+        if not files:
+            return
         from_number = self.experiment_channel.extra_data["number"]
         to_number = self.participant_identifier
         file_name_link_map = self._get_file_links(files)
@@ -940,7 +944,7 @@ class ApiChannel(ChannelBase):
     def participant_user(self):
         return super().participant_user or self.user
 
-    def send_text_to_user(self, bot_message: str, attachments: list[File]):
+    def send_text_to_user(self, bot_message: str):
         # The bot cannot send messages to this client, since it wouldn't know where to send it to
         pass
 
