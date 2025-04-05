@@ -4,6 +4,7 @@ from django.test import RequestFactory
 from apps.chatbots.forms import ChatbotForm
 from apps.experiments.models import Experiment
 from apps.pipelines.models import Pipeline
+from apps.teams.utils import set_current_team
 
 
 @pytest.mark.django_db()
@@ -13,7 +14,7 @@ def test_chatbot_form_valid_data(team_with_users):
     request = RequestFactory().get("/")
     request.team = team
     request.user = user
-
+    set_current_team(team)
     form_data = {
         "name": "Test Chatbot",
         "description": "A chatbot for testing",
@@ -58,6 +59,7 @@ def test_chatbot_form_pipeline_creation(team_with_users):
         "name": "Chatbot with Pipeline",
         "description": "Testing pipeline creation",
     }
+    set_current_team(team)
     form = ChatbotForm(request, data=form_data)
 
     assert form.is_valid()
