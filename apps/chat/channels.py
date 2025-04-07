@@ -476,19 +476,21 @@ class ChannelBase(ABC):
             unsupported_files = files
 
         if reply_text:
-            self._reply_text_message(bot_message, linkify_files=unsupported_files)
+            bot_message = self.append_attachment_links(bot_message, linkify_files=unsupported_files)
+            self.send_text_to_user(bot_message)
         else:
-            bot_message, urls = strip_urls_and_emojis(bot_message)
-            urls = "\n".join(urls)
+            bot_message, extracted_urls = strip_urls_and_emojis(bot_message)
+            urls_to_append = "\n".join(extracted_urls)
+            urls_to_append = self.append_attachment_links(urls_to_append, linkify_files=unsupported_files)
 
             try:
                 self._reply_voice_message(bot_message)
-                if urls:
-                    self.send_text_to_user(urls)
+
+                if urls_to_append:
+                    self.send_text_to_user(urls_to_append)
             except AudioSynthesizeException as e:
                 logger.exception(e)
-                bot_message = f"{bot_message}\n\n{urls}"
-                self._reply_text_message(bot_message, linkify_files=unsupported_files)
+                bot_message = f"{bot_message}\n\n{urls_to_append}"
 
         # Finally send the attachments that are supported by the channel
         self.send_files_to_user(supported_files)
@@ -507,20 +509,6 @@ class ChannelBase(ABC):
 
     def _handle_unsupported_message(self):
         return self.send_text_to_user(self._unsupported_message_type_response())
-
-    def _reply_text_message(self, text: str, linkify_files: list[File]):
-        """
-        This method processes a text message and appends any file links before sending
-        it to the user through the messaging channel.
-
-        Args:
-            text (str): The text message to be sent to the user.
-            linkify_files (list[File]): A list of File objects whose links will be
-                appended to the text message. Each file in this list will have its
-                corresponding link added to the end of the message.
-        """
-        text = self.append_attachment_links(text, linkify_files)
-        self.send_text_to_user(text)
 
     def _reply_voice_message(self, text: str):
         voice_provider = self.experiment.voice_provider
