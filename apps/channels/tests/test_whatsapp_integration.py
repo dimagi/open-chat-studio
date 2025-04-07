@@ -107,6 +107,7 @@ class TestTwilio:
         file1 = FileFactory(name="f1", content_type="image/jpeg")
         file2 = FileFactory(name="f2", content_type="image/jpeg")
 
+        channel.send_message_to_user("Hi there", [file1, file2])
         message_call = twilio_client_mock.messages.create.mock_calls[0]
         attachment_call_1 = twilio_client_mock.messages.create.mock_calls[1]
         attachment_call_2 = twilio_client_mock.messages.create.mock_calls[2]
