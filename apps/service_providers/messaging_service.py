@@ -155,14 +155,15 @@ class TwilioService(MessagingService):
 
         return number in self._get_account_numbers()
 
-    def send_files_to_user(self, from_: str, to: str, file_name_link_map: dict):
+    def send_files_to_user(self, from_: str, to: str, platform: ChannelPlatform, file_name_link_map: dict):
+        from_, to = self._parse_addressing_params(platform, from_=from_, to=to)
+
         # Sends the files to the user
         for name, download_link in file_name_link_map.items():
             self.client.messages.create(from_=from_, to=to, body=name, media_url=download_link)
 
-    def _can_send_file(self, file: File) -> bool:
-        answer = file.size_mb <= self.max_file_size_mb and file.content_type in supported_mime_types.TWILIO
-        return answer
+    def can_send_file(self, file: File) -> bool:
+        return file.content_type in supported_mime_types.TWILIO and file.size_mb <= self.max_file_size_mb
 
 
 class TurnIOService(MessagingService):
@@ -193,7 +194,7 @@ class TurnIOService(MessagingService):
         ogg_audio = BytesIO(response.content)
         return audio.convert_audio(ogg_audio, target_format="wav", source_format="ogg")
 
-    def _can_send_file(self, file: File) -> bool:
+    def can_send_file(self, file: File) -> bool:
         # When support for Turn.IO is added, this should be updated
         return False
 

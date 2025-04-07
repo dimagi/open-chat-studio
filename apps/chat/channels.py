@@ -860,7 +860,7 @@ class WhatsappChannel(ChannelBase):
         to_number = self.participant_identifier
         file_name_link_map = self._get_file_links(files)
         self.messaging_service.send_files_to_user(
-            from_=from_number, to=to_number, file_name_link_map=file_name_link_map
+            from_=from_number, to=to_number, platform=ChannelPlatform.WHATSAPP, file_name_link_map=file_name_link_map
         )
 
     def _get_file_links(self, files: list[File]) -> dict:
@@ -872,7 +872,7 @@ class WhatsappChannel(ChannelBase):
         return attachments
 
     def _can_send_file(self, file: File) -> bool:
-        return self.messaging_service._can_send_file(file)
+        return self.messaging_service.can_send_file(file)
 
 
 class SureAdhereChannel(ChannelBase):
