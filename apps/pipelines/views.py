@@ -32,6 +32,7 @@ from apps.teams.decorators import login_and_team_required
 from apps.teams.mixins import LoginAndTeamRequiredMixin
 from apps.teams.models import Flag
 
+from ..experiments.helpers import update_experiment_name_by_pipeline_id
 from ..generics.chips import Chip
 from ..generics.help import render_help_with_link
 
@@ -247,6 +248,8 @@ def pipeline_data(request, team_slug: str, pk: int):
         pipeline.save()
         pipeline.update_nodes_from_data()
         pipeline.refresh_from_db(fields=["node_set"])
+        if getattr(data, "experiment_name", None):
+            update_experiment_name_by_pipeline_id(pk, data.experiment_name)
         return JsonResponse({"data": pipeline.flow_data, "errors": pipeline.validate()})
 
     try:

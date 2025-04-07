@@ -1,4 +1,4 @@
-import React, {ChangeEvent, useState} from "react";
+import React, {ChangeEvent, useState, useRef} from "react";
 import Pipeline from "./Pipeline";
 import usePipelineStore from "./stores/pipelineStore";
 
@@ -18,10 +18,18 @@ export default function Page() {
     setName(event.target.value);
     updatePipelineName(event.target.value);
   };
+  const originalName = useRef(currentPipeline?.name);
+  const isNameEdited = name !== originalName.current;
+  const origin = JSON.parse(document.getElementById("pipeline-request-origin")?.textContent || '""');
+
   const onClickSave = () => {
     if (currentPipeline) {
-      const updatedPipeline = {...currentPipeline, data: {nodes, edges}}
-      savePipeline(updatedPipeline).then(() => setEditingName(false));
+    const updatedPipeline = {
+      ...currentPipeline,
+      data: { nodes, edges },
+      ...(isNameEdited && origin === "chatbots" && { experiment_name: name })
+    };
+    savePipeline(updatedPipeline).then(() => setEditingName(false));
     }
   };
   return (

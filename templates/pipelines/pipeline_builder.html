@@ -21,6 +21,14 @@
   </style>
 {% endblock page_head %}
 {% block breadcrumbs %}
+  {% if origin == "chatbots" %}
+    <div class="text-sm breadcrumbs" aria-label="breadcrumbs">
+      <ul>
+        <li><a href="{% url 'chatbots:chatbots_home' request.team.slug %}">Chatbots</a></li>
+        <li class="pg-breadcrumb-active" aria-current="page">{{ experiment.name }}</li>
+      </ul>
+    </div>
+  {% endif %}
 {% endblock %}
 {% block app %}
   <div class="max-w-7xl mx-auto" id="pipelineBuilder">
@@ -31,6 +39,7 @@
   {{ default_values|json_script:"default-values" }}
   {{ node_schemas|json_script:"node-schemas" }}
   {{ flags_enabled|json_script:"flags-enabled" }}
+  {{ origin|json_script:"pipeline-request-origin" }}
   <script src="{% static 'js/pipeline-bundle.js' %}"></script>
   <script type="module">
     window.DOCUMENTATION_BASE_URL = '{{ docs_base_url }}';
