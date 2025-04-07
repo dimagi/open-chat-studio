@@ -687,7 +687,6 @@ class ChannelBase(ABC):
                 "Tell the user that something went wrong while processing their message and that they should "
                 "try again later. Do this in the language they are speaking in."
             )
-            raise Exception("Blah blah")
         except Exception:  # noqa BLE001
             logger.exception("Something went wrong while trying to generate an appropriate error message for the user")
             bot_message = DEFAULT_ERROR_RESPONSE_TEXT
