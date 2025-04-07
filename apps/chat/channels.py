@@ -103,7 +103,7 @@ class ChannelBase(ABC):
         send_voice_to_user: (Optional) An abstract method to send a voice message to the user. This must be implemented
             if voice_replies_supported is True
         send_text_to_user: Implementation of sending text to the user. Typically this is the reply from the bot
-        send_files_to_user: Implementation of sending files to the user. This is a channel specific way of sending files
+        send_file_to_user: Implementation of sending a file to the user. This is a channel specific way of sending files
         _can_send_file: A method to check if a file can be sent through the channel.
         get_message_audio: The method to retrieve the audio content of the message from the external channel
         transcription_started:A callback indicating that the transcription process has started
@@ -217,9 +217,9 @@ class ChannelBase(ABC):
         """Channel specific way of sending text back to the user"""
         raise NotImplementedError()
 
-    def send_files_to_user(self, files: list[File]):
+    def send_file_to_user(self, files: list[File]):
         """
-        Sends the files to the user. This is a channel specific way of sending files.
+        Sends the file to the user. This is a channel specific way of sending files.
         The default implementation does nothing.
         """
         pass
@@ -493,7 +493,21 @@ class ChannelBase(ABC):
                 bot_message = f"{bot_message}\n\n{urls_to_append}"
 
         # Finally send the attachments that are supported by the channel
-        self.send_files_to_user(supported_files)
+        if supported_files:
+            self._send_files_to_user(supported_files)
+
+    def _send_files_to_user(self, files: list[File]):
+        """
+        Try sending each attachment separately. If it fails, send the download link to the user instead.
+        """
+
+        for file in files:
+            try:
+                self.send_file_to_user(file)
+            except Exception as e:
+                logger.exception(e)
+                download_link = file.download_link(self.experiment_session.id)
+                self.send_text_to_user(download_link)
 
     def _handle_supported_message(self):
         self.submit_input_to_llm()
@@ -841,23 +855,16 @@ class WhatsappChannel(ChannelBase):
             synthetic_voice, from_=from_number, to=to_number, platform=ChannelPlatform.WHATSAPP
         )
 
-    def send_files_to_user(self, files: list[File]):
-        if not files:
-            return
+    def send_file_to_user(self, file: File):
         from_number = self.experiment_channel.extra_data["number"]
         to_number = self.participant_identifier
-        file_name_link_map = self._get_file_links(files)
-        self.messaging_service.send_files_to_user(
-            from_=from_number, to=to_number, platform=ChannelPlatform.WHATSAPP, file_name_link_map=file_name_link_map
+        self.messaging_service.send_file_to_user(
+            from_=from_number,
+            to=to_number,
+            platform=ChannelPlatform.WHATSAPP,
+            file_name=file.name,
+            download_link=file.download_link(experiment_session_id=self.experiment_session.id),
         )
-
-    def _get_file_links(self, files: list[File]) -> dict:
-        attachments = {}
-        if files:
-            for file in files:
-                attachments[file.name] = file.download_link(experiment_session_id=self.experiment_session.id)
-
-        return attachments
 
     def _can_send_file(self, file: File) -> bool:
         return self.messaging_service.can_send_file(file)
