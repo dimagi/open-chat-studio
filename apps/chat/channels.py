@@ -246,9 +246,9 @@ class ChannelBase(ABC):
         """Callback indicating that the user input will now be given to the LLM"""
         pass
 
-    def append_attachment_links(self, text: str, attachments: list[File]) -> str:
+    def append_attachment_links(self, text: str, linkify_files: list[File]) -> str:
         """
-        Appends the links of the attachments to the text.
+        Appends the links of the files in `linkify_files` to the text.
 
         Example:
         ```
@@ -263,10 +263,10 @@ class ChannelBase(ABC):
             https://example.com/cat.jpg
         ```
         """
-        if not attachments:
+        if not linkify_files:
             return text
 
-        links = [f"{file.name}\n{file.download_link(self.experiment_session.id)}\n" for file in attachments]
+        links = [f"{file.name}\n{file.download_link(self.experiment_session.id)}\n" for file in linkify_files]
         return "{text}\n\n{links}".format(text=text, links="\n".join(links))
 
     @staticmethod
