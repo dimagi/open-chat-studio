@@ -1,3 +1,4 @@
+import logging
 from collections import defaultdict
 from collections.abc import Iterator
 from dataclasses import dataclass
@@ -27,6 +28,8 @@ from apps.pipelines.nodes.helpers import temporary_session
 from apps.teams.models import BaseTeamModel
 from apps.utils.models import BaseModel
 
+versioning_logger = logging.getLogger("ocs.versioning")
+
 
 @dataclass
 class ModelParamSpec:
@@ -34,6 +37,9 @@ class ModelParamSpec:
 
     param_name: str
     model_cls: VersionsMixin
+
+    def get_object(self, id: int):
+        return self.model_cls.objects.get(id=id)
 
 
 class PipelineManager(VersionsObjectManagerMixin, models.Manager):
@@ -557,9 +563,13 @@ class Node(BaseModel, VersionsMixin, CustomActionOperationMixin):
 
         for spec in model_param_specs.get(self.type, []):
             if instance_id := self.params[spec.param_name]:
-                instance_cls = spec.model_cls
-                obj = instance_cls.objects.get(id=instance_id)
-                obj.archive()
+                try:
+                    obj = spec.get_object(instance_id)
+                    obj.archive()
+                except self.model_cls.DoesNotExist:
+                    versioning_logger.exception(
+                        f"Failed to archive {spec.param_name} with id {instance_id}, since it could not be found"
+                    )
 
 
 class PipelineRunStatus(models.TextChoices):
