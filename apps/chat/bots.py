@@ -347,7 +347,7 @@ class EventBot:
         llm = service.get_chat_model(model.name, 0.7)
 
         config = {}
-        if self.history_manager.trace_service:
+        if self.history_manager and self.history_manager.trace_service:
             config = self.history_manager.trace_service.get_langchain_config(
                 trace_name=self.experiment.name,
                 participant_id=str(self.session.participant.identifier),
