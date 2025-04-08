@@ -328,6 +328,7 @@ multidict==6.0.4
     #   yarl
 mypy-extensions==1.0.0
     # via typing-inspect
+nh3==0.2.21
 numpy==1.26.2
     # via
     #   langchain
