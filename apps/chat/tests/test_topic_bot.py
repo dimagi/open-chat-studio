@@ -115,7 +115,7 @@ def test_tracing_service_reentry():
         bot.trace_service = mock_service
 
         assert bot.process_input("test").content == response
-        mock_service.get_callback.assert_called_once()
+        mock_service.get_langchain_config.assert_called_once()
 
     with mock_llm(responses=["response1", "response2"]):
         _run_bot_with_wrapped_service(session, "response1")
