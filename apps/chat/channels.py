@@ -624,7 +624,7 @@ class ChannelBase(ABC):
     def _unsupported_message_type_response(self):
         """Generates a suitable response to the user when they send unsupported messages"""
         history_manager = ExperimentHistoryManager(
-            session=self, experiment=self.experiment, trace_service=self.experiment.trace_service
+            session=self.experiment_session, experiment=self.experiment, trace_service=self.experiment.trace_service
         )
         return EventBot(self.experiment_session, self.experiment, history_manager).get_user_message(
             UNSUPPORTED_MESSAGE_BOT_PROMPT.format(supported_types=self.supported_message_types)
