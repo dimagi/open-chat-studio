@@ -161,7 +161,7 @@ def _chat_completions(request, experiment_id: uuid.UUID, version=None):
             {
                 "finish_reason": "stop",
                 "index": 0,
-                "message": {"role": "assistant", "content": response_message},
+                "message": {"role": "assistant", "content": response_message.content},
             }
         ],
         "created": int(time.time()),

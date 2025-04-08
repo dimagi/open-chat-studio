@@ -75,8 +75,9 @@ def get_response_for_webchat_task(
         )
         update_taskbadger_data(self, web_channel, message)
         with current_team(experiment_session.team):
-            response["response"] = web_channel.new_user_message(message)
-            response["message_id"] = web_channel.bot.get_ai_message_id()
+            chat_message = web_channel.new_user_message(message)
+            response["response"] = chat_message.content
+            response["message_id"] = chat_message.id
     except Exception as e:
         logger.exception(e)
         response["error"] = str(e)
