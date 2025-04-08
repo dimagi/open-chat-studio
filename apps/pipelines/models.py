@@ -29,7 +29,7 @@ from apps.utils.models import BaseModel
 
 
 class ModelParamSpec(TypedDict):
-    """A helper class to hold the parameter name and model of those that are data base records"""
+    """A helper class to hold the parameter name and model of those that are database records"""
 
     param_name: str
     model_cls: VersionsMixin
