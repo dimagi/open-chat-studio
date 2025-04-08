@@ -455,12 +455,25 @@ def main(input, **kwargs):
 
 
 @django_db_with_data(available_apps=("apps.service_providers",))
+@pytest.mark.parametrize(
+    "data_source", [StaticRouterNode.DataSource.participant_data, StaticRouterNode.DataSource.session_state]
+)
 @mock.patch("apps.pipelines.nodes.base.PipelineNode.logger", mock.Mock())
-def test_static_router_participant_data(pipeline, experiment_session):
+def test_static_router_participant_data(data_source, pipeline, experiment_session):
+    def _update_participant_data(session, data):
+        ParticipantDataProxy(session).set(data)
+
+    def _update_session_state(session, data):
+        session.state = data
+        session.save(update_fields=["state"])
+
+    DATA_SOURCE_UPDATERS = {
+        StaticRouterNode.DataSource.participant_data: _update_participant_data,
+        StaticRouterNode.DataSource.session_state: _update_session_state,
+    }
+
     start = start_node()
-    router = state_key_router_node(
-        "route_to", ["first", "second"], data_source=StaticRouterNode.DataSource.participant_data
-    )
+    router = state_key_router_node("route_to", ["first", "second"], data_source=data_source)
     template_a = render_template_node("A {{ input }}")
     template_b = render_template_node("B {{ input }}")
     end = end_node()
@@ -484,16 +497,16 @@ def test_static_router_participant_data(pipeline, experiment_session):
     ]
     runnable = create_runnable(pipeline, nodes, edges)
 
-    ParticipantDataProxy(experiment_session).set({"route_to": "first"})
+    DATA_SOURCE_UPDATERS[data_source](experiment_session, {"route_to": "first"})
     output = runnable.invoke(PipelineState(messages=["Hi"], experiment_session=experiment_session))
     assert output["messages"][-1] == "A Hi"
 
-    ParticipantDataProxy(experiment_session).set({"route_to": "second"})
+    DATA_SOURCE_UPDATERS[data_source](experiment_session, {"route_to": "second"})
     output = runnable.invoke(PipelineState(messages=["Hi"], experiment_session=experiment_session))
     assert output["messages"][-1] == "B Hi"
 
     # default route
-    ParticipantDataProxy(experiment_session).set({})
+    DATA_SOURCE_UPDATERS[data_source](experiment_session, {})
     output = runnable.invoke(PipelineState(messages=["Hi"], experiment_session=experiment_session))
     assert output["messages"][-1] == "A Hi"
 
@@ -1074,6 +1087,7 @@ def test_pipeline_history_manager_metadata_storage(get_llm_service, pipeline):
         ({"key": [1]}, {"key": [2]}, {"key": [1, 2]}),
         ({"key": [1]}, {"key": [1]}, {"key": [1]}),
         ({"keyA": [1]}, {"keyB": [2]}, {"keyA": [1], "keyB": [2]}),
+        ({"keyA": True}, {"keyA": False}, {"keyA": False}),
     ],
 )
 def test_merge_dicts(left, right, expected):

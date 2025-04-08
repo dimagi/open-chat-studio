@@ -3,7 +3,7 @@ import CodeMirror from '@uiw/react-codemirror';
 import {python} from "@codemirror/lang-python";
 import {githubDark, githubLight} from "@uiw/codemirror-theme-github";
 import {CompletionContext, snippetCompletion as snip} from '@codemirror/autocomplete'
-import {TypedOption} from "../types/nodeParameterValues";
+import {TypedOption, LlmProviderModel} from "../types/nodeParameterValues";
 import usePipelineStore from "../stores/pipelineStore";
 import {classNames, concatenate, getCachedData, getDocumentationLink, getSelectOptions} from "../utils";
 import {JsonSchema, NodeParams, PropertySchema} from "../types/nodeParams";
@@ -870,7 +870,11 @@ export function HistoryModeWidget(props: WidgetParams) {
   const maxHistoryLength = concatenate(props.nodeParams["max_history_length"]);
   const initialHistoryMode = concatenate(props.nodeParams["history_mode"]);
   const [historyMode, setHistoryMode] = useState(initialHistoryMode || "summarize");
-
+  const llmProviderId = concatenate(props.nodeParams["llm_provider_model_id"]);
+  const {parameterValues} = getCachedData();
+  const models = parameterValues.LlmProviderModelId as LlmProviderModel[];
+  const model = models.filter(m => String(m.value) === String(llmProviderId));
+  const defaultMaxTokens = model.length > 0 && model[0].max_token_limit !== undefined ? model[0].max_token_limit : 0;
   const historyModeHelpTexts: Record<string, string> = {
     summarize:"If the token count exceeds the limit, older messages will be summarized while keeping the last few messages intact.",
     truncate_tokens:"If the token count exceeds the limit, older messages will be removed until the token count is below the limit.",
@@ -908,7 +912,7 @@ export function HistoryModeWidget(props: WidgetParams) {
               name="user_max_token_limit"
               type="number"
               onChange={props.updateParamValue}
-              value={userMaxTokenLimit || ""}
+              value={userMaxTokenLimit || defaultMaxTokens || ""}
             />
             <small className ="text-muted mt-2">Maximum number of tokens before messages are summarized or truncated.</small>
           </InputField>

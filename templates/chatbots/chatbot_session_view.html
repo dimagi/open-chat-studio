@@ -7,8 +7,8 @@
   {% if request.user.is_authenticated %}
     <div class="text-sm breadcrumbs" aria-label="breadcrumbs">
       <ul>
-        <li><a href="{% url 'experiments:experiments_home' request.team.slug %}">Experiments</a></li>
-        <li><a href="{% url 'experiments:single_experiment_home' request.team.slug experiment.id %}">{{ experiment.name }}</a></li>
+        <li><a href="{% url 'chatbots:chatbots_home' request.team.slug %}">Chatbots</a></li>
+        <li><a href="{% url 'chatbots:single_chatbot_home' request.team.slug experiment.id %}">{{ experiment.name }}</a></li>
         <li class="pg-breadcrumb-active" aria-current="page">{{ experiment_session.external_id }}</li>
       </ul>
     </div>
@@ -18,10 +18,10 @@
   <div class="app-card">
     <div class="flex">
       <div class="flex-1">
-        <h1 class="pg-title">Experiment Review</h1>
+        <h1 class="pg-title">Chatbot Review</h1>
       </div>
       {% if request.user.is_authenticated %}
-        {% url 'experiments:experiment_session_pagination_view' team.slug experiment.public_id experiment_session.external_id as paginate_url %}
+        {% url 'chatbots:chatbot_session_pagination_view' team.slug experiment.public_id experiment_session.external_id as paginate_url %}
         <div class="justify-self-end">
           <div class="join">
             <a class="btn join-item"
@@ -36,45 +36,32 @@
         </div>
       {% endif %}
     </div>
-    <h3 class="text-base font-semibold leading-7 mt-8 pl-4">Experiment details</h3>
+    <h3 class="text-base font-semibold leading-7 mt-8 pl-4">Chatbot details</h3>
     <div class="max-w-5xl mt-4 border rounded-2xl">
       {% include "experiments/components/experiment_details.html" %}
     </div>
 
     <div role="tablist" class="mt-4 tabs tabs-bordered max-w-5xl">
-      <input type="radio" name="experiment_tabs-{{ experiment_session.id }}" role="tab" class="tab" aria-label="Messages" checked/>
+      <input type="radio" name="experiment_tabs-{{ session.id }}" role="tab" class="tab" aria-label="Messages" checked/>
       <div role="tabpanel" class="tab-content pt-3">
-        <div id="messages-container" class="min-w-full"
-             hx-get="{% url 'experiments:experiment_session_messages_view' request.team.slug experiment.public_id experiment_session.external_id %}"
-             hx-trigger="revealed once"
-             hx-indicator="#messages-initial-loading">
-          <div id="messages-initial-loading" class="flex items-center justify-center p-10">
-            <span class="loading loading-spinner"></span>
-          </div>
-        </div>
+        {% include "experiments/components/experiment_chat.html" %}
       </div>
       {% if perms.experiments.view_participantdata %}
-        <input type="radio" name="experiment_tabs-{{ experiment_session.id }}" role="tab" class="tab" aria-label="Participant Data" />
+        <input type="radio" name="experiment_tabs-{{ session.id }}" role="tab" class="tab" aria-label="Participant Data" />
         <div role="tabpanel" class="tab-content pt-3">
           <div class="p-3 border rounded-lg">
-          <pre><code class="text-sm">{{ participant_data|escape }}</code></pre>
+            <pre><code class="text-sm">{{ participant_data|escape }}</code></pre>
           </div>
         </div>
-        <input type="radio" name="experiment_tabs-{{ experiment_session.id }}" role="tab" class="tab" aria-label="Participant Schedules" />
+        <input type="radio" name="experiment_tabs-{{ session.id }}" role="tab" class="tab" aria-label="Participant Schedules" />
         <div role="tabpanel" class="tab-content pt-3">
           <div class="border rounded-lg divide-y">
             {% include "participants/partials/participant_schedules.html" %}
           </div>
         </div>
       {% endif %}
-      <input type="radio" name="experiment_tabs-{{ experiment_session.id }}" role="tab" class="tab" aria-label="Session State" />
-      <div role="tabpanel" class="tab-content pt-3">
-        <div class="p-3 border rounded-lg">
-          <pre><code class="text-sm">{{ experiment_session.state|escape }}</code></pre>
-        </div>
-      </div>
       {% if perms.events.view_eventlog %}
-        <input type="radio" name="experiment_tabs-{{ experiment_session.id }}" role="tab" class="tab" aria-label="Experiment Events"/>
+        <input type="radio" name="experiment_tabs-{{ session.id }}" role="tab" class="tab" aria-label="Chatbot Events"/>
         <div role="tabpanel" class="tab-content pt-3">
           {% for event_trigger in event_triggers %}
             <div class="max-w-5xl mt-4 border rounded-2xl">
@@ -84,6 +71,7 @@
         </div>
       {% endif %}
     </div>
+
   </div>
 {% endblock %}
 

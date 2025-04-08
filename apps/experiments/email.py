@@ -1,4 +1,4 @@
-from datetime import timedelta
+from datetime import datetime, timedelta
 
 import jwt
 from django.conf import settings
@@ -34,10 +34,11 @@ def send_experiment_invitation(experiment_session: ExperimentSession):
         experiment_session.save()
 
 
-def send_chat_link_email(experiment_session: ExperimentSession):
+def send_chat_link_email(experiment_session: ExperimentSession) -> datetime:
+    expiry_time = timezone.now() + timedelta(minutes=settings.PUBLIC_CHAT_LINK_MAX_AGE)
     token = jwt.encode(
         {
-            "exp": timezone.now() + timedelta(minutes=settings.PUBLIC_CHAT_LINK_MAX_AGE),
+            "exp": expiry_time,
             "session": str(experiment_session.external_id),
         },
         settings.SECRET_KEY,
@@ -64,3 +65,4 @@ def send_chat_link_email(experiment_session: ExperimentSession):
         fail_silently=False,
         html_message=render_to_string(f"{template}.html", context=email_context),
     )
+    return expiry_time

@@ -153,6 +153,7 @@ def chip_action(
     label_factory: Callable[[Any, Any], str] = None,
     required_permissions: list = None,
     display_condition: callable = None,
+    url_factory: Callable[[Any, Any, Any, Any], str] = None,
 ):
     """Action to display a chip-style link that links to another page.
 
@@ -164,10 +165,12 @@ def chip_action(
         def label_factory(record, value):
             return str(value)
 
-    def url_factory(_, __, record, value):
-        if hasattr(value, "get_absolute_url"):
-            return value.get_absolute_url()
-        return record.get_absolute_url()
+    if url_factory is None:
+
+        def url_factory(_, __, record, value):
+            if hasattr(value, "get_absolute_url"):
+                return value.get_absolute_url()
+            return record.get_absolute_url()
 
     return Action(
         url_name="",

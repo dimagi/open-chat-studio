@@ -159,6 +159,11 @@ urlpatterns = [
         views.experiment_session_pagination_view,
         name="experiment_session_pagination_view",
     ),
+    path(
+        "e/<uuid:experiment_id>/s/<str:session_id>/messages/",
+        views.experiment_session_messages_view,
+        name="experiment_session_messages_view",
+    ),
     # public link
     path("e/<uuid:experiment_id>/start/", views.start_session_public, name="start_session_public"),
     path("e/<uuid:experiment_id>/embed/start/", views.start_session_public_embed, name="start_session_public_embed"),

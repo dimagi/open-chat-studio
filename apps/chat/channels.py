@@ -410,7 +410,7 @@ class ChannelBase(ABC):
 
     def _send_seed_message(self):
         bot_response = self.bot.process_input(user_input=self.experiment.seed_message, save_input_to_history=False)
-        self.send_message_to_user(bot_response)
+        self.send_message_to_user(bot_response.content)
 
     def _chat_initiated(self):
         """The user initiated the chat and we need to get their consent before continuing the conversation"""
@@ -559,11 +559,7 @@ class ChannelBase(ABC):
         return "Unable to transcribe audio"
 
     def _get_bot_response(self, message: str) -> ChatMessage:
-        response = self.bot.process_input(message, attachments=self.message.attachments)
-        if ai_message_id := self.bot.get_ai_message_id():
-            return ChatMessage.objects.get(id=ai_message_id)
-
-        return ChatMessage(content=response, message_type=ChatMessageType.AI)
+        return self.bot.process_input(message, attachments=self.message.attachments)
 
     def _add_message_to_history(self, message: str, message_type: ChatMessageType):
         """Use this to update the chat history when not using the normal bot flow"""

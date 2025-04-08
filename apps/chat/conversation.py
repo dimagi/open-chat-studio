@@ -8,13 +8,14 @@ from langchain_anthropic import ChatAnthropic
 from langchain_community.callbacks import get_openai_callback
 from langchain_core.language_models import BaseChatModel
 from langchain_core.memory import BaseMemory
-from langchain_core.messages import BaseMessage, SystemMessage, get_buffer_string
+from langchain_core.messages import BaseMessage, HumanMessage, SystemMessage, get_buffer_string
 from langchain_core.prompts import (
     HumanMessagePromptTemplate,
     MessagesPlaceholder,
     SystemMessagePromptTemplate,
 )
 
+from apps.chat.exceptions import ChatException
 from apps.chat.models import Chat, ChatMessage, ChatMessageType
 from apps.pipelines.models import PipelineChatHistory, PipelineChatHistoryModes, PipelineChatMessages
 from apps.utils.prompt import OcsPromptTemplate
@@ -115,7 +116,7 @@ def compress_chat_history(
     max_token_limit: int,
     input_messages: list,
     keep_history_len: int = 10,
-    history_mode: str = None,
+    history_mode: str = PipelineChatHistoryModes.SUMMARIZE,
 ) -> list[BaseMessage]:
     history_messages = chat.get_langchain_messages_until_summary()
     try:
@@ -178,7 +179,7 @@ def _compress_chat_history(
     max_token_limit: int,
     input_messages: list,
     keep_history_len: int = 10,
-    history_mode: str = None,
+    history_mode: str = PipelineChatHistoryModes.SUMMARIZE,
 ) -> tuple[list[BaseMessage], BaseMessage | None, str | None]:
     """Compresses the chat history to be less than max_token_limit tokens long. This will summarize the history
     if necessary and save the summary to the DB.
@@ -247,14 +248,20 @@ def summarize_history(llm, history, max_token_limit, input_message_tokens, summa
             pruned_memory.extend(pruned_messages)
             history_tokens = llm.get_num_tokens_from_messages(history)
         # Generate a new summary after pruning messages
-        summary = _get_new_summary(llm, pruned_memory, summary, max_token_limit)
+        max_token_for_summary = max_token_limit - history_tokens - input_message_tokens
+        summary = _get_new_summary(llm, pruned_memory, summary, max_token_for_summary)
         summary_tokens = llm.get_num_tokens_from_messages([SystemMessage(content=summary)])
 
     return history, pruned_memory, summary
 
 
 def compress_chat_history_from_messages(
-    llm, history, keep_history_len: int, max_token_limit: int, input_messages: list, history_mode: str = None
+    llm,
+    history,
+    keep_history_len: int,
+    max_token_limit: int,
+    input_messages: list,
+    history_mode: str = PipelineChatHistoryModes.SUMMARIZE,
 ):
     """
     Handles chat history compression based on selected mode:
@@ -300,9 +307,20 @@ def _messages_exceeds_limit(history, input_messages) -> bool:
     return history and len(history) + len(input_messages) > MAX_UNCOMPRESSED_MESSAGES
 
 
-def _get_new_summary(llm, pruned_memory, summary, max_token_limit):
+def _get_new_summary(llm, pruned_memory, summary, max_token_limit, first_call=True):
     """Get a new summary from the pruned memory. If the pruned memory is still too long, prune it further and
     recursively call this function with the remaining memory."""
+    if not pruned_memory:
+        return summary
+    if first_call:
+        pruned_memory = [
+            HumanMessage(
+                " ".join(msg.content.split()[:1000]) + " ..." if len(msg.content.split()) > 1000 else msg.content
+            )
+            for msg in pruned_memory
+            if msg.content
+        ]
+
     tokens, context = _get_summary_tokens_with_context(llm, summary, pruned_memory)
     next_batch = []
     while pruned_memory and tokens > max_token_limit or len(pruned_memory) > MAX_UNCOMPRESSED_MESSAGES:
@@ -310,15 +328,18 @@ def _get_new_summary(llm, pruned_memory, summary, max_token_limit):
         tokens, context = _get_summary_tokens_with_context(llm, summary, pruned_memory)
 
     if not context["new_lines"]:
-        log.error(SUMMARY_TOO_LARGE_ERROR_MESSAGE)
+        if first_call:
+            log.error(SUMMARY_TOO_LARGE_ERROR_MESSAGE)
+        else:
+            raise ChatException("Unable to compress history")
         # If the summary is too large, discard it and compute a new summary from the pruned memory
-        return _get_new_summary(llm, next_batch, None, max_token_limit)
+        return _get_new_summary(llm, next_batch, None, max_token_limit, False)
 
     chain = LLMChain(llm=llm, prompt=SUMMARY_PROMPT, name="compress_chat_history")
     summary = chain.invoke(context)["text"]
 
     if next_batch:
-        return _get_new_summary(llm, next_batch, summary, max_token_limit)
+        return _get_new_summary(llm, next_batch, summary, max_token_limit, False)
 
     return summary
 

@@ -10,10 +10,15 @@ from apps.utils.time import seconds_to_human
 
 
 class ActionsColumn(tables.Column):
+    def __init__(self, origin=None, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        self.origin = origin
+
     def render(self, value, record):
+        namespace = "chatbots" if self.origin == "chatbots" else "experiments"
         trigger_type = "timeout" if record["type"] == "__timeout__" else "static"
         view_log_url = reverse(
-            f"experiments:events:{trigger_type}_logs_view",
+            f"{namespace}:events:{trigger_type}_logs_view",
             kwargs={
                 "trigger_id": record["id"],
                 "experiment_id": record["experiment_id"],
@@ -21,7 +26,7 @@ class ActionsColumn(tables.Column):
             },
         )
         edit_url = reverse(
-            f"experiments:events:{trigger_type}_event_edit",
+            f"{namespace}:events:{trigger_type}_event_edit",
             kwargs={
                 "trigger_id": record["id"],
                 "experiment_id": record["experiment_id"],
@@ -29,7 +34,7 @@ class ActionsColumn(tables.Column):
             },
         )
         delete_url = reverse(
-            f"experiments:events:{trigger_type}_event_delete",
+            f"{namespace}:events:{trigger_type}_event_delete",
             kwargs={
                 "trigger_id": record["id"],
                 "experiment_id": record["experiment_id"],
@@ -58,7 +63,11 @@ class EventsTable(tables.Table):
     action_params = ParamsColumn(accessor="action__params", verbose_name="With these parameters...")
     total_num_triggers = tables.Column(accessor="total_num_triggers", verbose_name="Repeat")
     error_count = tables.Column(accessor="failure_count", verbose_name="Error Count")
-    actions = ActionsColumn(empty_values=())
+    action = None
+
+    def __init__(self, *args, origin=None, **kwargs):
+        self.base_columns["actions"] = ActionsColumn(origin=origin, empty_values=())
+        super().__init__(*args, **kwargs)
 
     def render_type(self, value, record):
         if value == "__timeout__":

@@ -31,7 +31,7 @@ def test_experiment_routing(with_default, routing_response, expected_tag):
     with patch("apps.experiments.models.Experiment.get_llm_service", new=lambda x: fake_service):
         bot = TopicBot(session)
         response = bot.process_input("Hi")
-    assert response == "How can I help today?"
+    assert response.content == "How can I help today?"
     assert bot.processor_experiment == ExperimentRoute.objects.get(parent=experiment, keyword=expected_tag).child
     assert fake_service.llm.get_call_messages() == [
         [SystemMessage(content="You are a helpful assistant"), HumanMessage(content="Hi")],
@@ -50,7 +50,7 @@ def test_experiment_routing_with_tracing():
     with mock_llm(responses=["anything", "How can I help today?"], token_counts=[0]) as fake_service:
         bot = TopicBot(session)
         response = bot.process_input("Hi")
-    assert response == "How can I help today?"
+    assert response.content == "How can I help today?"
     assert fake_service.llm.get_call_messages() == [
         [SystemMessage(content="You are a helpful assistant"), HumanMessage(content="Hi")],
         [SystemMessage(content="You are a helpful assistant"), HumanMessage(content="Hi")],
@@ -89,7 +89,7 @@ def test_experiment_routing_with_assistant(
     with patch("apps.experiments.models.Experiment.get_llm_service", new=lambda x: fake_service):
         bot = TopicBot(session)
         response = bot.process_input("Hi")
-    assert response == "How can I help today?"
+    assert response.content == "How can I help today?"
 
     assert bot.processor_experiment == ExperimentRoute.objects.get(parent=experiment, keyword=expected_tag).child
 

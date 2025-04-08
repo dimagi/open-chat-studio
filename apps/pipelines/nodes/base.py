@@ -55,6 +55,8 @@ def merge_dicts(left: dict, right: dict):
         if key in output:
             if isinstance(output[key], list):
                 output[key] = list(set(output[key]) | set(value))
+            elif isinstance(output[key], bool):
+                output[key] = value
             else:
                 output[key] = [output[key], value]
         else:
@@ -76,7 +78,6 @@ class PipelineState(dict):
     temp_state: Annotated[TempState, add_temp_state_messages]
     input_message_metadata: Annotated[dict, merge_dicts]
     output_message_metadata: Annotated[dict, merge_dicts]
-    ai_message_id: int | None = None
     attachments: list = Field(default=[])
 
     def json_safe(self):

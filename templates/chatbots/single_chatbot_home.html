@@ -8,7 +8,7 @@
 
   <div class="text-sm breadcrumbs" aria-label="breadcrumbs">
     <ul>
-      <li><a href="{% url 'experiments:experiments_home' request.team.slug %}">Experiments</a></li>
+      <li><a href="{% url 'chatbots:chatbots_home' request.team.slug %}">Chatbots</a></li>
       <li class="pg-breadcrumb-active" aria-current="page">{{ experiment.name }}</li>
     </ul>
   </div>
@@ -51,7 +51,7 @@
                 <ul tabindex="0" class="dropdown-content menu bg-base-100 rounded-box z-[1] w-52 p-2 shadow">
                   <li>
                     <form method="post"
-                          action="{% url 'experiments:start_authed_web_session' team.slug experiment.id experiment.version_number %}"
+                          action="{% url 'chatbots:start_authed_web_session' team.slug experiment.id experiment.version_number %}"
                           class="inline">
                       {% csrf_token %}
                       <button type="submit">Unreleased version</button>
@@ -59,7 +59,7 @@
                   </li>
                   <li>
                     <form method="post"
-                          action="{% url 'experiments:start_authed_web_session' team.slug experiment.id 0 %}"
+                          action="{% url 'chatbots:start_authed_web_session' team.slug experiment.id 0 %}"
                           class="inline">
                       {% csrf_token %}
                       <button type="submit">Published version</button>
@@ -70,14 +70,14 @@
             </div>
             <div class="tooltip" data-tip="Edit">
               <a class="btn btn-primary join-item btn-sm rounded-r-full"
-                 href="{% url 'experiments:edit' team.slug experiment.id %}">
+                 href="{% url 'chatbots:edit' team.slug experiment.pipeline.id %}">
                 <i class="fa-solid fa-pencil"></i>
               </a>
             </div>
           {% else %}
             <div class="tooltip" data-tip="View">
               <a class="btn btn-primary join-item btn-sm rounded-l-full rounded-r-full"
-                 href="{% url 'experiments:edit' team.slug experiment.id %}">
+                 href="{% url 'chatbots:edit' team.slug experiment.id %}">
                 <i class="fa-solid fa-eye"></i>
               </a>
             </div>
@@ -105,7 +105,7 @@
             {% endif %}
             {% if perms.experiments.invite_participants %}
               <li>
-                <a href="{% url 'experiments:experiment_invitations' team.slug experiment.id %}">
+                <a href="{% url 'chatbots:chatbots_invitations' team.slug experiment.id %}">
                   <i class="fa-regular fa-envelope"></i> Invitations
                 </a>
               </li>
@@ -195,20 +195,6 @@
         {% endif %}
       </div>
     {% endif %}
-    {% if bot_type_chip %}
-      {% include 'generic/chip.html' with chip=bot_type_chip %}
-    {% endif %}
-
-    {% if not can_make_child_routes %}
-      <div class="my-4">
-        <h3 class="font-bold text-lg">Parent Experiments:
-          <span class="ml-2 tooltip" data-tip="This experiment is configured as a child of the following experiments.">
-            <i class="text-sm fa-regular fa-circle-question" ></i>
-          </span>
-        </h3>
-      </div>
-      <div class="p-3 lg:w-3/4">{% render_table parent_routes_table %}</div>
-    {% endif %}
   </div>
 
 
@@ -221,10 +207,7 @@
       {% flag "events" %}
         <input type="radio" name="tab_group" role="tab" class="tab" aria-label="Events" id="tab-events" />
       {% endflag %}
-      <input type="radio" name="tab_group" role="tab" class="tab" aria-label="Routes" id="tab-routes"/>
-      <input type="radio" name="tab_group" role="tab" class="tab" aria-label="Terminal Bot" id="tab-terminal_bots"/>
     </div>
-
 
     {% if perms.chat.view_chat %}
       <div role="tabpanel" class="tab-content" id="content-allsessions">
@@ -245,7 +228,7 @@
           </div>
         </div>
         <div id="sessions-table"
-             hx-get="{% url 'experiments:sessions-list' request.team.slug experiment.id %}"
+             hx-get="{% url 'chatbots:sessions-list' request.team.slug experiment.id %}"
              hx-trigger="none"
              hx-target="this"
              hx-swap="innerHTML"
@@ -260,7 +243,7 @@
              class="watchVersionChange"
              hx-trigger="load, version-changed"
              hx-target="this"
-             hx-get="{% url 'experiments:versions-list' request.team.slug experiment.id %}"
+             hx-get="{% url 'chatbots:versions-list' request.team.slug experiment.id  %}"
              hx-swap="innerHTML">
         </div>
       </div>
@@ -268,71 +251,47 @@
     {% flag "events" %}
       <div role="tabpanel" class="tab-content" id="content-events">
         <div class="app-card">
-          <a class="btn btn-sm btn-outline btn-primary" href="{% url 'experiments:events:static_event_new' team.slug experiment.id %}"><i class="fa-regular fa-plus"></i> Create Static Event</a>
-          <a class="btn btn-sm btn-outline btn-primary" href="{% url 'experiments:events:timeout_event_new' team.slug experiment.id %}"><i class="fa-regular fa-plus"></i> Create Timeout Event</a>
+          <a class="btn btn-sm btn-outline btn-primary" href="{% url 'chatbots:events:static_event_new' team.slug experiment.id %}"><i class="fa-regular fa-plus"></i> Create Static Event</a>
+          <a class="btn btn-sm btn-outline btn-primary" href="{% url 'chatbots:events:timeout_event_new' team.slug experiment.id %}"><i class="fa-regular fa-plus"></i> Create Timeout Event</a>
           {% if show_events %}
             {% render_table events_table %}
           {% endif %}
         </div>
       </div>
     {% endflag %}
-    {% if not experiment.pipeline %}
-      <div role="tabpanel" class="tab-content" id="content-routes">
-        <div class="app-card">
-          {% if experiment.assistant %}
-            Assistants cannot be router bots. Please use a normal bot
-          {% elif can_make_child_routes %}
-            {% if experiment.is_editable %}
-              <a class="btn btn-sm btn-outline btn-primary mb-2" href="{% url 'experiments:experiment_route_new' team.slug experiment.id 'processor' %}"><i class="fa-regular fa-plus"></i> Create child route</a>
-            {% endif %}
-            {% render_table child_routes_table %}
-          {% else %}
-            Child experiments cannot have their own routes.
-          {% endif %}
-        </div>
-      </div>
-      <div role="tabpanel" class="tab-content" id="content-terminal_bots">
-        <div class="app-card">
-          {% if terminal_bots_table.data|length == 0 and experiment.is_editable%}
-            <a class="btn btn-sm btn-outline btn-primary mb-2" href="{% url 'experiments:experiment_route_new' team.slug experiment.id 'terminal' %}"><i class="fa-regular fa-plus"></i> Add terminal bot</a>
-          {% endif %}
-          {% render_table terminal_bots_table %}
-        </div>
-    {% endif %}
-  </div>
-  <script>
-    function showTabContent(tabId) {
-      const tabContents = document.querySelectorAll('.tab-content');
-      tabContents.forEach(content => content.style.display = 'none');
-      const contentElement = document.getElementById(`content-${tabId}`);
-      if (contentElement) {
-        contentElement.style.display = 'block';
-        history.replaceState(null, '', `#${tabId}`);
+    <script>
+      function showTabContent(tabId) {
+        const tabContents = document.querySelectorAll('.tab-content');
+        tabContents.forEach(content => content.style.display = 'none');
+        const contentElement = document.getElementById(`content-${tabId}`);
+        if (contentElement) {
+          contentElement.style.display = 'block';
+          history.replaceState(null, '', `#${tabId}`);
+        }
       }
-    }
 
-    function selectTabFromHash() {
-      const tabId = window.location.hash.replace('#', '');
-      const tab = document.getElementById(`tab-${tabId}`);
-      if (tab) {
-        tab.checked = true;
-        showTabContent(tabId);
-      }
-    }
-
-    document.addEventListener('DOMContentLoaded', () => {
-      showTabContent('allsessions');
-      const tabs = document.querySelectorAll('.tab');
-      tabs.forEach(tab => {
-        tab.addEventListener('change', (event) => {
-          const tabId = event.target.id.replace('tab-', '');
+      function selectTabFromHash() {
+        const tabId = window.location.hash.replace('#', '');
+        const tab = document.getElementById(`tab-${tabId}`);
+        if (tab) {
+          tab.checked = true;
           showTabContent(tabId);
+        }
+      }
+
+      document.addEventListener('DOMContentLoaded', () => {
+        showTabContent('allsessions');
+        const tabs = document.querySelectorAll('.tab');
+        tabs.forEach(tab => {
+          tab.addEventListener('change', (event) => {
+            const tabId = event.target.id.replace('tab-', '');
+            showTabContent(tabId);
+          });
         });
+
+        selectTabFromHash();
       });
 
-      selectTabFromHash();
-    });
-
-    window.addEventListener('hashchange', selectTabFromHash);
-  </script>
+      window.addEventListener('hashchange', selectTabFromHash);
+    </script>
 {% endblock %}
