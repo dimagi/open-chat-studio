@@ -4,7 +4,7 @@ import json
 import logging
 import random
 import time
-from typing import Literal
+from typing import Annotated, Literal, Self
 
 import tiktoken
 from django.conf import settings
@@ -16,7 +16,7 @@ from langchain_core.messages import BaseMessage
 from langchain_core.prompts import MessagesPlaceholder, PromptTemplate
 from langchain_core.runnables import RunnableLambda, RunnablePassthrough
 from langchain_text_splitters import RecursiveCharacterTextSplitter
-from pydantic import BaseModel, Field, create_model, field_validator, model_validator
+from pydantic import BaseModel, BeforeValidator, Field, create_model, field_validator, model_validator
 from pydantic.config import ConfigDict
 from pydantic_core import PydanticCustomError
 from pydantic_core.core_schema import FieldValidationInfo
@@ -50,6 +50,8 @@ from apps.service_providers.llm_service.runnables import (
 )
 from apps.service_providers.models import LlmProviderModel
 from apps.utils.prompt import OcsPromptTemplate, PromptVars, validate_prompt_variables
+
+OptionalInt = Annotated[int | None, BeforeValidator(lambda x: None if x == "" else x)]
 
 
 class RenderTemplate(PipelineNode):
@@ -240,14 +242,14 @@ class LLMResponseWithPrompt(LLMResponse, HistoryMixin):
         json_schema_extra=NodeSchema(label="LLM", documentation_link=settings.DOCUMENTATION_LINKS["node_llm"])
     )
 
-    source_material_id: int | None = Field(
+    source_material_id: OptionalInt = Field(
         None, json_schema_extra=UiSchema(widget=Widgets.select, options_source=OptionsSource.source_material)
     )
     prompt: str = Field(
         default="You are a helpful assistant. Answer the user's query as best you can",
         json_schema_extra=UiSchema(widget=Widgets.expandable_text),
     )
-    collection_id: int | None = Field(
+    collection_id: OptionalInt = Field(
         None,
         title="Media",
         json_schema_extra=UiSchema(
@@ -266,7 +268,7 @@ class LLMResponseWithPrompt(LLMResponse, HistoryMixin):
     )
 
     @model_validator(mode="after")
-    def check_prompt_variables(self):
+    def check_prompt_variables(self) -> Self:
         context = {
             "prompt": self.prompt,
             "source_material": self.source_material_id,
@@ -275,6 +277,7 @@ class LLMResponseWithPrompt(LLMResponse, HistoryMixin):
         }
         try:
             validate_prompt_variables(context=context, prompt_key="prompt", known_vars=set(PromptVars.values))
+            return self
         except ValidationError as e:
             raise PydanticCustomError("invalid_prompt", e.error_dict["prompt"][0].message, {"field": "prompt"})
 
@@ -482,6 +485,7 @@ class StaticRouterNode(RouterMixin, Passthrough):
     class DataSource(TextChoices):
         participant_data = "participant_data", "Participant Data"
         temp_state = "temp_state", "Temporary State"
+        session_state = "session_state", "Session State"
 
     model_config = ConfigDict(
         json_schema_extra=NodeSchema(
@@ -501,10 +505,13 @@ class StaticRouterNode(RouterMixin, Passthrough):
     def _process_conditional(self, state: PipelineState, node_id=None):
         from apps.service_providers.llm_service.prompt_context import SafeAccessWrapper
 
-        if self.data_source == self.DataSource.participant_data:
-            data = self.get_participant_data_proxy(state).get()
-        else:
-            data = state["temp_state"]
+        match self.data_source:
+            case self.DataSource.participant_data:
+                data = self.get_participant_data_proxy(state).get()
+            case self.DataSource.temp_state:
+                data = state["temp_state"]
+            case self.DataSource.session_state:
+                data = state["experiment_session"].state
 
         formatted_key = f"{{data.{self.route_key}}}"
         try:

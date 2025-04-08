@@ -58,7 +58,7 @@ def set_session_access_cookie(response, experiment, experiment_session):
         max_age=MAX_AGE,
         secure=True,
         httponly=True,
-        samesite="Strict",
+        samesite="Lax",
     )
     return response
 

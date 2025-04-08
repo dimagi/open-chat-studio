@@ -1,3 +1,18 @@
+[project]
+name = "open-chat-studio"
+version = "0.1.0"
+requires-python = ">=3.11"
+description = "A web application for building and deploying chatbots."
+readme = "README.md"
+license = "BSD-3-Clause"
+
+[project.urls]
+Homepage = "https://sites.dimagi.com/open-chat-studio"
+Documentation = "https://docs.openchatstudio.com"
+Repository = "https://github.com/dimagi/open-chat-studio"
+Issues = "https://github.com/dimagi/open-chat-studio/issues"
+Changelog = "https://docs.openchatstudio.com/changelog/"
+
 [tool.pytest.ini_options]
 addopts = "--ds=gpt_playground.settings --reuse-db --strict-markers --tb=short"
 python_files = "tests.py test_*.py *_tests.py"

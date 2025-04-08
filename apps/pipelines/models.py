@@ -93,10 +93,14 @@ class Pipeline(BaseTeamModel, VersionsMixin):
         return f"v{self.version_number}"
 
     @classmethod
-    def create_default(cls, team):
+    def create_pipeline_with_name(cls, team, name):
+        return cls.create_default(team, name)
+
+    @classmethod
+    def create_default(cls, team, name=None):
         from apps.pipelines.nodes.nodes import EndNode, StartNode
 
-        default_name = "New Pipeline"
+        default_name = "New Pipeline" if name is None else name
         existing_pipeline_count = cls.objects.filter(team=team, name__startswith=default_name).count()
 
         start_id = str(uuid4())
@@ -120,7 +124,7 @@ class Pipeline(BaseTeamModel, VersionsMixin):
         new_pipeline = cls.objects.create(
             team=team,
             data={"nodes": default_nodes, "edges": []},
-            name=f"New Pipeline {existing_pipeline_count + 1}",
+            name=default_name if name else f"New Pipeline {existing_pipeline_count + 1}",
         )
         new_pipeline.update_nodes_from_data()
         return new_pipeline
@@ -250,6 +254,7 @@ class Pipeline(BaseTeamModel, VersionsMixin):
         logging_callback = PipelineLoggingCallbackHandler(pipeline_run)
 
         logging_callback.logger.debug("Starting pipeline run", input=input["messages"][-1])
+        pipeline_output = None
         try:
             callbacks = [logging_callback]
             trace_service = session.experiment.trace_service
@@ -286,7 +291,9 @@ class Pipeline(BaseTeamModel, VersionsMixin):
                 ai_message = self._save_message_to_history(
                     session, output["messages"][-1], ChatMessageType.AI, metadata=output_metadata
                 )
-                output["ai_message_id"] = ai_message.id
+                pipeline_output = ai_message
+            else:
+                pipeline_output = ChatMessage(content=output)
         finally:
             if trace_service:
                 trace_service.end()
@@ -296,7 +303,7 @@ class Pipeline(BaseTeamModel, VersionsMixin):
                 pipeline_run.status = PipelineRunStatus.SUCCESS
                 logging_callback.logger.debug("Pipeline run finished", output=output["messages"][-1])
             pipeline_run.save()
-        return output
+        return pipeline_output
 
     def _create_pipeline_run(self, input: PipelineState, session: ExperimentSession) -> "PipelineRun":
         # Django doesn't auto-serialize objects for JSON fields, so we need to copy the input and save the ID of
@@ -482,6 +489,7 @@ class Node(BaseModel, VersionsMixin, CustomActionOperationMixin):
         from apps.assistants.models import OpenAiAssistant
         from apps.documents.models import Collection
         from apps.experiments.models import VersionFieldDisplayFormatters
+        from apps.pipelines.nodes.nodes import LLMResponseWithPrompt
 
         node_name = self.params.get("name", self.type)
         if node_name == self.flow_id:
@@ -494,7 +502,8 @@ class Node(BaseModel, VersionsMixin, CustomActionOperationMixin):
                 case "tools":
                     display_formatter = VersionFieldDisplayFormatters.format_tools
                 case "custom_actions":
-                    display_formatter = VersionFieldDisplayFormatters.format_custom_action_operation
+                    # This is appended to the param_versions list separately
+                    continue
                 case "name":
                     value = node_name
                 case "assistant_id":
@@ -508,7 +517,17 @@ class Node(BaseModel, VersionsMixin, CustomActionOperationMixin):
                         value = Collection.objects.filter(id=value).first()
 
             param_versions.append(
-                VersionField(group_name=node_name, name=name, raw_value=value, to_display=display_formatter)
+                VersionField(group_name=node_name, name=name, raw_value=value, to_display=display_formatter),
+            )
+
+        if self.type == LLMResponseWithPrompt.__name__:
+            param_versions.append(
+                VersionField(
+                    group_name=node_name,
+                    name="custom_actions",
+                    queryset=self.get_custom_action_operations(),
+                    to_display=VersionFieldDisplayFormatters.format_custom_action_operation,
+                )
             )
 
         return VersionDetails(

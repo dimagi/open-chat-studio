@@ -37,6 +37,7 @@ from apps.experiments.models import (
     SessionStatus,
     VoiceResponseBehaviours,
 )
+from apps.files.models import File
 from apps.service_providers.llm_service.runnables import GenerationCancelled
 from apps.service_providers.speech_service import SynthesizedAudio
 from apps.slack.utils import parse_session_external_id
@@ -200,13 +201,13 @@ class ChannelBase(ABC):
         if self.experiment_session:
             return self.experiment_session.participant.user
 
-    def send_voice_to_user(self, synthetic_voice: SynthesizedAudio):
+    def send_voice_to_user(self, synthetic_voice: SynthesizedAudio, attached_files: list[File] = None):
         raise NotImplementedError(
             "Voice replies are supported but the method reply (`send_voice_to_user`) is not implemented"
         )
 
     @abstractmethod
-    def send_text_to_user(self, text: str):
+    def send_text_to_user(self, text: str, attached_files: list[File] = None):
         """Channel specific way of sending text back to the user"""
         raise NotImplementedError()
 
@@ -228,6 +229,29 @@ class ChannelBase(ABC):
     def submit_input_to_llm(self):
         """Callback indicating that the user input will now be given to the LLM"""
         pass
+
+    def append_attachment_links(self, text: str, attachments: list[File]) -> str:
+        """
+        Appends the links of the attachments to the text.
+
+        Example:
+        ```
+            This is a cat
+        ```
+        becomes
+
+        ```
+            This is a cat
+
+            cat.jpg
+            https://example.com/cat.jpg
+        ```
+        """
+        if not attachments:
+            return text
+
+        links = [f"{file.name}\n{file.download_link(self.experiment_session.id)}\n" for file in attachments]
+        return "{text}\n\n{links}".format(text=text, links="\n".join(links))
 
     @staticmethod
     def get_channel_class_for_platform(platform: ChannelPlatform | str) -> type[ChannelBase]:
@@ -283,7 +307,7 @@ class ChannelBase(ABC):
 
         self._ensure_sessions_exists()
 
-    def new_user_message(self, message: BaseMessage) -> str:
+    def new_user_message(self, message: BaseMessage) -> ChatMessage:
         """Handles the message coming from the user. Call this to send bot messages to the user.
         The `message` here will probably be some object, depending on the channel being used.
         """
@@ -298,7 +322,7 @@ class ChannelBase(ABC):
             return True
         return self.experiment.is_participant_allowed(self.participant_identifier)
 
-    def _new_user_message(self, message: BaseMessage) -> str:
+    def _new_user_message(self, message: BaseMessage) -> ChatMessage:
         try:
             self._add_message(message)
         except ParticipantNotAllowedException:
@@ -324,8 +348,7 @@ class ChannelBase(ABC):
                     self.experiment_session.update_status(SessionStatus.ACTIVE)
 
             enqueue_static_triggers.delay(self.experiment_session.id, StaticTriggerType.NEW_HUMAN_MESSAGE)
-            response = self._handle_supported_message()
-            return response
+            return self._handle_supported_message()
         except Exception as e:
             self._inform_user_of_error()
             raise e
@@ -371,7 +394,7 @@ class ChannelBase(ABC):
 
     def _send_seed_message(self):
         bot_response = self.bot.process_input(user_input=self.experiment.seed_message, save_input_to_history=False)
-        self.send_message_to_user(bot_response)
+        self.send_message_to_user(bot_response.content)
 
     def _chat_initiated(self):
         """The user initiated the chat and we need to get their consent before continuing the conversation"""
@@ -415,7 +438,7 @@ class ChannelBase(ABC):
             return self._get_voice_transcript()
         return self.message.message_text
 
-    def send_message_to_user(self, bot_message: str):
+    def send_message_to_user(self, bot_message: str, attached_files: list[File] = None):
         """Sends the `bot_message` to the user. The experiment's config will determine which message type to use"""
         send_message_func = self.send_text_to_user
         user_sent_voice = self.message and self.message.content_type == MESSAGE_TYPES.VOICE
@@ -427,21 +450,25 @@ class ChannelBase(ABC):
             elif voice_config == VoiceResponseBehaviours.RECIPROCAL and user_sent_voice:
                 send_message_func = self._reply_voice_message
 
-        send_message_func(bot_message)
+        send_message_func(bot_message, attached_files)
 
     def _handle_supported_message(self):
         self.submit_input_to_llm()
-        response = self._get_bot_response(message=self.user_query)
-        self.send_message_to_user(response)
+        ai_message = self._get_bot_response(message=self.user_query)
+
+        attached_files = ai_message.get_attached_files() or []
+
+        self.send_message_to_user(bot_message=ai_message.content, attached_files=attached_files)
+
         # Returning the response here is a bit of a hack to support chats through the web UI while trying to
         # use a coherent interface to manage / handle user messages
-        return response
+        return ai_message
 
     def _handle_unsupported_message(self):
         return self.send_text_to_user(self._unsupported_message_type_response())
 
-    def _reply_voice_message(self, text: str):
-        text, extracted_urls = strip_urls_and_emojis(text)
+    def _reply_voice_message(self, text: str, attached_files: list[File] = None):
+        text, link_attachments = strip_urls_and_emojis(text)
 
         voice_provider = self.experiment.voice_provider
         synthetic_voice = self.experiment.synthetic_voice
@@ -459,9 +486,12 @@ class ChannelBase(ABC):
             logger.exception(e)
             self.send_text_to_user(text)
 
-        if extracted_urls:
-            urls_text = "\n".join(extracted_urls)
-            self.send_text_to_user(urls_text)
+        if attached_files:
+            link_attachments.extend([file.download_link(self.experiment_session.id) for file in attached_files])
+
+        if link_attachments:
+            link_attachments_text = "\n".join(link_attachments)
+            self.send_text_to_user(link_attachments_text)
 
     def _get_voice_transcript(self) -> str:
         # Indicate to the user that the bot is busy processing the message
@@ -484,7 +514,7 @@ class ChannelBase(ABC):
                 return speech_service.transcribe_audio(audio)
         return "Unable to transcribe audio"
 
-    def _get_bot_response(self, message: str) -> str:
+    def _get_bot_response(self, message: str) -> ChatMessage:
         return self.bot.process_input(message, attachments=self.message.attachments)
 
     def _add_message_to_history(self, message: str, message_type: ChatMessageType):
@@ -627,8 +657,9 @@ class WebChannel(ChannelBase):
     voice_replies_supported = False
     supported_message_types = [MESSAGE_TYPES.TEXT]
 
-    def send_text_to_user(self, bot_message: str):
-        # Simply adding a new AI message to the chat history will cause it to be sent to the UI
+    def send_text_to_user(self, bot_message: str, attached_files: list[File] = None):
+        # Bot responses are returned by the task and picked up by a periodic request from the browser.
+        # Ad-hoc bot messages are picked up by a periodic poll from the browser as well
         pass
 
     def _ensure_sessions_exists(self):
@@ -688,7 +719,7 @@ class TelegramChannel(ChannelBase):
         super().__init__(experiment, experiment_channel, experiment_session)
         self.telegram_bot = TeleBot(self.experiment_channel.extra_data["bot_token"], threaded=False)
 
-    def send_voice_to_user(self, synthetic_voice: SynthesizedAudio):
+    def send_voice_to_user(self, synthetic_voice: SynthesizedAudio, attached_files: list[File] = None):
         antiflood(
             self.telegram_bot.send_voice,
             self.participant_identifier,
@@ -696,7 +727,9 @@ class TelegramChannel(ChannelBase):
             duration=synthetic_voice.duration,
         )
 
-    def send_text_to_user(self, text: str):
+    def send_text_to_user(self, text: str, attached_files: list[File] = None):
+        text = self.append_attachment_links(text, attached_files)
+
         for message_text in smart_split(text):
             antiflood(self.telegram_bot.send_message, self.participant_identifier, text=message_text)
 
@@ -721,11 +754,16 @@ class TelegramChannel(ChannelBase):
 
 
 class WhatsappChannel(ChannelBase):
-    def send_text_to_user(self, text: str):
+    def send_text_to_user(self, text: str, attached_files: list[File] = None):
+        text = self.append_attachment_links(text, attached_files)
         from_number = self.experiment_channel.extra_data.get("number")
         to_number = self.participant_identifier
         self.messaging_service.send_text_message(
-            text, from_=from_number, to=to_number, platform=ChannelPlatform.WHATSAPP
+            message=text,
+            from_=from_number,
+            to=to_number,
+            platform=ChannelPlatform.WHATSAPP,
+            attached_files=attached_files,
         )
 
     @property
@@ -740,7 +778,7 @@ class WhatsappChannel(ChannelBase):
     def echo_transcript(self, transcript: str):
         self.send_text_to_user(f'I heard: "{transcript}"')
 
-    def send_voice_to_user(self, synthetic_voice: SynthesizedAudio):
+    def send_voice_to_user(self, synthetic_voice: SynthesizedAudio, attached_files: list[File] = None):
         """
         Uploads the synthesized voice to AWS and send the public link to twilio
         """
@@ -752,9 +790,10 @@ class WhatsappChannel(ChannelBase):
 
 
 class SureAdhereChannel(ChannelBase):
-    def send_text_to_user(self, text: str):
+    def send_text_to_user(self, text: str, attached_files: list[File] = None):
+        text = self.append_attachment_links(text, attached_files)
         to_patient = self.participant_identifier
-        self.messaging_service.send_text_message(text, to=to_patient, platform=ChannelPlatform.SUREADHERE)
+        self.messaging_service.send_text_message(message=text, to=to_patient, platform=ChannelPlatform.SUREADHERE)
 
     @property
     def supported_message_types(self):
@@ -770,10 +809,11 @@ class SureAdhereChannel(ChannelBase):
 
 
 class FacebookMessengerChannel(ChannelBase):
-    def send_text_to_user(self, text: str):
+    def send_text_to_user(self, text: str, attached_files: list[File] = None):
+        text = self.append_attachment_links(text, attached_files)
         from_ = self.experiment_channel.extra_data.get("page_id")
         self.messaging_service.send_text_message(
-            text, from_=from_, to=self.participant_identifier, platform=ChannelPlatform.FACEBOOK
+            message=text, from_=from_, to=self.participant_identifier, platform=ChannelPlatform.FACEBOOK
         )
 
     @property
@@ -787,7 +827,7 @@ class FacebookMessengerChannel(ChannelBase):
     def echo_transcript(self, transcript: str):
         self.send_text_to_user(f'I heard: "{transcript}"')
 
-    def send_voice_to_user(self, synthetic_voice: SynthesizedAudio):
+    def send_voice_to_user(self, synthetic_voice: SynthesizedAudio, attached_files: list[File] = None):
         """
         Uploads the synthesized voice to AWS and send the public link to twilio
         """
@@ -819,7 +859,7 @@ class ApiChannel(ChannelBase):
     def participant_user(self):
         return super().participant_user or self.user
 
-    def send_text_to_user(self, bot_message: str):
+    def send_text_to_user(self, bot_message: str, attached_files: list[File] = None):
         # The bot cannot send messages to this client, since it wouldn't know where to send it to
         pass
 
@@ -844,7 +884,9 @@ class SlackChannel(ChannelBase):
         super().__init__(experiment, experiment_channel, experiment_session)
         self.send_response_to_user = send_response_to_user
 
-    def send_text_to_user(self, text: str):
+    def send_text_to_user(self, text: str, attached_files: list[File] = None):
+        text = self.append_attachment_links(text, attached_files)
+
         if not self.send_response_to_user:
             return
 
@@ -899,8 +941,9 @@ class CommCareConnectChannel(ChannelBase):
         super()._ensure_sessions_exists()
         self._check_consent()
 
-    def send_text_to_user(self, text: str):
+    def send_text_to_user(self, text: str, attached_files: list[File] = None):
         self._check_consent()
+        text = self.append_attachment_links(text, attached_files)
         self.client.send_message_to_user(
             channel_id=self.connect_channel_id, message=text, encryption_key=self.encryption_key
         )

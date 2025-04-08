@@ -133,6 +133,7 @@ MIDDLEWARE = [
     "apps.audit.middleware.AuditTransactionMiddleware",
     "apps.web.htmx_middleware.HtmxMessageMiddleware",
     "tz_detect.middleware.TimezoneMiddleware",
+    "apps.generics.middleware.OriginDetectionMiddleware",
 ]
 
 ROOT_URLCONF = "gpt_playground.urls"
@@ -613,6 +614,10 @@ HEALTH_CHECK = {
         "celery": ["CeleryHealthCheckCelery"],
     },
 }
+
+# increase from default (3)
+HEALTHCHECK_CELERY_QUEUE_TIMEOUT = 10
+HEALTHCHECK_CELERY_RESULT_TIMEOUT = 10
 
 CRYPTOGRAPHY_SALT = env("CRYPTOGRAPHY_SALT", default="")
 

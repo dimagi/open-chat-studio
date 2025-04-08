@@ -8,6 +8,7 @@ from django.db import transaction, utils
 from langchain_community.utilities.openapi import OpenAPISpec
 from langchain_core.tools import BaseTool
 
+from apps.channels.models import ChannelPlatform
 from apps.chat.agent import schemas
 from apps.chat.agent.openapi_tool import openapi_spec_op_to_function_def
 from apps.chat.models import ChatAttachment
@@ -21,8 +22,9 @@ if TYPE_CHECKING:
     from apps.assistants.models import OpenAiAssistant
 
 
-SUCCESSFUL_ATTACHMENT_MESSAGE: str = """"
-    File {file_id} is attached. You can use this markdown link to reference it in your response:
+SUCCESSFUL_ATTACHMENT_MESSAGE: str = "File {file_id} ({name}) is attached to your response"
+
+CREATE_LINK_TEXT = """You can use this markdown link to reference it in your response:
     `[{name}](file:{team_slug}:{session_id}:{file_id})` or `![](file:{team_slug}:{session_id}:{file_id})`
     if it is an image.
 """
@@ -203,9 +205,17 @@ class AttachMediaTool(CustomBaseTool):
             file = File.objects.get(id=file_id)
             self.chat_attachment.files.add(file_id)
             self.callback(file_id)
-            return SUCCESSFUL_ATTACHMENT_MESSAGE.format(
-                name=file.name, file_id=file_id, session_id=self.experiment_session.id, team_slug=file.team.slug
-            )
+            response = SUCCESSFUL_ATTACHMENT_MESSAGE.format(file_id=file_id, name=file.name)
+
+            if self.experiment_session.experiment_channel.platform == ChannelPlatform.WEB:
+                # Only the web platform is able to render these links
+                link_text = CREATE_LINK_TEXT.format(
+                    name=file.name, file_id=file_id, session_id=self.experiment_session.id, team_slug=file.team.slug
+                )
+                response = f"{response}. {link_text}"
+            else:
+                response = f"{response}. Do not use markdown links to reference the file."
+            return response
         except File.DoesNotExist:
             return f"File '{file_id}' does not exist"
         except utils.IntegrityError:
