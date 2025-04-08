@@ -4,7 +4,6 @@ from django.db import transaction
 from apps.experiments.models import Experiment
 from apps.pipelines.models import Pipeline
 from apps.service_providers.utils import get_first_llm_provider_by_team, get_first_llm_provider_model
-from apps.teams.utils import get_current_team
 
 
 class ChatbotForm(forms.ModelForm):
@@ -23,7 +22,7 @@ class ChatbotForm(forms.ModelForm):
 
     @transaction.atomic()
     def save(self, commit=True):
-        team_id = get_current_team().id
+        team_id = self.request.team.id
         llm_provider = get_first_llm_provider_by_team(team_id)
         llm_provider_model = None
         if llm_provider:
