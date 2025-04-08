@@ -41,7 +41,7 @@ class Collection(BaseTeamModel, VersionsMixin):
         ]
 
     def __str__(self) -> str:
-        return f"{self.name}"
+        return self.name
 
     @property
     def size(self) -> float:
