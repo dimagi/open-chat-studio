@@ -21,14 +21,17 @@
   </style>
 {% endblock page_head %}
 {% block breadcrumbs %}
-  {% if origin == "chatbots" %}
-    <div class="text-sm breadcrumbs" aria-label="breadcrumbs">
-      <ul>
+  <div class="text-sm breadcrumbs" aria-label="breadcrumbs">
+    <ul>
+      {% if origin == "chatbots" %}
         <li><a href="{% url 'chatbots:chatbots_home' request.team.slug %}">Chatbots</a></li>
-        <li class="pg-breadcrumb-active" aria-current="page">{{ experiment.name }}</li>
-      </ul>
-    </div>
-  {% endif %}
+        <li><a href="{% url 'chatbots:single_chatbot_home' request.team.slug experiment.id %}">{{ experiment.name }}</a></li>
+      {% else %}
+        <li><a href="{% url 'pipelines:home' request.team.slug %}">Pipelines</a></li>
+        <li><a href="{% url 'pipelines:edit' request.team.slug pipeline_id %}">{{ pipeline_name }} </a></li>
+      {% endif %}
+    </ul>
+  </div>
 {% endblock %}
 {% block app %}
   <div class="max-w-7xl mx-auto" id="pipelineBuilder">
