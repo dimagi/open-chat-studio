@@ -26,12 +26,6 @@ def mock_session():
         yield session
 
 
-@pytest.fixture()
-def mock_authorized_session(mock_session):
-    mock_session.participant.user = Mock()
-    return mock_session
-
-
 @patch("apps.experiments.models.SourceMaterial.objects.get")
 def test_builds_context_with_specified_variables(mock_get, mock_session):
     mock_get.return_value = Mock(material="source material")
@@ -46,9 +40,9 @@ def test_builds_context_with_specified_variables(mock_get, mock_session):
     proxy_mock.get.assert_not_called()
 
 
-def test_repeated_calls_are_cached(mock_authorized_session):
-    proxy_mock = mock_authorized_session._proxy_mock
-    context = PromptTemplateContext(mock_authorized_session, 1)
+def test_repeated_calls_are_cached(mock_session):
+    proxy_mock = mock_session._proxy_mock
+    context = PromptTemplateContext(mock_session, 1)
     result = context.get_context([])
     assert result == {}
 
@@ -112,16 +106,9 @@ def test_returns_blank_when_collection_not_found(collections_mock):
     assert context.get_media_summaries() == ""
 
 
-def test_retrieves_participant_data_when_authorized(mock_authorized_session):
-    context = PromptTemplateContext(mock_authorized_session, 1)
-    assert context.is_unauthorized_participant is False
-    assert context.get_participant_data() == {"name": "Dimagi", "email": "hello@world.com"}
-
-
-def test_returns_empty_string_when_unauthorized_participant(mock_session):
+def test_retrieves_participant_data_when_authorized(mock_session):
     context = PromptTemplateContext(mock_session, 1)
-    assert context.is_unauthorized_participant is True
-    assert context.get_participant_data() == ""
+    assert context.get_participant_data() == {"name": "Dimagi", "email": "hello@world.com"}
 
 
 def test_invalid_format_specifier_not_caught():
