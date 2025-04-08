@@ -1,8 +1,8 @@
 from collections import defaultdict
 from collections.abc import Iterator
+from dataclasses import dataclass
 from datetime import datetime
 from functools import cached_property
-from typing import TypedDict
 from uuid import uuid4
 
 import pydantic
@@ -28,7 +28,8 @@ from apps.teams.models import BaseTeamModel
 from apps.utils.models import BaseModel
 
 
-class ModelParamSpec(TypedDict):
+@dataclass
+class ModelParamSpec:
     """A helper class to hold the parameter name and model of those that are database records"""
 
     param_name: str
@@ -536,8 +537,8 @@ class Node(BaseModel, VersionsMixin, CustomActionOperationMixin):
         }
 
         for spec in model_param_specs.get(self.type, []):
-            if instance_id := self.params[spec["param_name"]]:
-                instance_cls = spec["model_cls"]
+            if instance_id := self.params[spec.param_name]:
+                instance_cls = spec.model_cls
                 obj = instance_cls.objects.get(id=instance_id)
                 obj.archive()
 
