@@ -520,6 +520,7 @@ class Node(BaseModel, VersionsMixin, CustomActionOperationMixin):
     def version_details(self) -> VersionDetails:
         from apps.assistants.models import OpenAiAssistant
         from apps.experiments.models import VersionFieldDisplayFormatters
+        from apps.pipelines.nodes.nodes import LLMResponseWithPrompt
 
         node_name = self.params.get("name", self.type)
         if node_name == self.flow_id:
@@ -532,7 +533,8 @@ class Node(BaseModel, VersionsMixin, CustomActionOperationMixin):
                 case "tools":
                     display_formatter = VersionFieldDisplayFormatters.format_tools
                 case "custom_actions":
-                    display_formatter = VersionFieldDisplayFormatters.format_custom_action_operation
+                    # This is appended to the param_versions list separately
+                    continue
                 case "name":
                     value = node_name
                 case "assistant_id":
@@ -541,7 +543,17 @@ class Node(BaseModel, VersionsMixin, CustomActionOperationMixin):
                     value = OpenAiAssistant.objects.filter(id=value).first()
 
             param_versions.append(
-                VersionField(group_name=node_name, name=name, raw_value=value, to_display=display_formatter)
+                VersionField(group_name=node_name, name=name, raw_value=value, to_display=display_formatter),
+            )
+
+        if self.type == LLMResponseWithPrompt.__name__:
+            param_versions.append(
+                VersionField(
+                    group_name=node_name,
+                    name="custom_actions",
+                    queryset=self.get_custom_action_operations(),
+                    to_display=VersionFieldDisplayFormatters.format_custom_action_operation,
+                )
             )
 
         return VersionDetails(
