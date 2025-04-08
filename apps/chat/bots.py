@@ -331,9 +331,10 @@ class EventBot:
         """
     )
 
-    def __init__(self, session: ExperimentSession, experiment: Experiment):
+    def __init__(self, session: ExperimentSession, experiment: Experiment, history_manager=None):
         self.session = session
         self.experiment = experiment or session.experiment_version
+        self.history_manager = history_manager
 
     def get_user_message(self, event_prompt: str):
         provider = self.llm_provider
@@ -344,13 +345,29 @@ class EventBot:
 
         service = provider.get_llm_service()
         llm = service.get_chat_model(model.name, 0.7)
+
+        config = {}
+        if self.history_manager.trace_service:
+            config = self.history_manager.trace_service.get_langchain_config(
+                trace_name=self.experiment.name,
+                participant_id=str(self.session.participant.identifier),
+                session_id=str(self.session.external_id),
+            )
         response = llm.invoke(
             [
                 {"role": "system", "content": self.system_prompt},
                 {"role": "user", "content": f"Generate the message for the user based on this text: {event_prompt}"},
-            ]
+            ],
+            config=config,
         )
-        return response.content
+
+        message = response.content
+        if self.history_manager:
+            self.history_manager.save_message_to_history(
+                message,
+                type_=ChatMessageType.AI,
+            )
+        return message
 
     @property
     def llm_provider(self):
