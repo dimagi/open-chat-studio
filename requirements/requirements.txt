@@ -28,8 +28,6 @@ anyio==4.4.0
     #   openai
 asgiref==3.8.1
     # via django
-async-timeout==5.0.1
-    # via redis
 attrs==23.1.0
     # via
     #   aiohttp
@@ -329,6 +327,7 @@ multidict==6.0.4
 mypy-extensions==1.0.0
     # via typing-inspect
 nh3==0.2.21
+    # via -r requirements.in
 numpy==1.26.2
     # via
     #   langchain
