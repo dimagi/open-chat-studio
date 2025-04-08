@@ -323,24 +323,21 @@ class PipelineBot:
 class EventBot:
     SYSTEM_PROMPT = textwrap.dedent(
         """
-    Your role is to generate messages to send to users. These could be reminders
-    or prompts to help them complete their tasks. The text that you generate will be sent
-    to the user in a chat message.
-
-    You should generate the message in the language of the user.
-
-    This is the data we have about the user:
-    ```
-    {participant_data}
-    ```
-
-    The current date and time is: {current_datetime}
+        Your role is to generate messages to send to users. These could be reminders
+        or prompts to help them complete their tasks. The text that you generate will be sent
+        to the user in a chat message.
     
-    Here are the most recent messages in the conversation:
-    ```
-    {conversation_history}
-    ```
-    """
+        You should generate the message in same language as the recent message history shown below.
+        If there is no history use English.
+    
+        This is the data we have about the user:
+        ```
+        {participant_data}
+        ```
+    
+        The current date and time is: {current_datetime}
+        {conversation_history}
+        """
     )
 
     def __init__(self, session: ExperimentSession, experiment: Experiment):
@@ -384,4 +381,15 @@ class EventBot:
             messages.append(f"{message.role}: {message.content}")
             if len(messages) > 10:
                 break
-        return "\n".join(reversed(messages))
+        if messages:
+            formatted_history = "\n".join(reversed(messages))
+            return textwrap.dedent(
+                f"""
+                Here are the most recent messages in the conversation:
+                ```
+                {formatted_history}
+                ```
+                """
+            )
+        else:
+            return "\nThis is the start of the conversation so there is no previous message history"
