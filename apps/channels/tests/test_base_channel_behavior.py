@@ -309,19 +309,20 @@ def test_pre_conversation_flow(send_text_to_user_mock, _send_seed_message):
 @pytest.mark.django_db()
 @patch("apps.chat.channels.TelegramChannel.send_text_to_user", Mock())
 @patch("apps.chat.bots.TopicBot", Mock())
-@patch("apps.chat.bots.EventBot.get_user_message", Mock(return_value="error"))
-def test_unsupported_message_type_creates_system_message():
+# @patch("apps.chat.bots.EventBot.get_user_message", Mock(return_value="error"))
+def test_unsupported_message_type_creates_ai_message():
     experiment = ExperimentFactory(conversational_consent_enabled=True)
     channel = TelegramChannel(experiment, ExperimentChannelFactory(experiment=experiment))
     assert channel.experiment_session is None
     telegram_chat_id = "123"
 
-    channel.new_user_message(telegram_messages.photo_message(telegram_chat_id))
+    with mock_llm(["error"]):
+        channel.new_user_message(telegram_messages.photo_message(telegram_chat_id))
     assert channel.experiment_session is not None
 
     channel.experiment_session.refresh_from_db()
     message = channel.experiment_session.chat.messages.first()
-    assert message.message_type == ChatMessageType.SYSTEM
+    assert message.message_type == ChatMessageType.AI
     assert channel.message.content_type_unparsed == "photo"
 
 

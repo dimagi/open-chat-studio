@@ -38,6 +38,7 @@ from apps.experiments.models import (
     VoiceResponseBehaviours,
 )
 from apps.files.models import File
+from apps.service_providers.llm_service.history_managers import ExperimentHistoryManager
 from apps.service_providers.llm_service.runnables import GenerationCancelled
 from apps.service_providers.speech_service import SynthesizedAudio
 from apps.slack.utils import parse_session_external_id
@@ -622,12 +623,10 @@ class ChannelBase(ABC):
 
     def _unsupported_message_type_response(self):
         """Generates a suitable response to the user when they send unsupported messages"""
-        ChatMessage.objects.create(
-            chat=self.experiment_session.chat,
-            message_type=ChatMessageType.SYSTEM,
-            content=f"The user sent an unsupported message type: {self.message.content_type_unparsed}",
+        history_manager = ExperimentHistoryManager(
+            session=self.experiment_session, experiment=self.experiment, trace_service=self.experiment.trace_service
         )
-        return EventBot(self.experiment_session, self.experiment).get_user_message(
+        return EventBot(self.experiment_session, self.experiment, history_manager).get_user_message(
             UNSUPPORTED_MESSAGE_BOT_PROMPT.format(supported_types=self.supported_message_types)
         )
 

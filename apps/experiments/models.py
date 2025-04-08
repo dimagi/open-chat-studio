@@ -1732,14 +1732,14 @@ class ExperimentSession(BaseTeamModel):
         message. The response from the bot will be saved to the chat history.
         """
         from apps.chat.bots import EventBot
+        from apps.service_providers.llm_service.history_managers import ExperimentHistoryManager
 
-        bot = EventBot(self, use_experiment)
-        message = bot.get_user_message(instruction_prompt)
-        chat_message = ChatMessage.objects.create(chat=self.chat, message_type=ChatMessageType.AI, content=message)
-        chat_message.add_version_tag(
-            version_number=bot.experiment.version_number, is_a_version=bot.experiment.is_a_version
+        experiment = use_experiment or self.experiment
+        history_manager = ExperimentHistoryManager(
+            session=self, experiment=experiment, trace_service=experiment.trace_service
         )
-        return message
+        bot = EventBot(self, experiment, history_manager)
+        return bot.get_user_message(instruction_prompt)
 
     def try_send_message(self, message: str, fail_silently=True):
         """Tries to send a message to this user session as the bot. Note that `message` will be send to the user
