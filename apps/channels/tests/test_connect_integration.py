@@ -15,18 +15,15 @@ from apps.channels.clients.connect_client import CommCareConnectClient, Message,
 from apps.channels.models import ChannelPlatform
 from apps.channels.tasks import handle_commcare_connect_message
 from apps.chat.channels import CommCareConnectChannel
+from apps.chat.models import ChatMessage, ChatMessageType
 from apps.experiments.models import ParticipantData
 from apps.utils.factories.channels import ExperimentChannelFactory
 from apps.utils.factories.experiment import ExperimentSessionFactory, ParticipantFactory
+from apps.utils.factories.files import FileFactory
 
 
-def _setup(experiment, message_spec: dict | None = None) -> tuple:
-    """
-    message_spec example: {1736835441: "hi there"}
-    """
-    if not message_spec:
-        message_spec = {1736835441: "Hi there bot"}
-
+def _setup_participant(experiment) -> tuple:
+    """Sets up a participant as if they went through the consent process"""
     team = experiment.team
     connect_id = str(uuid4())
     commcare_connect_channel_id = str(uuid4())
@@ -43,7 +40,16 @@ def _setup(experiment, message_spec: dict | None = None) -> tuple:
     experiment_channel = ExperimentChannelFactory(
         team=team, experiment=experiment, platform=ChannelPlatform.COMMCARE_CONNECT
     )
+    return commcare_connect_channel_id, encryption_key, experiment_channel, part_data
 
+
+def _build_user_message(encryption_key, commcare_connect_channel_id, message_spec: dict | None = None):
+    """Build the encrypted payload of a user message that CommCareConnect would send
+
+    message_spec example: {1736835441: "hi there"}
+    """
+    if not message_spec:
+        message_spec = {1736835441: "Hi there bot"}
     connect_client = CommCareConnectClient()
     messages = []
     for timestamp, message in message_spec.items():
@@ -58,9 +64,7 @@ def _setup(experiment, message_spec: dict | None = None) -> tuple:
             )
         )
 
-    payload = NewMessagePayload(channel_id=commcare_connect_channel_id, messages=messages)
-
-    return commcare_connect_channel_id, encryption_key, experiment_channel, part_data, payload
+    return NewMessagePayload(channel_id=commcare_connect_channel_id, messages=messages)
 
 
 @pytest.mark.django_db()
@@ -69,8 +73,9 @@ class TestHandleConnectMessageTask:
     @override_settings(COMMCARE_CONNECT_SERVER_SECRET="123", COMMCARE_CONNECT_SERVER_ID="123")
     def test_multiple_messages_are_sorted_and_concatenated(self, CommCareConnectChannelMock, experiment):
         channel_instance = CommCareConnectChannelMock.return_value
-        _, _, experiment_channel, data, payload = _setup(
-            experiment, message_spec={2: "I need to ask something", 1: "Hi bot"}
+        commcare_connect_channel_id, encryption_key, experiment_channel, data = _setup_participant(experiment)
+        payload = _build_user_message(
+            encryption_key, commcare_connect_channel_id, message_spec={2: "I need to ask something", 1: "Hi bot"}
         )
 
         handle_commcare_connect_message(experiment_channel.id, data.id, payload["messages"])
@@ -81,8 +86,9 @@ class TestHandleConnectMessageTask:
     @patch("apps.chat.bots.TopicBot.process_input")
     @override_settings(COMMCARE_CONNECT_SERVER_SECRET="123", COMMCARE_CONNECT_SERVER_ID="123")
     def test_bot_generate_and_sends_message(self, process_input, experiment):
-        process_input.return_value = "Hi human"
-        commcare_connect_channel_id, encryption_key, experiment_channel, data, payload = _setup(experiment)
+        process_input.return_value = ChatMessage(content="Hi human", message_type=ChatMessageType.AI)
+        commcare_connect_channel_id, encryption_key, experiment_channel, data = _setup_participant(experiment)
+        payload = _build_user_message(encryption_key, commcare_connect_channel_id)
         # The version will be used when chatting to the bot
         experiment.create_new_version(make_default=True)
 
@@ -109,7 +115,8 @@ class TestApiEndpoint:
     @patch("apps.channels.views.tasks.handle_commcare_connect_message", Mock())
     @override_settings(COMMCARE_CONNECT_SERVER_SECRET="123", COMMCARE_CONNECT_SERVER_ID="123")
     def test_payload_passes_validation(self, client, experiment):
-        _, _, _, _, payload = _setup(experiment)
+        commcare_connect_channel_id, encryption_key, _, _ = _setup_participant(experiment)
+        payload = _build_user_message(encryption_key, commcare_connect_channel_id)
 
         response = client.post(
             reverse("channels:new_connect_message"),
@@ -121,7 +128,8 @@ class TestApiEndpoint:
 
     @override_settings(COMMCARE_CONNECT_SERVER_SECRET="123", COMMCARE_CONNECT_SERVER_ID="123")
     def test_invalid_payload(self, client, experiment):
-        _, _, _, _, payload = _setup(experiment)
+        commcare_connect_channel_id, encryption_key, _, _ = _setup_participant(experiment)
+        payload = _build_user_message(encryption_key, commcare_connect_channel_id)
         payload["messages"][0]["timestamp"] = None
 
         response = client.post(
@@ -142,7 +150,10 @@ class TestApiEndpoint:
     )
     @override_settings(COMMCARE_CONNECT_SERVER_SECRET="123", COMMCARE_CONNECT_SERVER_ID="123")
     def test_missing_records(self, missing_record, expected_response, client, experiment):
-        _, _, experiment_channel, participant_data, payload = _setup(experiment)
+        commcare_connect_channel_id, encryption_key, experiment_channel, participant_data = _setup_participant(
+            experiment
+        )
+        payload = _build_user_message(encryption_key, commcare_connect_channel_id)
         if missing_record == "participant_data":
             participant_data.delete()
         else:
@@ -177,3 +188,33 @@ class TestCommCareConnectChannel:
         participant_data.refresh_from_db()
         assert key is not None
         assert participant_data.get_encryption_key_bytes() == key
+
+
+@pytest.mark.django_db()
+@override_settings(COMMCARE_CONNECT_SERVER_SECRET="123", COMMCARE_CONNECT_SERVER_ID="123")
+def test_attachment_links_attached_to_message(experiment):
+    _, _, _, part_data = _setup_participant(experiment)
+    session = ExperimentSessionFactory(
+        experiment_channel__platform=ChannelPlatform.COMMCARE_CONNECT,
+        participant=part_data.participant,
+        experiment=experiment,
+    )
+    channel = CommCareConnectChannel.from_experiment_session(session)
+    channel.client = Mock()
+    files = FileFactory.create_batch(2)
+    channel.send_text_to_user("Hi there", attached_files=files)
+    call_kwargs = channel.client.send_message_to_user.call_args[1]
+
+    final_message = call_kwargs["message"]
+
+    original_message = "Hi there"
+
+    expected_final_message = f"""{original_message}
+
+{files[0].name}
+{files[0].download_link(session.id)}
+
+{files[1].name}
+{files[1].download_link(session.id)}
+"""
+    assert final_message == expected_final_message
