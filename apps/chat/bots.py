@@ -211,20 +211,11 @@ class TopicBot:
 
         config = {}
         if self.trace_service:
-            callback = self.trace_service.get_callback(
+            config = self.trace_service.get_langchain_config(
                 trace_name=self.experiment.name,
                 participant_id=str(self.session.participant.identifier),
                 session_id=str(self.session.external_id),
             )
-            config = {
-                "run_name": self.experiment.name,
-                "callbacks": [callback],
-                "metadata": {
-                    "participant-id": str(self.session.participant.identifier),
-                    "session-id": str(self.session.external_id),
-                },
-            }
-
         try:
             return main_bot_chain.invoke(user_input, config=config)
         finally:
