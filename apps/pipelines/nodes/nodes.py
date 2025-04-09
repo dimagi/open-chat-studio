@@ -433,17 +433,15 @@ class RouterMixin(BaseModel):
 
     def _create_router_schema(self):
         """Create a Pydantic model for structured router output"""
-        routes = [keyword.lower() for keyword in self.keywords]
-
         return create_model(
-            "RouterOutput", route=(Literal[tuple(routes)], Field(description="Selected routing destination"))
+            "RouterOutput", route=(Literal[tuple(self.keywords)], Field(description="Selected routing destination"))
         )
 
     def get_output_map(self):
         """Returns a mapping of the form:
         {"output_1": "keyword 1", "output_2": "keyword_2", ...} where keywords are defined by the user
         """
-        return {f"output_{output_num}": keyword.lower() for output_num, keyword in enumerate(self.keywords)}
+        return {f"output_{output_num}": keyword for output_num, keyword in enumerate(self.keywords)}
 
 
 class RouterNode(RouterMixin, Passthrough, HistoryMixin):
@@ -480,17 +478,14 @@ class RouterNode(RouterMixin, Passthrough, HistoryMixin):
         llm = self.get_chat_model()
         router_schema = self._create_router_schema()
         chain = prompt | llm.with_structured_output(router_schema)
-        result = chain.invoke(context, config=self._config)
-
-        valid_keywords = [k.lower() for k in self.keywords]
-        default_keyword = self.keywords[0].lower()
         try:
+            result = chain.invoke(context, config=self._config)
             keyword = getattr(result, "route", None)
-        except Exception:
+        except ValidationError:
             keyword = None
 
-        if not keyword or keyword not in valid_keywords:
-            keyword = default_keyword
+        if not keyword:
+            keyword = self.keywords[0]
 
         if session:
             self._save_history(session, node_id, node_input, keyword)
