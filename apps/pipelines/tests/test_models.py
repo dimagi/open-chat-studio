@@ -185,7 +185,7 @@ class TestPipeline:
         user = UserFactory()
         pipeline.simple_invoke(user_input, user.id)["messages"][-1]
         expected_call_messages = [
-            [("system", "Help the user. User data: . Source material: "), ("human", user_input)],
+            [("system", "Help the user. User data: {'name': 'Anonymous'}. Source material: "), ("human", user_input)],
         ]
         assert [
             [(message.type, message.content) for message in call] for call in llm.get_call_messages()

@@ -2,7 +2,6 @@ from typing import Any, Self
 
 from django.utils import timezone
 
-from apps.channels.models import ChannelPlatform
 from apps.experiments.models import ParticipantData
 from apps.utils.time import pretty_date
 
@@ -66,25 +65,11 @@ class PromptTemplateContext:
             return ""
 
     def get_participant_data(self):
-        if self.is_unauthorized_participant:
-            data = ""
-        else:
-            data = self.participant_data_proxy.get() or ""
+        data = self.participant_data_proxy.get() or ""
         return SafeAccessWrapper(data)
 
     def get_current_datetime(self):
         return pretty_date(timezone.now(), self.participant_data_proxy.get_timezone())
-
-    @property
-    def is_unauthorized_participant(self):
-        """Returns `true` if a participant is unauthorized. A participant is considered authorized when the
-        following conditions are met:
-        For web channels:
-        - They are a platform user
-        All other channels:
-        - Always True, since the external channel handles authorization
-        """
-        return self.session.experiment_channel.platform == ChannelPlatform.WEB and self.session.participant.user is None
 
 
 class SafeAccessWrapper(dict):
