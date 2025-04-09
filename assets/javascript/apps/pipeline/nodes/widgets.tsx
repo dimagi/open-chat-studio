@@ -222,7 +222,9 @@ function MultiSelectWidget(props: WidgetParams) {
 
   function getNewNodeData(old: Node, updatedList: Array<string>) {
     return produce(old, next => {
-      next.data.params[props.name] = updatedList;
+      if (next?.data?.params) {
+        next.data.params[props.name] = updatedList;
+      }
     });
   }
 
@@ -649,7 +651,9 @@ export function KeywordsWidget(props: WidgetParams) {
 
   function getNewNodeData(old: Node, keywords: any[]) {
     return produce(old, next => {
-      next.data.params["keywords"] = keywords;
+      if (next?.data?.params) {
+        next.data.params["keywords"] = keywords;
+      }
     });
   }
 
@@ -759,8 +763,10 @@ export function LlmWidget(props: WidgetParams) {
     const [providerId, providerModelId] = value.split('|:|');
     setNode(props.nodeId, (old) =>
       produce(old, (next) => {
-        next.data.params.llm_provider_id = providerId;
-        next.data.params.llm_provider_model_id = providerModelId;
+        if (next?.data?.params) {
+          next.data.params.llm_provider_id = providerId;
+          next.data.params.llm_provider_model_id = providerModelId;
+        }
       })
     );
   };
