@@ -30,7 +30,7 @@ export default function EditPanel({nodeId}: { nodeId: string }) {
     id!,
     produce((next) => {
       if (next?.data?.params) {
-        next.data.params[name] = updateValue;
+        next.data.params[name] = value;
       }
     })
   );
