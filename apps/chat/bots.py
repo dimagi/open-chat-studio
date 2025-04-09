@@ -211,20 +211,11 @@ class TopicBot:
 
         config = {}
         if self.trace_service:
-            callback = self.trace_service.get_callback(
+            config = self.trace_service.get_langchain_config(
                 trace_name=self.experiment.name,
                 participant_id=str(self.session.participant.identifier),
                 session_id=str(self.session.external_id),
             )
-            config = {
-                "run_name": self.experiment.name,
-                "callbacks": [callback],
-                "metadata": {
-                    "participant-id": str(self.session.participant.identifier),
-                    "session-id": str(self.session.external_id),
-                },
-            }
-
         try:
             return main_bot_chain.invoke(user_input, config=config)
         finally:
@@ -314,29 +305,27 @@ class PipelineBot:
 class EventBot:
     SYSTEM_PROMPT = textwrap.dedent(
         """
-    Your role is to generate messages to send to users. These could be reminders
-    or prompts to help them complete their tasks. The text that you generate will be sent
-    to the user in a chat message.
-
-    You should generate the message in the language of the user.
-
-    This is the data we have about the user:
-    ```
-    {participant_data}
-    ```
-
-    The current date and time is: {current_datetime}
+        Your role is to generate messages to send to users. These could be reminders
+        or prompts to help them complete their tasks. The text that you generate will be sent
+        to the user in a chat message.
     
-    Here are the most recent messages in the conversation:
-    ```
-    {conversation_history}
-    ```
-    """
+        You should generate the message in same language as the recent message history shown below.
+        If there is no history use English.
+    
+        This is the data we have about the user:
+        ```
+        {participant_data}
+        ```
+    
+        The current date and time is: {current_datetime}
+        {conversation_history}
+        """
     )
 
-    def __init__(self, session: ExperimentSession, experiment: Experiment):
+    def __init__(self, session: ExperimentSession, experiment: Experiment, history_manager=None):
         self.session = session
         self.experiment = experiment or session.experiment_version
+        self.history_manager = history_manager
 
     def get_user_message(self, event_prompt: str):
         provider = self.llm_provider
@@ -347,13 +336,29 @@ class EventBot:
 
         service = provider.get_llm_service()
         llm = service.get_chat_model(model.name, 0.7)
+
+        config = {}
+        if self.history_manager and self.history_manager.trace_service:
+            config = self.history_manager.trace_service.get_langchain_config(
+                trace_name=self.experiment.name,
+                participant_id=str(self.session.participant.identifier),
+                session_id=str(self.session.external_id),
+            )
         response = llm.invoke(
             [
                 {"role": "system", "content": self.system_prompt},
                 {"role": "user", "content": f"Generate the message for the user based on this text: {event_prompt}"},
-            ]
+            ],
+            config=config,
         )
-        return response.content
+
+        message = response.content
+        if self.history_manager:
+            self.history_manager.save_message_to_history(
+                message,
+                type_=ChatMessageType.AI,
+            )
+        return message
 
     @property
     def llm_provider(self):
@@ -375,4 +380,15 @@ class EventBot:
             messages.append(f"{message.role}: {message.content}")
             if len(messages) > 10:
                 break
-        return "\n".join(reversed(messages))
+        if messages:
+            formatted_history = "\n".join(reversed(messages))
+            return textwrap.dedent(
+                f"""
+                Here are the most recent messages in the conversation:
+                ```
+                {formatted_history}
+                ```
+                """
+            )
+        else:
+            return "\nThis is the start of the conversation so there is no previous message history"

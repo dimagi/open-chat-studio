@@ -14,8 +14,7 @@ from apps.custom_actions.schema_utils import (
     get_operations_from_spec_dict,
     get_standalone_schema_for_action_operation,
 )
-from apps.experiments.models import VersionsMixin, VersionsObjectManagerMixin
-from apps.experiments.versioning import VersionDetails, VersionField
+from apps.experiments.versioning import VersionDetails, VersionField, VersionsMixin, VersionsObjectManagerMixin
 from apps.service_providers.auth_service import anonymous_auth_service
 from apps.teams.models import BaseTeamModel
 from apps.utils.models import BaseModel

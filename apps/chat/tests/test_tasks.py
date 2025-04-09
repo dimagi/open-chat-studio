@@ -6,7 +6,7 @@ from apps.chat.channels import _start_experiment_session
 from apps.chat.models import ChatMessage, ChatMessageType
 from apps.chat.tasks import _get_latest_sessions_for_participants
 from apps.experiments.models import ConsentForm, Experiment, ExperimentSession, SessionStatus
-from apps.service_providers.models import LlmProvider, LlmProviderModel
+from apps.service_providers.models import LlmProvider, LlmProviderModel, TraceProvider
 from apps.teams.models import Team
 from apps.users.models import CustomUser
 from apps.utils.factories.experiment import ExperimentSessionFactory
@@ -51,6 +51,10 @@ class TasksTest(TestCase):
 
     def test_getting_ping_message_saves_history(self):
         expected_ping_message = "Hey, answer me!"
+
+        provider = TraceProvider(type="langfuse", config={})
+        self.experiment_session.experiment.trace_provider = provider
+
         with mock_llm(responses=[expected_ping_message]):
             response = self.experiment_session._bot_prompt_for_user("Some message")
         messages = ChatMessage.objects.filter(chat=self.experiment_session.chat).all()
@@ -59,6 +63,7 @@ class TasksTest(TestCase):
         assert messages[0].message_type == "ai"
         assert response == expected_ping_message
         assert messages[0].content == expected_ping_message
+        assert "trace_info" in messages[0].metadata
 
     def _add_session(self, experiment: Experiment, session_status: SessionStatus = SessionStatus.ACTIVE):
         return _start_experiment_session(

@@ -20,18 +20,18 @@
             <dd class="text-sm overflow-auto">{{ object.content_type }}</dd>
         </div>
 
-        <div class="py-3" x-data="{collections: {{ current_collections }}}">
+        <div class="py-3" x-data="{collections: {{ current_collection_ids }}}">
             <dt class="text-sm font-medium">Collections</dt>
             <dd class="text-sm">
-                <span x-show="!editing">{{ current_collections|join:", " }}</span>
+                <span x-show="!editing">{{ current_collection_names|join:", " }}</span>
                 <div x-cloak x-show="editing">
                     <select x-model="collections" id="collections-select" name="collections" multiple placeholder="Select collections" autocomplete="off">
-                        {% for name in available_collections %}
+                        {% for collection in available_collections %}
                             <option
-                                value="{{ name }}"
-                                {% if name in current_collections %}selected{% endif %}
+                                value="{{ collection.id }}"
+                                {% if collection.id in current_collection_ids %}selected{% endif %}
                             >
-                                {{ name }}
+                                {{ collection.name }}
                             </option>
                         {% endfor %}
                     </select>
