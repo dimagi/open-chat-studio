@@ -1,5 +1,7 @@
+import logging
 from collections import defaultdict
 from collections.abc import Iterator
+from dataclasses import dataclass
 from datetime import datetime
 from functools import cached_property
 from uuid import uuid4
@@ -15,8 +17,8 @@ from pydantic import ConfigDict
 from apps.chat.models import ChatMessage, ChatMessageType
 from apps.custom_actions.form_utils import set_custom_actions
 from apps.custom_actions.mixins import CustomActionOperationMixin
-from apps.experiments.models import ExperimentSession, VersionsMixin, VersionsObjectManagerMixin
-from apps.experiments.versioning import VersionDetails, VersionField
+from apps.experiments.models import ExperimentSession
+from apps.experiments.versioning import VersionDetails, VersionField, VersionsMixin, VersionsObjectManagerMixin
 from apps.pipelines.exceptions import PipelineBuildError
 from apps.pipelines.executor import patch_executor
 from apps.pipelines.flow import Flow, FlowNode, FlowNodeData
@@ -25,6 +27,19 @@ from apps.pipelines.nodes.base import PipelineState
 from apps.pipelines.nodes.helpers import temporary_session
 from apps.teams.models import BaseTeamModel
 from apps.utils.models import BaseModel
+
+versioning_logger = logging.getLogger("ocs.versioning")
+
+
+@dataclass
+class ModelParamSpec:
+    """A helper class to hold the parameter name and model of those that are database records"""
+
+    param_name: str
+    model_cls: VersionsMixin
+
+    def get_object(self, id: int):
+        return self.model_cls.objects.get(id=id)
 
 
 class PipelineManager(VersionsObjectManagerMixin, models.Manager):
@@ -425,18 +440,27 @@ class Node(BaseModel, VersionsMixin, CustomActionOperationMixin):
         and update the `assistant_id` in the node params to the new assistant version id.
         """
         from apps.assistants.models import OpenAiAssistant
-        from apps.pipelines.nodes.nodes import AssistantNode
-
-        assistant_node_name = AssistantNode.__name__
+        from apps.documents.models import Collection
+        from apps.pipelines.nodes.nodes import AssistantNode, LLMResponseWithPrompt
 
         new_version = super().create_new_version(save=False)
 
-        if self.type == assistant_node_name and new_version.params.get("assistant_id"):
+        if self.type == AssistantNode.__name__ and new_version.params.get("assistant_id"):
             assistant = OpenAiAssistant.objects.get(id=new_version.params.get("assistant_id"))
             if not assistant.is_a_version:
                 assistant_version = assistant.create_new_version()
                 # convert to string to be consistent with values from the UI
                 new_version.params["assistant_id"] = str(assistant_version.id)
+
+        if self.type == LLMResponseWithPrompt.__name__:
+            if collection_id := self.params.get("collection_id"):
+                collection = Collection.objects.get(id=collection_id)
+
+                if collection.has_versions is False or collection.compare_with_latest():
+                    collection_version = collection.create_new_version()
+                    new_version.params["collection_id"] = str(collection_version.id)
+                else:
+                    new_version.params["collection_id"] = self.latest_version.params.get("collection_id")
 
         new_version.save()
         self._copy_custom_action_operations_to_new_version(new_node=new_version)
@@ -460,18 +484,16 @@ class Node(BaseModel, VersionsMixin, CustomActionOperationMixin):
         Archiving a node will also archive the assistant if it is an assistant node. The node's versions will be
         archived when the pipeline they belong to is archived.
         """
-        from apps.assistants.models import OpenAiAssistant
-
         super().archive()
-        if self.is_a_version and self.type == "AssistantNode":
-            assistant_id = self.params.get("assistant_id")
-            if assistant_id:
-                assistant = OpenAiAssistant.objects.get(id=assistant_id)
-                assistant.archive()
+        if not self.is_a_version:
+            return
+
+        self._archive_related_params()
 
     @property
     def version_details(self) -> VersionDetails:
         from apps.assistants.models import OpenAiAssistant
+        from apps.documents.models import Collection
         from apps.experiments.models import VersionFieldDisplayFormatters
         from apps.pipelines.nodes.nodes import LLMResponseWithPrompt
 
@@ -493,7 +515,12 @@ class Node(BaseModel, VersionsMixin, CustomActionOperationMixin):
                 case "assistant_id":
                     name = "assistant"
                     # Load the assistant, since it is being versioned
-                    value = OpenAiAssistant.objects.filter(id=value).first()
+                    if value:
+                        value = OpenAiAssistant.objects.filter(id=value).first()
+                case "collection_id":
+                    name = "media"
+                    if value:
+                        value = Collection.objects.filter(id=value).first()
 
             param_versions.append(
                 VersionField(group_name=node_name, name=name, raw_value=value, to_display=display_formatter),
@@ -517,6 +544,32 @@ class Node(BaseModel, VersionsMixin, CustomActionOperationMixin):
     def requires_attachment_tool(self) -> bool:
         """When a collection is linked, the attachment tool is required"""
         return self.params.get("collection_id") is not None
+
+    def _archive_related_params(self):
+        """
+        Archive related params that were also versioned along with this node
+        """
+        from apps.assistants.models import OpenAiAssistant
+        from apps.documents.models import Collection
+        from apps.pipelines.nodes import nodes
+
+        model_param_specs = {
+            nodes.AssistantNode.__name__: [ModelParamSpec(param_name="assistant_id", model_cls=OpenAiAssistant)],
+            nodes.LLMResponseWithPrompt.__name__: [
+                ModelParamSpec(param_name="collection_id", model_cls=Collection)
+                # TODO: Custom actions needed
+            ],
+        }
+
+        for spec in model_param_specs.get(self.type, []):
+            if instance_id := self.params[spec.param_name]:
+                try:
+                    obj = spec.get_object(instance_id)
+                    obj.archive()
+                except self.model_cls.DoesNotExist:
+                    versioning_logger.exception(
+                        f"Failed to archive {spec.param_name} with id {instance_id}, since it could not be found"
+                    )
 
 
 class PipelineRunStatus(models.TextChoices):

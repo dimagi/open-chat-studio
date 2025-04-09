@@ -7,6 +7,7 @@ from django.core.files.base import ContentFile
 from django.db import models
 from django.urls import reverse
 
+from apps.experiments.versioning import VersionDetails, VersionField, VersionsMixin, VersionsObjectManagerMixin
 from apps.teams.models import BaseTeamModel
 from apps.utils.conversions import bytes_to_megabytes
 from apps.web.meta import absolute_url
@@ -17,7 +18,11 @@ class FilePurpose(models.TextChoices):
     COLLECTION = "collection", "Collection"
 
 
-class File(BaseTeamModel):
+class FileObjectManager(VersionsObjectManagerMixin, models.Manager):
+    pass
+
+
+class File(BaseTeamModel, VersionsMixin):
     name = models.CharField(max_length=255)
     file = models.FileField()
     external_source = models.CharField(max_length=255, blank=True)
@@ -28,6 +33,18 @@ class File(BaseTeamModel):
     expiry_date = models.DateTimeField(null=True)
     summary = models.TextField(max_length=settings.MAX_SUMMARY_LENGTH, blank=True)  # This is roughly 1 short paragraph
     purpose = models.CharField(max_length=255, choices=FilePurpose.choices)
+    working_version = models.ForeignKey(
+        "self",
+        on_delete=models.CASCADE,
+        null=True,
+        blank=True,
+        related_name="versions",
+    )
+    is_archived = models.BooleanField(default=False)
+    objects = FileObjectManager()
+
+    def __str__(self) -> str:
+        return f"{self.name}"
 
     @classmethod
     def from_external_source(cls, filename, external_file, external_id, external_source, team_id):
@@ -83,6 +100,16 @@ class File(BaseTeamModel):
         """Returns the size of this file in megabytes"""
         return bytes_to_megabytes(self.content_size)
 
+    @property
+    def version_details(self) -> VersionDetails:
+        return VersionDetails(
+            instance=self,
+            fields=[
+                VersionField(group_name="General", name="name", raw_value=self.name),
+                VersionField(group_name="General", name="summary", raw_value=self.summary),
+            ],
+        )
+
     def save(self, *args, **kwargs):
         if self.file:
             self.content_size = self.file.size
@@ -109,6 +136,9 @@ class File(BaseTeamModel):
             new_file.file = new_file_file
         new_file.save()
         return new_file
+
+    def get_collection_references(self):
+        return self.collection_set.all()
 
     def download_link(self, experiment_session_id: int) -> str:
         return absolute_url(reverse("experiments:download_file", args=[self.team.slug, experiment_session_id, self.id]))
