@@ -424,12 +424,12 @@ class RouterMixin(BaseModel):
 
         return value
 
-    def get_keyword(self, result: str):
-        keyword = result.strip()
-        if keyword in self.keywords:
-            return keyword
+    def _get_keyword(self, result: str):
+        keyword = result.lower().strip()
+        if keyword in [k.lower() for k in self.keywords]:
+            return keyword.lower()
         else:
-            return self.keywords[0]
+            return self.keywords[0].lower()
 
     def _create_router_schema(self):
         """Create a Pydantic model for structured router output"""
