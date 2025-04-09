@@ -182,6 +182,12 @@ class PipelineNode(BaseModel, ABC):
         output_map = self.get_output_map()
         output_handle = next((k for k, v in output_map.items() if v == conditional_branch), None)
         state["outputs"][node_id]["output_handle"] = output_handle
+
+        state["outputs"][self.name] = {
+            "route": conditional_branch,
+            "output": state["outputs"][node_id]["message"],
+        }
+
         return conditional_branch
 
     def _process(self, input: str, state: PipelineState, node_id: str) -> PipelineState:
