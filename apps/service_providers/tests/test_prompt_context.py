@@ -68,7 +68,7 @@ def test_calls_with_different_vars_returns_correct_context(mock_session):
     assert result == {}
 
     result = context.get_context(["participant_data"])
-    assert result == {"participant_data": ""}
+    assert result == {"participant_data": {"name": "Dimagi", "email": "hello@world.com"}}
 
 
 @patch("apps.experiments.models.SourceMaterial.objects.get")
