@@ -3,11 +3,15 @@ from unittest.mock import Mock, patch
 
 import pytest
 
+from apps.assistants.models import OpenAiAssistant
 from apps.channels.models import ExperimentChannel
+from apps.documents.models import Collection
 from apps.events.models import EventActionType
 from apps.experiments.models import Experiment, ExperimentSession, Participant
+from apps.pipelines.nodes.nodes import AssistantNode, LLMResponseWithPrompt
 from apps.pipelines.tests.utils import create_runnable, end_node, llm_response_with_prompt_node, start_node
 from apps.utils.factories.assistants import OpenAiAssistantFactory
+from apps.utils.factories.documents import CollectionFactory
 from apps.utils.factories.events import EventActionFactory, ExperimentFactory, StaticTriggerFactory
 from apps.utils.factories.pipelines import NodeFactory, PipelineFactory
 from apps.utils.factories.service_provider_factories import (
@@ -31,26 +35,27 @@ def test_archive_pipeline_archives_nodes_as_well():
 
 
 @pytest.mark.django_db()
-class TestNode:
+class TestVersioningNodes:
     @pytest.mark.parametrize("versioned_assistant_linked", [True, False])
     @patch("apps.assistants.sync.push_assistant_to_openai", Mock())
-    def test_versioning_assistant_node(self, versioned_assistant_linked):
+    def test_version_assistant_node(self, versioned_assistant_linked):
         """
         Versioning an assistant node should version the assistant as well, but only when the linked assistant is not
         already a version
         """
+        node_type = AssistantNode.__name__
         assistant = OpenAiAssistantFactory()
         if versioned_assistant_linked:
             assistant = assistant.create_new_version()
 
         pipeline = PipelineFactory()
-        NodeFactory(type="AssistantNode", pipeline=pipeline, params={"assistant_id": str(assistant.id)})
-        assert pipeline.node_set.filter(type="AssistantNode").exists()
+        NodeFactory(type=node_type, pipeline=pipeline, params={"assistant_id": str(assistant.id)})
+        assert pipeline.node_set.filter(type=node_type).exists()
 
         pipeline.create_new_version()
 
-        original_node = pipeline.node_set.get(type="AssistantNode")
-        node_version = pipeline.versions.first().node_set.get(type="AssistantNode")
+        original_node = pipeline.node_set.get(type=node_type)
+        node_version = pipeline.versions.first().node_set.get(type=node_type)
         assistant_version = assistant if versioned_assistant_linked else assistant.versions.first()
 
         original_node_assistant_id = original_node.params["assistant_id"]
@@ -62,6 +67,65 @@ class TestNode:
             assert original_node_assistant_id != node_version_assistant_id
             assert original_node_assistant_id == str(assistant.id)
             assert node_version_assistant_id == str(assistant_version.id)
+
+    def test_version_llm_with_prompt_node(self):
+        node_type = LLMResponseWithPrompt.__name__
+        collection = CollectionFactory()
+        pipeline = PipelineFactory()
+        node = NodeFactory(type=node_type, pipeline=pipeline, params={"collection_id": str(collection.id)})
+
+        # Versioning it should version the collection as well
+        pipeline.create_new_version()
+
+        # Versioning it without changes to the collection should not version the collection
+        pipeline.create_new_version()
+        assert node.versions.first().params["collection_id"] == str(collection.versions.first().id)
+        assert node.versions.last().params["collection_id"] == str(collection.versions.first().id)
+
+
+@pytest.mark.django_db()
+class TestArchivingNodes:
+    @patch("apps.assistants.sync.push_assistant_to_openai", Mock())
+    def test_archive_assistant_node(self):
+        assistant = OpenAiAssistantFactory()
+        pipeline = PipelineFactory()
+        node = NodeFactory(type=AssistantNode.__name__, pipeline=pipeline, params={"assistant_id": str(assistant.id)})
+        node_version = node.create_new_version()
+
+        # Archiving the working version should not archive the assistant
+        node.archive()
+        assistant.refresh_from_db()
+        assert assistant.is_archived is False
+
+        # Archiving the working version should archive the assistant
+        node_version.archive()
+        assert OpenAiAssistant.objects.get_all().filter(working_version_id=assistant.id, is_archived=True).exists()
+
+    def test_archive_llm_response_with_prompt_node(self):
+        """
+        Archiving this node should archive the related collection as well when this node is a version and the collection
+        exists
+        """
+        collection = CollectionFactory()
+        pipeline = PipelineFactory()
+        node = NodeFactory(
+            type=LLMResponseWithPrompt.__name__, pipeline=pipeline, params={"collection_id": str(collection.id)}
+        )
+        version_with_instance = node.create_new_version()
+        node.params["collection_id"] = ""
+        version_without_instance = node.create_new_version()
+
+        # Archiving the working version should not archive the collection
+        node.archive()
+        collection.refresh_from_db()
+        assert collection.is_archived is False
+
+        # Archiving this version should archive the collection
+        version_with_instance.archive()
+        assert Collection.objects.get_all().filter(working_version_id=collection.id, is_archived=True).exists()
+
+        # Archiving this version should not error
+        version_without_instance.archive()
 
 
 class TestPipeline:
@@ -121,7 +185,7 @@ class TestPipeline:
         user = UserFactory()
         pipeline.simple_invoke(user_input, user.id)["messages"][-1]
         expected_call_messages = [
-            [("system", "Help the user. User data: . Source material: "), ("human", user_input)],
+            [("system", "Help the user. User data: {'name': 'Anonymous'}. Source material: "), ("human", user_input)],
         ]
         assert [
             [(message.type, message.content) for message in call] for call in llm.get_call_messages()

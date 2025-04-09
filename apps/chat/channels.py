@@ -65,7 +65,7 @@ def strip_urls_and_emojis(text: str) -> tuple[str, list[str]]:
     text = emoji.replace_emoji(text, replace="")
 
     url_pattern = re.compile(URL_REGEX)
-    urls = set(url_pattern.findall(text))
+    urls = set(url_pattern.findall(text)) or []
     for url in urls:
         text = text.replace(url, "")
 
@@ -104,6 +104,8 @@ class ChannelBase(ABC):
         send_voice_to_user: (Optional) An abstract method to send a voice message to the user. This must be implemented
             if voice_replies_supported is True
         send_text_to_user: Implementation of sending text to the user. Typically this is the reply from the bot
+        send_file_to_user: Implementation of sending a file to the user. This is a channel specific way of sending files
+        _can_send_file: A method to check if a file can be sent through the channel.
         get_message_audio: The method to retrieve the audio content of the message from the external channel
         transcription_started:A callback indicating that the transcription process has started
         transcription_finished: A callback indicating that the transcription process has finished.
@@ -163,6 +165,10 @@ class ChannelBase(ABC):
     def message(self) -> BaseMessage:
         return self._message
 
+    @property
+    def supports_multimedia(self) -> bool:
+        return False
+
     @message.setter
     def message(self, value: BaseMessage):
         self._message = value
@@ -202,15 +208,25 @@ class ChannelBase(ABC):
         if self.experiment_session:
             return self.experiment_session.participant.user
 
-    def send_voice_to_user(self, synthetic_voice: SynthesizedAudio, attached_files: list[File] = None):
+    def send_voice_to_user(self, synthetic_voice: SynthesizedAudio):
         raise NotImplementedError(
             "Voice replies are supported but the method reply (`send_voice_to_user`) is not implemented"
         )
 
     @abstractmethod
-    def send_text_to_user(self, text: str, attached_files: list[File] = None):
+    def send_text_to_user(self, text: str):
         """Channel specific way of sending text back to the user"""
         raise NotImplementedError()
+
+    def send_file_to_user(self, files: list[File]):
+        """
+        Sends the file to the user. This is a channel specific way of sending files.
+        The default implementation does nothing.
+        """
+        pass
+
+    def _can_send_file(self, file: File) -> bool:
+        return False
 
     def get_message_audio(self) -> BytesIO:
         return self.messaging_service.get_message_audio(message=self.message)
@@ -231,9 +247,9 @@ class ChannelBase(ABC):
         """Callback indicating that the user input will now be given to the LLM"""
         pass
 
-    def append_attachment_links(self, text: str, attachments: list[File]) -> str:
+    def append_attachment_links(self, text: str, linkify_files: list[File]) -> str:
         """
-        Appends the links of the attachments to the text.
+        Appends the links of the files in `linkify_files` to the text.
 
         Example:
         ```
@@ -248,10 +264,10 @@ class ChannelBase(ABC):
             https://example.com/cat.jpg
         ```
         """
-        if not attachments:
+        if not linkify_files:
             return text
 
-        links = [f"{file.name}\n{file.download_link(self.experiment_session.id)}\n" for file in attachments]
+        links = [f"{file.name}\n{file.download_link(self.experiment_session.id)}\n" for file in linkify_files]
         return "{text}\n\n{links}".format(text=text, links="\n".join(links))
 
     @staticmethod
@@ -439,27 +455,68 @@ class ChannelBase(ABC):
             return self._get_voice_transcript()
         return self.message.message_text
 
-    def send_message_to_user(self, bot_message: str, attached_files: list[File] = None):
+    def send_message_to_user(self, bot_message: str, files: list[File] | None = None):
         """Sends the `bot_message` to the user. The experiment's config will determine which message type to use"""
-        send_message_func = self.send_text_to_user
+        files = files or []
+        supported_files = []
+        unsupported_files = []
+
+        reply_text = True
         user_sent_voice = self.message and self.message.content_type == MESSAGE_TYPES.VOICE
 
         if self.voice_replies_supported and self.experiment.synthetic_voice:
             voice_config = self.experiment.voice_response_behaviour
             if voice_config == VoiceResponseBehaviours.ALWAYS:
-                send_message_func = self._reply_voice_message
+                reply_text = False
             elif voice_config == VoiceResponseBehaviours.RECIPROCAL and user_sent_voice:
-                send_message_func = self._reply_voice_message
+                reply_text = False
 
-        send_message_func(bot_message, attached_files)
+        if self.supports_multimedia:
+            supported_files, unsupported_files = self._get_supported_unsupported_files(files)
+        else:
+            unsupported_files = files
+
+        if reply_text:
+            bot_message = self.append_attachment_links(bot_message, linkify_files=unsupported_files)
+            self.send_text_to_user(bot_message)
+        else:
+            bot_message, extracted_urls = strip_urls_and_emojis(bot_message)
+            urls_to_append = "\n".join(extracted_urls)
+            urls_to_append = self.append_attachment_links(urls_to_append, linkify_files=unsupported_files)
+
+            try:
+                self._reply_voice_message(bot_message)
+
+                if urls_to_append:
+                    self.send_text_to_user(urls_to_append)
+            except AudioSynthesizeException as e:
+                logger.exception(e)
+                bot_message = f"{bot_message}\n\n{urls_to_append}"
+
+        # Finally send the attachments that are supported by the channel
+        if supported_files:
+            self._send_files_to_user(supported_files)
+
+    def _send_files_to_user(self, files: list[File]):
+        """
+        Try sending each attachment separately. If it fails, send the download link to the user instead.
+        """
+
+        for file in files:
+            try:
+                self.send_file_to_user(file)
+            except Exception as e:
+                logger.exception(e)
+                download_link = file.download_link(self.experiment_session.id)
+                self.send_text_to_user(download_link)
 
     def _handle_supported_message(self):
         self.submit_input_to_llm()
         ai_message = self._get_bot_response(message=self.user_query)
 
-        attached_files = ai_message.get_attached_files() or []
+        files = ai_message.get_attached_files() or []
 
-        self.send_message_to_user(bot_message=ai_message.content, attached_files=attached_files)
+        self.send_message_to_user(bot_message=ai_message.content, files=files)
 
         # Returning the response here is a bit of a hack to support chats through the web UI while trying to
         # use a coherent interface to manage / handle user messages
@@ -468,9 +525,7 @@ class ChannelBase(ABC):
     def _handle_unsupported_message(self):
         return self.send_text_to_user(self._unsupported_message_type_response())
 
-    def _reply_voice_message(self, text: str, attached_files: list[File] = None):
-        text, link_attachments = strip_urls_and_emojis(text)
-
+    def _reply_voice_message(self, text: str):
         voice_provider = self.experiment.voice_provider
         synthetic_voice = self.experiment.synthetic_voice
         if self.experiment.use_processor_bot_voice and (
@@ -480,19 +535,8 @@ class ChannelBase(ABC):
             synthetic_voice = self.bot.processor_experiment.synthetic_voice
 
         speech_service = voice_provider.get_speech_service()
-        try:
-            synthetic_voice_audio = speech_service.synthesize_voice(text, synthetic_voice)
-            self.send_voice_to_user(synthetic_voice_audio)
-        except AudioSynthesizeException as e:
-            logger.exception(e)
-            self.send_text_to_user(text)
-
-        if attached_files:
-            link_attachments.extend([file.download_link(self.experiment_session.id) for file in attached_files])
-
-        if link_attachments:
-            link_attachments_text = "\n".join(link_attachments)
-            self.send_text_to_user(link_attachments_text)
+        synthetic_voice_audio = speech_service.synthesize_voice(text, synthetic_voice)
+        self.send_voice_to_user(synthetic_voice_audio)
 
     def _get_voice_transcript(self) -> str:
         # Indicate to the user that the bot is busy processing the message
@@ -638,7 +682,7 @@ class ChannelBase(ABC):
         try:
             bot_message = EventBot(self.experiment_session, self.experiment).get_user_message(
                 "Tell the user that something went wrong while processing their message and that they should "
-                "try again later"
+                "try again later. Do this in the language they are speaking in."
             )
         except Exception:  # noqa BLE001
             logger.exception("Something went wrong while trying to generate an appropriate error message for the user")
@@ -649,6 +693,26 @@ class ChannelBase(ABC):
         except Exception:  # noqa BLE001
             logger.exception("Something went wrong while trying to inform the user of an error")
 
+    def _get_supported_unsupported_files(self, files: list[File]) -> tuple[list[File], list[File]]:
+        """
+        Splits the files into two lists based on file size and support by the messaging service:
+        1. Files that are both supported by the messaging service and below max_file_size
+        2. Files that are either unsupported or above max_file_size (these will be sent as links)
+
+        Returns:
+            A tuple of (supported_files, unsupported_files)
+        """
+        supported_files = []
+        unsupported_files = []
+
+        for file in files:
+            if self._can_send_file(file):
+                supported_files.append(file)
+            else:
+                unsupported_files.append(file)
+
+        return supported_files, unsupported_files
+
 
 class WebChannel(ChannelBase):
     """Message Handler for the UI"""
@@ -656,7 +720,7 @@ class WebChannel(ChannelBase):
     voice_replies_supported = False
     supported_message_types = [MESSAGE_TYPES.TEXT]
 
-    def send_text_to_user(self, bot_message: str, attached_files: list[File] = None):
+    def send_text_to_user(self, bot_message: str):
         # Bot responses are returned by the task and picked up by a periodic request from the browser.
         # Ad-hoc bot messages are picked up by a periodic poll from the browser as well
         pass
@@ -718,7 +782,7 @@ class TelegramChannel(ChannelBase):
         super().__init__(experiment, experiment_channel, experiment_session)
         self.telegram_bot = TeleBot(self.experiment_channel.extra_data["bot_token"], threaded=False)
 
-    def send_voice_to_user(self, synthetic_voice: SynthesizedAudio, attached_files: list[File] = None):
+    def send_voice_to_user(self, synthetic_voice: SynthesizedAudio):
         antiflood(
             self.telegram_bot.send_voice,
             self.participant_identifier,
@@ -726,9 +790,7 @@ class TelegramChannel(ChannelBase):
             duration=synthetic_voice.duration,
         )
 
-    def send_text_to_user(self, text: str, attached_files: list[File] = None):
-        text = self.append_attachment_links(text, attached_files)
-
+    def send_text_to_user(self, text: str):
         for message_text in smart_split(text):
             antiflood(self.telegram_bot.send_message, self.participant_identifier, text=message_text)
 
@@ -753,22 +815,14 @@ class TelegramChannel(ChannelBase):
 
 
 class WhatsappChannel(ChannelBase):
-    def send_text_to_user(self, text: str, attached_files: list[File] = None):
-        text = self.append_attachment_links(text, attached_files)
-        from_number = self.experiment_channel.extra_data.get("number")
-        to_number = self.participant_identifier
-        self.messaging_service.send_text_message(
-            message=text,
-            from_=from_number,
-            to=to_number,
-            platform=ChannelPlatform.WHATSAPP,
-            attached_files=attached_files,
-        )
-
     @property
     def voice_replies_supported(self) -> bool:
         # TODO: Update turn-python library to support this
         return self.messaging_service.voice_replies_supported
+
+    @property
+    def supports_multimedia(self) -> bool:
+        return self.messaging_service.supports_multimedia
 
     @property
     def supported_message_types(self):
@@ -777,20 +831,42 @@ class WhatsappChannel(ChannelBase):
     def echo_transcript(self, transcript: str):
         self.send_text_to_user(f'I heard: "{transcript}"')
 
-    def send_voice_to_user(self, synthetic_voice: SynthesizedAudio, attached_files: list[File] = None):
+    def send_text_to_user(self, text: str):
+        from_number = self.experiment_channel.extra_data["number"]
+        to_number = self.participant_identifier
+
+        self.messaging_service.send_text_message(
+            message=text, from_=from_number, to=to_number, platform=ChannelPlatform.WHATSAPP
+        )
+
+    def send_voice_to_user(self, synthetic_voice: SynthesizedAudio):
         """
         Uploads the synthesized voice to AWS and send the public link to twilio
         """
         from_number = self.experiment_channel.extra_data["number"]
         to_number = self.participant_identifier
+
         self.messaging_service.send_voice_message(
             synthetic_voice, from_=from_number, to=to_number, platform=ChannelPlatform.WHATSAPP
         )
 
+    def send_file_to_user(self, file: File):
+        from_number = self.experiment_channel.extra_data["number"]
+        to_number = self.participant_identifier
+        self.messaging_service.send_file_to_user(
+            from_=from_number,
+            to=to_number,
+            platform=ChannelPlatform.WHATSAPP,
+            file_name=file.name,
+            download_link=file.download_link(experiment_session_id=self.experiment_session.id),
+        )
+
+    def _can_send_file(self, file: File) -> bool:
+        return self.messaging_service.can_send_file(file)
+
 
 class SureAdhereChannel(ChannelBase):
-    def send_text_to_user(self, text: str, attached_files: list[File] = None):
-        text = self.append_attachment_links(text, attached_files)
+    def send_text_to_user(self, text: str):
         to_patient = self.participant_identifier
         self.messaging_service.send_text_message(message=text, to=to_patient, platform=ChannelPlatform.SUREADHERE)
 
@@ -808,8 +884,7 @@ class SureAdhereChannel(ChannelBase):
 
 
 class FacebookMessengerChannel(ChannelBase):
-    def send_text_to_user(self, text: str, attached_files: list[File] = None):
-        text = self.append_attachment_links(text, attached_files)
+    def send_text_to_user(self, text: str):
         from_ = self.experiment_channel.extra_data.get("page_id")
         self.messaging_service.send_text_message(
             message=text, from_=from_, to=self.participant_identifier, platform=ChannelPlatform.FACEBOOK
@@ -826,7 +901,7 @@ class FacebookMessengerChannel(ChannelBase):
     def echo_transcript(self, transcript: str):
         self.send_text_to_user(f'I heard: "{transcript}"')
 
-    def send_voice_to_user(self, synthetic_voice: SynthesizedAudio, attached_files: list[File] = None):
+    def send_voice_to_user(self, synthetic_voice: SynthesizedAudio):
         """
         Uploads the synthesized voice to AWS and send the public link to twilio
         """
@@ -858,7 +933,7 @@ class ApiChannel(ChannelBase):
     def participant_user(self):
         return super().participant_user or self.user
 
-    def send_text_to_user(self, bot_message: str, attached_files: list[File] = None):
+    def send_text_to_user(self, bot_message: str):
         # The bot cannot send messages to this client, since it wouldn't know where to send it to
         pass
 
@@ -883,9 +958,7 @@ class SlackChannel(ChannelBase):
         super().__init__(experiment, experiment_channel, experiment_session)
         self.send_response_to_user = send_response_to_user
 
-    def send_text_to_user(self, text: str, attached_files: list[File] = None):
-        text = self.append_attachment_links(text, attached_files)
-
+    def send_text_to_user(self, text: str):
         if not self.send_response_to_user:
             return
 
@@ -940,9 +1013,8 @@ class CommCareConnectChannel(ChannelBase):
         super()._ensure_sessions_exists()
         self._check_consent()
 
-    def send_text_to_user(self, text: str, attached_files: list[File] = None):
+    def send_text_to_user(self, text: str):
         self._check_consent()
-        text = self.append_attachment_links(text, attached_files)
         self.client.send_message_to_user(
             channel_id=self.connect_channel_id, message=text, encryption_key=self.encryption_key
         )

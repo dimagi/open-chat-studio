@@ -93,6 +93,32 @@ class TestTwilio:
             elif message_type == "audio":
                 send_voice_message.assert_called()
 
+    @pytest.mark.django_db()
+    @patch("apps.service_providers.messaging_service.TwilioService.client")
+    def test_attachments_are_sent_as_separate_messages(self, twilio_client_mock, experiment, twilio_provider):
+        """
+        Test that the bot's response is sent along with a message for each supported attachment
+        """
+        channel = ExperimentChannelFactory(
+            platform=ChannelPlatform.WHATSAPP, messaging_provider=twilio_provider, extra_data={"number": "123"}
+        )
+        session = ExperimentSessionFactory(experiment_channel=channel, experiment=experiment)
+        channel = WhatsappChannel.from_experiment_session(session)
+        file1 = FileFactory(name="f1", content_type="image/jpeg")
+        file2 = FileFactory(name="f2", content_type="image/jpeg")
+
+        channel.send_message_to_user("Hi there", [file1, file2])
+        message_call = twilio_client_mock.messages.create.mock_calls[0]
+        attachment_call_1 = twilio_client_mock.messages.create.mock_calls[1]
+        attachment_call_2 = twilio_client_mock.messages.create.mock_calls[2]
+
+        assert message_call.kwargs["body"] == "Hi there"
+        assert attachment_call_1.kwargs["body"] == file1.name
+        assert attachment_call_1.kwargs["media_url"] == file1.download_link(session.id)
+
+        assert attachment_call_2.kwargs["body"] == file2.name
+        assert attachment_call_2.kwargs["media_url"] == file2.download_link(session.id)
+
 
 class TestTurnio:
     @pytest.mark.parametrize(
@@ -163,18 +189,17 @@ class TestTurnio:
         response.status_code == 200
         handle_turn_message_task.assert_not_called()
 
+    @pytest.mark.django_db()
+    @patch("apps.service_providers.messaging_service.TurnIOService.client")
+    def test_attachment_links_attached_to_message(self, turnio_client, turnio_whatsapp_channel, experiment):
+        session = ExperimentSessionFactory(experiment_channel=turnio_whatsapp_channel, experiment=experiment)
+        channel = WhatsappChannel.from_experiment_session(session)
+        files = FileFactory.create_batch(2)
+        channel.send_message_to_user("Hi there", files=files)
+        call_args = turnio_client.messages.send_text.mock_calls[0].args
+        final_message = call_args[1]
 
-@pytest.mark.django_db()
-def test_attachment_links_attached_to_message(experiment):
-    session = ExperimentSessionFactory(experiment_channel__platform=ChannelPlatform.WHATSAPP, experiment=experiment)
-    channel = WhatsappChannel.from_experiment_session(session)
-    channel.messaging_service = Mock()
-    files = FileFactory.create_batch(2)
-    channel.send_text_to_user("Hi there", attached_files=files)
-    call_kwargs = channel.messaging_service.send_text_message.call_args[1]
-    final_message = call_kwargs["message"]
-
-    expected_final_message = f"""Hi there
+        expected_final_message = f"""Hi there
 
 {files[0].name}
 {files[0].download_link(session.id)}
@@ -182,4 +207,4 @@ def test_attachment_links_attached_to_message(experiment):
 {files[1].name}
 {files[1].download_link(session.id)}
 """
-    assert final_message == expected_final_message
+        assert final_message == expected_final_message

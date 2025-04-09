@@ -27,8 +27,10 @@ from apps.experiments.models import (
     SessionStatus,
     VoiceResponseBehaviours,
 )
+from apps.files.models import File
 from apps.utils.factories.channels import ExperimentChannelFactory
 from apps.utils.factories.experiment import ExperimentFactory, ExperimentSessionFactory
+from apps.utils.factories.files import FileFactory
 from apps.utils.factories.team import MembershipFactory
 from apps.utils.langchain import build_fake_llm_service, mock_llm
 
@@ -37,6 +39,9 @@ from .message_examples import telegram_messages
 
 class TestChannel(ChannelBase):
     def send_text_to_user(self):
+        pass
+
+    def send_voice_to_user(self, *args, **kwargs):
         pass
 
 
@@ -922,3 +927,37 @@ def test_ensure_session_exists_for_participant(new_session, experiment):
         assert ExperimentSession.objects.filter(participant__identifier="testy-pie").count() == 2
     else:
         assert ExperimentSession.objects.filter(participant__identifier="testy-pie").count() == 1
+
+
+@pytest.mark.django_db()
+def test_supported_and_unsupported_attachments(experiment):
+    """
+    Test that the bot's response is sent along with a message for each supported attachment. Unsupported files
+    should be appended as links to the bot's response.
+    """
+
+    class CustomChannel(TestChannel):
+        @property
+        def supports_multimedia(self):
+            return True
+
+        def _can_send_file(self, file: File):
+            return file.name in ["f1", "f2"]
+
+    session = ExperimentSessionFactory(experiment=experiment)
+    channel = CustomChannel(experiment, experiment_channel=Mock(), experiment_session=session)
+    channel.send_text_to_user = Mock()
+    channel.send_file_to_user = Mock()
+
+    file1 = FileFactory(name="f1", content_type="image/jpeg")
+    file2 = FileFactory(name="f2", content_type="image/jpeg")
+    # This file is too large to be sent as a message and should be sent as a link
+    file3 = Mock(
+        spec=File, name="f3", content_type="image/jpeg", download_link=lambda *args, **kwargs: "https://example.com"
+    )
+
+    channel.send_message_to_user("Hi there", files=[file1, file2, file3])
+
+    assert channel.send_text_to_user.call_args[0][0] == f"Hi there\n\n{file3.name}\nhttps://example.com\n"
+    assert channel.send_file_to_user.mock_calls[0].args[0] == file1
+    assert channel.send_file_to_user.mock_calls[1].args[0] == file2

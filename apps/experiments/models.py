@@ -11,23 +11,19 @@ import markdown
 import pytz
 from django.conf import settings
 from django.contrib.postgres.fields import ArrayField
-from django.core.exceptions import FieldDoesNotExist, ValidationError
+from django.core.exceptions import ValidationError
 from django.core.validators import MaxValueValidator, MinValueValidator, validate_email
 from django.db import models, transaction
 from django.db.models import (
     BooleanField,
     Case,
-    CharField,
     Count,
-    F,
     OuterRef,
     Q,
     Subquery,
     UniqueConstraint,
-    Value,
     When,
 )
-from django.db.models.functions import Cast, Concat
 from django.template.loader import get_template
 from django.urls import reverse
 from django.utils import timezone
@@ -40,7 +36,7 @@ from apps.annotations.models import Tag
 from apps.chat.models import Chat, ChatMessage, ChatMessageType
 from apps.custom_actions.mixins import CustomActionOperationMixin
 from apps.experiments import model_audit_fields
-from apps.experiments.versioning import VersionDetails, VersionField, differs
+from apps.experiments.versioning import VersionDetails, VersionField, VersionsMixin, VersionsObjectManagerMixin, differs
 from apps.generics.chips import Chip
 from apps.teams.models import BaseTeamModel, Team
 from apps.utils.models import BaseModel
@@ -152,36 +148,6 @@ class VersionFieldDisplayFormatters:
         return ", ".join([tool.replace("_", " ").capitalize() for tool in tools])
 
 
-class VersionsObjectManagerMixin:
-    def get_all(self):
-        """A method to return all experiments whether it is deprecated or not"""
-        return super().get_queryset()
-
-    def get_queryset(self):
-        query = (
-            super()
-            .get_queryset()
-            .annotate(
-                is_version=Case(
-                    When(working_version_id__isnull=False, then=True),
-                    When(working_version_id__isnull=True, then=False),
-                    output_field=BooleanField(),
-                )
-            )
-        )
-        try:
-            self.model._meta.get_field("is_archived")
-        except FieldDoesNotExist:
-            pass
-        else:
-            query = query.filter(is_archived=False)
-        return query
-
-    def working_versions_queryset(self):
-        """Returns a queryset with only working versions"""
-        return self.get_queryset().filter(working_version=None)
-
-
 class PromptObjectManager(AuditingManager):
     pass
 
@@ -232,89 +198,6 @@ class PromptBuilderHistory(BaseTeamModel):
 
     def __str__(self) -> str:
         return str(self.history)
-
-
-class VersionsMixin:
-    DEFAULT_EXCLUDED_KEYS = ["id", "created_at", "updated_at", "working_version", "versions", "version_number"]
-
-    @transaction.atomic()
-    def create_new_version(self, save=True):
-        """
-        Creates a new version of this instance and sets the `working_version_id` (if this model supports it) to the
-        original instance ID
-        """
-        working_version_id = self.id
-        new_instance = self._meta.model.objects.get(id=working_version_id)
-        new_instance.pk = None
-        new_instance.id = None
-        new_instance._state.adding = True
-        if hasattr(new_instance, "working_version_id"):
-            new_instance.working_version_id = working_version_id
-
-        if save:
-            new_instance.save()
-        return new_instance
-
-    @property
-    def is_a_version(self):
-        """Return whether or not this experiment is a version of an experiment"""
-        return self.working_version is not None
-
-    @property
-    def is_working_version(self):
-        return self.working_version is None
-
-    @property
-    def latest_version(self):
-        return self.versions.order_by("-created_at").first()
-
-    def get_working_version(self) -> "Experiment":
-        """Returns the working version of this experiment family"""
-        if self.is_working_version:
-            return self
-        return self.working_version
-
-    def get_working_version_id(self) -> int:
-        return self.working_version_id if self.working_version_id else self.id
-
-    @property
-    def has_versions(self):
-        return self.versions.exists()
-
-    @property
-    def version_family_ids(self) -> list[int]:
-        """Returns the ids of records in this version family, including the working version"""
-        working_version = self.get_working_version()
-        version_family_ids = [working_version.id]
-        version_family_ids.extend(working_version.versions.values_list("id", flat=True))
-        return version_family_ids
-
-    def get_fields_to_exclude(self):
-        """Returns a list of fields that should be excluded when comparing two versions."""
-        return self.DEFAULT_EXCLUDED_KEYS
-
-    def archive(self):
-        self.is_archived = True
-        self.save(update_fields=["is_archived"])
-
-    def is_editable(self) -> bool:
-        return not self.is_archived
-
-    def get_version_name(self):
-        """Returns version name in form of v + version number, or unreleased if working version."""
-        if self.is_working_version:
-            return "unreleased"
-        return f"v{self.version_number}"
-
-    def get_version_name_list(self):
-        """Returns list of version names in form of v + version number including working version."""
-        versions_list = list(
-            self.versions.annotate(
-                friendly_name=Concat(Value("v"), Cast(F("version_number"), output_field=CharField()))
-            ).values_list("friendly_name", flat=True)
-        )
-        versions_list.append(f"v{self.version_number}")
-        return versions_list
 
 
 @audit_fields(*model_audit_fields.SOURCE_MATERIAL_FIELDS, audit_special_queryset_writes=True)
@@ -962,15 +845,6 @@ class Experiment(BaseTeamModel, VersionsMixin, CustomActionOperationMixin):
 
     def get_fields_to_exclude(self):
         return super().get_fields_to_exclude() + ["is_default_version", "public_id", "version_description"]
-
-    def compare_with_latest(self):
-        """
-        Returns a boolean if the experiment differs from the lastest version
-        """
-        version = self.version_details
-        if prev_version := self.latest_version:
-            version.compare(prev_version.version_details, early_abort=True)
-        return version.fields_changed
 
     @transaction.atomic()
     def archive(self):
