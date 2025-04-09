@@ -99,6 +99,52 @@ class PipelineState(dict):
 
         return cls(**kwargs)
 
+    def get_route(self, node_name: str) -> str | None:
+        """
+        Gets the route selected by a specific router node.
+        """
+        node_output = self.get("outputs", {}).get(node_name)
+        if node_output:
+            return node_output.get("route")
+        return None
+
+    def get_node_path(self, node_name: str) -> list | None:
+        """
+        Gets the path (list of node names) leading to the specified node.
+
+        Returns:
+            A list containing the sequence of nodes leading to the target node,
+            or None if the node is not found
+        """
+        path = []
+        outputs = self.get("outputs", {})
+        current_node = node_name
+
+        while current_node:
+            path.insert(0, current_node)
+
+            # Find which node routed to the current node
+            parent_node = None
+            for node, data in outputs.items():
+                if "route" in data and data["route"] == current_node:
+                    parent_node = node
+                    break
+            current_node = parent_node
+        return path if path else None
+
+    def get_all_routes(self) -> dict:
+        """
+        Gets all routing decisions in the pipeline.
+        """
+        routes_dict = {}
+        outputs = self.get("outputs", {})
+
+        for node_name, node_data in outputs.items():
+            if "route" in node_data:
+                routes_dict[node_name] = node_data["route"]
+
+        return routes_dict
+
 
 class PipelineNode(BaseModel, ABC):
     """Pipeline node that implements the `_process` method and returns a new state. Define required parameters as
