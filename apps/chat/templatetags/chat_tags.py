@@ -1,4 +1,7 @@
+from copy import deepcopy
+
 import markdown
+import nh3
 from django import template
 from django.template.defaultfilters import linebreaksbr
 from django.utils.safestring import mark_safe
@@ -19,6 +22,10 @@ def render_markdown(text):
     text = markdown.markdown(
         text, extensions=[FootnoteExtension(BACKLINK_TEXT=""), FencedCodeExtension(), FileExtension(), TableExtension()]
     )
-    text = text.replace(">\n<", "><")
-    text = text.replace("</p><p>", "</p>\n<p>")
-    return linebreaksbr(mark_safe(text))
+    attributes = deepcopy(nh3.ALLOWED_ATTRIBUTES)
+    attributes["code"] = {"class"}
+    attributes["a"] = {"href", "title", "target"}  # Allows link to open in new tab
+    cleaned_html = nh3.clean(text, attributes=attributes)
+    cleaned_html = cleaned_html.replace(">\n<", "><")
+    cleaned_html = cleaned_html.replace("</p><p>", "</p>\n<p>")
+    return linebreaksbr(mark_safe(cleaned_html))
