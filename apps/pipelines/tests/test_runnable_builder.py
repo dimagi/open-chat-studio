@@ -26,7 +26,6 @@ from apps.pipelines.tests.utils import (
     llm_response_with_prompt_node,
     passthrough_node,
     render_template_node,
-    router_node,
     start_node,
     state_key_router_node,
 )
