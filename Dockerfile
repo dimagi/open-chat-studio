@@ -3,7 +3,8 @@ RUN apt-get update \
   # dependencies for building Python packages
   && apt-get install -y build-essential libpq-dev
 COPY ./requirements /requirements
-RUN pip wheel --no-cache-dir --no-deps --wheel-dir /wheels \
+RUN pip install --upgrade pip setuptools wheel \
+    && pip wheel --no-cache-dir --no-deps --wheel-dir /wheels \
     -r /requirements/requirements.txt \
     -r /requirements/prod-requirements.txt
 
