@@ -77,7 +77,7 @@ def test_tracing_service():
     session.experiment.trace_provider = provider
     service = "apps.service_providers.tracing.LangFuseTraceService"
     with (
-        patch(f"{service}.get_callback") as mock_get_callback,
+        patch(f"{service}.get_langchain_callback") as mock_get_callback,
         patch(f"{service}.get_trace_metadata") as get_trace_metadata,
         patch(f"{service}.end", Mock()),
         mock_llm(responses=["response"]),

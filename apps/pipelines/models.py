@@ -265,7 +265,7 @@ class Pipeline(BaseTeamModel, VersionsMixin):
             callbacks = [logging_callback]
             trace_service = session.experiment.trace_service
             if trace_service:
-                trace_service_callback = trace_service.get_callback(
+                trace_service_callback = trace_service.get_langchain_callback(
                     trace_name=session.experiment.name,
                     participant_id=str(session.participant.identifier),
                     session_id=str(session.external_id),

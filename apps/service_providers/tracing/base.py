@@ -15,11 +15,11 @@ class TraceService:
         self.type = type_
         self.config = config
 
-    def get_callback(self, trace_name: str, participant_id: str, session_id: str) -> BaseCallbackHandler:
+    def get_langchain_callback(self, trace_name: str, participant_id: str, session_id: str) -> BaseCallbackHandler:
         raise NotImplementedError
 
     def get_langchain_config(self, trace_name: str, participant_id: str, session_id: str) -> RunnableConfig:
-        callback = self.get_callback(
+        callback = self.get_langchain_callback(
             trace_name=trace_name,
             participant_id=participant_id,
             session_id=session_id,

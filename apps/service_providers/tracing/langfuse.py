@@ -32,7 +32,7 @@ class LangFuseTraceService(TraceService):
         self.client = None
         self.trace = None
 
-    def get_callback(self, trace_name: str, participant_id: str, session_id: str) -> BaseCallbackHandler:
+    def get_langchain_callback(self, trace_name: str, participant_id: str, session_id: str) -> BaseCallbackHandler:
         from langfuse.callback import CallbackHandler
 
         if self.trace:
