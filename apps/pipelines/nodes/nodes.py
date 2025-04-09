@@ -424,26 +424,24 @@ class RouterMixin(BaseModel):
 
         return value
 
-    def _get_keyword(self, result: str):
-        keyword = result.lower().strip()
-        if keyword in [k.lower() for k in self.keywords]:
-            return keyword.lower()
+    def get_keyword(self, result: str):
+        keyword = result.strip()
+        if keyword in self.keywords:
+            return keyword
         else:
-            return self.keywords[0].lower()
+            return self.keywords[0]
 
     def _create_router_schema(self):
         """Create a Pydantic model for structured router output"""
-        routes = [keyword.lower() for keyword in self.keywords]
-
         return create_model(
-            "RouterOutput", route=(Literal[tuple(routes)], Field(description="Selected routing destination"))
+            "RouterOutput", route=(Literal[tuple(self.keywords)], Field(description="Selected routing destination"))
         )
 
     def get_output_map(self):
         """Returns a mapping of the form:
         {"output_1": "keyword 1", "output_2": "keyword_2", ...} where keywords are defined by the user
         """
-        return {f"output_{output_num}": keyword.lower() for output_num, keyword in enumerate(self.keywords)}
+        return {f"output_{output_num}": keyword for output_num, keyword in enumerate(self.keywords)}
 
 
 class RouterNode(RouterMixin, Passthrough, HistoryMixin):
