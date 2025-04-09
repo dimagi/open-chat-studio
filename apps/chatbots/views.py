@@ -90,8 +90,10 @@ class EditChatbot(LoginAndTeamRequiredMixin, TemplateView, PermissionRequiredMix
             **data,
             "pipeline_id": kwargs["pk"],
             "node_schemas": _pipeline_node_schemas(),
+            "experiment": Experiment.objects.get(pipeline_id=kwargs.get("pk")),
             "parameter_values": _pipeline_node_parameter_values(self.request.team, llm_providers, llm_provider_models),
             "default_values": _pipeline_node_default_values(llm_providers, llm_provider_models),
+            "origin": "chatbots",
         }
 
 
