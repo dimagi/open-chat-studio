@@ -4,6 +4,7 @@
 from typing import Literal
 
 import pydantic
+from pydantic import Field
 
 from apps.pipelines.const import STANDARD_INPUT_NAME, STANDARD_OUTPUT_NAME
 
@@ -39,3 +40,4 @@ class Flow(pydantic.BaseModel):
 class FlowPipelineData(pydantic.BaseModel):
     name: str
     data: Flow
+    experiment_name: str = Field(default=None, min_length=1)
