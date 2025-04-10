@@ -73,10 +73,8 @@ class LangFuseTracer(Tracer):
             raise ServiceNotInitializedException("Service not initialized.")
 
         return {
-            "trace_info": {
-                "trace_id": self.trace.id,
-                "trace_url": self.trace.get_trace_url(),
-            },
+            "trace_id": self.trace.id,
+            "trace_url": self.trace.get_trace_url(),
             "trace_provider": self.type,
         }
 

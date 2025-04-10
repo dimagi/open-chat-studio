@@ -3,6 +3,7 @@
   {% if experiment.debug_mode_enabled %}
     <div class="flex gap-2 items-center">
       {% if message.trace_info %}
+        # TODO: fix trace info
         <div class="tooltip tooltip-right" data-tip="Open Trace on {{ message.trace_info.trace_provider|title }}">
           <a class="btn btn-xs btn-square btn-outline" href="{{ message.trace_info.trace_url }}" target="_blank">
             <i class="fa-regular fa-chart-bar"></i>
