@@ -9,6 +9,7 @@ from langchain_core.messages import BaseMessage, messages_from_dict
 from apps.annotations.models import Tag, TagCategories, TaggedModelMixin, UserCommentsMixin
 from apps.files.models import File
 from apps.teams.models import BaseTeamModel
+from apps.teams.utils import set_current_team
 from apps.utils.models import BaseModel
 
 
@@ -199,13 +200,14 @@ class ChatMessage(BaseModel, TaggedModelMixin, UserCommentsMixin):
         return self.metadata.get(key, None)
 
     def add_system_tag(self, tag: str, tag_category: TagCategories):
-        tag, _ = Tag.objects.get_or_create(
-            name=tag,
-            team=self.chat.team,
-            is_system_tag=True,
-            category=tag_category,
-        )
-        self.add_tag(tag, team=self.chat.team, added_by=None)
+        with set_current_team(self.chat.team):
+            tag, _ = Tag.objects.get_or_create(
+                name=tag,
+                team=self.chat.team,
+                is_system_tag=True,
+                category=tag_category,
+            )
+            self.add_tag(tag, team=self.chat.team, added_by=None)
 
     def add_version_tag(self, version_number: int, is_a_version: bool):
         tag = f"v{version_number}"
