@@ -375,7 +375,7 @@ class Passthrough(PipelineNode):
 
     def _process(self, input, state: PipelineState, node_id: str) -> PipelineState:
         if self.logger:
-            self.logger.debug(f"Returning input: '{input}' without modification", input=input, output=input)
+            self.logger.debug(f"Returning input: '{input}' without modification")
         return PipelineState.from_node_output(node_name=self.name, node_id=node_id, output=input)
 
 
