@@ -89,10 +89,10 @@ class FakeLlm(FakeListChatModel):
             if isinstance(result, dict):
                 return result
             elif isinstance(result, str):
-                route_value = result.lower()
+                route_value = result
                 return type("RouterOutput", (), {"route": route_value}) if is_router_schema else {"route": route_value}
             else:
-                default_route = self.responses[0].lower() if self.responses else "default"
+                default_route = self.responses[0] if self.responses else "default"
                 return (
                     type("RouterOutput", (), {"route": default_route}) if is_router_schema else {"route": default_route}
                 )

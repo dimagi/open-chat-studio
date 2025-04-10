@@ -425,11 +425,11 @@ class RouterMixin(BaseModel):
         return value
 
     def _get_keyword(self, result: str):
-        keyword = result.lower().strip()
-        if keyword in [k.lower() for k in self.keywords]:
-            return keyword.lower()
-        else:
-            return self.keywords[0].lower()
+        input_keyword = result.lower().strip()
+        for keyword in self.keywords:
+            if keyword.lower() == input_keyword:
+                return keyword
+        return self.keywords[0]
 
     def _create_router_schema(self):
         """Create a Pydantic model for structured router output"""
@@ -486,6 +486,8 @@ class RouterNode(RouterMixin, Passthrough, HistoryMixin):
 
         if not keyword:
             keyword = self.keywords[0]
+        else:
+            keyword = self._get_keyword(keyword)
 
         if session:
             self._save_history(session, node_id, node_input, keyword)
