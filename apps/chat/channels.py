@@ -41,6 +41,7 @@ from apps.files.models import File
 from apps.service_providers.llm_service.history_managers import ExperimentHistoryManager
 from apps.service_providers.llm_service.runnables import GenerationCancelled
 from apps.service_providers.speech_service import SynthesizedAudio
+from apps.service_providers.tracing import TracingService
 from apps.slack.utils import parse_session_external_id
 from apps.users.models import CustomUser
 
@@ -623,8 +624,9 @@ class ChannelBase(ABC):
 
     def _unsupported_message_type_response(self):
         """Generates a suitable response to the user when they send unsupported messages"""
+        trace_service = TracingService.create_for_experiment(self.experiment)
         history_manager = ExperimentHistoryManager(
-            session=self.experiment_session, experiment=self.experiment, trace_service=self.experiment.trace_service
+            session=self.experiment_session, experiment=self.experiment, trace_service=trace_service
         )
         return EventBot(self.experiment_session, self.experiment, history_manager).get_user_message(
             UNSUPPORTED_MESSAGE_BOT_PROMPT.format(supported_types=self.supported_message_types)

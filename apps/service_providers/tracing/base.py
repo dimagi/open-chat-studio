@@ -3,7 +3,6 @@ from typing import Any
 from uuid import UUID
 
 from langchain_core.callbacks import BaseCallbackHandler
-from langchain_core.runnables import RunnableConfig
 
 
 class ServiceReentryException(Exception):
@@ -63,17 +62,6 @@ class Tracer(ABC):
     @abstractmethod
     def get_langchain_callback(self) -> BaseCallbackHandler:
         raise NotImplementedError
-
-    def get_langchain_config(self) -> RunnableConfig:
-        callback = self.get_langchain_callback()
-        return {
-            "run_name": self.trace_name,
-            "callbacks": [callback],
-            "metadata": {
-                "participant-id": self.user_id,
-                "session-id": self.session_id,
-            },
-        }
 
     def get_trace_metadata(self) -> dict[str, str]:
         return {}

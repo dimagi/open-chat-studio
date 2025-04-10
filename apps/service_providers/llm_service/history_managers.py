@@ -64,7 +64,7 @@ class ExperimentHistoryManager(BaseHistoryManager):
             experiment=experiment,
             max_token_limit=experiment.max_token_limit,
             chat_model=experiment.get_chat_model(),
-            trace_service=trace_service or experiment.trace_service,
+            trace_service=trace_service,
         )
 
     @classmethod
