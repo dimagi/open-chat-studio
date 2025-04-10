@@ -2,7 +2,7 @@ import logging
 import uuid
 from datetime import datetime
 from typing import cast
-from urllib.parse import parse_qs, quote, urlparse
+from urllib.parse import parse_qs, urlparse
 
 import jwt
 from celery.result import AsyncResult
@@ -23,7 +23,7 @@ from django.utils.html import format_html
 from django.utils.safestring import mark_safe
 from django.views.decorators.clickjacking import xframe_options_exempt
 from django.views.decorators.csrf import csrf_exempt
-from django.views.decorators.http import require_POST
+from django.views.decorators.http import require_GET, require_POST
 from django.views.generic import CreateView, UpdateView
 from django_tables2 import SingleTableView
 from field_audit.models import AuditAction
@@ -778,6 +778,8 @@ def get_message_response(request, team_slug: str, experiment_id: uuid.UUID, sess
     progress = Progress(AsyncResult(task_id)).get_info()
     # don't render empty messages
     skip_render = progress["complete"] and progress["success"] and not progress["result"]
+    if skip_render:
+        return HttpResponse()
 
     message_details = {"message": None, "error_msg": False, "complete": progress["complete"]}
     if progress["complete"] and progress["success"]:
@@ -805,20 +807,37 @@ def get_message_response(request, team_slug: str, experiment_id: uuid.UUID, sess
             "task_id": task_id,
             "message_details": message_details,
             "skip_render": skip_render,
-            "last_message_datetime": last_message and quote(last_message.created_at.isoformat()),
+            "last_message_datetime": last_message and last_message.created_at,
             "attachments": attached_files,
         },
     )
 
 
+@experiment_session_view()
+@require_GET
+@xframe_options_exempt
 @team_required
-def poll_messages(request, team_slug: str, experiment_id: int, session_id: int):
+def poll_messages_embed(request, team_slug: str, experiment_id: uuid.UUID, session_id: str):
+    if not request.experiment_session.participant.is_anonymous:
+        return HttpResponseForbidden()
+
+    return _poll_messages(request)
+
+
+@experiment_session_view()
+@require_GET
+@team_required
+def poll_messages(request, team_slug: str, experiment_id: uuid.UUID, session_id: str):
     user = get_real_user_or_none(request.user)
+    if not request.experiment_session.participant.user == user:
+        return HttpResponseForbidden()
+
+    return _poll_messages(request)
+
+
+def _poll_messages(request):
     params = request.GET.dict()
     since_param = params.get("since")
-    experiment_session = get_object_or_404(
-        ExperimentSession, participant__user=user, experiment_id=experiment_id, id=session_id, team=request.team
-    )
 
     since = timezone.now()
     if since_param and since_param != "null":
@@ -828,20 +847,23 @@ def poll_messages(request, team_slug: str, experiment_id: int, session_id: int):
             logging.exception(f"Unexpected `since` parameter value. Error: {e}")
 
     messages = (
-        ChatMessage.objects.filter(message_type=ChatMessageType.AI, chat=experiment_session.chat, created_at__gt=since)
+        ChatMessage.objects.filter(
+            message_type=ChatMessageType.AI, chat=request.experiment_session.chat, created_at__gt=since
+        )
         .order_by("created_at")
         .all()
     )
-    last_message = messages[0] if messages else None
 
-    return TemplateResponse(
-        request,
-        "experiments/chat/system_message.html",
-        {
-            "messages": [message.content for message in messages],
-            "last_message_datetime": last_message and quote(last_message.created_at.isoformat()),
-        },
-    )
+    if messages:
+        return TemplateResponse(
+            request,
+            "experiments/chat/system_message.html",
+            {
+                "messages": [message.content for message in messages],
+                "last_message_datetime": messages[0].created_at,
+            },
+        )
+    return HttpResponse()
 
 
 @team_required
