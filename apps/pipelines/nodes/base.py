@@ -201,6 +201,9 @@ class PipelineNode(BaseModel, ABC):
 
     @cached_property
     def logger(self):
+        if not self._config or not self._config.get("callbacks"):
+            return noop_logger()[0]
+
         for handler in self._config["callbacks"].handlers:
             if isinstance(handler, LoggingCallbackHandler):
                 return handler.logger
