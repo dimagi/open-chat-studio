@@ -332,7 +332,7 @@ class ChannelBase(ABC):
         try:
             return self._new_user_message(message)
         except GenerationCancelled:
-            return ""
+            return ChatMessage(content="", message_type=ChatMessageType.AI)
 
     def _participant_is_allowed(self):
         if self.experiment.is_public:
