@@ -26,6 +26,7 @@ from apps.pipelines.tests.utils import (
     llm_response_with_prompt_node,
     passthrough_node,
     render_template_node,
+    router_node,
     start_node,
     state_key_router_node,
 )
@@ -1026,3 +1027,80 @@ def test_input_with_format_strings():
     resp = Passthrough(name="test").process("node_id", [], state, {})
 
     assert resp["messages"] == ["Is this it {the thing}"]
+
+
+@django_db_with_data(available_apps=("apps.service_providers",))
+@mock.patch("apps.service_providers.models.LlmProvider.get_llm_service")
+@mock.patch("apps.pipelines.nodes.base.PipelineNode.logger", mock.Mock())
+def test_router_node(get_llm_service, provider, provider_model, pipeline, experiment_session):
+    service = build_fake_llm_echo_service(include_system_message=False)
+    get_llm_service.return_value = service
+    start = start_node()
+    router = router_node(str(provider.id), str(provider_model.id), keywords=["A", "b", "c", "d"])
+    template_a = render_template_node("A {{ input }}")
+    template_b = render_template_node("B {{ input }}")
+    template_c = render_template_node("C {{ input }}")
+    template_d = render_template_node("D {{ input }}")
+    end = end_node()
+    nodes = [start, router, template_a, template_b, template_c, template_d, end]
+    edges = [
+        {"id": "start -> router", "source": start["id"], "target": router["id"]},
+        {
+            "id": "RouterNode -> A",
+            "source": router["id"],
+            "target": template_a["id"],
+            "sourceHandle": "output_0",
+        },
+        {
+            "id": "RouterNode -> B",
+            "source": router["id"],
+            "target": template_b["id"],
+            "sourceHandle": "output_1",
+        },
+        {
+            "id": "RouterNode -> C",
+            "source": router["id"],
+            "target": template_c["id"],
+            "sourceHandle": "output_2",
+        },
+        {
+            "id": "RouterNode -> D",
+            "source": router["id"],
+            "target": template_d["id"],
+            "sourceHandle": "output_3",
+        },
+        {
+            "id": "A -> END",
+            "source": template_a["id"],
+            "target": end["id"],
+        },
+        {
+            "id": "B -> END",
+            "source": template_b["id"],
+            "target": end["id"],
+        },
+        {
+            "id": "C -> END",
+            "source": template_c["id"],
+            "target": end["id"],
+        },
+        {
+            "id": "D -> END",
+            "source": template_d["id"],
+            "target": end["id"],
+        },
+    ]
+    runnable = create_runnable(pipeline, nodes, edges)
+
+    output = runnable.invoke(PipelineState(messages=["a"], experiment_session=experiment_session))
+    assert output["messages"][-1] == "A a"
+    output = runnable.invoke(PipelineState(messages=["A"], experiment_session=experiment_session))
+    assert output["messages"][-1] == "A A"
+    output = runnable.invoke(PipelineState(messages=["b"], experiment_session=experiment_session))
+    assert output["messages"][-1] == "B b"
+    output = runnable.invoke(PipelineState(messages=["c"], experiment_session=experiment_session))
+    assert output["messages"][-1] == "C c"
+    output = runnable.invoke(PipelineState(messages=["d"], experiment_session=experiment_session))
+    assert output["messages"][-1] == "D d"
+    output = runnable.invoke(PipelineState(messages=["z"], experiment_session=experiment_session))
+    assert output["messages"][-1] == "A z"
