@@ -333,10 +333,10 @@ class EventBot:
         service = provider.get_llm_service()
         llm = service.get_chat_model(model.name, 0.7)
 
-        if self.history_manager and self.history_manager.trace_service:
+        if self.history_manager:
             trace_service = self.history_manager.trace_service
         else:
-            trace_service = TracingService.empty()
+            trace_service = TracingService.create_for_experiment(self.experiment)
 
         with trace_service.trace(
             trace_name=self.experiment.name,

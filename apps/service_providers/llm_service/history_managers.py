@@ -10,6 +10,7 @@ from apps.chat.conversation import compress_chat_history, compress_pipeline_chat
 from apps.chat.models import ChatMessage, ChatMessageType
 from apps.experiments.models import Experiment, ExperimentSession
 from apps.pipelines.models import PipelineChatHistory, PipelineChatHistoryTypes
+from apps.service_providers.tracing import TracingService
 
 
 class BaseHistoryManager(metaclass=ABCMeta):
@@ -35,7 +36,7 @@ class ExperimentHistoryManager(BaseHistoryManager):
     def __init__(
         self,
         session: ExperimentSession,
-        experiment: Experiment | None = None,
+        experiment: Experiment,
         max_token_limit: int | None = None,
         chat_model: BaseChatModel | None = None,
         trace_service=None,
@@ -44,7 +45,7 @@ class ExperimentHistoryManager(BaseHistoryManager):
         self.session = session
         self.max_token_limit = max_token_limit
         self.chat_model = chat_model
-        self.trace_service = trace_service
+        self.trace_service = trace_service or TracingService.create_for_experiment(experiment)
         self.ai_message = None
         self.history_mode = history_mode
 
@@ -68,8 +69,8 @@ class ExperimentHistoryManager(BaseHistoryManager):
         )
 
     @classmethod
-    def for_assistant(cls, session: ExperimentSession, experiment: Experiment) -> Self:
-        return cls(session=session, experiment=experiment)
+    def for_assistant(cls, session: ExperimentSession, experiment: Experiment, trace_service=None) -> Self:
+        return cls(session=session, experiment=experiment, trace_service=trace_service)
 
     def get_chat_history(self, input_messages: list):
         return compress_chat_history(
