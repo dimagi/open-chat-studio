@@ -98,6 +98,7 @@ def test_trace_id_export():
             id="msg1",
             message_type="human",
             content="Hello",
+            # TODO: fix trace info
             metadata={"trace_info": {"trace_id": "trace123"}},
             trace_info={"trace_id": "trace123"},
             tags=Mock(all=Mock(return_value=[])),

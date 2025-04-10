@@ -141,9 +141,9 @@ class TracingService:
             config["configurable"] = {**configurable}
         return config
 
-    def get_trace_metadata(self) -> list[dict[str, Any]]:
+    def get_trace_metadata(self) -> dict[str, Any]:
         if not self.activated:
-            return []
+            return {}
 
         trace_info = []
         for tracer in self._active_tracers:
@@ -154,7 +154,7 @@ class TracingService:
                 logger.exception("Error getting trace info")
                 continue
 
-        return trace_info
+        return {"trace_info": trace_info} if trace_info else {}
 
     def _start_span(
         self,

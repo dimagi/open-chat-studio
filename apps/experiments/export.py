@@ -71,6 +71,7 @@ def filtered_export_to_csv(experiment, sessions_queryset):
 
     for session in queryset:
         for message in session.chat.messages.all():
+            # TODO: fix trace info
             trace_id = message.trace_info.get("trace_id", "") if message.trace_info else ""
             row = [
                 message.id,
