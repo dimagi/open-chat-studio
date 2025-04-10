@@ -43,43 +43,17 @@
     refreshTimer = setTimeout(pollBackend, pollInterval);
   }
 
-  function appendMessage(messageHTML) {
-    const messageList = document.getElementById('message-list');
-    const newMessageDiv = document.createElement('div');
-    newMessageDiv.innerHTML = messageHTML;
-
-    messageList.appendChild(newMessageDiv);
-  }
-
   function pollBackend() {
-    document.body.addEventListener('htmx:afterOnLoad', function(evt) {
-      // scroll to bottom of chat after every htmx request
-      const chatUI = document.getElementById('message-list');
-      chatUI.scrollTop = chatUI.scrollHeight;
-    });
     const messageListDiv = document.getElementById('message-list');
-    var url = messageListDiv.getAttribute('data-url');
+    const url = messageListDiv.getAttribute('data-url');
     const lastMessage = messageListDiv.lastElementChild
     const lastDateTime = lastMessage.getAttribute('data-last-message-datetime')
     if (!lastDateTime) {
+      console.log("No last message datetime found, skipping poll.", lastMessage);
       return;
     }
     const params = new URLSearchParams([['since', lastDateTime]])
-    fetch(`${url}?${params}`)
-      .then(response => {
-        if (response.status !== 200) {
-          console.error('Messages not found');
-          return;
-        }
-        return response.text();
-      })
-      .then(data => {
-        if (data) {
-          appendMessage(data);
-        }
-      })
-      .catch(error => console.error('Error fetching messages:', error))
-      .finally(() => scrollToBottom());
+    htmx.ajax('GET', `${url}?${params}`, {target: '#message-list', swap: 'beforeend'})
   }
 
   function cancelPolling() {
