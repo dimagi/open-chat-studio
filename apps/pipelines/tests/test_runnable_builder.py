@@ -12,7 +12,7 @@ from apps.experiments.models import ParticipantData
 from apps.pipelines.exceptions import PipelineBuildError, PipelineNodeBuildError
 from apps.pipelines.logging import LoggingCallbackHandler
 from apps.pipelines.nodes.base import PipelineState, merge_dicts
-from apps.pipelines.nodes.nodes import EndNode, RouterNode, StartNode, StaticRouterNode
+from apps.pipelines.nodes.nodes import EndNode, Passthrough, RouterNode, StartNode, StaticRouterNode
 from apps.pipelines.tests.utils import (
     assistant_node,
     boolean_node,
@@ -1014,3 +1014,15 @@ def test_pipeline_history_manager_metadata_storage(get_llm_service, pipeline):
 )
 def test_merge_dicts(left, right, expected):
     assert merge_dicts(left, right) == expected
+
+
+def test_input_with_format_strings():
+    state = PipelineState(
+        messages=["Is this it {the thing}"],
+        experiment_session=ExperimentSessionFactory.build(),
+        pipeline_version=1,
+        temp_state={},
+    )
+    resp = Passthrough(name="test").process("node_id", [], state, {})
+
+    assert resp["messages"] == ["Is this it {the thing}"]
