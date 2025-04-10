@@ -75,7 +75,7 @@ def test_tracing_service():
     session = ExperimentSessionFactory()
     provider = TraceProvider(type="langfuse", config={})
     session.experiment.trace_provider = provider
-    service = "apps.service_providers.tracing.LangFuseTraceService"
+    service = "apps.service_providers.tracing.LangFuseTracer"
     with (
         patch(f"{service}.get_langchain_callback") as mock_get_callback,
         patch(f"{service}.get_trace_metadata") as get_trace_metadata,
