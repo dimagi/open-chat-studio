@@ -320,6 +320,8 @@ def _get_new_summary(llm, pruned_memory, summary, max_token_limit, first_call=Tr
             for msg in pruned_memory
             if msg.content
         ]
+        if not pruned_memory:
+            return summary
 
     tokens, context = _get_summary_tokens_with_context(llm, summary, pruned_memory)
     next_batch = []
