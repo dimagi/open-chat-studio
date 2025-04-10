@@ -832,16 +832,17 @@ def poll_messages(request, team_slug: str, experiment_id: int, session_id: int):
         .order_by("created_at")
         .all()
     )
-    last_message = messages[0] if messages else None
 
-    return TemplateResponse(
-        request,
-        "experiments/chat/system_message.html",
-        {
-            "messages": [message.content for message in messages],
-            "last_message_datetime": last_message and last_message.created_at,
-        },
-    )
+    if messages:
+        return TemplateResponse(
+            request,
+            "experiments/chat/system_message.html",
+            {
+                "messages": [message.content for message in messages],
+                "last_message_datetime": messages[0].created_at,
+            },
+        )
+    return HttpResponse()
 
 
 @team_required
