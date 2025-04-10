@@ -6,7 +6,7 @@
          hx-trigger="load delay:1s"
          hx-swap="outerHTML"
        {% endif %}
-       data-last-message-datetime="{{ last_message_datetime|safe }}"
+       data-last-message-datetime="{{ last_message_datetime|date:"c" }}"
   >
     <div class="flex flex-row">
       <div>

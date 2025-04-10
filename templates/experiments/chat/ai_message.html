@@ -17,7 +17,7 @@
       {% endif %}
     </div>
   {% endif %}
-  <div class="chat-message-system flex flex-col" data-last-message-datetime="{{ created_at_datetime|safe }}">
+  <div class="chat-message-system flex flex-col" data-last-message-datetime="{{ created_at_datetime|date:"c" }}">
     <div class="flex flex-row">
       {% include "experiments/chat/components/system_icon.html" %}
       <div class="message-contents">

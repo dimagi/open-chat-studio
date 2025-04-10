@@ -2,7 +2,7 @@ import logging
 import uuid
 from datetime import datetime
 from typing import cast
-from urllib.parse import parse_qs, quote, urlparse
+from urllib.parse import parse_qs, urlparse
 
 import jwt
 from celery.result import AsyncResult
@@ -805,7 +805,7 @@ def get_message_response(request, team_slug: str, experiment_id: uuid.UUID, sess
             "task_id": task_id,
             "message_details": message_details,
             "skip_render": skip_render,
-            "last_message_datetime": last_message and quote(last_message.created_at.isoformat()),
+            "last_message_datetime": last_message and last_message.created_at,
             "attachments": attached_files,
         },
     )
@@ -839,7 +839,7 @@ def poll_messages(request, team_slug: str, experiment_id: int, session_id: int):
         "experiments/chat/system_message.html",
         {
             "messages": [message.content for message in messages],
-            "last_message_datetime": last_message and quote(last_message.created_at.isoformat()),
+            "last_message_datetime": last_message and last_message.created_at,
         },
     )
 
