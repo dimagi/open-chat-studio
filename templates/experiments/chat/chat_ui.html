@@ -64,8 +64,8 @@
     if (!lastDateTime) {
       return;
     }
-    url = url + "?since=" + lastDateTime
-    fetch(url)
+    const params = new URLSearchParams([['since', lastDateTime]])
+    fetch(`${url}?${params}`)
       .then(response => {
         if (response.status !== 200) {
           console.error('Messages not found');
