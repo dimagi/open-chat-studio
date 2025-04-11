@@ -155,7 +155,7 @@ class ParticipantDataProxy:
 
     def __init__(self, experiment_session):
         self.session = experiment_session
-        self.experiment = self.session.experiment
+        self.experiment = self.session.experiment if self.session else None
         self._participant_data = None
         self._scheduled_messages = None
 
