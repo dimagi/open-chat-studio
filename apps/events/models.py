@@ -9,6 +9,7 @@ from django.contrib.contenttypes.models import ContentType
 from django.db import models, transaction
 from django.db.models import F, Func, OuterRef, Q, Subquery, functions
 from django.utils import timezone
+from pytz.exceptions import UnknownTimeZoneError
 
 from apps.chat.models import ChatMessage, ChatMessageType
 from apps.events import actions
@@ -519,13 +520,18 @@ class ScheduledMessage(BaseTeamModel):
     def __str__(self):
         return self.as_string()
 
-    def as_dict(self, as_timezone=None):
+    def as_dict(self, as_timezone: str = None):
         next_trigger_date = self.next_trigger_date
         last_triggered_at = self.last_triggered_at
         if as_timezone:
-            next_trigger_date = next_trigger_date.astimezone(pytz.timezone(as_timezone))
-            if last_triggered_at:
-                last_triggered_at = last_triggered_at.astimezone(pytz.timezone(as_timezone))
+            try:
+                pytz_timezone = pytz.timezone(as_timezone)
+            except UnknownTimeZoneError:
+                pass
+            else:
+                next_trigger_date = next_trigger_date.astimezone(pytz_timezone)
+                if last_triggered_at:
+                    last_triggered_at = last_triggered_at.astimezone(pytz_timezone)
         return {
             "name": self.name,
             "prompt": self.prompt_text,

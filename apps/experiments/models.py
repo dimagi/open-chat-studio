@@ -8,7 +8,6 @@ from typing import Self
 from uuid import uuid4
 
 import markdown
-import pytz
 from django.conf import settings
 from django.contrib.postgres.fields import ArrayField
 from django.core.exceptions import ValidationError
@@ -1348,12 +1347,6 @@ class Participant(BaseTeamModel):
         scheduled_messages = []
         for message in messages:
             if as_dict:
-                next_trigger_date = message.next_trigger_date
-                last_triggered_at = message.last_triggered_at
-                if as_timezone:
-                    next_trigger_date = next_trigger_date.astimezone(pytz.timezone(as_timezone))
-                    if last_triggered_at:
-                        last_triggered_at = last_triggered_at.astimezone(pytz.timezone(as_timezone))
                 scheduled_messages.append(message.as_dict(as_timezone=as_timezone))
             else:
                 scheduled_messages.append(message.as_string(as_timezone=as_timezone))
