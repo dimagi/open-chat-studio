@@ -13,23 +13,26 @@ from apps.utils.prompt import validate_prompt_variables
 
 
 @pytest.fixture()
-def mock_session():
-    session = Mock()
-    session.experiment_channel.platform = ChannelPlatform.WEB
-    session.participant.user = None
-
+def mock_participant_data_proxy():
     proxy_mock = Mock()
     proxy_mock.get.return_value = {"name": "Dimagi", "email": "hello@world.com"}
     proxy_mock.get_timezone.return_value = "UTC"
-    session._proxy_mock = proxy_mock
+    proxy_mock.get_schedules.return_value = []
     with patch("apps.service_providers.llm_service.prompt_context.ParticipantDataProxy", return_value=proxy_mock):
-        yield session
+        yield proxy_mock
+
+
+@pytest.fixture()
+def mock_session(mock_participant_data_proxy):
+    session = Mock()
+    session.experiment_channel.platform = ChannelPlatform.WEB
+    session.participant.user = None
+    return session
 
 
 @patch("apps.experiments.models.SourceMaterial.objects.get")
-def test_builds_context_with_specified_variables(mock_get, mock_session):
+def test_builds_context_with_specified_variables(mock_get, mock_session, mock_participant_data_proxy):
     mock_get.return_value = Mock(material="source material")
-    proxy_mock = mock_session._proxy_mock
     context = PromptTemplateContext(mock_session, 1)
     variables = ["source_material", "current_datetime"]
     result = context.get_context(variables)
@@ -37,26 +40,25 @@ def test_builds_context_with_specified_variables(mock_get, mock_session):
     assert "current_datetime" in result
     assert "participant_data" not in result
 
-    proxy_mock.get.assert_not_called()
+    mock_participant_data_proxy.get.assert_not_called()
 
 
-def test_repeated_calls_are_cached(mock_session):
-    proxy_mock = mock_session._proxy_mock
+def test_repeated_calls_are_cached(mock_session, mock_participant_data_proxy):
     context = PromptTemplateContext(mock_session, 1)
     result = context.get_context([])
     assert result == {}
 
-    proxy_mock.get.assert_not_called()
+    mock_participant_data_proxy.get.assert_not_called()
 
     result = context.get_context(["participant_data"])
     assert result == {"participant_data": {"name": "Dimagi", "email": "hello@world.com"}}
-    proxy_mock.get.assert_called_once()
+    mock_participant_data_proxy.get.assert_called_once()
 
-    proxy_mock.get.reset_mock()
+    mock_participant_data_proxy.get.reset_mock()
     result = context.get_context(["participant_data"])
     assert result == {"participant_data": {"name": "Dimagi", "email": "hello@world.com"}}
 
-    proxy_mock.get.assert_not_called()
+    mock_participant_data_proxy.get.assert_not_called()
 
 
 def test_calls_with_different_vars_returns_correct_context(mock_session):
@@ -86,12 +88,12 @@ def test_returns_blank_source_material_not_found(mock_get, mock_session):
 
 
 @pytest.mark.django_db()
-def test_retrieves_media_successfully():
+def test_retrieves_media_successfully(mock_session):
     collection = CollectionFactory()
     file1 = FileFactory(summary="summary1", team_id=collection.team_id)
     file2 = FileFactory(summary="summary2", team_id=collection.team_id)
     collection.files.add(file1, file2)
-    context = PromptTemplateContext(session=None, source_material_id=None, collection_id=collection.id)
+    context = PromptTemplateContext(session=mock_session, collection_id=collection.id)
     expected_media_summaries = (
         f"* File (id={file1.id}, content_type={file1.content_type}): {file1.summary}\n\n"
         f"* File (id={file2.id}, content_type={file2.content_type}): {file2.summary}\n"
@@ -100,15 +102,25 @@ def test_retrieves_media_successfully():
 
 
 @patch("apps.documents.models.Collection.objects.get")
-def test_returns_blank_when_collection_not_found(collections_mock):
+def test_returns_blank_when_collection_not_found(collections_mock, mock_session):
     collections_mock.side_effect = Collection.DoesNotExist
-    context = PromptTemplateContext(session=None, source_material_id=1, collection_id=999)
+    context = PromptTemplateContext(session=mock_session, source_material_id=1, collection_id=999)
     assert context.get_media_summaries() == ""
 
 
 def test_retrieves_participant_data_when_authorized(mock_session):
-    context = PromptTemplateContext(mock_session, 1)
+    context = PromptTemplateContext(mock_session)
     assert context.get_participant_data() == {"name": "Dimagi", "email": "hello@world.com"}
+
+
+def test_participant_data_includes_schedules(mock_session, mock_participant_data_proxy):
+    mock_participant_data_proxy.get_schedules.return_value = [{"id": 1}]
+    context = PromptTemplateContext(mock_session)
+    assert context.get_participant_data() == {
+        "name": "Dimagi",
+        "email": "hello@world.com",
+        "scheduled_messages": [{"id": 1}],
+    }
 
 
 def test_invalid_format_specifier_not_caught():

@@ -38,6 +38,7 @@ def session(fake_llm_service):
     session.experiment.tools = [AgentTools.MOVE_SCHEDULED_MESSAGE_DATE]
     proxy_mock = mock.Mock()
     proxy_mock.get.return_value = {"name": "Tester"}
+    proxy_mock.get_schedules.return_value = []
     with patch("apps.service_providers.llm_service.prompt_context.ParticipantDataProxy", return_value=proxy_mock):
         yield session
 
