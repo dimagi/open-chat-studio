@@ -136,7 +136,7 @@ def test_compression_with_large_summary(_reduce_summary_size, mock_get_new_summa
     llm = FakeLlmSimpleTokenCount(responses=[])
     summary_content = "Summary " * 20
     mock_get_new_summary.return_value = summary_content
-    _reduce_summary_size.return_value = summary_content
+    _reduce_summary_size.return_value = summary_content, 0
     result = compress_chat_history(chat, llm, 26, input_messages=[])
     # 1 message * 3 tokens + 21 tokens for summary
     assert len(result) == 2
@@ -155,7 +155,7 @@ def test_compression_exhausts_history(_reduce_summary_size, mock_get_new_summary
     llm = FakeLlmSimpleTokenCount(responses=[])
     summary_content = "Summary " * 20
     mock_get_new_summary.return_value = summary_content
-    _reduce_summary_size.return_value = summary_content
+    _reduce_summary_size.return_value = summary_content, 0
     result = compress_chat_history(chat, llm, 20, input_messages=[])
     assert len(result) == 1
     assert result[0].content == summary_content
@@ -183,7 +183,7 @@ def test_compression_exhausts_history_and_pruned_memory(_reduce_summary_size, _g
 
     llm = Llm(responses=[])
     _get_new_summary.side_effect = _clear_pruned_memory
-    _reduce_summary_size.return_value = "Summary"
+    _reduce_summary_size.return_value = "Summary", 0
     result = compress_chat_history(chat, llm, 20, input_messages=[])
     assert len(result) == 1
     last_message = ChatMessage.objects.order_by("created_at").last()
@@ -313,7 +313,7 @@ def test_reduce_summary_size_1():
     initial_summary = "This is a very long summary " * 10  # Create a long summary
     summary_token_limit = 3  # Set a low token limit to force multiple reductions
 
-    result = _reduce_summary_size(llm, initial_summary, summary_token_limit)
+    result, _ = _reduce_summary_size(llm, initial_summary, summary_token_limit)
 
     assert result == "Final 3"  # Should get the last response after multiple attempts
     assert len(llm.get_calls()) == 3  # Should have made 3 calls to reduce the size
@@ -336,7 +336,7 @@ def test_reduce_summary_size_gives_up_after_three_attempts():
     initial_summary = "This is a very long summary " * 10
     summary_token_limit = 3  # Impossible to meet this limit
 
-    result = _reduce_summary_size(llm, initial_summary, summary_token_limit)
+    result, _ = _reduce_summary_size(llm, initial_summary, summary_token_limit)
 
     assert result == ""  # Should return empty string after failing to reduce enough
     assert len(llm.get_calls()) == 3  # Should still make exactly 3 attempts
@@ -349,7 +349,7 @@ def test_reduce_summary_size_succeeds_early():
     initial_summary = "This is a very long summary " * 5
     summary_token_limit = 5
 
-    result = _reduce_summary_size(llm, initial_summary, summary_token_limit)
+    result, _ = _reduce_summary_size(llm, initial_summary, summary_token_limit)
 
     assert result == "Short enough"
     assert len(llm.get_calls()) == 1  # Should only make one call since first response was short enough

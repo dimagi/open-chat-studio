@@ -266,7 +266,7 @@ def summarize_history(llm, history, max_token_limit, input_message_tokens, summa
             summary = _get_new_summary(llm, pruned_memory, summary, model_token_limit=max_token_limit)
             summary_tokens = llm.get_num_tokens_from_messages([SystemMessage(content=summary)])
             if summary and summary_tokens > summary_token_limit:
-                summary = _reduce_summary_size(llm, summary, summary_token_limit)
+                summary, summary_token_limit = _reduce_summary_size(llm, summary, summary_token_limit)
         except ChatException as e:
             log.exception("Error while generating summary: %s", e)
             summary = ""
@@ -382,16 +382,16 @@ def _get_summarization_prompt_tokens_with_context(llm, summary, pruned_memory):
     return tokens, context
 
 
-def _reduce_summary_size(llm, summary, summary_token_limit):
+def _reduce_summary_size(llm, summary, summary_token_limit) -> tuple:
     summary_tokens = llm.get_num_tokens_from_messages([SystemMessage(content=summary)])
     attempts = 0
     while summary and summary_tokens > summary_token_limit:
         if attempts == 3:
             log.exception("Too many attempts trying to reduce summary size.")
-            return ""
+            return "", 0
         chain = LLMChain(llm=llm, prompt=SUMMARY_COMPRESSION_PROMPT, name="compress_chat_history")
         summary = chain.invoke({"summary": summary})["text"]
         summary_tokens = llm.get_num_tokens_from_messages([SystemMessage(content=summary)])
         attempts += 1
 
-    return summary
+    return summary, summary_tokens
