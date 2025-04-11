@@ -21,6 +21,9 @@ from apps.pipelines.models import PipelineChatHistory, PipelineChatHistoryModes,
 from apps.utils.prompt import OcsPromptTemplate
 
 SUMMARY_TOO_LARGE_ERROR_MESSAGE = "Unable to compress chat history: existing summary too large"
+MESSAGES_TOO_LARGE_ERROR_MESSAGE = (
+    "Unable to compress chat history: Messages are too large for the context window of {tokens} tokens"
+)
 INITIAL_SUMMARY_TOKENS_ESTIMATE = 20
 # The maximum number of messages that can be uncompressed
 MAX_UNCOMPRESSED_MESSAGES = 1000
@@ -248,8 +251,7 @@ def summarize_history(llm, history, max_token_limit, input_message_tokens, summa
             pruned_memory.extend(pruned_messages)
             history_tokens = llm.get_num_tokens_from_messages(history)
         # Generate a new summary after pruning messages
-        max_token_for_summary = max_token_limit - history_tokens - input_message_tokens
-        summary = _get_new_summary(llm, pruned_memory, summary, max_token_for_summary)
+        summary = _get_new_summary(llm, pruned_memory, summary, model_token_limit=max_token_limit)
         summary_tokens = llm.get_num_tokens_from_messages([SystemMessage(content=summary)])
 
     return history, pruned_memory, summary
@@ -307,9 +309,11 @@ def _messages_exceeds_limit(history, input_messages) -> bool:
     return history and len(history) + len(input_messages) > MAX_UNCOMPRESSED_MESSAGES
 
 
-def _get_new_summary(llm, pruned_memory, summary, max_token_limit, first_call=True):
+def _get_new_summary(llm, pruned_memory, summary, model_token_limit, first_call=True):
     """Get a new summary from the pruned memory. If the pruned memory is still too long, prune it further and
     recursively call this function with the remaining memory."""
+    summary = summary or ""
+
     if not pruned_memory:
         return summary
     if first_call:
@@ -321,30 +325,39 @@ def _get_new_summary(llm, pruned_memory, summary, max_token_limit, first_call=Tr
             if msg.content
         ]
 
-    tokens, context = _get_summary_tokens_with_context(llm, summary, pruned_memory)
+    summarization_prompt_tokens, context = _get_summarization_prompt_tokens_with_context(llm, summary, pruned_memory)
     next_batch = []
-    while pruned_memory and tokens > max_token_limit or len(pruned_memory) > MAX_UNCOMPRESSED_MESSAGES:
-        next_batch.insert(0, pruned_memory.pop())
-        tokens, context = _get_summary_tokens_with_context(llm, summary, pruned_memory)
 
-    if not context["new_lines"]:
+    while (
+        pruned_memory
+        and summarization_prompt_tokens > model_token_limit
+        or len(pruned_memory) > MAX_UNCOMPRESSED_MESSAGES
+    ):
+        next_batch.insert(0, pruned_memory.pop())
+        summarization_prompt_tokens, context = _get_summarization_prompt_tokens_with_context(
+            llm, summary, pruned_memory
+        )
+
+    if not pruned_memory:
         if first_call:
-            log.error(SUMMARY_TOO_LARGE_ERROR_MESSAGE)
+            if summary:
+                log.error(SUMMARY_TOO_LARGE_ERROR_MESSAGE)
+            else:
+                log.error(MESSAGES_TOO_LARGE_ERROR_MESSAGE.format(tokens=model_token_limit))
+            return _get_new_summary(llm, next_batch, "", model_token_limit, False)
         else:
             raise ChatException("Unable to compress history")
-        # If the summary is too large, discard it and compute a new summary from the pruned memory
-        return _get_new_summary(llm, next_batch, None, max_token_limit, False)
 
     chain = LLMChain(llm=llm, prompt=SUMMARY_PROMPT, name="compress_chat_history")
     summary = chain.invoke(context)["text"]
 
     if next_batch:
-        return _get_new_summary(llm, next_batch, summary, max_token_limit, False)
+        return _get_new_summary(llm, next_batch, summary, model_token_limit, False)
 
     return summary
 
 
-def _get_summary_tokens_with_context(llm, summary, pruned_memory):
+def _get_summarization_prompt_tokens_with_context(llm, summary, pruned_memory):
     new_lines = get_buffer_string(pruned_memory)
     context = {"summary": summary or "", "new_lines": new_lines}
     tokens = llm.get_num_tokens_from_messages(SUMMARY_PROMPT.format_prompt(**context).to_messages())

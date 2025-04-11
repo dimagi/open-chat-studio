@@ -9,7 +9,7 @@ from langchain_core.messages import BaseMessage, HumanMessage
 from apps.chat.conversation import (
     SUMMARY_TOO_LARGE_ERROR_MESSAGE,
     _get_new_summary,
-    _get_summary_tokens_with_context,
+    _get_summarization_prompt_tokens_with_context,
     compress_chat_history,
     truncate_tokens,
 )
@@ -166,7 +166,7 @@ def test_compression_exhausts_history_and_pruned_memory(_get_new_summary, chat):
             # is empty
             return 80
 
-    def _clear_pruned_memory(llm, pruned_memory, summary, max_token_limit):
+    def _clear_pruned_memory(llm, pruned_memory, summary, model_token_limit):
         # Simulate the while loop running until the pruned memory is cleared
         pruned_memory.clear()
         return "Summary"
@@ -191,7 +191,7 @@ def test_get_new_summary_with_large_history():
 
     pruned_memory = [HumanMessage(f"Hello {i}") for i in range(20)]
 
-    prompt_tokens, _ = _get_summary_tokens_with_context(llm, None, [])
+    prompt_tokens, _ = _get_summarization_prompt_tokens_with_context(llm, None, [])
     # token limit below what we expect when generating the summary (20 * 3 = 60 + prompt_tokens)
     llm.max_token_limit = prompt_tokens + 30 - 5  # set low enough to force 2 iterations
 
@@ -215,7 +215,7 @@ def test_get_new_summary_with_large_summary(caplog):
 
     pruned_memory = [HumanMessage(f"Hello {i}") for i in range(2)]
 
-    prompt_tokens, _ = _get_summary_tokens_with_context(llm, None, [])
+    prompt_tokens, _ = _get_summarization_prompt_tokens_with_context(llm, None, [])
     llm.max_token_limit = prompt_tokens + 10  # set below what we expect when generating the summary
 
     summary = "Summary " * 20
@@ -279,7 +279,7 @@ def test_get_new_summary_with_large_message():
     llm.max_token_limit = 2000
     long_message = " ".join(["word"] * 1200)
     pruned_memory = [HumanMessage(long_message)]
-    prompt_tokens, _ = _get_summary_tokens_with_context(llm, None, [])
+    prompt_tokens, _ = _get_summarization_prompt_tokens_with_context(llm, None, [])
 
     new_summary = _get_new_summary(llm, pruned_memory, None, llm.max_token_limit)
 
@@ -289,10 +289,11 @@ def test_get_new_summary_with_large_message():
 
 def test_get_new_summary_with_large_message_raises_chat_exception():
     """Test if token count of single message exceeds max_token_limit then max recursion depth limit is exceeded"""
+    # This should never ever happen in practice
     llm = FakeLlmSimpleTokenCount(responses=["Summary"])
     llm.max_token_limit = 500
     long_message = " ".join(["word"] * 1200)
     pruned_memory = [HumanMessage(long_message)]
-    prompt_tokens, _ = _get_summary_tokens_with_context(llm, None, [])
+    prompt_tokens, _ = _get_summarization_prompt_tokens_with_context(llm, None, [])
     with pytest.raises(ChatException):
         _get_new_summary(llm, pruned_memory, None, llm.max_token_limit)
