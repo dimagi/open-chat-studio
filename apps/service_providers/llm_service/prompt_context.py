@@ -153,6 +153,7 @@ class ParticipantDataProxy:
 
     def __init__(self, experiment_session):
         self.session = experiment_session
+        self.experiment = self.session.experiment
         self._participant_data = None
         self._scheduled_messages = None
 
@@ -188,23 +189,9 @@ class ParticipantDataProxy:
         Returns all active scheduled messages for the participant in the current experiment session.
         """
         if self._scheduled_messages is None:
-            from apps.events.models import ScheduledMessage
-
-            experiment = self.session.experiment_id
-            participant = self.session.participant_id
-            team = self.session.experiment.team
-            messages = (
-                ScheduledMessage.objects.filter(
-                    experiment_id=experiment,
-                    participant_id=participant,
-                    team=team,
-                    is_complete=False,
-                    cancelled_at=None,
-                )
-                .select_related("action")
-                .order_by("created_at")
+            self._scheduled_messages = self.session.participant.get_schedules_for_experiment(
+                self.experiment, as_dict=True, as_timezone=self.get_timezone()
             )
-            self._scheduled_messages = [message.as_dict() for message in messages]
         return self._scheduled_messages
 
     def get_timezone(self):
