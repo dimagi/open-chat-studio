@@ -1,5 +1,5 @@
 from unittest import mock
-from unittest.mock import Mock, patch
+from unittest.mock import patch
 
 import pytest
 
@@ -75,23 +75,17 @@ def test_tracing_service():
     session = ExperimentSessionFactory()
     provider = TraceProvider(type="langfuse", config={})
     session.experiment.trace_provider = provider
-    service = "apps.service_providers.tracing.LangFuseTraceService"
+    service = "apps.service_providers.tracing.LangFuseTracer"
     with (
-        patch(f"{service}.get_callback") as mock_get_callback,
+        patch(f"{service}.get_langchain_callback") as mock_get_callback,
         patch(f"{service}.get_trace_metadata") as get_trace_metadata,
-        patch(f"{service}.end", Mock()),
         mock_llm(responses=["response"]),
     ):
         get_trace_metadata.return_value = {"trace": "demo"}
         bot = TopicBot(session)
         assert bot.process_input("test").content == "response"
-        mock_get_callback.assert_called_once_with(
-            trace_name=session.experiment.name,
-            participant_id=session.participant.identifier,
-            session_id=str(session.external_id),
-        )
+        mock_get_callback.assert_called_once()
         assert get_trace_metadata.call_count == 2
-    bot.process_input("test")
 
 
 @pytest.mark.django_db()

@@ -38,6 +38,7 @@ from apps.custom_actions.mixins import CustomActionOperationMixin
 from apps.experiments import model_audit_fields
 from apps.experiments.versioning import VersionDetails, VersionField, VersionsMixin, VersionsObjectManagerMixin, differs
 from apps.generics.chips import Chip
+from apps.service_providers.tracing import TracingService
 from apps.teams.models import BaseTeamModel, Team
 from apps.utils.models import BaseModel
 from apps.utils.time import seconds_to_human
@@ -1609,9 +1610,8 @@ class ExperimentSession(BaseTeamModel):
         from apps.service_providers.llm_service.history_managers import ExperimentHistoryManager
 
         experiment = use_experiment or self.experiment
-        history_manager = ExperimentHistoryManager(
-            session=self, experiment=experiment, trace_service=experiment.trace_service
-        )
+        trace_service = TracingService.create_for_experiment(self.experiment)
+        history_manager = ExperimentHistoryManager(session=self, experiment=experiment, trace_service=trace_service)
         bot = EventBot(self, experiment, history_manager)
         return bot.get_user_message(instruction_prompt)
 

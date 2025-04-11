@@ -87,6 +87,7 @@
                           </time>
                         </div>
                         {% if message.trace_info %}
+                          # TODO: fix trace info
                           <div class="tooltip" data-tip="Open Trace on {{ message.trace_info.trace_provider|title }}">
                             <a class="btn btn-xs btn-square" href="{{ message.trace_info.trace_url }}" target="_blank">
                               <i class="fa-regular fa-chart-bar"></i>
