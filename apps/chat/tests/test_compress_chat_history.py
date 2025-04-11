@@ -9,7 +9,8 @@ from langchain_core.messages import BaseMessage, HumanMessage
 from apps.chat.conversation import (
     SUMMARY_TOO_LARGE_ERROR_MESSAGE,
     _get_new_summary,
-    _get_summary_tokens_with_context,
+    _get_summarization_prompt_tokens_with_context,
+    _reduce_summary_size,
     compress_chat_history,
     truncate_tokens,
 )
@@ -127,13 +128,15 @@ def test_compress_chat_history_not_needed_with_existing_summary(chat):
 
 
 @mock.patch("apps.chat.conversation._get_new_summary")
-def test_compression_with_large_summary(mock_get_new_summary, chat):
+@mock.patch("apps.chat.conversation._reduce_summary_size")
+def test_compression_with_large_summary(_reduce_summary_size, mock_get_new_summary, chat):
     for i in range(15):
         ChatMessage.objects.create(chat=chat, content=f"Hello {i}", message_type=ChatMessageType.HUMAN)
 
     llm = FakeLlmSimpleTokenCount(responses=[])
     summary_content = "Summary " * 20
     mock_get_new_summary.return_value = summary_content
+    _reduce_summary_size.return_value = summary_content, 0
     result = compress_chat_history(chat, llm, 26, input_messages=[])
     # 1 message * 3 tokens + 21 tokens for summary
     assert len(result) == 2
@@ -143,7 +146,8 @@ def test_compression_with_large_summary(mock_get_new_summary, chat):
 
 
 @mock.patch("apps.chat.conversation._get_new_summary")
-def test_compression_exhausts_history(mock_get_new_summary, chat):
+@mock.patch("apps.chat.conversation._reduce_summary_size")
+def test_compression_exhausts_history(_reduce_summary_size, mock_get_new_summary, chat):
     messages = ChatMessage.objects.bulk_create(
         [ChatMessage(chat=chat, content=f"Hello {i}", message_type=ChatMessageType.HUMAN) for i in range(15)]
     )
@@ -151,6 +155,7 @@ def test_compression_exhausts_history(mock_get_new_summary, chat):
     llm = FakeLlmSimpleTokenCount(responses=[])
     summary_content = "Summary " * 20
     mock_get_new_summary.return_value = summary_content
+    _reduce_summary_size.return_value = summary_content, 0
     result = compress_chat_history(chat, llm, 20, input_messages=[])
     assert len(result) == 1
     assert result[0].content == summary_content
@@ -159,14 +164,15 @@ def test_compression_exhausts_history(mock_get_new_summary, chat):
 
 
 @mock.patch("apps.chat.conversation._get_new_summary")
-def test_compression_exhausts_history_and_pruned_memory(_get_new_summary, chat):
+@mock.patch("apps.chat.conversation._reduce_summary_size")
+def test_compression_exhausts_history_and_pruned_memory(_reduce_summary_size, _get_new_summary, chat):
     class Llm(FakeLlmSimpleTokenCount):
         def get_num_tokens_from_messages(*args, **kwargs):
             # Force the while loop inside compress_chat_history_from_messages to run until the `history` array
             # is empty
             return 80
 
-    def _clear_pruned_memory(llm, pruned_memory, summary, max_token_limit):
+    def _clear_pruned_memory(llm, pruned_memory, summary, model_token_limit):
         # Simulate the while loop running until the pruned memory is cleared
         pruned_memory.clear()
         return "Summary"
@@ -177,6 +183,7 @@ def test_compression_exhausts_history_and_pruned_memory(_get_new_summary, chat):
 
     llm = Llm(responses=[])
     _get_new_summary.side_effect = _clear_pruned_memory
+    _reduce_summary_size.return_value = "Summary", 0
     result = compress_chat_history(chat, llm, 20, input_messages=[])
     assert len(result) == 1
     last_message = ChatMessage.objects.order_by("created_at").last()
@@ -191,7 +198,7 @@ def test_get_new_summary_with_large_history():
 
     pruned_memory = [HumanMessage(f"Hello {i}") for i in range(20)]
 
-    prompt_tokens, _ = _get_summary_tokens_with_context(llm, None, [])
+    prompt_tokens, _ = _get_summarization_prompt_tokens_with_context(llm, None, [])
     # token limit below what we expect when generating the summary (20 * 3 = 60 + prompt_tokens)
     llm.max_token_limit = prompt_tokens + 30 - 5  # set low enough to force 2 iterations
 
@@ -215,7 +222,7 @@ def test_get_new_summary_with_large_summary(caplog):
 
     pruned_memory = [HumanMessage(f"Hello {i}") for i in range(2)]
 
-    prompt_tokens, _ = _get_summary_tokens_with_context(llm, None, [])
+    prompt_tokens, _ = _get_summarization_prompt_tokens_with_context(llm, None, [])
     llm.max_token_limit = prompt_tokens + 10  # set below what we expect when generating the summary
 
     summary = "Summary " * 20
@@ -279,7 +286,7 @@ def test_get_new_summary_with_large_message():
     llm.max_token_limit = 2000
     long_message = " ".join(["word"] * 1200)
     pruned_memory = [HumanMessage(long_message)]
-    prompt_tokens, _ = _get_summary_tokens_with_context(llm, None, [])
+    prompt_tokens, _ = _get_summarization_prompt_tokens_with_context(llm, None, [])
 
     new_summary = _get_new_summary(llm, pruned_memory, None, llm.max_token_limit)
 
@@ -289,10 +296,60 @@ def test_get_new_summary_with_large_message():
 
 def test_get_new_summary_with_large_message_raises_chat_exception():
     """Test if token count of single message exceeds max_token_limit then max recursion depth limit is exceeded"""
+    # This should never ever happen in practice
     llm = FakeLlmSimpleTokenCount(responses=["Summary"])
     llm.max_token_limit = 500
     long_message = " ".join(["word"] * 1200)
     pruned_memory = [HumanMessage(long_message)]
-    prompt_tokens, _ = _get_summary_tokens_with_context(llm, None, [])
+    prompt_tokens, _ = _get_summarization_prompt_tokens_with_context(llm, None, [])
     with pytest.raises(ChatException):
         _get_new_summary(llm, pruned_memory, None, llm.max_token_limit)
+
+
+def test_reduce_summary_size_1():
+    """Tests that the _reduce_summary_size method successfully reduces a large summary
+    by calling the LLM repeatedly until the summary is under the token limit"""
+    llm = FakeLlmSimpleTokenCount(responses=["Shorter summary 1", "Even shorter 2", "Final 3"])
+    initial_summary = "This is a very long summary " * 10  # Create a long summary
+    summary_token_limit = 3  # Set a low token limit to force multiple reductions
+
+    result, _ = _reduce_summary_size(llm, initial_summary, summary_token_limit)
+
+    assert result == "Final 3"  # Should get the last response after multiple attempts
+    assert len(llm.get_calls()) == 3  # Should have made 3 calls to reduce the size
+
+    # Verify the compression prompts were used correctly
+    calls = llm.get_calls()
+    for i, call in enumerate(calls):
+        if i == 0:
+            assert initial_summary in call.args[0][0].content
+        elif i == 1:
+            assert "Shorter summary 1" in call.args[0][0].content
+        elif i == 2:
+            assert "Even shorter 2" in call.args[0][0].content
+
+
+def test_reduce_summary_size_gives_up_after_three_attempts():
+    """Tests that _reduce_summary_size gives up and returns an empty string
+    if it can't reduce the summary enough after 3 attempts"""
+    llm = FakeLlmSimpleTokenCount(responses=["Still too long " * 5, "Also too long " * 4, "Still too big " * 3])
+    initial_summary = "This is a very long summary " * 10
+    summary_token_limit = 3  # Impossible to meet this limit
+
+    result, _ = _reduce_summary_size(llm, initial_summary, summary_token_limit)
+
+    assert result == ""  # Should return empty string after failing to reduce enough
+    assert len(llm.get_calls()) == 3  # Should still make exactly 3 attempts
+
+
+def test_reduce_summary_size_succeeds_early():
+    """Tests that _reduce_summary_size stops making LLM calls once it gets
+    a summary under the token limit"""
+    llm = FakeLlmSimpleTokenCount(responses=["Short enough"])
+    initial_summary = "This is a very long summary " * 5
+    summary_token_limit = 5
+
+    result, _ = _reduce_summary_size(llm, initial_summary, summary_token_limit)
+
+    assert result == "Short enough"
+    assert len(llm.get_calls()) == 1  # Should only make one call since first response was short enough
