@@ -377,6 +377,45 @@ def main(input, **kwargs):
 
 
 @django_db_with_data(available_apps=("apps.service_providers",))
+@mock.patch("apps.pipelines.nodes.base.PipelineNode.logger", mock.Mock())
+def test_static_router_case_sensitive(pipeline, experiment_session):
+    start = start_node()
+    router = state_key_router_node("route_to", ["first", "SECOND"], data_source=StaticRouterNode.DataSource.temp_state)
+    template_a = render_template_node("A")
+    template_b = render_template_node("B")
+    end = end_node()
+    nodes = [start, router, template_a, template_b, end]
+    edges = [
+        {"id": "start -> code", "source": start["id"], "target": router["id"]},
+        {
+            "id": "router -> A",
+            "source": router["id"],
+            "target": template_a["id"],
+            "sourceHandle": "output_0",
+        },
+        {
+            "id": "router -> B",
+            "source": router["id"],
+            "target": template_b["id"],
+            "sourceHandle": "output_1",
+        },
+        {"id": "A -> end", "source": template_a["id"], "target": end["id"]},
+        {"id": "B -> end", "source": template_b["id"], "target": end["id"]},
+    ]
+    runnable = create_runnable(pipeline, nodes, edges)
+    output = runnable.invoke(
+        PipelineState(messages=[""], experiment_session=experiment_session, temp_state={"route_to": "SECOND"})
+    )
+    assert output["messages"][-1] == "B"
+
+    # check that matches are not case-sensitive
+    output = runnable.invoke(
+        PipelineState(messages=[""], experiment_session=experiment_session, temp_state={"route_to": "second"})
+    )
+    assert output["messages"][-1] == "B"
+
+
+@django_db_with_data(available_apps=("apps.service_providers",))
 @pytest.mark.parametrize(
     "data_source", [StaticRouterNode.DataSource.participant_data, StaticRouterNode.DataSource.session_state]
 )
