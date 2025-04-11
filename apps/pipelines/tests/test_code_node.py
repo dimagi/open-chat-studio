@@ -4,7 +4,7 @@ from unittest import mock
 import pytest
 
 from apps.channels.datamodels import Attachment
-from apps.experiments.models import ExperimentSession, Participant, ParticipantData
+from apps.experiments.models import Participant, ParticipantData
 from apps.files.models import File
 from apps.pipelines.exceptions import PipelineNodeBuildError, PipelineNodeRunError
 from apps.pipelines.nodes.base import PipelineState
@@ -52,16 +52,16 @@ def main(input, **kwargs):
         (IMPORTS, json.dumps({"a": "b"}), str(json.loads('{"a": "b"}'))),  # Importing json will work
     ],
 )
-def test_code_node(pipeline, code, input, output):
+def test_code_node(pipeline, experiment_session, code, input, output):
     nodes = [
         start_node(),
         code_node(code),
         end_node(),
     ]
     assert (
-        create_runnable(pipeline, nodes).invoke(
-            PipelineState(messages=[input], experiment_session=ExperimentSession())
-        )["messages"][-1]
+        create_runnable(pipeline, nodes).invoke(PipelineState(messages=[input], experiment_session=experiment_session))[
+            "messages"
+        ][-1]
         == output
     )
 
@@ -126,16 +126,16 @@ def test_code_node_build_errors(pipeline, code, input, error):
         ("def main(input, **kwargs):\n\treturn f'Hello, {blah}!'", "", "name 'blah' is not defined"),
     ],
 )
-def test_code_node_runtime_errors(pipeline, code, input, error):
+def test_code_node_runtime_errors(pipeline, experiment_session, code, input, error):
     nodes = [
         start_node(),
         code_node(code),
         end_node(),
     ]
     with pytest.raises(PipelineNodeRunError, match=error):
-        create_runnable(pipeline, nodes).invoke(
-            PipelineState(messages=[input], experiment_session=ExperimentSession())
-        )["messages"][-1]
+        create_runnable(pipeline, nodes).invoke(PipelineState(messages=[input], experiment_session=experiment_session))[
+            "messages"
+        ][-1]
 
 
 @django_db_with_data(available_apps=("apps.service_providers",))
