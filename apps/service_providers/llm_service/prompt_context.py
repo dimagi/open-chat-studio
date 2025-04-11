@@ -65,7 +65,9 @@ class PromptTemplateContext:
             return ""
 
     def get_participant_data(self):
-        data = self.participant_data_proxy.get() or ""
+        data = self.participant_data_proxy.get() or {}
+        if scheduled_messages := self.participant_data_proxy.get_schedules():
+            data = {**data, "scheduled_messages": scheduled_messages}
         return SafeAccessWrapper(data)
 
     def get_current_datetime(self):
