@@ -51,8 +51,7 @@ logger = logging.getLogger("ocs.channels")
 
 USER_CONSENT_TEXT = "1"
 UNSUPPORTED_MESSAGE_BOT_PROMPT = """
-Tell the user (in the language being spoken) that they sent an unsupported message.
-You only support {supported_types} messages types. Respond only with the message for the user
+Tell the user that they sent an unsupported message. You only support {supported_types} messages types.
 """
 DEFAULT_ERROR_RESPONSE_TEXT = "Sorry, something went wrong while processing your message. Please try again later"
 
@@ -682,7 +681,7 @@ class ChannelBase(ABC):
         try:
             bot_message = EventBot(self.experiment_session, self.experiment).get_user_message(
                 "Tell the user that something went wrong while processing their message and that they should "
-                "try again later. Do this in the language they are speaking in."
+                "try again later."
             )
         except Exception:  # noqa BLE001
             logger.exception("Something went wrong while trying to generate an appropriate error message for the user")
