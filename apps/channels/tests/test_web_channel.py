@@ -29,12 +29,14 @@ def test_start_new_session(new_user_message, with_seed_message, experiment):
     session = WebChannel.start_new_session(
         experiment,
         "jack@titanic.com",
+        metadata={Chat.MetadataKeys.EMBED_SOURCE: "remote host"},
     )
 
     assert session is not None
     assert session.participant.identifier == "jack@titanic.com"
     assert session.experiment_channel is not None
     assert session.experiment_channel.platform == ChannelPlatform.WEB
+    assert session.chat.metadata.get(Chat.MetadataKeys.EMBED_SOURCE) == "remote host"
 
     if with_seed_message:
         assert session.seed_task_id is not None

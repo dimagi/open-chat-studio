@@ -140,6 +140,7 @@ class ChannelBase(ABC):
         session_status: SessionStatus = SessionStatus.ACTIVE,
         timezone: str | None = None,
         session_external_id: str | None = None,
+        metadata: dict | None = None,
     ):
         return _start_experiment_session(
             working_experiment,
@@ -149,6 +150,7 @@ class ChannelBase(ABC):
             session_status,
             timezone,
             session_external_id,
+            metadata,
         )
 
     @property
@@ -737,10 +739,17 @@ class WebChannel(ChannelBase):
         session_status: SessionStatus = SessionStatus.ACTIVE,
         timezone: str | None = None,
         version: int = Experiment.DEFAULT_VERSION_NUMBER,
+        metadata: dict | None = None,
     ):
         experiment_channel = ExperimentChannel.objects.get_team_web_channel(working_experiment.team)
         session = super().start_new_session(
-            working_experiment, experiment_channel, participant_identifier, participant_user, session_status, timezone
+            working_experiment,
+            experiment_channel,
+            participant_identifier,
+            participant_user,
+            session_status,
+            timezone,
+            metadata=metadata,
         )
 
         try:
@@ -1047,6 +1056,7 @@ def _start_experiment_session(
     session_status: SessionStatus = SessionStatus.ACTIVE,
     timezone: str | None = None,
     session_external_id: str | None = None,
+    metadata: dict | None = None,
 ) -> ExperimentSession:
     if working_experiment.is_a_version:
         raise VersionedExperimentSessionsNotAllowedException(
@@ -1072,6 +1082,12 @@ def _start_experiment_session(
             participant.user = participant_user
             participant.save()
 
+        chat = Chat.objects.create(
+            team=team,
+            name=f"{participant_identifier} - {experiment_channel.name}",
+            metadata=metadata or {},
+        )
+
         session = ExperimentSession.objects.create(
             team=team,
             experiment=working_experiment,
@@ -1079,6 +1095,7 @@ def _start_experiment_session(
             status=session_status,
             participant=participant,
             external_id=session_external_id,
+            chat=chat,
         )
 
         # Record the participant's timezone
