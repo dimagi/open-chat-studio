@@ -380,11 +380,14 @@ def main(input, **kwargs):
 @mock.patch("apps.pipelines.nodes.base.PipelineNode.logger", mock.Mock())
 def test_static_router_case_sensitive(pipeline, experiment_session):
     start = start_node()
-    router = state_key_router_node("route_to", ["first", "SECOND"], data_source=StaticRouterNode.DataSource.temp_state)
+    router = state_key_router_node(
+        "route_to", ["first", "SECOND", "third"], data_source=StaticRouterNode.DataSource.temp_state
+    )
     template_a = render_template_node("A")
     template_b = render_template_node("B")
+    template_c = render_template_node("C")
     end = end_node()
-    nodes = [start, router, template_a, template_b, end]
+    nodes = [start, router, template_a, template_b, template_c, end]
     edges = [
         {"id": "start -> code", "source": start["id"], "target": router["id"]},
         {
@@ -399,20 +402,29 @@ def test_static_router_case_sensitive(pipeline, experiment_session):
             "target": template_b["id"],
             "sourceHandle": "output_1",
         },
+        {
+            "id": "router -> C",
+            "source": router["id"],
+            "target": template_c["id"],
+            "sourceHandle": "output_2",
+        },
         {"id": "A -> end", "source": template_a["id"], "target": end["id"]},
         {"id": "B -> end", "source": template_b["id"], "target": end["id"]},
+        {"id": "C -> end", "source": template_c["id"], "target": end["id"]},
     ]
     runnable = create_runnable(pipeline, nodes, edges)
-    output = runnable.invoke(
-        PipelineState(messages=[""], experiment_session=experiment_session, temp_state={"route_to": "SECOND"})
-    )
-    assert output["messages"][-1] == "B"
 
-    # check that matches are not case-sensitive
-    output = runnable.invoke(
-        PipelineState(messages=[""], experiment_session=experiment_session, temp_state={"route_to": "second"})
-    )
-    assert output["messages"][-1] == "B"
+    def _check_match(route_to, expected):
+        output = runnable.invoke(
+            PipelineState(messages=[""], experiment_session=experiment_session, temp_state={"route_to": route_to})
+        )
+        assert output["messages"][-1] == expected
+
+    # Check that matches are not case-sensitive in either direction
+    _check_match("SECOND", "B")
+    _check_match("second", "B")
+    _check_match("third", "C")
+    _check_match("THIRD", "C")
 
 
 @django_db_with_data(available_apps=("apps.service_providers",))
