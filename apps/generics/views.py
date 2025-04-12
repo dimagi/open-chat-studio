@@ -133,7 +133,6 @@ def render_session_details(
                 (gettext("Started"), session.consent_date or session.created_at),
                 (gettext("Ended"), session.ended_at or "-"),
                 (gettext(session_type), experiment.name),
-                (gettext("Platform"), session.get_platform_name),
             ],
             "available_tags": [t.name for t in Tag.objects.filter(team__slug=team_slug, is_system_tag=False).all()],
             "event_triggers": [

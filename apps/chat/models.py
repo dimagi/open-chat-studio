@@ -26,6 +26,10 @@ class Chat(BaseTeamModel, TaggedModelMixin, UserCommentsMixin):
     name = models.CharField(max_length=128, default="Unnamed Chat")
     metadata = models.JSONField(default=dict)
 
+    @property
+    def embed_source(self):
+        return self.metadata.get(Chat.MetadataKeys.EMBED_SOURCE)
+
     def get_metadata(self, key: MetadataKeys):
         return self.metadata.get(key, None)
 
