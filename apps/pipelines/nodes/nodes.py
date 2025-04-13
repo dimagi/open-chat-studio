@@ -112,6 +112,11 @@ class LLMResponseMixin(BaseModel):
     llm_temperature: float = Field(
         default=0.7, ge=0.0, le=2.0, title="Temperature", json_schema_extra=UiSchema(widget=Widgets.range)
     )
+    tag_message: bool = Field(
+        default=False,
+        description="Tag output message with route",
+        json_schema_extra=UiSchema(widget=Widgets.toggle)
+    )
 
     def get_llm_service(self):
         from apps.service_providers.models import LlmProvider
@@ -413,6 +418,11 @@ class BooleanNode(Passthrough):
 
 class RouterMixin(BaseModel):
     keywords: list[str] = Field(default_factory=list, json_schema_extra=UiSchema(widget=Widgets.keywords))
+    tag_message: str = Field(
+        default="False",
+        description="Tag output message with route",
+        json_schema_extra=UiSchema(widget=Widgets.toggle)
+    )
 
     @field_validator("keywords")
     def ensure_keywords_exist(cls, value, info: FieldValidationInfo):
@@ -444,7 +454,7 @@ class RouterNode(RouterMixin, Passthrough, HistoryMixin):
         json_schema_extra=NodeSchema(
             label="LLM Router",
             documentation_link=settings.DOCUMENTATION_LINKS["node_llm_router"],
-            field_order=["llm_provider_id", "llm_temperature", "history_type", "prompt", "keywords"],
+            field_order=["llm_provider_id", "llm_temperature", "history_type", "prompt", "keywords", "tag_message"],
         )
     )
     prompt: str = Field(
@@ -476,9 +486,10 @@ class RouterNode(RouterMixin, Passthrough, HistoryMixin):
             keyword = getattr(result, "route", None)
         except ValidationError:
             keyword = None
-
         if not keyword:
             keyword = self.keywords[0]
+        if self.tag_message:
+            state["input_message_metadata"].setdefault("tags", []).append(keyword)
 
         if session:
             self._save_history(session, node_id, node_input, keyword)
@@ -508,6 +519,11 @@ class StaticRouterNode(RouterMixin, Passthrough):
         json_schema_extra=UiSchema(enum_labels=DataSource.labels),
     )
     route_key: str = Field(..., description="The key in the data to use for routing")
+    tag_message: bool = Field(
+        default=False,
+        description="Tag output message with route",
+        json_schema_extra=UiSchema(widget=Widgets.toggle)
+    )
 
     def _process_conditional(self, state: PipelineState, node_id=None):
         from apps.service_providers.llm_service.prompt_context import SafeAccessWrapper
@@ -530,6 +546,8 @@ class StaticRouterNode(RouterMixin, Passthrough):
         for keyword in self.keywords:
             if keyword.lower() == result_lower:
                 return keyword
+        if self.tag_message:
+            state["input_message_metadata"].setdefault("tags", []).append(keyword)
         return self.keywords[0]
 
 
