@@ -29,9 +29,7 @@ export default function EditPanel({nodeId}: { nodeId: string }) {
     setNode(
     id!,
     produce((next) => {
-      if (next?.data?.params) {
-        next.data.params[name] = value;
-      }
+      next.data.params[name] = value;
     })
   );
 };

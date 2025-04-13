@@ -31,9 +31,7 @@ export function PipelineNode(nodeProps: NodeProps<NodeData>) {
     }
 
     setNode(id, produce((next) => {
-      if (next?.data?.params) {
-        next.data.params[name] = updateValue;
-      }
+      next.data.params[name] = updateValue;
     }));
   };
 
