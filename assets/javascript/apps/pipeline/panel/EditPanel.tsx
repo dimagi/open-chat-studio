@@ -20,7 +20,8 @@ export default function EditPanel({nodeId}: { nodeId: string }) {
   const updateParamValue = (
     event: ChangeEvent<HTMLTextAreaElement | HTMLSelectElement | HTMLInputElement>,
   ) => {
-    const {name, value} = event.target;
+    const {name, type} = event.target;
+    const value = type === 'checkbox' ? (event.target as HTMLInputElement).checked : event.target.value;
     if (!schemaProperties.includes(name)) {
       console.warn(`Unknown parameter: ${name}`);
       return;

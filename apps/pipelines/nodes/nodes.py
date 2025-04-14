@@ -418,10 +418,10 @@ class BooleanNode(Passthrough):
 
 class RouterMixin(BaseModel):
     keywords: list[str] = Field(default_factory=list, json_schema_extra=UiSchema(widget=Widgets.keywords))
-    tag_message: str = Field(
-        default="False",
+    tag_message: bool = Field(
+        default=False,
         description="Tag output message with route",
-        json_schema_extra=UiSchema(widget=Widgets.toggle)
+        json_schema_extra=UiSchema(widget=Widgets.checkbox)
     )
 
     @field_validator("keywords")
@@ -522,7 +522,7 @@ class StaticRouterNode(RouterMixin, Passthrough):
     tag_message: bool = Field(
         default=False,
         description="Tag output message with route",
-        json_schema_extra=UiSchema(widget=Widgets.toggle)
+        json_schema_extra=UiSchema(widget=Widgets.checkbox)
     )
 
     def _process_conditional(self, state: PipelineState, node_id=None):

@@ -37,6 +37,8 @@ export function getWidget(name: string, params: PropertySchema) {
       return KeywordsWidget
     case "node_name":
       return NodeNameWidget
+    case "checkbox":
+        return CheckboxWidget
     default:
       if (params.enum) {
         return SelectWidget
@@ -167,6 +169,23 @@ function ToggleWidget(props: ToggleWidgetParams) {
         checked={props.paramValue}
         type="checkbox"
       ></input>
+    </InputField>
+  );
+}
+
+function CheckboxWidget(props: ToggleWidgetParams) {
+  return (
+    <InputField help_text={props.helpText} inputError={props.inputError}>
+      <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
+        <div style={{ fontWeight: 'bold' }}>{props.label}</div>
+        <input
+          type="checkbox"
+          name={props.name}
+          checked={props.paramValue}
+          onChange={props.updateParamValue}
+          style={{ width: '16px', height: '16px', cursor: 'pointer' }}
+        />
+      </div>
     </InputField>
   );
 }

@@ -223,6 +223,7 @@ class Widgets(StrEnum):
     float = "float"
     range = "range"
     multiselect = "multiselect"
+    checkbox = "checkbox"
     none = "none"
 
     # special widgets
