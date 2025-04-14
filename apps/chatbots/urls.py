@@ -49,4 +49,20 @@ urlpatterns = [
         name="start_authed_web_session",
     ),
     path("<int:experiment_id>/invitations/", views.chatbot_invitations, name="chatbots_invitations"),
+    path("<uuid:experiment_id>/start/", views.start_chatbot_session_public, name="start_session_public"),
+    path(
+        "<uuid:experiment_id>/s/<str:session_id>/chat/",
+        views.chatbot_chat,
+        name="chatbot_chat",
+    ),
+    path(
+        "<uuid:experiment_id>/embed/start/",
+        views.start_chatbot_session_public_embed,
+        name="start_session_public_embed",
+    ),
+    path(
+        "<uuid:experiment_id>/s/<str:session_id>/embed/chat/",
+        views.chatbot_chat_embed,
+        name="chatbot_chat_embed",
+    ),
 ]

@@ -41,6 +41,7 @@ from .experiment import (  # noqa: F401
     get_message_response,
     get_release_status_badge,
     poll_messages,
+    poll_messages_embed,
     send_invitation,
     set_default_experiment,
     single_experiment_home,

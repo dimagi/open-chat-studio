@@ -32,6 +32,7 @@ from apps.teams.decorators import login_and_team_required
 from apps.teams.mixins import LoginAndTeamRequiredMixin
 from apps.teams.models import Flag
 
+from ..experiments.helpers import update_experiment_name_by_pipeline_id
 from ..generics.chips import Chip
 from ..generics.help import render_help_with_link
 
@@ -85,10 +86,11 @@ class EditPipeline(LoginAndTeamRequiredMixin, TemplateView, PermissionRequiredMi
         llm_providers = LlmProvider.objects.filter(team=self.request.team).values("id", "name", "type").all()
         llm_provider_models = LlmProviderModel.objects.for_team(self.request.team).all()
         ui_feature_flags = ["document_management"]
-
+        pipeline = Pipeline.objects.get(id=kwargs["pk"], team=self.request.team)
         return {
             **data,
             "pipeline_id": kwargs["pk"],
+            "pipeline_name": pipeline.name,
             "node_schemas": _pipeline_node_schemas(),
             "parameter_values": _pipeline_node_parameter_values(self.request.team, llm_providers, llm_provider_models),
             "default_values": _pipeline_node_default_values(llm_providers, llm_provider_models),
@@ -247,6 +249,8 @@ def pipeline_data(request, team_slug: str, pk: int):
         pipeline.save()
         pipeline.update_nodes_from_data()
         pipeline.refresh_from_db(fields=["node_set"])
+        if getattr(data, "experiment_name", None):
+            update_experiment_name_by_pipeline_id(pk, data.experiment_name)
         return JsonResponse({"data": pipeline.flow_data, "errors": pipeline.validate()})
 
     try:

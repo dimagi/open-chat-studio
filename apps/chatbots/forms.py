@@ -3,6 +3,7 @@ from django.db import transaction
 
 from apps.experiments.models import Experiment
 from apps.pipelines.models import Pipeline
+from apps.service_providers.utils import get_first_llm_provider_by_team, get_first_llm_provider_model
 
 
 class ChatbotForm(forms.ModelForm):
@@ -21,7 +22,14 @@ class ChatbotForm(forms.ModelForm):
 
     @transaction.atomic()
     def save(self, commit=True):
-        pipeline = Pipeline.create_pipeline_with_name(self.request.team, self.cleaned_data["name"])
+        team_id = self.request.team.id
+        llm_provider = get_first_llm_provider_by_team(team_id)
+        llm_provider_model = None
+        if llm_provider:
+            llm_provider_model = get_first_llm_provider_model(llm_provider, team_id)
+        pipeline = Pipeline.create_default_pipeline_with_name(
+            self.request.team, self.cleaned_data["name"], llm_provider.id if llm_provider else None, llm_provider_model
+        )
         experiment = super().save(commit=False)
         experiment.team = self.request.team
         experiment.owner = self.request.user

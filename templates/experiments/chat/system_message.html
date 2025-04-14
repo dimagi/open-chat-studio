@@ -1,5 +1,5 @@
 {% for message in messages %}
-  <div class="chat-message-system flex" data-last-message-datetime="{{ last_message_datetime|safe }}">
+  <div class="chat-message-system flex" data-last-message-datetime="{{ last_message_datetime|date:"c" }}">
     {% include "experiments/chat/components/system_icon.html" %}
     <div class="message-contents">
       <p>{{ message }}</p>
