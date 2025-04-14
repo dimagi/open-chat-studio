@@ -10,6 +10,7 @@ import {JsonSchema, NodeParams, PropertySchema} from "../types/nodeParams";
 import {Node, useUpdateNodeInternals} from "reactflow";
 import DOMPurify from 'dompurify';
 import {apiClient} from "../api/api";
+import { produce } from "immer";
 
 export function getWidget(name: string, params: PropertySchema) {
   switch (name) {
@@ -239,16 +240,9 @@ function MultiSelectWidget(props: WidgetParams) {
   const setNode = usePipelineStore((state) => state.setNode);
 
   function getNewNodeData(old: Node, updatedList: Array<string>) {
-    return {
-      ...old,
-      data: {
-        ...old.data,
-        params: {
-          ...old.data.params,
-          [props.name]: updatedList,
-        },
-      },
-    };
+    return produce(old, next => {
+      next.data.params[props.name] = updatedList;
+    });
   }
 
   function onUpdate(event: ChangeEvent<HTMLInputElement>) {
@@ -673,16 +667,9 @@ export function KeywordsWidget(props: WidgetParams) {
   const updateNodeInternals = useUpdateNodeInternals()
 
   function getNewNodeData(old: Node, keywords: any[]) {
-    return {
-      ...old,
-      data: {
-        ...old.data,
-        params: {
-          ...old.data.params,
-          ["keywords"]: keywords,
-        },
-      },
-    };
+    return produce(old, next => {
+      next.data.params["keywords"] = keywords;
+    });
   }
 
   const addKeyword = () => {
@@ -789,19 +776,13 @@ export function LlmWidget(props: WidgetParams) {
   const updateParamValue = (event: ChangeEvent<HTMLSelectElement>) => {
     const {value} = event.target;
     const [providerId, providerModelId] = value.split('|:|');
-    setNode(props.nodeId, (old) => ({
-      ...old,
-      data: {
-        ...old.data,
-        params: {
-          ...old.data.params,
-          llm_provider_id: providerId,
-          llm_provider_model_id: providerModelId,
-        },
-      },
-    }));
+    setNode(props.nodeId, (old) =>
+      produce(old, (next) => {
+        next.data.params.llm_provider_id = providerId;
+        next.data.params.llm_provider_model_id = providerModelId;
+      })
+    );
   };
-
   const makeValue = (providerId: string, providerModelId: string) => {
     return providerId + '|:|' + providerModelId;
   };

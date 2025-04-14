@@ -8,6 +8,7 @@ import {getWidgetsForNode} from "./nodes/GetInputWidget";
 import NodeInput from "./nodes/NodeInput";
 import NodeOutputs from "./nodes/NodeOutputs";
 import {HelpContent} from "./panel/ComponentHelp";
+import { produce } from "immer";
 
 export type PipelineNode = Node<NodeData>;
 
@@ -28,17 +29,9 @@ export function PipelineNode(nodeProps: NodeProps<NodeData>) {
     if (event.target instanceof HTMLInputElement && event.target.type === "checkbox") {
       updateValue = event.target.checked;
     }
-    
-    
-    setNode(id, (old) => ({
-      ...old,
-      data: {
-        ...old.data,
-        params: {
-          ...old.data.params,
-          [name]: updateValue,
-        },
-      },
+
+    setNode(id, produce((next) => {
+      next.data.params[name] = updateValue;
     }));
   };
 
