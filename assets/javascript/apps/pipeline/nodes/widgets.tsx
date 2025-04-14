@@ -176,7 +176,7 @@ function ToggleWidget(props: ToggleWidgetParams) {
 
 function CheckboxWidget(props: ToggleWidgetParams) {
   return (
-    <InputField help_text={props.helpText} inputError={props.inputError}>
+    <InputField label={props.label} help_text={props.helpText} inputError={props.inputError}>
       <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
         <div style={{ fontWeight: 'bold' }}>{props.label}</div>
         <input
