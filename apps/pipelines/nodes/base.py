@@ -182,6 +182,9 @@ class PipelineNode(BaseModel, ABC):
         output_map = self.get_output_map()
         output_handle = next((k for k, v in output_map.items() if v == conditional_branch), None)
         state["outputs"][node_id]["output_handle"] = output_handle
+        if self.tag_output_message:
+            state["output_message_metadata"].setdefault("tags", []).append(conditional_branch)
+        breakpoint()
         return conditional_branch
 
     def _process(self, input: str, state: PipelineState, node_id: str) -> PipelineState:
