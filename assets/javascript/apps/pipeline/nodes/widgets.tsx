@@ -176,17 +176,18 @@ function ToggleWidget(props: ToggleWidgetParams) {
 
 function CheckboxWidget(props: ToggleWidgetParams) {
   return (
-    <InputField label={props.label} help_text={props.helpText} inputError={props.inputError}>
-      <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
-        <div style={{ fontWeight: 'bold' }}>{props.label}</div>
-        <input
-          type="checkbox"
-          name={props.name}
-          checked={props.paramValue}
-          onChange={props.updateParamValue}
-          style={{ width: '16px', height: '16px', cursor: 'pointer' }}
-        />
-      </div>
+    <InputField
+      label={props.label}
+      help_text={props.helpText}
+      inputError={props.inputError}
+    >
+      <input
+        type="checkbox"
+        name={props.name}
+        checked={props.paramValue}
+        onChange={props.updateParamValue}
+        className="checkbox"
+      />
     </InputField>
   );
 }
