@@ -10,7 +10,6 @@ from apps.chat.conversation import compress_chat_history, compress_pipeline_chat
 from apps.chat.models import ChatMessage, ChatMessageType
 from apps.experiments.models import Experiment, ExperimentSession
 from apps.pipelines.models import PipelineChatHistory, PipelineChatHistoryTypes
-from apps.teams.utils import current_team
 
 
 class BaseHistoryManager(metaclass=ABCMeta):
@@ -124,14 +123,13 @@ class ExperimentHistoryManager(BaseHistoryManager):
         )
 
         if experiment_tag:
-            with current_team(self.session.team):
-                tag, _ = Tag.objects.get_or_create(
-                    name=experiment_tag,
-                    team=self.session.team,
-                    is_system_tag=True,
-                    category=TagCategories.BOT_RESPONSE,
-                )
-                chat_message.add_tag(tag, team=self.session.team, added_by=None)
+            tag, _ = Tag.objects.get_or_create(
+                name=experiment_tag,
+                team=self.session.team,
+                is_system_tag=True,
+                category=TagCategories.BOT_RESPONSE,
+            )
+            chat_message.add_tag(tag, team=self.session.team, added_by=None)
 
         if type_ == ChatMessageType.AI:
             self.ai_message = chat_message

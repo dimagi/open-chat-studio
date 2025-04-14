@@ -42,6 +42,7 @@ from apps.service_providers.llm_service.history_managers import ExperimentHistor
 from apps.service_providers.llm_service.runnables import GenerationCancelled
 from apps.service_providers.speech_service import SynthesizedAudio
 from apps.slack.utils import parse_session_external_id
+from apps.teams.utils import current_team
 from apps.users.models import CustomUser
 
 if TYPE_CHECKING:
@@ -327,11 +328,12 @@ class ChannelBase(ABC):
         """Handles the message coming from the user. Call this to send bot messages to the user.
         The `message` here will probably be some object, depending on the channel being used.
         """
-        self._is_user_message = True
-        try:
-            return self._new_user_message(message)
-        except GenerationCancelled:
-            return ChatMessage(content="", message_type=ChatMessageType.AI)
+        with current_team(self.experiment_channel.team):
+            self._is_user_message = True
+            try:
+                return self._new_user_message(message)
+            except GenerationCancelled:
+                return ChatMessage(content="", message_type=ChatMessageType.AI)
 
     def _participant_is_allowed(self):
         if self.experiment.is_public:
