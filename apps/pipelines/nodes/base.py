@@ -184,7 +184,6 @@ class PipelineNode(BaseModel, ABC):
         state["outputs"][node_id]["output_handle"] = output_handle
         if self.tag_output_message:
             state["output_message_metadata"].setdefault("tags", []).append(conditional_branch)
-        breakpoint()
         return conditional_branch
 
     def _process(self, input: str, state: PipelineState, node_id: str) -> PipelineState:
@@ -226,7 +225,6 @@ class Widgets(StrEnum):
     float = "float"
     range = "range"
     multiselect = "multiselect"
-    checkbox = "checkbox"
     none = "none"
 
     # special widgets

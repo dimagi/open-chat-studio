@@ -414,7 +414,9 @@ class BooleanNode(Passthrough):
 class RouterMixin(BaseModel):
     keywords: list[str] = Field(default_factory=list, json_schema_extra=UiSchema(widget=Widgets.keywords))
     tag_output_message: bool = Field(
-        default=False, description="Tag the output message with chosen route", json_schema_extra=UiSchema(widget=Widgets.toggle)
+        default=False,
+        description="Tag the output message with chosen route",
+        json_schema_extra=UiSchema(widget=Widgets.toggle),
     )
 
     @field_validator("keywords")
@@ -535,7 +537,6 @@ class StaticRouterNode(RouterMixin, Passthrough):
             result = ""
 
         result_lower = result.lower()
-        breakpoint()
         for keyword in self.keywords:
             if keyword.lower() == result_lower:
                 return keyword

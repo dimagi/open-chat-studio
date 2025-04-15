@@ -38,8 +38,6 @@ export function getWidget(name: string, params: PropertySchema) {
       return KeywordsWidget
     case "node_name":
       return NodeNameWidget
-    case "checkbox":
-        return CheckboxWidget
     default:
       if (params.enum) {
         return SelectWidget
@@ -170,24 +168,6 @@ function ToggleWidget(props: ToggleWidgetParams) {
         checked={props.paramValue}
         type="checkbox"
       ></input>
-    </InputField>
-  );
-}
-
-function CheckboxWidget(props: ToggleWidgetParams) {
-  return (
-    <InputField
-      label={props.label}
-      help_text={props.helpText}
-      inputError={props.inputError}
-    >
-      <input
-        type="checkbox"
-        name={props.name}
-        checked={props.paramValue}
-        onChange={props.updateParamValue}
-        className="checkbox"
-      />
     </InputField>
   );
 }
