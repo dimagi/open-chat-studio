@@ -1,4 +1,6 @@
 import dataclasses
+import json
+import uuid
 from collections.abc import Iterator
 from contextlib import contextmanager
 from typing import Any
@@ -36,7 +38,30 @@ class FakeLlm(FakeListChatModel):
         **kwargs: Any,
     ) -> ChatResult:
         output = self._call(messages, stop=stop, run_manager=run_manager, **kwargs)
-        if isinstance(output, BaseMessage):
+
+        if isinstance(output, dict):
+            is_structured_output = any(t.get("type") == "function" for t in kwargs.get("tools", []))
+
+            if is_structured_output:
+                tool_name = "function"
+                if "tools" in kwargs and kwargs["tools"]:
+                    tool_name = kwargs["tools"][0]["function"]["name"]
+
+                message = AIMessage(
+                    content="",
+                    additional_kwargs={
+                        "tool_calls": [
+                            {
+                                "id": f"call_{uuid.uuid4().hex[:12]}",
+                                "function": {"arguments": json.dumps(output), "name": tool_name},
+                                "type": "function",
+                            }
+                        ]
+                    },
+                )
+            else:
+                message = AIMessage(content=json.dumps(output))
+        elif isinstance(output, BaseMessage):
             message = output
         else:
             message = AIMessage(content=output)
@@ -68,36 +93,39 @@ class FakeLlm(FakeListChatModel):
     def bind_tools(self, tools, *args, **kwargs):
         return self.bind(tools=[convert_to_openai_tool(tool) for tool in tools])
 
-    def with_structured_output(self, schema) -> RunnableSerializable:
-        """with_structured_output returns a runnable that handles both regular message inputs and ChatPromptValue
-        inputs, converting the result to the schema's expected format.
 
-        Examples:
-            FakeLlm(responses=[{"name": "John"}]).with_structured_output(...) -> {"name": "John"}
-            FakeLlm(responses=["keyword"]).with_structured_output(router_schema) -> {"route": "keyword"}
-            FakeLlm(responses=[AIMessage(content="value")]).with_structured_output(...) -> {"route": "value"}
-        """
+def with_structured_output(self, schema) -> RunnableSerializable:
+    is_router_schema = hasattr(schema, "__annotations__") and "route" in schema.__annotations__
 
-        def _structured_output_handler(input_value, *args, **kwargs):
-            if isinstance(input_value, ChatPromptValue):
-                messages = input_value.messages
-            else:
-                messages = [input_value]
-            result = self._call(messages, *args, **kwargs)
+    def _structured_output_handler(input_value, *args, **kwargs):
+        if isinstance(input_value, ChatPromptValue):
+            messages = input_value.messages
+        else:
+            messages = [input_value]
 
-            is_router_schema = hasattr(schema, "__annotations__") and "route" in schema.__annotations__
-            if isinstance(result, dict):
-                return result
-            elif isinstance(result, str):
-                route_value = result.lower()
-                return type("RouterOutput", (), {"route": route_value}) if is_router_schema else {"route": route_value}
-            else:
-                default_route = self.responses[0].lower() if self.responses else "default"
-                return (
-                    type("RouterOutput", (), {"route": default_route}) if is_router_schema else {"route": default_route}
-                )
+        self._call(messages, *args, **kwargs)
 
-        return RunnableLambda(_structured_output_handler)
+        if is_router_schema:
+            user_msg = ""
+            for msg in messages:
+                if msg.type == "human":
+                    user_msg = msg.content.lower()
+                    break
+
+            route_values = schema.__fields__["route"].annotation.__args__
+
+            selected_route = route_values[0]  # Default to first route
+            for route in route_values:
+                if route.lower() == user_msg.lower():
+                    selected_route = route
+                    break
+
+            return schema(route=selected_route)
+
+        # For non-router schemas, just return a JSON string
+        return {"output": "default_output"}
+
+    return RunnableLambda(_structured_output_handler)
 
 
 @dataclasses.dataclass

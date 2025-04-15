@@ -26,6 +26,7 @@ from apps.pipelines.tests.utils import (
     llm_response_with_prompt_node,
     passthrough_node,
     render_template_node,
+    router_node,
     start_node,
     state_key_router_node,
 )
@@ -40,7 +41,9 @@ from apps.utils.factories.experiment import (
 from apps.utils.factories.pipelines import PipelineFactory
 from apps.utils.factories.service_provider_factories import LlmProviderFactory, LlmProviderModelFactory
 from apps.utils.langchain import (
+    FakeLlmService,
     FakeLlmSimpleTokenCount,
+    FakeTokenCounter,
     build_fake_llm_echo_service,
     build_fake_llm_service,
 )
@@ -579,7 +582,7 @@ def test_extract_structured_data_with_chunking(provider, provider_model, pipelin
 
     # This is what the LLM sees.
     inferences = llm.get_call_messages()
-    assert inferences[0][0].text == (
+    assert inferences[0][0].content == (
         "Extract user data using the current user data and conversation history as reference. Use JSON output."
         "\nCurrent user data:"
         "\n"
@@ -588,7 +591,7 @@ def test_extract_structured_data_with_chunking(provider, provider_model, pipelin
         "The conversation history should carry more weight in the outcome. It can change the user's current data"
     )
 
-    assert inferences[1][0].text == (
+    assert inferences[1][0].content == (
         "Extract user data using the current user data and conversation history as reference. Use JSON output."
         "\nCurrent user data:"
         "\n{'name': None}"
@@ -597,7 +600,7 @@ def test_extract_structured_data_with_chunking(provider, provider_model, pipelin
         "The conversation history should carry more weight in the outcome. It can change the user's current data"
     )
 
-    assert inferences[2][0].text == (
+    assert inferences[2][0].content == (
         "Extract user data using the current user data and conversation history as reference. Use JSON output."
         "\nCurrent user data:"
         "\n{'name': 'james'}"
@@ -606,7 +609,6 @@ def test_extract_structured_data_with_chunking(provider, provider_model, pipelin
         "The conversation history should carry more weight in the outcome. It can change the user's current data"
     )
 
-    # Expected node output
     assert extracted_data == '{"name": "james"}'
 
 
@@ -1077,3 +1079,98 @@ def test_input_with_format_strings():
     resp = Passthrough(name="test").process("node_id", [], state, {})
 
     assert resp["messages"] == ["Is this it {the thing}"]
+
+
+@django_db_with_data(available_apps=("apps.service_providers",))
+@mock.patch("apps.service_providers.models.LlmProvider.get_llm_service")
+@mock.patch("apps.pipelines.nodes.base.PipelineNode.logger", mock.Mock())
+def test_router_node(get_llm_service, provider, provider_model, pipeline, experiment_session):
+    """Test that the RouterNode correctly routes to multiple different nodes based on the input."""
+
+    route_llm = FakeLlmSimpleTokenCount(
+        responses=[
+            {"route": "A"},  # First test - route A
+            {"route": "b"},  # Second test - route b
+            {"route": "c"},  # Third test - route c
+            {"route": "d"},  # Fourth test - route d
+            {"route": "A"},  # Fifth test - default to A for unknown input
+        ]
+    )
+
+    service = FakeLlmService(llm=route_llm, token_counter=FakeTokenCounter(token_counts=[0]))
+    get_llm_service.return_value = service
+
+    start = start_node()
+    router = router_node(str(provider.id), str(provider_model.id), keywords=["A", "b", "c", "d"])
+    template_a = render_template_node("A {{ input }}")
+    template_b = render_template_node("B {{ input }}")
+    template_c = render_template_node("C {{ input }}")
+    template_d = render_template_node("D {{ input }}")
+    end = end_node()
+
+    nodes = [start, router, template_a, template_b, template_c, template_d, end]
+    edges = [
+        {"id": "start -> router", "source": start["id"], "target": router["id"]},
+        {
+            "id": "RouterNode -> A",
+            "source": router["id"],
+            "target": template_a["id"],
+            "sourceHandle": "output_0",
+        },
+        {
+            "id": "RouterNode -> B",
+            "source": router["id"],
+            "target": template_b["id"],
+            "sourceHandle": "output_1",
+        },
+        {
+            "id": "RouterNode -> C",
+            "source": router["id"],
+            "target": template_c["id"],
+            "sourceHandle": "output_2",
+        },
+        {
+            "id": "RouterNode -> D",
+            "source": router["id"],
+            "target": template_d["id"],
+            "sourceHandle": "output_3",
+        },
+        {
+            "id": "A -> END",
+            "source": template_a["id"],
+            "target": end["id"],
+        },
+        {
+            "id": "B -> END",
+            "source": template_b["id"],
+            "target": end["id"],
+        },
+        {
+            "id": "C -> END",
+            "source": template_c["id"],
+            "target": end["id"],
+        },
+        {
+            "id": "D -> END",
+            "source": template_d["id"],
+            "target": end["id"],
+        },
+    ]
+
+    runnable = create_runnable(pipeline, nodes, edges)
+
+    output = runnable.invoke(PipelineState(messages=["A"], experiment_session=experiment_session))
+    assert output["messages"][-1] == "A A"
+
+    output = runnable.invoke(PipelineState(messages=["b"], experiment_session=experiment_session))
+    assert output["messages"][-1] == "B b"
+
+    output = runnable.invoke(PipelineState(messages=["c"], experiment_session=experiment_session))
+    assert output["messages"][-1] == "C c"
+
+    output = runnable.invoke(PipelineState(messages=["d"], experiment_session=experiment_session))
+    assert output["messages"][-1] == "D d"
+
+    # Test default route - should use the first keyword ("A")
+    output = runnable.invoke(PipelineState(messages=["unknown"], experiment_session=experiment_session))
+    assert output["messages"][-1] == "A unknown"
