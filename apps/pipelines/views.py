@@ -134,7 +134,7 @@ class DeletePipeline(LoginAndTeamRequiredMixin, View, PermissionRequiredMixin):
 
 def _pipeline_node_parameter_values(team, llm_providers, llm_provider_models):
     """Returns the possible values for each input type"""
-    source_materials = SourceMaterial.objects.filter(team=team).values("id", "topic").all()
+    source_materials = SourceMaterial.objects.working_versions_queryset().filter(team=team).values("id", "topic").all()
     assistants = OpenAiAssistant.objects.working_versions_queryset().filter(team=team).values("id", "name").all()
     collections = Collection.objects.filter(team=team, is_version=False).values("id", "name").all()
 
