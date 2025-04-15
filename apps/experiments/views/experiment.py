@@ -36,7 +36,7 @@ from apps.channels.exceptions import ExperimentChannelException
 from apps.channels.forms import ChannelForm
 from apps.channels.models import ChannelPlatform, ExperimentChannel
 from apps.chat.channels import WebChannel
-from apps.chat.models import ChatAttachment, ChatMessage, ChatMessageType
+from apps.chat.models import Chat, ChatAttachment, ChatMessage, ChatMessageType
 from apps.events.models import (
     EventLogStatusChoices,
     StaticTrigger,
@@ -966,6 +966,7 @@ def start_session_public_embed(request, team_slug: str, experiment_id: uuid.UUID
         working_experiment=experiment,
         participant_identifier=participant.identifier,
         timezone=request.session.get("detected_tz", None),
+        metadata={Chat.MetadataKeys.EMBED_SOURCE: request.headers.get("referer", None)},
     )
     redirect_url = (
         "chatbots:chatbot_chat_embed" if request.origin == "chatbots" else "experiments:experiment_chat_embed"
