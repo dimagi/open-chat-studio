@@ -328,7 +328,7 @@ class ChannelBase(ABC):
         """Handles the message coming from the user. Call this to send bot messages to the user.
         The `message` here will probably be some object, depending on the channel being used.
         """
-        with current_team(self.experiment_channel.team):
+        with current_team(self.experiment.team):
             self._is_user_message = True
             try:
                 return self._new_user_message(message)
