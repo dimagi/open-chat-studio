@@ -30,6 +30,10 @@ def set_current_team(team) -> Token:
         get_current_team(team)
     ```
     """
+    if existing_team := get_current_team():
+        if existing_team != team:
+            raise ValueError("Cannot set a different team in the current context")
+
     token = _context.set(team)
     if team:
         sentry_sdk.get_current_scope().set_tag("team", team.slug)
