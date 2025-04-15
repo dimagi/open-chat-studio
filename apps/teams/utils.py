@@ -39,6 +39,10 @@ def set_current_team(team) -> Token:
 
 
 def unset_current_team(token: Token | None = None):
+    """
+    When the token that the context was set to is passed, we use that to reset the context to its previous value,
+    otherwise we set it to None.
+    """
     if token is None:
         _context.set(None)
     else:
