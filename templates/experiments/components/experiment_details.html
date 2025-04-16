@@ -1,3 +1,4 @@
+{% load i18n %}
 {% load waffle_tags %}
 
 <div>
@@ -11,6 +12,17 @@
           </dd>
         </div>
       {% endfor %}
+      <div class="py-3 grid grid-cols-3 sm:gap-4">
+        <dt class="text-sm font-medium leading-6">{% translate "Platform" %}</dt>
+        <dd class="text-sm col-span-2">
+          {{ experiment_session.get_platform_name }}
+          {% if experiment_session.chat.embed_source %}
+            (Embedded at <a class="link" href="{{ experiment_session.chat.embed_source }}" target="_blank">
+              {{ experiment_session.chat.embed_source }}
+            </a>)
+          {% endif %}
+        </dd>
+      </div>
       {% if experiment.assistant %}
         <div class="py-3 grid grid-cols-3 sm:gap-4">
           <dt class="text-sm font-medium leading-6">OpenAI Assistant</dt>

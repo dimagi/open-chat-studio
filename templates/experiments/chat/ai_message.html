@@ -1,5 +1,5 @@
 {% load chat_tags %}
-<div class="flex flex-col gap-1">
+<div class="flex flex-col gap-1" data-last-message-datetime="{{ created_at_datetime|date:"c" }}">
   {% if experiment.debug_mode_enabled %}
     <div class="flex gap-2 items-center">
       {% include "experiments/chat/components/trace_icons.html" with trace_infos=message.trace_info %}
@@ -11,7 +11,7 @@
       {% endif %}
     </div>
   {% endif %}
-  <div class="chat-message-system flex flex-col" data-last-message-datetime="{{ created_at_datetime|safe }}">
+  <div class="chat-message-system flex flex-col">
     <div class="flex flex-row">
       {% include "experiments/chat/components/system_icon.html" %}
       <div class="message-contents">

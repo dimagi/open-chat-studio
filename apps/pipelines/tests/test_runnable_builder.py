@@ -12,7 +12,7 @@ from apps.experiments.models import ParticipantData
 from apps.pipelines.exceptions import PipelineBuildError, PipelineNodeBuildError
 from apps.pipelines.logging import LoggingCallbackHandler
 from apps.pipelines.nodes.base import PipelineState, merge_dicts
-from apps.pipelines.nodes.nodes import EndNode, RouterNode, StartNode, StaticRouterNode
+from apps.pipelines.nodes.nodes import EndNode, Passthrough, RouterNode, StartNode, StaticRouterNode
 from apps.pipelines.tests.utils import (
     assistant_node,
     boolean_node,
@@ -26,7 +26,6 @@ from apps.pipelines.tests.utils import (
     llm_response_with_prompt_node,
     passthrough_node,
     render_template_node,
-    router_node,
     start_node,
     state_key_router_node,
 )
@@ -300,83 +299,6 @@ def test_conditional_node(pipeline, experiment_session):
     }
 
 
-@django_db_with_data(available_apps=("apps.service_providers",))
-@mock.patch("apps.service_providers.models.LlmProvider.get_llm_service")
-@mock.patch("apps.pipelines.nodes.base.PipelineNode.logger", mock.Mock())
-def test_router_node(get_llm_service, provider, provider_model, pipeline, experiment_session):
-    service = build_fake_llm_echo_service(include_system_message=False)
-    get_llm_service.return_value = service
-    start = start_node()
-    router = router_node(str(provider.id), str(provider_model.id), keywords=["A", "b", "c", "d"])
-    template_a = render_template_node("A {{ input }}")
-    template_b = render_template_node("B {{ input }}")
-    template_c = render_template_node("C {{ input }}")
-    template_d = render_template_node("D {{ input }}")
-    end = end_node()
-    nodes = [start, router, template_a, template_b, template_c, template_d, end]
-    edges = [
-        {"id": "start -> router", "source": start["id"], "target": router["id"]},
-        {
-            "id": "RouterNode -> A",
-            "source": router["id"],
-            "target": template_a["id"],
-            "sourceHandle": "output_0",
-        },
-        {
-            "id": "RouterNode -> B",
-            "source": router["id"],
-            "target": template_b["id"],
-            "sourceHandle": "output_1",
-        },
-        {
-            "id": "RouterNode -> C",
-            "source": router["id"],
-            "target": template_c["id"],
-            "sourceHandle": "output_2",
-        },
-        {
-            "id": "RouterNode -> D",
-            "source": router["id"],
-            "target": template_d["id"],
-            "sourceHandle": "output_3",
-        },
-        {
-            "id": "A -> END",
-            "source": template_a["id"],
-            "target": end["id"],
-        },
-        {
-            "id": "B -> END",
-            "source": template_b["id"],
-            "target": end["id"],
-        },
-        {
-            "id": "C -> END",
-            "source": template_c["id"],
-            "target": end["id"],
-        },
-        {
-            "id": "D -> END",
-            "source": template_d["id"],
-            "target": end["id"],
-        },
-    ]
-    runnable = create_runnable(pipeline, nodes, edges)
-
-    output = runnable.invoke(PipelineState(messages=["a"], experiment_session=experiment_session))
-    assert output["messages"][-1] == "A a"
-    output = runnable.invoke(PipelineState(messages=["A"], experiment_session=experiment_session))
-    assert output["messages"][-1] == "A A"
-    output = runnable.invoke(PipelineState(messages=["b"], experiment_session=experiment_session))
-    assert output["messages"][-1] == "B b"
-    output = runnable.invoke(PipelineState(messages=["c"], experiment_session=experiment_session))
-    assert output["messages"][-1] == "C c"
-    output = runnable.invoke(PipelineState(messages=["d"], experiment_session=experiment_session))
-    assert output["messages"][-1] == "D d"
-    output = runnable.invoke(PipelineState(messages=["z"], experiment_session=experiment_session))
-    assert output["messages"][-1] == "A z"
-
-
 @pytest.mark.django_db()
 @mock.patch("apps.service_providers.models.LlmProvider.get_llm_service")
 def test_router_node_prompt(get_llm_service, provider, provider_model, pipeline, experiment_session):
@@ -452,6 +374,57 @@ def main(input, **kwargs):
     # default route
     output = runnable.invoke(PipelineState(messages=["Go to Third"], experiment_session=experiment_session))
     assert output["messages"][-1] == "A Go to Third"
+
+
+@django_db_with_data(available_apps=("apps.service_providers",))
+@mock.patch("apps.pipelines.nodes.base.PipelineNode.logger", mock.Mock())
+def test_static_router_case_sensitive(pipeline, experiment_session):
+    start = start_node()
+    router = state_key_router_node(
+        "route_to", ["first", "SECOND", "third"], data_source=StaticRouterNode.DataSource.temp_state
+    )
+    template_a = render_template_node("A")
+    template_b = render_template_node("B")
+    template_c = render_template_node("C")
+    end = end_node()
+    nodes = [start, router, template_a, template_b, template_c, end]
+    edges = [
+        {"id": "start -> code", "source": start["id"], "target": router["id"]},
+        {
+            "id": "router -> A",
+            "source": router["id"],
+            "target": template_a["id"],
+            "sourceHandle": "output_0",
+        },
+        {
+            "id": "router -> B",
+            "source": router["id"],
+            "target": template_b["id"],
+            "sourceHandle": "output_1",
+        },
+        {
+            "id": "router -> C",
+            "source": router["id"],
+            "target": template_c["id"],
+            "sourceHandle": "output_2",
+        },
+        {"id": "A -> end", "source": template_a["id"], "target": end["id"]},
+        {"id": "B -> end", "source": template_b["id"], "target": end["id"]},
+        {"id": "C -> end", "source": template_c["id"], "target": end["id"]},
+    ]
+    runnable = create_runnable(pipeline, nodes, edges)
+
+    def _check_match(route_to, expected):
+        output = runnable.invoke(
+            PipelineState(messages=[""], experiment_session=experiment_session, temp_state={"route_to": route_to})
+        )
+        assert output["messages"][-1] == expected
+
+    # Check that matches are not case-sensitive in either direction
+    _check_match("SECOND", "B")
+    _check_match("second", "B")
+    _check_match("third", "C")
+    _check_match("THIRD", "C")
 
 
 @django_db_with_data(available_apps=("apps.service_providers",))
@@ -1092,3 +1065,15 @@ def test_pipeline_history_manager_metadata_storage(get_llm_service, pipeline):
 )
 def test_merge_dicts(left, right, expected):
     assert merge_dicts(left, right) == expected
+
+
+def test_input_with_format_strings():
+    state = PipelineState(
+        messages=["Is this it {the thing}"],
+        experiment_session=ExperimentSessionFactory.build(),
+        pipeline_version=1,
+        temp_state={},
+    )
+    resp = Passthrough(name="test").process("node_id", [], state, {})
+
+    assert resp["messages"] == ["Is this it {the thing}"]

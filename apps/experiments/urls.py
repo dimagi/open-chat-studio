@@ -98,9 +98,14 @@ urlpatterns = [
         name="get_message_response",
     ),
     path(
-        "e/<int:experiment_id>/session/<int:session_id>/poll_messages/",
+        "e/<uuid:experiment_id>/session/<str:session_id>/poll_messages/",
         views.poll_messages,
         name="poll_messages",
+    ),
+    path(
+        "e/<uuid:experiment_id>/session/<str:session_id>/poll_messages/embed/",
+        views.poll_messages_embed,
+        name="poll_messages_embed",
     ),
     # events
     path("e/<int:experiment_id>/events/", include("apps.events.urls")),

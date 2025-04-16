@@ -1,4 +1,9 @@
-<div id="message-list" class="chat-pane" data-url="{% url 'experiments:poll_messages' team.slug experiment.id session.id %}">
+{% if embedded %}
+  {% url 'experiments:poll_messages_embed' team_slug=request.team.slug experiment_id=experiment.public_id session_id=session.external_id as poll_url%}
+{% else %}
+  {% url 'experiments:poll_messages' team_slug=request.team.slug experiment_id=experiment.public_id session_id=session.external_id as poll_url%}
+{% endif %}
+<div id="message-list" class="chat-pane" data-url="{{ poll_url }}">
   {% if not session.has_display_messages %}
     {% if session.seed_task_id %}
       {% with session.seed_task_id as task_id %}
@@ -15,7 +20,7 @@
   {% endif %}
   {% for message in session.get_messages_for_display %}
     {% with message.content as message_text %}
-      {% with message.created_at_datetime as created_at_datetime %}
+      {% with message.created_at as created_at_datetime %}
         {% if message.is_ai_message %}
           {% include 'experiments/chat/ai_message.html' with attachments=message.get_attached_files %}
         {% elif message.is_human_message %}
@@ -34,7 +39,7 @@
 {% endif %}
 <script>
   let refreshTimer = null;
-  const pollInterval = 60000;
+  const pollInterval = 30000;
 
   function scrollToBottom() {
     const chatUI = document.getElementById('message-list');
@@ -43,44 +48,17 @@
     refreshTimer = setTimeout(pollBackend, pollInterval);
   }
 
-  function appendMessage(messageHTML) {
-    const messageList = document.getElementById('message-list');
-    const newMessageDiv = document.createElement('div');
-    newMessageDiv.innerHTML = messageHTML;
-
-    messageList.appendChild(newMessageDiv);
-  }
-
   function pollBackend() {
-    document.body.addEventListener('htmx:afterOnLoad', function(evt) {
-      // scroll to bottom of chat after every htmx request
-      const chatUI = document.getElementById('message-list');
-      chatUI.scrollTop = chatUI.scrollHeight;
-    });
     const messageListDiv = document.getElementById('message-list');
-    var url = messageListDiv.getAttribute('data-url');
+    const url = messageListDiv.getAttribute('data-url');
     const lastMessage = messageListDiv.lastElementChild
     const lastDateTime = lastMessage.getAttribute('data-last-message-datetime')
     if (!lastDateTime) {
+      console.log("No last message datetime found, skipping poll.", lastMessage);
       return;
     }
-    url = url + "?since=" + lastDateTime
-    fetch(url)
-      .then(response => {
-        if (response.status !== 200) {
-          console.error('Messages not found');
-          return;
-        }
-        return response.text();
-      })
-      .then(data => {
-        if (data) {
-          appendMessage(data);
-          console.log(data);
-          scrollToBottom();
-        }
-      })
-      .catch(error => console.error('Error fetching messages:', error));
+    const params = new URLSearchParams([['since', lastDateTime]])
+    htmx.ajax('GET', `${url}?${params}`, {target: '#message-list', swap: 'beforeend'})
   }
 
   function cancelPolling() {

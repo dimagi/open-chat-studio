@@ -70,4 +70,4 @@ def test_get_user_message_with_llm_provider(mock_get_llm_service):
     assert calls[0][0].type == "system"
     assert session.participant.name in calls[0][0].content
     assert calls[0][1].type == "human"
-    assert calls[0][1].content == "Generate the message for the user based on this text: Test event prompt"
+    assert calls[0][1].content == "Test event prompt"

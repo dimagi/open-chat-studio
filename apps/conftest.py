@@ -3,6 +3,7 @@ import os
 import pytest
 from django.db import connections
 
+from apps.teams.utils import unset_current_team
 from apps.utils.factories.experiment import ExperimentFactory
 from apps.utils.factories.team import TeamFactory, TeamWithUsersFactory
 
@@ -43,3 +44,13 @@ def _django_db_restore_serialized(request: pytest.FixtureRequest, django_db_keep
 @pytest.fixture(autouse=True, scope="session")
 def _set_env():
     os.environ["UNIT_TESTING"] = "True"
+
+
+@pytest.fixture(autouse=True)
+def _reset_team_context():
+    """Resets the team context variable after each test."""
+    unset_current_team()
+    try:
+        yield
+    finally:
+        unset_current_team()

@@ -86,8 +86,6 @@ def test_running_pipeline_creates_run(pipeline: Pipeline, session: ExperimentSes
         time=entries[2]["time"],
         message=f"Returning input: '{input}' without modification",
         level="DEBUG",
-        input=input,
-        output=input,
     )
     assert LogEntry(**entries[3]) == LogEntry(
         time=entries[3]["time"],
@@ -105,8 +103,6 @@ def test_running_pipeline_creates_run(pipeline: Pipeline, session: ExperimentSes
         time=entries[5]["time"],
         message=f"Returning input: '{input}' without modification",
         level="DEBUG",
-        input=input,
-        output=input,
     )
     assert LogEntry(**entries[6]) == LogEntry(
         time=entries[6]["time"],

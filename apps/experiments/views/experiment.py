@@ -2,7 +2,7 @@ import logging
 import uuid
 from datetime import datetime
 from typing import cast
-from urllib.parse import parse_qs, quote, urlparse
+from urllib.parse import parse_qs, urlparse
 
 import jwt
 from celery.result import AsyncResult
@@ -23,7 +23,7 @@ from django.utils.html import format_html
 from django.utils.safestring import mark_safe
 from django.views.decorators.clickjacking import xframe_options_exempt
 from django.views.decorators.csrf import csrf_exempt
-from django.views.decorators.http import require_POST
+from django.views.decorators.http import require_GET, require_POST
 from django.views.generic import CreateView, UpdateView
 from django_tables2 import SingleTableView
 from field_audit.models import AuditAction
@@ -36,7 +36,7 @@ from apps.channels.exceptions import ExperimentChannelException
 from apps.channels.forms import ChannelForm
 from apps.channels.models import ChannelPlatform, ExperimentChannel
 from apps.chat.channels import WebChannel
-from apps.chat.models import ChatAttachment, ChatMessage, ChatMessageType
+from apps.chat.models import Chat, ChatAttachment, ChatMessage, ChatMessageType
 from apps.events.models import (
     EventLogStatusChoices,
     StaticTrigger,
@@ -778,6 +778,8 @@ def get_message_response(request, team_slug: str, experiment_id: uuid.UUID, sess
     progress = Progress(AsyncResult(task_id)).get_info()
     # don't render empty messages
     skip_render = progress["complete"] and progress["success"] and not progress["result"]
+    if skip_render:
+        return HttpResponse()
 
     message_details = {"message": None, "error_msg": False, "complete": progress["complete"]}
     if progress["complete"] and progress["success"]:
@@ -805,20 +807,37 @@ def get_message_response(request, team_slug: str, experiment_id: uuid.UUID, sess
             "task_id": task_id,
             "message_details": message_details,
             "skip_render": skip_render,
-            "last_message_datetime": last_message and quote(last_message.created_at.isoformat()),
+            "last_message_datetime": last_message and last_message.created_at,
             "attachments": attached_files,
         },
     )
 
 
+@experiment_session_view()
+@require_GET
+@xframe_options_exempt
 @team_required
-def poll_messages(request, team_slug: str, experiment_id: int, session_id: int):
+def poll_messages_embed(request, team_slug: str, experiment_id: uuid.UUID, session_id: str):
+    if not request.experiment_session.participant.is_anonymous:
+        return HttpResponseForbidden()
+
+    return _poll_messages(request)
+
+
+@experiment_session_view()
+@require_GET
+@team_required
+def poll_messages(request, team_slug: str, experiment_id: uuid.UUID, session_id: str):
     user = get_real_user_or_none(request.user)
+    if user and request.experiment_session.participant.user != user:
+        return HttpResponseForbidden()
+
+    return _poll_messages(request)
+
+
+def _poll_messages(request):
     params = request.GET.dict()
     since_param = params.get("since")
-    experiment_session = get_object_or_404(
-        ExperimentSession, participant__user=user, experiment_id=experiment_id, id=session_id, team=request.team
-    )
 
     since = timezone.now()
     if since_param and since_param != "null":
@@ -828,20 +847,23 @@ def poll_messages(request, team_slug: str, experiment_id: int, session_id: int):
             logging.exception(f"Unexpected `since` parameter value. Error: {e}")
 
     messages = (
-        ChatMessage.objects.filter(message_type=ChatMessageType.AI, chat=experiment_session.chat, created_at__gt=since)
+        ChatMessage.objects.filter(
+            message_type=ChatMessageType.AI, chat=request.experiment_session.chat, created_at__gt=since
+        )
         .order_by("created_at")
         .all()
     )
-    last_message = messages[0] if messages else None
 
-    return TemplateResponse(
-        request,
-        "experiments/chat/system_message.html",
-        {
-            "messages": [message.content for message in messages],
-            "last_message_datetime": last_message and quote(last_message.created_at.isoformat()),
-        },
-    )
+    if messages:
+        return TemplateResponse(
+            request,
+            "experiments/chat/system_message.html",
+            {
+                "messages": [message.content for message in messages],
+                "last_message_datetime": messages[0].created_at,
+            },
+        )
+    return HttpResponse()
 
 
 @team_required
@@ -866,7 +888,7 @@ def start_session_public(request, team_slug: str, experiment_id: uuid.UUID):
             participant_identifier=identifier,
             timezone=request.session.get("detected_tz", None),
         )
-        return _record_consent_and_redirect(team_slug, experiment, session)
+        return _record_consent_and_redirect(team_slug, experiment, session, request.origin)
 
     if request.method == "POST":
         form = ConsentForm(consent, request.POST, initial={"identifier": user.email if user else None})
@@ -944,8 +966,12 @@ def start_session_public_embed(request, team_slug: str, experiment_id: uuid.UUID
         working_experiment=experiment,
         participant_identifier=participant.identifier,
         timezone=request.session.get("detected_tz", None),
+        metadata={Chat.MetadataKeys.EMBED_SOURCE: request.headers.get("referer", None)},
     )
-    return redirect("experiments:experiment_chat_embed", team_slug, experiment.public_id, session.external_id)
+    redirect_url = (
+        "chatbots:chatbot_chat_embed" if request.origin == "chatbots" else "experiments:experiment_chat_embed"
+    )
+    return redirect(redirect_url, team_slug, experiment.public_id, session.external_id)
 
 
 def _verify_user_or_start_session(identifier, request, experiment, session):
@@ -1083,7 +1109,9 @@ def send_invitation(request, team_slug: str, experiment_id: int, session_id: str
     )
 
 
-def _record_consent_and_redirect(team_slug: str, experiment: Experiment, experiment_session: ExperimentSession):
+def _record_consent_and_redirect(
+    team_slug: str, experiment: Experiment, experiment_session: ExperimentSession, origin="experiments"
+):
     # record consent, update status
     experiment_session.consent_date = timezone.now()
     if experiment_session.experiment_version.pre_survey:
@@ -1091,7 +1119,7 @@ def _record_consent_and_redirect(team_slug: str, experiment: Experiment, experim
         redirect_url_name = "experiments:experiment_pre_survey"
     else:
         experiment_session.status = SessionStatus.ACTIVE
-        redirect_url_name = "experiments:experiment_chat"
+        redirect_url_name = "chatbots:chatbot_chat" if origin == "chatbots" else "experiments:experiment_chat"
     experiment_session.save()
     response = HttpResponseRedirect(
         reverse(
@@ -1211,7 +1239,7 @@ def _experiment_chat_ui(request, embedded=False):
         {
             "experiment": request.experiment,
             "session": request.experiment_session,
-            "active_tab": "experiments",
+            "active_tab": "chatbots" if request.origin == "chatbots" else "experiments",
             "embedded": embedded,
             **version_specific_vars,
         },

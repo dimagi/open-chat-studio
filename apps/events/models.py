@@ -9,6 +9,7 @@ from django.contrib.contenttypes.models import ContentType
 from django.db import models, transaction
 from django.db.models import F, Func, OuterRef, Q, Subquery, functions
 from django.utils import timezone
+from pytz.exceptions import UnknownTimeZoneError
 
 from apps.chat.models import ChatMessage, ChatMessageType
 from apps.events import actions
@@ -16,7 +17,6 @@ from apps.events.const import TOTAL_FAILURES
 from apps.experiments.models import Experiment, ExperimentSession
 from apps.experiments.versioning import VersionDetails, VersionField, VersionsMixin, VersionsObjectManagerMixin
 from apps.teams.models import BaseTeamModel
-from apps.teams.utils import current_team
 from apps.utils.models import BaseModel
 from apps.utils.slug import get_next_unique_id
 from apps.utils.time import pretty_date
@@ -414,12 +414,11 @@ class ScheduledMessage(BaseTeamModel):
             # Schedules probably created by the API
             return
 
-        with current_team(experiment_session.team):
-            experiment_session.ad_hoc_bot_message(
-                self.params["prompt_text"],
-                fail_silently=False,
-                use_experiment=self._get_experiment_to_generate_response(),
-            )
+        experiment_session.ad_hoc_bot_message(
+            self.params["prompt_text"],
+            fail_silently=False,
+            use_experiment=self._get_experiment_to_generate_response(),
+        )
 
         utc_now = timezone.now()
         self.last_triggered_at = utc_now
@@ -519,13 +518,18 @@ class ScheduledMessage(BaseTeamModel):
     def __str__(self):
         return self.as_string()
 
-    def as_dict(self, as_timezone=None):
+    def as_dict(self, as_timezone: str = None):
         next_trigger_date = self.next_trigger_date
         last_triggered_at = self.last_triggered_at
         if as_timezone:
-            next_trigger_date = next_trigger_date.astimezone(pytz.timezone(as_timezone))
-            if last_triggered_at:
-                last_triggered_at = last_triggered_at.astimezone(pytz.timezone(as_timezone))
+            try:
+                pytz_timezone = pytz.timezone(as_timezone)
+            except UnknownTimeZoneError:
+                pass
+            else:
+                next_trigger_date = next_trigger_date.astimezone(pytz_timezone)
+                if last_triggered_at:
+                    last_triggered_at = last_triggered_at.astimezone(pytz_timezone)
         return {
             "name": self.name,
             "prompt": self.prompt_text,
