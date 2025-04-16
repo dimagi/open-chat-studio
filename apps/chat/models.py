@@ -130,6 +130,8 @@ class ChatMessage(BaseModel, TaggedModelMixin, UserCommentsMixin):
             return []
 
         if isinstance(trace_info, dict):
+            # migrate legacy format
+            trace_info["trace_provider"] = self.metadata.get("trace_provider")
             return [trace_info]
         return trace_info
 

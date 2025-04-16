@@ -86,14 +86,7 @@
                             {{ message.created_at|date:"DATETIME_FORMAT" }}
                           </time>
                         </div>
-                        {% if message.trace_info %}
-                          # TODO: fix trace info
-                          <div class="tooltip" data-tip="Open Trace on {{ message.trace_info.trace_provider|title }}">
-                            <a class="btn btn-xs btn-square" href="{{ message.trace_info.trace_url }}" target="_blank">
-                              <i class="fa-regular fa-chart-bar"></i>
-                            </a>
-                          </div>
-                        {% endif %}
+                        {% include "experiments/chat/components/trace_icons.html" with trace_infos=message.trace_info %}
                         {% if perms.annotations.add_usercomment %}
                           <div class="grow">
                             {% include "annotations/tag_ui.html" with object=message allow_edit=experiment.is_editable %}
