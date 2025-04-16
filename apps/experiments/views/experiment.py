@@ -829,7 +829,7 @@ def poll_messages_embed(request, team_slug: str, experiment_id: uuid.UUID, sessi
 @team_required
 def poll_messages(request, team_slug: str, experiment_id: uuid.UUID, session_id: str):
     user = get_real_user_or_none(request.user)
-    if not request.experiment_session.participant.user == user:
+    if user and request.experiment_session.participant.user != user:
         return HttpResponseForbidden()
 
     return _poll_messages(request)
