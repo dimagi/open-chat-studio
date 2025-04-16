@@ -61,4 +61,5 @@ class ChatbotSessionsTable(ExperimentSessionsTable):
             ),
         ],
         align="right",
+        orderable=False
     )
