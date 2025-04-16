@@ -400,6 +400,11 @@ class BooleanNode(Passthrough):
     model_config = ConfigDict(json_schema_extra=NodeSchema(label="Conditional Node"))
 
     input_equals: str
+    tag_output_message: bool = Field(
+        default=False,
+        description="Tag the output message with the selected route",
+        json_schema_extra=UiSchema(widget=Widgets.toggle),
+    )
 
     def _process_conditional(self, state: PipelineState, node_id: str | None = None) -> Literal["true", "false"]:
         if self.input_equals == state["messages"][-1]:
@@ -415,7 +420,7 @@ class RouterMixin(BaseModel):
     keywords: list[str] = Field(default_factory=list, json_schema_extra=UiSchema(widget=Widgets.keywords))
     tag_output_message: bool = Field(
         default=False,
-        description="Tag the output message with chosen route",
+        description="Tag the output message with the selected route",
         json_schema_extra=UiSchema(widget=Widgets.toggle),
     )
 

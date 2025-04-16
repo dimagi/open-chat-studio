@@ -79,6 +79,7 @@ class PipelineState(dict):
     input_message_metadata: Annotated[dict, merge_dicts]
     output_message_metadata: Annotated[dict, merge_dicts]
     attachments: list = Field(default=[])
+    tag_output_message: Annotated[dict, merge_dicts]
 
     def json_safe(self):
         # We need to make a copy of `self` so as to not change the actual value of `experiment_session` forever
@@ -183,7 +184,7 @@ class PipelineNode(BaseModel, ABC):
         output_handle = next((k for k, v in output_map.items() if v == conditional_branch), None)
         state["outputs"][node_id]["output_handle"] = output_handle
         if self.tag_output_message:
-            state["output_message_metadata"].setdefault("tags", []).append(conditional_branch)
+            state["tag_output_message"].setdefault("tags", []).append(f"{self.name}:{conditional_branch}")
         return conditional_branch
 
     def _process(self, input: str, state: PipelineState, node_id: str) -> PipelineState:

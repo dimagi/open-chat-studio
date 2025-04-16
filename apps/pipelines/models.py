@@ -14,6 +14,7 @@ from langchain_core.messages import AIMessage, BaseMessage, HumanMessage, System
 from langchain_core.runnables import RunnableConfig
 from pydantic import ConfigDict
 
+from apps.annotations.models import TagCategories
 from apps.chat.models import ChatMessage, ChatMessageType
 from apps.custom_actions.form_utils import set_custom_actions
 from apps.custom_actions.mixins import CustomActionOperationMixin
@@ -345,7 +346,11 @@ class Pipeline(BaseTeamModel, VersionsMixin):
                         session, input["messages"][-1], ChatMessageType.HUMAN, metadata=input_metadata
                     )
                 ai_message = self._save_message_to_history(
-                    session, output["messages"][-1], ChatMessageType.AI, metadata=output_metadata
+                    session,
+                    output["messages"][-1],
+                    ChatMessageType.AI,
+                    metadata=output_metadata,
+                    tags=output.get("tag_output_message"),
                 )
                 pipeline_output = ai_message
             else:
@@ -374,7 +379,7 @@ class Pipeline(BaseTeamModel, VersionsMixin):
         )
 
     def _save_message_to_history(
-        self, session: ExperimentSession, message: str, type_: ChatMessageType, metadata: dict
+        self, session: ExperimentSession, message: str, type_: ChatMessageType, metadata: dict, tags: dict = None
     ) -> ChatMessage:
         chat_message = ChatMessage.objects.create(
             chat=session.chat, message_type=type_.value, content=message, metadata=metadata
@@ -382,6 +387,9 @@ class Pipeline(BaseTeamModel, VersionsMixin):
 
         if type_ == ChatMessageType.AI:
             chat_message.add_version_tag(version_number=self.version_number, is_a_version=self.is_a_version)
+            if tags:
+                for tag in tags.items():
+                    chat_message.add_system_tag(tag, TagCategories.BOT_RESPONSE)
         return chat_message
 
     @transaction.atomic()

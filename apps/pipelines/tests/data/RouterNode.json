@@ -86,10 +86,10 @@
     },
     "tag_output_message": {
       "default": false,
-      "description": "Tag output message with route",
+      "description": "Tag the output message with the selected route",
       "title": "Tag Output Message",
       "type": "boolean",
-      "ui:widget": "checkbox"
+      "ui:widget": "toggle"
     },
     "prompt": {
       "default": "You are an extremely helpful router",
