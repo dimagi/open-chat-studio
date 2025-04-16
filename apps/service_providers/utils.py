@@ -152,8 +152,6 @@ def get_first_llm_provider_model(llm_provider, team_id):
     try:
         if llm_provider:
             model = LlmProviderModel.objects.filter(type=llm_provider.type, team_id=team_id).order_by("id").first()
-            breakpoint()
             return model
     except LlmProviderModel.DoesNotExist:
-        breakpoint()
         return None
