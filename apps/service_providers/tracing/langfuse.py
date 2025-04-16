@@ -49,9 +49,11 @@ class LangFuseTracer(Tracer):
     def start_span(
         self, span_id: str, span_name: str, inputs: dict[str, Any], metadata: dict[str, Any] | None = None
     ) -> None:
+        # TODO: add implementation
         pass
 
     def end_span(self, span_id: str, outputs: dict[str, Any] | None = None, error: Exception | None = None) -> None:
+        # TODO: add implementation
         pass
 
     def get_langchain_callback(self) -> BaseCallbackHandler:

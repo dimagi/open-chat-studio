@@ -6,7 +6,7 @@ from uuid import UUID
 from langchain_core.tracers import LangChainTracer
 
 from . import Tracer
-from .base import ServiceReentryException
+from .base import ServiceNotInitializedException, ServiceReentryException
 
 if TYPE_CHECKING:
     from langchain.callbacks.base import BaseCallbackHandler
@@ -37,10 +37,14 @@ class LangSmithTracer(Tracer):
     def start_span(
         self, span_id: str, span_name: str, inputs: dict[str, Any], metadata: dict[str, Any] | None = None
     ) -> None:
+        # TODO: add implementation
         pass
 
     def end_span(self, span_id: str, outputs: dict[str, Any] | None = None, error: Exception | None = None) -> None:
+        # TODO: add implementation
         pass
 
     def get_langchain_callback(self) -> BaseCallbackHandler:
+        if not self.ready:
+            raise ServiceNotInitializedException("Service not initialized.")
         return LangChainTracer(client=self.client, project_name=self.config["project"])
