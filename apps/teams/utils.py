@@ -1,5 +1,5 @@
 from contextlib import contextmanager
-from contextvars import ContextVar
+from contextvars import ContextVar, Token
 
 import sentry_sdk
 
@@ -21,7 +21,7 @@ def get_current_team():
         pass
 
 
-def set_current_team(team):
+def set_current_team(team) -> Token:
     """
     Utils to set a team in the current thread/context.
     Used in a middleware once a user is logged in.
@@ -30,15 +30,27 @@ def set_current_team(team):
         get_current_team(team)
     ```
     """
-    _context.set(team)
+    if existing_team := get_current_team():
+        if existing_team != team:
+            raise ValueError("Cannot set a different team in the current context")
+
+    token = _context.set(team)
     if team:
         sentry_sdk.get_current_scope().set_tag("team", team.slug)
     else:
         sentry_sdk.get_current_scope().remove_tag("team")
+    return token
 
 
-def unset_current_team():
-    _context.set(None)
+def unset_current_team(token: Token | None = None):
+    """
+    When the token that the context was set to is passed, we use that to reset the context to its previous value,
+    otherwise we set it to None.
+    """
+    if token is None:
+        _context.set(None)
+    else:
+        _context.reset(token)
     sentry_sdk.get_current_scope().remove_tag("team")
 
 
@@ -46,8 +58,8 @@ def unset_current_team():
 def current_team(team):
     """Context manager used for setting the team outside of requests where the team can be set automatically.
     This is mostly used for auditing but also useful for testing."""
-    set_current_team(team)
+    token = set_current_team(team)
     try:
         yield
     finally:
-        unset_current_team()
+        unset_current_team(token)
