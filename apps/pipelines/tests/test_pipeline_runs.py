@@ -195,7 +195,6 @@ def test_save_metadata_and_tagging(pipeline: Pipeline, session: ExperimentSessio
 
     with mock.patch.object(ChatMessage, "add_system_tag") as mock_add_system_tag:
         pipeline.invoke(pipeline_state, session)
-        ai_message = session.chat.messages.filter(message_type=ChatMessageType.AI).first()
         for tag in output_message_tags:
             mock_add_system_tag.assert_any_call(tag, TagCategories.BOT_RESPONSE)
 
