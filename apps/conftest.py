@@ -50,3 +50,7 @@ def _set_env():
 def _reset_team_context():
     """Resets the team context variable after each test."""
     unset_current_team()
+    try:
+        yield
+    finally:
+        unset_current_team()
