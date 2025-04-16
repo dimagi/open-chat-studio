@@ -16,8 +16,6 @@ class LangSmithTracer(Tracer):
     def __init__(self, type_, config: dict):
         super().__init__(type_, config)
         self.client = None
-        self.session_id = None
-        self.user_id = None
 
     @property
     def ready(self) -> bool:
