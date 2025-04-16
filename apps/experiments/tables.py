@@ -152,11 +152,8 @@ def _show_chat_button(request, record):
 class ExperimentSessionsTable(tables.Table):
     participant = columns.Column(accessor="participant", verbose_name="Participant", order_by="participant__identifier")
     last_message = columns.Column(accessor="last_message_created_at", verbose_name="Last Message", orderable=True)
-    tags = columns.TemplateColumn(
-        verbose_name="Tags",
-        template_name="annotations/tag_ui.html",
-    )
-    versions = columns.Column(verbose_name="Versions", accessor="experiment_version_for_display")
+    tags = columns.TemplateColumn(verbose_name="Tags", template_name="annotations/tag_ui.html", orderable=False)
+    versions = columns.Column(verbose_name="Versions", accessor="experiment_version_for_display", orderable=False)
     actions = actions.ActionsColumn(
         actions=[
             actions.Action(
@@ -171,6 +168,7 @@ class ExperimentSessionsTable(tables.Table):
             ),
         ],
         align="right",
+        orderable=False,
     )
 
     def render_tags(self, record, bound_column):
