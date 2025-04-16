@@ -1,7 +1,7 @@
 import dataclasses
 from collections.abc import Iterator
 from contextlib import contextmanager
-from typing import Any
+from typing import Any, cast
 from unittest import mock
 from unittest.mock import patch
 
@@ -11,9 +11,9 @@ from langchain_core.callbacks import BaseCallbackHandler, CallbackManagerForLLMR
 from langchain_core.language_models import BaseLanguageModel
 from langchain_core.messages import AIMessage, AIMessageChunk, BaseMessage, BaseMessageChunk
 from langchain_core.outputs import ChatGeneration, ChatGenerationChunk, ChatResult
-from langchain_core.prompt_values import ChatPromptValue
-from langchain_core.runnables import RunnableConfig, RunnableLambda, RunnableSerializable
+from langchain_core.runnables import RunnableConfig, RunnableSerializable
 from langchain_core.utils.function_calling import convert_to_openai_tool
+from langchain_core.utils.pydantic import TypeBaseModel, is_basemodel_subclass
 from openai import OpenAI
 from pydantic import ConfigDict
 
@@ -77,27 +77,13 @@ class FakeLlm(FakeListChatModel):
             FakeLlm(responses=["keyword"]).with_structured_output(router_schema) -> {"route": "keyword"}
             FakeLlm(responses=[AIMessage(content="value")]).with_structured_output(...) -> {"route": "value"}
         """
+        from langchain_core.output_parsers.openai_tools import PydanticToolsParser
 
-        def _structured_output_handler(input_value, *args, **kwargs):
-            if isinstance(input_value, ChatPromptValue):
-                messages = input_value.messages
-            else:
-                messages = [input_value]
-            result = self._call(messages, *args, **kwargs)
-
-            is_router_schema = hasattr(schema, "__annotations__") and "route" in schema.__annotations__
-            if isinstance(result, dict):
-                return result
-            elif isinstance(result, str):
-                route_value = result.lower()
-                return type("RouterOutput", (), {"route": route_value}) if is_router_schema else {"route": route_value}
-            else:
-                default_route = self.responses[0].lower() if self.responses else "default"
-                return (
-                    type("RouterOutput", (), {"route": default_route}) if is_router_schema else {"route": default_route}
-                )
-
-        return RunnableLambda(_structured_output_handler)
+        if isinstance(schema, type) and is_basemodel_subclass(schema):
+            output_parser = PydanticToolsParser(tools=[cast(TypeBaseModel, schema)], first_tool_only=True)
+            llm = self.bind_tools([schema], tool_choice="any")
+            return llm | output_parser
+        raise Exception("Unsupported schema type, only pydantic models are supported")
 
 
 @dataclasses.dataclass
