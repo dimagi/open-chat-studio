@@ -106,6 +106,7 @@ PROJECT_APPS = [
     "apps.participants",
     "apps.chatbots",
     "apps.banners",
+    "apps.evaluations",
 ]
 
 SPECIAL_APPS = [
