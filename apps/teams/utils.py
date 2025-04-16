@@ -1,8 +1,10 @@
+import logging
 from contextlib import contextmanager
 from contextvars import ContextVar, Token
 
 import sentry_sdk
 
+log = logging.getLogger("ocs.teams")
 _context = ContextVar("team")
 
 
@@ -32,7 +34,7 @@ def set_current_team(team) -> Token:
     """
     if existing_team := get_current_team():
         if existing_team != team:
-            raise ValueError("Cannot set a different team in the current context")
+            log.error("Trying to set a different team in the current context")
 
     token = _context.set(team)
     if team:
