@@ -17,6 +17,7 @@ from langchain_core.prompts import MessagesPlaceholder, PromptTemplate
 from langchain_core.runnables import RunnableLambda, RunnablePassthrough
 from langchain_text_splitters import RecursiveCharacterTextSplitter
 from pydantic import BaseModel, BeforeValidator, Field, create_model, field_validator, model_validator
+from pydantic import ValidationError as PydanticValidationError
 from pydantic.config import ConfigDict
 from pydantic_core import PydanticCustomError
 from pydantic_core.core_schema import FieldValidationInfo
@@ -474,7 +475,7 @@ class RouterNode(RouterMixin, Passthrough, HistoryMixin):
         try:
             result = chain.invoke(context, config=self._config)
             keyword = getattr(result, "route", None)
-        except ValidationError:
+        except PydanticValidationError:
             keyword = None
 
         if not keyword:
