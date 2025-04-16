@@ -30,7 +30,14 @@ class Tracer(ABC):
 
     @abstractmethod
     def begin_trace(self, trace_name: str, trace_id: UUID, session_id: str, user_id: str):
-        """This must be called before any tracing methods are called."""
+        """This must be called before any tracing methods are called.
+
+        Args:
+            trace_name (str): The name of the trace.
+            trace_id (UUID): The unique identifier for the trace.
+            session_id (str): The session identifier.
+            user_id (str): The user identifier.
+        """
         self.trace_name = trace_name
         self.trace_id = trace_id
         self.session_id = session_id
