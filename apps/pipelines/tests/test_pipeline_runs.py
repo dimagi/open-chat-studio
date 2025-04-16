@@ -1,10 +1,12 @@
+from unittest import mock
 from unittest.mock import patch
 
 import pytest
 from langchain_core.runnables import RunnableLambda
 
+from apps.annotations.models import TagCategories
 from apps.channels.datamodels import Attachment
-from apps.chat.models import ChatMessageType
+from apps.chat.models import ChatMessage, ChatMessageType
 from apps.experiments.models import ExperimentSession
 from apps.pipelines.models import LogEntry, Pipeline, PipelineRunStatus
 from apps.pipelines.nodes.base import PipelineNode, PipelineState
@@ -65,6 +67,7 @@ def test_running_pipeline_creates_run(pipeline: Pipeline, session: ExperimentSes
         },
         input_message_metadata={},
         output_message_metadata={},
+        output_message_tags=[],
     )
 
     assert len(run.log["entries"]) == 8
@@ -183,3 +186,19 @@ def test_save_trace_metadata(pipeline: Pipeline, session: ExperimentSession):
     assert "trace_info" in human_message.metadata
     ai_message = session.chat.messages.filter(message_type=ChatMessageType.AI).first()
     assert "trace_info" in ai_message.metadata
+
+
+@pytest.mark.django_db()
+def test_save_metadata_and_tagging(pipeline: Pipeline, session: ExperimentSession):
+    output_message_tags = ["test_tag_1"]
+    pipeline_state = PipelineState(messages=["Hi"], output_message_tags=output_message_tags)
+
+    with mock.patch.object(ChatMessage, "add_system_tag") as mock_add_system_tag:
+        pipeline.invoke(pipeline_state, session)
+        ai_message = session.chat.messages.filter(message_type=ChatMessageType.AI).first()
+        for tag in output_message_tags:
+            mock_add_system_tag.assert_any_call(tag, TagCategories.BOT_RESPONSE)
+
+        assert (
+            mock_add_system_tag.call_count == len(output_message_tags) + 1
+        )  # add version tag also calls add system tag
