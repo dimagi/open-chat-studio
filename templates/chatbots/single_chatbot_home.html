@@ -280,7 +280,16 @@
       }
 
       document.addEventListener('DOMContentLoaded', () => {
-        showTabContent('allsessions');
+        // Initially show the tab based on the hash, if present, otherwise default to allsessions
+        const initialTabIdFromHash = window.location.hash.replace('#', '');
+        if (initialTabIdFromHash && document.getElementById(`tab-${initialTabIdFromHash}`)) {
+          document.getElementById(`tab-${initialTabIdFromHash}`).checked = true;
+          showTabContent(initialTabIdFromHash);
+        } else {
+          document.getElementById('tab-allsessions').checked = true;
+          showTabContent('allsessions');
+        }
+
         const tabs = document.querySelectorAll('.tab');
         tabs.forEach(tab => {
           tab.addEventListener('change', (event) => {
@@ -288,10 +297,8 @@
             showTabContent(tabId);
           });
         });
-
-        selectTabFromHash();
       });
-
       window.addEventListener('hashchange', selectTabFromHash);
     </script>
 {% endblock %}
+
