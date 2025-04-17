@@ -118,6 +118,8 @@ sniffio==1.3.0
     #   httpx
 termcolor==2.5.0
     # via -r dev-requirements.in
+tomli==2.2.1
+    # via coverage
 typing-extensions==4.12.2
     # via
     #   -c requirements.txt

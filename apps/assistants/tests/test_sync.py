@@ -29,7 +29,7 @@ class ObjectWithId:
 
 
 @pytest.mark.django_db()
-@patch("openai.resources.beta.vector_stores.VectorStores.create", return_value=ObjectWithId(id="vs_123"))
+@patch("openai.resources.vector_stores.VectorStores.create", return_value=ObjectWithId(id="vs_123"))
 @patch("openai.resources.beta.Assistants.create", return_value=AssistantFactory.build(id="test_id"))
 @patch("openai.resources.Files.create", side_effect=FileObjectFactory.create_batch(3))
 def test_push_assistant_to_openai_create(mock_file_create, assistant_create, vs_create):
@@ -58,9 +58,9 @@ def test_push_assistant_to_openai_create(mock_file_create, assistant_create, vs_
 
 
 @pytest.mark.django_db()
-@patch("openai.resources.beta.vector_stores.file_batches.FileBatches.create")
-@patch("openai.resources.beta.vector_stores.files.Files.list")
-@patch("openai.resources.beta.vector_stores.VectorStores.retrieve", return_value=ObjectWithId(id="vs_123"))
+@patch("openai.resources.vector_stores.file_batches.FileBatches.create")
+@patch("openai.resources.vector_stores.files.Files.list")
+@patch("openai.resources.vector_stores.VectorStores.retrieve", return_value=ObjectWithId(id="vs_123"))
 @patch("openai.resources.beta.Assistants.update")
 def test_push_assistant_to_openai_update(mock_update, vs_retrieve, vs_files_list, file_batches, experiment):
     local_assistant = OpenAiAssistantFactory(assistant_id="test_id", builtin_tools=["code_interpreter", "file_search"])
@@ -112,7 +112,7 @@ def test_push_assistant_to_openai_update(mock_update, vs_retrieve, vs_files_list
 
 
 @pytest.mark.django_db()
-@patch("openai.resources.beta.vector_stores.files.Files.list")
+@patch("openai.resources.vector_stores.files.Files.list")
 @patch("openai.resources.beta.Assistants.retrieve")
 @patch("openai.resources.Files.content", return_value=BytesIO(b"test_content"))
 @patch("openai.resources.Files.retrieve")
@@ -172,7 +172,7 @@ def test_sync_from_openai(mock_file_retrieve, _, mock_retrieve, mock_vector_stor
 
 @pytest.mark.django_db()
 @patch("openai.resources.beta.Assistants.retrieve")
-@patch("openai.resources.beta.vector_stores.files.Files.list")
+@patch("openai.resources.vector_stores.files.Files.list")
 @patch("openai.resources.Files.retrieve")
 @patch("openai.resources.Files.content", return_value=BytesIO(b"test_content"))
 def test_import_openai_assistant(_, mock_file_retrieve, mock_vector_store_files, mock_retrieve):
@@ -234,7 +234,7 @@ def test_import_openai_assistant_raises_for_invalid_instructions(mock_retrieve):
 
 @pytest.mark.django_db()
 @patch("openai.resources.beta.Assistants.delete")
-@patch("openai.resources.beta.vector_stores.VectorStores.delete")
+@patch("openai.resources.vector_stores.VectorStores.delete")
 @patch("openai.resources.Files.delete")
 def test_delete_openai_assistant(mock_file_delete, mock_vector_store_delete, mock_delete):
     files = FileFactory.create_batch(3, external_id="test_id", external_source="openai")
@@ -288,7 +288,7 @@ def test_code_interpreter_are_files_in_sync_with_openai(mock_retrieve):
 
 
 @pytest.mark.django_db()
-@patch("openai.resources.beta.vector_stores.files.Files.list")
+@patch("openai.resources.vector_stores.files.Files.list")
 @patch("openai.resources.beta.Assistants.retrieve")
 def test_file_search_are_files_in_sync_with_openai(mock_retrieve, file_list):
     tool_type = "file_search"
@@ -328,10 +328,10 @@ def test_file_search_are_files_in_sync_with_openai(mock_retrieve, file_list):
         ([f"file_{file_id}" for file_id in range(10)], False),
     ],
 )
-@patch("openai.resources.beta.vector_stores.VectorStores.create", return_value=ObjectWithId(id="vs_123"))
-@patch("openai.resources.beta.vector_stores.file_batches.FileBatches.create")
+@patch("openai.resources.vector_stores.VectorStores.create", return_value=ObjectWithId(id="vs_123"))
+@patch("openai.resources.vector_stores.file_batches.FileBatches.create")
 def test_vector_store_create_batch_files(create_file_batch, create_vector_store, file_ids, expect_batch_api_called):
-    """The `client.beta.vector_stores.create` API can only handle 100 file_ids whereas the batch API can handle 500"""
+    """The `client.vector_stores.create` API can only handle 100 file_ids whereas the batch API can handle 500"""
     local_assistant = OpenAiAssistantFactory(builtin_tools=["file_search"], assistant_id="")
 
     _update_or_create_vector_store(local_assistant, "test_v_store", vector_store_id=None, file_ids=file_ids)
