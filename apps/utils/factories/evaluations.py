@@ -4,17 +4,18 @@ from factory.django import DjangoModelFactory
 from apps.evaluations.models import (
     EvaluationConfig,
     EvaluationDataset,
-    EvaluationResult,
     EvaluationRun,
     Evaluator,
 )
 from apps.utils.factories.experiment import ExperimentFactory, ExperimentSessionFactory
+from apps.utils.factories.team import TeamFactory
 
 
 class EvaluatorFactory(DjangoModelFactory):
     class Meta:
         model = Evaluator
 
+    team = factory.SubFactory(TeamFactory)
     type = "LLM"
     params = {
         "llm_prompt": "give me the sentiment of the user messages",
@@ -26,6 +27,7 @@ class EvaluationDatasetFactory(DjangoModelFactory):
     class Meta:
         model = EvaluationDataset
 
+    team = factory.SubFactory(TeamFactory)
     message_type = "ALL"
     version = factory.SubFactory(ExperimentFactory)
 
@@ -44,6 +46,7 @@ class EvaluationConfigFactory(DjangoModelFactory):
     class Meta:
         model = EvaluationConfig
 
+    team = factory.SubFactory(TeamFactory)
     dataset = factory.SubFactory(EvaluationDatasetFactory)
     experiment = factory.SubFactory(ExperimentFactory)
 
@@ -62,13 +65,5 @@ class EvaluationRunFactory(DjangoModelFactory):
     class Meta:
         model = EvaluationRun
 
+    team = factory.SubFactory(TeamFactory)
     config = factory.SubFactory(EvaluationConfigFactory)
-
-
-class EvaluatorResultFactory(DjangoModelFactory):
-    class Meta:
-        model = EvaluationResult
-
-    evaluator = factory.SubFactory(EvaluatorFactory)
-    output = factory.LazyFunction(lambda: {"sentiment": "positive"})
-    run = factory.SubFactory(EvaluationRunFactory)

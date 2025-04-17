@@ -46,6 +46,7 @@ team_urlpatterns = [
     path("help/", include("apps.help.urls")),
     path("documents/", include("apps.documents.urls")),
     path("chatbots/", include("apps.chatbots.urls")),
+    path("evaluations/", include("apps.evaluations.urls")),
 ]
 
 urlpatterns = [

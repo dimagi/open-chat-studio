@@ -99,4 +99,13 @@
       {% endif %}
     </li>
   {% endflag %}
+
+  {% flag "evaluations" %}
+    <li>
+      <a href="{% url 'evaluations:home' request.team.slug %}" {% if active_tab == 'evaluations' %}class="active"{% endif %}>
+        <i class="fa-solid fa-chart-simple"></i>
+        {% translate "Evaluations" %}<span class="badge badge-sm">new!</span>
+      </a>
+    </li>
+  {% endflag %}
 {% endif %}
