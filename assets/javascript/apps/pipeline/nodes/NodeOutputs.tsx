@@ -11,16 +11,25 @@ export default function NodeOutputs({data}: {
   const generateOutputHandle = (outputIndex: number) => {
     return multipleOutputs ? `output_${outputIndex}` : "output";
   };
+
   const generateOutputLabel = (outputIndex: number, output_label:string) => {
-    if (multipleOutputs && outputIndex === 0) {
+    // Get the default index from params, defaulting to 0 if not defined
+    const defaultIndex = data.params.defaultKeywordIndex !== undefined ? data.params.defaultKeywordIndex : 0;
+    const isDefault = outputIndex === defaultIndex;
+
+    if (multipleOutputs) {
       return (
-        <span className="tooltip" data-tip="This is the default output if there are no matches">
-          <i className="fa-solid fa-asterisk fa-2xs mr-1 text-accent"></i>{output_label}
+        <span className="tooltip" data-tip={isDefault ? "This is the default output if there are no matches" : ""}>
+          {isDefault ? (
+            <i className="fa-solid fa-star text-accent mr-1"></i>
+          ) : null}
+          {output_label}
         </span>
       );
     }
     return <>{output_label}</>;
   }
+
   return (
     <>
       {multipleOutputs && <div className="divider">Outputs</div>}
@@ -39,7 +48,6 @@ export default function NodeOutputs({data}: {
     </>
   )
 }
-
 
 function getOutputNames(nodeType: string, params: NodeParams) {
   if (nodeType === "BooleanNode") {
