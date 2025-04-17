@@ -518,7 +518,8 @@ def main(input, **kwargs):
 
 @contextmanager
 def extract_structured_data_pipeline(provider, provider_model, pipeline, llm=None):
-    service = build_fake_llm_service(responses=[{"name": "John"}], token_counts=[0], fake_llm=llm)
+    tool_response = AIMessage(tool_calls=[ToolCall(name="CustomModel", args={"name": "John"}, id="123")], content="Hi")
+    service = build_fake_llm_service(responses=[tool_response], token_counts=[0], fake_llm=llm)
 
     with (
         mock.patch(
@@ -560,9 +561,12 @@ def test_extract_structured_data_with_chunking(provider, provider_model, pipelin
     )
     llm = FakeLlmSimpleTokenCount(
         responses=[
-            {"name": None},  # the first chunk sees nothing of value
-            {"name": "james"},  # the second chunk message sees the name
-            {"name": "james"},  # the third chunk sees nothing of value
+            # the first chunk sees nothing of value
+            AIMessage(tool_calls=[ToolCall(name="CustomModel", args={"name": None}, id="123")], content="Hi"),
+            # the second chunk message sees the name
+            AIMessage(tool_calls=[ToolCall(name="CustomModel", args={"name": "james"}, id="123")], content="Hi"),
+            # the third chunk sees nothing of value
+            AIMessage(tool_calls=[ToolCall(name="CustomModel", args={"name": "james"}, id="123")], content="Hi"),
         ]
     )
 
@@ -581,7 +585,7 @@ def test_extract_structured_data_with_chunking(provider, provider_model, pipelin
 
     # This is what the LLM sees.
     inferences = llm.get_call_messages()
-    assert inferences[0][0].text == (
+    assert inferences[0][0].content == (
         "Extract user data using the current user data and conversation history as reference. Use JSON output."
         "\nCurrent user data:"
         "\n"
@@ -590,7 +594,7 @@ def test_extract_structured_data_with_chunking(provider, provider_model, pipelin
         "The conversation history should carry more weight in the outcome. It can change the user's current data"
     )
 
-    assert inferences[1][0].text == (
+    assert inferences[1][0].content == (
         "Extract user data using the current user data and conversation history as reference. Use JSON output."
         "\nCurrent user data:"
         "\n{'name': None}"
@@ -599,7 +603,7 @@ def test_extract_structured_data_with_chunking(provider, provider_model, pipelin
         "The conversation history should carry more weight in the outcome. It can change the user's current data"
     )
 
-    assert inferences[2][0].text == (
+    assert inferences[2][0].content == (
         "Extract user data using the current user data and conversation history as reference. Use JSON output."
         "\nCurrent user data:"
         "\n{'name': 'james'}"
@@ -633,18 +637,20 @@ def test_extract_participant_data(provider, pipeline):
         session,
         provider=provider,
         pipeline=pipeline,
-        extracted_data={"name": "Johnny"},
+        schema='{"name": "the name of the user", "last_name": "the last name of the user"}',
+        extracted_data={"name": "Johnny", "last_name": None},
         key_name="profile",
     )
 
     participant_data = ParticipantData.objects.for_experiment(session.experiment).get(participant=session.participant)
-    assert participant_data.data == {"profile": {"name": "Johnny"}}
+    assert participant_data.data == {"profile": {"name": "Johnny", "last_name": None}}
 
     # The "profile" key should be updated
     _run_data_extract_and_update_pipeline(
         session,
         provider=provider,
         pipeline=pipeline,
+        schema='{"name": "the name of the user", "last_name": "the last name of the user"}',
         extracted_data={"name": "John", "last_name": "Wick"},
         key_name="profile",
     )
@@ -656,19 +662,22 @@ def test_extract_participant_data(provider, pipeline):
         session,
         provider=provider,
         pipeline=pipeline,
-        extracted_data={"has_pets": False},
+        schema='{"has_pets": "whether or not the user has pets"}',
+        extracted_data={"has_pets": "false"},
         key_name="",
     )
     participant_data.refresh_from_db()
     assert participant_data.data == {
         "profile": {"name": "John", "last_name": "Wick"},
-        "has_pets": False,
+        "has_pets": "false",
     }
 
 
-def _run_data_extract_and_update_pipeline(session, provider, pipeline, extracted_data: dict, key_name: str):
-    service = build_fake_llm_service(responses=[extracted_data], token_counts=[0])
-
+def _run_data_extract_and_update_pipeline(
+    session, provider, pipeline, extracted_data: dict, schema: dict, key_name: str
+):
+    tool_call = AIMessage(tool_calls=[ToolCall(name="CustomModel", args=extracted_data, id="123")], content="Hi")
+    service = build_fake_llm_service(responses=[tool_call], token_counts=[0])
     with (
         mock.patch(
             "apps.service_providers.models.LlmProvider.get_llm_service",
@@ -680,7 +689,7 @@ def _run_data_extract_and_update_pipeline(session, provider, pipeline, extracted
             extract_participant_data_node(
                 str(provider.id),
                 str(session.experiment.llm_provider_model.id),
-                '{"name": "the name of the user"}',
+                schema,
                 key_name,
             ),
             end_node(),
