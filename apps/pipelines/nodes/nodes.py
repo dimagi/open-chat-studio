@@ -459,7 +459,7 @@ class RouterNode(RouterMixin, Passthrough, HistoryMixin):
             "prompt": self.prompt,
         }
         try:
-            validate_prompt_variables(context=context, prompt_key="prompt", known_vars=set(PromptVars.values))
+            validate_prompt_variables(context=context, prompt_key="prompt", known_vars=set(PromptVars.PARTICIPANT_DATA))
             return self
         except ValidationError as e:
             raise PydanticCustomError("invalid_prompt", e.error_dict["prompt"][0].message, {"field": "prompt"})
