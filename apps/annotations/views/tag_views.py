@@ -1,4 +1,5 @@
 import json
+import unicodedata
 
 from django.contrib import messages
 from django.contrib.auth.mixins import PermissionRequiredMixin
@@ -46,6 +47,19 @@ class CreateTag(CreateView, PermissionRequiredMixin):
     def form_valid(self, form):
         form.instance.team = self.request.team
         form.instance.created_by = self.request.user
+        form.instance.name = unicodedata.normalize("NFC", form.instance.name)
+
+        existing_tags = Tag.objects.filter(
+            team=self.request.team,
+            name=form.instance.name,
+            is_system_tag=getattr(form.instance, "is_system_tag", False),
+            category=getattr(form.instance, "category", ""),
+        )
+
+        if existing_tags.exists():
+            form.add_error("name", "A tag with this name already exists for this team, system status, and category.")
+            return self.form_invalid(form)
+
         return super().form_valid(form)
 
 
