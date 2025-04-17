@@ -21,7 +21,6 @@ from apps.chat.channels import (
 from apps.chat.models import ChatMessage
 from apps.experiments.models import ParticipantData
 from apps.service_providers.models import MessagingProviderType
-from apps.teams.utils import current_team
 from apps.utils.taskbadger import update_taskbadger_data
 
 log = logging.getLogger("ocs.channels")
@@ -46,8 +45,7 @@ def handle_telegram_message(self, message_data: str, channel_external_id: uuid):
     message_handler = TelegramChannel(experiment_channel.experiment.default_version, experiment_channel)
     update_taskbadger_data(self, message_handler, message)
 
-    with current_team(experiment_channel.team):
-        message_handler.new_user_message(message)
+    message_handler.new_user_message(message)
 
 
 @shared_task(bind=True, base=TaskbadgerTask, ignore_result=True)
@@ -81,8 +79,7 @@ def handle_twilio_message(self, message_data: str, request_uri: str, signature: 
     message_handler = ChannelClass(experiment_channel.experiment.default_version, experiment_channel=experiment_channel)
     update_taskbadger_data(self, message_handler, message)
 
-    with current_team(experiment_channel.team):
-        message_handler.new_user_message(message)
+    message_handler.new_user_message(message)
 
 
 def validate_twillio_request(experiment_channel, raw_data, request_uri, signature):
@@ -118,8 +115,7 @@ def handle_sureadhere_message(self, sureadhere_tenant_id: str, message_data: dic
         return
     channel = SureAdhereChannel(experiment_channel.experiment.default_version, experiment_channel)
     update_taskbadger_data(self, channel, message)
-    with current_team(experiment_channel.team):
-        channel.new_user_message(message)
+    channel.new_user_message(message)
 
 
 @shared_task(bind=True, base=TaskbadgerTask, ignore_result=True)
@@ -139,9 +135,7 @@ def handle_turn_message(self, experiment_id: uuid, message_data: dict):
         return
     channel = WhatsappChannel(experiment_channel.experiment.default_version, experiment_channel)
     update_taskbadger_data(self, channel, message)
-
-    with current_team(experiment_channel.team):
-        channel.new_user_message(message)
+    channel.new_user_message(message)
 
 
 def handle_api_message(
@@ -180,5 +174,4 @@ def handle_commcare_connect_message(
     )
 
     update_taskbadger_data(self, channel, message)
-    with current_team(experiment_channel.team):
-        channel.new_user_message(message)
+    channel.new_user_message(message)

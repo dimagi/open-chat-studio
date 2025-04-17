@@ -47,8 +47,8 @@ class PromptTemplateContext:
     def get_media_summaries(self):
         """
         Example output:
-        * File (27): summary1
-        * File (28): summary2
+        * File (id=27, content_type=image/png): summary1
+        * File (id=28, content_type=application/pdf): summary2
         """
         from apps.documents.models import Collection
 

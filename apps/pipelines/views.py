@@ -6,6 +6,7 @@ from celery_progress.backend import Progress
 from django.contrib import messages
 from django.contrib.auth.decorators import permission_required
 from django.contrib.auth.mixins import PermissionRequiredMixin
+from django.db import transaction
 from django.db.models import Count, QuerySet, Subquery
 from django.http import Http404, HttpResponse, JsonResponse
 from django.shortcuts import get_object_or_404, redirect, render
@@ -242,15 +243,16 @@ def _get_node_schema(node_class):
 @csrf_exempt
 def pipeline_data(request, team_slug: str, pk: int):
     if request.method == "POST":
-        pipeline = get_object_or_404(Pipeline.objects.prefetch_related("node_set"), pk=pk, team=request.team)
-        data = FlowPipelineData.model_validate_json(request.body)
-        pipeline.name = data.name
-        pipeline.data = data.data.model_dump()
-        pipeline.save()
-        pipeline.update_nodes_from_data()
-        pipeline.refresh_from_db(fields=["node_set"])
-        if getattr(data, "experiment_name", None):
-            update_experiment_name_by_pipeline_id(pk, data.experiment_name)
+        with transaction.atomic():
+            pipeline = get_object_or_404(Pipeline.objects.prefetch_related("node_set"), pk=pk, team=request.team)
+            data = FlowPipelineData.model_validate_json(request.body)
+            pipeline.name = data.name
+            pipeline.data = data.data.model_dump()
+            pipeline.save()
+            pipeline.update_nodes_from_data()
+            pipeline.refresh_from_db(fields=["node_set"])
+            if getattr(data, "experiment_name", None):
+                update_experiment_name_by_pipeline_id(pk, data.experiment_name)
         return JsonResponse({"data": pipeline.flow_data, "errors": pipeline.validate()})
 
     try:
