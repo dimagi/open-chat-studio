@@ -4,9 +4,9 @@ from factory.django import DjangoModelFactory
 from apps.evaluations.models import (
     EvaluationConfig,
     EvaluationDataset,
+    EvaluationResult,
     EvaluationRun,
     Evaluator,
-    EvaluatorResult,
 )
 from apps.utils.factories.experiment import ExperimentFactory, ExperimentSessionFactory
 
@@ -67,7 +67,7 @@ class EvaluationRunFactory(DjangoModelFactory):
 
 class EvaluatorResultFactory(DjangoModelFactory):
     class Meta:
-        model = EvaluatorResult
+        model = EvaluationResult
 
     evaluator = factory.SubFactory(EvaluatorFactory)
     output = factory.LazyFunction(lambda: {"sentiment": "positive"})
