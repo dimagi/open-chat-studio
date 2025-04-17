@@ -163,8 +163,7 @@ TEMPLATES = [
                 "apps.web.context_processors.project_meta",
                 "apps.teams.context_processors.team",
                 "apps.users.context_processors.user_teams",
-                # this line can be removed if not using google analytics
-                "apps.web.context_processors.google_analytics_id",
+                "apps.web.context_processors.analytics",
             ],
             "loaders": _DEFAULT_LOADERS if DEBUG else _CACHED_LOADERS,
             "builtins": [

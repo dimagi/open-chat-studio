@@ -32,13 +32,13 @@ def project_meta(request):
     }
 
 
-def google_analytics_id(request):
+def analytics(request):
     """
     Adds google analytics id to all requests
     """
+    context = {"GLOBAL_CONFIG": {}}
     if settings.GOOGLE_ANALYTICS_ID:
-        return {
-            "GOOGLE_ANALYTICS_ID": settings.GOOGLE_ANALYTICS_ID,
-        }
-    else:
-        return {}
+        context["GOOGLE_ANALYTICS_ID"] = settings.GOOGLE_ANALYTICS_ID
+    if settings.SENTRY_DSN:
+        context["GLOBAL_CONFIG"]["sentry_dsn"] = settings.SENTRY_DSN
+    return context

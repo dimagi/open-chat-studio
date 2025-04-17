@@ -43,6 +43,7 @@
     {% if GOOGLE_ANALYTICS_ID %}
       {% include 'web/components/google_analytics.html' %}
     {% endif %}
+    {{ GLOBAL_CONFIG|json_script:"global_config" }}
     <script src="{% static 'js/site-bundle.js'%}"></script>
     {% block page_head %}
     {% endblock %}
