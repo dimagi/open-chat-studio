@@ -50,6 +50,7 @@ from apps.service_providers.llm_service.runnables import (
     SimpleLLMChat,
 )
 from apps.service_providers.models import LlmProviderModel
+from apps.utils.langchain import dict_to_json_schema
 from apps.utils.prompt import OcsPromptTemplate, PromptVars, validate_prompt_variables
 
 OptionalInt = Annotated[int | None, BeforeValidator(lambda x: None if x == "" else x)]
@@ -554,7 +555,7 @@ class ExtractStructuredDataNodeMixin:
         return self._prompt_chain(reference_data) | super().get_chat_model().with_structured_output(json_schema)
 
     def _process(self, input, state: PipelineState, node_id: str, **kwargs) -> PipelineState:
-        json_schema = self.to_json_schema(json.loads(self.data_schema))
+        json_schema = dict_to_json_schema(json.loads(self.data_schema))
         reference_data = self.get_reference_data(state)
         prompt_token_count = self._get_prompt_token_count(reference_data, json_schema)
         message_chunks = self.chunk_messages(input, prompt_token_count=prompt_token_count)
@@ -622,36 +623,6 @@ class ExtractStructuredDataNodeMixin:
         )
 
         return text_splitter.split_text(input)
-
-    def to_json_schema(self, data: dict):
-        """Converts a dictionary to a JSON schema by first converting it to a Pydantic object and dumping it again.
-        The input should be in the format {"key": "description", "key2": [{"key": "description"}]}
-
-        Nested objects are not supported at the moment
-
-        Input example 1:
-        {"name": "the user's name", "surname": "the user's surname"}
-
-        Input example 2:
-        {"name": "the user's name", "pets": [{"name": "the pet's name": "type": "the type of animal"}]}
-
-        """
-
-        def _create_model_from_data(value_data, model_name: str):
-            pydantic_schema = {}
-            for key, value in value_data.items():
-                if isinstance(value, str):
-                    pydantic_schema[key] = (str | None, Field(description=value))
-                elif isinstance(value, list):
-                    model = _create_model_from_data(value[0], key.capitalize())
-                    pydantic_schema[key] = (list[model], Field(description=f"A list of {key}"))
-            return create_model(model_name, **pydantic_schema)
-
-        Model = _create_model_from_data(data, "CustomModel")
-        schema = Model.model_json_schema()
-        # The schema needs a description in order to comply with function calling APIs
-        schema["description"] = ""
-        return schema
 
 
 class StructuredDataSchemaValidatorMixin:
