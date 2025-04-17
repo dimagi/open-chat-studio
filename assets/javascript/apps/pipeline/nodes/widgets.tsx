@@ -647,9 +647,12 @@ export function KeywordsWidget(props: WidgetParams) {
   const setEdges = usePipelineStore((state) => state.setEdges);
   const updateNodeInternals = useUpdateNodeInternals()
 
-  function getNewNodeData(old: Node, keywords: any[]) {
+  function getNewNodeData(old: Node, keywords: any[], defaultKeywordIndex?: number) {
     return produce(old, next => {
       next.data.params["keywords"] = keywords;
+      if (defaultKeywordIndex !== undefined) {
+        next.data.params["defaultKeywordIndex"] = defaultKeywordIndex;
+      }
     });
   }
 
@@ -674,9 +677,19 @@ export function KeywordsWidget(props: WidgetParams) {
     setNode(props.nodeId, (old) => {
       const updatedList = [...(old.data.params["keywords"] || [])];
       updatedList.splice(index, 1);
-      return getNewNodeData(old, updatedList);
+      const defaultIndex = old.data.params["defaultKeywordIndex"] || 0;
+
+      let newDefaultIndex = defaultIndex;
+      if (index === defaultIndex) {
+        newDefaultIndex = 0;
+      } else if (index < defaultIndex) {
+        newDefaultIndex = defaultIndex - 1;
+      }
+
+      return getNewNodeData(old, updatedList, newDefaultIndex);
     });
     updateNodeInternals(props.nodeId);
+
     const handleName = `output_${index}`;
     setEdges((old) => {
       const edges = old.filter((edge) => {
@@ -686,7 +699,6 @@ export function KeywordsWidget(props: WidgetParams) {
         }
         return edge.sourceHandle != handleName;
       }).map((edge) => {
-        // update sourceHandle of edges that have a sourceHandle greater than this index to preserve connections
         if (edge.source != props.nodeId) {
           return edge;
         }
@@ -701,14 +713,17 @@ export function KeywordsWidget(props: WidgetParams) {
     });
   }
 
+  const setAsDefault = (index: number) => {
+    setNode(props.nodeId, (old) => {
+      return getNewNodeData(old, [...(old.data.params["keywords"] || [])], index);
+    });
+  }
+
   const length = (Array.isArray(props.nodeParams.keywords) ? props.nodeParams.keywords.length : 1);
-  const keywords = Array.isArray(props.nodeParams.keywords) ? props.nodeParams["keywords"] : []
+  const keywords = Array.isArray(props.nodeParams.keywords) ? props.nodeParams["keywords"] : [];
+  const defaultIndex = props.nodeParams.defaultKeywordIndex !== undefined ? props.nodeParams.defaultKeywordIndex : 0;
   const canDelete = length > 1;
-  const defaultMarker = (
-    <span className="tooltip normal-case" data-tip="This is the default output if there are no matches">
-      <i className="fa-solid fa-asterisk fa-2xs ml-1 text-accent"></i>
-    </span>
-  )
+
   return (
     <>
       <div className="form-control w-full capitalize">
@@ -726,10 +741,26 @@ export function KeywordsWidget(props: WidgetParams) {
         {Array.from({length: length}, (_, index) => {
           const value = keywords ? keywords[index] || "" : "";
           const label = `Output Keyword ${index + 1}`;
+          const isDefault = index === defaultIndex;
+
           return (
             <div className="form-control w-full capitalize" key={index}>
               <div className="flex justify-between items-center">
-                <label className="label">{label}{index === 0 && defaultMarker}</label>
+                <label className="label">
+                  {label}
+                  <div className="pl-2 tooltip" data-tip={isDefault ? "Default" : "Set as Default"}>
+                    <span
+                      onClick={() => !isDefault && setAsDefault(index)}
+                      style={{ cursor: isDefault ? 'default' : 'pointer' }}
+                    >
+                      {isDefault ? (
+                        <i className="fa-solid fa-star text-accent"></i>
+                      ) : (
+                        <i className="fa-regular fa-star text-gray-500"></i>
+                      )}
+                    </span>
+                  </div>
+                </label>
                 <div className="tooltip tooltip-left" data-tip={`Delete Keyword ${index + 1}`}>
                   <button className="btn btn-xs btn-ghost" onClick={() => deleteKeyword(index)} disabled={!canDelete}>
                     <i className="fa-solid fa-minus"></i>
