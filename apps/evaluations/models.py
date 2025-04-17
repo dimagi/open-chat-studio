@@ -7,9 +7,10 @@ from django.utils import timezone
 
 from apps.evaluations import evaluators
 from apps.experiments.models import Experiment, ExperimentSession
+from apps.teams.models import BaseTeamModel
 
 
-class Evaluator(models.Model):
+class Evaluator(BaseTeamModel):
     type = models.CharField(max_length=128)  # The evaluator type, should be one from evaluators.py
     params = models.JSONField(
         default=dict
@@ -26,7 +27,7 @@ class Evaluator(models.Model):
             raise  # TODO
 
 
-class EvaluationDataset(models.Model):
+class EvaluationDataset(BaseTeamModel):
     MESSAGE_TYPE_CHOICES = [
         ("USER_ONLY", "User Only"),
         ("BOT_ONLY", "Bot Only"),
@@ -48,7 +49,8 @@ class EvaluationDataset(models.Model):
         return messages
 
 
-class EvaluationConfig(models.Model):
+class EvaluationConfig(BaseTeamModel):
+    name = models.CharField(max_length=255)
     evaluators = models.ManyToManyField(Evaluator)
     dataset = models.ForeignKey(EvaluationDataset, on_delete=models.CASCADE)
     experiment = models.ForeignKey(Experiment, on_delete=models.SET_NULL, null=True, blank=True)
@@ -59,18 +61,20 @@ class EvaluationConfig(models.Model):
 
     def run(self) -> list["EvaluationResult"]:
         """Runs the evaluation"""
-        run = EvaluationRun.objects.create(config=self)
+        run = EvaluationRun.objects.create(team=self.team, config=self)
         results = []
         for evaluator in cast(Iterable[Evaluator], self.evaluators.all()):
             result = evaluator.run(self.dataset)
-            eval_result = EvaluationResult.objects.create(run=run, evaluator=evaluator, output=result.model_dump_json())
+            eval_result = EvaluationResult.objects.create(
+                run=run, evaluator=evaluator, output=result.model_dump_json(), team=self.team
+            )
             results.append(eval_result)
         run.finished_at = timezone.now()
         run.save()
         return results
 
 
-class EvaluationRun(models.Model):
+class EvaluationRun(BaseTeamModel):
     config = models.ForeignKey(EvaluationConfig, on_delete=models.CASCADE)
     created_at = models.DateTimeField(auto_now_add=True)
     finished_at = models.DateTimeField(null=True, blank=True)
@@ -82,7 +86,7 @@ class EvaluationRun(models.Model):
         return f"EvaluationRun ({self.created_at} - {self.finished_at})"
 
 
-class EvaluationResult(models.Model):
+class EvaluationResult(BaseTeamModel):
     evaluator = models.ForeignKey(Evaluator, on_delete=models.CASCADE)
     output = models.JSONField()
     run = models.ForeignKey(EvaluationRun, on_delete=models.CASCADE, related_name="results")
