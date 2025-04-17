@@ -15,7 +15,7 @@ from langchain_core.runnables import RunnableConfig, RunnableSerializable
 from langchain_core.utils.function_calling import convert_to_openai_tool
 from langchain_core.utils.pydantic import TypeBaseModel, is_basemodel_subclass
 from openai import OpenAI
-from pydantic import ConfigDict
+from pydantic import ConfigDict, Field, create_model
 
 from apps.service_providers.llm_service import LlmService
 from apps.service_providers.llm_service.callbacks import TokenCountingCallbackHandler
@@ -197,3 +197,34 @@ def build_fake_llm_echo_service(token_counts=None, include_system_message=True):
         token_counts = [0]
     llm = FakeLlmEcho(include_system_message=include_system_message)
     return FakeLlmService(llm=llm, token_counter=FakeTokenCounter(token_counts=token_counts))
+
+
+def dict_to_json_schema(data: dict) -> dict:
+    """Converts a dictionary to a JSON schema by first converting it to a Pydantic object and dumping it again.
+    The input should be in the format {"key": "description", "key2": [{"key": "description"}]}
+
+    Nested objects are not supported at the moment
+
+    Input example 1:
+    {"name": "the user's name", "surname": "the user's surname"}
+
+    Input example 2:
+    {"name": "the user's name", "pets": [{"name": "the pet's name": "type": "the type of animal"}]}
+
+    """
+
+    def _create_model_from_data(value_data, model_name: str):
+        pydantic_schema = {}
+        for key, value in value_data.items():
+            if isinstance(value, str):
+                pydantic_schema[key] = (str | None, Field(description=value))
+            elif isinstance(value, list):
+                model = _create_model_from_data(value[0], key.capitalize())
+                pydantic_schema[key] = (list[model], Field(description=f"A list of {key}"))
+        return create_model(model_name, **pydantic_schema)
+
+    Model = _create_model_from_data(data, "CustomModel")
+    schema = Model.model_json_schema()
+    # The schema needs a description in order to comply with function calling APIs
+    schema["description"] = ""
+    return schema
