@@ -1,18 +1,28 @@
+from collections.abc import Iterable
+from typing import cast
+
 from django.conf import settings
 from django.db import models
 
+from apps.evaluations import evaluators
 from apps.experiments.models import Experiment, ExperimentSession
 
 
 class Evaluator(models.Model):
-    TYPE_CHOICES = [
-        ("LLM", "LLM"),
-    ]
-    type = models.CharField(max_length=32, choices=TYPE_CHOICES)
-    params = models.JSONField()  # This is different for each evaluator. TODO: enforce schemas
+    type = models.CharField(max_length=128)  # The evaluator type, should be one from evaluators.py
+    params = models.JSONField(
+        default=dict
+    )  # This is different for each evaluator. Usage is similar to how we define Nodes in pipelines
 
     def __str__(self):
         return f"Evaluator ({self.type})"
+
+    def run(self, dataset: "EvaluationDataset") -> evaluators.EvaluatorResult:
+        try:
+            evaluator = getattr(evaluators, self.type)
+            return evaluator(**self.params).run(dataset.get_messages())
+        except:
+            raise  # TODO
 
 
 class EvaluationDataset(models.Model):
@@ -29,6 +39,13 @@ class EvaluationDataset(models.Model):
     def __str__(self):
         return f"EvaluationDataset ({self.version.version_number if self.version else 'Working'})"
 
+    def get_messages(self):
+        # TODO: use self.message_type to filter messages
+        messages = []
+        for session in self.sessions.all():
+            messages.extend(session.chat.get_langchain_messages())
+        return messages
+
 
 class EvaluationConfig(models.Model):
     evaluators = models.ManyToManyField(Evaluator)
@@ -38,6 +55,13 @@ class EvaluationConfig(models.Model):
 
     def __str__(self):
         return f"EvaluationConfig (experiment={self.experiment_id})"
+
+    def run(self) -> "EvaluationResult":
+        """Runs the evaluation"""
+        # TODO: Create an Evaluation Run
+        # TODO: Return an Evaluation Result
+        # TODO: Parallelize these:
+        return [evaluator.run(self.dataset) for evaluator in cast(Iterable[Evaluator], self.evaluators.all())]
 
 
 class EvaluationRun(models.Model):
@@ -52,7 +76,7 @@ class EvaluationRun(models.Model):
         return f"EvaluationRun ({self.created_at} - {self.finished_at})"
 
 
-class EvaluatorResult(models.Model):
+class EvaluationResult(models.Model):
     evaluator = models.ForeignKey(Evaluator, on_delete=models.CASCADE)
     output = models.JSONField()
     run = models.ForeignKey(EvaluationRun, on_delete=models.CASCADE, related_name="results")
