@@ -72,6 +72,7 @@ def test_end_conversation_runs_pipeline(session, pipeline):
             },
             "input_message_metadata": {},
             "output_message_metadata": {},
+            "output_message_tags": [],
         }
     )
     assert pipeline.runs.count() == 1

@@ -9,6 +9,13 @@
     "input_equals": {
       "title": "Input Equals",
       "type": "string"
+    },
+    "tag_output_message": {
+      "default": false,
+      "description": "Tag the output message with the selected route",
+      "title": "Tag Output Message",
+      "type": "boolean",
+      "ui:widget": "toggle"
     }
   },
   "required": [
