@@ -129,8 +129,16 @@ class ChatMessage(BaseModel, TaggedModelMixin, UserCommentsMixin):
         super().save(*args, **kwargs)
 
     @property
-    def trace_info(self):
-        return self.metadata.get("trace_info")
+    def trace_info(self) -> list[dict]:
+        trace_info = self.metadata.get("trace_info")
+        if not trace_info:
+            return []
+
+        if isinstance(trace_info, dict):
+            # migrate legacy format
+            trace_info["trace_provider"] = self.metadata.get("trace_provider")
+            return [trace_info]
+        return trace_info
 
     def get_summary_message(self):
         if not self.summary:

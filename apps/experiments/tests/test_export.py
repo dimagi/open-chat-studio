@@ -6,6 +6,7 @@ import pytest
 
 from apps.chat.models import ChatMessage, ChatMessageType
 from apps.experiments.export import filtered_export_to_csv
+from apps.service_providers.tracing import OCS_TRACE_PROVIDER
 from apps.utils.factories.channels import ExperimentChannelFactory
 from apps.utils.factories.experiment import ExperimentFactory, ExperimentSessionFactory
 
@@ -94,12 +95,32 @@ def test_trace_id_export():
     )
 
     session.chat.messages.all.return_value = [
+        # legacy data
         Mock(
             id="msg1",
             message_type="human",
             content="Hello",
-            metadata={"trace_info": {"trace_id": "trace123"}},
-            trace_info={"trace_id": "trace123"},
+            metadata={"trace_info": [{"trace_id": "trace123"}]},
+            trace_info=[{"trace_id": "trace123"}],
+            tags=Mock(all=Mock(return_value=[])),
+            comments=Mock(all=Mock(return_value=[])),
+            chat=session.chat,
+        ),
+        # new data with two traces (only the langfuse one should get exported)
+        Mock(
+            id="msg1",
+            message_type="human",
+            content="Hello",
+            metadata={
+                "trace_info": [
+                    {"trace_id": "traceABC", "trace_provider": OCS_TRACE_PROVIDER},
+                    {"trace_id": "trace456", "trace_provider": "langfuse"},
+                ]
+            },
+            trace_info=[
+                {"trace_id": "traceABC", "trace_provider": OCS_TRACE_PROVIDER},
+                {"trace_id": "trace456", "trace_provider": "langfuse"},
+            ],
             tags=Mock(all=Mock(return_value=[])),
             comments=Mock(all=Mock(return_value=[])),
             chat=session.chat,
@@ -109,7 +130,7 @@ def test_trace_id_export():
             message_type="ai",
             content="Hi",
             metadata={},
-            trace_info=None,
+            trace_info=[],
             tags=Mock(all=Mock(return_value=[])),
             comments=Mock(all=Mock(return_value=[])),
             chat=session.chat,
@@ -127,4 +148,5 @@ def test_trace_id_export():
 
     assert "Trace ID" in rows[0], "Trace ID not in header"
     assert rows[1][-1] == "trace123", "Trace ID not exported correctly"
-    assert rows[2][-1] == "", "Empty trace ID not handled correctly"
+    assert rows[2][-1] == "trace456", "Trace ID not exported correctly"
+    assert rows[3][-1] == "", "Empty trace ID not handled correctly"
