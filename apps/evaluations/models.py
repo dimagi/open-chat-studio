@@ -3,6 +3,7 @@ from typing import cast
 
 from django.conf import settings
 from django.db import models
+from django.utils import timezone
 
 from apps.evaluations import evaluators
 from apps.experiments.models import Experiment, ExperimentSession
@@ -56,12 +57,17 @@ class EvaluationConfig(models.Model):
     def __str__(self):
         return f"EvaluationConfig (experiment={self.experiment_id})"
 
-    def run(self) -> "EvaluationResult":
+    def run(self) -> list["EvaluationResult"]:
         """Runs the evaluation"""
-        # TODO: Create an Evaluation Run
-        # TODO: Return an Evaluation Result
-        # TODO: Parallelize these:
-        return [evaluator.run(self.dataset) for evaluator in cast(Iterable[Evaluator], self.evaluators.all())]
+        run = EvaluationRun.objects.create(config=self)
+        results = []
+        for evaluator in cast(Iterable[Evaluator], self.evaluators.all()):
+            result = evaluator.run(self.dataset)
+            eval_result = EvaluationResult.objects.create(run=run, evaluator=evaluator, output=result.model_dump_json())
+            results.append(eval_result)
+        run.finished_at = timezone.now()
+        run.save()
+        return results
 
 
 class EvaluationRun(models.Model):
