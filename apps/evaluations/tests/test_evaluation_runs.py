@@ -44,6 +44,10 @@ def test_running_evaluator(get_llm_service, llm_provider, llm_provider_model):
     dataset = EvaluationDatasetFactory(sessions=[ExperimentSessionFactory(chat=chat)])
     evaluation_config = cast(EvaluationConfig, EvaluationConfigFactory(evaluators=[evaluator], dataset=dataset))
     results = evaluation_config.run()
-    assert results == [
-        EvaluatorResult(result={"route": f"{prompt} human: {message_1.lower()}\nhuman: {message_2.lower()}"})
-    ]
+
+    assert (
+        results[0].output
+        == EvaluatorResult(
+            result={"route": f"{prompt} human: {message_1.lower()}\nhuman: {message_2.lower()}"}
+        ).model_dump_json()
+    )
