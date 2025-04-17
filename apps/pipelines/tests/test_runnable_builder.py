@@ -5,6 +5,7 @@ from unittest.mock import Mock, patch
 import pytest
 from django.core import mail
 from django.test import override_settings
+from langchain_core.messages import AIMessage, ToolCall
 from langchain_core.runnables import RunnableConfig
 
 from apps.channels.datamodels import Attachment
@@ -26,6 +27,7 @@ from apps.pipelines.tests.utils import (
     llm_response_with_prompt_node,
     passthrough_node,
     render_template_node,
+    router_node,
     start_node,
     state_key_router_node,
 )
@@ -516,7 +518,8 @@ def main(input, **kwargs):
 
 @contextmanager
 def extract_structured_data_pipeline(provider, provider_model, pipeline, llm=None):
-    service = build_fake_llm_service(responses=[{"name": "John"}], token_counts=[0], fake_llm=llm)
+    tool_response = AIMessage(tool_calls=[ToolCall(name="CustomModel", args={"name": "John"}, id="123")], content="Hi")
+    service = build_fake_llm_service(responses=[tool_response], token_counts=[0], fake_llm=llm)
 
     with (
         mock.patch(
@@ -558,9 +561,12 @@ def test_extract_structured_data_with_chunking(provider, provider_model, pipelin
     )
     llm = FakeLlmSimpleTokenCount(
         responses=[
-            {"name": None},  # the first chunk sees nothing of value
-            {"name": "james"},  # the second chunk message sees the name
-            {"name": "james"},  # the third chunk sees nothing of value
+            # the first chunk sees nothing of value
+            AIMessage(tool_calls=[ToolCall(name="CustomModel", args={"name": None}, id="123")], content="Hi"),
+            # the second chunk message sees the name
+            AIMessage(tool_calls=[ToolCall(name="CustomModel", args={"name": "james"}, id="123")], content="Hi"),
+            # the third chunk sees nothing of value
+            AIMessage(tool_calls=[ToolCall(name="CustomModel", args={"name": "james"}, id="123")], content="Hi"),
         ]
     )
 
@@ -579,7 +585,7 @@ def test_extract_structured_data_with_chunking(provider, provider_model, pipelin
 
     # This is what the LLM sees.
     inferences = llm.get_call_messages()
-    assert inferences[0][0].text == (
+    assert inferences[0][0].content == (
         "Extract user data using the current user data and conversation history as reference. Use JSON output."
         "\nCurrent user data:"
         "\n"
@@ -588,7 +594,7 @@ def test_extract_structured_data_with_chunking(provider, provider_model, pipelin
         "The conversation history should carry more weight in the outcome. It can change the user's current data"
     )
 
-    assert inferences[1][0].text == (
+    assert inferences[1][0].content == (
         "Extract user data using the current user data and conversation history as reference. Use JSON output."
         "\nCurrent user data:"
         "\n{'name': None}"
@@ -597,7 +603,7 @@ def test_extract_structured_data_with_chunking(provider, provider_model, pipelin
         "The conversation history should carry more weight in the outcome. It can change the user's current data"
     )
 
-    assert inferences[2][0].text == (
+    assert inferences[2][0].content == (
         "Extract user data using the current user data and conversation history as reference. Use JSON output."
         "\nCurrent user data:"
         "\n{'name': 'james'}"
@@ -631,18 +637,20 @@ def test_extract_participant_data(provider, pipeline):
         session,
         provider=provider,
         pipeline=pipeline,
-        extracted_data={"name": "Johnny"},
+        schema='{"name": "the name of the user", "last_name": "the last name of the user"}',
+        extracted_data={"name": "Johnny", "last_name": None},
         key_name="profile",
     )
 
     participant_data = ParticipantData.objects.for_experiment(session.experiment).get(participant=session.participant)
-    assert participant_data.data == {"profile": {"name": "Johnny"}}
+    assert participant_data.data == {"profile": {"name": "Johnny", "last_name": None}}
 
     # The "profile" key should be updated
     _run_data_extract_and_update_pipeline(
         session,
         provider=provider,
         pipeline=pipeline,
+        schema='{"name": "the name of the user", "last_name": "the last name of the user"}',
         extracted_data={"name": "John", "last_name": "Wick"},
         key_name="profile",
     )
@@ -654,19 +662,22 @@ def test_extract_participant_data(provider, pipeline):
         session,
         provider=provider,
         pipeline=pipeline,
-        extracted_data={"has_pets": False},
+        schema='{"has_pets": "whether or not the user has pets"}',
+        extracted_data={"has_pets": "false"},
         key_name="",
     )
     participant_data.refresh_from_db()
     assert participant_data.data == {
         "profile": {"name": "John", "last_name": "Wick"},
-        "has_pets": False,
+        "has_pets": "false",
     }
 
 
-def _run_data_extract_and_update_pipeline(session, provider, pipeline, extracted_data: dict, key_name: str):
-    service = build_fake_llm_service(responses=[extracted_data], token_counts=[0])
-
+def _run_data_extract_and_update_pipeline(
+    session, provider, pipeline, extracted_data: dict, schema: dict, key_name: str
+):
+    tool_call = AIMessage(tool_calls=[ToolCall(name="CustomModel", args=extracted_data, id="123")], content="Hi")
+    service = build_fake_llm_service(responses=[tool_call], token_counts=[0])
     with (
         mock.patch(
             "apps.service_providers.models.LlmProvider.get_llm_service",
@@ -678,7 +689,7 @@ def _run_data_extract_and_update_pipeline(session, provider, pipeline, extracted
             extract_participant_data_node(
                 str(provider.id),
                 str(session.experiment.llm_provider_model.id),
-                '{"name": "the name of the user"}',
+                schema,
                 key_name,
             ),
             end_node(),
@@ -1077,3 +1088,93 @@ def test_input_with_format_strings():
     resp = Passthrough(name="test").process("node_id", [], state, {})
 
     assert resp["messages"] == ["Is this it {the thing}"]
+
+
+@django_db_with_data(available_apps=("apps.service_providers",))
+@mock.patch("apps.service_providers.models.LlmProvider.get_llm_service")
+@mock.patch("apps.pipelines.nodes.base.PipelineNode.logger", mock.Mock())
+def test_router_node(get_llm_service, provider, provider_model, pipeline, experiment_session):
+    def _tool_call(route):
+        return AIMessage(tool_calls=[ToolCall(name="RouterOutput", args={"route": route}, id="123")], content=route)
+
+    service = build_fake_llm_service(
+        responses=[
+            _tool_call("a"),
+            _tool_call("A"),
+            _tool_call("b"),
+            _tool_call("c"),
+            _tool_call("d"),
+            _tool_call("z"),
+        ],
+        token_counts=[0],
+    )
+    get_llm_service.return_value = service
+    start = start_node()
+    router = router_node(str(provider.id), str(provider_model.id), keywords=["A", "b", "c", "d"])
+    template_a = render_template_node("A {{ input }}")
+    template_b = render_template_node("B {{ input }}")
+    template_c = render_template_node("C {{ input }}")
+    template_d = render_template_node("D {{ input }}")
+    end = end_node()
+    nodes = [start, router, template_a, template_b, template_c, template_d, end]
+    edges = [
+        {"id": "start -> router", "source": start["id"], "target": router["id"]},
+        {
+            "id": "RouterNode -> A",
+            "source": router["id"],
+            "target": template_a["id"],
+            "sourceHandle": "output_0",
+        },
+        {
+            "id": "RouterNode -> B",
+            "source": router["id"],
+            "target": template_b["id"],
+            "sourceHandle": "output_1",
+        },
+        {
+            "id": "RouterNode -> C",
+            "source": router["id"],
+            "target": template_c["id"],
+            "sourceHandle": "output_2",
+        },
+        {
+            "id": "RouterNode -> D",
+            "source": router["id"],
+            "target": template_d["id"],
+            "sourceHandle": "output_3",
+        },
+        {
+            "id": "A -> END",
+            "source": template_a["id"],
+            "target": end["id"],
+        },
+        {
+            "id": "B -> END",
+            "source": template_b["id"],
+            "target": end["id"],
+        },
+        {
+            "id": "C -> END",
+            "source": template_c["id"],
+            "target": end["id"],
+        },
+        {
+            "id": "D -> END",
+            "source": template_d["id"],
+            "target": end["id"],
+        },
+    ]
+    runnable = create_runnable(pipeline, nodes, edges)
+
+    output = runnable.invoke(PipelineState(messages=["a"], experiment_session=experiment_session))
+    assert output["messages"][-1] == "A a"
+    output = runnable.invoke(PipelineState(messages=["A"], experiment_session=experiment_session))
+    assert output["messages"][-1] == "A A"
+    output = runnable.invoke(PipelineState(messages=["b"], experiment_session=experiment_session))
+    assert output["messages"][-1] == "B b"
+    output = runnable.invoke(PipelineState(messages=["c"], experiment_session=experiment_session))
+    assert output["messages"][-1] == "C c"
+    output = runnable.invoke(PipelineState(messages=["d"], experiment_session=experiment_session))
+    assert output["messages"][-1] == "D d"
+    output = runnable.invoke(PipelineState(messages=["z"], experiment_session=experiment_session))
+    assert output["messages"][-1] == "A z"
