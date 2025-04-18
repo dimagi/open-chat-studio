@@ -97,6 +97,11 @@ DEFAULT_ERROR_MESSAGE = (
     "Please try again, and wait a few minutes if this keeps happening."
 )
 
+CUSTOM_ERROR_MESSAGE = (
+    "The chatbot is currently unavailable. We are working hard to resolve the issue as quickly"
+    " as possible and apologize for any inconvenience. Thank you for your patience."
+)
+
 
 @login_and_team_required
 @permission_required("experiments.view_experiment", raise_exception=True)
@@ -789,7 +794,16 @@ def get_message_response(request, team_slug: str, experiment_id: uuid.UUID, sess
         elif response := result.get("response"):
             message_details["message"] = {"content": response}
         if error := result.get("error"):
-            message_details["error_msg"] = error if experiment.debug_mode_enabled else DEFAULT_ERROR_MESSAGE
+            if not experiment.debug_mode_enabled:
+                if isinstance(error, dict) and "message" in error:
+                    if "Invalid parameter" in error["message"]:  # TODO: temporary
+                        message_details["error_msg"] = CUSTOM_ERROR_MESSAGE
+                    else:
+                        message_details["error_msg"] = DEFAULT_ERROR_MESSAGE
+                else:
+                    message_details["error_msg"] = DEFAULT_ERROR_MESSAGE
+            else:
+                message_details["error_msg"] = error
     elif progress["complete"]:
         message_details["error_msg"] = DEFAULT_ERROR_MESSAGE
 
