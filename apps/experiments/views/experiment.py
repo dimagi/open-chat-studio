@@ -795,11 +795,8 @@ def get_message_response(request, team_slug: str, experiment_id: uuid.UUID, sess
             message_details["message"] = {"content": response}
         if error := result.get("error"):
             if not experiment.debug_mode_enabled:
-                if isinstance(error, dict) and "message" in error:
-                    if "Invalid parameter" in error["message"]:  # TODO: temporary
-                        message_details["error_msg"] = CUSTOM_ERROR_MESSAGE
-                    else:
-                        message_details["error_msg"] = DEFAULT_ERROR_MESSAGE
+                if "Invalid parameter" in error:  # TODO: temporary
+                    message_details["error_msg"] = CUSTOM_ERROR_MESSAGE
                 else:
                     message_details["error_msg"] = DEFAULT_ERROR_MESSAGE
             else:
