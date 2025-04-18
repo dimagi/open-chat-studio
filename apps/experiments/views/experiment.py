@@ -123,8 +123,6 @@ class ExperimentSessionsTableView(LoginAndTeamRequiredMixin, SingleTableView, Pe
             .filter(team=self.request.team, experiment__id=self.kwargs["experiment_id"])
             .select_related("participant__user")
         )
-        if not self.request.GET.get("show-all"):
-            query_set = query_set.exclude(experiment_channel__platform=ChannelPlatform.API)
         query_set = apply_dynamic_filters(query_set, self.request)
         return query_set
 
@@ -460,7 +458,6 @@ def base_single_experiment_view(request, team_slug, experiment_id, template_name
     channels = experiment.experimentchannel_set.exclude(platform__in=[ChannelPlatform.WEB, ChannelPlatform.API]).all()
     used_platforms = {channel.platform_enum for channel in channels}
     available_platforms = ChannelPlatform.for_dropdown(used_platforms, experiment.team)
-
     platform_forms = {}
     form_kwargs = {"experiment": experiment}
     for platform in available_platforms:
@@ -477,7 +474,6 @@ def base_single_experiment_view(request, team_slug, experiment_id, template_name
             bot_type_chip = Chip(label=f"Pipeline: {pipeline.name}", url=pipeline.get_absolute_url())
         elif assistant := experiment.assistant:
             bot_type_chip = Chip(label=f"Assistant: {assistant.name}", url=assistant.get_absolute_url())
-
     context = {
         "active_tab": active_tab,
         "bot_type_chip": bot_type_chip,

@@ -63,7 +63,7 @@
           <!-- Value Input (Choice, String, Timestamp) -->
           <template x-if="filter.operator">
             <div class="relative">
-              <template x-if="filterData.columns[filter.column]?.type === 'choice' && ['any of', 'all of'].includes(filter.operator)">
+              <template x-if="filterData.columns[filter.column]?.type === 'choice' && ['any of', 'all of', 'excludes'].includes(filter.operator)">
                 <div class="relative">
                   <div @click="filter.showOptions = !filter.showOptions" class="w-40 px-3 border border-base-200 rounded-lg bg-base-100 text-sm cursor-pointer flex justify-between items-center" style="height: 2rem;">
                     <span x-text="filter.selectedValues.length ? (filter.selectedValues.join(', ').length > 18 ? filter.selectedValues.join(', ').substring(0, 18) + '...' : filter.selectedValues.join(', ')) : 'Select'"></span>
@@ -114,6 +114,7 @@
 <script>
   const tags = JSON.parse(document.getElementById('available-tags-data').textContent);
   const versionsList = JSON.parse(document.getElementById('experiment-versions-data').textContent);
+  const channelsList = ['Telegram', 'Web', 'Whatsapp', 'Facebook', 'SureAdhere', 'API', 'Slack', 'CommCare Connect'];
   document.addEventListener('alpine:init', () => {
     Alpine.data('filterComponent', () => ({
       filterData: {
@@ -123,8 +124,9 @@
         columns: {
           'participant': {type: 'string', operators: ['equals', 'contains', 'does not contain', 'starts_with', 'ends_with'], label: 'Participant'},
           'last_message': {type: 'timestamp', operators: ['on', 'before', 'after'], label: 'Last Message'},
-          'tags': {type: 'choice', operators: ['any of', 'all of'], options: tags, label: 'Tags' },
-          'versions': {type: 'choice', operators: ['any of', 'all of'], options: versionsList, label: 'Versions'}
+          'tags': {type: 'choice', operators: ['any of', 'all of', 'excludes'], options: tags, label: 'Tags' },
+          'versions': {type: 'choice', operators: ['any of', 'all of', 'excludes'], options: versionsList, label: 'Versions'},
+          'channels': {type: 'choice', operators: ['any of', 'all of', 'excludes'], options: channelsList, label: 'Channels'}
         }
       },
 
@@ -260,7 +262,7 @@
               filter.availableOperators = this.filterData.columns[columnParam].operators;
               filter.operator = operatorParam;
 
-              if (['any of', 'all of'].includes(operatorParam) && valueParam) {
+              if (['any of', 'all of', 'excludes'].includes(operatorParam) && valueParam) {
                 try {
                   filter.selectedValues = JSON.parse(valueParam);
                   if (this.filterData.columns[columnParam].options) {
@@ -304,7 +306,7 @@
           params.set(`filter_${i}_column`, filter.column);
           params.set(`filter_${i}_operator`, filter.operator);
 
-          if (['any of', 'all of'].includes(filter.operator)) {
+          if (['any of', 'all of', 'excludes'].includes(filter.operator)) {
             if (filter.selectedValues && filter.selectedValues.length > 0) {
               params.set(`filter_${i}_value`, JSON.stringify(filter.selectedValues));
             }
@@ -336,7 +338,7 @@
             filterParams[`filter_${i}_column`] = filter.column;
             filterParams[`filter_${i}_operator`] = filter.operator;
 
-            if (['any of', 'all of'].includes(filter.operator)) {
+            if (['any of', 'all of', 'excludes'].includes(filter.operator)) {
               if (filter.selectedValues && filter.selectedValues.length > 0) {
                 filterParams[`filter_${i}_value`] = JSON.stringify(filter.selectedValues);
               }
