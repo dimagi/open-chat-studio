@@ -66,7 +66,7 @@ class EvaluationConfig(BaseTeamModel):
         for evaluator in cast(Iterable[Evaluator], self.evaluators.all()):
             result = evaluator.run(self.dataset)
             eval_result = EvaluationResult.objects.create(
-                run=run, evaluator=evaluator, output=result.model_dump_json(), team=self.team
+                run=run, evaluator=evaluator, output=result.model_dump(), team=self.team
             )
             results.append(eval_result)
         run.finished_at = timezone.now()
