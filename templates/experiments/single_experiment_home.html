@@ -236,11 +236,7 @@
               {% if perms.experiments.download_chats %}
                 {% include "experiments/components/exports.html" %}
               {% endif %}
-              {% include "experiments/filters.html" %}
-              <label class="label cursor-pointer">
-                <span class="label-text mr-2">Include API Sessions</span>
-                <input type="checkbox" name="show-all" class="toggle" @change="triggerFilterChange()" />
-              </label>
+              {% include "experiments/filters.html"%}
             </div>
           </div>
         </div>

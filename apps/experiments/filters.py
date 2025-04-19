@@ -5,6 +5,7 @@ from django.contrib.contenttypes.models import ContentType
 from django.db.models import Exists, OuterRef, Q
 
 from apps.annotations.models import CustomTaggedItem
+from apps.channels.models import ChannelPlatform
 from apps.chat.models import Chat, ChatMessage
 
 
@@ -47,6 +48,8 @@ def build_filter_condition(column, operator, value):
         return build_tags_filter(operator, value)
     elif column == "versions":
         return build_versions_filter(operator, value)
+    elif column == "channels":
+        return build_channels_filter(operator, value)
     return None
 
 
@@ -99,6 +102,8 @@ def build_tags_filter(operator, value):
                     )
                 )
             return conditions
+        elif operator == "excludes":
+            return ~Q(chat__tags__name__in=selected_tags)
     except json.JSONDecodeError:
         pass
     return None
@@ -135,6 +140,45 @@ def build_versions_filter(operator, value):
                 ).values("id")
                 q_objects &= Q(Exists(tag_exists))
             return q_objects
+
+        elif operator == "excludes":
+            combined_exclude_query = Q()
+            for tag in version_tags:
+                combined_exclude_query |= Q(
+                    Exists(
+                        ChatMessage.objects.filter(
+                            chat=OuterRef("chat"),
+                            tags__name__startswith=tag,
+                            tags__category=Chat.MetadataKeys.EXPERIMENT_VERSION,
+                        ).values("id")
+                    )
+                )
+            return ~combined_exclude_query
+    except json.JSONDecodeError:
+        pass
+    return None
+
+
+def build_channels_filter(operator, value):
+    try:
+        selected_display_names = json.loads(value)
+        if not selected_display_names:
+            return None
+
+        display_to_value = {label: val for val, label in ChannelPlatform.choices}
+        selected_values = [display_to_value.get(name.strip()) for name in selected_display_names]
+        selected_values = [val for val in selected_values if val is not None]
+        if not selected_values:
+            return None
+        if operator == "any of":
+            return Q(experiment_channel__platform__in=selected_values)
+        elif operator == "all of":
+            conditions = Q()
+            for channel in selected_values:
+                conditions &= Q(experiment_channel__platform__iexact=channel)
+            return conditions
+        elif operator == "excludes":
+            return ~Q(experiment_channel__platform__in=selected_values)
     except json.JSONDecodeError:
         pass
     return None
