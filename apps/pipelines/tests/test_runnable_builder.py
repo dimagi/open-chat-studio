@@ -309,7 +309,7 @@ def test_router_node_prompt(get_llm_service, provider, provider_model, pipeline,
 
     node = RouterNode(
         name="test router",
-        prompt="PD: {participant_data}\nDT: {current_datetime}",
+        prompt="PD: {participant_data}",
         keywords=["A"],
         llm_provider_id=provider.id,
         llm_provider_model_id=provider_model.id,
