@@ -114,7 +114,7 @@
 <script>
   const tags = JSON.parse(document.getElementById('available-tags-data').textContent);
   const versionsList = JSON.parse(document.getElementById('experiment-versions-data').textContent);
-  const channelsList = ['Telegram', 'Web', 'Whatsapp', 'Facebook', 'SureAdhere', 'API', 'Slack', 'CommCare Connect'];
+  const channelsList = ['API', 'CommCare Connect', 'Facebook', 'Slack', 'SureAdhere', 'Telegram', 'Web', 'Whatsapp'];
   document.addEventListener('alpine:init', () => {
     Alpine.data('filterComponent', () => ({
       filterData: {
@@ -132,6 +132,19 @@
 
       init() {
         this.loadFiltersFromUrl();
+        // set default filter to exclude API sessions
+        if (this.filterData.filters.length === 1 && !this.filterData.filters[0].column) {
+          this.filterData.filters = [{
+            column: 'channels',
+            operator: 'excludes',
+            value: '',
+            selectedValues: ['API'],
+            availableOperators: ['any of', 'all of', 'excludes'],
+            showOptions: false,
+            searchQuery: '',
+            filteredOptions: channelsList
+          }];
+        }
         const urlParams = new URLSearchParams(window.location.search);
         const showAllCheckbox = document.querySelector('input[name="show-all"]');
         if (urlParams.has('show-all') && showAllCheckbox) {

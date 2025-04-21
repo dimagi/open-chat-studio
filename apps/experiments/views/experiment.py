@@ -1070,8 +1070,9 @@ def generate_chat_export(request, team_slug: str, experiment_id: str):
     experiment = get_object_or_404(Experiment, id=experiment_id)
     parsed_url = urlparse(request.headers.get("HX-Current-URL"))
     query_params = parse_qs(parsed_url.query)
-    include_api = request.POST.get("show-all") == "on"
-    task_id = async_export_chat.delay(experiment_id, query_params, include_api)
+    task_id = async_export_chat.delay(
+        experiment_id, query_params, True
+    )  # setting include_api to true until filters are passed and API session exclusion is checked
     return TemplateResponse(
         request, "experiments/components/exports.html", {"experiment": experiment, "task_id": task_id}
     )

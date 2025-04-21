@@ -115,20 +115,27 @@ def build_versions_filter(operator, value):
         if not version_strings:
             return None
         version_tags = [v for v in version_strings if v]
-        if operator == "any of":
-            tag_exists = [
-                ChatMessage.objects.filter(
-                    chat=OuterRef("chat"),
-                    tags__name__startswith=tag,
-                    tags__category=Chat.MetadataKeys.EXPERIMENT_VERSION,
-                ).values("id")
-                for tag in version_tags
-            ]
-            combined_query = Q()
-            for query in tag_exists:
-                combined_query |= Q(Exists(query))
 
-            return combined_query
+        def build_exists_q_for_tags(tags):
+            return [
+                Q(
+                    Exists(
+                        ChatMessage.objects.filter(
+                            chat=OuterRef("chat"),
+                            tags__name__startswith=tag,
+                            tags__category=Chat.MetadataKeys.EXPERIMENT_VERSION,
+                        ).values("id")
+                    )
+                )
+                for tag in tags
+            ]
+
+        if operator == "any of" or operator == "excludes":
+            queries = build_exists_q_for_tags(version_tags)
+            combined_query = Q()
+            for q in queries:
+                combined_query |= q
+            return ~combined_query if operator == "excludes" else combined_query
 
         elif operator == "all of":
             q_objects = Q()
@@ -140,20 +147,6 @@ def build_versions_filter(operator, value):
                 ).values("id")
                 q_objects &= Q(Exists(tag_exists))
             return q_objects
-
-        elif operator == "excludes":
-            combined_exclude_query = Q()
-            for tag in version_tags:
-                combined_exclude_query |= Q(
-                    Exists(
-                        ChatMessage.objects.filter(
-                            chat=OuterRef("chat"),
-                            tags__name__startswith=tag,
-                            tags__category=Chat.MetadataKeys.EXPERIMENT_VERSION,
-                        ).values("id")
-                    )
-                )
-            return ~combined_exclude_query
     except json.JSONDecodeError:
         pass
     return None
