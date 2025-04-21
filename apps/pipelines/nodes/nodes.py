@@ -413,15 +413,14 @@ class BooleanNode(Passthrough):
 
 class RouterMixin(BaseModel):
     keywords: list[str] = Field(default_factory=list, json_schema_extra=UiSchema(widget=Widgets.keywords))
+    defaultKeywordIndex: int = Field(default=0)
 
     @field_validator("keywords")
     def ensure_keywords_exist(cls, value, info: FieldValidationInfo):
         if not all(entry for entry in value):
             raise PydanticCustomError("invalid_keywords", "Keywords cannot be empty")
-
         if len(set(value)) != len(value):
             raise PydanticCustomError("invalid_keywords", "Keywords must be unique")
-
         return value
 
     def _create_router_schema(self):
@@ -454,10 +453,14 @@ class RouterNode(RouterMixin, Passthrough, HistoryMixin):
     )
 
     def _process_conditional(self, state: PipelineState, node_id=None):
+        default_keyword = self.keywords[self.defaultKeywordIndex] if self.keywords else None
         prompt = OcsPromptTemplate.from_messages(
-            [("system", self.prompt), MessagesPlaceholder("history", optional=True), ("human", "{input}")]
+            [
+                ("system", f"{self.prompt}\nThe default routing destination is: {default_keyword}"),
+                MessagesPlaceholder("history", optional=True),
+                ("human", "{input}"),
+            ]
         )
-
         session: ExperimentSession = state["experiment_session"]
         node_input = state["messages"][-1]
 
@@ -476,9 +479,8 @@ class RouterNode(RouterMixin, Passthrough, HistoryMixin):
             keyword = getattr(result, "route", None)
         except ValidationError:
             keyword = None
-
         if not keyword:
-            keyword = self.keywords[0]
+            keyword = self.keywords[self.defaultKeywordIndex]
 
         if session:
             self._save_history(session, node_id, node_input, keyword)
@@ -530,7 +532,7 @@ class StaticRouterNode(RouterMixin, Passthrough):
         for keyword in self.keywords:
             if keyword.lower() == result_lower:
                 return keyword
-        return self.keywords[0]
+        return self.keywords[self.defaultKeywordIndex]
 
 
 class ExtractStructuredDataNodeMixin:
