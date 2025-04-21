@@ -454,6 +454,19 @@ class RouterNode(RouterMixin, Passthrough, HistoryMixin):
         json_schema_extra=UiSchema(widget=Widgets.expandable_text),
     )
 
+    @model_validator(mode="after")
+    def check_prompt_variables(self) -> Self:
+        context = {
+            "prompt": self.prompt,
+        }
+        try:
+            validate_prompt_variables(
+                context=context, prompt_key="prompt", known_vars=set([PromptVars.PARTICIPANT_DATA])
+            )
+            return self
+        except ValidationError as e:
+            raise PydanticCustomError("invalid_prompt", e.error_dict["prompt"][0].message, {"field": "prompt"})
+
     def _process_conditional(self, state: PipelineState, node_id=None):
         prompt = OcsPromptTemplate.from_messages(
             [("system", self.prompt), MessagesPlaceholder("history", optional=True), ("human", "{input}")]
