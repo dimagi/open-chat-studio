@@ -14,7 +14,9 @@ class EvaluationConfigTable(tables.Table):
         orderable=True,
     )
     actions = actions.ActionsColumn(
-        actions=[]
+        actions=[
+            actions.edit_action(url_name="evaluations:edit"),
+        ]
         # actions=[
         #     actions.edit_action(url_name="pipelines:edit"),
         #     actions.AjaxAction(
