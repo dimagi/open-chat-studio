@@ -20,7 +20,7 @@
     <div role="tabpanel" class="tab-content p-4" x-data="{ showDebug: false }">
         <div class="font-mono" x-data="{ openSections: {} }">
             <div class="flex mb-4 items-center cursor-pointer">
-                <span class="label-text mr-2">Show Debug</span>
+                <span class="mr-2">Show Debug</span>
                 <input x-model="showDebug" type="checkbox" class="toggle" />
             </div>
             {% for entry in pipeline_run.log.entries %}

@@ -2,7 +2,7 @@
   <div class="form-check">
     <label class="label font-bold cursor-pointer">
       <div>
-        <span class="label-text">{{ form_field.label }}</span>
+        {{ form_field.label }}
         {% if form_field.help_text %}
           <small class="form-text text-muted">{% include "generic/help.html" with help_content=form_field.help_text %}</small>
         {% endif %}
