@@ -1220,3 +1220,32 @@ def test_router_node(get_llm_service, provider, provider_model, pipeline, experi
     assert output["messages"][-1] == "D d"
     output = runnable.invoke(PipelineState(messages=["z"], experiment_session=experiment_session))
     assert output["messages"][-1] == "A z"
+
+
+@pytest.mark.django_db()
+def test_router_node_output_structure(provider, provider_model, pipeline, experiment_session):
+    service = build_fake_llm_echo_service()
+    with mock.patch("apps.service_providers.models.LlmProvider.get_llm_service", return_value=service):
+        node = RouterNode(
+            name="test_router",
+            prompt="PD: {participant_data}",
+            keywords=["A"],
+            llm_provider_id=provider.id,
+            llm_provider_model_id=provider_model.id,
+        )
+
+        state = PipelineState(
+            outputs={"123": {"message": "hello world"}},
+            messages=["hello world"],
+            experiment_session=experiment_session,
+        )
+        conditional_branch = node.process_conditional(state, node_id="123")
+
+        assert "123" in state["outputs"]
+        assert "output_handle" in state["outputs"]["123"]
+        assert node.name in state["outputs"]
+        assert "route" in state["outputs"][node.name]
+        assert "output" in state["outputs"][node.name]
+
+        assert state["outputs"][node.name]["route"] == conditional_branch
+        assert state["outputs"][node.name]["output"] == "hello world"
