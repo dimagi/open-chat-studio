@@ -12,7 +12,7 @@
             type="text"
             name="search"
             value="{{ search|default:'' }}"
-            class="input input-bordered input-sm w-96"
+            class="input input-sm w-96"
             placeholder="Search tags..."
             hx-get="{% url 'experiments:experiment_session_messages_view' request.team.slug experiment.public_id experiment_session.external_id %}"
             hx-trigger="keyup changed delay:500ms"

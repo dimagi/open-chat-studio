@@ -29,7 +29,7 @@
 
   {% if enable_search and not toggle_archived %}
     <div class="my-2">
-      <input class="input input-bordered" type="search"
+      <input class="input" type="search"
              name="{{ search_param_name|default:"search" }}" placeholder="Search..."
              hx-get="{{ table_url }}"
              hx-trigger="keyup[this.value.length === 0 || this.value.length > 2] changed delay:500ms, search"
@@ -46,7 +46,7 @@
       hx-indicator=".htmx-indicator">
       <div class="my-2 flex gap-x-2">
         <div class="my-2">
-          <input class="input input-bordered"
+          <input class="input"
                  type="search"
                  name="{{ search_param_name|default:'search' }}"
                  placeholder="Search..."

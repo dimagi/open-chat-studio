@@ -43,7 +43,7 @@ export default function Page() {
                   type="text"
                   value={name}
                   onChange={handleNameChange}
-                  className="input input-bordered input-sm"
+                  className="input input-sm"
                   placeholder="Edit pipeline name"
                 />
                 <button className="btn btn-sm btn-primary" onClick={onClickSave}>

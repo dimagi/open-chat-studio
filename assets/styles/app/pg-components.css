@@ -103,12 +103,12 @@
 }
 
 @utility pg-control {
-  @apply input input-bordered w-full;
+  @apply input w-full;
 }
 
 @utility pg-select {
   & select {
-    @apply select select-bordered w-full;
+    @apply select w-full;
   }
 }
 

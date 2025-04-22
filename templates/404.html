@@ -20,7 +20,7 @@
           {% csrf_token %}
           <div class="form-control w-full">
             <label class="label font-bold" for="id_password">Password</label>
-            <input class="input input-bordered w-full " type="password" name="password" required="" id="id_password">
+            <input class="input w-full " type="password" name="password" required="" id="id_password">
           </div>
           <input type="hidden" name="redirect" value="{{ request_path }}" id="id_redirect">
           <div>

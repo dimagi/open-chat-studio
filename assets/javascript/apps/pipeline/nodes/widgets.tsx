@@ -70,7 +70,7 @@ function DefaultWidget(props: WidgetParams) {
   return (
     <InputField label={props.label} help_text={props.helpText} inputError={props.inputError}>
       <input
-        className="input input-bordered w-full"
+        className="input w-full"
         name={props.name}
         onChange={props.updateParamValue}
         value={props.paramValue}
@@ -101,7 +101,7 @@ function NodeNameWidget(props: WidgetParams) {
   return (
     <InputField label={props.label} help_text={props.helpText} inputError={props.inputError}>
       <input
-        className="input input-bordered w-full"
+        className="input w-full"
         name={props.name}
         onChange={handleInputChange}
         value={inputValue}
@@ -115,7 +115,7 @@ function NodeNameWidget(props: WidgetParams) {
 function FloatWidget(props: WidgetParams) {
   return <InputField label={props.label} help_text={props.helpText} inputError={props.inputError}>
     <input
-      className="input input-bordered w-full"
+      className="input w-full"
       name={props.name}
       onChange={props.updateParamValue}
       value={props.paramValue}
@@ -136,7 +136,7 @@ function RangeWidget(props: WidgetParams) {
   }
   return <InputField label={props.label} help_text={props.helpText} inputError={props.inputError}>
     <input
-      className="input input-bordered w-full input-sm"
+      className="input w-full input-sm"
       name={props.name}
       onChange={props.updateParamValue}
       value={props.paramValue}
@@ -187,7 +187,7 @@ function SelectWidget(props: WidgetParams) {
   return <InputField label={props.label} help_text={props.helpText} inputError={props.inputError}>
     <div className="flex flex-row gap-2">
       <select
-        className="select select-bordered w-full"
+        className="select w-full"
         name={props.name}
         onChange={onUpdate}
         value={props.paramValue}
@@ -737,7 +737,7 @@ export function KeywordsWidget(props: WidgetParams) {
                 </div>
               </div>
               <input
-                className={classNames("input input-bordered w-full", value ? "" : "input-error")}
+                className={classNames("input w-full", value ? "" : "input-error")}
                 name="keywords"
                 onChange={(event) => updateKeyword(index, event.target.value)}
                 value={value}
@@ -783,7 +783,7 @@ export function LlmWidget(props: WidgetParams) {
   return (
     <InputField label={props.label} help_text={props.helpText} inputError={props.inputError}>
       <select
-        className="select select-bordered w-full"
+        className="select w-full"
         name={props.name}
         onChange={updateParamValue}
         value={value}
@@ -815,7 +815,7 @@ export function HistoryTypeWidget(props: WidgetParams) {
       <div className="flex join">
         <InputField label="History" help_text={props.helpText}>
           <select
-            className="select select-bordered join-item"
+            className="select join-item"
             name={props.name}
             onChange={props.updateParamValue}
             value={historyType}
@@ -830,7 +830,7 @@ export function HistoryTypeWidget(props: WidgetParams) {
         {historyType == "named" && (
           <InputField label="History Name" help_text={props.helpText}>
             <input
-              className="input input-bordered join-item"
+              className="input join-item"
               name="history_name"
               onChange={props.updateParamValue}
               value={historyName || ""}
@@ -867,7 +867,7 @@ export function HistoryModeWidget(props: WidgetParams) {
       <div className="flex join">
         <InputField label="History Mode" help_text = "">
           <select
-            className="select select-bordered join-item"
+            className="select join-item"
             name="history_mode"
             onChange={(e) => {
               setHistoryMode(e.target.value);
@@ -889,7 +889,7 @@ export function HistoryModeWidget(props: WidgetParams) {
         <div className="flex join mb-4">
           <InputField label="Token Limit" help_text = "">
             <input
-              className="input input-bordered join-item"
+              className="input join-item"
               name="user_max_token_limit"
               type="number"
               onChange={props.updateParamValue}
@@ -904,7 +904,7 @@ export function HistoryModeWidget(props: WidgetParams) {
         <div className="flex join mb-4">
           <InputField label="Max History Length" help_text = "">
             <input
-              className="input input-bordered join-item"
+              className="input join-item"
               name="max_history_length"
               type="number"
               onChange={props.updateParamValue}

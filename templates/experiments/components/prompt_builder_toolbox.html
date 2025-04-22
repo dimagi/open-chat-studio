@@ -43,13 +43,13 @@
 
                 <div>
                     <label for="model-selector" class="block font-semibold mb-2">Model</label>
-                    <select id="provider-selector" class="w-full select select-sm select-bordered"
+                    <select id="provider-selector" class="w-full select select-sm"
                             x-model.number="$store.promptBuilder.currentState.provider">
                         {% for provider in llm_providers %}
                             <option value="{{ provider.id }}">{{ provider }}</option>
                         {% endfor %}
                     </select>
-                    <select id="model-selector" class="w-full select select-sm select-bordered"
+                    <select id="model-selector" class="w-full select select-sm"
                             x-model="$store.promptBuilder.currentState.providerModelId">
                         <template x-for="(option, index) in $store.promptBuilder.llm_models" :key="index">
                             <option :value="option.value" x-text="option.text" :selected="option.value == $store.promptBuilder.currentState.providerModelId"></option>

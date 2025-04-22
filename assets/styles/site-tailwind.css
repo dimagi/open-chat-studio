@@ -1,13 +1,11 @@
-@import 'tailwindcss/theme' layer(theme);
-
-@import 'tailwindcss/preflight' layer(base);
+@import "tailwindcss";
+@plugin "daisyui";
 
 @import './app/chat.css';
 @import './app/table.css' layer(components);
 @import './app/alertify.css';
 @import './app/pg-components.css';
 @import './app/prompt-builder.css' layer(components);
-@import 'tailwindcss/utilities.css' layer(components);
 
 @config '../../tailwind.config.js';
 
@@ -58,13 +56,13 @@
   @apply h-full px-8 py-4 border-4 rounded-md border-white;
 
   &.is-selected {
-    @apply border-blue-500 border-opacity-100;
+    @apply border-blue-500 border-black/100;
   }
 }
 
 @utility is-selected {
   &.plan {
-    @apply border-blue-500 border-opacity-100;
+    @apply border-blue-500 border-black/100;
   }
 }
 
