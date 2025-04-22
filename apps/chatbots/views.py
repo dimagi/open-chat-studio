@@ -67,7 +67,7 @@ class CreateChatbot(CreateExperiment, BaseExperimentView):
         return context
 
     def get_success_url(self):
-        return reverse("chatbots:edit", args=[self.request.team.slug, self.object.pipeline.id])
+        return reverse("chatbots:edit", args=[self.request.team.slug, self.object.id])
 
 
 @login_and_team_required
