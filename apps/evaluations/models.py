@@ -61,7 +61,7 @@ class EvaluationConfig(BaseTeamModel):
         return f"EvaluationConfig (experiment={self.experiment_id})"
 
     def get_absolute_url(self):
-        return reverse("evaluations:edit", args=[self.team.slug, self.id])
+        return reverse("evaluations:runs_table", args=[self.team.slug, self.id])
 
     def run(self) -> list["EvaluationResult"]:
         """Runs the evaluation"""
@@ -88,6 +88,9 @@ class EvaluationRun(BaseTeamModel):
 
     def __str__(self):
         return f"EvaluationRun ({self.created_at} - {self.finished_at})"
+
+    def get_absolute_url(self):
+        return reverse("evaluations:run_detail", args=[self.team.slug, self.config_id, self.pk])
 
 
 class EvaluationResult(BaseTeamModel):
