@@ -68,7 +68,7 @@ const config = {
 };
 
 module.exports = (env, argv) => {
-  if (argv.mode === 'production') {
+  if (argv.mode === 'production' && process.env.GITHUB_REF === 'refs/heads/main') {
     config.plugins = config.plugins.concat([
       // Uploads source maps to Sentry
       // These env variables must be set in the environment when running 'npm run build'
