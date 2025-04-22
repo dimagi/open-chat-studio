@@ -132,6 +132,7 @@
 
       init() {
         this.loadFiltersFromUrl();
+        let defaultFilterApplied = false;
         // set default filter to exclude API sessions
         if (this.filterData.filters.length === 1 && !this.filterData.filters[0].column) {
           this.filterData.filters = [{
@@ -144,6 +145,7 @@
             searchQuery: '',
             filteredOptions: channelsList
           }];
+          defaultFilterApplied = true;
         }
         const urlParams = new URLSearchParams(window.location.search);
         const showAllCheckbox = document.querySelector('input[name="show-all"]');
@@ -157,7 +159,7 @@
         }
           // Always trigger a data load on init to ensure correct data is shown
         this.$nextTick(() => {
-          this.triggerFilterChange(false); // Don't update URL again since we just loaded from it
+          this.triggerFilterChange(defaultFilterApplied); // Don't update URL again since we just loaded from it
         });
       },
 
