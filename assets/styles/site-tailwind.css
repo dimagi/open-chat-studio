@@ -18,6 +18,7 @@
 
   If we ever want to remove these styles, we need to add an explicit border
   color utility to any element that depends on these defaults.
+  See https://tailwindcss.com/docs/upgrade-guide#default-border-color
 */
 @layer base {
   *,
@@ -125,25 +126,25 @@ input[type=number]::-webkit-outer-spin-button {
 
 /* Override ugly daisyui badges */
 .badge-success {
-  @apply inline-flex items-center rounded-md bg-green-50 px-2 py-1 text-xs font-medium text-green-700 ring-1 ring-inset ring-green-600/20;
+  @apply border-none inline-flex items-center rounded-md bg-green-50 px-2 py-1 text-xs font-medium text-green-700 ring-1 ring-inset ring-green-600/20;
 }
 
 .badge-info {
-  @apply inline-flex items-center rounded-md bg-blue-50 px-2 py-1 text-xs font-medium text-blue-700 ring-1 ring-inset ring-blue-700/10;
+  @apply border-none inline-flex items-center rounded-md bg-blue-50 px-2 py-1 text-xs font-medium text-blue-700 ring-1 ring-inset ring-blue-700/10;
 }
 
 .badge-warning {
-  @apply inline-flex items-center rounded-md bg-yellow-50 px-2 py-1 text-xs font-medium text-yellow-800 ring-1 ring-inset ring-yellow-600/20;
+  @apply border-none inline-flex items-center rounded-md bg-yellow-50 px-2 py-1 text-xs font-medium text-yellow-800 ring-1 ring-inset ring-yellow-600/20;
 }
 
 .badge-error {
-  @apply inline-flex items-center rounded-md bg-red-50 px-2 py-1 text-xs font-medium text-red-700 ring-1 ring-inset ring-red-600/10;
+  @apply border-none inline-flex items-center rounded-md bg-red-50 px-2 py-1 text-xs font-medium text-red-700 ring-1 ring-inset ring-red-600/10;
 }
 
 .badge-green {
-  @apply bg-green-100 text-green-800 text-sm font-medium me-2 px-2.5 py-0.5 rounded-md dark:bg-green-900 dark:text-green-300;
+  @apply border-none bg-green-100 text-green-800 text-sm font-medium me-2 px-2.5 py-0.5 rounded-md dark:bg-green-900 dark:text-green-300;
 }
 
 .badge-neutral {
-  @apply rounded-md
+  @apply border-none rounded-md
 }
