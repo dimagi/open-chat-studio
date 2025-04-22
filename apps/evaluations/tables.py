@@ -1,7 +1,7 @@
 from django.conf import settings
 from django_tables2 import columns, tables
 
-from apps.evaluations.models import EvaluationConfig
+from apps.evaluations.models import EvaluationConfig, EvaluationRun
 from apps.generics import actions
 
 
@@ -39,3 +39,24 @@ class EvaluationConfigTable(tables.Table):
         row_attrs = settings.DJANGO_TABLES2_ROW_ATTRS
         orderable = False
         empty_text = "No evaluation configurations found."
+
+
+class EvaluationRunTable(tables.Table):
+    created_at = columns.DateTimeColumn(
+        verbose_name="Created",
+        linkify=True,
+        attrs={
+            "a": {"class": "link"},
+        },
+        orderable=True,
+    )
+
+    results = columns.Column(accessor="results.count", verbose_name="Result count", orderable=False)
+    # actions = actions.chip_column(label="Session Details")
+
+    class Meta:
+        model = EvaluationRun
+        fields = ("created_at", "finished_at", "results")
+        row_attrs = settings.DJANGO_TABLES2_ROW_ATTRS
+        orderable = False
+        empty_text = "No runs found."

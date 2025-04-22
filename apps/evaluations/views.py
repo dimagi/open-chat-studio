@@ -1,11 +1,12 @@
 from django.contrib.auth.mixins import PermissionRequiredMixin
+from django.shortcuts import get_object_or_404
 from django.urls import reverse
 from django.views.generic import CreateView, TemplateView, UpdateView
-from django_tables2 import SingleTableView
+from django_tables2 import SingleTableView, columns, tables
 
 from apps.evaluations.forms import EvaluationConfigForm
-from apps.evaluations.models import EvaluationConfig
-from apps.evaluations.tables import EvaluationConfigTable
+from apps.evaluations.models import EvaluationConfig, EvaluationRun
+from apps.evaluations.tables import EvaluationConfigTable, EvaluationRunTable
 from apps.teams.mixins import LoginAndTeamRequiredMixin
 
 
@@ -81,3 +82,55 @@ class EditEvaluation(UpdateView):
 
     def get_success_url(self):
         return reverse("evaluations:home", args=[self.request.team.slug])
+
+
+class EvaluationRunsTableView(SingleTableView, PermissionRequiredMixin):
+    # permission_required = "pipelines.view_pipelinerun"
+    model = EvaluationRun
+    paginate_by = 25
+    table_class = EvaluationRunTable
+    template_name = "table/single_table.html"
+
+    def get_queryset(self):
+        return EvaluationRun.objects.filter(config_id=self.kwargs["pk"]).order_by("-created_at")
+
+
+class EvaluationRunDetailView(SingleTableView):
+    template_name = "table/single_table.html"
+
+    def get_queryset(self):
+        run = get_object_or_404(
+            EvaluationRun.objects.filter(team__slug=self.kwargs["team_slug"]),
+            pk=self.kwargs["pk"],
+        )
+        self.run = run
+        return run.results.all()
+
+    def get_table_data(self):
+        return [
+            {
+                "evaluator": result.evaluator.type,
+                **result.output.get("result", {}),
+            }
+            for result in self.get_queryset()
+        ]
+
+    def get_table_class(self):
+        """
+        Inspect the first row’s keys and build a Table subclass
+        with one Column per field.
+        """
+        data = self.get_table_data()
+        if not data:
+            return type("EmptyTable", (tables.Table,), {})
+
+        # dynamically create attrs: one Column per dict key
+        attrs = {}
+        for row in data:
+            for key in row:
+                if key in attrs:
+                    continue
+                header = key.replace("_", " ").title()
+                attrs[key] = columns.Column(verbose_name=header)
+
+        return type("RunResultsTable", (tables.Table,), attrs)
