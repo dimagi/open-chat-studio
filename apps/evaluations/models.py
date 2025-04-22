@@ -3,6 +3,7 @@ from typing import cast
 
 from django.conf import settings
 from django.db import models
+from django.urls import reverse
 from django.utils import timezone
 
 from apps.evaluations import evaluators
@@ -58,6 +59,9 @@ class EvaluationConfig(BaseTeamModel):
 
     def __str__(self):
         return f"EvaluationConfig (experiment={self.experiment_id})"
+
+    def get_absolute_url(self):
+        return reverse("evaluations:edit", args=[self.team.slug, self.id])
 
     def run(self) -> list["EvaluationResult"]:
         """Runs the evaluation"""

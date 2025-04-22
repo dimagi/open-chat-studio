@@ -19,4 +19,4 @@ urlpatterns = []
 #     ),
 # ]
 
-urlpatterns.extend(make_crud_urls(views, "Evaluation", new=False, edit=False, delete=False))
+urlpatterns.extend(make_crud_urls(views, "Evaluation", delete=False))
