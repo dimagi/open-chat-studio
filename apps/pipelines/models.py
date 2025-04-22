@@ -18,7 +18,7 @@ from apps.annotations.models import TagCategories
 from apps.chat.models import ChatMessage, ChatMessageType
 from apps.custom_actions.form_utils import set_custom_actions
 from apps.custom_actions.mixins import CustomActionOperationMixin
-from apps.experiments.models import ExperimentSession
+from apps.experiments.models import Experiment, ExperimentSession
 from apps.experiments.versioning import VersionDetails, VersionField, VersionsMixin, VersionsObjectManagerMixin
 from apps.pipelines.exceptions import PipelineBuildError
 from apps.pipelines.executor import patch_executor
@@ -299,10 +299,11 @@ class Pipeline(BaseTeamModel, VersionsMixin):
         self,
         input: PipelineState,
         session: ExperimentSession,
+        experiment: Experiment,
         save_run_to_history=True,
         save_input_to_history=True,
         disable_reminder_tools=False,
-    ) -> dict:
+    ) -> ChatMessage:
         from apps.experiments.models import AgentTools
         from apps.pipelines.graph import PipelineGraph
 
@@ -352,6 +353,9 @@ class Pipeline(BaseTeamModel, VersionsMixin):
                     metadata=output_metadata,
                     tags=output.get("output_message_tags"),
                 )
+                ai_message.add_version_tag(
+                    version_number=experiment.version_number, is_a_version=experiment.is_a_version
+                )
                 pipeline_output = ai_message
             else:
                 pipeline_output = ChatMessage(content=output)
@@ -385,11 +389,9 @@ class Pipeline(BaseTeamModel, VersionsMixin):
             chat=session.chat, message_type=type_.value, content=message, metadata=metadata
         )
 
-        if type_ == ChatMessageType.AI:
-            chat_message.add_version_tag(version_number=self.version_number, is_a_version=self.is_a_version)
-            if tags:
-                for tag in tags:
-                    chat_message.add_system_tag(tag, TagCategories.BOT_RESPONSE)
+        if tags:
+            for tag in tags:
+                chat_message.add_system_tag(tag, TagCategories.BOT_RESPONSE)
         return chat_message
 
     @transaction.atomic()

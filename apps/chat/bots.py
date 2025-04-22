@@ -297,6 +297,7 @@ class PipelineBot:
                 pipeline_version=self.experiment.pipeline.version_number,
             ),
             self.session,
+            self.experiment,
             save_input_to_history=save_input_to_history,
             disable_reminder_tools=self.disable_reminder_tools,
         )
