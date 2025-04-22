@@ -429,6 +429,48 @@ def test_static_router_case_sensitive(pipeline, experiment_session):
     _check_match("THIRD", "C")
 
 
+@pytest.mark.django_db()
+def test_router_sets_tags_correctly(pipeline, experiment_session):
+    start = start_node()
+    router = state_key_router_node(
+        "route_to", ["first", "second"], data_source=StaticRouterNode.DataSource.temp_state, tag_output=True
+    )
+    template_a = render_template_node("A")
+    template_b = render_template_node("B")
+    end = end_node()
+
+    nodes = [start, router, template_a, template_b, end]
+    edges = [
+        {"id": "start -> router", "source": start["id"], "target": router["id"]},
+        {
+            "id": "router -> A",
+            "source": router["id"],
+            "target": template_a["id"],
+            "sourceHandle": "output_0",
+        },
+        {
+            "id": "router -> B",
+            "source": router["id"],
+            "target": template_b["id"],
+            "sourceHandle": "output_1",
+        },
+        {"id": "A -> end", "source": template_a["id"], "target": end["id"]},
+        {"id": "B -> end", "source": template_b["id"], "target": end["id"]},
+    ]
+    runnable = create_runnable(pipeline, nodes, edges)
+
+    def _check_routing_and_tags(route_to, expected_tag):
+        output = runnable.invoke(
+            PipelineState(
+                messages=["Test message"], experiment_session=experiment_session, temp_state={"route_to": route_to}
+            )
+        )
+        assert output["output_message_tags"] == [f"static router:{expected_tag}"]
+
+    _check_routing_and_tags("first", "first")
+    _check_routing_and_tags("second", "second")
+
+
 @django_db_with_data(available_apps=("apps.service_providers",))
 @pytest.mark.parametrize(
     "data_source", [StaticRouterNode.DataSource.participant_data, StaticRouterNode.DataSource.session_state]
