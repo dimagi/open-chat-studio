@@ -316,7 +316,7 @@ def test_router_node_prompt(get_llm_service, provider, provider_model, pipeline,
     )
     node.process_conditional(
         PipelineState(
-            outputs={"123": {}},
+            outputs={"123": {"message": "a"}},
             messages=["a"],
             experiment_session=experiment_session,
         ),
