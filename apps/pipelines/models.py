@@ -312,10 +312,9 @@ class Pipeline(BaseTeamModel, VersionsMixin):
         logging_callback = PipelineLoggingCallbackHandler(pipeline_run)
 
         logging_callback.logger.debug("Starting pipeline run", input=input["messages"][-1])
-        pipeline_output = None
+        trace_service = session.experiment.trace_service
         try:
             callbacks = [logging_callback]
-            trace_service = session.experiment.trace_service
             if trace_service:
                 trace_service_callback = trace_service.get_callback(
                     trace_name=session.experiment.name,
@@ -356,9 +355,9 @@ class Pipeline(BaseTeamModel, VersionsMixin):
                 ai_message.add_version_tag(
                     version_number=experiment.version_number, is_a_version=experiment.is_a_version
                 )
-                pipeline_output = ai_message
+                return ai_message
             else:
-                pipeline_output = ChatMessage(content=output)
+                return ChatMessage(content=output["messages"][-1])
         finally:
             if trace_service:
                 trace_service.end()
@@ -368,7 +367,6 @@ class Pipeline(BaseTeamModel, VersionsMixin):
                 pipeline_run.status = PipelineRunStatus.SUCCESS
                 logging_callback.logger.debug("Pipeline run finished", output=output["messages"][-1])
             pipeline_run.save()
-        return pipeline_output
 
     def _create_pipeline_run(self, input: PipelineState, session: ExperimentSession) -> "PipelineRun":
         # Django doesn't auto-serialize objects for JSON fields, so we need to copy the input and save the ID of
