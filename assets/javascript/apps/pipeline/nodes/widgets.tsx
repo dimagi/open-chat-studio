@@ -358,7 +358,7 @@ export function CodeModal(
             ✕
           </button>
         </form>
-        <div className="flex-grow h-full w-full flex flex-col">
+        <div className="grow h-full w-full flex flex-col">
           <div className="flex justify-between items-center">
             <h4 className="font-bold text-lg bottom-2 capitalize">
               {humanName}
@@ -551,7 +551,7 @@ function CodeNodeEditor(
   return <CodeMirror
     value={value}
     onChange={onChange}
-    className="textarea textarea-bordered h-full w-full flex-grow min-h-48"
+    className="textarea textarea-bordered h-full w-full grow min-h-48"
     height="100%"
     width="100%"
     theme={isDarkMode ? githubDark : githubLight}
@@ -590,12 +590,12 @@ export function TextModal(
             ✕
           </button>
         </form>
-        <div className="flex-grow h-full w-full flex flex-col">
+        <div className="grow h-full w-full flex flex-col">
           <h4 className="mb-4 font-bold text-lg bottom-2 capitalize">
             {humanName}
           </h4>
           <textarea
-            className="textarea textarea-bordered textarea-lg w-full flex-grow resize-none"
+            className="textarea textarea-bordered textarea-lg w-full grow resize-none"
             name={name}
             onChange={onChange}
             value={value}

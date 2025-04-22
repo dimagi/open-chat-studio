@@ -1,9 +1,39 @@
-@tailwind base;
-@tailwind components;
-@tailwind utilities;
+@import 'tailwindcss';
 
-:host {
-   /**
+/*
+  The default border color has changed to `currentcolor` in Tailwind CSS v4,
+  so we've added these compatibility styles to make sure everything still
+  looks the same as it did with Tailwind CSS v3.
+
+  If we ever want to remove these styles, we need to add an explicit border
+  color utility to any element that depends on these defaults.
+*/
+@layer base {
+  *,
+  ::after,
+  ::before,
+  ::backdrop,
+  ::file-selector-button {
+    border-color: var(--color-gray-200, currentcolor);
+  }
+}
+
+@utility btn {
+  @apply py-2.5 px-5 me-2 mb-2 text-sm font-medium focus:outline-hidden rounded-lg border;
+  background-color: var(--button-background-color);
+  color: var(--button-text-color);
+  border-color: var(--button-border-color);
+
+  &:hover {
+    background-color: var(--button-background-color-hover);
+    color: var(--button-text-color-hover);
+    border-color: var(--button-border-color-hover);
+  }
+}
+
+@layer utilities {
+  :host {
+    /**
    * @prop --button-background-color: Button background color
    * @prop --button-background-color-hover: Button background color on hover
    * @prop --button-text-color: Button text color
@@ -11,37 +41,23 @@
    * @prop --button-border-color: Button border color
    * @prop --button-border-color-hover: Button border color on hover
    */
-  --button-background-color: white;
-  /* gray-100 */
-  --button-background-color-hover: #f3f4f6;
-  /* gray-900 */
-  --button-text-color: #111827;
-  /* blue-700 */
-  --button-text-color-hover: #1d4ed8;
-  /* gray-500 */
-  --button-border-color: #6b7280;
-  /* gray-700 */
-  --button-border-color-hover: #374151;
-  --chat-z-index: 50;
+    --button-background-color: white;
+    /* gray-100 */
+    --button-background-color-hover: #f3f4f6;
+    /* gray-900 */
+    --button-text-color: #111827;
+    /* blue-700 */
+    --button-text-color-hover: #1d4ed8;
+    /* gray-500 */
+    --button-border-color: #6b7280;
+    /* gray-700 */
+    --button-border-color-hover: #374151;
+    --chat-z-index: 50;
 
-  display: block;
-}
-
-/* These custom button styles need to remain since they use CSS variables */
-
-@layer components {
-  .btn {
-    @apply py-2.5 px-5 me-2 mb-2 text-sm font-medium focus:outline-none rounded-lg border;
-    background-color: var(--button-background-color);
-    color: var(--button-text-color);
-    border-color: var(--button-border-color);
+    display: block;
   }
 
-  .btn:hover {
-    background-color: var(--button-background-color-hover);
-    color: var(--button-text-color-hover);
-    border-color: var(--button-border-color-hover);
-  }
+  /* These custom button styles need to remain since they use CSS variables */
 }
 
 #ocs-chat-window {

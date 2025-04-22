@@ -1,57 +1,76 @@
-@import "tailwindcss/base";
-@import "tailwindcss/components";
+@import 'tailwindcss/theme' layer(theme);
+
+@import 'tailwindcss/preflight' layer(base);
 
 @import './app/chat.css';
-@import './app/table.css';
+@import './app/table.css' layer(components);
 @import './app/alertify.css';
 @import './app/pg-components.css';
-@import './app/prompt-builder.css';
-@import "tailwindcss/utilities.css";
+@import './app/prompt-builder.css' layer(components);
+@import 'tailwindcss/utilities.css' layer(components);
 
-@layer components {
+@config '../../tailwind.config.js';
 
-  .section {
-    @apply m-4;
+/*
+  The default border color has changed to `currentcolor` in Tailwind CSS v4,
+  so we've added these compatibility styles to make sure everything still
+  looks the same as it did with Tailwind CSS v3.
+
+  If we ever want to remove these styles, we need to add an explicit border
+  color utility to any element that depends on these defaults.
+*/
+@layer base {
+  *,
+  ::after,
+  ::before,
+  ::backdrop,
+  ::file-selector-button {
+    border-color: var(--color-gray-200, currentcolor);
   }
+}
 
+@utility section {
+  @apply m-4;
+}
+
+@utility help {
   /* forms */
-  .help {
-    @apply text-xs text-gray-700;
-  }
+  @apply text-xs text-gray-700;
+}
 
-  .app {
-    @apply m-4;
-  }
+@utility app {
+  @apply m-4;
+}
 
-  .app-card {
-    @apply lg:shadow-md p-4 mb-2 mt-2 lg:mt-0 lg:p-8;
-  }
+@utility app-card {
+  @apply lg:shadow-md p-4 mb-2 mt-2 lg:mt-0 lg:p-8;
+}
 
-  .tab:is(input[type="radio"]) {
-  	@apply whitespace-nowrap;
+@utility tab {
+  &:is(input[type='radio']) {
+    @apply whitespace-nowrap;
   }
 }
 
 /* subscriptions */
 
-@layer components {
+@utility plan {
+  @apply h-full px-8 py-4 border-4 rounded-md border-white;
 
-  .plan {
-    @apply h-full px-8 py-4 border-4 rounded-md border-white;
-  }
-
-  .plan.is-selected {
+  &.is-selected {
     @apply border-blue-500 border-opacity-100;
   }
-
 }
 
+@utility is-selected {
+  &.plan {
+    @apply border-blue-500 border-opacity-100;
+  }
+}
 
 /* chat UI stuff*/
-@layer components {
-  .htmx-request {
-    @apply loading;
-  }
+@utility htmx-request {
+  @apply loading;
 }
 
 /* set css variables to DaisyUI default colors: https://daisyui.com/docs/colors/ */
@@ -63,7 +82,7 @@
 }
 
 .ts-wrapper {
-  @apply w-full !ml-0;
+  @apply w-full ml-0!;
 }
 
 .ts-control {

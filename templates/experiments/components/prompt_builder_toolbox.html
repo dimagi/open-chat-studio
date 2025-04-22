@@ -24,7 +24,7 @@
                 <!-- token display -->
                 <div class="flex flex-row">
                     <span class="flex-1 mr-2 my-auto font-semibold">Tokens</span>
-                    <div class="flex flex-grow bg-base-100 rounded-lg mt-2 py-2 px-6 justify-between border">
+                    <div class="flex grow bg-base-100 rounded-lg mt-2 py-2 px-6 justify-between border">
                         <div class="flex flex-row">
                             <i class="fa-solid fa-arrow-up-from-bracket" title="Output Token Count"></i>
                             <span class="badge badge-sm" title="Output Token Count"
@@ -65,7 +65,7 @@
                     <label for="temperature-slider" class="text-base-400 font-semibold">Temperature</label>
                     <input id="temperature-slider-value" type="text"
                            x-model.number="$store.promptBuilder.currentState.temperature"
-                           class="w-16 text-right text-base-400 font-semibold bg-transparent border-transparent group-hover:border-neutral-300 focus:outline-none focus:ring-0 focus:shadow-none focus:bg-base-100">
+                           class="w-16 text-right text-base-400 font-semibold bg-transparent border-transparent group-hover:border-neutral-300 focus:outline-hidden focus:ring-0 focus:shadow-none focus:bg-base-100">
                 </div>
                 <input id="temperature-slider" type="range" min="0" max="2" step="0.01"
                        x-model.number="$store.promptBuilder.currentState.temperature"
