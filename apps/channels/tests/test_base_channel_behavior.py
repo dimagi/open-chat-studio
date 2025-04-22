@@ -28,6 +28,7 @@ from apps.experiments.models import (
     VoiceResponseBehaviours,
 )
 from apps.files.models import File
+from apps.service_providers.llm_service.runnables import GenerationCancelled
 from apps.utils.factories.channels import ExperimentChannelFactory
 from apps.utils.factories.experiment import ExperimentFactory, ExperimentSessionFactory
 from apps.utils.factories.files import FileFactory
@@ -961,3 +962,14 @@ def test_supported_and_unsupported_attachments(experiment):
     assert channel.send_text_to_user.call_args[0][0] == f"Hi there\n\n{file3.name}\nhttps://example.com\n"
     assert channel.send_file_to_user.mock_calls[0].args[0] == file1
     assert channel.send_file_to_user.mock_calls[1].args[0] == file2
+
+
+@pytest.mark.django_db()
+def test_chat_message_returned_for_cancelled_generate():
+    session = ExperimentSessionFactory()
+    channel = TestChannel(session.experiment, None)
+    channel._new_user_message = Mock()
+    channel._new_user_message.side_effect = GenerationCancelled(output="Cancelled")
+    response = channel.new_user_message("Hi there")
+
+    assert type(response) == ChatMessage

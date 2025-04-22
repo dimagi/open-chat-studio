@@ -82,3 +82,9 @@ def test_max_number_of_concurrent_privileges(request_with_session):
 def test_invalid_slug(request_with_session):
     with pytest.raises(ValueError, match="Invalid grant"):
         apply_temporary_superuser_access(request_with_session, "  ")
+
+
+def test_get_temporary_superuser_access_handles_missing_user_attribute():
+    request = type("DummyRequest", (), {"session": {}})()
+    result = get_temporary_superuser_access(request)
+    assert result == {}

@@ -8,7 +8,6 @@ from typing import Self
 from uuid import uuid4
 
 import markdown
-import pytz
 from django.conf import settings
 from django.contrib.postgres.fields import ArrayField
 from django.core.exceptions import ValidationError
@@ -39,6 +38,7 @@ from apps.experiments import model_audit_fields
 from apps.experiments.versioning import VersionDetails, VersionField, VersionsMixin, VersionsObjectManagerMixin, differs
 from apps.generics.chips import Chip
 from apps.teams.models import BaseTeamModel, Team
+from apps.teams.utils import current_team
 from apps.utils.models import BaseModel
 from apps.utils.time import seconds_to_human
 from apps.web.meta import absolute_url
@@ -1348,12 +1348,6 @@ class Participant(BaseTeamModel):
         scheduled_messages = []
         for message in messages:
             if as_dict:
-                next_trigger_date = message.next_trigger_date
-                last_triggered_at = message.last_triggered_at
-                if as_timezone:
-                    next_trigger_date = next_trigger_date.astimezone(pytz.timezone(as_timezone))
-                    if last_triggered_at:
-                        last_triggered_at = last_triggered_at.astimezone(pytz.timezone(as_timezone))
                 scheduled_messages.append(message.as_dict(as_timezone=as_timezone))
             else:
                 scheduled_messages.append(message.as_string(as_timezone=as_timezone))
@@ -1598,8 +1592,11 @@ class ExperimentSession(BaseTeamModel):
             use_experiment: The experiment whose data to use. This is useful for multi-bot setups where we want a
             specific child bot to handle the check-in.
         """
-        bot_message = self._bot_prompt_for_user(instruction_prompt=instruction_prompt, use_experiment=use_experiment)
-        self.try_send_message(message=bot_message, fail_silently=fail_silently)
+        with current_team(self.team):
+            bot_message = self._bot_prompt_for_user(
+                instruction_prompt=instruction_prompt, use_experiment=use_experiment
+            )
+            self.try_send_message(message=bot_message, fail_silently=fail_silently)
 
     def _bot_prompt_for_user(self, instruction_prompt: str, use_experiment: Experiment | None = None) -> str:
         """Sends the `instruction_prompt` along with the chat history to the LLM to formulate an appropriate prompt

@@ -17,7 +17,7 @@ class ChatbotTable(tables.Table):
     owner = columns.Column(accessor="owner__username", verbose_name="Created By")
     actions = columns.TemplateColumn(
         template_name="experiments/components/experiment_actions_column.html",
-        extra_context={"type": "chatbots", "use_pipeline_id": True},
+        extra_context={"type": "chatbots"},
     )
 
     class Meta:
@@ -61,4 +61,5 @@ class ChatbotSessionsTable(ExperimentSessionsTable):
             ),
         ],
         align="right",
+        orderable=False,
     )

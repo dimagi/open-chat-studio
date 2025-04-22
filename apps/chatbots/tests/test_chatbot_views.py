@@ -75,7 +75,7 @@ def test_create_chatbot_view(team_with_users):
     assert Experiment.objects.filter(name="My Chatbot", team=team).exists()
     experiment = Experiment.objects.get(name="My Chatbot")
     assert experiment.pipeline is not None
-    expected_url = reverse("chatbots:edit", args=[team.slug, experiment.pipeline.id])
+    expected_url = reverse("chatbots:edit", args=[team.slug, experiment.id])
     assert response.status_code == 302
     assert response.url == expected_url
 

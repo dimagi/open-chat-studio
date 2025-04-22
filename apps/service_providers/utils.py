@@ -139,3 +139,19 @@ def get_llm_provider_choices(team) -> dict[int, dict[str, list[dict[str, Any]]]]
             "supports_assistants": provider.type_enum.supports_assistants,
         }
     return providers
+
+
+def get_first_llm_provider_by_team(team_id):
+    try:
+        return LlmProvider.objects.filter(team_id=team_id).order_by("id").first()
+    except LlmProvider.DoesNotExist:
+        return None
+
+
+def get_first_llm_provider_model(llm_provider, team_id):
+    try:
+        if llm_provider:
+            model = LlmProviderModel.objects.filter(type=llm_provider.type, team_id=team_id).order_by("id").first()
+            return model
+    except LlmProviderModel.DoesNotExist:
+        return None

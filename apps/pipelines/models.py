@@ -14,6 +14,7 @@ from langchain_core.messages import AIMessage, BaseMessage, HumanMessage, System
 from langchain_core.runnables import RunnableConfig
 from pydantic import ConfigDict
 
+from apps.annotations.models import TagCategories
 from apps.chat.models import ChatMessage, ChatMessageType
 from apps.custom_actions.form_utils import set_custom_actions
 from apps.custom_actions.mixins import CustomActionOperationMixin
@@ -99,11 +100,11 @@ class Pipeline(BaseTeamModel, VersionsMixin):
         return f"v{self.version_number}"
 
     @classmethod
-    def create_pipeline_with_name(cls, team, name):
-        return cls.create_default(team, name)
+    def create_default_pipeline_with_name(cls, team, name, llm_provider_id=None, llm_provider_model=None):
+        return cls.create_default(team, name, llm_provider_id, llm_provider_model)
 
     @classmethod
-    def create_default(cls, team, name=None):
+    def create_default(cls, team, name=None, llm_provider_id=None, llm_provider_model=None):
         from apps.pipelines.nodes.nodes import EndNode, StartNode
 
         default_name = "New Pipeline" if name is None else name
@@ -126,10 +127,60 @@ class Pipeline(BaseTeamModel, VersionsMixin):
             position={"x": 1000, "y": 200},
             data=FlowNodeData(id=end_id, type=EndNode.__name__, params={"name": "end"}),
         )
-        default_nodes = [start_node.model_dump(), end_node.model_dump()]
+        if llm_provider_id and llm_provider_model:
+            llm_id = f"LLMResponseWithPrompt-{uuid4().hex[:5]}"
+            llm_node = FlowNode(
+                id=llm_id,
+                type="pipelineNode",
+                position={"x": 300, "y": 0},
+                data=FlowNodeData(
+                    id=llm_id,
+                    type="LLMResponseWithPrompt",
+                    label="LLM",
+                    params={
+                        "name": llm_id,
+                        "llm_provider_id": llm_provider_id,
+                        "llm_provider_model_id": llm_provider_model.id,
+                        "llm_temperature": 0.7,
+                        "history_type": "none",
+                        "history_name": None,
+                        "history_mode": "summarize",
+                        "user_max_token_limit": llm_provider_model.max_token_limit,
+                        "max_history_length": 10,
+                        "source_material_id": None,
+                        "prompt": "You are a helpful assistant. Answer the user's query as best you can.",
+                        "tools": None,
+                        "custom_actions": None,
+                        "keywords": [""],
+                    },
+                ),
+            )
+            edges = [
+                {
+                    "id": f"edge-{start_id}-{llm_id}",
+                    "source": start_id,
+                    "target": llm_id,
+                    "sourceHandle": "output",
+                    "targetHandle": "input",
+                },
+                {
+                    "id": f"edge-{llm_id}-{end_id}",
+                    "source": llm_id,
+                    "target": end_id,
+                    "sourceHandle": "output",
+                    "targetHandle": "input",
+                },
+            ]
+        else:
+            llm_node = None
+            edges = []
+        default_nodes = [start_node.model_dump()]
+        if llm_node:
+            default_nodes.append(llm_node.model_dump())
+        default_nodes.append(end_node.model_dump())
         new_pipeline = cls.objects.create(
             team=team,
-            data={"nodes": default_nodes, "edges": []},
+            data={"nodes": default_nodes, "edges": edges},
             name=default_name if name else f"New Pipeline {existing_pipeline_count + 1}",
         )
         new_pipeline.update_nodes_from_data()
@@ -295,7 +346,11 @@ class Pipeline(BaseTeamModel, VersionsMixin):
                         session, input["messages"][-1], ChatMessageType.HUMAN, metadata=input_metadata
                     )
                 ai_message = self._save_message_to_history(
-                    session, output["messages"][-1], ChatMessageType.AI, metadata=output_metadata
+                    session,
+                    output["messages"][-1],
+                    ChatMessageType.AI,
+                    metadata=output_metadata,
+                    tags=output.get("output_message_tags"),
                 )
                 pipeline_output = ai_message
             else:
@@ -324,7 +379,7 @@ class Pipeline(BaseTeamModel, VersionsMixin):
         )
 
     def _save_message_to_history(
-        self, session: ExperimentSession, message: str, type_: ChatMessageType, metadata: dict
+        self, session: ExperimentSession, message: str, type_: ChatMessageType, metadata: dict, tags: list[str] = None
     ) -> ChatMessage:
         chat_message = ChatMessage.objects.create(
             chat=session.chat, message_type=type_.value, content=message, metadata=metadata
@@ -332,6 +387,9 @@ class Pipeline(BaseTeamModel, VersionsMixin):
 
         if type_ == ChatMessageType.AI:
             chat_message.add_version_tag(version_number=self.version_number, is_a_version=self.is_a_version)
+            if tags:
+                for tag in tags:
+                    chat_message.add_system_tag(tag, TagCategories.BOT_RESPONSE)
         return chat_message
 
     @transaction.atomic()

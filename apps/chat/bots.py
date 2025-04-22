@@ -309,16 +309,17 @@ class EventBot:
         or prompts to help them complete their tasks. The text that you generate will be sent
         to the user in a chat message.
     
-        You should generate the message in same language as the recent message history shown below.
+        You should generate the message in same language as the recent conversation history shown below.
         If there is no history use English.
-    
-        This is the data we have about the user:
-        ```
-        {participant_data}
-        ```
-    
-        The current date and time is: {current_datetime}
+
+        #### Conversation history
         {conversation_history}
+    
+        #### User data
+        {participant_data}
+    
+        #### Current date and time
+        {current_datetime}
         """
     )
 
@@ -347,7 +348,7 @@ class EventBot:
         response = llm.invoke(
             [
                 {"role": "system", "content": self.system_prompt},
-                {"role": "user", "content": f"Generate the message for the user based on this text: {event_prompt}"},
+                {"role": "user", "content": event_prompt},
             ],
             config=config,
         )

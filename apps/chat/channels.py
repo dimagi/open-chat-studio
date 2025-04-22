@@ -42,6 +42,7 @@ from apps.service_providers.llm_service.history_managers import ExperimentHistor
 from apps.service_providers.llm_service.runnables import GenerationCancelled
 from apps.service_providers.speech_service import SynthesizedAudio
 from apps.slack.utils import parse_session_external_id
+from apps.teams.utils import current_team
 from apps.users.models import CustomUser
 
 if TYPE_CHECKING:
@@ -51,8 +52,7 @@ logger = logging.getLogger("ocs.channels")
 
 USER_CONSENT_TEXT = "1"
 UNSUPPORTED_MESSAGE_BOT_PROMPT = """
-Tell the user (in the language being spoken) that they sent an unsupported message.
-You only support {supported_types} messages types. Respond only with the message for the user
+Tell the user that they sent an unsupported message. You only support {supported_types} messages types.
 """
 DEFAULT_ERROR_RESPONSE_TEXT = "Sorry, something went wrong while processing your message. Please try again later"
 
@@ -141,6 +141,7 @@ class ChannelBase(ABC):
         session_status: SessionStatus = SessionStatus.ACTIVE,
         timezone: str | None = None,
         session_external_id: str | None = None,
+        metadata: dict | None = None,
     ):
         return _start_experiment_session(
             working_experiment,
@@ -150,6 +151,7 @@ class ChannelBase(ABC):
             session_status,
             timezone,
             session_external_id,
+            metadata,
         )
 
     @property
@@ -328,11 +330,12 @@ class ChannelBase(ABC):
         """Handles the message coming from the user. Call this to send bot messages to the user.
         The `message` here will probably be some object, depending on the channel being used.
         """
-        self._is_user_message = True
-        try:
-            return self._new_user_message(message)
-        except GenerationCancelled:
-            return ""
+        with current_team(self.experiment.team):
+            self._is_user_message = True
+            try:
+                return self._new_user_message(message)
+            except GenerationCancelled:
+                return ChatMessage(content="", message_type=ChatMessageType.AI)
 
     def _participant_is_allowed(self):
         if self.experiment.is_public:
@@ -682,7 +685,7 @@ class ChannelBase(ABC):
         try:
             bot_message = EventBot(self.experiment_session, self.experiment).get_user_message(
                 "Tell the user that something went wrong while processing their message and that they should "
-                "try again later. Do this in the language they are speaking in."
+                "try again later."
             )
         except Exception:  # noqa BLE001
             logger.exception("Something went wrong while trying to generate an appropriate error message for the user")
@@ -738,10 +741,17 @@ class WebChannel(ChannelBase):
         session_status: SessionStatus = SessionStatus.ACTIVE,
         timezone: str | None = None,
         version: int = Experiment.DEFAULT_VERSION_NUMBER,
+        metadata: dict | None = None,
     ):
         experiment_channel = ExperimentChannel.objects.get_team_web_channel(working_experiment.team)
         session = super().start_new_session(
-            working_experiment, experiment_channel, participant_identifier, participant_user, session_status, timezone
+            working_experiment,
+            experiment_channel,
+            participant_identifier,
+            participant_user,
+            session_status,
+            timezone,
+            metadata=metadata,
         )
 
         try:
@@ -1048,6 +1058,7 @@ def _start_experiment_session(
     session_status: SessionStatus = SessionStatus.ACTIVE,
     timezone: str | None = None,
     session_external_id: str | None = None,
+    metadata: dict | None = None,
 ) -> ExperimentSession:
     if working_experiment.is_a_version:
         raise VersionedExperimentSessionsNotAllowedException(
@@ -1073,6 +1084,12 @@ def _start_experiment_session(
             participant.user = participant_user
             participant.save()
 
+        chat = Chat.objects.create(
+            team=team,
+            name=f"{participant_identifier} - {experiment_channel.name}",
+            metadata=metadata or {},
+        )
+
         session = ExperimentSession.objects.create(
             team=team,
             experiment=working_experiment,
@@ -1080,6 +1097,7 @@ def _start_experiment_session(
             status=session_status,
             participant=participant,
             external_id=session_external_id,
+            chat=chat,
         )
 
         # Record the participant's timezone

@@ -6,6 +6,7 @@ from celery_progress.backend import Progress
 from django.contrib import messages
 from django.contrib.auth.decorators import permission_required
 from django.contrib.auth.mixins import PermissionRequiredMixin
+from django.db import transaction
 from django.db.models import Count, QuerySet, Subquery
 from django.http import Http404, HttpResponse, JsonResponse
 from django.shortcuts import get_object_or_404, redirect, render
@@ -32,6 +33,7 @@ from apps.teams.decorators import login_and_team_required
 from apps.teams.mixins import LoginAndTeamRequiredMixin
 from apps.teams.models import Flag
 
+from ..experiments.helpers import update_experiment_name_by_pipeline_id
 from ..generics.chips import Chip
 from ..generics.help import render_help_with_link
 
@@ -85,10 +87,11 @@ class EditPipeline(LoginAndTeamRequiredMixin, TemplateView, PermissionRequiredMi
         llm_providers = LlmProvider.objects.filter(team=self.request.team).values("id", "name", "type").all()
         llm_provider_models = LlmProviderModel.objects.for_team(self.request.team).all()
         ui_feature_flags = ["document_management"]
-
+        pipeline = Pipeline.objects.get(id=kwargs["pk"], team=self.request.team)
         return {
             **data,
             "pipeline_id": kwargs["pk"],
+            "pipeline_name": pipeline.name,
             "node_schemas": _pipeline_node_schemas(),
             "parameter_values": _pipeline_node_parameter_values(self.request.team, llm_providers, llm_provider_models),
             "default_values": _pipeline_node_default_values(llm_providers, llm_provider_models),
@@ -132,9 +135,9 @@ class DeletePipeline(LoginAndTeamRequiredMixin, View, PermissionRequiredMixin):
 
 def _pipeline_node_parameter_values(team, llm_providers, llm_provider_models):
     """Returns the possible values for each input type"""
-    source_materials = SourceMaterial.objects.filter(team=team).values("id", "topic").all()
+    source_materials = SourceMaterial.objects.working_versions_queryset().filter(team=team).values("id", "topic").all()
     assistants = OpenAiAssistant.objects.working_versions_queryset().filter(team=team).values("id", "name").all()
-    collections = Collection.objects.filter(team=team, is_version=False).values("id", "name").all()
+    collections = Collection.objects.working_versions_queryset().filter(team=team).values("id", "name").all()
 
     def _option(value, label, type_=None, edit_url: str | None = None, max_token_limit=None):
         data = {"value": value, "label": label}
@@ -240,13 +243,16 @@ def _get_node_schema(node_class):
 @csrf_exempt
 def pipeline_data(request, team_slug: str, pk: int):
     if request.method == "POST":
-        pipeline = get_object_or_404(Pipeline.objects.prefetch_related("node_set"), pk=pk, team=request.team)
-        data = FlowPipelineData.model_validate_json(request.body)
-        pipeline.name = data.name
-        pipeline.data = data.data.model_dump()
-        pipeline.save()
-        pipeline.update_nodes_from_data()
-        pipeline.refresh_from_db(fields=["node_set"])
+        with transaction.atomic():
+            pipeline = get_object_or_404(Pipeline.objects.prefetch_related("node_set"), pk=pk, team=request.team)
+            data = FlowPipelineData.model_validate_json(request.body)
+            pipeline.name = data.name
+            pipeline.data = data.data.model_dump()
+            pipeline.save()
+            pipeline.update_nodes_from_data()
+            pipeline.refresh_from_db(fields=["node_set"])
+            if getattr(data, "experiment_name", None):
+                update_experiment_name_by_pipeline_id(pk, data.experiment_name)
         return JsonResponse({"data": pipeline.flow_data, "errors": pipeline.validate()})
 
     try:

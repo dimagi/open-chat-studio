@@ -4,6 +4,7 @@ import OverlayPanel from "../components/OverlayPanel";
 import {classNames, getCachedData} from "../utils";
 import usePipelineStore from "../stores/pipelineStore";
 import {getWidgets} from "../nodes/GetInputWidget";
+import {produce} from "immer"
 
 export default function EditPanel({nodeId}: { nodeId: string }) {
   const closeEditor = useEditorStore((state) => state.closeEditor);
@@ -20,22 +21,19 @@ export default function EditPanel({nodeId}: { nodeId: string }) {
   const updateParamValue = (
     event: ChangeEvent<HTMLTextAreaElement | HTMLSelectElement | HTMLInputElement>,
   ) => {
-    const {name, value} = event.target;
+    const {name, type} = event.target;
+    const value = type === 'checkbox' ? (event.target as HTMLInputElement).checked : event.target.value;
     if (!schemaProperties.includes(name)) {
       console.warn(`Unknown parameter: ${name}`);
       return;
     }
-    setNode(id!, (old) => ({
-      ...old,
-      data: {
-        ...old.data,
-        params: {
-          ...old.data.params,
-          [name]: value
-        },
-      },
-    }));
-  };
+    setNode(
+    id!,
+    produce((next) => {
+      next.data.params[name] = value;
+    })
+  );
+};
 
   const toggleExpand = () => {
     setExpanded(!expanded);
