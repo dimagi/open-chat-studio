@@ -1,5 +1,7 @@
 @import "tailwindcss";
-@plugin "daisyui";
+@plugin "daisyui" {
+  themes: light --default, dark --prefersdark, cupcake;
+}
 
 @import './app/chat.css';
 @import './app/table.css' layer(components);

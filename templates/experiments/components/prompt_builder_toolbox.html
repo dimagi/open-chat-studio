@@ -1,5 +1,5 @@
 <div x-data="{ tab: 'first' }" x-on:submit-conversation.window="$refs.submitButton.click()">
-    <div class="tabs tabs-bordered" role="tablist">
+    <div class="tabs tabs-border" role="tablist">
         <a class="tab tab-active" :class="{ 'tab-active': tab === 'first' }" @click="tab = 'first'">Prompt
             details</a>
         <a class="tab" :class="{ 'tab-active': tab === 'second' }" @click="tab = 'second'">Model
