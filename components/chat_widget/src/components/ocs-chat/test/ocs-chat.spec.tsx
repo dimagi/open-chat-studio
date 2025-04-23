@@ -91,7 +91,7 @@ describe('open-chat-studio-widget', () => {
                 </button>
               </div>
             </div>
-            <iframe class="grow w-full border-none iframe-placeholder"></iframe>
+            <iframe class="flex-grow w-full border-none iframe-placeholder"></iframe>
           </div>
         </mock:shadow-root>
       </open-chat-studio-widget>
@@ -173,7 +173,7 @@ describe('open-chat-studio-widget', () => {
                 </button>
               </div>
             </div>
-            <iframe class="grow w-full border-none iframe-placeholder" src="https://localhost"></iframe>
+            <iframe class="flex-grow w-full border-none iframe-placeholder" src="https://localhost"></iframe>
           </div>
         </mock:shadow-root>
       </open-chat-studio-widget>

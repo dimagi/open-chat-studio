@@ -160,7 +160,7 @@ export class OcsChat {
             </div>
             {this.loaded && (
               <iframe
-                class="grow w-full border-none iframe-placeholder"
+                class="flex-grow w-full border-none iframe-placeholder"
                 src={this.botUrl}
               ></iframe>
             )}
