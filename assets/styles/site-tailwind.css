@@ -1,6 +1,11 @@
 @import "tailwindcss";
 @plugin "daisyui" {
-  themes: light --default, dark --prefersdark, cupcake;
+  themes: light --default, dark --prefersdark;
+}
+
+@plugin "daisyui/theme" {
+  name: "dark";
+  --color-base-content: oklch(0.746477 0.0216 264.436);
 }
 
 @import './app/chat.css';
@@ -147,4 +152,8 @@ input[type=number]::-webkit-outer-spin-button {
 
 .badge-neutral {
   @apply border-none rounded-md
+}
+
+.menu-active {
+  background-color: oklch(0.313815 0.021108 254.139);
 }
