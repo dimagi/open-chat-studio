@@ -286,7 +286,7 @@ def test_conditional_node(pipeline, experiment_session):
     assert output["messages"][-1] == "said hello"
     assert output["outputs"] == {
         start["id"]: {"message": "hello"},
-        boolean["id"]: {"message": "hello", "output_handle": "output_0", "route_node_id": template_true["id"]},
+        boolean["id"]: {"message": "hello", "output_handle": "output_0"},
         template_true["id"]: {"message": "said hello"},
         end["id"]: {"message": "said hello"},
     }
@@ -295,7 +295,7 @@ def test_conditional_node(pipeline, experiment_session):
     assert output["messages"][-1] == "didn't say hello, said bad"
     assert output["outputs"] == {
         start["id"]: {"message": "bad"},
-        boolean["id"]: {"message": "bad", "output_handle": "output_1", "route_node_id": template_false["id"]},
+        boolean["id"]: {"message": "bad", "output_handle": "output_1"},
         template_false["id"]: {"message": "didn't say hello, said bad"},
         end["id"]: {"message": "didn't say hello, said bad"},
     }
@@ -1127,7 +1127,7 @@ def test_input_with_format_strings():
         pipeline_version=1,
         temp_state={},
     )
-    resp = Passthrough(name="test").process("node_id", [], state, {})
+    resp = Passthrough(name="test").process("node_id", [], [], state, {})
 
     assert resp["messages"] == ["Is this it {the thing}"]
 
