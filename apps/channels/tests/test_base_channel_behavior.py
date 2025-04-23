@@ -12,6 +12,7 @@ from django.test import override_settings
 from apps.channels.models import ChannelPlatform, ExperimentChannel
 from apps.chat.channels import (
     DEFAULT_ERROR_RESPONSE_TEXT,
+    MESSAGE_TYPES,
     URL_REGEX,
     ChannelBase,
     TelegramChannel,
@@ -39,19 +40,26 @@ from .message_examples import telegram_messages
 
 
 class TestChannel(ChannelBase):
-    def send_text_to_user(self):
-        pass
+    voice_replies_supported = True
+    supported_message_types = [MESSAGE_TYPES.TEXT, MESSAGE_TYPES.VOICE]
 
-    def send_voice_to_user(self, *args, **kwargs):
-        pass
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        self.text_sent = []
+        self.voice_sent = []
+
+    def send_text_to_user(self, text: str):
+        self.text_sent.append(text)
+
+    def send_voice_to_user(self, synthetic_voice):
+        self.voice_sent.append(synthetic_voice)
 
 
 @pytest.fixture()
 def telegram_channel(db):
     experiment = ExperimentFactory(conversational_consent_enabled=False)
     channel = ExperimentChannelFactory(experiment=experiment)
-    channel = TelegramChannel(experiment=experiment, experiment_channel=channel)
-    channel.telegram_bot = Mock()
+    channel = TestChannel(experiment=experiment, experiment_channel=channel)
     return channel
 
 
@@ -360,10 +368,10 @@ def test_unsupported_message_type_triggers_bot_response(send_text_to_user, _unsu
         (VoiceResponseBehaviours.RECIPROCAL, telegram_messages.audio_message(), True),
     ],
 )
-@patch("apps.chat.channels.TelegramChannel._get_voice_transcript")
-@patch("apps.chat.channels.TelegramChannel.send_text_to_user")
-@patch("apps.chat.channels.TelegramChannel._reply_voice_message")
-@patch("apps.chat.channels.TelegramChannel._get_bot_response")
+@patch("apps.channels.tests.test_base_channel_behavior.TestChannel._get_voice_transcript")
+@patch("apps.channels.tests.test_base_channel_behavior.TestChannel.send_text_to_user")
+@patch("apps.channels.tests.test_base_channel_behavior.TestChannel._reply_voice_message")
+@patch("apps.channels.tests.test_base_channel_behavior.TestChannel._get_bot_response")
 def test_voice_response_behaviour(
     get_llm_response,
     _reply_voice_message,
@@ -395,8 +403,8 @@ def test_voice_response_behaviour(
         (VoiceResponseBehaviours.RECIPROCAL, True),
     ],
 )
-@patch("apps.chat.channels.TelegramChannel.send_text_to_user")
-@patch("apps.chat.channels.TelegramChannel._reply_voice_message")
+@patch("apps.channels.tests.test_base_channel_behavior.TestChannel.send_text_to_user")
+@patch("apps.channels.tests.test_base_channel_behavior.TestChannel._reply_voice_message")
 @patch("apps.chat.bots.EventBot.get_user_message")
 def test_failed_transcription_informs_the_user(
     _get_user_message,
@@ -414,7 +422,10 @@ def test_failed_transcription_informs_the_user(
     experiment.save()
 
     with pytest.raises(Exception, match="Nope"):
-        with patch("apps.chat.channels.TelegramChannel._get_voice_transcript", side_effect=Exception("Nope")):
+        with patch(
+            "apps.channels.tests.test_base_channel_behavior.TestChannel._get_voice_transcript",
+            side_effect=Exception("Nope"),
+        ):
             telegram_channel.new_user_message(telegram_messages.audio_message())
 
     assert _reply_voice_message.called == voice_response_expected
@@ -423,8 +434,8 @@ def test_failed_transcription_informs_the_user(
 
 @pytest.mark.django_db()
 @patch("apps.chat.bots.EventBot.get_user_message")
-@patch("apps.chat.channels.TelegramChannel.send_message_to_user")
-@patch("apps.chat.channels.TelegramChannel.is_message_type_supported")
+@patch("apps.channels.tests.test_base_channel_behavior.TestChannel.send_message_to_user")
+@patch("apps.channels.tests.test_base_channel_behavior.TestChannel.is_message_type_supported")
 def test_any_failure_informs_users(
     is_message_type_supported, send_message_to_user, _get_user_message, telegram_channel, caplog
 ):
@@ -448,10 +459,10 @@ def test_any_failure_informs_users(
 
 
 @pytest.mark.django_db()
-@patch("apps.chat.channels.TelegramChannel._get_voice_transcript")
-@patch("apps.chat.channels.TelegramChannel.send_text_to_user")
-@patch("apps.chat.channels.TelegramChannel._reply_voice_message")
-@patch("apps.chat.channels.TelegramChannel._get_bot_response")
+@patch("apps.channels.tests.test_base_channel_behavior.TestChannel._get_voice_transcript")
+@patch("apps.channels.tests.test_base_channel_behavior.TestChannel.send_text_to_user")
+@patch("apps.channels.tests.test_base_channel_behavior.TestChannel._reply_voice_message")
+@patch("apps.channels.tests.test_base_channel_behavior.TestChannel._get_bot_response")
 def test_reply_with_text_when_synthetic_voice_not_specified(
     get_llm_response,
     _reply_voice_message,
@@ -654,10 +665,10 @@ def test_url_regex():
 
 @pytest.mark.django_db()
 @patch("apps.service_providers.models.VoiceProvider.get_speech_service")
-@patch("apps.chat.channels.TelegramChannel._get_voice_transcript")
-@patch("apps.chat.channels.TelegramChannel.send_text_to_user")
-@patch("apps.chat.channels.TelegramChannel.send_voice_to_user")
-@patch("apps.chat.channels.TelegramChannel._get_bot_response")
+@patch("apps.channels.tests.test_base_channel_behavior.TestChannel._get_voice_transcript")
+@patch("apps.channels.tests.test_base_channel_behavior.TestChannel.send_text_to_user")
+@patch("apps.channels.tests.test_base_channel_behavior.TestChannel.send_voice_to_user")
+@patch("apps.channels.tests.test_base_channel_behavior.TestChannel._get_bot_response")
 def test_voice_response_with_urls(
     get_llm_response,
     send_voice_to_user,
@@ -706,7 +717,6 @@ def test_processor_bot_voice_setting(
     child_bot_has_voice,
     router_bot_has_voice,
     expected_voice,
-    telegram_channel,
 ):
     session = ExperimentSessionFactory()
     team = session.team
@@ -844,7 +854,7 @@ def test_send_message_to_user_with_multibot(
         (["11111"], False, "someone@test.com", True),
     ],
 )
-@patch("apps.chat.channels.TelegramChannel.send_text_to_user")
+@patch("apps.channels.tests.test_base_channel_behavior.TestChannel.send_text_to_user")
 def test_participant_authorization(
     send_text_to_user, whitelist, is_external_user, identifier, is_allowed, telegram_channel
 ):
