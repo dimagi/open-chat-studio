@@ -16,3 +16,4 @@ urlpatterns = [
 ]
 
 urlpatterns.extend(make_crud_urls(views, "Evaluation", delete=False))
+urlpatterns.extend(make_crud_urls(views, "Evaluator", prefix="evaluator", delete=False))

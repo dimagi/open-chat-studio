@@ -162,6 +162,15 @@
         <i class="fa-solid fa-chart-simple"></i>
         {% translate "Evaluations" %}<span class="badge badge-sm">new!</span>
       </a>
+      <ul>
+        <li>
+          <a href="{% url 'evaluations:evaluator_home' request.team.slug %}"
+             {% if active_tab == 'evaluators' %}class="active"{% endif %}>
+            <i class="fa fa-clipboard-check fa-fw"></i>
+            {% translate "Evaluators" %}
+          </a>
+        </li>
+      </ul>
     </li>
   {% endflag %}
 {% endif %}
