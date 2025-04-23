@@ -1,18 +1,17 @@
 from django import forms
 
 from apps.evaluations.models import EvaluationConfig, EvaluationDataset, Evaluator
-from apps.experiments.models import Experiment, ExperimentSession
+from apps.experiments.models import ExperimentSession
 
 
 class EvaluationConfigForm(forms.ModelForm):
     class Meta:
         model = EvaluationConfig
-        fields = ("name", "experiment", "evaluators")
+        fields = ("name", "evaluators")
 
     def __init__(self, team, *args, **kwargs):
         super().__init__(*args, **kwargs)
         self.team = team
-        self.fields["experiment"].queryset = Experiment.objects.filter(team=team)
 
 
 class EvaluatorForm(forms.ModelForm):
@@ -28,12 +27,11 @@ class EvaluatorForm(forms.ModelForm):
 class EvaluationDatasetForm(forms.ModelForm):
     class Meta:
         model = EvaluationDataset
-        fields = ("message_type", "version", "sessions")
+        fields = ("message_type", "sessions")
 
     def __init__(self, team, *args, **kwargs):
         super().__init__(*args, **kwargs)
         self.team = team
 
-        # TODO Filter sessions by version?
-        self.fields["version"].queryset = Experiment.objects.filter(team=team)
+        # TODO Filter sessions by experiment
         self.fields["sessions"].queryset = ExperimentSession.objects.filter(team=team)
