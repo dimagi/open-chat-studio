@@ -13,6 +13,7 @@ import requests
 from django.db import transaction
 from django.http import Http404
 from telebot import TeleBot
+from telebot.apihelper import ApiTelegramException
 from telebot.util import antiflood, smart_split
 
 from apps.channels import audio
@@ -209,6 +210,13 @@ class ChannelBase(ABC):
     def participant_user(self):
         if self.experiment_session:
             return self.experiment_session.participant.user
+
+    @cached_property
+    def participant_data(self) -> ParticipantData:
+        experiment = self.experiment
+        if self.experiment.is_a_version:
+            experiment = self.experiment.working_version
+        return experiment.participantdata_set.defer("data").get(participant__identifier=self.participant_identifier)
 
     def send_voice_to_user(self, synthetic_voice: SynthesizedAudio):
         raise NotImplementedError(
@@ -721,6 +729,20 @@ class ChannelBase(ABC):
 
         return supported_files, unsupported_files
 
+    def _check_consent(self, strict=True):
+        # This is a failsafe, checks should also happen earlier in the process
+        if self.experiment_session:
+            try:
+                participant_data = self.participant_data
+            except ParticipantData.DoesNotExist:
+                if strict:
+                    raise ChannelException("Participant has not given consent to chat") from None
+                else:
+                    return
+
+            if not participant_data.system_metadata.get("consent", False):
+                raise ChannelException("Participant has not given consent to chat")
+
 
 class WebChannel(ChannelBase):
     """Message Handler for the UI"""
@@ -795,24 +817,45 @@ class TelegramChannel(ChannelBase):
         experiment_session: ExperimentSession | None = None,
     ):
         super().__init__(experiment, experiment_channel, experiment_session)
+        self._check_consent(strict=False)
         self.telegram_bot = TeleBot(self.experiment_channel.extra_data["bot_token"], threaded=False)
 
     def send_voice_to_user(self, synthetic_voice: SynthesizedAudio):
-        antiflood(
-            self.telegram_bot.send_voice,
-            self.participant_identifier,
-            voice=synthetic_voice.audio,
-            duration=synthetic_voice.duration,
-        )
+        self._check_consent(strict=False)
+        try:
+            antiflood(
+                self.telegram_bot.send_voice,
+                self.participant_identifier,
+                voice=synthetic_voice.audio,
+                duration=synthetic_voice.duration,
+            )
+        except ApiTelegramException as e:
+            self._handle_telegram_api_error(e)
 
     def send_text_to_user(self, text: str):
-        for message_text in smart_split(text):
-            antiflood(self.telegram_bot.send_message, self.participant_identifier, text=message_text)
+        self._check_consent(strict=False)
+        try:
+            for message_text in smart_split(text):
+                antiflood(self.telegram_bot.send_message, self.participant_identifier, text=message_text)
+        except ApiTelegramException as e:
+            self._handle_telegram_api_error(e)
 
     def get_message_audio(self) -> BytesIO:
         file_url = self.telegram_bot.get_file_url(self.message.media_id)
         ogg_audio = BytesIO(requests.get(file_url).content)
         return audio.convert_audio(ogg_audio, target_format="wav", source_format="ogg")
+
+    def _handle_telegram_api_error(self, e: ApiTelegramException):
+        if e.error_code == 403 and "bot was blocked by the user" in e.description:
+            try:
+                participant_data = self.participant_data
+                participant_data.update_consent(False)
+            except ParticipantData.DoesNotExist:
+                raise ChannelException("Participant data does not exist during consent update") from e
+            except Exception:
+                raise ChannelException(f"Unable to update consent for participant {self.participant_identifier}")
+        else:
+            raise ChannelException(f"Telegram API error occurred: {e.description}") from e
 
     # Callbacks
 
@@ -1010,20 +1053,6 @@ class CommCareConnectChannel(ChannelBase):
         self._check_consent(strict=False)
         self.client = CommCareConnectClient()
 
-    def _check_consent(self, strict=True):
-        # This is a failsafe, checks should also happen earlier in the process
-        if self.experiment_session:
-            try:
-                participant_data = self.participant_data
-            except ParticipantData.DoesNotExist:
-                if strict:
-                    raise ChannelException("Participant has not given consent to chat") from None
-                else:
-                    return
-
-            if not participant_data.system_metadata.get("consent", False):
-                raise ChannelException("Participant has not given consent to chat")
-
     def _ensure_sessions_exists(self):
         super()._ensure_sessions_exists()
         self._check_consent()
@@ -1033,13 +1062,6 @@ class CommCareConnectChannel(ChannelBase):
         self.client.send_message_to_user(
             channel_id=self.connect_channel_id, message=text, encryption_key=self.encryption_key
         )
-
-    @cached_property
-    def participant_data(self) -> ParticipantData:
-        experiment = self.experiment
-        if self.experiment.is_a_version:
-            experiment = self.experiment.working_version
-        return experiment.participantdata_set.defer("data").get(participant__identifier=self.participant_identifier)
 
     @cached_property
     def connect_channel_id(self) -> str:
