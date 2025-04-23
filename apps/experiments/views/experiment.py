@@ -53,7 +53,7 @@ from apps.experiments.decorators import (
 )
 from apps.experiments.email import send_chat_link_email, send_experiment_invitation
 from apps.experiments.exceptions import ChannelAlreadyUtilizedException
-from apps.experiments.filters import apply_dynamic_filters
+from apps.experiments.filters import FIELD_TYPE_FILTERS, apply_dynamic_filters
 from apps.experiments.forms import (
     ConsentForm,
     ExperimentForm,
@@ -494,6 +494,7 @@ def base_single_experiment_view(request, team_slug, experiment_id, template_name
         "available_tags": [tag.name for tag in experiment.team.tag_set.filter(is_system_tag=False)],
         "experiment_versions": experiment.get_version_name_list(),
         "deployed_version": deployed_version,
+        "field_type_filters": FIELD_TYPE_FILTERS,
         **_get_events_context(experiment, team_slug, request.origin),
     }
     if active_tab != "chatbots":
