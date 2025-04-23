@@ -36,7 +36,7 @@ from apps.utils.factories.team import MembershipFactory
 from apps.utils.langchain import build_fake_llm_service, mock_llm
 
 from ..datamodels import BaseMessage
-from .message_examples import telegram_messages
+from .message_examples import base_messages
 
 
 class TestChannel(ChannelBase):
@@ -75,8 +75,8 @@ def test_incoming_message_adds_channel_info(test_channel):
     `experiment_channel` should also be added to the `experiment_session`
     """
 
-    chat_id = 123123
-    message = telegram_messages.text_message(chat_id=chat_id)
+    chat_id = "123123"
+    message = base_messages.text_message(participant_id=chat_id)
     _send_user_message_on_channel(test_channel, message)
 
     experiment_session = ExperimentSession.objects.filter(
@@ -89,8 +89,8 @@ def test_incoming_message_adds_channel_info(test_channel):
 @pytest.mark.django_db()
 def test_channel_added_for_experiment_session(test_channel):
     """Ensure that the experiment session gets a link to the experimentt channel that this is using"""
-    chat_id = 123123
-    message = telegram_messages.text_message(chat_id=chat_id)
+    chat_id = "123123"
+    message = base_messages.text_message(participant_id=chat_id)
     _send_user_message_on_channel(test_channel, message)
     participant = Participant.objects.get(identifier=chat_id)
     experiment_session = participant.experimentsession_set.first()
@@ -100,11 +100,11 @@ def test_channel_added_for_experiment_session(test_channel):
 @pytest.mark.django_db()
 def test_incoming_message_uses_existing_experiment_session(test_channel):
     """Approach: Simulate messages coming in after one another in order to test this behaviour"""
-    chat_id = 12312331
+    chat_id = "12312331"
     experiment = test_channel.experiment
 
     # First message
-    message = telegram_messages.text_message(chat_id=chat_id)
+    message = base_messages.text_message(participant_id=chat_id)
     _send_user_message_on_channel(test_channel, message)
 
     # Let's find the session it created
@@ -134,10 +134,10 @@ def test_non_active_sessions_are_not_resused(test_channel):
     Sessions that were ended should not be reused when the user sends a new message. Rather, a new session should be
     created
     """
-    chat_id = 12312331
+    participant_id = "12312331"
     experiment = test_channel.experiment
 
-    message = telegram_messages.text_message(chat_id=chat_id)
+    message = base_messages.text_message(participant_id=participant_id)
     _send_user_message_on_channel(test_channel, message)
     # End the session. This could have been done using a timeout trigger for instance
     test_channel.experiment_session.end()
@@ -146,19 +146,22 @@ def test_non_active_sessions_are_not_resused(test_channel):
     test_channel.experiment_session = None
 
     # When the user sends another message, a new session should be created
-    message = telegram_messages.text_message(chat_id=chat_id)
+    message = base_messages.text_message(participant_id=participant_id)
     _send_user_message_on_channel(test_channel, message)
-    assert experiment.sessions.filter(participant__identifier=chat_id, status=SessionStatus.ACTIVE).count() == 1
-    assert experiment.sessions.filter(participant__identifier=chat_id, status=SessionStatus.PENDING_REVIEW).count() == 1
+    assert experiment.sessions.filter(participant__identifier=participant_id, status=SessionStatus.ACTIVE).count() == 1
+    assert (
+        experiment.sessions.filter(participant__identifier=participant_id, status=SessionStatus.PENDING_REVIEW).count()
+        == 1
+    )
 
 
 @pytest.mark.django_db()
 def test_different_sessions_created_for_different_users(test_channel):
-    user_1_chat_id = 00000
-    user_2_chat_id = 11111
+    user_1_chat_id = "00000"
+    user_2_chat_id = "11111"
 
     # First user's message
-    user_1_message = telegram_messages.text_message(chat_id=user_1_chat_id)
+    user_1_message = base_messages.text_message(participant_id=user_1_chat_id)
     _send_user_message_on_channel(test_channel, user_1_message)
 
     # Calling new_user_message added an experiment_session, so we should remove it before reusing the instance
@@ -166,7 +169,7 @@ def test_different_sessions_created_for_different_users(test_channel):
     test_channel._participant_identifier = None
 
     # Second user's message
-    user_2_message = telegram_messages.text_message(chat_id=user_2_chat_id)
+    user_2_message = base_messages.text_message(participant_id=user_2_chat_id)
     _send_user_message_on_channel(test_channel, user_2_message)
 
     # Assertions
@@ -178,8 +181,8 @@ def test_different_sessions_created_for_different_users(test_channel):
 
 @pytest.mark.django_db()
 def test_different_participants_created_for_same_user_in_different_teams():
-    chat_id = 00000
-    user_message = telegram_messages.text_message(chat_id=chat_id)
+    chat_id = "00000"
+    user_message = base_messages.text_message(participant_id=chat_id)
 
     experiment1 = ExperimentFactory()
     exp_channel1 = ExperimentChannelFactory(experiment=experiment1)
@@ -206,14 +209,14 @@ def test_different_participants_created_for_same_user_in_different_teams():
 @pytest.mark.parametrize("user_input", ["/reset", "/Reset", "/RESET", " /reset "])
 def test_reset_command_creates_new_experiment_session(user_input, test_channel):
     """The reset command should create a new session when the user conversed with the bot"""
-    telegram_chat_id = 00000
-    normal_message = telegram_messages.text_message(chat_id=telegram_chat_id)
+    participant_id = "123"
+    normal_message = base_messages.text_message(participant_id=participant_id)
 
     _send_user_message_on_channel(test_channel, normal_message)
 
-    reset_message = telegram_messages.text_message(chat_id=telegram_chat_id, message_text=user_input)
+    reset_message = base_messages.text_message(participant_id=participant_id, message_text=user_input)
     test_channel.new_user_message(reset_message)
-    sessions = ExperimentSession.objects.for_chat_id(telegram_chat_id).order_by("created_at").all()
+    sessions = ExperimentSession.objects.for_chat_id(participant_id).order_by("created_at").all()
     assert len(sessions) == 2
     new_session = sessions[0]
     old_session = sessions[1]
@@ -225,15 +228,15 @@ def test_reset_command_creates_new_experiment_session(user_input, test_channel):
 @patch("apps.chat.bots.TopicBot._call_predict", return_value="OK")
 def test_reset_conversation_does_not_create_new_session(_call_predict, test_channel):
     """The reset command should not create a new session when the user haven't conversed with the bot yet"""
-    telegram_chat_id = 00000
+    participant_id = "123"
 
-    message1 = telegram_messages.text_message(chat_id=telegram_chat_id, message_text=ExperimentChannel.RESET_COMMAND)
+    message1 = base_messages.text_message(participant_id=participant_id, message_text=ExperimentChannel.RESET_COMMAND)
     _send_user_message_on_channel(test_channel, message1)
 
-    message2 = telegram_messages.text_message(chat_id=telegram_chat_id, message_text=ExperimentChannel.RESET_COMMAND)
+    message2 = base_messages.text_message(participant_id=participant_id, message_text=ExperimentChannel.RESET_COMMAND)
     _send_user_message_on_channel(test_channel, message2)
 
-    sessions = ExperimentSession.objects.for_chat_id(telegram_chat_id).all()
+    sessions = ExperimentSession.objects.for_chat_id(participant_id).all()
     assert len(sessions) == 1
     # The reset command should not be saved in the history
     assert sessions[0].chat.get_langchain_messages() == []
@@ -258,13 +261,12 @@ def test_pre_conversation_flow(_send_seed_message):
     assert pre_survey
 
     def _user_message(message: str):
-        message = telegram_messages.text_message(chat_id=telegram_chat_id, message_text=message)
+        message = base_messages.text_message(message_text=message)
         channel.new_user_message(message)
 
     experiment = channel.experiment
     experiment.seed_message = "Hi human"
     experiment.save()
-    telegram_chat_id = "123"
 
     _user_message("Hi")
     chat = channel.experiment_session.chat
@@ -306,16 +308,13 @@ def test_unsupported_message_type_creates_ai_message():
     experiment = ExperimentFactory(conversational_consent_enabled=True)
     channel = TestChannel(experiment, ExperimentChannelFactory(experiment=experiment))
     assert channel.experiment_session is None
-    telegram_chat_id = "123"
-
     with mock_llm(["error"]):
-        channel.new_user_message(telegram_messages.photo_message(telegram_chat_id))
+        channel.new_user_message(base_messages.unsupported_content_type_message())
     assert channel.experiment_session is not None
 
     channel.experiment_session.refresh_from_db()
     message = channel.experiment_session.chat.messages.first()
     assert message.message_type == ChatMessageType.AI
-    assert channel.message.content_type_unparsed == "photo"
 
 
 @pytest.mark.django_db()
@@ -326,9 +325,8 @@ def test_unsupported_message_type_triggers_bot_response(_unsupported_message_typ
     experiment = ExperimentFactory(conversational_consent_enabled=True)
     channel = TestChannel(experiment, ExperimentChannelFactory(experiment=experiment))
     assert channel.experiment_session is None
-    telegram_chat_id = "123"
 
-    channel.new_user_message(telegram_messages.photo_message(telegram_chat_id))
+    channel.new_user_message(base_messages.unsupported_content_type_message())
     assert channel.experiment_session is not None
     assert channel.text_sent == [bot_response]
 
@@ -337,12 +335,12 @@ def test_unsupported_message_type_triggers_bot_response(_unsupported_message_typ
 @pytest.mark.parametrize(
     ("voice_behaviour", "user_message", "voice_response_expected"),
     [
-        (VoiceResponseBehaviours.ALWAYS, telegram_messages.text_message(), True),
-        (VoiceResponseBehaviours.ALWAYS, telegram_messages.audio_message(), True),
-        (VoiceResponseBehaviours.NEVER, telegram_messages.text_message(), False),
-        (VoiceResponseBehaviours.NEVER, telegram_messages.audio_message(), False),
-        (VoiceResponseBehaviours.RECIPROCAL, telegram_messages.text_message(), False),
-        (VoiceResponseBehaviours.RECIPROCAL, telegram_messages.audio_message(), True),
+        (VoiceResponseBehaviours.ALWAYS, base_messages.text_message(), True),
+        (VoiceResponseBehaviours.ALWAYS, base_messages.audio_message(), True),
+        (VoiceResponseBehaviours.NEVER, base_messages.text_message(), False),
+        (VoiceResponseBehaviours.NEVER, base_messages.audio_message(), False),
+        (VoiceResponseBehaviours.RECIPROCAL, base_messages.text_message(), False),
+        (VoiceResponseBehaviours.RECIPROCAL, base_messages.audio_message(), True),
     ],
 )
 @patch("apps.channels.tests.test_base_channel_behavior.TestChannel._get_voice_transcript")
@@ -403,7 +401,7 @@ def test_failed_transcription_informs_the_user(
             "apps.channels.tests.test_base_channel_behavior.TestChannel._get_voice_transcript",
             side_effect=Exception("Nope"),
         ):
-            test_channel.new_user_message(telegram_messages.audio_message())
+            test_channel.new_user_message(base_messages.audio_message())
 
     assert _reply_voice_message.called == voice_response_expected
     assert send_text_to_user.called == (not voice_response_expected)
@@ -426,7 +424,7 @@ def test_any_failure_informs_users(
     _get_user_message.side_effect = Exception("Generation error")
 
     with pytest.raises(Exception, match="Random error"):
-        test_channel.new_user_message(telegram_messages.text_message())
+        test_channel.new_user_message(base_messages.text_message())
 
     assert send_message_to_user.call_args[0][0] == DEFAULT_ERROR_RESPONSE_TEXT
 
@@ -455,7 +453,7 @@ def test_reply_with_text_when_synthetic_voice_not_specified(
     experiment.synthetic_voice = None
     experiment.save()
 
-    test_channel.new_user_message(telegram_messages.text_message())
+    test_channel.new_user_message(base_messages.text_message())
 
     _reply_voice_message.assert_not_called()
     send_text_to_user.assert_called()
@@ -464,7 +462,7 @@ def test_reply_with_text_when_synthetic_voice_not_specified(
 @pytest.mark.django_db()
 @pytest.mark.parametrize(
     ("message_func", "message_type"),
-    [(telegram_messages.audio_message, "voice"), (telegram_messages.text_message, "text")],
+    [(base_messages.audio_message, "voice"), (base_messages.text_message, "text")],
 )
 @patch("apps.channels.tests.test_base_channel_behavior.TestChannel._add_message_to_history", Mock())
 def test_user_query_extracted_for_pre_conversation_flow(message_func, message_type):
@@ -479,7 +477,6 @@ def test_user_query_extracted_for_pre_conversation_flow(message_func, message_ty
     channel = TestChannel(experiment, ExperimentChannelFactory(experiment=experiment))
     channel.experiment_session = experiment_session
     pre_survey = experiment.pre_survey
-    telegram_chat_id = "123"
     assert pre_survey
 
     with (
@@ -488,7 +485,7 @@ def test_user_query_extracted_for_pre_conversation_flow(message_func, message_ty
     ):
         _get_voice_transcript.return_value = "Hi botty"
 
-        message = message_func(chat_id=telegram_chat_id)
+        message = message_func()
         channel.new_user_message(message)
         if message_type == "voice":
             _get_voice_transcript.assert_called()
@@ -533,24 +530,24 @@ def test_missing_channel_raises_error(twilio_provider):
 @pytest.mark.django_db()
 def test_participant_reused_across_experiments():
     """A single participant should be linked to multiple sessions per team"""
-    chat_id = 123
+    chat_id = "123"
 
     # User chats to experiment 1
     experiment1 = ExperimentFactory()
     team1 = experiment1.team
     tele_channel1 = TestChannel(experiment1, ExperimentChannelFactory(experiment=experiment1))
-    _send_user_message_on_channel(tele_channel1, telegram_messages.text_message(chat_id=chat_id))
+    _send_user_message_on_channel(tele_channel1, base_messages.text_message(participant_id=chat_id))
 
-    # User chats to experiment 2 that is in the same team
+    # User chats to experiment 2 that is in the same teamparticipant_id
     experiment2 = ExperimentFactory(team=team1)
     tele_channel2 = TestChannel(experiment2, ExperimentChannelFactory(experiment=experiment2))
-    _send_user_message_on_channel(tele_channel2, telegram_messages.text_message(chat_id=chat_id))
+    _send_user_message_on_channel(tele_channel2, base_messages.text_message(participant_id=chat_id))
 
     # User chats to experiment 3 that is in a different team
     experiment3 = ExperimentFactory()
     team2 = experiment3.team
     tele_channel3 = TestChannel(experiment3, ExperimentChannelFactory(experiment=experiment3))
-    _send_user_message_on_channel(tele_channel3, telegram_messages.text_message(chat_id=chat_id))
+    _send_user_message_on_channel(tele_channel3, base_messages.text_message(participant_id=chat_id))
 
     # There should be 1 participant with identifier = chat_id per team
     assert Participant.objects.filter(team=team1, identifier=chat_id).count() == 1
@@ -656,7 +653,7 @@ def test_voice_response_with_urls(
     experiment.voice_response_behaviour = VoiceResponseBehaviours.ALWAYS
     experiment.save()
 
-    test_channel.new_user_message(telegram_messages.text_message())
+    test_channel.new_user_message(base_messages.text_message())
 
     assert send_voice_to_user.called is True
 
@@ -710,7 +707,7 @@ def test_processor_bot_voice_setting(
 
     with patch("apps.experiments.models.Experiment.get_llm_service", new=lambda x: fake_service):
         test_channel = TestChannel(router_exp, channel, session)
-        test_channel.new_user_message(telegram_messages.text_message("Hi"))
+        test_channel.new_user_message(base_messages.text_message("Hi"))
 
     assert test_channel.bot.processor_experiment == child_exp
 
@@ -821,7 +818,7 @@ def test_send_message_to_user_with_multibot(
 def test_participant_authorization(
     send_text_to_user, whitelist, is_external_user, identifier, is_allowed, test_channel
 ):
-    message = telegram_messages.text_message(chat_id=identifier)
+    message = base_messages.text_message(participant_id=identifier)
     experiment = test_channel.experiment
     if not is_external_user:
         MembershipFactory(team=experiment.team, user__email=identifier)
@@ -845,7 +842,7 @@ def test_participant_identifier_determination():
     session = ExperimentSessionFactory(participant__identifier="Alpha")
     exp_channel = ExperimentChannelFactory(experiment=session.experiment)
     channel_base = TestChannel(experiment=session.experiment, experiment_channel=exp_channel)
-    channel_base.message = telegram_messages.text_message(chat_id="Beta")
+    channel_base.message = base_messages.text_message(participant_id="Beta")
 
     assert channel_base.participant_identifier == "Beta"
     assert channel_base._participant_identifier == "Beta"
@@ -862,7 +859,7 @@ def test_new_sessions_are_linked_to_the_working_experiment(experiment):
     new_version = working_version.create_new_version()
 
     test_channel = TestChannel(experiment=new_version, experiment_channel=channel)
-    _send_user_message_on_channel(test_channel, telegram_messages.text_message())
+    _send_user_message_on_channel(test_channel, base_messages.text_message())
 
     # Check that the working experiment is linked to the session
     assert ExperimentSession.objects.filter(experiment=working_version).exists()
