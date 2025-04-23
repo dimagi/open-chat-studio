@@ -83,7 +83,7 @@ class PipelineState(dict):
     output_message_tags: Annotated[list[str], operator.add]
 
     # list of (previous, current, next) tuples used for aiding in routing decisions
-    route: Annotated[Sequence[tuple[str, str, str]], operator.add]
+    path: Annotated[Sequence[tuple[str, str, str]], operator.add]
     # input to the current node
     node_input: str
     # source node for the current node
@@ -114,7 +114,7 @@ class PipelineState(dict):
             outputs={node_id: {"output_handle": output_handle, "message": output}},
             temp_state={"outputs": {node_name: output}},
             output_message_tags=tags,
-            route=[route_path],
+            path=[route_path],
         )
 
 
@@ -142,7 +142,7 @@ class BasePipelineNode(BaseModel, ABC):
             state["node_input"] = state["outputs"][incoming_edge]["message"]
             state["node_source"] = incoming_edge
         else:
-            for path in reversed(state["route"]):
+            for path in reversed(state["path"]):
                 candidate_node_id = path[2]
                 if candidate_node_id == node_id:
                     previous_node_id = path[1]
@@ -219,7 +219,7 @@ class PipelineNode(BasePipelineNode, ABC):
         state = self._prepare_state(node_id, incoming_edges, state, config)
         output = self._process(input=state["node_input"], state=state, node_id=node_id)
         target = outgoing_edges[0] if len(outgoing_edges) == 1 else outgoing_edges
-        output["route"] = [(state["node_source"], node_id, target or None)]
+        output["path"] = [(state["node_source"], node_id, target or None)]
         return output
 
     def _process(self, input: str, state: PipelineState, node_id: str) -> PipelineState:
