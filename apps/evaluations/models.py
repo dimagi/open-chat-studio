@@ -20,7 +20,7 @@ class Evaluator(BaseTeamModel):
     )  # This is different for each evaluator. Usage is similar to how we define Nodes in pipelines
 
     def __str__(self):
-        return f"Evaluator ({self.type})"
+        return f"{self.name} ({self.type})"
 
     def run(self, messages: list[BaseMessage]) -> evaluators.EvaluatorResult:
         try:
@@ -28,6 +28,9 @@ class Evaluator(BaseTeamModel):
             return evaluator(**self.params).run(messages)
         except:
             raise  # TODO
+
+    def get_absolute_url(self):
+        return reverse("evaluations:evaluator_edit", args=[self.team.slug, self.id])
 
 
 class EvaluationDataset(BaseTeamModel):
@@ -43,14 +46,6 @@ class EvaluationDataset(BaseTeamModel):
 
     def __str__(self):
         return f"EvaluationDataset ({self.version.version_number if self.version else 'Working'})"
-
-    def get_messages(self):
-        # TODO: use self.message_type to filter messages
-        messages = []
-        # TODO: output one list per session
-        for session in self.sessions.all():
-            messages.extend(session.chat.get_langchain_messages())
-        return messages
 
 
 class EvaluationConfig(BaseTeamModel):
