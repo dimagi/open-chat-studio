@@ -1,4 +1,5 @@
 import json
+import unicodedata
 
 import pytest
 from django.urls import reverse
@@ -132,3 +133,38 @@ def test_unlink_tag_returns_404(tag, client):
     data = {"tag_name": tag.name, "object_info": object_info_json}
     response = client.post(reverse("annotations:unlink_tag", kwargs={"team_slug": tag.team.slug}), data=data)
     assert response.status_code == 404
+
+
+@pytest.mark.django_db()
+def test_create_duplicate_tag_error(client):
+    team = TeamWithUsersFactory()
+    user = team.members.first()
+    client.login(username=user.username, password="password")
+
+    tag_name = "duplicate_tag"
+    Tag.objects.create(name=tag_name, created_by=user, team=team)
+
+    url = reverse("annotations:tag_new", kwargs={"team_slug": team.slug})
+    response = client.post(url, data={"name": tag_name})
+
+    assert response.status_code == 200
+    assert "A tag with this name already exists" in response.content.decode()
+    assert Tag.objects.filter(name=tag_name, team=team).count() == 1
+
+
+@pytest.mark.django_db()
+def test_unicode_normalization_prevents_duplicates(client):
+    team = TeamWithUsersFactory()
+    user = team.members.first()
+
+    client.login(username=user.username, password="password")
+    Tag.objects.create(name="café", created_by=user, team=team)
+
+    # café can be represented in Unicode as "cafe\u0301" or as "café"
+    url = reverse("annotations:tag_new", kwargs={"team_slug": team.slug})
+    response = client.post(url, data={"name": "cafe\u0301"})
+
+    assert response.status_code == 200
+    assert "A tag with this name already exists" in response.content.decode()
+
+    assert Tag.objects.filter(name=unicodedata.normalize("NFC", "café"), team=team).count() == 1
