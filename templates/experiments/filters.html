@@ -111,9 +111,11 @@
   </div>
 </div>
 
+{{ field_type_filters|json_script:"field-type-filters" }}
 <script>
   const tags = JSON.parse(document.getElementById('available-tags-data').textContent);
   const versionsList = JSON.parse(document.getElementById('experiment-versions-data').textContent);
+  const fieldTypeFilters = JSON.parse(document.getElementById('field-type-filters').textContent);
   document.addEventListener('alpine:init', () => {
     Alpine.data('filterComponent', () => ({
       filterData: {
@@ -121,10 +123,10 @@
         filters: [],
         loading: false,
         columns: {
-          'participant': {type: 'string', operators: ['equals', 'contains', 'does not contain', 'starts with', 'ends with'], label: 'Participant'},
-          'last_message': {type: 'timestamp', operators: ['on', 'before', 'after'], label: 'Last Message'},
-          'tags': {type: 'choice', operators: ['any of', 'all of'], options: tags, label: 'Tags' },
-          'versions': {type: 'choice', operators: ['any of', 'all of'], options: versionsList, label: 'Versions'}
+          'participant': {type: 'string', operators: fieldTypeFilters.string, label: 'Participant'},
+          'last_message': {type: 'timestamp', operators: fieldTypeFilters.timestamp, label: 'Last Message'},
+          'tags': {type: 'choice', operators: fieldTypeFilters.choice, options: tags, label: 'Tags' },
+          'versions': {type: 'choice', operators: fieldTypeFilters.choice, options: versionsList, label: 'Versions'}
         }
       },
 
