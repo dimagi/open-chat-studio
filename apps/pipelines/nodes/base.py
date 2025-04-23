@@ -82,6 +82,13 @@ class PipelineState(dict):
     attachments: list = Field(default=[])
     output_message_tags: Annotated[list[str], operator.add]
 
+    # list of (previous, current, next) tuples used for aiding in routing decisions
+    route: Annotated[Sequence[tuple[str, str, str]], operator.add]
+    # input to the current node
+    node_input: str
+    # source node for the current node
+    node_source: str
+
     def json_safe(self):
         # We need to make a copy of `self` so as to not change the actual value of `experiment_session` forever
         copy = self.copy()
@@ -102,8 +109,13 @@ class PipelineState(dict):
         return cls(**kwargs)
 
     @classmethod
-    def from_router_output(cls, node_id, output, output_handle, tags) -> Self:
-        return cls(outputs={node_id: {"output_handle": output_handle, "message": output}}, output_message_tags=tags)
+    def from_router_output(cls, node_id, node_name, output, output_handle, tags, route_path) -> Self:
+        return cls(
+            outputs={node_id: {"output_handle": output_handle, "message": output}},
+            temp_state={"outputs": {node_name: output}},
+            output_message_tags=tags,
+            route=[route_path],
+        )
 
 
 class BasePipelineNode(BaseModel, ABC):
@@ -117,35 +129,34 @@ class BasePipelineNode(BaseModel, ABC):
 
         if not incoming_edges:
             # This is the first node in the graph
-            node_input = state["messages"][-1]
+            state["node_input"] = state["messages"][-1]
+            state["node_source"] = None
 
             # init temp state here to avoid having to do it in each place the pipeline is invoked
-            state["temp_state"]["user_input"] = node_input
+            state["temp_state"]["user_input"] = state["node_input"]
             state["temp_state"]["attachments"] = [
                 Attachment.model_validate(att) for att in state.get("attachments", [])
             ]
         elif len(incoming_edges) == 1:
             incoming_edge = incoming_edges[0]
-            node_input = state["outputs"][incoming_edge]["message"]
+            state["node_input"] = state["outputs"][incoming_edge]["message"]
+            state["node_source"] = incoming_edge
         else:
-            # Here we use some internal langgraph state to determine which input to use. This is useful
-            # for conditional edges.
-            # The 'langgraph_triggers' key is set in the metadata of the pipeline by langgraph. Some examples:
-            #   - start:xyz
-            #   - xyz
-            #   - branch:xyz:condition:abc
-            #   - join:abc+def:xyz
-            node_triggers = config["metadata"]["langgraph_triggers"]
-            for incoming_edge in incoming_edges:
-                if any(incoming_edge in trigger for trigger in node_triggers):
-                    node_input = state["outputs"][incoming_edge]["message"]
+            for path in reversed(state["route"]):
+                candidate_node_id = path[2]
+                if candidate_node_id == node_id:
+                    previous_node_id = path[1]
+                    state["node_input"] = state["outputs"][previous_node_id]["message"]
+                    state["node_source"] = previous_node_id
                     break
             else:
-                # This happens when we merge parallel paths into a single node
-                # e.g. start -> router -> A / B -> End
+                # This shouldn't happen, but keeping it here for now to avoid breaking
+                logger.warning(f"Cannot determine which input to use for node {node_id}. Switching to fallback.")
                 for incoming_edge in reversed(incoming_edges):
                     if incoming_edge in state["outputs"]:
                         node_input = state["outputs"][incoming_edge]["message"]
+                        state["node_input"] = node_input
+                        state["node_source"] = incoming_edge
                         break
                 else:
                     raise PipelineNodeRunError(
@@ -156,7 +167,7 @@ class BasePipelineNode(BaseModel, ABC):
                             "state_outputs": state["outputs"],
                         },
                     )
-        return node_input, state
+        return state
 
     def get_participant_data_proxy(self, state: PipelineState) -> "ParticipantDataProxy":
         return ParticipantDataProxy.from_state(state)
@@ -202,11 +213,14 @@ class PipelineNode(BasePipelineNode, ABC):
     """
 
     def process(
-        self, node_id: str, incoming_edges: list, state: PipelineState, config: RunnableConfig
+        self, node_id: str, incoming_edges: list, outgoing_edges: list, state: PipelineState, config: RunnableConfig
     ) -> PipelineState:
         self._config = config
-        node_input, state = self._prepare_state(node_id, incoming_edges, state, config)
-        return self._process(input=node_input, state=state, node_id=node_id)
+        state = self._prepare_state(node_id, incoming_edges, state, config)
+        output = self._process(input=state["node_input"], state=state, node_id=node_id)
+        target = outgoing_edges[0] if len(outgoing_edges) == 1 else outgoing_edges
+        output["route"] = [(state["node_source"], node_id, target or None)]
+        return output
 
     def _process(self, input: str, state: PipelineState, node_id: str) -> PipelineState:
         """The method that executes node specific functionality"""
@@ -223,15 +237,19 @@ class PipelineRouterNode(BasePipelineNode):
         def router(state: PipelineState, config: RunnableConfig) -> ReturnType:
             self._config = config
 
-            node_input, state = self._prepare_state(node_id, incoming_edges, state, config)
+            state = self._prepare_state(node_id, incoming_edges, state, config)
 
             conditional_branch = self._process_conditional(state, node_id)
             output_handle = next((k for k, v in output_map.items() if v == conditional_branch), None)
             tags = self.get_output_tags(conditional_branch)
-            output = PipelineState.from_router_output(node_id, node_input, output_handle, tags)
+            target_node_id = edge_map[conditional_branch]
+            route_path = (state["node_source"], node_id, target_node_id)
+            output = PipelineState.from_router_output(
+                node_id, self.name, state["node_input"], output_handle, tags, route_path
+            )
             return Command(
                 update=output,
-                goto=edge_map[conditional_branch],
+                goto=target_node_id,
             )
 
         return router

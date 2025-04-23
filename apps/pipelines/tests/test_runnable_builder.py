@@ -286,7 +286,7 @@ def test_conditional_node(pipeline, experiment_session):
     assert output["messages"][-1] == "said hello"
     assert output["outputs"] == {
         start["id"]: {"message": "hello"},
-        boolean["id"]: {"message": "hello", "output_handle": "output_0"},
+        boolean["id"]: {"message": "hello", "output_handle": "output_0", "route_node_id": template_true["id"]},
         template_true["id"]: {"message": "said hello"},
         end["id"]: {"message": "said hello"},
     }
@@ -295,7 +295,7 @@ def test_conditional_node(pipeline, experiment_session):
     assert output["messages"][-1] == "didn't say hello, said bad"
     assert output["outputs"] == {
         start["id"]: {"message": "bad"},
-        boolean["id"]: {"message": "bad", "output_handle": "output_1"},
+        boolean["id"]: {"message": "bad", "output_handle": "output_1", "route_node_id": template_false["id"]},
         template_false["id"]: {"message": "didn't say hello, said bad"},
         end["id"]: {"message": "didn't say hello, said bad"},
     }

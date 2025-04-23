@@ -198,7 +198,12 @@ class PipelineGraph(pydantic.BaseModel):
                     router_function = node_instance.build_router_function(node.id, edge_map, incoming_edges)
                     state_graph.add_node(node.id, router_function)
                 else:
-                    state_graph.add_node(node.id, partial(node_instance.process, node.id, incoming_edges))
+                    outgoing_edges = [edge.target for edge in self.edges if edge.source == node.id]
+                    if len(outgoing_edges) > 1:
+                        raise PipelineNodeBuildError("Node connected to multiple other nodes")
+                    state_graph.add_node(
+                        node.id, partial(node_instance.process, node.id, incoming_edges, outgoing_edges)
+                    )
             except ValidationError as ex:
                 raise PipelineNodeBuildError(ex)
 
