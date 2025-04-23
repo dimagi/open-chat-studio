@@ -142,13 +142,19 @@ class BasePipelineNode(BaseModel, ABC):
             state["node_input"] = state["outputs"][incoming_edge]["message"]
             state["node_source"] = incoming_edge
         else:
+            # state.path is a list of tuples (previous, current, next)
+            # `next` can be a list of node IDs
             for path in reversed(state["path"]):
-                candidate_node_id = path[2]
-                if candidate_node_id == node_id:
-                    previous_node_id = path[1]
-                    state["node_input"] = state["outputs"][previous_node_id]["message"]
-                    state["node_source"] = previous_node_id
-                    break
+                candidate_node_ids = path[2] if isinstance(path[2], list) else [path[2]]
+                for candidate_node_id in candidate_node_ids:
+                    if candidate_node_id == node_id:
+                        previous_node_id = path[1]
+                        state["node_input"] = state["outputs"][previous_node_id]["message"]
+                        state["node_source"] = previous_node_id
+                        break
+                else:
+                    continue
+                break
             else:
                 # This shouldn't happen, but keeping it here for now to avoid breaking
                 logger.warning(f"Cannot determine which input to use for node {node_id}. Switching to fallback.")
