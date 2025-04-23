@@ -6,12 +6,12 @@
     </button>
   </form>
   <a class="btn btn-sm"
-     href="{% if use_pipeline_id and record.pipeline_id %}{% url type|add:':edit' record.team.slug record.pipeline_id %}{% else %}{% url type|add:':edit' record.team.slug record.id %}{% endif %}" title="View">
+     href="{% url type|add:':edit' record.team.slug record.id %}" title="View">
     <i class="fa-solid fa-pencil"></i>
   </a>
 {% else %}
   <a class="btn btn-sm"
-     href="{% if use_pipeline_id and record.pipeline_id %}{% url url type|add:':edit' record.team.slug record.pipeline_id %}{% else %}{% url url type|add:':edit' record.team.slug record.id %}{% endif %}" title="View">
+     href="{% url url type|add:':edit' record.team.slug record.id %}" title="View">
     <i class="fa-solid fa-eye"></i>
   </a>
 {% endif %}
