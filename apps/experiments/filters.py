@@ -58,9 +58,9 @@ def build_participant_filter(operator, value):
         return Q(participant__identifier__icontains=value)
     elif operator == "does not contain":
         return ~Q(participant__identifier__icontains=value)
-    elif operator == "starts_with":
+    elif operator == "starts with":
         return Q(participant__identifier__istartswith=value)
-    elif operator == "ends_with":
+    elif operator == "ends with":
         return Q(participant__identifier__iendswith=value)
     return None
 
