@@ -8,7 +8,7 @@ from django.utils import timezone
 from langchain_core.messages import BaseMessage
 
 from apps.evaluations import evaluators
-from apps.experiments.models import Experiment, ExperimentSession
+from apps.experiments.models import ExperimentSession
 from apps.teams.models import BaseTeamModel
 
 
@@ -40,7 +40,9 @@ class EvaluationDataset(BaseTeamModel):
         ("ALL", "All"),
     ]
     message_type = models.CharField(max_length=32, choices=MESSAGE_TYPE_CHOICES)
-    version = models.ForeignKey(Experiment, on_delete=models.SET_NULL, null=True, blank=True)
+
+    name = models.CharField(max_length=255)
+    # version = models.ForeignKey(Experiment, on_delete=models.SET_NULL, null=True, blank=True)
     # If this is null, this should target the latest working version.
     sessions = models.ManyToManyField(ExperimentSession)
 
@@ -52,11 +54,11 @@ class EvaluationConfig(BaseTeamModel):
     name = models.CharField(max_length=255)
     evaluators = models.ManyToManyField(Evaluator)
     dataset = models.ForeignKey(EvaluationDataset, on_delete=models.CASCADE)
-    experiment = models.ForeignKey(Experiment, on_delete=models.SET_NULL, null=True, blank=True)
+    # experiment = models.ForeignKey(Experiment, on_delete=models.SET_NULL, null=True, blank=True)
     # The bot / experiment we are targeting
 
     def __str__(self):
-        return f"EvaluationConfig (experiment={self.experiment_id})"
+        return f"EvaluationConfig ({self.name})"
 
     def get_absolute_url(self):
         return reverse("evaluations:runs_table", args=[self.team.slug, self.id])

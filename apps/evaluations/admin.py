@@ -18,21 +18,18 @@ class EvaluatorAdmin(admin.ModelAdmin):
 
 @admin.register(EvaluationDataset)
 class EvaluationDatasetAdmin(admin.ModelAdmin):
-    list_display = ("id", "version", "message_type", "team")
-    list_filter = ("message_type", "version", "team")
+    list_display = ("id", "message_type", "team")
+    list_filter = ("message_type", "team")
     filter_horizontal = ("sessions",)
     search_fields = ("version__version_number",)
 
 
 @admin.register(EvaluationConfig)
 class EvaluationConfigAdmin(admin.ModelAdmin):
-    list_display = ("id", "name", "experiment", "dataset", "team")
-    list_filter = ("experiment", "team")
+    list_display = ("id", "name", "dataset", "team")
+    list_filter = ("team",)
     filter_horizontal = ("evaluators",)
-    search_fields = (
-        "name",
-        "experiment__version_number",
-    )
+    search_fields = ("name",)
 
 
 class EvaluationResultInline(admin.TabularInline):
@@ -44,7 +41,7 @@ class EvaluationResultInline(admin.TabularInline):
 @admin.register(EvaluationRun)
 class EvaluationRunAdmin(admin.ModelAdmin):
     list_display = ("id", "config", "created_at", "finished_at", "user", "team")
-    list_filter = ("config__experiment", "team")
+    list_filter = ("team",)
     readonly_fields = ("created_at", "finished_at")
     inlines = (EvaluationResultInline,)
 
@@ -52,6 +49,6 @@ class EvaluationRunAdmin(admin.ModelAdmin):
 @admin.register(EvaluationResult)
 class EvaluationResultAdmin(admin.ModelAdmin):
     list_display = ("id", "run", "evaluator", "team")
-    list_filter = ("evaluator", "run__config__experiment", "team")
+    list_filter = ("evaluator", "team")
     readonly_fields = ("output",)
     search_fields = ("output",)
