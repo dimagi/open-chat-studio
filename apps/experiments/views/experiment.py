@@ -1,4 +1,5 @@
 import logging
+import unicodedata
 import uuid
 from datetime import datetime
 from typing import cast
@@ -249,6 +250,7 @@ class CreateExperiment(BaseExperimentView, CreateView):
 
     def form_valid(self, form, file_formset):
         with transaction.atomic():
+            form.instance.name = unicodedata.normalize("NFC", form.instance.name)
             self.object = form.save()
             if file_formset:
                 files = file_formset.save(self.request)
