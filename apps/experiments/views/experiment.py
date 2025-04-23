@@ -298,8 +298,13 @@ def _get_voice_provider_alpine_context(request):
     exclude_services = [SyntheticVoice.OpenAIVoiceEngine]
     if flag_is_active(request, "open_ai_voice_engine"):
         exclude_services = []
+
+    form_attrs = {"enctype": "multipart/form-data"}
+    if request.origin == "experiments":
+        form_attrs["x-data"] = "experiment"
+
     return {
-        "form_attrs": {"x-data": "experiment", "enctype": "multipart/form-data"},
+        "form_attrs": form_attrs,
         # map provider ID to provider type
         "voice_providers_types": dict(request.team.voiceprovider_set.values_list("id", "type")),
         "synthetic_voice_options": sorted(
