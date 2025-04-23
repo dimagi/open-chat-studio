@@ -1,3 +1,5 @@
+from collections.abc import Iterable
+
 from django.contrib.auth.mixins import PermissionRequiredMixin
 from django.shortcuts import get_object_or_404
 from django.urls import reverse
@@ -5,7 +7,7 @@ from django.views.generic import CreateView, TemplateView, UpdateView
 from django_tables2 import SingleTableView, columns, tables
 
 from apps.evaluations.forms import EvaluationConfigForm
-from apps.evaluations.models import EvaluationConfig, EvaluationRun
+from apps.evaluations.models import EvaluationConfig, EvaluationResult, EvaluationRun
 from apps.evaluations.tables import EvaluationConfigTable, EvaluationRunTable
 from apps.teams.mixins import LoginAndTeamRequiredMixin
 
@@ -98,7 +100,7 @@ class EvaluationRunsTableView(SingleTableView, PermissionRequiredMixin):
 class EvaluationRunDetailView(SingleTableView):
     template_name = "table/single_table.html"
 
-    def get_queryset(self):
+    def get_queryset(self) -> Iterable[EvaluationResult]:
         run = get_object_or_404(
             EvaluationRun.objects.filter(team__slug=self.kwargs["team_slug"]),
             pk=self.kwargs["pk"],
@@ -109,6 +111,7 @@ class EvaluationRunDetailView(SingleTableView):
     def get_table_data(self):
         return [
             {
+                "session": result.session.id,
                 "evaluator": result.evaluator.type,
                 **result.output.get("result", {}),
             }

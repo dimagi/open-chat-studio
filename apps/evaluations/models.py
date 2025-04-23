@@ -5,6 +5,7 @@ from django.conf import settings
 from django.db import models
 from django.urls import reverse
 from django.utils import timezone
+from langchain_core.messages import BaseMessage
 
 from apps.evaluations import evaluators
 from apps.experiments.models import Experiment, ExperimentSession
@@ -12,6 +13,7 @@ from apps.teams.models import BaseTeamModel
 
 
 class Evaluator(BaseTeamModel):
+    name = models.CharField(max_length=255)
     type = models.CharField(max_length=128)  # The evaluator type, should be one from evaluators.py
     params = models.JSONField(
         default=dict
@@ -20,10 +22,10 @@ class Evaluator(BaseTeamModel):
     def __str__(self):
         return f"Evaluator ({self.type})"
 
-    def run(self, dataset: "EvaluationDataset") -> evaluators.EvaluatorResult:
+    def run(self, messages: list[BaseMessage]) -> evaluators.EvaluatorResult:
         try:
             evaluator = getattr(evaluators, self.type)
-            return evaluator(**self.params).run(dataset.get_messages())
+            return evaluator(**self.params).run(messages)
         except:
             raise  # TODO
 
@@ -45,6 +47,7 @@ class EvaluationDataset(BaseTeamModel):
     def get_messages(self):
         # TODO: use self.message_type to filter messages
         messages = []
+        # TODO: output one list per session
         for session in self.sessions.all():
             messages.extend(session.chat.get_langchain_messages())
         return messages
@@ -64,15 +67,21 @@ class EvaluationConfig(BaseTeamModel):
         return reverse("evaluations:runs_table", args=[self.team.slug, self.id])
 
     def run(self) -> list["EvaluationResult"]:
+        # TODO: Run this in a celery task
         """Runs the evaluation"""
         run = EvaluationRun.objects.create(team=self.team, config=self)
         results = []
+        # TODO: Run in parallel with langgraph
         for evaluator in cast(Iterable[Evaluator], self.evaluators.all()):
-            result = evaluator.run(self.dataset)
-            eval_result = EvaluationResult.objects.create(
-                run=run, evaluator=evaluator, output=result.model_dump(), team=self.team
-            )
-            results.append(eval_result)
+            # TODO: Filter sessions
+            for session in self.dataset.sessions.all():
+                # TODO: pass in the correct messages based on dataset.message_types
+                result = evaluator.run(session.chat.get_langchain_messages())
+                results.append(
+                    EvaluationResult.objects.create(
+                        session=session, run=run, evaluator=evaluator, output=result.model_dump(), team=self.team
+                    )
+                )
         run.finished_at = timezone.now()
         run.save()
         return results
@@ -95,8 +104,9 @@ class EvaluationRun(BaseTeamModel):
 
 class EvaluationResult(BaseTeamModel):
     evaluator = models.ForeignKey(Evaluator, on_delete=models.CASCADE)
-    output = models.JSONField()
+    session = models.ForeignKey(ExperimentSession, null=True, on_delete=models.SET_NULL)
     run = models.ForeignKey(EvaluationRun, on_delete=models.CASCADE, related_name="results")
+    output = models.JSONField()
     # TODO: track input with a generic FK relationship / normalized inputs
 
     def __str__(self):
