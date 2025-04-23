@@ -357,7 +357,7 @@ class Pipeline(BaseTeamModel, VersionsMixin):
                 )
                 return ai_message
             else:
-                return ChatMessage(content=output["messages"][-1])
+                return ChatMessage(content=output)
         finally:
             if trace_service:
                 trace_service.end()
