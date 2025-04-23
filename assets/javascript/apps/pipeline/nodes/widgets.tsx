@@ -711,7 +711,7 @@ export function KeywordsWidget(props: WidgetParams) {
   )
   return (
     <>
-      <div className="form-control w-full capitalize">
+      <div className="fieldset w-full capitalize">
         <label className="label font-bold">
           Outputs
           <div className="tooltip tooltip-left" data-tip="Add Keyword">
@@ -727,7 +727,7 @@ export function KeywordsWidget(props: WidgetParams) {
           const value = keywords ? keywords[index] || "" : "";
           const label = `Output Keyword ${index + 1}`;
           return (
-            <div className="form-control w-full capitalize" key={index}>
+            <div className="fieldset w-full capitalize" key={index}>
               <div className="flex justify-between items-center">
                 <label className="label">{label}{index === 0 && defaultMarker}</label>
                 <div className="tooltip tooltip-left" data-tip={`Delete Keyword ${index + 1}`}>
@@ -925,7 +925,7 @@ export function InputField({label, help_text, inputError, children}: React.Props
 }>) {
   return (
     <>
-      <div className="form-control w-full capitalize">
+      <div className="fieldset w-full capitalize">
         <label className="label font-bold">{label}</label>
         {children}
       </div>
