@@ -170,6 +170,13 @@
             {% translate "Evaluators" %}
           </a>
         </li>
+        <li>
+          <a href="{% url 'evaluations:dataset_home' request.team.slug %}"
+             {% if active_tab == 'evaluation_datasets' %}class="active"{% endif %}>
+            <i class="fa fa-database fa-fw"></i>
+            {% translate "Datasets" %}
+          </a>
+        </li>
       </ul>
     </li>
   {% endflag %}
