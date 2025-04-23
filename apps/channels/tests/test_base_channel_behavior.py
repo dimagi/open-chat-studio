@@ -215,7 +215,8 @@ def test_reset_command_creates_new_experiment_session(user_input, test_channel):
     _send_user_message_on_channel(test_channel, normal_message)
 
     reset_message = base_messages.text_message(participant_id=participant_id, message_text=user_input)
-    test_channel.new_user_message(reset_message)
+    response = test_channel.new_user_message(reset_message)
+    assert response.content == "Conversation reset"
     sessions = ExperimentSession.objects.for_chat_id(participant_id).order_by("created_at").all()
     assert len(sessions) == 2
     new_session = sessions[0]
@@ -262,13 +263,14 @@ def test_pre_conversation_flow(_send_seed_message):
 
     def _user_message(message: str):
         message = base_messages.text_message(message_text=message)
-        channel.new_user_message(message)
+        return channel.new_user_message(message)
 
     experiment = channel.experiment
     experiment.seed_message = "Hi human"
     experiment.save()
 
-    _user_message("Hi")
+    response = _user_message("Hi")
+    assert experiment.consent_form.consent_text in response.content
     chat = channel.experiment_session.chat
     pre_survey_link = channel.experiment_session.get_pre_survey_link(experiment)
     confirmation_text = pre_survey.confirmation_text
@@ -279,14 +281,16 @@ def test_pre_conversation_flow(_send_seed_message):
     channel.experiment_session.refresh_from_db()
     assert channel.experiment_session.status == SessionStatus.PENDING
     # It did, now the user gives consent
-    _user_message("1")
+    response = _user_message("1")
+    assert expected_survey_text in response.content
     # Check the status
     channel.experiment_session.refresh_from_db()
     assert channel.experiment_session.status == SessionStatus.PENDING_PRE_SURVEY
     # Let's make sure the bot presented the user with the survey
     assert expected_survey_text in chat.messages.last().content
     # Now the user tries to talk
-    _user_message("Hi there")
+    response = _user_message("Hi there")
+    assert expected_survey_text in response.content
     # Check the status. It should not have changed
     channel.experiment_session.refresh_from_db()
     assert channel.experiment_session.status == SessionStatus.PENDING_PRE_SURVEY
@@ -295,7 +299,9 @@ def test_pre_conversation_flow(_send_seed_message):
 
     # The user caves, and says they did fill it out
     assert _send_seed_message.call_count == 0
-    _user_message("1")
+    _send_seed_message.return_value = "Hi human"
+    response = _user_message("1")
+    assert response.content == "Hi human"
     # Check the status
     channel.experiment_session.refresh_from_db()
     assert channel.experiment_session.status == SessionStatus.ACTIVE
@@ -814,10 +820,7 @@ def test_send_message_to_user_with_multibot(
         (["11111"], False, "someone@test.com", True),
     ],
 )
-@patch("apps.channels.tests.test_base_channel_behavior.TestChannel.send_text_to_user")
-def test_participant_authorization(
-    send_text_to_user, whitelist, is_external_user, identifier, is_allowed, test_channel
-):
+def test_participant_authorization(whitelist, is_external_user, identifier, is_allowed, test_channel):
     message = base_messages.text_message(participant_id=identifier)
     experiment = test_channel.experiment
     if not is_external_user:
@@ -828,9 +831,9 @@ def test_participant_authorization(
     assert test_channel._participant_is_allowed() == is_allowed
 
     if not is_allowed:
-        test_channel.new_user_message(message)
-        send_text_to_user.assert_called()
-        assert send_text_to_user.call_args[0][0] == "Sorry, you are not allowed to chat to this bot"
+        resp = test_channel.new_user_message(message)
+        assert resp.content == "Sorry, you are not allowed to chat to this bot"
+        assert test_channel.text_sent[0] == "Sorry, you are not allowed to chat to this bot"
 
 
 @pytest.mark.django_db()
