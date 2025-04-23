@@ -1,5 +1,6 @@
 import json
 from datetime import datetime
+from enum import StrEnum
 
 from django.contrib.contenttypes.models import ContentType
 from django.db.models import Exists, OuterRef, Q
@@ -8,7 +9,7 @@ from apps.annotations.models import CustomTaggedItem
 from apps.chat.models import Chat, ChatMessage
 
 
-class Operators:
+class Operators(StrEnum):
     """Enum for filter operators used in dynamic filters."""
 
     EQUALS = "equals"
