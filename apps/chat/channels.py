@@ -724,7 +724,7 @@ class ChannelBase(ABC):
 
         return supported_files, unsupported_files
 
-    def _check_consent(self, strict=True):
+    def _check_consent(self, strict=True, default_consent=False):
         # This is a failsafe, checks should also happen earlier in the process
         if self.experiment_session:
             try:
@@ -735,7 +735,7 @@ class ChannelBase(ABC):
                 else:
                     return
 
-            if not participant_data.system_metadata.get("consent", False):
+            if not participant_data.system_metadata.get("consent", default_consent):
                 raise ChannelException("Participant has not given consent to chat")
 
 
@@ -812,11 +812,11 @@ class TelegramChannel(ChannelBase):
         experiment_session: ExperimentSession | None = None,
     ):
         super().__init__(experiment, experiment_channel, experiment_session)
-        self._check_consent(strict=False)
+        self._check_consent(strict=False, default_consent=True)
         self.telegram_bot = TeleBot(self.experiment_channel.extra_data["bot_token"], threaded=False)
 
     def send_voice_to_user(self, synthetic_voice: SynthesizedAudio):
-        self._check_consent(strict=False)
+        self._check_consent(strict=False, default_consent=True)
         try:
             antiflood(
                 self.telegram_bot.send_voice,
@@ -828,7 +828,7 @@ class TelegramChannel(ChannelBase):
             self._handle_telegram_api_error(e)
 
     def send_text_to_user(self, text: str):
-        self._check_consent(strict=False)
+        self._check_consent(strict=False, default_consent=True)
         try:
             for message_text in smart_split(text):
                 antiflood(self.telegram_bot.send_message, self.participant_identifier, text=message_text)
