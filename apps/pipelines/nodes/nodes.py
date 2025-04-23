@@ -33,6 +33,7 @@ from apps.pipelines.nodes.base import (
     NodeSchema,
     OptionsSource,
     PipelineNode,
+    PipelineRouterNode,
     PipelineState,
     UiSchema,
     Widgets,
@@ -395,7 +396,7 @@ class EndNode(Passthrough):
 
 
 @deprecated_node(message="Use the 'Router' node instead.")
-class BooleanNode(Passthrough):
+class BooleanNode(PipelineRouterNode):
     """Branches based whether the input matches a certain value"""
 
     model_config = ConfigDict(json_schema_extra=NodeSchema(label="Conditional Node"))
@@ -413,8 +414,13 @@ class BooleanNode(Passthrough):
         return "false"
 
     def get_output_map(self):
-        """A mapping from the output handles on the frontend to the return values of process_conditional"""
+        """A mapping from the output handles on the frontend to the return values of _process_conditional"""
         return {"output_0": "true", "output_1": "false"}
+
+    def get_output_tags(self, selected_route) -> list[str]:
+        if self.tag_output_message:
+            return [f"{self.name}:{selected_route}"]
+        return []
 
 
 class RouterMixin(BaseModel):
@@ -447,8 +453,13 @@ class RouterMixin(BaseModel):
         """
         return {f"output_{output_num}": keyword for output_num, keyword in enumerate(self.keywords)}
 
+    def get_output_tags(self, selected_route) -> list[str]:
+        if self.tag_output_message:
+            return [f"{self.name}:{selected_route}"]
+        return []
 
-class RouterNode(RouterMixin, Passthrough, HistoryMixin):
+
+class RouterNode(RouterMixin, PipelineRouterNode, HistoryMixin):
     """Routes the input to one of the linked nodes using an LLM"""
 
     model_config = ConfigDict(
@@ -515,7 +526,7 @@ class RouterNode(RouterMixin, Passthrough, HistoryMixin):
         return keyword
 
 
-class StaticRouterNode(RouterMixin, Passthrough):
+class StaticRouterNode(RouterMixin, PipelineRouterNode):
     """Routes the input to a linked node using the temp state of the pipeline or participant data"""
 
     class DataSource(TextChoices):
