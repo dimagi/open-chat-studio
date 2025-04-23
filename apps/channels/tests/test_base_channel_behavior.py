@@ -1015,7 +1015,6 @@ def test_handle_telegram_block_updates_consent():
 def test_handle_telegram_block_participant_data_does_not_exist():
     experiment = ExperimentFactory()
     exp_channel = ExperimentChannelFactory(experiment=experiment, extra_data={"bot_token": "fake_token"})
-    participant_identifier = "test_telegram_user_id_for_error_test"
     channel = TelegramChannel(experiment=experiment, experiment_channel=exp_channel)
     channel.telegram_bot = Mock()
 
