@@ -17,8 +17,8 @@ class MockTracer(Tracer):
     def ready(self) -> bool:
         return bool(self.trace)
 
-    def begin_trace(self, trace_name: str, trace_id: UUID, session_id: str, user_id: str):
-        super().begin_trace(trace_name=trace_name, trace_id=trace_id, session_id=session_id, user_id=user_id)
+    def start_trace(self, trace_name: str, trace_id: UUID, session_id: str, user_id: str):
+        super().start_trace(trace_name=trace_name, trace_id=trace_id, session_id=session_id, user_id=user_id)
         self.trace = {
             "name": trace_name,
             "id": trace_id,

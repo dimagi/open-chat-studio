@@ -31,7 +31,7 @@ class Tracer(ABC):
         raise NotImplementedError
 
     @abstractmethod
-    def begin_trace(self, trace_name: str, trace_id: UUID, session_id: str, user_id: str):
+    def start_trace(self, trace_name: str, trace_id: UUID, session_id: str, user_id: str):
         """This must be called before any tracing methods are called.
 
         Args:

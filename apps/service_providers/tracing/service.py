@@ -56,7 +56,7 @@ class TracingService:
         self.trace_id = uuid.uuid4()
 
         try:
-            self._begin_traces()
+            self._start_traces()
             yield self
         except Exception as e:
             self._end_traces(e)
@@ -64,10 +64,10 @@ class TracingService:
         else:
             self._end_traces()
 
-    def _begin_traces(self):
+    def _start_traces(self):
         for tracer in self._tracers:
             try:
-                tracer.begin_trace(self.trace_name, self.trace_id, self.session_id, self.user_id)
+                tracer.start_trace(self.trace_name, self.trace_id, self.session_id, self.user_id)
             except Exception:  # noqa BLE001
                 logger.error("Error initializing tracer %s", tracer.__class__.__name__, exc_info=True)
 

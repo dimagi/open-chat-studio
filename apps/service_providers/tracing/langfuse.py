@@ -41,11 +41,11 @@ class LangFuseTracer(Tracer):
     def ready(self) -> bool:
         return bool(self.trace)
 
-    def begin_trace(self, trace_name: str, trace_id: UUID, session_id: str, user_id: str):
+    def start_trace(self, trace_name: str, trace_id: UUID, session_id: str, user_id: str):
         if self.trace:
             raise ServiceReentryException("Service does not support reentrant use.")
 
-        super().begin_trace(trace_name, trace_id, session_id, user_id)
+        super().start_trace(trace_name, trace_id, session_id, user_id)
 
         self.client = client_manager.get(self.config)
         self.trace = self.client.trace(name=trace_name, session_id=session_id, user_id=user_id)

@@ -25,13 +25,13 @@ class LangSmithTracer(Tracer):
     def ready(self) -> bool:
         return bool(self.client)
 
-    def begin_trace(self, trace_name: str, trace_id: UUID, session_id: str, user_id: str):
+    def start_trace(self, trace_name: str, trace_id: UUID, session_id: str, user_id: str):
         from langsmith import Client
 
         if self.client:
             raise ServiceReentryException("Service does not support reentrant use.")
 
-        super().begin_trace(trace_name, trace_id, session_id, user_id)
+        super().start_trace(trace_name, trace_id, session_id, user_id)
 
         self.client = Client(
             api_url=self.config["api_url"],
