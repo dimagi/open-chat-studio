@@ -1,5 +1,3 @@
-from collections.abc import Iterable
-
 from django.contrib.auth.mixins import PermissionRequiredMixin
 from django.http import JsonResponse
 from django.shortcuts import get_object_or_404
@@ -8,7 +6,7 @@ from django.views.generic import CreateView, TemplateView, UpdateView
 from django_tables2 import SingleTableView, columns, tables
 
 from apps.evaluations.forms import EvaluationConfigForm
-from apps.evaluations.models import EvaluationConfig, EvaluationResult, EvaluationRun
+from apps.evaluations.models import EvaluationConfig, EvaluationRun
 from apps.evaluations.tables import EvaluationConfigTable, EvaluationRunTable
 from apps.teams.mixins import LoginAndTeamRequiredMixin
 
@@ -133,23 +131,14 @@ class EvaluationResultHome(LoginAndTeamRequiredMixin, TemplateView):  # , Permis
 class EvaluationResultTableView(SingleTableView):
     template_name = "table/single_table.html"
 
-    def get_queryset(self) -> Iterable[EvaluationResult]:
-        run = get_object_or_404(
+    def get_queryset(self) -> EvaluationRun:
+        return get_object_or_404(
             EvaluationRun.objects.filter(team__slug=self.kwargs["team_slug"]),
             pk=self.kwargs["evaluation_run_pk"],
         )
-        self.run = run
-        return run.results.all()
 
     def get_table_data(self):
-        return [
-            {
-                "session": result.session.id,
-                "evaluator": result.evaluator,
-                **result.output.get("result", {}),
-            }
-            for result in self.get_queryset()
-        ]
+        return self.get_queryset().get_table_data()
 
     def get_table_class(self):
         """
@@ -160,7 +149,6 @@ class EvaluationResultTableView(SingleTableView):
         if not data:
             return type("EmptyTable", (tables.Table,), {})
 
-        # dynamically create attrs: one Column per dict key
         attrs = {}
         for row in data:
             for key in row:
@@ -169,7 +157,7 @@ class EvaluationResultTableView(SingleTableView):
                 header = key.replace("_", " ").title()
                 attrs[key] = columns.Column(verbose_name=header)
 
-        return type("RunResultsTable", (tables.Table,), attrs)
+        return type("EvaluationResultTableTable", (tables.Table,), attrs)
 
 
 def create_evaluation_run(request, team_slug, evaluation_pk):
