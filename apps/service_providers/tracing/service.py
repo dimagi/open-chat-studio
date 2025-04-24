@@ -133,14 +133,14 @@ class TracingService:
 
         extra_callbacks = callbacks or []
         tracer_callbacks = self.get_langchain_callbacks()
-        config = {
-            "run_name": self.trace_name,
-            "callbacks": tracer_callbacks + extra_callbacks,
-            "metadata": {
+        config = RunnableConfig(
+            run_name=self.trace_name,
+            callbacks=tracer_callbacks + extra_callbacks,
+            metadata={
                 "participant-id": self.user_id,
                 "session-id": self.session_id,
             },
-        }
+        )
         if configurable is not None:
             config["configurable"] = {**configurable}
         return config
