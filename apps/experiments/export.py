@@ -72,7 +72,7 @@ def filtered_export_to_csv(experiment, sessions_queryset):
 
     for session in queryset:
         for message in session.chat.messages.all():
-            trace_id = _get_trace_info_for_export(message)
+            trace_id = _get_trace_id_for_export(message)
             row = [
                 message.id,
                 message.created_at,
@@ -96,7 +96,7 @@ def filtered_export_to_csv(experiment, sessions_queryset):
     return csv_in_memory
 
 
-def _get_trace_info_for_export(message):
+def _get_trace_id_for_export(message):
     """Returns the trace info from the message.
     This will return the first non-OCS trace info if it exists.
     """
