@@ -723,7 +723,7 @@ export function KeywordsWidget(props: WidgetParams) {
 
   const length = (Array.isArray(props.nodeParams.keywords) ? props.nodeParams.keywords.length : 1);
   const keywords = Array.isArray(props.nodeParams.keywords) ? props.nodeParams["keywords"] : [];
-  const defaultIndex = props.nodeParams.defaultKeywordIndex !== undefined ? props.nodeParams.defaultKeywordIndex : 0;
+  const defaultIndex = props.nodeParams.defaultKeywordIndex;
   const canDelete = length > 1;
 
   return (

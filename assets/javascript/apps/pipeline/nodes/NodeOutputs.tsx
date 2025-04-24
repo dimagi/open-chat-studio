@@ -13,8 +13,7 @@ export default function NodeOutputs({data}: {
   };
 
   const generateOutputLabel = (outputIndex: number, output_label:string) => {
-    // Get the default index from params, defaulting to 0 if not defined
-    const defaultIndex = data.params.defaultKeywordIndex !== undefined ? data.params.defaultKeywordIndex : 0;
+    const defaultIndex = data.params.defaultKeywordIndex;
     const isDefault = outputIndex === defaultIndex;
 
     if (multipleOutputs) {
