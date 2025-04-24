@@ -47,7 +47,7 @@ class EvaluationDataset(BaseTeamModel):
     sessions = models.ManyToManyField(ExperimentSession)
 
     def __str__(self):
-        return f"EvaluationDataset ({self.version.version_number if self.version else 'Working'})"
+        return f"EvaluationDataset ({self.name})"
 
 
 class EvaluationConfig(BaseTeamModel):
@@ -61,7 +61,7 @@ class EvaluationConfig(BaseTeamModel):
         return f"EvaluationConfig ({self.name})"
 
     def get_absolute_url(self):
-        return reverse("evaluations:runs_table", args=[self.team.slug, self.id])
+        return reverse("evaluations:evaluation_runs_home", args=[self.team.slug, self.id])
 
     def run(self) -> list["EvaluationResult"]:
         # TODO: Run this in a celery task

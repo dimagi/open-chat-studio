@@ -1,4 +1,5 @@
 from django.conf import settings
+from django.urls import reverse
 from django_tables2 import columns, tables
 
 from apps.evaluations.models import EvaluationConfig, EvaluationDataset, EvaluationRun, Evaluator
@@ -16,6 +17,14 @@ class EvaluationConfigTable(tables.Table):
     actions = actions.ActionsColumn(
         actions=[
             actions.edit_action(url_name="evaluations:edit"),
+            actions.Action(
+                url_name="evaluations:create_evaluation_run",
+                url_factory=lambda url_name, request, record, value: reverse(
+                    url_name, args=[request.team.slug, record.id]
+                ),
+                icon_class="fa-solid fa-play",
+                title="Run",
+            ),
         ]
         # actions=[
         #     actions.edit_action(url_name="pipelines:edit"),
