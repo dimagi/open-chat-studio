@@ -474,6 +474,8 @@ def base_single_experiment_view(request, team_slug, experiment_id, template_name
             bot_type_chip = Chip(label=f"Pipeline: {pipeline.name}", url=pipeline.get_absolute_url())
         elif assistant := experiment.assistant:
             bot_type_chip = Chip(label=f"Assistant: {assistant.name}", url=assistant.get_absolute_url())
+
+    channel_list = ChannelPlatform.for_filter(experiment.team)
     context = {
         "active_tab": active_tab,
         "bot_type_chip": bot_type_chip,
@@ -485,6 +487,7 @@ def base_single_experiment_view(request, team_slug, experiment_id, template_name
         "available_tags": [tag.name for tag in experiment.team.tag_set.filter(is_system_tag=False)],
         "experiment_versions": experiment.get_version_name_list(),
         "deployed_version": deployed_version,
+        "channel_list": channel_list,
         **_get_events_context(experiment, team_slug, request.origin),
     }
     if active_tab != "chatbots":
