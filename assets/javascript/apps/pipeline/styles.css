@@ -4,11 +4,11 @@
 }
 
 .edge-error .react-flow__edge-path {
-    stroke: var(--fallback-er,oklch(var(--er)));
+    stroke: var(--color-error);
     stroke-width: 2px;
 }
 
 .edge-error.selected .react-flow__edge-path {
-    stroke: var(--fallback-s,oklch(var(--s)));
+    stroke: var(--color-secondary);
     stroke-width: 2px;
 }

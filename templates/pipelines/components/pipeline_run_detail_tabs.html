@@ -20,11 +20,11 @@
     <div role="tabpanel" class="tab-content p-4" x-data="{ showDebug: false }">
         <div class="font-mono" x-data="{ openSections: {} }">
             <div class="flex mb-4 items-center cursor-pointer">
-                <span class="label-text mr-2">Show Debug</span>
+                <span class="mr-2">Show Debug</span>
                 <input x-model="showDebug" type="checkbox" class="toggle" />
             </div>
             {% for entry in pipeline_run.log.entries %}
-                <div class="log log-{{ entry.level|lower }} p-4 border rounded shadow mb-2" {% if entry.level == "DEBUG" %}x-show="showDebug"{% endif %} >
+                <div class="log log-{{ entry.level|lower }} p-4 border rounded-sm shadow-sm mb-2" {% if entry.level == "DEBUG" %}x-show="showDebug"{% endif %} >
                     <i :class="openSections['{{ entry.time }}'] ? 'fa fa-chevron-up' : 'fa fa-chevron-down'" class="mr-2 float-right" aria-hidden="true"></i>
                     <div class="flex items-center cursor-pointer" @click="openSections['{{ entry.time }}'] = !openSections['{{ entry.time }}']">
                         <time datetime="{{ entry.time }}" title="{{ entry.time }}">{{ entry.time }}</time>

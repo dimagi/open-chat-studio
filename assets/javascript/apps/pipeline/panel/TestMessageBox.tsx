@@ -147,20 +147,20 @@ export default function TestMessageBox({
             <div className="p-4">
               {userMessage && (
                 <div className="mb-4">
-                  <div className="p-2 border rounded">
+                  <div className="p-2 border rounded-sm">
                     <strong>Input:</strong> {userMessage}
                   </div>
                   {loading ? (
-                    <div className="mt-2 p-2 border rounded">
+                    <div className="mt-2 p-2 border rounded-sm">
                       <span className="loading loading-dots loading-sm"></span>
                     </div>
                   ) : errorMessage ? (
-                    <div className="mt-2 p-2 border rounded text-red-500">
+                    <div className="mt-2 p-2 border rounded-sm text-red-500">
                       <strong>Error:</strong> {errorMessage}
                     </div>
                   ) : (
                     responseMessage && (
-                      <div className="mt-2 p-2 border rounded">
+                      <div className="mt-2 p-2 border rounded-sm">
                         <strong>Output:</strong> {responseMessage}
                       </div>
                     )
@@ -176,7 +176,7 @@ export default function TestMessageBox({
               >
                 <input
                   type="text"
-                  className="input w-full p-2 border rounded mb-2"
+                  className="input w-full p-2 border rounded-sm mb-2"
                   value={newMessage}
                   onChange={(e) => setNewMessage(e.target.value)}
                   placeholder="Type your message..."

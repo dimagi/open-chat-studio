@@ -526,7 +526,7 @@ DJANGO_TABLES2_TABLE_ATTRS = {
 DJANGO_TABLES2_ROW_ATTRS = {
     "class": """
         border-b border-base-300 hover:bg-base-200
-        data-[redirect-url]:[&:not([data-redirect-url=''])]:hover:cursor-pointer
+        data-redirect-url:[&:not([data-redirect-url=''])]:hover:cursor-pointer
     """,
     "id": lambda record: f"record-{record.id}",
     "data-redirect-url": lambda record: record.get_absolute_url() if hasattr(record, "get_absolute_url") else "",

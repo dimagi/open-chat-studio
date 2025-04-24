@@ -44,7 +44,7 @@ export function PipelineNode(nodeProps: NodeProps<NodeData>) {
   return (
     <>
       <NodeToolbar position={Position.Top} isVisible={hasErrors || selected}>
-        <div className="border border-primary join">
+        <div className="join">
             <button
               className="btn btn-xs join-item"
               onClick={() => deleteNode(id)}>
@@ -57,7 +57,7 @@ export function PipelineNode(nodeProps: NodeProps<NodeData>) {
             )}
             {nodeDocs && (
               <div className="dropdown dropdown-right">
-                  <button tabIndex={0} role="button" className="btn btn-xs join-item">
+                  <button className="btn btn-xs join-item">
                       <i className={"fa-regular fa-circle-question"}></i>
                   </button>
                   <HelpContent>{nodeDocs}</HelpContent>
@@ -65,7 +65,7 @@ export function PipelineNode(nodeProps: NodeProps<NodeData>) {
             )}
             {nodeError && (
                 <div className="dropdown dropdown-top">
-                    <button tabIndex={0} role="button" className="btn btn-xs join-item">
+                    <button className="btn btn-xs join-item">
                         <i className="fa-solid fa-exclamation-triangle text-warning"></i>
                     </button>
                     <HelpContent><p>{nodeError}</p></HelpContent>
