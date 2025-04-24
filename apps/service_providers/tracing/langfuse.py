@@ -6,8 +6,9 @@ import threading
 import time
 from threading import RLock
 from typing import TYPE_CHECKING, Any
+from uuid import UUID
 
-from . import TraceService
+from . import Tracer
 from .base import ServiceNotInitializedException, ServiceReentryException
 from .callback import wrap_callback
 
@@ -19,7 +20,7 @@ if TYPE_CHECKING:
 logger = logging.getLogger("ocs.tracing.langfuse")
 
 
-class LangFuseTraceService(TraceService):
+class LangFuseTracer(Tracer):
     """
     Notes on langfuse:
 
@@ -32,19 +33,40 @@ class LangFuseTraceService(TraceService):
         self.client = None
         self.trace = None
 
-    def get_callback(self, trace_name: str, participant_id: str, session_id: str) -> BaseCallbackHandler:
-        from langfuse.callback import CallbackHandler
+    @property
+    def ready(self) -> bool:
+        return bool(self.trace)
 
+    def begin_trace(self, trace_name: str, trace_id: UUID, session_id: str, user_id: str):
         if self.trace:
             raise ServiceReentryException("Service does not support reentrant use.")
 
+        super().begin_trace(trace_name, trace_id, session_id, user_id)
+
         self.client = client_manager.get(self.config)
-        self.trace = self.client.trace(name=trace_name, session_id=session_id, user_id=participant_id)
+        self.trace = self.client.trace(name=trace_name, session_id=session_id, user_id=user_id)
+
+    def start_span(
+        self, span_id: str, span_name: str, inputs: dict[str, Any], metadata: dict[str, Any] | None = None
+    ) -> None:
+        # TODO: add implementation
+        pass
+
+    def end_span(self, span_id: str, outputs: dict[str, Any] | None = None, error: Exception | None = None) -> None:
+        # TODO: add implementation
+        pass
+
+    def get_langchain_callback(self) -> BaseCallbackHandler:
+        from langfuse.callback import CallbackHandler
+
+        if not self.trace:
+            raise ServiceReentryException("Service does not support reentrant use.")
+
         callback = CallbackHandler(
             stateful_client=self.trace,
             update_stateful_client=True,
-            user_id=participant_id,
-            session_id=session_id,
+            user_id=self.user_id,
+            session_id=self.session_id,
         )
         return wrap_callback(callback)
 
@@ -53,15 +75,13 @@ class LangFuseTraceService(TraceService):
             raise ServiceNotInitializedException("Service not initialized.")
 
         return {
-            "trace_info": {
-                "trace_id": self.trace.id,
-                "trace_url": self.trace.get_trace_url(),
-            },
+            "trace_id": self.trace.id,
+            "trace_url": self.trace.get_trace_url(),
             "trace_provider": self.type,
         }
 
-    def end(self):
-        if not self.client:
+    def end_trace(self):
+        if not self.ready:
             raise ServiceNotInitializedException("Service not initialized.")
         self.client.flush()
 

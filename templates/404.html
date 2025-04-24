@@ -18,9 +18,9 @@
         <form class="mt-6 space-y-6" method="post"
               action="{% url "web:sudo" request.resolver_match.kwargs.team_slug %}">
           {% csrf_token %}
-          <div class="form-control w-full">
+          <div class="fieldset w-full">
             <label class="label font-bold" for="id_password">Password</label>
-            <input class="input input-bordered w-full " type="password" name="password" required="" id="id_password">
+            <input class="input w-full " type="password" name="password" required="" id="id_password">
           </div>
           <input type="hidden" name="redirect" value="{{ request_path }}" id="id_redirect">
           <div>

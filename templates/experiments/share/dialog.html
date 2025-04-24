@@ -1,6 +1,6 @@
 <dialog id="sharing_modal" class="modal">
   <div class="modal-box" x-data="{ tab: 'tab-link' }">
-    <div role="tablist" class="tabs tabs-bordered">
+    <div role="tablist" class="tabs tabs-border">
       <a role="tab" class="tab" @click="tab = 'tab-link'" :class="{ 'tab-active': tab === 'tab-link' }">Public Link</a>
       <a role="tab" class="tab" @click="tab = 'tab-embed'" :class="{ 'tab-active': tab === 'tab-embed' }">Embed</a>
     </div>

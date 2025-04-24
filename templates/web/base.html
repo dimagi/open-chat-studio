@@ -43,6 +43,15 @@
     {% if GOOGLE_ANALYTICS_ID %}
       {% include 'web/components/google_analytics.html' %}
     {% endif %}
+
+    <!-- Sentry SDK. See https://docs.sentry.io/platforms/javascript/ -->
+    {% if not debug %}
+      <script
+        src="https://js.sentry-cdn.com/40eeb2bc0ecd41b2a7b9df3c5ca182e8.min.js"
+        crossorigin="anonymous"
+      ></script>
+    {% endif %}
+
     <script src="{% static 'js/site-bundle.js'%}"></script>
     {% block page_head %}
     {% endblock %}

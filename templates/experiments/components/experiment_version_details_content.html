@@ -24,22 +24,22 @@
         <span
             x-show="!editActive"
             @click="editActive = true"
-            class="hover:bg-base-200 hover:cursor-pointer text-sm p-2 rounded"
+            class="hover:bg-base-200 hover:cursor-pointer text-sm p-2 rounded-sm"
             x-text="descriptionText">
         </span>
         <textarea name="description" x-show="editActive" x-model="descriptionText" class="textarea textarea-bordered text-sm w-full"></textarea>
-        <div class="btn-group">
+        <div class="join">
             <button
                 type="button"
                 x-show="editActive"
-                class="btn btn-sm hover:bg-base-200"
+                class="join-item btn btn-sm hover:bg-base-200"
                 @click="concludeEdit()"
                 hx-post="{% url 'experiments:update_version_description' team_slug=team.slug experiment_id=experiment.working_version_id version_number=experiment.version_number %}"
                 hx-swap="none"
             >
                 <i class="fa-sm fa-solid fa-check"></i>
             </button>
-            <button type="button" x-show="editActive" class="btn btn-sm hover:bg-base-200" @click="cancelEdit()">
+            <button type="button" x-show="editActive" class="join-item btn btn-sm hover:bg-base-200" @click="cancelEdit()">
                 <i class="fa-sm fa-solid fa-xmark"></i>
             </button>
         </div>

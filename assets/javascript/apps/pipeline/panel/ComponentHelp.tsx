@@ -34,7 +34,7 @@ export function HelpContent(props: {
   style?: any
 }) {
   return (
-    <div className="card compact dropdown-content bg-base-100 rounded-box z-20 w-64 shadow border border-neutral-500"
+    <div className="card dropdown-content bg-base-100 rounded-box z-20 w-64 shadow-sm border border-neutral-500"
          style={props.style}>
       <div tabIndex={0} className="card-body">
         {props.children}

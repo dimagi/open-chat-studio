@@ -17,6 +17,7 @@ from langchain_core.prompts import MessagesPlaceholder, PromptTemplate
 from langchain_core.runnables import RunnableLambda, RunnablePassthrough
 from langchain_text_splitters import RecursiveCharacterTextSplitter
 from pydantic import BaseModel, BeforeValidator, Field, create_model, field_validator, model_validator
+from pydantic import ValidationError as PydanticValidationError
 from pydantic.config import ConfigDict
 from pydantic_core import PydanticCustomError
 from pydantic_core.core_schema import FieldValidationInfo
@@ -400,6 +401,11 @@ class BooleanNode(Passthrough):
     model_config = ConfigDict(json_schema_extra=NodeSchema(label="Conditional Node"))
 
     input_equals: str
+    tag_output_message: bool = Field(
+        default=False,
+        description="Tag the output message with the selected route",
+        json_schema_extra=UiSchema(widget=Widgets.toggle),
+    )
 
     def _process_conditional(self, state: PipelineState, node_id: str | None = None) -> Literal["true", "false"]:
         if self.input_equals == state["messages"][-1]:
@@ -414,6 +420,11 @@ class BooleanNode(Passthrough):
 class RouterMixin(BaseModel):
     keywords: list[str] = Field(default_factory=list, json_schema_extra=UiSchema(widget=Widgets.keywords))
     defaultKeywordIndex: int = Field(default=0)
+    tag_output_message: bool = Field(
+        default=False,
+        description="Tag the output message with the selected route",
+        json_schema_extra=UiSchema(widget=Widgets.toggle),
+    )
 
     @field_validator("keywords")
     def ensure_keywords_exist(cls, value, info: FieldValidationInfo):
@@ -443,7 +454,14 @@ class RouterNode(RouterMixin, Passthrough, HistoryMixin):
         json_schema_extra=NodeSchema(
             label="LLM Router",
             documentation_link=settings.DOCUMENTATION_LINKS["node_llm_router"],
-            field_order=["llm_provider_id", "llm_temperature", "history_type", "prompt", "keywords"],
+            field_order=[
+                "llm_provider_id",
+                "llm_temperature",
+                "history_type",
+                "prompt",
+                "keywords",
+                "tag_output_message",
+            ],
         )
     )
     prompt: str = Field(
@@ -451,6 +469,19 @@ class RouterNode(RouterMixin, Passthrough, HistoryMixin):
         min_length=1,
         json_schema_extra=UiSchema(widget=Widgets.expandable_text),
     )
+
+    @model_validator(mode="after")
+    def check_prompt_variables(self) -> Self:
+        context = {
+            "prompt": self.prompt,
+        }
+        try:
+            validate_prompt_variables(
+                context=context, prompt_key="prompt", known_vars=set([PromptVars.PARTICIPANT_DATA])
+            )
+            return self
+        except ValidationError as e:
+            raise PydanticCustomError("invalid_prompt", e.error_dict["prompt"][0].message, {"field": "prompt"})
 
     def _process_conditional(self, state: PipelineState, node_id=None):
         default_keyword = self.keywords[self.defaultKeywordIndex] if self.keywords else None
@@ -477,14 +508,13 @@ class RouterNode(RouterMixin, Passthrough, HistoryMixin):
         try:
             result = chain.invoke(context, config=self._config)
             keyword = getattr(result, "route", None)
-        except ValidationError:
+        except PydanticValidationError:
             keyword = None
         if not keyword:
             keyword = self.keywords[self.defaultKeywordIndex]
 
         if session:
             self._save_history(session, node_id, node_input, keyword)
-
         return keyword
 
 
@@ -552,19 +582,20 @@ class ExtractStructuredDataNodeMixin:
             | prompt
         )
 
-    def extraction_chain(self, json_schema, reference_data):
-        return self._prompt_chain(reference_data) | super().get_chat_model().with_structured_output(json_schema)
+    def extraction_chain(self, tool_class, reference_data):
+        return self._prompt_chain(reference_data) | super().get_chat_model().with_structured_output(tool_class)
 
     def _process(self, input, state: PipelineState, node_id: str, **kwargs) -> PipelineState:
-        json_schema = self.to_json_schema(json.loads(self.data_schema))
+        ToolClass = self.get_tool_class(json.loads(self.data_schema))
         reference_data = self.get_reference_data(state)
-        prompt_token_count = self._get_prompt_token_count(reference_data, json_schema)
+        prompt_token_count = self._get_prompt_token_count(reference_data, ToolClass.model_json_schema())
         message_chunks = self.chunk_messages(input, prompt_token_count=prompt_token_count)
 
         new_reference_data = reference_data
         for idx, message_chunk in enumerate(message_chunks, start=1):
-            chain = self.extraction_chain(json_schema=json_schema, reference_data=new_reference_data)
+            chain = self.extraction_chain(tool_class=ToolClass, reference_data=new_reference_data)
             output = chain.invoke(message_chunk, config=self._config)
+            output = output.model_dump()
             self.logger.info(
                 f"Chunk {idx}",
                 input=f"\nReference data:\n{new_reference_data}\nChunk data:\n{message_chunk}\n\n",
@@ -625,7 +656,7 @@ class ExtractStructuredDataNodeMixin:
 
         return text_splitter.split_text(input)
 
-    def to_json_schema(self, data: dict):
+    def get_tool_class(self, data: dict):
         """Converts a dictionary to a JSON schema by first converting it to a Pydantic object and dumping it again.
         The input should be in the format {"key": "description", "key2": [{"key": "description"}]}
 
@@ -650,10 +681,8 @@ class ExtractStructuredDataNodeMixin:
             return create_model(model_name, **pydantic_schema)
 
         Model = _create_model_from_data(data, "CustomModel")
-        schema = Model.model_json_schema()
-        # The schema needs a description in order to comply with function calling APIs
-        schema["description"] = ""
-        return schema
+        Model.description = ""
+        return Model
 
 
 class StructuredDataSchemaValidatorMixin:
