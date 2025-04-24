@@ -55,7 +55,7 @@ class TracingService:
         This context manager will start a trace if there isn't already one,
         otherwise it will start a span.
         """
-        if self.trace_id:
+        if not self.trace_id:
             with self.trace(name, session_id, user_id, inputs):
                 yield self
         else:
