@@ -1,4 +1,4 @@
-@import "tailwindcss";
+@import "tailwindcss" source("../../");
 @plugin "daisyui" {
   themes: light --default, dark --prefersdark;
 }
@@ -7,6 +7,8 @@
   name: "dark";
   --color-base-content: oklch(0.746477 0.0216 264.436);
 }
+
+@source inline("alert-success", "alert-info", "alert-error", "alert-warning", "alertify-notifier")
 
 @import './app/chat.css';
 @import './app/table.css' layer(components);

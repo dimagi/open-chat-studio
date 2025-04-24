@@ -7,13 +7,6 @@ module.exports = {
     './templates/**/*.html',
     './gpt_playground/settings.py',
   ],
-  safelist: [
-    'alert-success',
-    'alert-info',
-    'alert-error',
-    'alert-warning',
-    'alertify-notifier',
-  ],
   theme: {
     extend: {
       aspectRatio: {
