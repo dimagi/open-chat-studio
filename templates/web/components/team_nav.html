@@ -85,7 +85,7 @@
     {% if perms.assistants.view_openaiassistant %}
       <a href="{% url 'assistants:home' request.team.slug %}" {% if active_tab == 'assistants' %}class="menu-active"{% endif %}>
         <i class="fa-solid fa-robot"></i>
-        {% translate "Assistants" %}<span class="badge badge-sm">beta</span>
+        {% translate "Assistants" %}
       </a>
     {% endif %}
   </li>
@@ -94,7 +94,7 @@
       {% if perms.pipelines.view_pipeline %}
         <a href="{% url 'pipelines:home' request.team.slug %}" {% if active_tab == 'pipelines' %}class="menu-active"{% endif %}>
           <i class="fa-solid fa-puzzle-piece"></i>
-          {% translate "Pipelines" %}<span class="badge badge-sm">new!</span>
+          {% translate "Pipelines" %}
         </a>
       {% endif %}
     </li>
