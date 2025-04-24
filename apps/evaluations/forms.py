@@ -7,11 +7,12 @@ from apps.experiments.models import ExperimentSession
 class EvaluationConfigForm(forms.ModelForm):
     class Meta:
         model = EvaluationConfig
-        fields = ("name", "evaluators")
+        fields = ("name", "dataset", "evaluators")
 
     def __init__(self, team, *args, **kwargs):
         super().__init__(*args, **kwargs)
         self.team = team
+        self.fields["dataset"].queryset = EvaluationDataset.objects.filter(team=team)
 
 
 class EvaluatorForm(forms.ModelForm):
@@ -27,7 +28,7 @@ class EvaluatorForm(forms.ModelForm):
 class EvaluationDatasetForm(forms.ModelForm):
     class Meta:
         model = EvaluationDataset
-        fields = ("message_type", "sessions")
+        fields = ("name", "message_type", "sessions")
 
     def __init__(self, team, *args, **kwargs):
         super().__init__(*args, **kwargs)

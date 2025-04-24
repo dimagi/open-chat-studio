@@ -1,6 +1,7 @@
 from collections.abc import Iterable
 
 from django.contrib.auth.mixins import PermissionRequiredMixin
+from django.http import JsonResponse
 from django.shortcuts import get_object_or_404
 from django.urls import reverse
 from django.views.generic import CreateView, TemplateView, UpdateView
@@ -43,7 +44,7 @@ class CreateEvaluation(LoginAndTeamRequiredMixin, CreateView, PermissionRequired
         return {**super().get_form_kwargs(), "team": self.request.team}
 
     def get_success_url(self):
-        return reverse("evaluations:evaluations_home", args=[self.request.team.slug])
+        return reverse("evaluations:home", args=[self.request.team.slug])
 
     def form_valid(self, form):
         form.instance.team = self.request.team
@@ -86,7 +87,19 @@ class EditEvaluation(UpdateView):
         return reverse("evaluations:home", args=[self.request.team.slug])
 
 
-class EvaluationRunsTableView(SingleTableView, PermissionRequiredMixin):
+class EvaluationRunHome(LoginAndTeamRequiredMixin, TemplateView):  # , PermissionRequiredMixin
+    # permission_required = "pipelines.view_pipeline"
+    template_name = "generic/object_home.html"
+
+    def get_context_data(self, team_slug: str, **kwargs):
+        return {
+            "active_tab": "evaluations",
+            "title": "Evaluation Runs",
+            "table_url": reverse("evaluations:evaluation_runs_table", args=[team_slug, kwargs["evaluation_pk"]]),
+        }
+
+
+class EvaluationRunTableView(SingleTableView, PermissionRequiredMixin):
     # permission_required = "pipelines.view_pipelinerun"
     model = EvaluationRun
     paginate_by = 25
@@ -94,7 +107,7 @@ class EvaluationRunsTableView(SingleTableView, PermissionRequiredMixin):
     template_name = "table/single_table.html"
 
     def get_queryset(self):
-        return EvaluationRun.objects.filter(config_id=self.kwargs["pk"]).order_by("-created_at")
+        return EvaluationRun.objects.filter(config_id=self.kwargs["evaluation_pk"]).order_by("-created_at")
 
 
 class EvaluationRunDetailView(SingleTableView):
@@ -137,3 +150,10 @@ class EvaluationRunDetailView(SingleTableView):
                 attrs[key] = columns.Column(verbose_name=header)
 
         return type("RunResultsTable", (tables.Table,), attrs)
+
+
+def create_evaluation_run(request, team_slug, evaluation_pk):
+    # TODO: Assert all the permissions, etc.
+    config = get_object_or_404(EvaluationConfig, team__slug=team_slug, pk=evaluation_pk)
+    config.run()
+    return JsonResponse({"success": "true"})

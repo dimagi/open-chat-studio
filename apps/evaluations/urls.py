@@ -7,11 +7,26 @@ from .views import dataset_views, evaluator_views, evalutation_config_views
 app_name = "evaluations"
 
 urlpatterns = [
-    path("<int:pk>/runs_table/", evalutation_config_views.EvaluationRunsTableView.as_view(), name="runs_table"),
+    # path("<int:pk>/runs_table/", evalutation_config_views.EvaluationRunsTableView.as_view(), name="runs_table"),
     path(
         "<int:evaluation_pk>/runs/<int:pk>/",
         evalutation_config_views.EvaluationRunDetailView.as_view(),
         name="run_detail",
+    ),
+    path(
+        "<int:evaluation_pk>/runs/new/",
+        evalutation_config_views.create_evaluation_run,
+        name="create_evaluation_run",
+    ),
+    path(
+        "<int:evaluation_pk>/evaluation_runs",
+        evalutation_config_views.EvaluationRunHome.as_view(),
+        name="evaluation_runs_home",
+    ),
+    path(
+        "<int:evaluation_pk>/evaluation_runs_table",
+        evalutation_config_views.EvaluationRunTableView.as_view(),
+        name="evaluation_runs_table",
     ),
 ]
 
