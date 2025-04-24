@@ -8,6 +8,7 @@
   --color-base-content: oklch(0.746477 0.0216 264.436);
 }
 
+@plugin "@tailwindcss/typography";
 @source inline("alert-success", "alert-info", "alert-error", "alert-warning", "alertify-notifier")
 
 @import './app/chat.css';
