@@ -47,7 +47,7 @@ class EvaluationDataset(BaseTeamModel):
     sessions = models.ManyToManyField(ExperimentSession)
 
     def __str__(self):
-        return f"EvaluationDataset ({self.name})"
+        return f"{self.name} ({self.sessions.count()} sessions)"
 
 
 class EvaluationConfig(BaseTeamModel):
@@ -96,7 +96,7 @@ class EvaluationRun(BaseTeamModel):
         return f"EvaluationRun ({self.created_at} - {self.finished_at})"
 
     def get_absolute_url(self):
-        return reverse("evaluations:run_detail", args=[self.team.slug, self.config_id, self.pk])
+        return reverse("evaluations:evaluation_results_home", args=[self.team.slug, self.config_id, self.pk])
 
 
 class EvaluationResult(BaseTeamModel):

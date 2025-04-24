@@ -43,6 +43,8 @@ class EvaluationConfigTable(tables.Table):
         model = EvaluationConfig
         fields = (
             "name",
+            "evaluators",
+            "dataset",
             "actions",
         )
         row_attrs = settings.DJANGO_TABLES2_ROW_ATTRS

@@ -29,6 +29,21 @@ class EvaluationHome(LoginAndTeamRequiredMixin, TemplateView):  # , PermissionRe
         }
 
 
+class EvaluationTableView(SingleTableView, PermissionRequiredMixin):
+    permission_required = "pipelines.view_pipeline"
+    model = EvaluationConfig
+    paginate_by = 25
+    table_class = EvaluationConfigTable
+    template_name = "table/single_table.html"
+
+    def get_queryset(self):
+        return (
+            EvaluationConfig.objects.filter(team=self.request.team)
+            # .annotate(run_count=Count("runs"))
+            # .order_by("name")
+        )
+
+
 class CreateEvaluation(LoginAndTeamRequiredMixin, CreateView, PermissionRequiredMixin):
     # permission_required = "pipelines.add_pipeline"
     template_name = "generic/object_form.html"
@@ -50,21 +65,6 @@ class CreateEvaluation(LoginAndTeamRequiredMixin, CreateView, PermissionRequired
         form.instance.team = self.request.team
         form.instance.created_by = self.request.user
         return super().form_valid(form)
-
-
-class EvaluationTableView(SingleTableView, PermissionRequiredMixin):
-    permission_required = "pipelines.view_pipeline"
-    model = EvaluationConfig
-    paginate_by = 25
-    table_class = EvaluationConfigTable
-    template_name = "table/single_table.html"
-
-    def get_queryset(self):
-        return (
-            EvaluationConfig.objects.filter(team=self.request.team)
-            # .annotate(run_count=Count("runs"))
-            # .order_by("name")
-        )
 
 
 class EditEvaluation(UpdateView):
@@ -95,6 +95,7 @@ class EvaluationRunHome(LoginAndTeamRequiredMixin, TemplateView):  # , Permissio
         return {
             "active_tab": "evaluations",
             "title": "Evaluation Runs",
+            "allow_new": False,
             "table_url": reverse("evaluations:evaluation_runs_table", args=[team_slug, kwargs["evaluation_pk"]]),
         }
 
@@ -110,13 +111,32 @@ class EvaluationRunTableView(SingleTableView, PermissionRequiredMixin):
         return EvaluationRun.objects.filter(config_id=self.kwargs["evaluation_pk"]).order_by("-created_at")
 
 
-class EvaluationRunDetailView(SingleTableView):
+class EvaluationResultHome(LoginAndTeamRequiredMixin, TemplateView):  # , PermissionRequiredMixin
+    # permission_required = "pipelines.view_pipeline"
+    template_name = "generic/object_home.html"
+
+    def get_context_data(self, team_slug: str, **kwargs):
+        return {
+            "active_tab": "evaluations",
+            "title": "Evaluation Run Result",
+            "allow_new": False,
+            "table_url": reverse(
+                "evaluations:evaluation_results_table",
+                args=[team_slug, kwargs["evaluation_pk"], kwargs["evaluation_run_pk"]],
+            ),
+            # "title_help_content": render_help_with_link(
+            #     "Pipelines allow you to create more complex bots by combining one or more steps together.", "pipelines"  # noqa
+            # ),
+        }
+
+
+class EvaluationResultTableView(SingleTableView):
     template_name = "table/single_table.html"
 
     def get_queryset(self) -> Iterable[EvaluationResult]:
         run = get_object_or_404(
             EvaluationRun.objects.filter(team__slug=self.kwargs["team_slug"]),
-            pk=self.kwargs["pk"],
+            pk=self.kwargs["evaluation_run_pk"],
         )
         self.run = run
         return run.results.all()
@@ -125,7 +145,7 @@ class EvaluationRunDetailView(SingleTableView):
         return [
             {
                 "session": result.session.id,
-                "evaluator": result.evaluator.type,
+                "evaluator": result.evaluator,
                 **result.output.get("result", {}),
             }
             for result in self.get_queryset()
