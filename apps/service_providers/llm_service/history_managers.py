@@ -10,7 +10,6 @@ from apps.chat.conversation import compress_chat_history, compress_pipeline_chat
 from apps.chat.models import ChatMessage, ChatMessageType
 from apps.experiments.models import Experiment, ExperimentSession
 from apps.pipelines.models import PipelineChatHistory, PipelineChatHistoryTypes
-from apps.service_providers.tracing import TracingService
 
 
 class BaseHistoryManager(metaclass=ABCMeta):
@@ -45,7 +44,7 @@ class ExperimentHistoryManager(BaseHistoryManager):
         self.session = session
         self.max_token_limit = max_token_limit
         self.chat_model = chat_model
-        self.trace_service = trace_service or TracingService.create_for_experiment(experiment)
+        self.trace_service = trace_service
         self.ai_message = None
         self.history_mode = history_mode
 
@@ -141,9 +140,7 @@ class ExperimentHistoryManager(BaseHistoryManager):
         return chat_message
 
     def get_trace_metadata(self) -> dict:
-        if self.trace_service:
-            return self.trace_service.get_trace_metadata()
-        return {}
+        return self.trace_service.get_trace_metadata()
 
 
 class PipelineHistoryManager(BaseHistoryManager):
