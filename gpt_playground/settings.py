@@ -444,6 +444,7 @@ if SENTRY_DSN:
     sentry_sdk.init(
         dsn=SENTRY_DSN,
         send_default_pii=True,  # include user details in events
+        attach_stacktrace=True,  # include stack trace in all events
         environment=env("SENTRY_ENVIRONMENT", default="development"),
         integrations=[
             DjangoIntegration(),

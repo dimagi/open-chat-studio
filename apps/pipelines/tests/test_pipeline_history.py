@@ -215,17 +215,20 @@ def test_global_history(get_llm_service, provider, pipeline, experiment_session)
     output_1 = experiment.pipeline.invoke(
         PipelineState(messages=[user_input], experiment_session=experiment_session, pipeline_version=1),
         experiment_session,
+        experiment,
     )
     user_input_2 = "Saying more stuff"
     output_2 = experiment.pipeline.invoke(
         PipelineState(messages=[user_input_2], experiment_session=experiment_session, pipeline_version=1),
         experiment_session,
+        experiment,
     )
 
     user_input_3 = "Tell me something interesting"
     experiment.pipeline.invoke(
         PipelineState(messages=[user_input_3], experiment_session=experiment_session, pipeline_version=1),
         experiment_session,
+        experiment,
     )
 
     expected_call_messages = [

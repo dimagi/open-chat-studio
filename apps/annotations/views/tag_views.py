@@ -1,4 +1,5 @@
 import json
+import unicodedata
 
 from django.contrib import messages
 from django.contrib.auth.mixins import PermissionRequiredMixin
@@ -44,9 +45,17 @@ class CreateTag(CreateView, PermissionRequiredMixin):
         return reverse("annotations:tag_home", args=[self.request.team.slug])
 
     def form_valid(self, form):
+        from django.db import IntegrityError
+
         form.instance.team = self.request.team
         form.instance.created_by = self.request.user
-        return super().form_valid(form)
+        form.instance.name = unicodedata.normalize("NFC", form.instance.name)
+
+        try:
+            return super().form_valid(form)
+        except IntegrityError:
+            form.add_error("name", "A tag with this name already exists for this team, system status, and category.")
+        return self.form_invalid(form)
 
 
 class EditTag(UpdateView, PermissionRequiredMixin):

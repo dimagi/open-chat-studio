@@ -321,7 +321,12 @@
     }
 
     document.addEventListener('DOMContentLoaded', () => {
-      showTabContent('allsessions');
+      if (window.location.hash) {
+        selectTabFromHash();
+      } else {
+        showTabContent('allsessions');
+      }
+
       const tabs = document.querySelectorAll('.tab');
       tabs.forEach(tab => {
         tab.addEventListener('change', (event) => {
@@ -329,10 +334,7 @@
           showTabContent(tabId);
         });
       });
-
-      selectTabFromHash();
     });
-
     window.addEventListener('hashchange', selectTabFromHash);
   </script>
 {% endblock %}

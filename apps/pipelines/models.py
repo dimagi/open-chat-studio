@@ -13,10 +13,11 @@ from django.urls import reverse
 from langchain_core.messages import AIMessage, BaseMessage, HumanMessage, SystemMessage
 from pydantic import ConfigDict
 
+from apps.annotations.models import TagCategories
 from apps.chat.models import ChatMessage, ChatMessageType
 from apps.custom_actions.form_utils import set_custom_actions
 from apps.custom_actions.mixins import CustomActionOperationMixin
-from apps.experiments.models import ExperimentSession
+from apps.experiments.models import Experiment, ExperimentSession
 from apps.experiments.versioning import VersionDetails, VersionField, VersionsMixin, VersionsObjectManagerMixin
 from apps.pipelines.exceptions import PipelineBuildError
 from apps.pipelines.executor import patch_executor
@@ -298,6 +299,7 @@ class Pipeline(BaseTeamModel, VersionsMixin):
         self,
         input: PipelineState,
         session: ExperimentSession,
+        experiment: Experiment,
         save_run_to_history=True,
         save_input_to_history=True,
         disable_reminder_tools=False,
@@ -339,11 +341,18 @@ class Pipeline(BaseTeamModel, VersionsMixin):
                         session, input["messages"][-1], ChatMessageType.HUMAN, metadata=input_metadata
                     )
                 ai_message = self._save_message_to_history(
-                    session, output["messages"][-1], ChatMessageType.AI, metadata=output_metadata
+                    session,
+                    output["messages"][-1],
+                    ChatMessageType.AI,
+                    metadata=output_metadata,
+                    tags=output.get("output_message_tags"),
                 )
-                pipeline_output = ai_message
+                ai_message.add_version_tag(
+                    version_number=experiment.version_number, is_a_version=experiment.is_a_version
+                )
+                return ai_message
             else:
-                pipeline_output = ChatMessage(content=output)
+                return ChatMessage(content=output)
         finally:
             if pipeline_run.status == PipelineRunStatus.ERROR:
                 logging_callback.logger.debug("Pipeline run failed", input=input["messages"][-1])
@@ -351,7 +360,6 @@ class Pipeline(BaseTeamModel, VersionsMixin):
                 pipeline_run.status = PipelineRunStatus.SUCCESS
                 logging_callback.logger.debug("Pipeline run finished", output=output["messages"][-1])
             pipeline_run.save()
-        return pipeline_output
 
     def _create_pipeline_run(self, input: PipelineState, session: ExperimentSession) -> "PipelineRun":
         # Django doesn't auto-serialize objects for JSON fields, so we need to copy the input and save the ID of
@@ -366,14 +374,15 @@ class Pipeline(BaseTeamModel, VersionsMixin):
         )
 
     def _save_message_to_history(
-        self, session: ExperimentSession, message: str, type_: ChatMessageType, metadata: dict
+        self, session: ExperimentSession, message: str, type_: ChatMessageType, metadata: dict, tags: list[str] = None
     ) -> ChatMessage:
         chat_message = ChatMessage.objects.create(
             chat=session.chat, message_type=type_.value, content=message, metadata=metadata
         )
 
-        if type_ == ChatMessageType.AI:
-            chat_message.add_version_tag(version_number=self.version_number, is_a_version=self.is_a_version)
+        if tags:
+            for tag in tags:
+                chat_message.add_system_tag(tag, TagCategories.BOT_RESPONSE)
         return chat_message
 
     @transaction.atomic()
