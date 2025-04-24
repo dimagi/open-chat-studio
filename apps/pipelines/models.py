@@ -312,20 +312,15 @@ class Pipeline(BaseTeamModel, VersionsMixin):
         logging_callback = PipelineLoggingCallbackHandler(pipeline_run)
         logging_callback.logger.debug("Starting pipeline run", input=input["messages"][-1])
         try:
-            with trace_service.trace(
-                trace_name=session.experiment.name,
-                session_id=str(session.external_id),
-                user_id=str(session.participant.identifier),
-            ):
-                config = trace_service.get_langchain_config(
-                    callbacks=[logging_callback],
-                    configurable={
-                        "disabled_tools": AgentTools.reminder_tools() if disable_reminder_tools else [],
-                    },
-                )
-                raw_output = runnable.invoke(input, config=config)
-                output = PipelineState(**raw_output).json_safe()
-
+            config = trace_service.get_langchain_config(
+                callbacks=[logging_callback],
+                configurable={
+                    "disabled_tools": AgentTools.reminder_tools() if disable_reminder_tools else [],
+                },
+            )
+            raw_output = runnable.invoke(input, config=config)
+            output = PipelineState(**raw_output).json_safe()
+            trace_service.set_current_span_outputs(output)
             pipeline_run.output = output
             if save_run_to_history and session is not None:
                 input_metadata = output.get("input_message_metadata", {})

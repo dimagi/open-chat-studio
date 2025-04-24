@@ -41,14 +41,16 @@ class LangFuseTracer(Tracer):
     def ready(self) -> bool:
         return bool(self.trace)
 
-    def start_trace(self, trace_name: str, trace_id: UUID, session_id: str, user_id: str):
+    def start_trace(
+        self, trace_name: str, trace_id: UUID, session_id: str, user_id: str, inputs: dict[str, Any] | None = None
+    ) -> None:
         if self.trace:
             raise ServiceReentryException("Service does not support reentrant use.")
 
-        super().start_trace(trace_name, trace_id, session_id, user_id)
+        super().start_trace(trace_name, trace_id, session_id, user_id, inputs)
 
         self.client = client_manager.get(self.config)
-        self.trace = self.client.trace(name=trace_name, session_id=session_id, user_id=user_id)
+        self.trace = self.client.trace(name=trace_name, session_id=session_id, user_id=user_id, input=inputs)
 
     def end_trace(self, outputs: dict[str, Any] | None = None, error: Exception | None = None) -> None:
         super().end_trace(outputs=outputs, error=error)
@@ -103,17 +105,10 @@ class LangFuseTracer(Tracer):
             span.end(**content)
 
     def get_langchain_callback(self) -> BaseCallbackHandler:
-        from langfuse.callback import CallbackHandler
-
         if not self.ready:
             raise ServiceReentryException("Service does not support reentrant use.")
 
-        callback = CallbackHandler(
-            stateful_client=self._get_current_span(),
-            update_stateful_client=True,
-            user_id=self.user_id,
-            session_id=self.session_id,
-        )
+        callback = self._get_current_span().get_langchain_handler(update_parent=True)
         return wrap_callback(callback)
 
     def get_trace_metadata(self) -> dict[str, str]:

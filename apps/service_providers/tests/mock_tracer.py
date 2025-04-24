@@ -17,13 +17,16 @@ class MockTracer(Tracer):
     def ready(self) -> bool:
         return bool(self.trace)
 
-    def start_trace(self, trace_name: str, trace_id: UUID, session_id: str, user_id: str):
+    def start_trace(
+        self, trace_name: str, trace_id: UUID, session_id: str, user_id: str, inputs: dict[str, Any] | None = None
+    ) -> None:
         super().start_trace(trace_name=trace_name, trace_id=trace_id, session_id=session_id, user_id=user_id)
         self.trace = {
             "name": trace_name,
             "id": trace_id,
             "session_id": session_id,
             "user_id": user_id,
+            "inputs": inputs or {},
         }
 
     def end_trace(self, outputs: dict[str, Any] | None = None, error: Exception | None = None) -> None:

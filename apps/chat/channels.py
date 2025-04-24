@@ -355,6 +355,7 @@ class ChannelBase(ABC):
                     trace_name=self.experiment.name,
                     session_id=str(self.experiment_session.external_id),
                     user_id=self.participant_identifier,
+                    inputs={"input": self.user_query},
                 ):
                     response = self._new_user_message()
                     self.trace_service.set_current_span_outputs({"response": response.content})
@@ -434,7 +435,7 @@ class ChannelBase(ABC):
         return None
 
     def _send_seed_message(self) -> str:
-        with self.trace_service.span("seed_message"):
+        with self.trace_service.span("seed_message", inputs={"input": self.experiment.seed_message}):
             bot_response = self.bot.process_input(user_input=self.experiment.seed_message, save_input_to_history=False)
             self.trace_service.set_current_span_outputs({"response": bot_response.content})
             self.send_message_to_user(bot_response.content)
@@ -540,7 +541,7 @@ class ChannelBase(ABC):
                 self.send_text_to_user(download_link)
 
     def _handle_supported_message(self):
-        with self.trace_service.span("process_message"):
+        with self.trace_service.span("process_message", inputs={"input": self.user_query}):
             self.submit_input_to_llm()
             ai_message = self._get_bot_response(message=self.user_query)
 
@@ -555,10 +556,7 @@ class ChannelBase(ABC):
         return ai_message
 
     def _handle_unsupported_message(self):
-        with self.trace_service.span("unsupported_message"):
-            response = self._unsupported_message_type_response()
-            self.trace_service.set_current_span_outputs({"response": response})
-            return self.send_text_to_user(response)
+        return self.send_text_to_user(self._unsupported_message_type_response())
 
     def _reply_voice_message(self, text: str):
         voice_provider = self.experiment.voice_provider

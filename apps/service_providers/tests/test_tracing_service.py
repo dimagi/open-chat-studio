@@ -40,7 +40,7 @@ class TestTracingService:
         session_id = "test_session"
         user_id = "test_user"
 
-        with tracing_service.trace(trace_name, session_id, user_id):
+        with tracing_service.trace(trace_name, session_id, user_id, {"input": "test"}):
             assert tracing_service.activated
             assert tracing_service.trace_name == trace_name
             assert tracing_service.session_id == session_id
@@ -50,6 +50,7 @@ class TestTracingService:
             assert mock_tracer.trace["name"] == trace_name
             assert mock_tracer.trace["session_id"] == session_id
             assert mock_tracer.trace["user_id"] == user_id
+            assert mock_tracer.trace["inputs"] == {"input": "test"}
 
             tracing_service.set_current_span_outputs({"output": "test"})
             assert tracing_service.outputs[tracing_service.trace_id] == {"output": "test"}
@@ -158,6 +159,14 @@ class TestTracingService:
             config = tracing_service.get_langchain_config(callbacks=[extra_callback], configurable=configurable)
             assert len(config["callbacks"]) == 2
             assert config["configurable"] == configurable
+
+            # Test with a span
+            with tracing_service.span("test_span", {"input": "test"}):
+                config = tracing_service.get_langchain_config()
+                assert config["run_name"] == "test_span"
+                assert len(config["callbacks"]) == 1
+                assert config["metadata"]["participant-id"] == "user_id"
+                assert config["metadata"]["session-id"] == "session_id"
 
         assert not tracing_service.activated
         config = tracing_service.get_langchain_config()

@@ -339,6 +339,7 @@ class EventBot:
             trace_name=f"{self.experiment.name} - ad-hoc event",
             session_id=str(self.session.external_id),
             user_id=str(self.session.participant.identifier),
+            inputs={"input": event_prompt},
         ):
             config = trace_service.get_langchain_config()
             response = llm.invoke(
