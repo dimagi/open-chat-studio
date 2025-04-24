@@ -371,7 +371,8 @@ class ChannelBase(ABC):
     def _new_user_message(self) -> ChatMessage:
         try:
             if not self.is_message_type_supported():
-                return self._handle_unsupported_message()
+                resp = self._handle_unsupported_message()
+                return ChatMessage(content=resp)
 
             if self.experiment_channel.platform != ChannelPlatform.WEB:
                 # Webchats' statuses are updated through an "external" flow
@@ -555,8 +556,10 @@ class ChannelBase(ABC):
         # use a coherent interface to manage / handle user messages
         return ai_message
 
-    def _handle_unsupported_message(self):
-        return self.send_text_to_user(self._unsupported_message_type_response())
+    def _handle_unsupported_message(self) -> str:
+        response = self._unsupported_message_type_response()
+        self.send_text_to_user(response)
+        return response
 
     def _reply_voice_message(self, text: str):
         voice_provider = self.experiment.voice_provider
