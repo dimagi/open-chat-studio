@@ -4,6 +4,8 @@ from uuid import UUID
 
 from langchain_core.callbacks import BaseCallbackHandler
 
+from apps.service_providers.tracing.const import SpanLevel
+
 
 class ServiceReentryException(Exception):
     pass
@@ -50,17 +52,18 @@ class Tracer(ABC):
     @abstractmethod
     def start_span(
         self,
-        span_id: str,
+        span_id: UUID,
         span_name: str,
         inputs: dict[str, Any],
         metadata: dict[str, Any] | None = None,
+        level: SpanLevel = "DEFAULT",
     ) -> None:
         raise NotImplementedError
 
     @abstractmethod
     def end_span(
         self,
-        span_id: str,
+        span_id: UUID,
         outputs: dict[str, Any] | None = None,
         error: Exception | None = None,
     ) -> None:

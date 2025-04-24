@@ -22,10 +22,9 @@ class TracingService:
         self._tracers = tracers
         self.activated = False
 
-        self.inputs: dict[str, dict] = defaultdict(dict)
-        self.inputs_metadata: dict[str, dict] = defaultdict(dict)
-        self.outputs: dict[str, dict] = defaultdict(dict)
-        self.outputs_metadata: dict[str, dict] = defaultdict(dict)
+        self.inputs: dict[UUID, dict] = defaultdict(dict)
+        self.inputs_metadata: dict[UUID, dict] = defaultdict(dict)
+        self.outputs: dict[UUID, dict] = defaultdict(dict)
 
         self.trace_name: str | None = None
         self.trace_id: UUID | None = None
@@ -79,7 +78,6 @@ class TracingService:
     @contextmanager
     def span(
         self,
-        span_id: str,
         span_name: str,
         inputs: dict[str, Any],
         metadata: dict[str, Any] | None = None,
@@ -88,12 +86,14 @@ class TracingService:
             yield self
             return
 
+        span_id = uuid.uuid4()
         self._start_span(
             span_id,
             span_name,
             inputs,
             metadata,
         )
+
         try:
             yield self
         except Exception as e:
@@ -104,12 +104,10 @@ class TracingService:
 
     def set_outputs(
         self,
-        span_id: str,
+        span_id: UUID,
         outputs: dict[str, Any],
-        output_metadata: dict[str, Any] | None = None,
     ) -> None:
         self.outputs[span_id] |= outputs or {}
-        self.outputs_metadata[span_id] |= output_metadata or {}
 
     def get_langchain_callbacks(self) -> list["BaseCallbackHandler"]:
         if not self.activated:
@@ -158,7 +156,7 @@ class TracingService:
 
     def _start_span(
         self,
-        span_id: str,
+        span_id: UUID,
         span_name: str,
         inputs: dict[str, Any],
         metadata: dict[str, Any] | None = None,
@@ -179,7 +177,7 @@ class TracingService:
             except Exception:  # noqa BLE001
                 logger.exception(f"Error starting span {span_name}")
 
-    def _end_span(self, span_id: str, span_name: str, error: Exception | None = None) -> None:
+    def _end_span(self, span_id: UUID, span_name: str, error: Exception | None = None) -> None:
         if not self.activated:
             return
 
@@ -187,7 +185,7 @@ class TracingService:
             try:
                 tracer.end_span(
                     span_id=span_id,
-                    outputs=self.outputs[span_id],
+                    outputs=self.outputs.get(span_id, None),
                     error=error,
                 )
             except Exception:  # noqa BLE001
@@ -201,4 +199,3 @@ class TracingService:
         self.inputs = defaultdict(dict)
         self.inputs_metadata = defaultdict(dict)
         self.outputs = defaultdict(dict)
-        self.outputs_metadata = defaultdict(dict)

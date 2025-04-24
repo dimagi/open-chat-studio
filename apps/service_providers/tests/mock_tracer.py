@@ -1,0 +1,58 @@
+from typing import Any
+from uuid import UUID
+
+from langchain_core.callbacks import BaseCallbackHandler
+
+from apps.service_providers.tracing import Tracer
+from apps.service_providers.tracing.const import SpanLevel
+
+
+class MockTracer(Tracer):
+    def __init__(self, type_, config: dict):
+        super().__init__(type_, config)
+        self.trace = None
+        self.spans: dict[UUID, dict] = {}
+
+    @property
+    def ready(self) -> bool:
+        return bool(self.trace)
+
+    def begin_trace(self, trace_name: str, trace_id: UUID, session_id: str, user_id: str):
+        self.trace = {
+            "name": trace_name,
+            "id": trace_id,
+            "session_id": session_id,
+            "user_id": user_id,
+        }
+
+    def end_trace(self):
+        if not self.trace:
+            raise Exception("Trace has not been started.")
+        self.trace["ended"] = True
+
+    def start_span(
+        self,
+        span_id: UUID,
+        span_name: str,
+        inputs: dict[str, Any],
+        metadata: dict[str, Any] | None = None,
+        level: SpanLevel = "DEFAULT",
+    ) -> None:
+        self.spans[span_id] = {
+            "name": span_name,
+            "inputs": inputs,
+            "metadata": metadata or {},
+            "level": level,
+        }
+
+    def end_span(self, span_id: UUID, outputs: dict[str, Any] | None = None, error: Exception | None = None) -> None:
+        span = self.spans[span_id]
+        span["outputs"] = outputs or {}
+        span["error"] = str(error) if error else None
+        span["ended"] = True
+
+    def get_langchain_callback(self) -> BaseCallbackHandler:
+        raise NotImplementedError()
+
+    def get_trace_metadata(self) -> dict[str, str]:
+        return {"trace_id": self.trace["id"]}

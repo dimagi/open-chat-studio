@@ -8,9 +8,12 @@ from threading import RLock
 from typing import TYPE_CHECKING, Any
 from uuid import UUID
 
+from langfuse.client import StatefulClient, StatefulSpanClient
+
 from . import Tracer
 from .base import ServiceNotInitializedException, ServiceReentryException
 from .callback import wrap_callback
+from .const import SpanLevel
 
 if TYPE_CHECKING:
     from langchain.callbacks.base import BaseCallbackHandler
@@ -32,6 +35,7 @@ class LangFuseTracer(Tracer):
         super().__init__(type_, config)
         self.client = None
         self.trace = None
+        self.spans: dict[UUID, StatefulSpanClient] = {}
 
     @property
     def ready(self) -> bool:
@@ -47,14 +51,42 @@ class LangFuseTracer(Tracer):
         self.trace = self.client.trace(name=trace_name, session_id=session_id, user_id=user_id)
 
     def start_span(
-        self, span_id: str, span_name: str, inputs: dict[str, Any], metadata: dict[str, Any] | None = None
+        self,
+        span_id: UUID,
+        span_name: str,
+        inputs: dict[str, Any],
+        metadata: dict[str, Any] | None = None,
+        level: SpanLevel = "DEFAULT",
     ) -> None:
-        # TODO: add implementation
-        pass
+        if not self.ready:
+            return
 
-    def end_span(self, span_id: str, outputs: dict[str, Any] | None = None, error: Exception | None = None) -> None:
-        # TODO: add implementation
-        pass
+        content_span = {
+            "id": str(span_id),
+            "name": span_name,
+            "input": inputs,
+            "metadata": metadata or {},
+            "level": level,
+        }
+
+        self.spans[span_id] = self._get_current_span().span(**content_span)
+
+    def end_span(self, span_id: UUID, outputs: dict[str, Any] | None = None, error: Exception | None = None) -> None:
+        if not self.ready:
+            return
+
+        span = self.spans.pop(span_id, None)
+        if span:
+            output: dict = {}
+            output |= outputs or {}
+            output |= {"error": str(error)} if error else {}
+
+            content = {
+                "output": output,
+                "status_message": str(error) if error else None,
+                "level": "ERROR" if error else None,
+            }
+            span.end(**content)
 
     def get_langchain_callback(self) -> BaseCallbackHandler:
         from langfuse.callback import CallbackHandler
@@ -84,6 +116,13 @@ class LangFuseTracer(Tracer):
         if not self.ready:
             raise ServiceNotInitializedException("Service not initialized.")
         self.client.flush()
+
+    def _get_current_span(self) -> StatefulClient:
+        if self.spans:
+            last_span = next(reversed(self.spans))
+            return self.spans[last_span]
+        else:
+            return self.trace
 
 
 class ClientManager:
