@@ -216,7 +216,9 @@ function MultiSelectWidget(props: WidgetParams) {
   if (options.length == 0) {
     return <></>
   }
-  let selectedValues = Array.isArray(props.paramValue) ? props.paramValue : [];
+  // props.paramValue is made immutable when produce is used to update the node, so we have to copy props.paramValue
+  // in order to push to it
+  let selectedValues = Array.isArray(props.paramValue) ? [...props.paramValue] : [];
 
   const setNode = usePipelineStore((state) => state.setNode);
 
