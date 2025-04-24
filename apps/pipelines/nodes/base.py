@@ -83,8 +83,7 @@ class PipelineState(dict):
     output_message_tags: Annotated[list[str], operator.add]
 
     # List of (previous, current, next) tuples used for aiding in routing decisions.
-    # `previous` can be None, `current` is always a string, `next` is always a list
-    path: Annotated[Sequence[tuple[str, str, str]], operator.add]
+    path: Annotated[Sequence[tuple[str | None, str, list[str]]], operator.add]
     # input to the current node
     node_input: str
     # source node for the current node
