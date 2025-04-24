@@ -20,7 +20,6 @@ logger = logging.getLogger("ocs.tracing")
 class TracingService:
     def __init__(self, tracers: list[Tracer]):
         self._tracers = tracers
-        self.activated = False
 
         self.outputs: dict[UUID, dict] = defaultdict(dict)
         self.span_stack: list[UUID] = []
@@ -45,6 +44,10 @@ class TracingService:
 
         return cls(tracers)
 
+    @property
+    def activated(self):
+        return bool(self.trace_id)
+
     @contextmanager
     def trace(self, trace_name: str, session_id: str, user_id: str):
         self.session_id = session_id
@@ -54,15 +57,12 @@ class TracingService:
 
         try:
             self._begin_traces()
-            self.activated = True
             yield self
         except Exception as e:
             self._end_traces(e)
             raise
         else:
             self._end_traces()
-        finally:
-            self.activated = False
 
     def _begin_traces(self):
         for tracer in self._tracers:
@@ -206,7 +206,6 @@ class TracingService:
         return [tracer for tracer in self._tracers if tracer.ready]
 
     def _reset(self) -> None:
-        self.activated = False
         self.trace_id = None
         self.trace_name = None
         self.session_id = None
