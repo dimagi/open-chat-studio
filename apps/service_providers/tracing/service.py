@@ -49,6 +49,20 @@ class TracingService:
         return bool(self.trace_id)
 
     @contextmanager
+    def trace_or_span(self, name: str, session_id: str, user_id: str):
+        """Context manager for tracing or spanning.
+
+        This context manager will start a trace if there isn't already one,
+        otherwise it will start a span.
+        """
+        if self.trace_id:
+            with self.trace(name, session_id, user_id):
+                yield self
+        else:
+            with self.span(name, {}, {}):
+                yield self
+
+    @contextmanager
     def trace(self, trace_name: str, session_id: str, user_id: str):
         self.session_id = session_id
         self.trace_name = trace_name

@@ -8,7 +8,7 @@ from threading import RLock
 from typing import TYPE_CHECKING, Any
 from uuid import UUID
 
-from langfuse.client import StatefulClient, StatefulSpanClient, StatefulTraceClient
+from langfuse.client import StatefulSpanClient, StatefulTraceClient
 
 from . import Tracer
 from .base import ServiceNotInitializedException, ServiceReentryException
@@ -109,7 +109,7 @@ class LangFuseTracer(Tracer):
             raise ServiceReentryException("Service does not support reentrant use.")
 
         callback = CallbackHandler(
-            stateful_client=self.trace,
+            stateful_client=self._get_current_span(),
             update_stateful_client=True,
             user_id=self.user_id,
             session_id=self.session_id,
@@ -126,7 +126,7 @@ class LangFuseTracer(Tracer):
             "trace_provider": self.type,
         }
 
-    def _get_current_span(self) -> StatefulClient:
+    def _get_current_span(self) -> StatefulTraceClient | StatefulSpanClient:
         if self.spans:
             last_span = next(reversed(self.spans))
             return self.spans[last_span]

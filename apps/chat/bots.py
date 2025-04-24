@@ -208,13 +208,8 @@ class TopicBot:
 
             return self.generator_chain.history_manager.ai_message
 
-        with self.trace_service.trace(
-            trace_name=self.experiment.name,
-            session_id=str(self.session.external_id),
-            user_id=str(self.session.participant.identifier),
-        ):
-            config = self.trace_service.get_langchain_config()
-            return main_bot_chain.invoke(user_input, config=config)
+        config = self.trace_service.get_langchain_config()
+        return main_bot_chain.invoke(user_input, config=config)
 
     def _get_safe_response(self, safety_layer: SafetyLayer):
         if safety_layer.prompt_to_bot:
@@ -325,7 +320,7 @@ class EventBot:
         self.experiment = experiment or session.experiment_version
         self.history_manager = history_manager
 
-    def get_user_message(self, event_prompt: str):
+    def get_user_message(self, event_prompt: str) -> str:
         provider = self.llm_provider
         if not provider:
             raise Exception("No LLM provider found")
@@ -340,8 +335,8 @@ class EventBot:
         else:
             trace_service = TracingService.create_for_experiment(self.experiment)
 
-        with trace_service.trace(
-            trace_name=self.experiment.name,
+        with trace_service.trace_or_span(
+            trace_name=f"{self.experiment.name} - ad-hoc event",
             session_id=str(self.session.external_id),
             user_id=str(self.session.participant.identifier),
         ):

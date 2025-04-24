@@ -343,8 +343,22 @@ class ChannelBase(ABC):
         """
         with current_team(self.experiment.team):
             self._is_user_message = True
+
             try:
-                return self._new_user_message(message)
+                self._add_message(message)
+            except ParticipantNotAllowedException:
+                self.send_message_to_user("Sorry, you are not allowed to chat to this bot")
+                return ChatMessage(content="Sorry, you are not allowed to chat to this bot")
+
+            try:
+                with self.trace_service.trace(
+                    trace_name=self.experiment.name,
+                    session_id=str(self.experiment_session.external_id),
+                    user_id=self.participant_identifier,
+                ):
+                    response = self._new_user_message()
+                    self.trace_service.set_current_span_outputs({"response": response.content})
+                    return response
             except GenerationCancelled:
                 return ChatMessage(content="", message_type=ChatMessageType.AI)
 
@@ -353,13 +367,7 @@ class ChannelBase(ABC):
             return True
         return self.experiment.is_participant_allowed(self.participant_identifier)
 
-    def _new_user_message(self, message: BaseMessage) -> ChatMessage:
-        try:
-            self._add_message(message)
-        except ParticipantNotAllowedException:
-            self.send_message_to_user("Sorry, you are not allowed to chat to this bot")
-            return ChatMessage(content="Sorry, you are not allowed to chat to this bot")
-
+    def _new_user_message(self) -> ChatMessage:
         try:
             if not self.is_message_type_supported():
                 return self._handle_unsupported_message()
@@ -426,9 +434,11 @@ class ChannelBase(ABC):
         return None
 
     def _send_seed_message(self) -> str:
-        bot_response = self.bot.process_input(user_input=self.experiment.seed_message, save_input_to_history=False)
-        self.send_message_to_user(bot_response.content)
-        return bot_response.content
+        with self.trace_service.span("seed_message"):
+            bot_response = self.bot.process_input(user_input=self.experiment.seed_message, save_input_to_history=False)
+            self.trace_service.set_current_span_outputs({"response": bot_response.content})
+            self.send_message_to_user(bot_response.content)
+            return bot_response.content
 
     def _chat_initiated(self):
         """The user initiated the chat and we need to get their consent before continuing the conversation"""
@@ -530,19 +540,25 @@ class ChannelBase(ABC):
                 self.send_text_to_user(download_link)
 
     def _handle_supported_message(self):
-        self.submit_input_to_llm()
-        ai_message = self._get_bot_response(message=self.user_query)
+        with self.trace_service.span("process_message"):
+            self.submit_input_to_llm()
+            ai_message = self._get_bot_response(message=self.user_query)
 
-        files = ai_message.get_attached_files() or []
-
-        self.send_message_to_user(bot_message=ai_message.content, files=files)
+            files = ai_message.get_attached_files() or []
+            self.trace_service.set_current_span_outputs(
+                {"response": ai_message.content, "attachments": [file.name for file in files]}
+            )
+            self.send_message_to_user(bot_message=ai_message.content, files=files)
 
         # Returning the response here is a bit of a hack to support chats through the web UI while trying to
         # use a coherent interface to manage / handle user messages
         return ai_message
 
     def _handle_unsupported_message(self):
-        return self.send_text_to_user(self._unsupported_message_type_response())
+        with self.trace_service.span("unsupported_message"):
+            response = self._unsupported_message_type_response()
+            self.trace_service.set_current_span_outputs({"response": response})
+            return self.send_text_to_user(response)
 
     def _reply_voice_message(self, text: str):
         voice_provider = self.experiment.voice_provider
@@ -684,7 +700,7 @@ class ChannelBase(ABC):
     def is_message_type_supported(self) -> bool:
         return self.message and self.message.content_type in self.supported_message_types
 
-    def _unsupported_message_type_response(self):
+    def _unsupported_message_type_response(self) -> str:
         """Generates a suitable response to the user when they send unsupported messages"""
         history_manager = ExperimentHistoryManager(
             session=self.experiment_session, experiment=self.experiment, trace_service=self.trace_service
