@@ -1,6 +1,5 @@
 module.exports = {
   // keep in sync with Dockerfile
-  darkMode: ['selector', '[data-theme="dark"]'],
   content: [
     './apps/**/*.html',
     './assets/**/*.{js,jsx,ts,tsx,html}',

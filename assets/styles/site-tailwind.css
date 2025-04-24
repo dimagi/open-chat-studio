@@ -2,6 +2,7 @@
 @config '../../tailwind.config.js';
 @plugin "@tailwindcss/typography";
 @source inline("alert-success", "alert-info", "alert-error", "alert-warning", "alertify-notifier");
+@custom-variant dark (&:where([data-theme=dark], [data-theme=dark] *));
 
 @plugin "daisyui" {
   themes: light --default, dark --prefersdark;
