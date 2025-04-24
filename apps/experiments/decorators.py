@@ -87,24 +87,20 @@ def verify_session_access_cookie(view):
 
     @wraps(view)
     def _inner(request, *args, **kwargs):
-        allow_superuser_access = False
         if request.user.is_authenticated:
             if request.experiment_session.participant.user_id == request.user.id:
                 return view(request, *args, **kwargs)
             elif request.team_membership:
                 if request.user.has_perm("chat.view_chat"):
                     return view(request, *args, **kwargs)
-            else:
-                # If the user is authed but not a team member, initiate superuser access checks
-                allow_superuser_access = True
 
         try:
             access_value = get_chat_session_access_cookie_data(request)
         except (signing.BadSignature, KeyError):
-            raise TeamAccessDenied() if allow_superuser_access else Http404()
+            raise TeamAccessDenied() if request.user.is_superuser else Http404()
 
         if not _validate_access_cookie_data(request.experiment, request.experiment_session, access_value):
-            raise TeamAccessDenied() if allow_superuser_access else Http404()
+            raise TeamAccessDenied() if request.user.is_superuser else Http404()
 
         return view(request, *args, **kwargs)
 
