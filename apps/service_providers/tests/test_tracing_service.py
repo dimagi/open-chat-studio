@@ -1,4 +1,3 @@
-import uuid
 from unittest.mock import MagicMock
 from uuid import UUID
 
@@ -29,6 +28,7 @@ class TestTracingService:
         assert service.trace_id is None
         assert service.session_id is None
         assert service.user_id is None
+        assert service.span_stack == []
 
     def test_empty_initialization(self):
         service = TracingService.empty()
@@ -51,24 +51,28 @@ class TestTracingService:
             assert mock_tracer.trace["session_id"] == session_id
             assert mock_tracer.trace["user_id"] == user_id
 
-        # Note: In the current implementation, the activated state is not reset
-        # when exiting the context manager
-        assert tracing_service.activated
+            tracing_service.set_current_span_outputs({"output": "test"})
+            assert tracing_service.outputs[tracing_service.trace_id] == {"output": "test"}
+
+        assert not tracing_service.activated
 
     def test_end_traces(self, tracing_service, mock_tracer):
-        # Setup a trace
         trace_name = "test_trace"
         session_id = "test_session"
         user_id = "test_user"
         with tracing_service.trace(trace_name, session_id, user_id):
             # Add some data to verify reset
-            span_id = uuid.uuid4()
-            tracing_service.outputs[span_id] = {"output": "test"}
+            tracing_service.set_current_span_outputs({"output": "test"})
 
         assert mock_tracer.trace["ended"]
 
-        # Verify IO was reset
+        assert not tracing_service.activated
+        assert not tracing_service.trace_id
+        assert not tracing_service.trace_name
+        assert not tracing_service.session_id
+        assert not tracing_service.user_id
         assert not tracing_service.outputs
+        assert not tracing_service.span_stack
 
     def test_span_context_manager(self, tracing_service, mock_tracer):
         trace_name = "test_trace"
@@ -88,7 +92,7 @@ class TestTracingService:
                 assert span_data["metadata"] == metadata
 
                 outputs = {"output": "test"}
-                span.set_outputs(span_id, outputs)
+                span.set_current_span_outputs(outputs)
                 assert tracing_service.outputs[span_id] == outputs
 
             span_data = mock_tracer.spans[span_id]
@@ -133,9 +137,7 @@ class TestTracingService:
             callbacks = tracing_service.get_langchain_callbacks()
             assert len(callbacks) == 1
 
-        # Note: In the current implementation, the service remains activated
-        # after exiting the context manager, so we need to manually reset it
-        tracing_service.activated = False
+        assert not tracing_service.activated
         callbacks = tracing_service.get_langchain_callbacks()
         assert callbacks == []
 
@@ -157,22 +159,16 @@ class TestTracingService:
             assert len(config["callbacks"]) == 2
             assert config["configurable"] == configurable
 
-        # Note: In the current implementation, the service remains activated
-        # after exiting the context manager, so we need to manually reset it
-        tracing_service.activated = False
+        assert not tracing_service.activated
         config = tracing_service.get_langchain_config()
         assert config == {}
 
     def test_get_trace_metadata(self, tracing_service, mock_tracer):
-        # Mock the get_trace_metadata method
-        # Test with activated service
         with tracing_service.trace("test", "session", "user"):
             metadata = tracing_service.get_trace_metadata()
             assert metadata == {"trace_info": [{"trace_id": mock_tracer.trace["id"]}]}
 
-        # Note: In the current implementation, the service remains activated
-        # after exiting the context manager, so we need to manually reset it
-        tracing_service.activated = False
+        assert not tracing_service.activated
         metadata = tracing_service.get_trace_metadata()
         assert metadata == {}
 

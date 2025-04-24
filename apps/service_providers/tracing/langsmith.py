@@ -79,6 +79,18 @@ class LangSmithTracer(Tracer):
         # Store the span for later reference
         self.spans[span_id] = span_tree
 
+    def end_trace(self, outputs: dict[str, Any] | None = None, error: Exception | None = None) -> None:
+        super().end_trace(outputs=outputs, error=error)
+        if not self.ready or not self.root_run_tree:
+            return
+
+        self.root_run_tree.end(outputs=outputs or {}, error=str(error) if error else None)
+        self.root_run_tree.patch()
+
+        self.client = None
+        self.root_run_tree = None
+        self.spans.clear()
+
     def end_span(self, span_id: UUID, outputs: dict[str, Any] | None = None, error: Exception | None = None) -> None:
         if not self.ready or not self.root_run_tree:
             return

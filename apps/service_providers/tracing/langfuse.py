@@ -8,7 +8,7 @@ from threading import RLock
 from typing import TYPE_CHECKING, Any
 from uuid import UUID
 
-from langfuse.client import StatefulClient, StatefulSpanClient
+from langfuse.client import StatefulClient, StatefulSpanClient, StatefulTraceClient
 
 from . import Tracer
 from .base import ServiceNotInitializedException, ServiceReentryException
@@ -34,7 +34,7 @@ class LangFuseTracer(Tracer):
     def __init__(self, type_, config: dict):
         super().__init__(type_, config)
         self.client = None
-        self.trace = None
+        self.trace: StatefulTraceClient | None = None
         self.spans: dict[UUID, StatefulSpanClient] = {}
 
     @property
@@ -91,7 +91,7 @@ class LangFuseTracer(Tracer):
     def get_langchain_callback(self) -> BaseCallbackHandler:
         from langfuse.callback import CallbackHandler
 
-        if not self.trace:
+        if not self.ready:
             raise ServiceReentryException("Service does not support reentrant use.")
 
         callback = CallbackHandler(
@@ -103,7 +103,7 @@ class LangFuseTracer(Tracer):
         return wrap_callback(callback)
 
     def get_trace_metadata(self) -> dict[str, str]:
-        if not self.trace:
+        if not self.ready:
             raise ServiceNotInitializedException("Service not initialized.")
 
         return {
@@ -112,10 +112,19 @@ class LangFuseTracer(Tracer):
             "trace_provider": self.type,
         }
 
-    def end_trace(self):
+    def end_trace(self, outputs: dict[str, Any] | None = None, error: Exception | None = None) -> None:
+        super().end_trace(outputs=outputs, error=error)
         if not self.ready:
             raise ServiceNotInitializedException("Service not initialized.")
+
+        if outputs or error:
+            outputs = {**outputs, "error": str(error)} if error else outputs
+            self.trace.update(output=outputs)
+
         self.client.flush()
+        self.client = None
+        self.trace = None
+        self.spans.clear()
 
     def _get_current_span(self) -> StatefulClient:
         if self.spans:

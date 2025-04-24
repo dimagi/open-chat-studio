@@ -18,6 +18,7 @@ class MockTracer(Tracer):
         return bool(self.trace)
 
     def begin_trace(self, trace_name: str, trace_id: UUID, session_id: str, user_id: str):
+        super().begin_trace(trace_name=trace_name, trace_id=trace_id, session_id=session_id, user_id=user_id)
         self.trace = {
             "name": trace_name,
             "id": trace_id,
@@ -25,9 +26,13 @@ class MockTracer(Tracer):
             "user_id": user_id,
         }
 
-    def end_trace(self):
+    def end_trace(self, outputs: dict[str, Any] | None = None, error: Exception | None = None) -> None:
+        super().end_trace(outputs=outputs, error=error)
+
         if not self.trace:
             raise Exception("Trace has not been started.")
+        self.trace["outputs"] = outputs
+        self.trace["error"] = error
         self.trace["ended"] = True
 
     def start_span(

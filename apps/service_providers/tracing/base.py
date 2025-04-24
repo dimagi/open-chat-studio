@@ -45,9 +45,12 @@ class Tracer(ABC):
         self.session_id = session_id
         self.user_id = user_id
 
-    def end_trace(self):
+    def end_trace(self, outputs: dict[str, Any] | None = None, error: Exception | None = None) -> None:
         """This must be called after all tracing methods are called to finalize the trace."""
-        pass
+        self.trace_name = None
+        self.trace_id = None
+        self.session_id = None
+        self.user_id = None
 
     @abstractmethod
     def start_span(
