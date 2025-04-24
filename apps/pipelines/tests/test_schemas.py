@@ -10,7 +10,6 @@ def test_schemas():
     schemas = _pipeline_node_schemas()
     for schema in schemas:
         title = schema["title"]
-        print(title)
         assert schema["description"], title
         assert schema["ui:label"], title
 
