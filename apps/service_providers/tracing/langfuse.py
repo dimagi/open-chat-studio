@@ -50,6 +50,20 @@ class LangFuseTracer(Tracer):
         self.client = client_manager.get(self.config)
         self.trace = self.client.trace(name=trace_name, session_id=session_id, user_id=user_id)
 
+    def end_trace(self, outputs: dict[str, Any] | None = None, error: Exception | None = None) -> None:
+        super().end_trace(outputs=outputs, error=error)
+        if not self.ready:
+            raise ServiceNotInitializedException("Service not initialized.")
+
+        if outputs or error:
+            outputs = {**outputs, "error": str(error)} if error else outputs
+            self.trace.update(output=outputs)
+
+        self.client.flush()
+        self.client = None
+        self.trace = None
+        self.spans.clear()
+
     def start_span(
         self,
         span_id: UUID,
@@ -111,20 +125,6 @@ class LangFuseTracer(Tracer):
             "trace_url": self.trace.get_trace_url(),
             "trace_provider": self.type,
         }
-
-    def end_trace(self, outputs: dict[str, Any] | None = None, error: Exception | None = None) -> None:
-        super().end_trace(outputs=outputs, error=error)
-        if not self.ready:
-            raise ServiceNotInitializedException("Service not initialized.")
-
-        if outputs or error:
-            outputs = {**outputs, "error": str(error)} if error else outputs
-            self.trace.update(output=outputs)
-
-        self.client.flush()
-        self.client = None
-        self.trace = None
-        self.spans.clear()
 
     def _get_current_span(self) -> StatefulClient:
         if self.spans:
