@@ -22,8 +22,6 @@ class TracingService:
         self._tracers = tracers
         self.activated = False
 
-        self.inputs: dict[UUID, dict] = defaultdict(dict)
-        self.inputs_metadata: dict[UUID, dict] = defaultdict(dict)
         self.outputs: dict[UUID, dict] = defaultdict(dict)
 
         self.trace_name: str | None = None
@@ -161,8 +159,6 @@ class TracingService:
         inputs: dict[str, Any],
         metadata: dict[str, Any] | None = None,
     ) -> None:
-        self.inputs[span_id] = inputs
-        self.inputs_metadata[span_id] = metadata or {}
         if not self.activated:
             return
 
@@ -196,6 +192,4 @@ class TracingService:
         return [tracer for tracer in self._tracers if tracer.ready]
 
     def _reset_io(self) -> None:
-        self.inputs = defaultdict(dict)
-        self.inputs_metadata = defaultdict(dict)
         self.outputs = defaultdict(dict)

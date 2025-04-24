@@ -63,16 +63,12 @@ class TestTracingService:
         with tracing_service.trace(trace_name, session_id, user_id):
             # Add some data to verify reset
             span_id = uuid.uuid4()
-            tracing_service.inputs[span_id] = {"input": "test"}
             tracing_service.outputs[span_id] = {"output": "test"}
-            tracing_service.inputs_metadata[span_id] = {"meta": "test"}
 
         assert mock_tracer.trace["ended"]
 
         # Verify IO was reset
-        assert not tracing_service.inputs
         assert not tracing_service.outputs
-        assert not tracing_service.inputs_metadata
 
     def test_span_context_manager(self, tracing_service, mock_tracer):
         trace_name = "test_trace"
