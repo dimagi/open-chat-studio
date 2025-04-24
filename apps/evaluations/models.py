@@ -1,3 +1,4 @@
+from collections import defaultdict
 from collections.abc import Iterable
 from typing import cast
 
@@ -97,6 +98,21 @@ class EvaluationRun(BaseTeamModel):
 
     def get_absolute_url(self):
         return reverse("evaluations:evaluation_results_home", args=[self.team.slug, self.config_id, self.pk])
+
+    def get_table_data(self):
+        results = self.results.all()
+        table_by_session = defaultdict(dict)
+        for result in results:
+            table_by_session[result.session.id].update(
+                {
+                    "session": result.session.id,
+                    **{
+                        f"{key} ({result.evaluator.name})": value
+                        for key, value in result.output.get("result", {}).items()
+                    },
+                }
+            )
+        return table_by_session.values()
 
 
 class EvaluationResult(BaseTeamModel):
