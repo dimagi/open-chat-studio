@@ -7,6 +7,7 @@ from apps.chat.models import ChatMessageType
 from apps.experiments.models import ExperimentSession
 from apps.pipelines.models import PipelineEventInputs
 from apps.pipelines.nodes.base import PipelineState
+from apps.service_providers.tracing import TracingService
 from apps.utils.django_db import MakeInterval
 
 
@@ -134,5 +135,6 @@ class PipelineStartAction(EventActionHandlerBase):
 
         input = "\n".join(f"{message.type}: {message.content}" for message in messages)
         state = PipelineState(messages=[input], experiment_session=session)
-        output = pipeline.invoke(state, session, session.experiment_version, save_run_to_history=False)
+        trace_service = TracingService.create_for_experiment(session.experiment)
+        output = pipeline.invoke(state, session, session.experiment_version, trace_service, save_run_to_history=False)
         return output.content

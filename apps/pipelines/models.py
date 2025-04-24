@@ -25,7 +25,6 @@ from apps.pipelines.flow import Flow, FlowNode, FlowNodeData
 from apps.pipelines.logging import PipelineLoggingCallbackHandler
 from apps.pipelines.nodes.base import PipelineState
 from apps.pipelines.nodes.helpers import temporary_session
-from apps.service_providers.tracing import TracingService
 from apps.teams.models import BaseTeamModel
 from apps.utils.models import BaseModel
 
@@ -300,6 +299,7 @@ class Pipeline(BaseTeamModel, VersionsMixin):
         input: PipelineState,
         session: ExperimentSession,
         experiment: Experiment,
+        trace_service,
         save_run_to_history=True,
         save_input_to_history=True,
         disable_reminder_tools=False,
@@ -312,7 +312,6 @@ class Pipeline(BaseTeamModel, VersionsMixin):
         logging_callback = PipelineLoggingCallbackHandler(pipeline_run)
         logging_callback.logger.debug("Starting pipeline run", input=input["messages"][-1])
         try:
-            trace_service = TracingService.create_for_experiment(session.experiment)
             with trace_service.trace(
                 trace_name=session.experiment.name,
                 session_id=str(session.external_id),

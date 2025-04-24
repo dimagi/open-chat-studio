@@ -133,6 +133,8 @@ class ChannelBase(ABC):
         self._participant_identifier = experiment_session.participant.identifier if experiment_session else None
         self._is_user_message = False
 
+        self.trace_service = TracingService.create_for_experiment(self.experiment)
+
     @classmethod
     def start_new_session(
         cls,
@@ -187,7 +189,7 @@ class ChannelBase(ABC):
     def bot(self):
         if not self.experiment_session:
             raise ChannelException("Bot cannot be accessed without an experiment session")
-        return get_bot(self.experiment_session, experiment=self.experiment)
+        return get_bot(self.experiment_session, self.experiment, self.trace_service)
 
     def reset_bot(self):
         try:
@@ -684,9 +686,8 @@ class ChannelBase(ABC):
 
     def _unsupported_message_type_response(self):
         """Generates a suitable response to the user when they send unsupported messages"""
-        trace_service = TracingService.create_for_experiment(self.experiment)
         history_manager = ExperimentHistoryManager(
-            session=self.experiment_session, experiment=self.experiment, trace_service=trace_service
+            session=self.experiment_session, experiment=self.experiment, trace_service=self.trace_service
         )
         return EventBot(self.experiment_session, self.experiment, history_manager).get_user_message(
             UNSUPPORTED_MESSAGE_BOT_PROMPT.format(supported_types=self.supported_message_types)

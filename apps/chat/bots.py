@@ -45,11 +45,11 @@ def notify_users_of_violation(session_id: int, safety_layer_id: int):
     notify_users_of_safety_violations_task.delay(session_id, safety_layer_id)
 
 
-def get_bot(session: ExperimentSession, experiment: Experiment | None = None, disable_tools: bool = False):
+def get_bot(session: ExperimentSession, experiment: Experiment, trace_service, disable_tools: bool = False):
     experiment = experiment or session.experiment_version
     if experiment.pipeline_id:
-        return PipelineBot(session, experiment=experiment, disable_reminder_tools=disable_tools)
-    return TopicBot(session, experiment, disable_tools=disable_tools)
+        return PipelineBot(session, experiment, trace_service, disable_reminder_tools=disable_tools)
+    return TopicBot(session, experiment, trace_service, disable_tools=disable_tools)
 
 
 class TopicBot:
@@ -66,8 +66,8 @@ class TopicBot:
         conversation history of the participant's chat with the router / main bot.
     """
 
-    def __init__(self, session: ExperimentSession, experiment: Experiment | None = None, disable_tools: bool = False):
-        self.experiment = experiment or session.experiment_version
+    def __init__(self, session: ExperimentSession, experiment: Experiment, trace_service, disable_tools: bool = False):
+        self.experiment = experiment
         self.disable_tools = disable_tools
         self.prompt = self.experiment.prompt_text
         self.input_formatter = self.experiment.input_formatter
@@ -89,7 +89,7 @@ class TopicBot:
         self.default_tag = None
         self.terminal_chain = None
         self.processor_experiment = None
-        self.trace_service = TracingService.create_for_experiment(self.experiment)
+        self.trace_service = trace_service
 
         # The chain that generated the AI message
         self.generator_chain = None
@@ -273,9 +273,10 @@ class SafetyBot:
 
 
 class PipelineBot:
-    def __init__(self, session: ExperimentSession, experiment: Experiment, disable_reminder_tools=False):
+    def __init__(self, session: ExperimentSession, experiment: Experiment, trace_service, disable_reminder_tools=False):
         self.experiment = experiment
         self.session = session
+        self.trace_service = trace_service
         self.disable_reminder_tools = disable_reminder_tools
 
     def process_input(
@@ -292,6 +293,7 @@ class PipelineBot:
             ),
             self.session,
             self.experiment,
+            self.trace_service,
             save_input_to_history=save_input_to_history,
             disable_reminder_tools=self.disable_reminder_tools,
         )
