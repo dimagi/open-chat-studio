@@ -126,6 +126,7 @@ class ExperimentSessionsTableView(LoginAndTeamRequiredMixin, SingleTableView, Pe
     def get_queryset(self):
         query_set = (
             ExperimentSession.objects.with_last_message_created_at()
+            .with_first_message_created_at()
             .filter(team=self.request.team, experiment__id=self.kwargs["experiment_id"])
             .select_related("participant__user")
         )
