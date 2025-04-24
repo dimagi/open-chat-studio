@@ -17,6 +17,7 @@ from apps.pipelines.nodes.base import PipelineState
 from apps.service_providers.llm_service.default_models import get_default_model
 from apps.service_providers.llm_service.prompt_context import PromptTemplateContext
 from apps.service_providers.llm_service.runnables import create_experiment_runnable
+from apps.service_providers.tracing import TracingService
 
 if TYPE_CHECKING:
     from apps.channels.datamodels import Attachment
@@ -88,7 +89,7 @@ class TopicBot:
         self.default_tag = None
         self.terminal_chain = None
         self.processor_experiment = None
-        self.trace_service = self.experiment.trace_service
+        self.trace_service = TracingService.create_for_experiment(self.experiment)
 
         # The chain that generated the AI message
         self.generator_chain = None
@@ -97,7 +98,7 @@ class TopicBot:
     def _initialize(self):
         for child_route in self.child_experiment_routes:
             child_runnable = create_experiment_runnable(
-                child_route.child, self.session, self.disable_tools, trace_service=self.trace_service
+                child_route.child, self.session, self.trace_service, self.disable_tools
             )
             self.child_chains[child_route.keyword.lower().strip()] = child_runnable
             if child_route.is_default:
@@ -107,16 +108,14 @@ class TopicBot:
         if self.child_chains and not self.default_child_chain:
             self.default_tag, self.default_child_chain = list(self.child_chains.items())[0]
 
-        self.chain = create_experiment_runnable(
-            self.experiment, self.session, self.disable_tools, trace_service=self.trace_service
-        )
+        self.chain = create_experiment_runnable(self.experiment, self.session, self.trace_service, self.disable_tools)
 
         terminal_route = (
             ExperimentRoute.objects.select_related("child").filter(parent=self.experiment, type="terminal").first()
         )
         if terminal_route:
             self.terminal_chain = create_experiment_runnable(
-                terminal_route.child, self.session, trace_service=self.trace_service
+                terminal_route.child, self.session, self.trace_service, self.disable_tools
             )
 
         # load up the safety bots. They should not be agents. We don't want them using tools (for now)
@@ -209,18 +208,13 @@ class TopicBot:
 
             return self.generator_chain.history_manager.ai_message
 
-        config = {}
-        if self.trace_service:
-            config = self.trace_service.get_langchain_config(
-                trace_name=self.experiment.name,
-                participant_id=str(self.session.participant.identifier),
-                session_id=str(self.session.external_id),
-            )
-        try:
+        with self.trace_service.trace(
+            trace_name=self.experiment.name,
+            session_id=str(self.session.external_id),
+            user_id=str(self.session.participant.identifier),
+        ):
+            config = self.trace_service.get_langchain_config()
             return main_bot_chain.invoke(user_input, config=config)
-        finally:
-            if self.trace_service:
-                self.trace_service.end()
 
     def _get_safe_response(self, safety_layer: SafetyLayer):
         if safety_layer.prompt_to_bot:
@@ -339,20 +333,24 @@ class EventBot:
         service = provider.get_llm_service()
         llm = service.get_chat_model(model.name, 0.7)
 
-        config = {}
-        if self.history_manager and self.history_manager.trace_service:
-            config = self.history_manager.trace_service.get_langchain_config(
-                trace_name=self.experiment.name,
-                participant_id=str(self.session.participant.identifier),
-                session_id=str(self.session.external_id),
+        if self.history_manager:
+            trace_service = self.history_manager.trace_service
+        else:
+            trace_service = TracingService.create_for_experiment(self.experiment)
+
+        with trace_service.trace(
+            trace_name=self.experiment.name,
+            session_id=str(self.session.external_id),
+            user_id=str(self.session.participant.identifier),
+        ):
+            config = trace_service.get_langchain_config()
+            response = llm.invoke(
+                [
+                    {"role": "system", "content": self.system_prompt},
+                    {"role": "user", "content": event_prompt},
+                ],
+                config=config,
             )
-        response = llm.invoke(
-            [
-                {"role": "system", "content": self.system_prompt},
-                {"role": "user", "content": event_prompt},
-            ],
-            config=config,
-        )
 
         message = response.content
         if self.history_manager:

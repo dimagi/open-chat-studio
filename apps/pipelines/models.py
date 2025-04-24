@@ -11,7 +11,6 @@ from django.core.serializers.json import DjangoJSONEncoder
 from django.db import models, transaction
 from django.urls import reverse
 from langchain_core.messages import AIMessage, BaseMessage, HumanMessage, SystemMessage
-from langchain_core.runnables import RunnableConfig
 from pydantic import ConfigDict
 
 from apps.annotations.models import TagCategories
@@ -26,6 +25,7 @@ from apps.pipelines.flow import Flow, FlowNode, FlowNodeData
 from apps.pipelines.logging import PipelineLoggingCallbackHandler
 from apps.pipelines.nodes.base import PipelineState
 from apps.pipelines.nodes.helpers import temporary_session
+from apps.service_providers.tracing import TracingService
 from apps.teams.models import BaseTeamModel
 from apps.utils.models import BaseModel
 
@@ -310,28 +310,23 @@ class Pipeline(BaseTeamModel, VersionsMixin):
         runnable = PipelineGraph.build_runnable_from_pipeline(self)
         pipeline_run = self._create_pipeline_run(input, session)
         logging_callback = PipelineLoggingCallbackHandler(pipeline_run)
-
         logging_callback.logger.debug("Starting pipeline run", input=input["messages"][-1])
-        trace_service = session.experiment.trace_service
         try:
-            callbacks = [logging_callback]
-            if trace_service:
-                trace_service_callback = trace_service.get_callback(
-                    trace_name=session.experiment.name,
-                    participant_id=str(session.participant.identifier),
-                    session_id=str(session.external_id),
+            trace_service = TracingService.create_for_experiment(session.experiment)
+            with trace_service.trace(
+                trace_name=session.experiment.name,
+                session_id=str(session.external_id),
+                user_id=str(session.participant.identifier),
+            ):
+                config = trace_service.get_langchain_config(
+                    callbacks=[logging_callback],
+                    configurable={
+                        "disabled_tools": AgentTools.reminder_tools() if disable_reminder_tools else [],
+                    },
                 )
-                callbacks.append(trace_service_callback)
+                raw_output = runnable.invoke(input, config=config)
+                output = PipelineState(**raw_output).json_safe()
 
-            config = RunnableConfig(
-                run_name=session.experiment.name,
-                callbacks=callbacks,
-                configurable={
-                    "disabled_tools": AgentTools.reminder_tools() if disable_reminder_tools else [],
-                },
-            )
-            output = runnable.invoke(input, config=config)
-            output = PipelineState(**output).json_safe()
             pipeline_run.output = output
             if save_run_to_history and session is not None:
                 input_metadata = output.get("input_message_metadata", {})
@@ -359,8 +354,6 @@ class Pipeline(BaseTeamModel, VersionsMixin):
             else:
                 return ChatMessage(content=output)
         finally:
-            if trace_service:
-                trace_service.end()
             if pipeline_run.status == PipelineRunStatus.ERROR:
                 logging_callback.logger.debug("Pipeline run failed", input=input["messages"][-1])
             else:
