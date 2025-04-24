@@ -336,7 +336,7 @@ class EventBot:
             trace_service = TracingService.create_for_experiment(self.experiment)
 
         with trace_service.trace_or_span(
-            trace_name=f"{self.experiment.name} - ad-hoc event",
+            name=f"{self.experiment.name} - ad-hoc event",
             session_id=str(self.session.external_id),
             user_id=str(self.session.participant.identifier),
             inputs={"input": event_prompt},
