@@ -82,7 +82,8 @@ class PipelineState(dict):
     attachments: list = Field(default=[])
     output_message_tags: Annotated[list[str], operator.add]
 
-    # list of (previous, current, next) tuples used for aiding in routing decisions
+    # List of (previous, current, next) tuples used for aiding in routing decisions.
+    # `previous` can be None, `current` is always a string, `next` is always a list
     path: Annotated[Sequence[tuple[str, str, str]], operator.add]
     # input to the current node
     node_input: str
@@ -90,7 +91,7 @@ class PipelineState(dict):
     node_source: str
 
     def json_safe(self):
-        # We need to make a copy of `self` so as to not change the actual value of `experiment_session` forever
+        # We need to make a copy of `self` to not change the actual value of `experiment_session` forever
         copy = self.copy()
         if "experiment_session" in copy:
             copy["experiment_session"] = copy["experiment_session"].id
@@ -124,7 +125,10 @@ class BasePipelineNode(BaseModel, ABC):
     _config: RunnableConfig | None = None
     name: str = Field(title="Node Name", json_schema_extra={"ui:widget": "node_name"})
 
-    def _prepare_state(self, node_id: str, incoming_edges: list, state: PipelineState, config: RunnableConfig):
+    def _prepare_state(self, node_id: str, incoming_edges: list, state: PipelineState):
+        """This function initializes the state before executing the node function. This is primarily
+        determining which output to select from the state as this node's input.
+        """
         from apps.channels.datamodels import Attachment
 
         if not incoming_edges:
@@ -143,9 +147,8 @@ class BasePipelineNode(BaseModel, ABC):
             state["node_source"] = incoming_edge
         else:
             # state.path is a list of tuples (previous, current, next)
-            # `next` can be a list of node IDs
             for path in reversed(state["path"]):
-                candidate_node_ids = path[2] if isinstance(path[2], list) else [path[2]]
+                candidate_node_ids = path[2]
                 for candidate_node_id in candidate_node_ids:
                     if candidate_node_id == node_id:
                         previous_node_id = path[1]
@@ -222,10 +225,9 @@ class PipelineNode(BasePipelineNode, ABC):
         self, node_id: str, incoming_edges: list, outgoing_edges: list, state: PipelineState, config: RunnableConfig
     ) -> PipelineState:
         self._config = config
-        state = self._prepare_state(node_id, incoming_edges, state, config)
+        state = self._prepare_state(node_id, incoming_edges, state)
         output = self._process(input=state["node_input"], state=state, node_id=node_id)
-        target = outgoing_edges[0] if len(outgoing_edges) == 1 else outgoing_edges
-        output["path"] = [(state["node_source"], node_id, target or None)]
+        output["path"] = [(state["node_source"], node_id, outgoing_edges)]
         return output
 
     def _process(self, input: str, state: PipelineState, node_id: str) -> PipelineState:
@@ -243,7 +245,7 @@ class PipelineRouterNode(BasePipelineNode):
         def router(state: PipelineState, config: RunnableConfig) -> ReturnType:
             self._config = config
 
-            state = self._prepare_state(node_id, incoming_edges, state, config)
+            state = self._prepare_state(node_id, incoming_edges, state)
 
             conditional_branch = self._process_conditional(state, node_id)
             output_handle = next((k for k, v in output_map.items() if v == conditional_branch), None)
