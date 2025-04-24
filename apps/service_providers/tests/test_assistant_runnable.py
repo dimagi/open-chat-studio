@@ -87,7 +87,7 @@ def test_assistant_conversation_new_chat(
         ASSISTANT_ID, run.id, thread_id, [{"assistant": "ai response"}]
     )
 
-    assistant_runnable = create_experiment_runnable(session.experiment, session)
+    assistant_runnable = create_experiment_runnable(session.experiment, session, TracingService.empty())
 
     result = assistant_runnable.invoke("test")
     assert result.output == "ai response"
@@ -122,7 +122,7 @@ def test_assistant_conversation_existing_chat(
         ASSISTANT_ID, run.id, thread_id, [{"assistant": ai_response}]
     )
 
-    assistant_runnable = create_experiment_runnable(session.experiment, session)
+    assistant_runnable = create_experiment_runnable(session.experiment, session, TracingService.empty())
     result = assistant_runnable.invoke("test")
 
     assert create_message.call_args.args == (thread_id,)
@@ -160,7 +160,7 @@ def test_assistant_conversation_input_formatting(
         ASSISTANT_ID, run.id, thread_id, [{"assistant": "ai response"}]
     )
 
-    assistant_runnable = create_experiment_runnable(session.experiment, session)
+    assistant_runnable = create_experiment_runnable(session.experiment, session, TracingService.empty())
     result = assistant_runnable.invoke("test")
     assert result.output == "ai response"
     assert create_and_run.call_args.kwargs["thread"]["messages"][0]["content"] == "foo test bar"
@@ -216,7 +216,7 @@ def test_assistant_includes_file_type_information(
 def test_assistant_runnable_raises_error(session):
     error = openai.BadRequestError("test", response=mock.Mock(), body={})
     with mock_llm([error]):
-        assistant_runnable = create_experiment_runnable(session.experiment, session)
+        assistant_runnable = create_experiment_runnable(session.experiment, session, TracingService.empty())
         with pytest.raises(openai.BadRequestError):
             assistant_runnable.invoke("test")
 
@@ -231,7 +231,7 @@ def test_assistant_runnable_raises_error(session):
 def test_assistant_runnable_handles_cancellation_status(session):
     error = ValueError("unexpected status: cancelled")
     with mock_llm([error]):
-        assistant_runnable = create_experiment_runnable(session.experiment, session)
+        assistant_runnable = create_experiment_runnable(session.experiment, session, TracingService.empty())
         with pytest.raises(GenerationCancelled):
             assistant_runnable.invoke("test")
 
@@ -283,7 +283,7 @@ def test_assistant_runnable_cancels_existing_run(save_response_annotations, resp
     thread_id = "thread_abc"
     session.chat.set_metadata(session.chat.MetadataKeys.OPENAI_THREAD_ID, thread_id)
 
-    assistant_runnable = create_experiment_runnable(session.experiment, session)
+    assistant_runnable = create_experiment_runnable(session.experiment, session, TracingService.empty())
     cancel_run = mock.Mock()
     assistant_runnable.__dict__["_cancel_run"] = cancel_run
     with mock_llm(responses):
@@ -320,7 +320,7 @@ def test_assistant_uploads_new_file(create_and_run, retrieve_run, list_messages,
         ASSISTANT_ID, run.id, thread_id, [{"assistant": "ai response"}]
     )
 
-    assistant = create_experiment_runnable(session.experiment, session)
+    assistant = create_experiment_runnable(session.experiment, session, TracingService.empty())
     attachments = [
         Attachment.from_file(files[0], "code_interpreter"),
         Attachment.from_file(files[1], "file_search"),
@@ -411,7 +411,7 @@ def test_assistant_response_with_annotations(
         " Another link to nothing [file3.pdf](https://example.com/download/file-3)"
     )
 
-    assistant = create_experiment_runnable(session.experiment, session)
+    assistant = create_experiment_runnable(session.experiment, session, TracingService.empty())
     list_messages.return_value.data = _create_thread_messages(
         ASSISTANT_ID, run.id, thread_id, [{"assistant": ai_message}], annotations
     )
@@ -486,7 +486,7 @@ def test_assistant_response_with_annotations_and_assistant_file(
     ]
 
     ai_message = "Is this the file you're looking for:【6:0†source】."
-    assistant = create_experiment_runnable(session.experiment, session)
+    assistant = create_experiment_runnable(session.experiment, session, TracingService.empty())
     list_messages.return_value.data = _create_thread_messages(
         ASSISTANT_ID, run.id, thread_id, [{"assistant": ai_message}], annotations, include_image_file=False
     )
@@ -547,7 +547,7 @@ def test_assistant_response_with_image_file_content_block(
     list_messages.return_value.data = _create_thread_messages(ASSISTANT_ID, run.id, thread_id, [{"assistant": "Ola"}])
     create_and_run.return_value = run
     retrieve_run.return_value = run
-    assistant = create_experiment_runnable(db_session.experiment, db_session)
+    assistant = create_experiment_runnable(db_session.experiment, db_session, TracingService.empty())
 
     # Run assistant
     result = assistant.invoke("test", attachments=[])
@@ -697,7 +697,7 @@ def _create_run(
 @patch("apps.service_providers.llm_service.runnables.AssistantChat._sync_messages_to_thread")
 def test_input_message_is_saved_on_chain_error(sync_messages_to_thread, db_session):
     sync_messages_to_thread.side_effect = Exception("Error")
-    assistant = create_experiment_runnable(db_session.experiment, db_session)
+    assistant = create_experiment_runnable(db_session.experiment, db_session, TracingService.empty())
 
     with pytest.raises(Exception, match="Error"):
         assistant.invoke("test", attachments=[])
@@ -733,7 +733,7 @@ def test_assistant_empty_messages_list(
     list_messages.return_value.data = []
 
     # Create the assistant runnable
-    assistant = create_experiment_runnable(session.experiment, session)
+    assistant = create_experiment_runnable(session.experiment, session, TracingService.empty())
 
     # Run the assistant - it should return an empty string for output
     result = assistant.invoke("test")

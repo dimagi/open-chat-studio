@@ -45,7 +45,7 @@ class GenerationCancelled(Exception):
 
 
 def create_experiment_runnable(
-    experiment: Experiment, session: ExperimentSession, disable_tools: bool = False, trace_service: Any = None
+    experiment: Experiment, session: ExperimentSession, trace_service: Any, disable_tools: bool = False
 ):
     """Create an experiment runnable based on the experiment configuration."""
 
