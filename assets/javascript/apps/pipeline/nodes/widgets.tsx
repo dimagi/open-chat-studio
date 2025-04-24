@@ -145,7 +145,7 @@ function RangeWidget(props: WidgetParams) {
       required={props.required}
     ></input>
     <input
-      className="range range-xs"
+      className="range range-xs w-full"
       name={props.name}
       onChange={props.updateParamValue}
       value={props.paramValue}
@@ -815,7 +815,7 @@ export function HistoryTypeWidget(props: WidgetParams) {
       <div className="flex join">
         <InputField label="History" help_text={props.helpText}>
           <select
-            className="select join-item"
+            className={`select join-item ${historyType == 'named' ? '' : 'w-full'}`}
             name={props.name}
             onChange={props.updateParamValue}
             value={historyType}
@@ -867,7 +867,7 @@ export function HistoryModeWidget(props: WidgetParams) {
       <div className="flex join">
         <InputField label="History Mode" help_text = "">
           <select
-            className="select join-item"
+            className="select join-item w-full"
             name="history_mode"
             onChange={(e) => {
               setHistoryMode(e.target.value);
@@ -889,7 +889,7 @@ export function HistoryModeWidget(props: WidgetParams) {
         <div className="flex join mb-4">
           <InputField label="Token Limit" help_text = "">
             <input
-              className="input join-item"
+              className="input join-item w-full"
               name="user_max_token_limit"
               type="number"
               onChange={props.updateParamValue}
@@ -904,7 +904,7 @@ export function HistoryModeWidget(props: WidgetParams) {
         <div className="flex join mb-4">
           <InputField label="Max History Length" help_text = "">
             <input
-              className="input join-item"
+              className="input join-item w-full"
               name="max_history_length"
               type="number"
               onChange={props.updateParamValue}
