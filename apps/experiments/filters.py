@@ -71,7 +71,9 @@ def build_filter_condition(column, operator, value):
     if column == "participant":
         return build_participant_filter(operator, value)
     elif column == "last_message":
-        return build_timestamp_filter(operator, value)
+        return build_timestamp_filter(operator, value, "last_message_created_at")
+    elif column == "first_message":
+        return build_timestamp_filter(operator, value, "first_message_created_at")
     elif column == "tags":
         return build_tags_filter(operator, value)
     elif column == "versions":
@@ -94,16 +96,16 @@ def build_participant_filter(operator, value):
     return None
 
 
-def build_timestamp_filter(operator, value):
+def build_timestamp_filter(operator, value, field=None):
     """Build filter condition for timestamp"""
     try:
         date_value = datetime.strptime(value, "%Y-%m-%d").date()
         if operator == Operators.ON:
-            return Q(last_message_created_at__date=date_value)
+            return Q(**{f"{field}__date": date_value})
         elif operator == Operators.BEFORE:
-            return Q(last_message_created_at__date__lt=date_value)
+            return Q(**{f"{field}__date__lt": date_value})
         elif operator == Operators.AFTER:
-            return Q(last_message_created_at__date__gt=date_value)
+            return Q(**{f"{field}__date__gt": date_value})
     except (ValueError, TypeError):
         pass
     return None
