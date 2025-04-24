@@ -25,6 +25,7 @@ from apps.service_providers.llm_service.runnables import (
     GenerationError,
     create_experiment_runnable,
 )
+from apps.service_providers.tracing import TracingService
 from apps.utils.factories.assistants import OpenAiAssistantFactory
 from apps.utils.factories.experiment import ExperimentSessionFactory
 from apps.utils.factories.files import FileFactory
@@ -569,7 +570,7 @@ def test_sync_messages_to_thread(messages, thread_id, thread_created, messages_c
     adapter = Mock(spec=AssistantAdapter)
     adapter.get_messages_to_sync_to_thread.return_value = messages
     session = ExperimentSessionFactory()
-    history_manager = ExperimentHistoryManager.for_assistant(session, experiment=session.experiment)
+    history_manager = ExperimentHistoryManager.for_assistant(session, session.experiment, TracingService.empty())
     assistant_runnable = AssistantChat(adapter=adapter, history_manager=history_manager)
     assistant_runnable._sync_messages_to_thread(thread_id)
 
@@ -603,7 +604,7 @@ def test_get_messages_to_sync_to_thread():
 
 def _get_assistant_mocked_history_recording(session, get_attachments_return_value=None):
     adapter = AssistantAdapter.for_experiment(session.experiment, session)
-    history_manager = ExperimentHistoryManager.for_assistant(session, session.experiment)
+    history_manager = ExperimentHistoryManager.for_assistant(session, session.experiment, TracingService.empty())
     assistant = AssistantChat(adapter=adapter, history_manager=history_manager)
     history_manager.save_message_to_history = Mock()
     adapter.get_attachments = lambda _type: get_attachments_return_value or []

@@ -14,6 +14,7 @@ from apps.service_providers.llm_service.runnables import (
     GenerationCancelled,
     SimpleLLMChat,
 )
+from apps.service_providers.tracing import TracingService
 from apps.utils.factories.assistants import OpenAiAssistantFactory
 from apps.utils.factories.experiment import ExperimentSessionFactory
 from apps.utils.langchain import build_fake_llm_service
@@ -89,8 +90,7 @@ def _test_runnable(runnable, session, expected_output):
 def _get_runnable_with_mocked_history(session, runnable_cls):
     adapter = ChatAdapter.for_experiment(session.experiment, session)
     history_manager = ExperimentHistoryManager.for_llm_chat(
-        session=session,
-        experiment=session.experiment,
+        session=session, experiment=session.experiment, trace_service=TracingService.empty()
     )
     runnable = runnable_cls(adapter=adapter, history_manager=history_manager, check_every_ms=0)
     history_manager.add_messages_to_history = Mock()
