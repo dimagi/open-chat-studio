@@ -112,6 +112,14 @@ class ChannelPlatform(models.TextChoices):
     def as_list(exclude: list["ChannelPlatform"]) -> list["ChannelPlatform"]:
         return [ChannelPlatform(value) for value in ChannelPlatform.values if value not in exclude]
 
+    @classmethod
+    def for_filter(cls, team) -> list[str]:
+        platforms = cls.for_dropdown([], team).keys()
+        platforms_with_labels = [platform.label for platform in platforms]
+        platforms_with_labels.append(cls.API.label)
+        platforms_with_labels.append(cls.WEB.label)
+        return sorted(platforms_with_labels)
+
 
 class ExperimentChannelObjectManager(AuditingManager):
     def filter_extras(self, team_slug: str, platform: ChannelPlatform, key: str, value: str):
