@@ -164,12 +164,16 @@ class TestTracingService:
 
         assert not tracing_service.activated
         config = tracing_service.get_langchain_config()
-        assert config == {}
+        assert config == {
+            "callbacks": [],
+            "metadata": {},
+            "run_name": "OCS run",
+        }
 
     def test_get_trace_metadata(self, tracing_service, mock_tracer):
         with tracing_service.trace("test", "session", "user"):
             metadata = tracing_service.get_trace_metadata()
-            assert metadata == {"trace_info": [{"trace_id": mock_tracer.trace["id"]}]}
+            assert metadata == {"trace_info": [{"trace_id": str(mock_tracer.trace["id"])}]}
 
         assert not tracing_service.activated
         metadata = tracing_service.get_trace_metadata()

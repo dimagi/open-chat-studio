@@ -73,10 +73,10 @@ class TracingService:
         inputs: dict[str, Any] | None = None,
         metadata: dict[str, str] | None = None,
     ):
-        self.session_id = session_id
-        self.trace_name = trace_name
-        self.user_id = user_id
         self.trace_id = uuid.uuid4()
+        self.trace_name = trace_name
+        self.session_id = session_id
+        self.user_id = user_id
 
         try:
             self._start_traces(inputs, metadata)
@@ -154,13 +154,15 @@ class TracingService:
         extra_callbacks = callbacks or []
         tracer_callbacks = self.get_langchain_callbacks()
         _, span_name = self._get_current_span_info()
+        metadata = {}
+        if self.user_id:
+            metadata["participant-id"] = self.user_id
+        if self.session_id:
+            metadata["session-id"] = self.session_id
         config = RunnableConfig(
-            run_name=f"{span_name} run",
+            run_name=f"{span_name or 'OCS'} run",
             callbacks=tracer_callbacks + extra_callbacks,
-            metadata={
-                "participant-id": self.user_id,
-                "session-id": self.session_id,
-            },
+            metadata=metadata,
         )
         if configurable is not None:
             config["configurable"] = {**configurable}
