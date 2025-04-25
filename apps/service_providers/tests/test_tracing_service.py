@@ -148,7 +148,7 @@ class TestTracingService:
 
         with tracing_service.trace("test_trace", "session_id", "user_id"):
             config = tracing_service.get_langchain_config()
-            assert config["run_name"] == "test_trace"
+            assert config["run_name"] == "test_trace run"
             assert len(config["callbacks"]) == 1
             assert config["metadata"]["participant-id"] == "user_id"
             assert config["metadata"]["session-id"] == "session_id"
@@ -163,7 +163,7 @@ class TestTracingService:
             # Test with a span
             with tracing_service.span("test_span", {"input": "test"}):
                 config = tracing_service.get_langchain_config()
-                assert config["run_name"] == "test_span"
+                assert config["run_name"] == "test_span run"
                 assert len(config["callbacks"]) == 1
                 assert config["metadata"]["participant-id"] == "user_id"
                 assert config["metadata"]["session-id"] == "session_id"
