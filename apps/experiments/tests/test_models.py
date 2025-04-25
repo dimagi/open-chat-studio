@@ -393,7 +393,7 @@ class TestExperimentSession:
 
         def _test():
             experiment_session.ad_hoc_bot_message(
-                instruction_prompt="Tell the user we're testing", fail_silently=fail_silently
+                "test", instruction_prompt="Tell the user we're testing", fail_silently=fail_silently
             )
             call = mock_channel.send_message_to_user.mock_calls[0]
             assert call.args[0] == "We're testing"
