@@ -18,7 +18,13 @@ class MockTracer(Tracer):
         return bool(self.trace)
 
     def start_trace(
-        self, trace_name: str, trace_id: UUID, session_id: str, user_id: str, inputs: dict[str, Any] | None = None
+        self,
+        trace_name: str,
+        trace_id: UUID,
+        session_id: str,
+        user_id: str,
+        inputs: dict[str, Any] | None = None,
+        metadata: dict[str, Any] | None = None,
     ) -> None:
         super().start_trace(trace_name=trace_name, trace_id=trace_id, session_id=session_id, user_id=user_id)
         self.trace = {
@@ -27,6 +33,7 @@ class MockTracer(Tracer):
             "session_id": session_id,
             "user_id": user_id,
             "inputs": inputs or {},
+            "metadata": metadata or {},
         }
 
     def end_trace(self, outputs: dict[str, Any] | None = None, error: Exception | None = None) -> None:

@@ -391,7 +391,7 @@ class ChannelBase(ABC):
             enqueue_static_triggers.delay(self.experiment_session.id, StaticTriggerType.NEW_HUMAN_MESSAGE)
             return self._handle_supported_message()
         except Exception as e:
-            self._inform_user_of_error()
+            self._inform_user_of_error(e)
             raise e
 
     def _handle_pre_conversation_requirements(self) -> str | None:
@@ -706,17 +706,19 @@ class ChannelBase(ABC):
         history_manager = ExperimentHistoryManager(
             session=self.experiment_session, experiment=self.experiment, trace_service=self.trace_service
         )
-        return EventBot(self.experiment_session, self.experiment, history_manager).get_user_message(
-            UNSUPPORTED_MESSAGE_BOT_PROMPT.format(supported_types=self.supported_message_types)
-        )
+        metadata = {"message_type": self.message.content_type}
+        return EventBot(
+            "unsupported message", self.experiment_session, self.experiment, history_manager, metadata
+        ).get_user_message(UNSUPPORTED_MESSAGE_BOT_PROMPT.format(supported_types=self.supported_message_types))
 
-    def _inform_user_of_error(self):
+    def _inform_user_of_error(self, exception):
         """Simply tells the user that something went wrong to keep them in the loop.
         This method will not raise an error if something went wrong during this operation.
         """
 
+        metadata = {"error": str(exception)}
         try:
-            bot_message = EventBot(self.experiment_session, self.experiment).get_user_message(
+            bot_message = EventBot("error", self.experiment_session, self.experiment, metadata).get_user_message(
                 "Tell the user that something went wrong while processing their message and that they should "
                 "try again later."
             )
@@ -821,7 +823,7 @@ class WebChannel(ChannelBase):
             session.save()
         return session
 
-    def _inform_user_of_error(self):
+    def _inform_user_of_error(self, exception):
         # Web channel's errors are optionally rendered in the UI, so no need to send a message
         pass
 

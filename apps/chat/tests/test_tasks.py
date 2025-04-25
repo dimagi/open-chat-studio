@@ -56,7 +56,7 @@ class TasksTest(TestCase):
         self.experiment_session.experiment.trace_provider = provider
 
         with mock_llm(responses=[expected_ping_message]):
-            response = self.experiment_session._bot_prompt_for_user("Some message")
+            response = self.experiment_session._bot_prompt_for_user("test", "Some message")
         messages = ChatMessage.objects.filter(chat=self.experiment_session.chat).all()
         # Only the AI message should be there
         assert len(messages) == 1

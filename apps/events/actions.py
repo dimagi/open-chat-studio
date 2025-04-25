@@ -22,7 +22,7 @@ class EventActionHandlerBase:
             Callback for whenever the associated action is updated.
     """
 
-    def invoke(self, session, *args, **kwargs):
+    def invoke(self, session, action):
         ...
 
     def event_action_updated(self, action):
@@ -105,7 +105,9 @@ class SendMessageToBotAction(EventActionHandlerBase):
         except KeyError:
             message = "The user hasn't responded, please prompt them again."
 
-        session.ad_hoc_bot_message(instruction_prompt=message)
+        session.ad_hoc_bot_message(
+            "event", instruction_prompt=message, metadata={"action_type": action.action_type, "action_id": action.id}
+        )
 
         last_message = session.chat.messages.last()
         if last_message:

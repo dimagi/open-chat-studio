@@ -315,10 +315,19 @@ class EventBot:
         """
     )
 
-    def __init__(self, session: ExperimentSession, experiment: Experiment, history_manager=None):
+    def __init__(
+        self,
+        name: str,
+        session: ExperimentSession,
+        experiment: Experiment,
+        history_manager=None,
+        metadata: dict[str, Any] | None = None,
+    ):
+        self.name = name
         self.session = session
         self.experiment = experiment or session.experiment_version
         self.history_manager = history_manager
+        self.metadata = metadata
 
     def get_user_message(self, event_prompt: str) -> str:
         provider = self.llm_provider
@@ -336,10 +345,11 @@ class EventBot:
             trace_service = TracingService.create_for_experiment(self.experiment)
 
         with trace_service.trace_or_span(
-            name=f"{self.experiment.name} - ad-hoc event",
+            name=f"{self.experiment.name} - {self.name}",
             session_id=str(self.session.external_id),
             user_id=str(self.session.participant.identifier),
             inputs={"input": event_prompt},
+            metadata=self.metadata,
         ):
             config = trace_service.get_langchain_config()
             response = llm.invoke(

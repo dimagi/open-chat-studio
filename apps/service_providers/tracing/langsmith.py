@@ -28,7 +28,13 @@ class LangSmithTracer(Tracer):
         return bool(self.client)
 
     def start_trace(
-        self, trace_name: str, trace_id: UUID, session_id: str, user_id: str, inputs: dict[str, Any] | None = None
+        self,
+        trace_name: str,
+        trace_id: UUID,
+        session_id: str,
+        user_id: str,
+        inputs: dict[str, Any] | None = None,
+        metadata: dict[str, Any] | None = None,
     ) -> None:
         from langsmith import Client
 
@@ -44,10 +50,13 @@ class LangSmithTracer(Tracer):
 
         project_name = self.config["project"]
 
-        metadata = {
-            "session_id": session_id,
-            "user_id": user_id,
-        }
+        metadata = metadata or {}
+        metadata.update(
+            {
+                "session_id": session_id,
+                "user_id": user_id,
+            }
+        )
 
         self.context = ls.tracing_context(
             project_name=project_name, metadata=metadata, client=self.client, enabled=True

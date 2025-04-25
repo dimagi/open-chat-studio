@@ -61,7 +61,7 @@ def test_get_user_message_with_llm_provider(mock_get_llm_service):
     fake_llm_service = build_fake_llm_service(responses=["this is a test message"], token_counts=[30, 20, 10])
     mock_get_llm_service.return_value = fake_llm_service
     session = ExperimentSessionFactory()
-    event_bot = EventBot(session, session.experiment)
+    event_bot = EventBot("test", session, session.experiment)
     response = event_bot.get_user_message("Test event prompt")
     mock_get_llm_service.assert_called()
     assert response == "this is a test message"

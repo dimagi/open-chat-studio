@@ -32,7 +32,13 @@ class Tracer(ABC):
 
     @abstractmethod
     def start_trace(
-        self, trace_name: str, trace_id: UUID, session_id: str, user_id: str, inputs: dict[str, Any] | None = None
+        self,
+        trace_name: str,
+        trace_id: UUID,
+        session_id: str,
+        user_id: str,
+        inputs: dict[str, Any] | None = None,
+        metadata: dict[str, Any] | None = None,
     ) -> None:
         """This must be called before any tracing methods are called.
 
@@ -41,6 +47,8 @@ class Tracer(ABC):
             trace_id (UUID): The unique identifier for the trace.
             session_id (str): The session identifier.
             user_id (str): The user identifier.
+            inputs (dict[str, Any] | None): The inputs to the trace.
+            metadata (dict[str, Any] | None): Additional metadata for the trace.
         """
         self.trace_name = trace_name
         self.trace_id = trace_id

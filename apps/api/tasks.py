@@ -87,4 +87,4 @@ def trigger_bot_message_task(data):
 
     with current_team(experiment.team):
         channel.ensure_session_exists_for_participant(identifier, new_session=start_new_session)
-        channel.experiment_session.ad_hoc_bot_message(prompt_text, use_experiment=published_experiment)
+        channel.experiment_session.ad_hoc_bot_message("api trigger", prompt_text, use_experiment=published_experiment)

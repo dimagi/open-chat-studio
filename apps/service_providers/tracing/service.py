@@ -49,28 +49,37 @@ class TracingService:
         return bool(self.trace_id)
 
     @contextmanager
-    def trace_or_span(self, name: str, session_id: str, user_id: str, inputs: dict[str, Any]):
+    def trace_or_span(
+        self, name: str, session_id: str, user_id: str, inputs: dict[str, Any], metadata: dict[str, Any] | None = None
+    ):
         """Context manager for tracing or spanning.
 
         This context manager will start a trace if there isn't already one,
         otherwise it will start a span.
         """
         if not self.trace_id:
-            with self.trace(name, session_id, user_id, inputs):
+            with self.trace(name, session_id, user_id, inputs, metadata):
                 yield self
         else:
-            with self.span(name, inputs, {}):
+            with self.span(name, inputs, metadata):
                 yield self
 
     @contextmanager
-    def trace(self, trace_name: str, session_id: str, user_id: str, inputs: dict[str, Any] = None):
+    def trace(
+        self,
+        trace_name: str,
+        session_id: str,
+        user_id: str,
+        inputs: dict[str, Any] | None = None,
+        metadata: dict[str, str] | None = None,
+    ):
         self.session_id = session_id
         self.trace_name = trace_name
         self.user_id = user_id
         self.trace_id = uuid.uuid4()
 
         try:
-            self._start_traces(inputs)
+            self._start_traces(inputs, metadata)
             yield self
         except Exception as e:
             self._end_traces(e)
@@ -78,10 +87,10 @@ class TracingService:
         else:
             self._end_traces()
 
-    def _start_traces(self, inputs: dict[str, Any] | None = None):
+    def _start_traces(self, inputs: dict[str, Any] | None = None, metadata: dict[str, str] | None = None):
         for tracer in self._tracers:
             try:
-                tracer.start_trace(self.trace_name, self.trace_id, self.session_id, self.user_id, inputs)
+                tracer.start_trace(self.trace_name, self.trace_id, self.session_id, self.user_id, inputs, metadata)
             except Exception:  # noqa BLE001
                 logger.exception("Error initializing tracer %s", tracer.__class__.__name__)
 
