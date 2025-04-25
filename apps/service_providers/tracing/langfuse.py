@@ -108,7 +108,7 @@ class LangFuseTracer(Tracer):
         if not self.ready:
             raise ServiceReentryException("Service does not support reentrant use.")
 
-        callback = self._get_current_span().get_langchain_handler(update_parent=True)
+        callback = self._get_current_span().get_langchain_handler(update_parent=False)
         return wrap_callback(callback)
 
     def get_trace_metadata(self) -> dict[str, str]:

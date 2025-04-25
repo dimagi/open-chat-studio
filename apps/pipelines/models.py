@@ -320,7 +320,6 @@ class Pipeline(BaseTeamModel, VersionsMixin):
             )
             raw_output = runnable.invoke(input, config=config)
             output = PipelineState(**raw_output).json_safe()
-            trace_service.set_current_span_outputs(output)
             pipeline_run.output = output
             if save_run_to_history and session is not None:
                 input_metadata = output.get("input_message_metadata", {})

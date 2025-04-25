@@ -149,7 +149,7 @@ class TracingService:
         tracer_callbacks = self.get_langchain_callbacks()
         _, span_name = self._get_current_span_info()
         config = RunnableConfig(
-            run_name=span_name,
+            run_name=f"{span_name} run",
             callbacks=tracer_callbacks + extra_callbacks,
             metadata={
                 "participant-id": self.user_id,

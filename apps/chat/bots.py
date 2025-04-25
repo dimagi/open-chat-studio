@@ -349,6 +349,7 @@ class EventBot:
                 ],
                 config=config,
             )
+            trace_service.set_current_span_outputs({"response": response.content})
 
         message = response.content
         if self.history_manager:
