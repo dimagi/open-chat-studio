@@ -122,7 +122,7 @@ def build_tags_filter(operator, value):
             for tag in selected_tags:
                 conditions &= Exists(
                     CustomTaggedItem.objects.filter(
-                        object_id=OuterRef("id"),
+                        object_id=OuterRef("chat__id"),
                         content_type_id=content_type,
                         tag__name=tag,
                     )
