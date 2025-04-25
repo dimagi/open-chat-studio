@@ -151,9 +151,6 @@ class TracingService:
         return callbacks
 
     def get_langchain_config(self, *, callbacks: list = None, configurable: dict = None) -> RunnableConfig:
-        if not self.activated:
-            return {}
-
         extra_callbacks = callbacks or []
         tracer_callbacks = self.get_langchain_callbacks()
         _, span_name = self._get_current_span_info()
