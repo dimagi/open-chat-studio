@@ -235,7 +235,7 @@ def _get_node_schema(node_class):
     for _key, value in schema["properties"].items():
         if "anyOf" in value:
             any_of = value.pop("anyOf")
-            value["type"] = [item["type"] for item in any_of if item["type"] != "null"][0]  # take the first type
+            value["type"] = next(item["type"] for item in any_of if item["type"] != "null")  # take the first type
     return schema
 
 

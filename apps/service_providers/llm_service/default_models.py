@@ -137,7 +137,7 @@ def _update_llm_provider_models(LlmProviderModel):
         related_objects = get_related_objects(provider_model)
         for obj in related_objects:
             custom_model = _get_or_create_custom_model(obj, key, provider_model, existing_custom_by_team)
-            field = [f for f in obj._meta.fields if f.related_model == LlmProviderModel][0]
+            field = next(f for f in obj._meta.fields if f.related_model == LlmProviderModel)
             setattr(obj, field.attname, custom_model.id)
             obj.save(update_fields=[field.name])
 
@@ -156,7 +156,7 @@ def _get_or_create_custom_model(team_object, key, global_model, existing_custom_
     """
     from apps.service_providers.models import LlmProviderModel
 
-    id_key = (team_object.team_id,) + key
+    id_key = (team_object.team_id, *key)
     custom_model = existing_custom_by_team.get(id_key)
     if not custom_model:
         custom_model = LlmProviderModel.objects.create(
@@ -175,7 +175,7 @@ def _update_pipeline_node_param(pipeline, node, param_name, param_value, commit=
         node.save()
 
     data = pipeline.data
-    raw_node = [n for n in data["nodes"] if n["id"] == node.flow_id][0]
+    raw_node = next(n for n in data["nodes"] if n["id"] == node.flow_id)
     raw_node["data"]["params"][param_name] = param_value
     node.pipeline.data = data
     if commit:

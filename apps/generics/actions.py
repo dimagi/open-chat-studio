@@ -107,9 +107,9 @@ class AjaxAction(Action):
 
 def edit_action(
     url_name: str,
-    url_factory: Callable[[str, Any, Any, Any], str] = None,
-    required_permissions: list = None,
-    display_condition: callable = None,
+    url_factory: Callable[[str, Any, Any, Any], str] | None = None,
+    required_permissions: list | None = None,
+    display_condition: callable | None = None,
     template: str | None = None,
 ):
     kwargs = {}
@@ -127,10 +127,10 @@ def edit_action(
 
 def delete_action(
     url_name: str,
-    url_factory: Callable[[str, Any, Any, Any], str] = None,
-    required_permissions: list = None,
-    display_condition: callable = None,
-    confirm_message: str = None,
+    url_factory: Callable[[str, Any, Any, Any], str] | None = None,
+    required_permissions: list | None = None,
+    display_condition: callable | None = None,
+    confirm_message: str | None = None,
     template: str | None = None,
 ):
     kwargs = {}
@@ -149,11 +149,11 @@ def delete_action(
 
 
 def chip_action(
-    label: str = None,
-    label_factory: Callable[[Any, Any], str] = None,
-    required_permissions: list = None,
-    display_condition: callable = None,
-    url_factory: Callable[[Any, Any, Any, Any], str] = None,
+    label: str | None = None,
+    label_factory: Callable[[Any, Any], str] | None = None,
+    required_permissions: list | None = None,
+    display_condition: callable | None = None,
+    url_factory: Callable[[Any, Any, Any, Any], str] | None = None,
 ):
     """Action to display a chip-style link that links to another page.
 
@@ -197,6 +197,6 @@ class ActionsColumn(TemplateColumn):
         super().__init__(template_name="generic/crud_actions_column.html", extra_context=extra_context, **extra)
 
 
-def chip_column(label: str = None, align="left", **kwargs):
+def chip_column(label: str | None = None, align="left", **kwargs):
     """A column a chip link"""
     return ActionsColumn(actions=[chip_action(label=label)], align=align, **kwargs)

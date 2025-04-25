@@ -162,7 +162,7 @@ class FakeLlmEcho(FakeLlmSimpleTokenCount):
 
 
 @contextmanager
-def mock_llm(responses: list[Any], token_counts: list[int] = None):
+def mock_llm(responses: list[Any], token_counts: list[int] | None = None):
     service = build_fake_llm_service(responses=responses, token_counts=token_counts)
 
     def fake_llm_service(self):

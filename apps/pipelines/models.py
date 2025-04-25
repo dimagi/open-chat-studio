@@ -374,7 +374,12 @@ class Pipeline(BaseTeamModel, VersionsMixin):
         )
 
     def _save_message_to_history(
-        self, session: ExperimentSession, message: str, type_: ChatMessageType, metadata: dict, tags: list[str] = None
+        self,
+        session: ExperimentSession,
+        message: str,
+        type_: ChatMessageType,
+        metadata: dict,
+        tags: list[str] | None = None,
     ) -> ChatMessage:
         chat_message = ChatMessage.objects.create(
             chat=session.chat, message_type=type_.value, content=message, metadata=metadata

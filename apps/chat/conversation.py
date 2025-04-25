@@ -129,7 +129,7 @@ def compress_chat_history(
         if summary is not None:
             if last_message:
                 ChatMessage.objects.filter(id=last_message.additional_kwargs["id"]).update(summary=summary)
-                return [SystemMessage(content=summary)] + history
+                return [SystemMessage(content=summary), *history]
             else:
                 logging.exception(f"last_message is unexpectedly None for chat_id={chat.id}")
         return history
@@ -145,7 +145,7 @@ def compress_pipeline_chat_history(
     max_token_limit: int,
     input_messages: list,
     keep_history_len: int = 10,
-    history_mode: str = None,
+    history_mode: str | None = None,
 ) -> list[BaseMessage]:
     history_messages = pipeline_chat_history.get_langchain_messages_until_summary()
     try:
@@ -160,7 +160,7 @@ def compress_pipeline_chat_history(
         if summary is not None:
             if last_message:
                 PipelineChatMessages.objects.filter(id=last_message.additional_kwargs["id"]).update(summary=summary)
-                return [SystemMessage(content=summary)] + history
+                return [SystemMessage(content=summary), *history]
             else:
                 logging.exception(f"last_message is unexpectedly None for chat_id={pipeline_chat_history.id}")
         return history

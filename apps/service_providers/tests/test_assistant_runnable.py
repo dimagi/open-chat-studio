@@ -637,9 +637,10 @@ def _create_thread_messages(
             if include_image_file
             else []
         )
-        return content + [
+        return [
+            *content,
             TextContentBlock(
-                text=Text(annotations=annotations if annotations else [], value=list(message.values())[0]),
+                text=Text(annotations=annotations if annotations else [], value=next(iter(message.values()))),
                 type="text",
             ),
         ]
@@ -652,7 +653,7 @@ def _create_thread_messages(
             created_at=0,
             content=get_content(message),
             object="thread.message",
-            role=list(message)[0],
+            role=next(iter(message)),
             run_id=run_id,
             thread_id=thread_id,
             status="completed",

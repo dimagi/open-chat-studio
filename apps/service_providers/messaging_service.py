@@ -219,7 +219,7 @@ class SureAdhereService(MessagingService):
         response.raise_for_status()
         return response.json()["access_token"]
 
-    def send_text_message(self, message: str, to: str, platform: ChannelPlatform, from_: str = None):
+    def send_text_message(self, message: str, to: str, platform: ChannelPlatform, from_: str | None = None):
         access_token = self.get_access_token()
         send_msg_url = urljoin(self.base_url, "/treatment/external/send-msg")
         headers = {"Content-Type": "application/json", "Authorization": f"Bearer {access_token}"}
@@ -238,7 +238,7 @@ class SlackService(MessagingService):
     slack_installation_id: int
 
     def send_text_message(
-        self, message: str, from_: str, to: str, platform: ChannelPlatform, thread_ts: str = None, **kwargs
+        self, message: str, from_: str, to: str, platform: ChannelPlatform, thread_ts: str | None = None, **kwargs
     ):
         self.client.chat_postMessage(
             channel=to,

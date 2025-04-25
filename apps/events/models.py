@@ -311,7 +311,7 @@ class TimeoutTrigger(BaseModel, VersionsMixin):
         return not (has_succeeded or failed)
 
     def get_fields_to_exclude(self):
-        return super().get_fields_to_exclude() + ["action", "experiment", "event_logs"]
+        return [*super().get_fields_to_exclude(), "action", "experiment", "event_logs"]
 
     @property
     def version_details(self) -> VersionDetails:
@@ -518,7 +518,7 @@ class ScheduledMessage(BaseTeamModel):
     def __str__(self):
         return self.as_string()
 
-    def as_dict(self, as_timezone: str = None):
+    def as_dict(self, as_timezone: str | None = None):
         next_trigger_date = self.next_trigger_date
         last_triggered_at = self.last_triggered_at
         if as_timezone:

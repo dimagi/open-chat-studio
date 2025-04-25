@@ -328,7 +328,7 @@ def get_tool_for_custom_action_operation(custom_action_operation) -> BaseTool | 
         return
 
     auth_service = custom_action.get_auth_service()
-    path = list(spec.paths)[0]
+    path = next(iter(spec.paths))
     method = spec.get_methods_for_path(path)[0]
     function_def = openapi_spec_op_to_function_def(spec, path, method)
     return function_def.build_tool(auth_service)

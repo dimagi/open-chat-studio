@@ -244,7 +244,7 @@ class AgentLLMChat(LLMChat):
     @property
     def prompt(self):
         prompt = super().prompt
-        return OcsPromptTemplate.from_messages(prompt.messages + [("placeholder", "{agent_scratchpad}")])
+        return OcsPromptTemplate.from_messages([*prompt.messages, ("placeholder", "{agent_scratchpad}")])
 
 
 class AssistantChat(RunnableSerializable[dict, ChainOutput]):

@@ -45,7 +45,7 @@ def delete_object_with_auditing_of_related_objects(obj):
                 continue
 
             if len(instances) == 1:
-                list(instances)[0].delete()
+                next(iter(instances)).delete()
                 counter[model._meta.label] += 1
                 continue
 
@@ -160,9 +160,9 @@ def get_related_m2m_objects(objs, exclude: list | None = None) -> dict[Any, list
             continue
 
         # get the other side of the relationship (the one that is not the origin)
-        related_field = [
+        related_field = next(
             f for f in through_model._meta.get_fields() if f.is_relation and f.related_model == related_model
-        ][0]
+        )
 
         field = related.field
         qs = collector.related_objects(through_model, [field], objs)
@@ -187,7 +187,7 @@ def _get_m2m_related_models(model):
     return m2m_models
 
 
-def get_related_objects(instance, pipeline_param_key: str = None) -> list:
+def get_related_objects(instance, pipeline_param_key: str | None = None) -> list:
     from apps.pipelines.models import Node
 
     related_objects = []
@@ -201,11 +201,11 @@ def get_related_objects(instance, pipeline_param_key: str = None) -> list:
     return related_objects
 
 
-def has_related_objects(instance, pipeline_param_key: str = None) -> bool:
+def has_related_objects(instance, pipeline_param_key: str | None = None) -> bool:
     return any(queryset.exists() for queryset in _get_related_objects_querysets(instance, pipeline_param_key))
 
 
-def _get_related_objects_querysets(instance, pipeline_param_key: str = None) -> list:
+def _get_related_objects_querysets(instance, pipeline_param_key: str | None = None) -> list:
     for related in get_candidate_relations_to_delete(instance._meta):
         related_objects = getattr(instance, related.get_accessor_name(), None)
         if related_objects is not None:
@@ -215,7 +215,7 @@ def _get_related_objects_querysets(instance, pipeline_param_key: str = None) -> 
         yield get_related_pipelines_queryset(instance, pipeline_param_key)
 
 
-def get_related_pipelines_queryset(instance, pipeline_param_key: str = None):
+def get_related_pipelines_queryset(instance, pipeline_param_key: str | None = None):
     from apps.pipelines.models import Node
 
     pipelines = Node.objects.filter(

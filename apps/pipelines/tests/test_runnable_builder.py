@@ -554,7 +554,7 @@ def main(input, **kwargs):
         config=RunnableConfig(callbacks=[callback]),
     )
     assert output["messages"][-1] == "test.py,blog.md"
-    log_entry = [e for e in callback.log_entries if e.level == "INFO"][0]
+    log_entry = next(e for e in callback.log_entries if e.level == "INFO")
     assert log_entry.message == str(serialized_attachments)
 
 
@@ -742,7 +742,7 @@ def _run_data_extract_and_update_pipeline(
 
 
 def assistant_node_runnable_mock(
-    output: str, input_message_metadata: dict = None, output_message_metadata: dict = None
+    output: str, input_message_metadata: dict | None = None, output_message_metadata: dict | None = None
 ):
     """A mock for an assistant node runnable that returns the given output and metadata."""
     runnable_mock = Mock()

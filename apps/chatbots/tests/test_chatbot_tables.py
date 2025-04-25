@@ -14,7 +14,7 @@ def test_chatbot_table_render(team_with_users):
         name="Test Experiment", description="This is a test description.", owner=user, team=team, is_archived=False
     )
     table = ChatbotTable(Experiment.objects.filter(id=experiment.id))
-    row = list(table.rows)[0]
+    row = next(iter(table.rows))
 
     assert row.get_cell("name") == "Test Experiment"
     assert row.get_cell("description") == "This is a test description."
@@ -30,7 +30,7 @@ def test_chatbot_table_redirect_url(team_with_users):
     )
 
     table = ChatbotTable(Experiment.objects.filter(id=experiment.id))
-    row_attrs = list(table.rows)[0].attrs
+    row_attrs = next(iter(table.rows)).attrs
 
     expected_url = reverse("chatbots:single_chatbot_home", args=[team.slug, experiment.id])
     assert row_attrs["data-redirect-url"] == expected_url

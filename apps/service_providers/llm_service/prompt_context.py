@@ -7,7 +7,7 @@ from apps.utils.time import pretty_date
 
 
 class PromptTemplateContext:
-    def __init__(self, session, source_material_id: int = None, collection_id: int = None):
+    def __init__(self, session, source_material_id: int | None = None, collection_id: int | None = None):
         self.session = session
         self.source_material_id = source_material_id
         self.collection_id = collection_id

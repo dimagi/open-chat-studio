@@ -70,4 +70,5 @@ urlpatterns = [
     path("channels/", include("apps.channels.urls", namespace="channels")),
     path("api/", include("apps.api.urls", namespace="api")),
     path("tz_detect/", include("tz_detect.urls")),
-] + static(settings.MEDIA_URL, document_root=settings.MEDIA_ROOT)
+    *static(settings.MEDIA_URL, document_root=settings.MEDIA_ROOT),
+]

@@ -64,8 +64,8 @@ class ChatAdapter(BaseAdapter):
         temperature: float,
         prompt_text: str,
         max_token_limit: int,
-        tools: list[BaseTool] = None,
-        disabled_tools: set[str] = None,
+        tools: list[BaseTool] | None = None,
+        disabled_tools: set[str] | None = None,
         input_formatter: str | None = None,
         source_material_id: int | None = None,
         save_message_metadata_only=False,
@@ -109,7 +109,7 @@ class ChatAdapter(BaseAdapter):
         llm_service: LlmService,
         provider_model: "LlmProviderModel",
         tools: list[BaseTool],
-        disabled_tools: set[str] = None,
+        disabled_tools: set[str] | None = None,
     ) -> Self:
         return cls(
             session=session,
@@ -150,7 +150,7 @@ class AssistantAdapter(BaseAdapter):
         citations_enabled: bool,
         input_formatter: str | None = None,
         save_message_metadata_only: bool = False,
-        disabled_tools: set[str] = None,
+        disabled_tools: set[str] | None = None,
     ):
         self.session = session
         self.assistant = assistant
@@ -177,7 +177,9 @@ class AssistantAdapter(BaseAdapter):
         )
 
     @classmethod
-    def for_pipeline(cls, session: ExperimentSession, node: "AssistantNode", disabled_tools: set[str] = None) -> Self:
+    def for_pipeline(
+        cls, session: ExperimentSession, node: "AssistantNode", disabled_tools: set[str] | None = None
+    ) -> Self:
         assistant = OpenAiAssistant.objects.get(id=node.assistant_id)
         return cls(
             session=session,

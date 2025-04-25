@@ -127,4 +127,4 @@ def get_experiment_channel(channel_id) -> ExperimentChannel | None:
         return channels[0]
 
     # if there are multiple channels, we need to find the one that matches the channel_id
-    return [channel for channel in channels if channel.extra_data.get("slack_channel_id") == channel_id][0]
+    return next(channel for channel in channels if channel.extra_data.get("slack_channel_id") == channel_id)

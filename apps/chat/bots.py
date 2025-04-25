@@ -106,7 +106,7 @@ class TopicBot:
                 self.default_tag = child_route.keyword.lower().strip()
 
         if self.child_chains and not self.default_child_chain:
-            self.default_tag, self.default_child_chain = list(self.child_chains.items())[0]
+            self.default_tag, self.default_child_chain = next(iter(self.child_chains.items()))
 
         self.chain = create_experiment_runnable(self.experiment, self.session, self.trace_service, self.disable_tools)
 

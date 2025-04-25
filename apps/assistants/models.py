@@ -162,7 +162,7 @@ class OpenAiAssistant(BaseTeamModel, VersionsMixin, CustomActionOperationMixin):
         delete_openai_assistant_task.delay(self.id)
         return True
 
-    def get_related_experiments_queryset(self, assistant_ids: list = None):
+    def get_related_experiments_queryset(self, assistant_ids: list | None = None):
         """Returns working versions and published experiments containing the assistant ids"""
         if assistant_ids:
             return Experiment.objects.filter(
@@ -173,7 +173,7 @@ class OpenAiAssistant(BaseTeamModel, VersionsMixin, CustomActionOperationMixin):
 
         return self.experiment_set.filter(Q(working_version_id=None) | Q(is_default_version=True), is_archived=False)
 
-    def get_related_pipeline_node_queryset(self, assistant_ids: list = None):
+    def get_related_pipeline_node_queryset(self, assistant_ids: list | None = None):
         """Returns working version pipelines with assistant nodes containing the assistant ids"""
         assistant_ids = assistant_ids if assistant_ids else [str(self.id)]
         return Node.objects.assistant_nodes().filter(
@@ -183,7 +183,7 @@ class OpenAiAssistant(BaseTeamModel, VersionsMixin, CustomActionOperationMixin):
             pipeline__is_archived=False,
         )
 
-    def get_related_experiments_with_pipeline_queryset(self, assistant_ids: list = None):
+    def get_related_experiments_with_pipeline_queryset(self, assistant_ids: list | None = None):
         """Returns published experiment versions referenced by versioned pipelines with assistant nodes
         containing the assistant ids"""
         assistant_ids = assistant_ids if assistant_ids else [str(self.id)]

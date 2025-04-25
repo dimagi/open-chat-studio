@@ -41,6 +41,6 @@ def teams_list(flag):
 
 @admin.register(Flag)
 class FlagAdmin(WaffleFlagAdmin):
-    list_display = tuple(list(WaffleFlagAdmin.list_display) + [teams_list])
-    list_filter = tuple(list(WaffleFlagAdmin.list_filter) + ["teams"])
-    raw_id_fields = tuple(list(WaffleFlagAdmin.raw_id_fields) + ["teams"])
+    list_display = tuple([*list(WaffleFlagAdmin.list_display), teams_list])
+    list_filter = tuple([*list(WaffleFlagAdmin.list_filter), "teams"])
+    raw_id_fields = tuple([*list(WaffleFlagAdmin.raw_id_fields), "teams"])

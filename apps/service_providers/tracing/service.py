@@ -123,7 +123,9 @@ class TracingService:
 
         return callbacks
 
-    def get_langchain_config(self, *, callbacks: list = None, configurable: dict = None) -> RunnableConfig:
+    def get_langchain_config(
+        self, *, callbacks: list | None = None, configurable: dict | None = None
+    ) -> RunnableConfig:
         if not self.activated:
             return {}
 
