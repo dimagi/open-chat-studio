@@ -1,3 +1,4 @@
+import contextlib
 import logging
 
 from langchain.chains.conversation.base import ConversationChain
@@ -75,11 +76,8 @@ class BasicConversation:
     def system_prompt(self):
         prompt_to_use = SystemMessagePromptTemplate.from_template(self.prompt_str)
         if self.source_material:
-            try:
+            with contextlib.suppress(KeyError):
                 prompt_to_use = prompt_to_use.format(source_material=self.source_material)
-            except KeyError:
-                # no source material found in prompt, just use it "naked"
-                pass
         return prompt_to_use
 
     def load_memory_from_messages(self, messages: list[BaseMessage]):
@@ -191,14 +189,16 @@ def _compress_chat_history(
     total_messages = history.copy()
     total_messages.extend(input_messages)
     current_token_count = llm.get_num_tokens_from_messages(total_messages)
-    if history_mode in [PipelineChatHistoryModes.SUMMARIZE, PipelineChatHistoryModes.TRUNCATE_TOKENS, None]:
-        if current_token_count <= max_token_limit and len(total_messages) <= MAX_UNCOMPRESSED_MESSAGES:
-            log.info("Skipping chat history compression: %s <= %s", current_token_count, max_token_limit)
-            return history, None, None
-    elif history_mode == PipelineChatHistoryModes.MAX_HISTORY_LENGTH:
-        if keep_history_len is not None and len(total_messages) <= keep_history_len:
-            log.info("Skipping chat history compression: %d <= %d", len(total_messages), keep_history_len)
-            return history, None, None
+    if history_mode in [PipelineChatHistoryModes.SUMMARIZE, PipelineChatHistoryModes.TRUNCATE_TOKENS, None] and (
+        current_token_count <= max_token_limit and len(total_messages) <= MAX_UNCOMPRESSED_MESSAGES
+    ):
+        log.info("Skipping chat history compression: %s <= %s", current_token_count, max_token_limit)
+        return history, None, None
+    elif history_mode == PipelineChatHistoryModes.MAX_HISTORY_LENGTH and (
+        keep_history_len is not None and len(total_messages) <= keep_history_len
+    ):
+        log.info("Skipping chat history compression: %d <= %d", len(total_messages), keep_history_len)
+        return history, None, None
 
     log.debug(
         "Compressing chat history with mode %s: %s/%s(max) tokens and %d/%d(max) messages",

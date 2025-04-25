@@ -1009,11 +1009,12 @@ def _verify_user_or_start_session(identifier, request, experiment, session):
     if not session.requires_participant_data():
         return _record_consent_and_redirect(team_slug, experiment, session)
 
-    if session_data := get_chat_session_access_cookie_data(request, fail_silently=True):
-        if Participant.objects.filter(
-            id=session_data["participant_id"], identifier=identifier, team_id=session.team_id
-        ).exists():
-            return _record_consent_and_redirect(team_slug, experiment, session)
+    if (
+        session_data := get_chat_session_access_cookie_data(request, fail_silently=True)
+    ) and Participant.objects.filter(
+        id=session_data["participant_id"], identifier=identifier, team_id=session.team_id
+    ).exists():
+        return _record_consent_and_redirect(team_slug, experiment, session)
 
     token_expiry: datetime = send_chat_link_email(session)
     return TemplateResponse(

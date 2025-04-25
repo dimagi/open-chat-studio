@@ -202,10 +202,12 @@ def test_prune_worker(client_manager, config, langfuse_mock):
         raise InterruptedError("Test complete")  # Stop the loop after 3 iterations
 
     # Act & Assert
-    with mock.patch("time.sleep", side_effect=mock_sleep):
-        with mock.patch.object(client_manager, "_prune_stale") as prune_mock:
-            with contextlib.suppress(InterruptedError):
-                client_manager._prune_worker()
+    with (
+        mock.patch("time.sleep", side_effect=mock_sleep),
+        mock.patch.object(client_manager, "_prune_stale") as prune_mock,
+    ):
+        with contextlib.suppress(InterruptedError):
+            client_manager._prune_worker()
 
-            # Assert _prune_stale was called 3 times
-            assert prune_mock.call_count == 3
+        # Assert _prune_stale was called 3 times
+        assert prune_mock.call_count == 3

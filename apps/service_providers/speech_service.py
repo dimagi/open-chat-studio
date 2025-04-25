@@ -131,9 +131,11 @@ class AzureSpeechService(SpeechService):
             elif result.reason == speechsdk.ResultReason.Canceled:
                 cancellation_details = result.cancellation_details
                 msg = f"Azure speech synthesis failed: {cancellation_details.reason.name}"
-                if cancellation_details.reason == speechsdk.CancellationReason.Error:
-                    if cancellation_details.error_details:
-                        msg += f". Error details: {cancellation_details.error_details}"
+                if (
+                    cancellation_details.reason == speechsdk.CancellationReason.Error
+                    and cancellation_details.error_details
+                ):
+                    msg += f". Error details: {cancellation_details.error_details}"
                 raise AudioSynthesizeException(msg)
 
     def _transcribe_audio(self, audio: BytesIO) -> str:
@@ -156,9 +158,8 @@ class AzureSpeechService(SpeechService):
         elif result.reason == speechsdk.ResultReason.Canceled:
             cancellation_details = result.cancellation_details
             msg = f"Azure speech transcription failed: {cancellation_details.reason.name}"
-            if cancellation_details.reason == speechsdk.CancellationReason.Error:
-                if cancellation_details.error_details:
-                    msg += f". Error details: {cancellation_details.error_details}"
+            if cancellation_details.reason == speechsdk.CancellationReason.Error and cancellation_details.error_details:
+                msg += f". Error details: {cancellation_details.error_details}"
             raise AudioTranscriptionException(msg)
 
 

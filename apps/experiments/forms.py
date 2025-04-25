@@ -235,11 +235,12 @@ class ExperimentForm(forms.ModelForm):
                 errors["llm_provider"] = "LLM Provider is required unless you select an OpenAI Assistant"
             if not cleaned_data.get("llm_provider_model"):
                 errors["llm_provider_model"] = "LLM Model is required unless you select an OpenAI Assistant"
-            if cleaned_data.get("llm_provider") and cleaned_data.get("llm_provider_model"):
-                if cleaned_data["llm_provider"].type != cleaned_data["llm_provider_model"].type:
-                    errors[
-                        "llm_provider_model"
-                    ] = "You must select a provider model that is the same type as the provider"
+            if (
+                cleaned_data.get("llm_provider")
+                and cleaned_data.get("llm_provider_model")
+                and cleaned_data["llm_provider"].type != cleaned_data["llm_provider_model"].type
+            ):
+                errors["llm_provider_model"] = "You must select a provider model that is the same type as the provider"
 
         elif bot_type == "assistant":
             cleaned_data["pipeline"] = None

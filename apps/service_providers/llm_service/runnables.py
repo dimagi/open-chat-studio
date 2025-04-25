@@ -175,9 +175,12 @@ class LLMChat(RunnableSerializable[str, ChainOutput]):
         if self.cancelled:
             return True
 
-        if self.last_cancel_check and self.check_every_ms:
-            if self.last_cancel_check + self.check_every_ms > time.time():
-                return False
+        if (
+            self.last_cancel_check
+            and self.check_every_ms
+            and self.last_cancel_check + self.check_every_ms > time.time()
+        ):
+            return False
 
         self.last_cancel_check = time.time()
 
