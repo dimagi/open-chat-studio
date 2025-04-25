@@ -133,7 +133,7 @@ def convert_to_openai_tool(tool):
     # all fields are required
     is_strict = not properties or set(parameters.get("required", [])) == set(properties)
     if is_strict:
-        for prop, schema in properties.items():
+        for _prop, schema in properties.items():
             # format and default not supported + type must be present
             is_strict &= "format" not in schema and "default" not in schema and "type" in schema
 

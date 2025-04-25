@@ -114,7 +114,7 @@ class TeamMemberManagementViewTest(TestCase):
     def test_members_cant_view_other_members(self):
         c = Client()
         c.force_login(self.member)
-        for other_membership in [self.admin_membership, self.normal_membership2]:
+        for _other_membership in [self.admin_membership, self.normal_membership2]:
             response = c.get(self._get_membership_url(self.admin_membership))
             # should either be a 404 or a redirect
             assert 200 != response.status_code

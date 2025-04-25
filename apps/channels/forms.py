@@ -187,7 +187,7 @@ class SlackChannelForm(ExtraFormBase):
             initial["channel_mode"] = "all"
         else:
             initial["channel_mode"] = "channel"
-        self.form_attrs = {"x-data": '{"channelMode": "%s"}' % initial["channel_mode"]}
+        self.form_attrs = {"x-data": '{{"channelMode": "{}"}}'.format(initial["channel_mode"])}
         super().__init__(*args, **kwargs)
 
     def clean_slack_channel_name(self):
