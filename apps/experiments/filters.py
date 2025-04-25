@@ -132,7 +132,7 @@ def build_tags_filter(operator, value):
                     )
                 )
             return conditions
-        elif operator == "excludes":
+        elif operator == Operators.EXCLUDES:
             return ~Q(chat__tags__name__in=selected_tags)
     except json.JSONDecodeError:
         pass
