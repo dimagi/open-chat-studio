@@ -43,7 +43,7 @@ class Tracer(ABC):
         self.session_id = session_id
         self.user_id = user_id
 
-    def end_trace(self):
+    def end_trace(self):  # noqa: B027
         """This must be called after all tracing methods are called to finalize the trace."""
         pass
 
