@@ -11,7 +11,7 @@ from apps.utils.factories.experiment import ExperimentFactory, ExperimentSession
 @pytest.mark.django_db()
 def test_async_export_chat_returns_file_id():
     session = ExperimentSessionFactory()
-    result = async_export_chat(session.experiment_id, {}, False)
+    result = async_export_chat(session.experiment_id, {})
     assert result == {"file_id": File.objects.first().id}
 
 

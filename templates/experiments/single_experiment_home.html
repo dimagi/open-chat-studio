@@ -45,10 +45,10 @@
           {% if experiment.is_editable %}
             <div class="tooltip" data-tip="Chat to the bot">
               <div class="dropdown dropdown-hover">
-                <div tabindex="0" role="button" class="btn btn-primary join-item btn-sm !rounded-l-full">
+                <div tabindex="0" role="button" class="btn btn-primary join-item btn-sm rounded-l-full!">
                   <i class="fas fa-comment"></i><i class="fa-solid fa-caret-down fa-sm"></i>
                 </div>
-                <ul tabindex="0" class="dropdown-content menu bg-base-100 rounded-box z-[1] w-52 p-2 shadow">
+                <ul tabindex="0" class="dropdown-content menu bg-base-100 rounded-box z-1 w-52 p-2 shadow-sm">
                   <li>
                     <form method="post"
                           action="{% url 'experiments:start_authed_web_session' team.slug experiment.id experiment.version_number %}"
@@ -90,14 +90,14 @@
       <div class="my-4">
         <h3 class="font-bold text-lg inline mr-4">Channels:</h3>
         <input id="api-url-link" type="hidden" value="{{ experiment.get_api_url }}" />
-        <button class="btn btn-ghost btn-sm no-animation !normal-case" onclick="SiteJS.app.copyToClipboard(this, 'api-url-link')" title="Copy to clipboard">
+        <button class="btn btn-ghost btn-sm no-animation normal-case!" onclick="SiteJS.app.copyToClipboard(this, 'api-url-link')" title="Copy to clipboard">
           <i class="fa-solid fa-link"></i> API <i class="fa-regular fa-copy fa-sm pg-text-muted"></i>
         </button>
         <div class="dropdown dropdown-hover">
-          <div tabindex="0" role="button" class="btn btn-ghost btn-sm !normal-case">
+          <div tabindex="0" role="button" class="btn btn-ghost btn-sm normal-case!">
             <i class="fa-regular fa-window-maximize"></i> Web <i class="fa-solid fa-caret-down fa-sm pg-text-muted"></i>
           </div>
-          <ul tabindex="0" class="dropdown-content menu bg-base-100 rounded-box z-[1] w-52 p-2 shadow border">
+          <ul tabindex="0" class="dropdown-content menu bg-base-100 rounded-box z-1 w-52 p-2 shadow-sm border">
             {% if experiment.is_public %}
               <li onclick="sharing_modal.showModal()">
                 <span><i class="fa-solid fa-share-nodes"></i> Share</span>
@@ -119,7 +119,7 @@
       {#  <i class="fa-brands fa-telegram"></i> #}
       {#  <i class="fa-brands fa-whatsapp"></i> #}
         {% for channel in channels %}
-          <div class="btn btn-ghost btn-sm !normal-case" onclick="channel_{{ channel.id }}_modal.showModal()">
+          <div class="btn btn-ghost btn-sm normal-case!" onclick="channel_{{ channel.id }}_modal.showModal()">
             <span class="tooltip" data-tip="{{ channel.name }}"><i class="fa-brands fa-{{ channel.platform_enum.value }}"></i> {{ channel.platform_enum.label }}</span>
           </div>
           <dialog id="channel_{{ channel.id }}_modal" class="modal">
@@ -149,7 +149,7 @@
             <button tabindex="0" class="btn btn-ghost btn-sm">
               <i class="fa-regular fa-plus"></i>
             </button>
-            <ul tabindex="0" class="dropdown-content z-10 menu p-2 shadow bg-base-100 rounded-box w-52 border">
+            <ul tabindex="0" class="dropdown-content z-10 menu p-2 shadow-sm bg-base-100 rounded-box w-52 border">
               {% for platform, available in platforms.items %}
                 <li>
                   <button
@@ -213,7 +213,7 @@
 
 
   <div class="tabs-container">
-    <div role="tablist" class="tabs tabs-bordered flex justify-start">
+    <div role="tablist" class="tabs tabs-border flex justify-start">
       {% if perms.chat.view_chat %}
         <input type="radio" name="tab_group" role="tab" class="tab" aria-label="Sessions" id="tab-allsessions" checked/>
       {% endif %}
@@ -233,14 +233,11 @@
             <div class="flex items-center gap-4">
               {{ available_tags|default:""|json_script:"available-tags-data" }}
               {{ experiment_versions|default:""|json_script:"experiment-versions-data" }}
+              {{ channel_list|default:"[]"|json_script:"channel-list-data" }}
               {% if perms.experiments.download_chats %}
                 {% include "experiments/components/exports.html" %}
               {% endif %}
-              {% include "experiments/filters.html" %}
-              <label class="label cursor-pointer">
-                <span class="label-text mr-2">Include API Sessions</span>
-                <input type="checkbox" name="show-all" class="toggle" @change="triggerFilterChange()" />
-              </label>
+              {% include "experiments/filters.html"%}
             </div>
           </div>
         </div>
@@ -248,8 +245,7 @@
              hx-get="{% url 'experiments:sessions-list' request.team.slug experiment.id %}"
              hx-trigger="none"
              hx-target="this"
-             hx-swap="innerHTML"
-             hx-include="[name='show-all']">
+             hx-swap="innerHTML">
         </div>
       </div>
       </div>

@@ -45,12 +45,14 @@ class GenerationCancelled(Exception):
 
 
 def create_experiment_runnable(
-    experiment: Experiment, session: ExperimentSession, disable_tools: bool = False, trace_service: Any = None
+    experiment: Experiment, session: ExperimentSession, trace_service: Any, disable_tools: bool = False
 ):
     """Create an experiment runnable based on the experiment configuration."""
 
     if assistant := experiment.assistant:
-        history_manager = ExperimentHistoryManager.for_assistant(session=session, experiment=experiment)
+        history_manager = ExperimentHistoryManager.for_assistant(
+            session=session, experiment=experiment, trace_service=trace_service
+        )
         assistant_adapter = AssistantAdapter.for_experiment(experiment, session)
         if assistant.tools_enabled and not disable_tools:
             runnable = AgentAssistantChat(adapter=assistant_adapter, history_manager=history_manager)

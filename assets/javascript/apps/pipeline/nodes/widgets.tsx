@@ -70,7 +70,7 @@ function DefaultWidget(props: WidgetParams) {
   return (
     <InputField label={props.label} help_text={props.helpText} inputError={props.inputError}>
       <input
-        className="input input-bordered w-full"
+        className="input w-full"
         name={props.name}
         onChange={props.updateParamValue}
         value={props.paramValue}
@@ -101,7 +101,7 @@ function NodeNameWidget(props: WidgetParams) {
   return (
     <InputField label={props.label} help_text={props.helpText} inputError={props.inputError}>
       <input
-        className="input input-bordered w-full"
+        className="input w-full"
         name={props.name}
         onChange={handleInputChange}
         value={inputValue}
@@ -115,7 +115,7 @@ function NodeNameWidget(props: WidgetParams) {
 function FloatWidget(props: WidgetParams) {
   return <InputField label={props.label} help_text={props.helpText} inputError={props.inputError}>
     <input
-      className="input input-bordered w-full"
+      className="input w-full"
       name={props.name}
       onChange={props.updateParamValue}
       value={props.paramValue}
@@ -136,7 +136,7 @@ function RangeWidget(props: WidgetParams) {
   }
   return <InputField label={props.label} help_text={props.helpText} inputError={props.inputError}>
     <input
-      className="input input-bordered w-full input-sm"
+      className="input w-full input-sm"
       name={props.name}
       onChange={props.updateParamValue}
       value={props.paramValue}
@@ -145,7 +145,7 @@ function RangeWidget(props: WidgetParams) {
       required={props.required}
     ></input>
     <input
-      className="range range-xs"
+      className="range range-xs w-full"
       name={props.name}
       onChange={props.updateParamValue}
       value={props.paramValue}
@@ -187,7 +187,7 @@ function SelectWidget(props: WidgetParams) {
   return <InputField label={props.label} help_text={props.helpText} inputError={props.inputError}>
     <div className="flex flex-row gap-2">
       <select
-        className="select select-bordered w-full"
+        className="select w-full"
         name={props.name}
         onChange={onUpdate}
         value={props.paramValue}
@@ -216,7 +216,9 @@ function MultiSelectWidget(props: WidgetParams) {
   if (options.length == 0) {
     return <></>
   }
-  let selectedValues = Array.isArray(props.paramValue) ? props.paramValue : [];
+  // props.paramValue is made immutable when produce is used to update the node, so we have to copy props.paramValue
+  // in order to push to it
+  let selectedValues = Array.isArray(props.paramValue) ? [...props.paramValue] : [];
 
   const setNode = usePipelineStore((state) => state.setNode);
 
@@ -358,7 +360,7 @@ export function CodeModal(
             ✕
           </button>
         </form>
-        <div className="flex-grow h-full w-full flex flex-col">
+        <div className="grow h-full w-full flex flex-col">
           <div className="flex justify-between items-center">
             <h4 className="font-bold text-lg bottom-2 capitalize">
               {humanName}
@@ -551,7 +553,7 @@ function CodeNodeEditor(
   return <CodeMirror
     value={value}
     onChange={onChange}
-    className="textarea textarea-bordered h-full w-full flex-grow min-h-48"
+    className="textarea textarea-bordered h-full w-full grow min-h-48"
     height="100%"
     width="100%"
     theme={isDarkMode ? githubDark : githubLight}
@@ -590,12 +592,12 @@ export function TextModal(
             ✕
           </button>
         </form>
-        <div className="flex-grow h-full w-full flex flex-col">
+        <div className="grow h-full w-full flex flex-col">
           <h4 className="mb-4 font-bold text-lg bottom-2 capitalize">
             {humanName}
           </h4>
           <textarea
-            className="textarea textarea-bordered textarea-lg w-full flex-grow resize-none"
+            className="textarea textarea-bordered textarea-lg w-full grow resize-none"
             name={name}
             onChange={onChange}
             value={value}
@@ -647,9 +649,12 @@ export function KeywordsWidget(props: WidgetParams) {
   const setEdges = usePipelineStore((state) => state.setEdges);
   const updateNodeInternals = useUpdateNodeInternals()
 
-  function getNewNodeData(old: Node, keywords: any[]) {
+  function getNewNodeData(old: Node, keywords: any[], defaultKeywordIndex?: number) {
     return produce(old, next => {
       next.data.params["keywords"] = keywords;
+      if (defaultKeywordIndex !== undefined) {
+        next.data.params["defaultKeywordIndex"] = defaultKeywordIndex;
+      }
     });
   }
 
@@ -674,9 +679,19 @@ export function KeywordsWidget(props: WidgetParams) {
     setNode(props.nodeId, (old) => {
       const updatedList = [...(old.data.params["keywords"] || [])];
       updatedList.splice(index, 1);
-      return getNewNodeData(old, updatedList);
+      const defaultIndex = old.data.params["defaultKeywordIndex"] || 0;
+
+      let newDefaultIndex = defaultIndex;
+      if (index === defaultIndex) {
+        newDefaultIndex = 0;
+      } else if (index < defaultIndex) {
+        newDefaultIndex = defaultIndex - 1;
+      }
+
+      return getNewNodeData(old, updatedList, newDefaultIndex);
     });
     updateNodeInternals(props.nodeId);
+
     const handleName = `output_${index}`;
     setEdges((old) => {
       const edges = old.filter((edge) => {
@@ -686,7 +701,6 @@ export function KeywordsWidget(props: WidgetParams) {
         }
         return edge.sourceHandle != handleName;
       }).map((edge) => {
-        // update sourceHandle of edges that have a sourceHandle greater than this index to preserve connections
         if (edge.source != props.nodeId) {
           return edge;
         }
@@ -701,17 +715,20 @@ export function KeywordsWidget(props: WidgetParams) {
     });
   }
 
+  const setAsDefault = (index: number) => {
+    setNode(props.nodeId, (old) => {
+      return getNewNodeData(old, [...(old.data.params["keywords"] || [])], index);
+    });
+  }
+
   const length = (Array.isArray(props.nodeParams.keywords) ? props.nodeParams.keywords.length : 1);
-  const keywords = Array.isArray(props.nodeParams.keywords) ? props.nodeParams["keywords"] : []
+  const keywords = Array.isArray(props.nodeParams.keywords) ? props.nodeParams["keywords"] : [];
+  const defaultIndex = props.nodeParams.defaultKeywordIndex;
   const canDelete = length > 1;
-  const defaultMarker = (
-    <span className="tooltip normal-case" data-tip="This is the default output if there are no matches">
-      <i className="fa-solid fa-asterisk fa-2xs ml-1 text-accent"></i>
-    </span>
-  )
+
   return (
     <>
-      <div className="form-control w-full capitalize">
+      <div className="fieldset w-full capitalize">
         <label className="label font-bold">
           Outputs
           <div className="tooltip tooltip-left" data-tip="Add Keyword">
@@ -726,10 +743,26 @@ export function KeywordsWidget(props: WidgetParams) {
         {Array.from({length: length}, (_, index) => {
           const value = keywords ? keywords[index] || "" : "";
           const label = `Output Keyword ${index + 1}`;
+          const isDefault = index === defaultIndex;
+
           return (
-            <div className="form-control w-full capitalize" key={index}>
+            <div className="fieldset w-full capitalize" key={index}>
               <div className="flex justify-between items-center">
-                <label className="label">{label}{index === 0 && defaultMarker}</label>
+                <label className="label">
+                  {label}
+                  <div className="pl-2 tooltip" data-tip={isDefault ? "Default" : "Set as Default"}>
+                    <span
+                      onClick={() => !isDefault && setAsDefault(index)}
+                      style={{ cursor: isDefault ? 'default' : 'pointer' }}
+                    >
+                      {isDefault ? (
+                        <i className="fa-solid fa-star text-accent"></i>
+                      ) : (
+                        <i className="fa-regular fa-star text-gray-500"></i>
+                      )}
+                    </span>
+                  </div>
+                </label>
                 <div className="tooltip tooltip-left" data-tip={`Delete Keyword ${index + 1}`}>
                   <button className="btn btn-xs btn-ghost" onClick={() => deleteKeyword(index)} disabled={!canDelete}>
                     <i className="fa-solid fa-minus"></i>
@@ -737,7 +770,7 @@ export function KeywordsWidget(props: WidgetParams) {
                 </div>
               </div>
               <input
-                className={classNames("input input-bordered w-full", value ? "" : "input-error")}
+                className={classNames("input w-full", value ? "" : "input-error")}
                 name="keywords"
                 onChange={(event) => updateKeyword(index, event.target.value)}
                 value={value}
@@ -783,7 +816,7 @@ export function LlmWidget(props: WidgetParams) {
   return (
     <InputField label={props.label} help_text={props.helpText} inputError={props.inputError}>
       <select
-        className="select select-bordered w-full"
+        className="select w-full"
         name={props.name}
         onChange={updateParamValue}
         value={value}
@@ -815,7 +848,7 @@ export function HistoryTypeWidget(props: WidgetParams) {
       <div className="flex join">
         <InputField label="History" help_text={props.helpText}>
           <select
-            className="select select-bordered join-item"
+            className={`select join-item ${historyType == 'named' ? '' : 'w-full'}`}
             name={props.name}
             onChange={props.updateParamValue}
             value={historyType}
@@ -830,7 +863,7 @@ export function HistoryTypeWidget(props: WidgetParams) {
         {historyType == "named" && (
           <InputField label="History Name" help_text={props.helpText}>
             <input
-              className="input input-bordered join-item"
+              className="input join-item"
               name="history_name"
               onChange={props.updateParamValue}
               value={historyName || ""}
@@ -867,7 +900,7 @@ export function HistoryModeWidget(props: WidgetParams) {
       <div className="flex join">
         <InputField label="History Mode" help_text = "">
           <select
-            className="select select-bordered join-item"
+            className="select join-item w-full"
             name="history_mode"
             onChange={(e) => {
               setHistoryMode(e.target.value);
@@ -889,7 +922,7 @@ export function HistoryModeWidget(props: WidgetParams) {
         <div className="flex join mb-4">
           <InputField label="Token Limit" help_text = "">
             <input
-              className="input input-bordered join-item"
+              className="input join-item w-full"
               name="user_max_token_limit"
               type="number"
               onChange={props.updateParamValue}
@@ -904,7 +937,7 @@ export function HistoryModeWidget(props: WidgetParams) {
         <div className="flex join mb-4">
           <InputField label="Max History Length" help_text = "">
             <input
-              className="input input-bordered join-item"
+              className="input join-item w-full"
               name="max_history_length"
               type="number"
               onChange={props.updateParamValue}
@@ -925,7 +958,7 @@ export function InputField({label, help_text, inputError, children}: React.Props
 }>) {
   return (
     <>
-      <div className="form-control w-full capitalize">
+      <div className="fieldset w-full capitalize">
         <label className="label font-bold">{label}</label>
         {children}
       </div>

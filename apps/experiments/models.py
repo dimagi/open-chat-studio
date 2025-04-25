@@ -37,6 +37,7 @@ from apps.custom_actions.mixins import CustomActionOperationMixin
 from apps.experiments import model_audit_fields
 from apps.experiments.versioning import VersionDetails, VersionField, VersionsMixin, VersionsObjectManagerMixin, differs
 from apps.generics.chips import Chip
+from apps.service_providers.tracing import TracingService
 from apps.teams.models import BaseTeamModel, Team
 from apps.teams.utils import current_team
 from apps.utils.models import BaseModel
@@ -135,7 +136,7 @@ class VersionFieldDisplayFormatters:
     def format_pipeline(pipeline) -> str:
         if not pipeline:
             return ""
-        name = pipeline.name.split(f" v{pipeline.version_number}")[0]
+        name = str(pipeline)
         template = get_template("generic/chip.html")
         url = (
             pipeline.get_absolute_url() if pipeline.is_working_version else pipeline.working_version.get_absolute_url()
@@ -1606,9 +1607,8 @@ class ExperimentSession(BaseTeamModel):
         from apps.service_providers.llm_service.history_managers import ExperimentHistoryManager
 
         experiment = use_experiment or self.experiment
-        history_manager = ExperimentHistoryManager(
-            session=self, experiment=experiment, trace_service=experiment.trace_service
-        )
+        trace_service = TracingService.create_for_experiment(self.experiment)
+        history_manager = ExperimentHistoryManager(session=self, experiment=experiment, trace_service=trace_service)
         bot = EventBot(self, experiment, history_manager)
         return bot.get_user_message(instruction_prompt)
 

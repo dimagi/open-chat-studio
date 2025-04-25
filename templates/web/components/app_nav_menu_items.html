@@ -6,23 +6,23 @@
 <li class="menu-title">
   <span>{% translate "My Account" %}</span>
 </li>
-<ul class="menu-list">
+<ul class="menu">
   <li>
-    <a href="{% url 'users:user_profile' %}" {% if active_tab == 'profile' %}class="active"{% endif %}>
+    <a href="{% url 'users:user_profile' %}" {% if active_tab == 'profile' %}class="menu-active"{% endif %}>
       <i class="fa fa-user h-4 w-4"></i>
       {% translate "Profile" %}
     </a>
   </li>
   {% if user.has_usable_password %}
     <li>
-      <a href="{% url 'account_change_password' %}" {% if 'accounts/password/change' in request.path %}class="active"{% endif %}>
+      <a href="{% url 'account_change_password' %}" {% if 'accounts/password/change' in request.path %}class="menu-active"{% endif %}>
         <i class="fa fa-unlock-alt h-4 w-4"></i>
         {% translate "Change Password" %}
       </a>
     </li>
   {% endif %}
   <li>
-    <a href="{% url 'account_logout' %}" {% if 'accounts/logout' in request.path %}class="active"{% endif %}>
+    <a href="{% url 'account_logout' %}" {% if 'accounts/logout' in request.path %}class="menu-active"{% endif %}>
       <i class="fa fa-sign-out h-4 w-4"></i>
       {% translate "Sign out" %}
     </a>
@@ -33,9 +33,9 @@
   <li class="menu-title">
     <span>{% translate "Global Admin" %}</span>
   </li>
-  <ul class="menu-list">
+  <ul class="menu">
     <li>
-      <a href="{% url 'ocs_admin:home' %}" {% if active_tab == 'admin' %}class="active"{% endif %}>
+      <a href="{% url 'ocs_admin:home' %}" {% if active_tab == 'admin' %}class="menu-active"{% endif %}>
         <i class="fa fa-bar-chart-o h-4 w-4"></i>
         {% translate "Admin" %}
       </a>

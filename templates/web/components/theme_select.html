@@ -1,5 +1,5 @@
-<div class="dropdown dropdown-end {% if position == "right" %}dropdown-right{% endif %} hover:cursor-pointer" x-data="{ open: false }">
-  <div tabindex="0" class="flex justify-start items-center gap-x-2 px-4 my-2" @click="open = !open">
+<div class="dropdown dropdown-end {% if position == "right" %}dropdown-right{% endif %} hover:cursor-pointer">
+  <div tabindex="0" class="flex justify-start items-center gap-x-2 px-3 my-2">
     <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
       <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
             d="M12 3v1m0 16v1m9-9h-1M4 12H3m15.364 6.364l-.707-.707M6.343 6.343l-.707-.707m12.728 0l-.707.707M6.343 17.657l-.707.707M16 12a4 4 0 11-8 0 4 4 0 018 0z"
@@ -10,8 +10,7 @@
     </svg>
     {% if text %}<span>{{ text }}</span>{% endif %}
   </div>
-  <ul tabindex="0" class="dropdown-content menu bg-base-100 rounded-box z-[1] w-36 p-2 shadow" x-show="open"
-      @click.away="open = false">
+  <ul tabindex="0" class="dropdown-content menu bg-base-100 rounded-box z-1 w-36 p-2 shadow-sm">
     <li>
       <input
         type="radio"

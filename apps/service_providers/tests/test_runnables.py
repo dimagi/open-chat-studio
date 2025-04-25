@@ -19,6 +19,7 @@ from apps.service_providers.llm_service.runnables import (
     LLMChat,
     SimpleLLMChat,
 )
+from apps.service_providers.tracing import TracingService
 from apps.utils.factories.channels import ChannelPlatform, ExperimentChannelFactory
 from apps.utils.factories.experiment import ExperimentSessionFactory
 from apps.utils.langchain import build_fake_llm_service
@@ -74,6 +75,7 @@ def _get_history_manager(session, experiment=None):
     return ExperimentHistoryManager.for_llm_chat(
         session=session,
         experiment=experiment if experiment else session.experiment,
+        trace_service=TracingService.empty(),
     )
 
 

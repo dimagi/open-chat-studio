@@ -3,35 +3,35 @@
 {% load team_tags %}
 {% if request.team %}
   <li>
-    <a href="{% url 'experiments:experiments_home' request.team.slug %}" {% if active_tab == 'experiments' %}class="active"{% endif %}>
+    <a href="{% url 'experiments:experiments_home' request.team.slug %}"{% if active_tab == 'experiments' %}class="menu-active"{% endif %}>
       <i class="fa fa-flask fa-fw"></i>
       {% translate "Experiments" %}
     </a>
     <ul>
       <li>
         <a href="{% url 'experiments:safety_home' request.team.slug %}"
-           {% if active_tab == 'safety_layers' %}class="active"{% endif %}>
+           {% if active_tab == 'safety_layers' %}class="menu-active"{% endif %}>
           <i class="fa fa-shield fa-fw"></i>
           {% translate "Safety Layers" %}
         </a>
       </li>
       <li>
         <a href="{% url 'experiments:source_material_home' request.team.slug %}"
-           {% if active_tab == 'source_material' %}class="active"{% endif %}>
+           {% if active_tab == 'source_material' %}class="menu-active"{% endif %}>
           <i class="fa fa-book fa-fw"></i>
           {% translate "Source Material" %}
         </a>
       </li>
       <li>
         <a href="{% url 'experiments:survey_home' request.team.slug %}"
-           {% if active_tab == 'survey' %}class="active"{% endif %}>
+           {% if active_tab == 'survey' %}class="menu-active"{% endif %}>
           <i class="fa-solid fa-file-circle-question fa-fw"></i>
           {% translate "Surveys" %}
         </a>
       </li>
       <li>
         <a href="{% url 'experiments:consent_home' request.team.slug %}"
-           {% if active_tab == 'consent_forms' %}class="active"{% endif %}>
+           {% if active_tab == 'consent_forms' %}class="menu-active"{% endif %}>
           <i class="fa-solid fa-file-contract fa-fw"></i>
           {% translate "Consent Forms" %}
         </a>
@@ -39,7 +39,7 @@
       {% if perms.annotations.add_tag %}
         <li>
           <a href="{% url 'annotations:tag_home' request.team.slug %}"
-             {% if active_tab == 'tags' %}class="active"{% endif %}>
+             {% if active_tab == 'tags' %}class="menu-active"{% endif %}>
             <i class="fa fa-solid fa-tags"></i>
             {% translate "Manage Tags" %}
           </a>
@@ -51,7 +51,7 @@
     {% if perms.documents.view_collection %}
       <li>
         <a href="{% url 'documents:collections' request.team.slug 'files' %}"
-           {% if active_tab == 'manage_files' %}class="active"{% endif %}>
+           {% if active_tab == 'manage_files' %}class="menu-active"{% endif %}>
           <i class="fa fa-folder" aria-hidden="true"></i></i>
         {% translate "Manage Files" %}
       </a>
@@ -60,7 +60,7 @@
   {% endflag %}
   {% flag "chatbots" %}
     <li>
-      <a href="{% url 'chatbots:chatbots_home' request.team.slug %}" {% if active_tab == 'chatbots' %}class="active"{% endif %}>
+      <a href="{% url 'chatbots:chatbots_home' request.team.slug %}" {% if active_tab == 'chatbots' %}class="menu-active"{% endif %}>
         <i class="fas fa-comments"></i>
         {% translate "Chatbots" %}
       </a>
@@ -69,7 +69,7 @@
   {% if perms.experiments.view_participant %}
     <li>
       <a href="{% url 'participants:participant_home' request.team.slug %}"
-         {% if active_tab == 'participants' %}class="active"{% endif %}>
+         {% if active_tab == 'participants' %}class="menu-active"{% endif %}>
         <i class="fa fa-users" aria-hidden="true"></i></i>
       {% translate "Participants" %}
     </a>
@@ -83,18 +83,18 @@
   </li>
   <li>
     {% if perms.assistants.view_openaiassistant %}
-      <a href="{% url 'assistants:home' request.team.slug %}" {% if active_tab == 'assistants' %}class="active"{% endif %}>
+      <a href="{% url 'assistants:home' request.team.slug %}" {% if active_tab == 'assistants' %}class="menu-active"{% endif %}>
         <i class="fa-solid fa-robot"></i>
-        {% translate "Assistants" %}<span class="badge badge-sm">beta</span>
+        {% translate "Assistants" %}
       </a>
     {% endif %}
   </li>
   {% flag "pipelines-v2" %}
     <li>
       {% if perms.pipelines.view_pipeline %}
-        <a href="{% url 'pipelines:home' request.team.slug %}" {% if active_tab == 'pipelines' %}class="active"{% endif %}>
+        <a href="{% url 'pipelines:home' request.team.slug %}" {% if active_tab == 'pipelines' %}class="menu-active"{% endif %}>
           <i class="fa-solid fa-puzzle-piece"></i>
-          {% translate "Pipelines" %}<span class="badge badge-sm">new!</span>
+          {% translate "Pipelines" %}
         </a>
       {% endif %}
     </li>

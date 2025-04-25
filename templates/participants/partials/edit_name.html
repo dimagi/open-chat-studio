@@ -4,7 +4,7 @@
   hx-swap="innerHTML"
   hx-target="#participant-name"
 >
-  <input class="input input-xs input-bordered" type="text" name="name" value="{{ participant.name }}"/>
+  <input class="input input-xs" type="text" name="name" value="{{ participant.name }}"/>
   <button class="btn btn-xs btn-success btn-outline"><i class="fa-solid fa-check"></i></button>
   <button class="btn btn-xs btn-error btn-outline" hx-post="{{ update_url }}" hx-params="none"><i class="fa-solid fa-xmark"></i></button>
 </form>
