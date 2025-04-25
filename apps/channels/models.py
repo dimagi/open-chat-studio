@@ -117,6 +117,7 @@ class ChannelPlatform(models.TextChoices):
         platforms = cls.for_dropdown([], team).keys()
         platforms_with_labels = [platform.label for platform in platforms]
         platforms_with_labels.append(cls.API.label)
+        platforms_with_labels.append(cls.WEB.label)
         return sorted(platforms_with_labels)
 
 

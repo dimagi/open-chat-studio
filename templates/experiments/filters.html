@@ -127,8 +127,8 @@
           'participant': {type: 'string', operators: fieldTypeFilters.string, label: 'Participant'},
           'last_message': {type: 'timestamp', operators: fieldTypeFilters.timestamp, label: 'Last Message'},
           'tags': {type: 'choice', operators: fieldTypeFilters.choice, options: tags, label: 'Tags' },
-          'versions': {type: 'choice', operators: fieldTypeFilters.choice, options: versionsList, label: 'Versions'}
-          'channels': {type: 'choice', operators: ['any of', 'all of', 'excludes'], options: channelsList, label: 'Channels'}
+          'versions': {type: 'choice', operators: fieldTypeFilters.choice, options: versionsList, label: 'Versions'},
+          'channels': {type: 'choice', operators: fieldTypeFilters.choice, options: channelsList, label: 'Channels'}
         }
       },
 

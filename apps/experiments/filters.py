@@ -23,6 +23,7 @@ class Operators(StrEnum):
     AFTER = "after"
     ANY_OF = "any of"
     ALL_OF = "all of"
+    EXCLUDES = "excludes"
 
 
 FIELD_TYPE_FILTERS = {
@@ -34,7 +35,7 @@ FIELD_TYPE_FILTERS = {
         Operators.ENDS_WITH,
     ],
     "timestamp": [Operators.ON, Operators.BEFORE, Operators.AFTER],
-    "choice": [Operators.ANY_OF, Operators.ALL_OF],
+    "choice": [Operators.ANY_OF, Operators.ALL_OF, Operators.EXCLUDES],
 }
 
 
@@ -144,7 +145,7 @@ def build_versions_filter(operator, value):
         if not version_strings:
             return None
         version_tags = [v for v in version_strings if v]
-        if operator == Operators.ANY_OF:
+        if operator in [Operators.ANY_OF, Operators.EXCLUDES]:
             tag_exists = [
                 ChatMessage.objects.filter(
                     chat=OuterRef("chat"),
@@ -153,14 +154,11 @@ def build_versions_filter(operator, value):
                 ).values("id")
                 for tag in version_tags
             ]
-
-        if operator == "any of" or operator == "excludes":
-            queries = build_exists_q_for_tags(version_tags)
             combined_query = Q()
             for query in tag_exists:
                 combined_query |= Q(Exists(query))
 
-            return combined_query
+            return ~combined_query if operator == Operators.EXCLUDES else combined_query
 
         elif operator == Operators.ALL_OF:
             q_objects = Q()
@@ -188,14 +186,14 @@ def build_channels_filter(operator, value):
         selected_values = [val for val in selected_values if val is not None]
         if not selected_values:
             return None
-        if operator == "any of":
+        if operator == Operators.ANY_OF:
             return Q(experiment_channel__platform__in=selected_values)
-        elif operator == "all of":
+        elif operator == Operators.ALL_OF:
             conditions = Q()
             for channel in selected_values:
                 conditions &= Q(experiment_channel__platform__iexact=channel)
             return conditions
-        elif operator == "excludes":
+        elif operator == Operators.EXCLUDES:
             return ~Q(experiment_channel__platform__in=selected_values)
     except json.JSONDecodeError:
         pass
