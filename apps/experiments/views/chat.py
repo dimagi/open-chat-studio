@@ -8,7 +8,7 @@ from apps.teams.decorators import team_required
 @team_required
 def rate_message(request, team_slug: str, message_id: int, rating: str):
     if rating not in ["👍", "👎"]:
-        raise Http404()
+        raise Http404
 
     message = get_object_or_404(ChatMessage, id=message_id, message_type=ChatMessageType.AI, chat__team=request.team)
     message.add_rating(rating)

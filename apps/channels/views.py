@@ -128,7 +128,7 @@ def _new_api_message(request, experiment_id: uuid, version=None):
                 experiment_channel__platform=ChannelPlatform.API,
             )
         except ExperimentSession.DoesNotExist:
-            raise Http404() from None
+            raise Http404 from None
         participant_id = session.participant.identifier
         experiment_channel = session.experiment_channel
         experiment = session.experiment

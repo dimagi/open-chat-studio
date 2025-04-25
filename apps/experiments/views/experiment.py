@@ -686,7 +686,7 @@ def experiment_chat_session(
     try:
         experiment_version = experiment.get_version(version_number)
     except Experiment.DoesNotExist:
-        raise Http404() from None
+        raise Http404 from None
 
     version_specific_vars = {
         "assistant": experiment_version.get_assistant(),
@@ -731,7 +731,7 @@ def _experiment_session_message(request, version_number: int, embedded=False):
     try:
         experiment_version = working_experiment.get_version(version_number)
     except Experiment.DoesNotExist:
-        raise Http404() from None
+        raise Http404 from None
 
     message_text = request.POST["message"]
     uploaded_files = request.FILES
@@ -888,7 +888,7 @@ def start_session_public(request, team_slug: str, experiment_id: uuid.UUID):
         experiment = get_object_or_404(Experiment, public_id=experiment_id, team=request.team)
     except ValidationError:
         # old links dont have uuids
-        raise Http404() from None
+        raise Http404 from None
 
     experiment_version = experiment.default_version
     if not experiment_version.is_public:
@@ -971,7 +971,7 @@ def start_session_public_embed(request, team_slug: str, experiment_id: uuid.UUID
         experiment = get_object_or_404(Experiment, public_id=experiment_id, team=request.team)
     except ValidationError:
         # old links dont have uuids
-        raise Http404() from None
+        raise Http404 from None
 
     experiment_version = experiment.default_version
     if not experiment_version.is_public:
@@ -1156,7 +1156,7 @@ def start_session_from_invite(request, team_slug: str, experiment_id: uuid.UUID,
         "identifier": request.experiment_session.participant.identifier,
     }
     if not request.experiment_session.participant:
-        raise Http404()
+        raise Http404
 
     if not consent:
         return _record_consent_and_redirect(team_slug, request.experiment, request.experiment_session)
@@ -1398,7 +1398,7 @@ def download_file(request, team_slug: str, session_id: int, pk: int):
         file = resource.file.open()
         return FileResponse(file, as_attachment=True, filename=resource.file.name)
     except FileNotFoundError:
-        raise Http404() from None
+        raise Http404 from None
 
 
 @require_POST
@@ -1466,7 +1466,7 @@ def experiment_version_details(request, team_slug: str, experiment_id: int, vers
             team=request.team, working_version_id=experiment_id, version_number=version_number
         )
     except Experiment.DoesNotExist:
-        raise Http404() from None
+        raise Http404 from None
 
     context = {"version_details": experiment_version.version_details, "experiment": experiment_version}
     return render(request, "experiments/components/experiment_version_details_content.html", context)

@@ -38,7 +38,7 @@ def experiment_session_view(allowed_states=None):
                     team=request.team,
                 )
             except ExperimentSession.DoesNotExist:
-                raise Http404() from None
+                raise Http404 from None
 
             if allowed_states and request.experiment_session.status not in allowed_states:
                 return _redirect_for_state(request, team_slug)

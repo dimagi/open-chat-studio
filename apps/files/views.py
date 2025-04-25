@@ -26,7 +26,7 @@ class FileView(LoginAndTeamRequiredMixin, View):
             if referrer and referrer.startswith("/"):
                 messages.error(request, "Unable to read file contents.")
                 return redirect(referrer)
-            raise Http404()
+            raise Http404
 
         file = get_object_or_404(File, id=pk, team=request.team)
         if not file.file:
@@ -76,7 +76,7 @@ class BaseAddFileHtmxView(LoginAndTeamRequiredMixin, View, PermissionRequiredMix
         )
 
     def get_delete_url(self, file):
-        raise NotImplementedError()
+        raise NotImplementedError
 
     def form_valid(self, form):
         file = form.save(commit=False)
@@ -120,7 +120,7 @@ class BaseAddMultipleFilesHtmxView(LoginAndTeamRequiredMixin, View, PermissionRe
         )
 
     def get_delete_url(self, file):
-        raise NotImplementedError()
+        raise NotImplementedError
 
     def form_valid(self, form):
         files = form.cleaned_data["file"]

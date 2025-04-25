@@ -13,7 +13,7 @@ class TokenCounter:
         return None
 
     def get_tokens_from_text(self, text) -> int:
-        raise NotImplementedError()
+        raise NotImplementedError
 
     def get_tokens_from_messages(self, messages) -> int:
         return sum([self.get_tokens_from_text(get_buffer_string([m])) for m in messages])

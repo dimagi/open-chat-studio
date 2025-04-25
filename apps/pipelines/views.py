@@ -302,7 +302,7 @@ class PipelineRunsTableView(SingleTableView, PermissionRequiredMixin):
 def run_details(request, team_slug: str, run_pk: int, pipeline_pk: int):
     pipeline_run = get_object_or_404(PipelineRun, id=run_pk, pipeline__id=pipeline_pk)
     if pipeline_run.pipeline.team.slug != team_slug:
-        raise Http404()
+        raise Http404
     return render(
         request,
         "pipelines/pipeline_run_details.html",

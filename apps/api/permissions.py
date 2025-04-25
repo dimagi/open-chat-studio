@@ -42,7 +42,7 @@ class BaseKeyAuthentication(BaseAuthentication):
         request.team = token.team
         request.team_membership = get_team_membership_for_request(request)
         if not request.team_membership:
-            raise exceptions.AuthenticationFailed()
+            raise exceptions.AuthenticationFailed
 
         # this is unset by the request_finished signal
         set_current_team(token.team)

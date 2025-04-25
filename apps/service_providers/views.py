@@ -59,7 +59,7 @@ def matches_blocking_deletion_condition(obj):
 def delete_service_provider(request, team_slug: str, provider_type: str, pk: int):
     provider = ServiceProvider[provider_type]
     if not request.user.has_perm(provider.get_permission("delete")):
-        raise PermissionDenied()
+        raise PermissionDenied
     service_config = get_object_or_404(provider.model, team=request.team, pk=pk)
     related_objects = get_related_objects(service_config)
 

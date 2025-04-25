@@ -226,7 +226,7 @@ class ChannelBase(ABC):
     @abstractmethod
     def send_text_to_user(self, text: str):
         """Channel specific way of sending text back to the user"""
-        raise NotImplementedError()
+        raise NotImplementedError
 
     def send_file_to_user(self, files: list[File]):  # noqa: B027
         """
@@ -328,7 +328,7 @@ class ChannelBase(ABC):
         self.message = message
 
         if not self._participant_is_allowed():
-            raise ParticipantNotAllowedException()
+            raise ParticipantNotAllowedException
 
         self._ensure_sessions_exists()
 
