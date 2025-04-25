@@ -386,7 +386,7 @@ class Pipeline(BaseTeamModel, VersionsMixin):
         return chat_message
 
     @transaction.atomic()
-    def create_new_version(self, *args, **kwargs):
+    def create_new_version(self):
         version_number = self.version_number
         self.version_number = version_number + 1
         self.save(update_fields=["version_number"])
