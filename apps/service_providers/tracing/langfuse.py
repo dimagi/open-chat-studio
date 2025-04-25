@@ -66,6 +66,7 @@ class LangFuseTracer(Tracer):
             raise ServiceNotInitializedException("Service not initialized.")
 
         if outputs or error:
+            outputs = outputs or {}
             outputs = {**outputs, "error": str(error)} if error else outputs
             self.trace.update(output=outputs)
 
