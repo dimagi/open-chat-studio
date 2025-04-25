@@ -138,5 +138,15 @@ class PipelineStartAction(EventActionHandlerBase):
         input = "\n".join(f"{message.type}: {message.content}" for message in messages)
         state = PipelineState(messages=[input], experiment_session=session)
         trace_service = TracingService.create_for_experiment(session.experiment)
-        output = pipeline.invoke(state, session, session.experiment_version, trace_service, save_run_to_history=False)
+        with trace_service.trace(
+            trace_name=f"{session.experiment.name} - event pipeline execution",
+            session_id=session.id,
+            user_id=session.participant.identifier,
+            inputs={"input": input},
+            metadata={"action_type": action.action_type, "action_id": action.id, "params": action.params},
+        ):
+            output = pipeline.invoke(
+                state, session, session.experiment_version, trace_service, save_run_to_history=False
+            )
+            trace_service.set_current_span_outputs({"response": output.content})
         return output.content
