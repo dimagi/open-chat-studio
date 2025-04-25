@@ -380,14 +380,13 @@ class EventBot:
             if len(messages) > 10:
                 break
         if messages:
-            formatted_history = "\n".join(reversed(messages))
             return textwrap.dedent(
-                f"""
+                """
                 Here are the most recent messages in the conversation:
                 ```
-                {formatted_history}
+                {}
                 ```
                 """
-            )
+            ).format("\n".join(reversed(messages)))
         else:
             return "\nThis is the start of the conversation so there is no previous message history"
