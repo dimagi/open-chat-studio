@@ -291,10 +291,7 @@ def test_new_participant_created_for_different_teams(_trigger_mock, is_user):
     assert session.participant.identifier == identifier
 
     # user starts a second session in another team
-    if is_user:
-        new_team = TeamWithUsersFactory(member__user=user)
-    else:
-        new_team = TeamWithUsersFactory()
+    new_team = TeamWithUsersFactory(member__user=user) if is_user else TeamWithUsersFactory()
 
     experiment2 = ExperimentFactory(team=new_team)
 

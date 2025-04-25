@@ -36,10 +36,7 @@ class FakeLlm(FakeListChatModel):
         **kwargs: Any,
     ) -> ChatResult:
         output = self._call(messages, stop=stop, run_manager=run_manager, **kwargs)
-        if isinstance(output, BaseMessage):
-            message = output
-        else:
-            message = AIMessage(content=output)
+        message = output if isinstance(output, BaseMessage) else AIMessage(content=output)
 
         generation = ChatGeneration(message=message)
         return ChatResult(generations=[generation])

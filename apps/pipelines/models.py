@@ -503,15 +503,14 @@ class Node(BaseModel, VersionsMixin, CustomActionOperationMixin):
                 # convert to string to be consistent with values from the UI
                 new_version.params["assistant_id"] = str(assistant_version.id)
 
-        if self.type == LLMResponseWithPrompt.__name__:
-            if collection_id := self.params.get("collection_id"):
-                collection = Collection.objects.get(id=collection_id)
+        if self.type == LLMResponseWithPrompt.__name__ and (collection_id := self.params.get("collection_id")):
+            collection = Collection.objects.get(id=collection_id)
 
-                if collection.has_versions is False or collection.compare_with_latest():
-                    collection_version = collection.create_new_version()
-                    new_version.params["collection_id"] = str(collection_version.id)
-                else:
-                    new_version.params["collection_id"] = self.latest_version.params.get("collection_id")
+            if collection.has_versions is False or collection.compare_with_latest():
+                collection_version = collection.create_new_version()
+                new_version.params["collection_id"] = str(collection_version.id)
+            else:
+                new_version.params["collection_id"] = self.latest_version.params.get("collection_id")
 
         new_version.save()
         self._copy_custom_action_operations_to_new_version(new_node=new_version)

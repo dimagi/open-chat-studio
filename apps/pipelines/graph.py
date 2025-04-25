@@ -164,12 +164,7 @@ class PipelineGraph(pydantic.BaseModel):
             state[node_id] = "visited"
             return False
 
-        for node_id in adjacency_list:
-            if state[node_id] == "unvisited":
-                if dfs(node_id):
-                    return True
-
-        return False
+        return any(state[node_id] == "unvisited" and dfs(node_id) for node_id in adjacency_list)
 
     def _get_reachable_nodes(self, start_node: Node) -> list[Node]:
         visited = set()

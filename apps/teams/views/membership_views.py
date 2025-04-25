@@ -57,9 +57,8 @@ def remove_team_membership(request, team_slug, membership_id):
     membership = get_object_or_404(Membership, team=request.team, pk=membership_id)
     removing_self = membership.user == request.user
     can_edit_team_members = request.user.has_perm("teams.change_membership")
-    if not can_edit_team_members:
-        if not removing_self:
-            raise TeamPermissionError(_("You don't have permission to remove others from that team."))
+    if not can_edit_team_members and not removing_self:
+        raise TeamPermissionError(_("You don't have permission to remove others from that team."))
     if membership.is_team_admin():
         perms = Permission.objects.filter(Q(codename="change_team") | Q(codename="delete_team"))
         other_admins = (

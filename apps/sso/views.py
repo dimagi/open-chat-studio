@@ -93,9 +93,8 @@ def _redirect_for_sso(request, email, for_signup=False):
     if app:
         if email in app.settings.get("ignore_list", []):
             return
-        if allow_list := app.settings.get("allow_list"):
-            if email not in allow_list:
-                return
+        if (allow_list := app.settings.get("allow_list")) and email not in allow_list:
+            return
 
         provider = app.get_provider(request)
         # Store email in session to validate later

@@ -6,14 +6,14 @@ from ..slug import get_next_slug, get_next_unique_id, get_next_unique_slug
 
 
 def test_next_slug_basic():
-    assert "slug-11" == get_next_slug("slug", 11)
+    assert get_next_slug("slug", 11) == "slug-11"
 
 
 def test_next_slug_truncate():
-    assert "slug-11" == get_next_slug("slug", 11, max_length=7)
-    assert "slu-11" == get_next_slug("slug", 11, max_length=6)
-    assert "slu-100" == get_next_slug("slug", 100, max_length=7)
-    assert "sl-100" == get_next_slug("slug", 100, max_length=6)
+    assert get_next_slug("slug", 11, max_length=7) == "slug-11"
+    assert get_next_slug("slug", 11, max_length=6) == "slu-11"
+    assert get_next_slug("slug", 100, max_length=7) == "slu-100"
+    assert get_next_slug("slug", 100, max_length=6) == "sl-100"
 
 
 def test_next_slug_fail():

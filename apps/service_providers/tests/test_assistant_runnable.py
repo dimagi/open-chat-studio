@@ -286,9 +286,8 @@ def test_assistant_runnable_cancels_existing_run(save_response_annotations, resp
     assistant_runnable = create_experiment_runnable(session.experiment, session, TracingService.empty())
     cancel_run = mock.Mock()
     assistant_runnable.__dict__["_cancel_run"] = cancel_run
-    with mock_llm(responses):
-        with exception:
-            result = assistant_runnable.invoke("test")
+    with mock_llm(responses), exception:
+        result = assistant_runnable.invoke("test")
 
     if output:
         assert result.output == "normal response"

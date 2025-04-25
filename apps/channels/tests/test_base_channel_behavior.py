@@ -402,12 +402,11 @@ def test_failed_transcription_informs_the_user(
     experiment.voice_response_behaviour = voice_behaviour
     experiment.save()
 
-    with pytest.raises(Exception, match="Nope"):
-        with patch(
-            "apps.channels.tests.test_base_channel_behavior.TestChannel._get_voice_transcript",
-            side_effect=Exception("Nope"),
-        ):
-            test_channel.new_user_message(base_messages.audio_message())
+    with pytest.raises(Exception, match="Nope"), patch(
+        "apps.channels.tests.test_base_channel_behavior.TestChannel._get_voice_transcript",
+        side_effect=Exception("Nope"),
+    ):
+        test_channel.new_user_message(base_messages.audio_message())
 
     assert _reply_voice_message.called == voice_response_expected
     assert send_text_to_user.called == (not voice_response_expected)

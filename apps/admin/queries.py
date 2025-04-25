@@ -83,10 +83,7 @@ def get_whatsapp_number_data():
                     account = hashlib.shake_128(token.encode()).hexdigest(8)
 
         provider_name = channel["messaging_provider__name"]
-        if provider_name:
-            provider_name = f"{provider_name} ({provider_type})"
-        else:
-            provider_name = "---"
+        provider_name = f"{provider_name} ({provider_type})" if provider_name else "---"
 
         yield (
             channel["team__name"],

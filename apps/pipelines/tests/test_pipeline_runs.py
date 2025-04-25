@@ -134,9 +134,8 @@ def test_running_failed_pipeline_logs_error(pipeline: Pipeline, session: Experim
 
     from apps.pipelines.nodes import nodes
 
-    with patch.object(nodes, StartNode.__name__, FailingNode):
-        with pytest.raises(Exception, match=error_message):
-            pipeline.invoke(PipelineState(messages=[input]), session, session.experiment)
+    with patch.object(nodes, StartNode.__name__, FailingNode), pytest.raises(Exception, match=error_message):
+        pipeline.invoke(PipelineState(messages=[input]), session, session.experiment)
 
     assert pipeline.runs.count() == 1
     run = pipeline.runs.first()

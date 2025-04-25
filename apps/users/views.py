@@ -77,11 +77,10 @@ def upload_profile_image(request):
 @require_http_methods(["GET", "POST"])
 def create_api_key(request):
     form = ApiKeyForm(request, request.POST or None)
-    if request.method == "POST":
-        if form.is_valid():
-            instance, key = form.save()
-            request.session[SESSION_API_KEY] = key
-            return HttpResponse(status=201, headers={"HX-Location": reverse("users:user_profile")})
+    if request.method == "POST" and form.is_valid():
+        instance, key = form.save()
+        request.session[SESSION_API_KEY] = key
+        return HttpResponse(status=201, headers={"HX-Location": reverse("users:user_profile")})
 
     return render(
         request,
