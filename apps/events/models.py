@@ -252,7 +252,7 @@ class TimeoutTrigger(BaseModel, VersionsMixin):
                 failure_count=Subquery(failure_count_for_last_message),
             )
             .filter(
-                last_human_message_created_at__gt=self.updated_at,
+                last_human_message_created_at__gte=self.updated_at,
                 # last message received after trigger config was updated
                 last_human_message_created_at__lt=trigger_time,
                 last_human_message_created_at__isnull=False,
