@@ -42,7 +42,7 @@ class TracingService:
         if experiment and experiment.trace_provider:
             try:
                 tracers.append(experiment.trace_provider.get_service())
-            except Exception as e:  # noqa: BLE001
+            except Exception as e:
                 logger.error(f"Error setting up trace service: {e}")
 
         return cls(tracers)
@@ -65,14 +65,14 @@ class TracingService:
         for tracer in self._tracers:
             try:
                 tracer.begin_trace(self.trace_name, self.trace_id, self.session_id, self.user_id)
-            except Exception:  # noqa BLE001
+            except Exception:
                 logger.error("Error initializing tracer %s", tracer.__class__.__name__, exc_info=True)
 
     def _end_traces(self):
         for tracer in self._active_tracers:
             try:
                 tracer.end_trace()
-            except Exception:  # noqa BLE001
+            except Exception:
                 logger.error("Error ending tracer %s", tracer.__class__.__name__, exc_info=True)
         self._reset_io()
 
@@ -150,7 +150,7 @@ class TracingService:
             try:
                 info = tracer.get_trace_metadata()
                 trace_info.append(info)
-            except Exception:  # noqa BLE001
+            except Exception:
                 logger.exception("Error getting trace info")
                 continue
 
@@ -176,7 +176,7 @@ class TracingService:
                     inputs=inputs,
                     metadata=metadata or {},
                 )
-            except Exception:  # noqa BLE001
+            except Exception:
                 logger.exception(f"Error starting span {span_name}")
 
     def _end_span(self, span_id: str, span_name: str, error: Exception | None = None) -> None:
@@ -190,7 +190,7 @@ class TracingService:
                     outputs=self.outputs[span_id],
                     error=error,
                 )
-            except Exception:  # noqa BLE001
+            except Exception:
                 logger.exception(f"Error ending span {span_name}")
 
     @property

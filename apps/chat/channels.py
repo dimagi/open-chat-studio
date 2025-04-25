@@ -480,10 +480,8 @@ class ChannelBase(ABC):
 
         if self.voice_replies_supported and self.experiment.synthetic_voice:
             voice_config = self.experiment.voice_response_behaviour
-            if (
-                voice_config == VoiceResponseBehaviours.ALWAYS
-                or voice_config == VoiceResponseBehaviours.RECIPROCAL
-                and user_sent_voice
+            if user_sent_voice and (
+                voice_config == VoiceResponseBehaviours.ALWAYS or voice_config == VoiceResponseBehaviours.RECIPROCAL
             ):
                 reply_text = False
 
@@ -701,13 +699,13 @@ class ChannelBase(ABC):
                 "Tell the user that something went wrong while processing their message and that they should "
                 "try again later."
             )
-        except Exception:  # noqa BLE001
+        except Exception:
             logger.exception("Something went wrong while trying to generate an appropriate error message for the user")
             bot_message = DEFAULT_ERROR_RESPONSE_TEXT
 
         try:
             self.send_message_to_user(bot_message)
-        except Exception:  # noqa BLE001
+        except Exception:
             logger.exception("Something went wrong while trying to inform the user of an error")
 
     def _get_supported_unsupported_files(self, files: list[File]) -> tuple[list[File], list[File]]:

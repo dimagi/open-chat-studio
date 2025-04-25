@@ -77,7 +77,7 @@ class RenderTemplate(PipelineNode):
                 "temp_state": state.get("temp_state", {}),
             }
 
-            if "experiment_session" in state and state["experiment_session"]:
+            if state.get("experiment_session"):
                 exp_session = state["experiment_session"]
                 participant = getattr(exp_session, "participant", None)
                 if participant:

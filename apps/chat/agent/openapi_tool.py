@@ -92,9 +92,9 @@ class OpenAPIOperationExecutor:
             except httpx.HTTPStatusError as e:
                 if e.response and e.response.status_code == 400:
                     raise ToolException(f"Bad request: {e.response.text}") from None
-                raise ToolException(f"Error making request: {str(e)}") from None
+                raise ToolException(f"Error making request: {e!s}") from None
             except httpx.HTTPError as e:
-                raise ToolException(f"Error making request: {str(e)}") from None
+                raise ToolException(f"Error making request: {e!s}") from None
 
     def _make_request(
         self, http_client: httpx.Client, url: str, method: str, **kwargs
@@ -140,7 +140,7 @@ class OpenAPIOperationExecutor:
 
             filename = msg.get_filename()
         except Exception as e:
-            raise ToolException(f"Invalid content-disposition header: {str(e)}") from e
+            raise ToolException(f"Invalid content-disposition header: {e!s}") from e
         return filename or str(uuid.uuid4())
 
     def _get_url(self, path_params):

@@ -333,10 +333,8 @@ def _get_new_summary(llm, pruned_memory, summary, model_token_limit, first_call=
     summarization_prompt_tokens, context = _get_summarization_prompt_tokens_with_context(llm, summary, pruned_memory)
     next_batch = []
 
-    while (
-        pruned_memory
-        and summarization_prompt_tokens > model_token_limit
-        or len(pruned_memory) > MAX_UNCOMPRESSED_MESSAGES
+    while pruned_memory and (
+        summarization_prompt_tokens > model_token_limit or len(pruned_memory) > MAX_UNCOMPRESSED_MESSAGES
     ):
         next_batch.insert(0, pruned_memory.pop())
         summarization_prompt_tokens, context = _get_summarization_prompt_tokens_with_context(
