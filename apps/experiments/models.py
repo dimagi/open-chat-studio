@@ -1439,40 +1439,32 @@ class SessionStatus(models.TextChoices):
     UNKNOWN = "unknown", gettext("Unknown")
 
 
-class ExperimentSessionQuerySet(models.QuerySet):
-    def with_last_message_created_at(self):
-        last_message_created_at = (
-            ChatMessage.objects.filter(
-                chat__experiment_session=models.OuterRef("pk"),
-            )
-            .order_by("-created_at")
-            .values("created_at")[:1]
-        )
-        return self.annotate(last_message_created_at=models.Subquery(last_message_created_at))
-
-    def with_first_message_created_at(self):
-        first_message_created_at = (
-            ChatMessage.objects.filter(
-                chat__experiment_session=models.OuterRef("pk"),
-            )
-            .order_by("created_at")
-            .values("created_at")[:1]
-        )
-        return self.annotate(first_message_created_at=models.Subquery(first_message_created_at))
-
-
 class ExperimentSessionObjectManager(models.Manager):
-    def for_chat_id(self, chat_id: str) -> list["ExperimentSession"]:
-        return self.filter(participant__identifier=chat_id)
-
-    def get_queryset(self):
-        return ExperimentSessionQuerySet(self.model, using=self._db)
-
-    def with_last_message_created_at(self):
-        return self.get_queryset().with_last_message_created_at()
+    def _get_message_created_at_subquery(self, order_by):
+        return (
+            ChatMessage.objects.filter(
+                chat__experiment_session=models.OuterRef("pk"),
+            )
+            .order_by(order_by)
+            .values("created_at")[:1]
+        )
 
     def with_first_message_created_at(self):
-        return self.get_queryset().with_first_message_created_at()
+        first_message_subquery = self._get_message_created_at_subquery("created_at")
+        return self.get_queryset().annotate(first_message_created_at=models.Subquery(first_message_subquery))
+
+    def with_last_message_created_at(self):
+        last_message_subquery = self._get_message_created_at_subquery("-created_at")
+        return self.get_queryset().annotate(last_message_created_at=models.Subquery(last_message_subquery))
+
+    def with_filter_annotations(self):
+        first_message_subquery = self._get_message_created_at_subquery("created_at")
+        last_message_subquery = self._get_message_created_at_subquery("-created_at")
+
+        return self.get_queryset().annotate(
+            first_message_created_at=models.Subquery(first_message_subquery),
+            last_message_created_at=models.Subquery(last_message_subquery),
+        )
 
 
 class ExperimentSession(BaseTeamModel):
