@@ -361,12 +361,9 @@ class EventBot:
             )
             trace_service.set_current_span_outputs({"response": response.content})
 
-        message = response.content
-        if self.history_manager:
-            self.history_manager.save_message_to_history(
-                message,
-                type_=ChatMessageType.AI,
-            )
+            message = response.content
+            if self.history_manager:
+                self.history_manager.save_message_to_history(message, type_=ChatMessageType.AI)
         return message
 
     @property
