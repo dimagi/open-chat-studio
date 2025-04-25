@@ -250,7 +250,7 @@ class PipelineRouterNode(BasePipelineNode):
             output_handle = next((k for k, v in output_map.items() if v == conditional_branch), None)
             tags = self.get_output_tags(conditional_branch)
             target_node_id = edge_map[conditional_branch]
-            route_path = (state["node_source"], node_id, target_node_id)
+            route_path = (state["node_source"], node_id, [target_node_id])
             output = PipelineState.from_router_output(
                 node_id, self.name, state["node_input"], output_handle, tags, route_path
             )
