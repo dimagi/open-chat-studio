@@ -120,7 +120,7 @@ class EventActionForm(forms.ModelForm):
                 raise forms.ValidationError("This action is not allowed when 'A new bot message is received'")
         return cleaned_data
 
-    def save(self, experiment_id, commit=True):
+    def save(self, commit=True, experiment_id=None):
         instance = super().save(commit=False)
         instance.experiment_id = experiment_id
         if commit:
