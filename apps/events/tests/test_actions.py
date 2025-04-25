@@ -65,6 +65,7 @@ def test_end_conversation_runs_pipeline(session, pipeline):
                 "end": {"message": f"human: {input}"},
             },
             "experiment_session": session.id,
+            "pipeline_version": pipeline.version_number,
             "temp_state": {
                 "user_input": output_message,
                 "attachments": [],
