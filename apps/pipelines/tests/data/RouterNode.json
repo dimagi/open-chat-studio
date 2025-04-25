@@ -84,6 +84,11 @@
       "type": "array",
       "ui:widget": "keywords"
     },
+    "defaultKeywordIndex": {
+      "default": 0,
+      "title": "Defaultkeywordindex",
+      "type": "integer"
+    },
     "tag_output_message": {
       "default": false,
       "description": "Tag the output message with the selected route",
