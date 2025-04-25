@@ -10,7 +10,6 @@ Usage:
     Use the `for_experiment` or `for_pipeline` class methods to instantiate `ChatAdapter` or `AssistantAdapter`.
 """
 
-from abc import ABCMeta
 from functools import cached_property
 from typing import TYPE_CHECKING, Self
 
@@ -31,7 +30,7 @@ if TYPE_CHECKING:
     from apps.service_providers.models import LlmProviderModel
 
 
-class BaseAdapter(metaclass=ABCMeta):
+class BaseAdapter:
     ai_message = None
 
     @property

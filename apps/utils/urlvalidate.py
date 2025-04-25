@@ -23,7 +23,7 @@ def validate_user_input_url(url, strict=True):
                 "url": url,
             },
         )
-        raise InvalidURL("Invalid URL. Ensure that the URL is a valid HTTPS URL")
+        raise InvalidURL("Invalid URL. Ensure that the URL is a valid HTTPS URL") from None
     except CannotResolveHost as e:
         log.exception(
             "Error resolving host: %s",
@@ -32,7 +32,7 @@ def validate_user_input_url(url, strict=True):
                 "url": url,
             },
         )
-        raise InvalidURL("Unable to validate URL")
+        raise InvalidURL("Unable to validate URL") from None
 
 
 def _validate_url(url, strict=True):

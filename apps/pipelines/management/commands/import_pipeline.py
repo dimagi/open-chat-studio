@@ -25,14 +25,14 @@ class Command(BaseCommand):
             with open(file_path) as file:
                 data = json.load(file)
         except FileNotFoundError:
-            raise CommandError(f"File {file_path} does not exist.")
-        except json.JSONDecodeError:
-            raise CommandError("Invalid JSON file.")
+            raise CommandError(f"File {file_path} does not exist.") from None
+        except json.JSONDecodeError as e:
+            raise CommandError("Invalid JSON file.") from e
 
         try:
             team = Team.objects.get(slug=team_slug)
         except Team.DoesNotExist:
-            raise CommandError(f"Team with slug {team_slug} does not exist.")
+            raise CommandError(f"Team with slug {team_slug} does not exist.") from None
 
         new_pipeline = Pipeline.objects.create(
             team=team,

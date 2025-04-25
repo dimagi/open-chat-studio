@@ -123,7 +123,7 @@ class PipelineGraph(pydantic.BaseModel):
         try:
             compiled_graph = state_graph.compile()
         except ValueError as e:
-            raise PipelineBuildError(str(e))
+            raise PipelineBuildError(str(e)) from e
         return compiled_graph
 
     def _validate_no_parallel_nodes(self):
@@ -193,7 +193,7 @@ class PipelineGraph(pydantic.BaseModel):
                 incoming_edges = [edge.source for edge in self.edges if edge.target == node.id]
                 state_graph.add_node(node.id, partial(node.pipeline_node_instance.process, node.id, incoming_edges))
             except ValidationError as ex:
-                raise PipelineNodeBuildError(ex)
+                raise PipelineNodeBuildError(ex) from ex
 
     def _add_edges_to_graph(self, state_graph: StateGraph, reachable_nodes: list[Node]):
         seen_sources = set()

@@ -33,7 +33,7 @@ class JsonOrYamlField(CharField):
                 self.error_messages["invalid"],
                 code="invalid",
                 params={"value": value},
-            )
+            ) from None
         if isinstance(converted, str):
             return JSONString(converted)
         else:

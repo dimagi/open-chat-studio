@@ -92,7 +92,7 @@ def wrap_openai_errors(fn):
             if isinstance(e.body, dict):
                 try:
                     message = e.body["message"]
-                except KeyError | AttributeError:
+                except (KeyError, AttributeError):
                     pass
 
             raise OpenAiSyncError(message) from e
