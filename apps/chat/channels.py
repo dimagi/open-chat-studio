@@ -229,7 +229,7 @@ class ChannelBase(ABC):
         """Channel specific way of sending text back to the user"""
         raise NotImplementedError()
 
-    def send_file_to_user(self, files: list[File]):
+    def send_file_to_user(self, files: list[File]):  # noqa: B027
         """
         Sends the file to the user. This is a channel specific way of sending files.
         The default implementation does nothing.
@@ -242,19 +242,19 @@ class ChannelBase(ABC):
     def get_message_audio(self) -> BytesIO:
         return self.messaging_service.get_message_audio(message=self.message)
 
-    def echo_transcript(self, transcript: str):
+    def echo_transcript(self, transcript: str):  # noqa: B027
         """Sends a text message to the user with a transcript of what the user said"""
         pass
 
-    def transcription_started(self):
+    def transcription_started(self):  # noqa: B027
         """Callback indicating that the transcription process started"""
         pass
 
-    def transcription_finished(self, transcript: str):
+    def transcription_finished(self, transcript: str):  # noqa: B027
         """Callback indicating that the transcription is finished"""
         pass
 
-    def submit_input_to_llm(self):
+    def submit_input_to_llm(self):  # noqa: B027
         """Callback indicating that the user input will now be given to the LLM"""
         pass
 
@@ -787,7 +787,7 @@ class WebChannel(ChannelBase):
             experiment_version = working_experiment.get_version(version)
             session.chat.set_metadata(Chat.MetadataKeys.EXPERIMENT_VERSION, version)
         except Experiment.DoesNotExist:
-            raise Http404(f"Experiment with version {version} not found")
+            raise Http404(f"Experiment with version {version} not found") from None
 
         WebChannel.check_and_process_seed_message(session, experiment_version)
         return session
@@ -854,8 +854,8 @@ class TelegramChannel(ChannelBase):
                 participant_data.update_consent(False)
             except ParticipantData.DoesNotExist:
                 raise ChannelException("Participant data does not exist during consent update") from e
-            except Exception:
-                raise ChannelException(f"Unable to update consent for participant {self.participant_identifier}")
+            except Exception as e:
+                raise ChannelException(f"Unable to update consent for participant {self.participant_identifier}") from e
         else:
             raise ChannelException(f"Telegram API error occurred: {e.description}") from e
 

@@ -341,10 +341,10 @@ def download_file(request, team_slug: str, pk: int, file_id: int):
     try:
         file = File.objects.filter(team=request.team, id__in=models.Subquery(assistant_file_ids)).get(id=file_id)
     except File.DoesNotExist:
-        raise Http404()
+        raise Http404() from None
 
     try:
         file = file.file.open()
         return FileResponse(file, as_attachment=True, filename=file.name)
     except FileNotFoundError:
-        raise Http404()
+        raise Http404() from None

@@ -362,7 +362,7 @@ def file_content_view(request, pk: int):
     try:
         return FileResponse(file.file.open(), as_attachment=True, filename=file.file.name)
     except FileNotFoundError:
-        raise Http404()
+        raise Http404() from None
 
 
 @csrf_exempt
@@ -383,7 +383,7 @@ def generate_key(request: Request):
             participant__identifier=connect_id, system_metadata__commcare_connect_channel_id=commcare_connect_channel_id
         )
     except ParticipantData.DoesNotExist:
-        raise Http404()
+        raise Http404() from None
 
     if not participant_data.encryption_key:
         participant_data.generate_encryption_key()

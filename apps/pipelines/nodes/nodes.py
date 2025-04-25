@@ -102,7 +102,7 @@ class RenderTemplate(PipelineNode):
             output = template.render(content)
         except Exception as e:
             self.logger.error(f"Template rendering failed: {e}")
-            raise PipelineNodeRunError(f"Error rendering template: {e}")
+            raise PipelineNodeRunError(f"Error rendering template: {e}") from e
 
         return PipelineState.from_node_output(node_name=self.name, node_id=node_id, output=output)
 
@@ -121,7 +121,7 @@ class LLMResponseMixin(BaseModel):
             provider = LlmProvider.objects.get(id=self.llm_provider_id)
             return provider.get_llm_service()
         except LlmProvider.DoesNotExist:
-            raise PipelineNodeBuildError(f"LLM provider with id {self.llm_provider_id} does not exist")
+            raise PipelineNodeBuildError(f"LLM provider with id {self.llm_provider_id} does not exist") from None
         except ServiceProviderConfigError as e:
             raise PipelineNodeBuildError("There was an issue configuring the LLM service provider") from e
 
@@ -129,7 +129,9 @@ class LLMResponseMixin(BaseModel):
         try:
             return LlmProviderModel.objects.get(id=self.llm_provider_model_id)
         except LlmProviderModel.DoesNotExist:
-            raise PipelineNodeBuildError(f"LLM provider model with id {self.llm_provider_model_id} does not exist")
+            raise PipelineNodeBuildError(
+                f"LLM provider model with id {self.llm_provider_model_id} does not exist"
+            ) from None
 
     def get_chat_model(self):
         return self.get_llm_service().get_chat_model(self.get_llm_provider_model().name, self.llm_temperature)
@@ -281,7 +283,9 @@ class LLMResponseWithPrompt(LLMResponse, HistoryMixin):
             validate_prompt_variables(context=context, prompt_key="prompt", known_vars=set(PromptVars.values))
             return self
         except ValidationError as e:
-            raise PydanticCustomError("invalid_prompt", e.error_dict["prompt"][0].message, {"field": "prompt"})
+            raise PydanticCustomError(
+                "invalid_prompt", e.error_dict["prompt"][0].message, {"field": "prompt"}
+            ) from None
 
     @field_validator("tools", mode="before")
     def ensure_value(cls, value: str):
@@ -359,7 +363,7 @@ class SendEmail(PipelineNode):
             try:
                 validate_email(email)
             except ValidationError:
-                raise PydanticCustomError("invalid_recipient_list", "Invalid list of emails addresses")
+                raise PydanticCustomError("invalid_recipient_list", "Invalid list of emails addresses") from None
         return value
 
     def _process(self, input, node_id: str, **kwargs) -> PipelineState:
@@ -481,7 +485,9 @@ class RouterNode(RouterMixin, Passthrough, HistoryMixin):
             )
             return self
         except ValidationError as e:
-            raise PydanticCustomError("invalid_prompt", e.error_dict["prompt"][0].message, {"field": "prompt"})
+            raise PydanticCustomError(
+                "invalid_prompt", e.error_dict["prompt"][0].message, {"field": "prompt"}
+            ) from None
 
     def _process_conditional(self, state: PipelineState, node_id=None):
         default_keyword = self.keywords[self.defaultKeywordIndex] if self.keywords else None
@@ -690,8 +696,8 @@ class StructuredDataSchemaValidatorMixin:
     def validate_data_schema(cls, value):
         try:
             parsed_value = json.loads(value)
-        except json.JSONDecodeError:
-            raise PydanticCustomError("invalid_schema", "Invalid schema")
+        except json.JSONDecodeError as e:
+            raise PydanticCustomError("invalid_schema", "Invalid schema") from e
 
         if not isinstance(parsed_value, dict) or len(parsed_value) == 0:
             raise PydanticCustomError("invalid_schema", "Invalid schema")
@@ -829,7 +835,7 @@ class AssistantNode(PipelineNode):
         try:
             assistant = OpenAiAssistant.objects.get(id=self.assistant_id)
         except OpenAiAssistant.DoesNotExist:
-            raise PipelineNodeBuildError(f"Assistant {self.assistant_id} does not exist")
+            raise PipelineNodeBuildError(f"Assistant {self.assistant_id} does not exist") from None
 
         session: ExperimentSession | None = state.get("experiment_session")
         runnable = self._get_assistant_runnable(assistant, session=session, node_id=node_id)
@@ -903,12 +909,12 @@ class CodeNode(PipelineNode):
             try:
                 exec(byte_code, {}, custom_locals)
             except Exception as exc:
-                raise PydanticCustomError("invalid_code", "{error}", {"error": str(exc)})
+                raise PydanticCustomError("invalid_code", "{error}", {"error": str(exc)}) from exc
 
             try:
                 main = custom_locals["main"]
             except KeyError:
-                raise SyntaxError("You must define a 'main' function")
+                raise SyntaxError("You must define a 'main' function") from None
 
             for name, item in custom_locals.items():
                 if name != "main" and inspect.isfunction(item):
@@ -921,7 +927,7 @@ class CodeNode(PipelineNode):
                 raise SyntaxError("The main function should have the signature main(input, **kwargs) only.")
 
         except SyntaxError as exc:
-            raise PydanticCustomError("invalid_code", "{error}", {"error": exc.msg})
+            raise PydanticCustomError("invalid_code", "{error}", {"error": exc.msg}) from None
         return value
 
     def _process(self, input: str, state: PipelineState, node_id: str) -> PipelineState:

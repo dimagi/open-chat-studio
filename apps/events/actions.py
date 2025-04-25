@@ -118,13 +118,13 @@ class PipelineStartAction(EventActionHandlerBase):
         try:
             pipeline: Pipeline = Pipeline.objects.get(id=action.params["pipeline_id"])
         except KeyError:
-            raise ValueError("The action is missing the pipeline id")
+            raise ValueError("The action is missing the pipeline id") from None
         except Pipeline.DoesNotExist:
-            raise ValueError("The selected pipeline does not exist, maybe it was deleted?")
+            raise ValueError("The selected pipeline does not exist, maybe it was deleted?") from None
         try:
             input_type = action.params["input_type"]
         except KeyError:
-            raise ValueError("The action is missing the input type")
+            raise ValueError("The action is missing the input type") from None
         if input_type == PipelineEventInputs.FULL_HISTORY:
             messages = session.chat.get_langchain_messages()
         elif input_type == PipelineEventInputs.HISTORY_LAST_SUMMARY:

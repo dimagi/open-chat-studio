@@ -23,7 +23,7 @@ class Command(BaseCommand):
             try:
                 team = Team.objects.get(slug=team)
             except Team.DoesNotExist:
-                raise CommandError(f"Team {team} does not exist.")
+                raise CommandError(f"Team {team} does not exist.") from None
             assistants = OpenAiAssistant.objects.filter(
                 team=team, working_version_id=None, tool_resources__tool_type="file_search"
             ).all()

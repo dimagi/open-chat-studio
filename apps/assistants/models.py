@@ -105,13 +105,13 @@ class OpenAiAssistant(BaseTeamModel, VersionsMixin, CustomActionOperationMixin):
         return self.custom_action_operations.exists()
 
     @transaction.atomic()
-    def create_new_version(self, *args, **kwargs):
+    def create_new_version(self):
         from .sync import push_assistant_to_openai
 
         version_number = self.version_number
         self.version_number = version_number + 1
         self.save(update_fields=["version_number"])
-        assistant_version = super().create_new_version(save=False, *args, **kwargs)
+        assistant_version = super().create_new_version(save=False)
         assistant_version.version_number = version_number
         assistant_version.name = f"{self.name} v{version_number}"
         assistant_version.assistant_id = ""

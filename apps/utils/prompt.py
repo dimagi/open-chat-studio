@@ -44,7 +44,7 @@ def _inspect_prompt(context: str, prompt_key) -> tuple[set, str]:
                     )
                 prompt_variables.add(get_root_var(field_name))
     except ValueError as e:
-        raise ValidationError({prompt_key: f"Invalid format in prompt: {e}"})
+        raise ValidationError({prompt_key: f"Invalid format in prompt: {e}"}) from None
 
     return prompt_variables, prompt_text
 

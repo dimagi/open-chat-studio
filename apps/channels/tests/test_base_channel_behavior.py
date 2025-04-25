@@ -942,4 +942,4 @@ def test_chat_message_returned_for_cancelled_generate():
     channel._new_user_message.side_effect = GenerationCancelled(output="Cancelled")
     response = channel.new_user_message("Hi there")
 
-    assert type(response) == ChatMessage
+    assert type(response) is ChatMessage
