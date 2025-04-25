@@ -32,7 +32,7 @@ indent-width = 4
 target-version = "py311"
 
 [tool.ruff.lint]
-select = ["E", "F", "I", "UP", "DJ", "PT", "B", "SIM", "RSE"]
+select = ["E", "F", "I", "UP", "DJ", "PT", "B", "SIM", "RSE", "T10", "UP"]
 ignore = ["PT019"]
 fixable = ["ALL"]
 unfixable = []
