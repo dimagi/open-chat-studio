@@ -355,7 +355,7 @@ class ChannelBase(ABC):
                     trace_name=self.experiment.name,
                     session_id=str(self.experiment_session.external_id),
                     user_id=self.participant_identifier,
-                    inputs={"input": self.user_query},
+                    inputs={"input": self.message.model_dump()},
                 ):
                     response = self._new_user_message()
                     self.trace_service.set_current_span_outputs({"response": response.content})
