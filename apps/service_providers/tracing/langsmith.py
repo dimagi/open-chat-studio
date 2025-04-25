@@ -3,7 +3,9 @@ from __future__ import annotations
 from typing import TYPE_CHECKING, Any
 from uuid import UUID
 
+import langsmith as ls
 from langchain_core.tracers import LangChainTracer
+from langchain_core.tracers.langchain import wait_for_all_tracers
 from langsmith import RunTree
 
 from . import Tracer
@@ -18,8 +20,8 @@ class LangSmithTracer(Tracer):
     def __init__(self, type_, config: dict):
         super().__init__(type_, config)
         self.client = None
-        self.root_run_tree = None
-        self.spans: dict[UUID, RunTree] = {}
+        self.spans: dict[UUID, tuple[ls.trace, RunTree]] = {}
+        self.context = None
 
     @property
     def ready(self) -> bool:
@@ -47,28 +49,30 @@ class LangSmithTracer(Tracer):
             "user_id": user_id,
         }
 
-        self.root_run_tree = RunTree(
-            id=trace_id,
+        self.context = ls.tracing_context(
+            project_name=project_name, metadata=metadata, client=self.client, enabled=True
+        )
+        self.context.__enter__()
+
+        self._start_trace(
+            trace_id,
             name=trace_name,
             inputs=inputs,
-            run_type="chain",
-            ls_client=self.client,
-            project_name=project_name,
-            extra={"metadata": metadata},
             tags=[f"user:{user_id}", f"session:{session_id}"],
         )
-        self.root_run_tree.post()
 
     def end_trace(self, outputs: dict[str, Any] | None = None, error: Exception | None = None) -> None:
+        trace_id = self.trace_id
         super().end_trace(outputs=outputs, error=error)
-        if not self.ready or not self.root_run_tree:
+        if not self.ready:
             return
 
-        self.root_run_tree.end(outputs=outputs or {}, error=str(error) if error else None)
-        self.root_run_tree.patch()
+        self._end_trace(trace_id, outputs, error)
+        self.context.__exit__(None, None, None)
+        wait_for_all_tracers()
 
+        self.context = None
         self.client = None
-        self.root_run_tree = None
         self.spans.clear()
 
     def start_span(
@@ -79,38 +83,38 @@ class LangSmithTracer(Tracer):
         metadata: dict[str, Any] | None = None,
         level: SpanLevel = "DEFAULT",
     ) -> None:
-        if not self.ready or not self.root_run_tree:
+        if not self.ready:
             return
 
-        span_tree = self._get_parent_run_tree().create_child(
-            run_id=span_id,
-            name=span_name,
-            run_type="chain",
-            inputs=inputs,
-            extra={"metadata": metadata or {}},
-        )
-        span_tree.post()
-
-        # Store the span for later reference
-        self.spans[span_id] = span_tree
+        self._start_trace(span_id, name=span_name, inputs=inputs, metadata=metadata or {})
 
     def end_span(self, span_id: UUID, outputs: dict[str, Any] | None = None, error: Exception | None = None) -> None:
-        if not self.ready or not self.root_run_tree:
+        if not self.ready:
             return
 
-        span_tree = self.spans.pop(span_id, None)
-        if span_tree:
-            span_tree.end(outputs=outputs or {}, error=str(error) if error else None)
-            span_tree.patch()
+        self._end_trace(span_id, outputs, error)
 
     def get_langchain_callback(self) -> BaseCallbackHandler:
         if not self.ready:
             raise ServiceNotInitializedException("Service not initialized.")
-        return LangChainTracer(client=self.client, project_name=self.config["project"])
+        return LangChainTracer(client=self.client)
 
-    def _get_parent_run_tree(self) -> RunTree:
-        if self.spans:
-            last_span = next(reversed(self.spans))
-            return self.spans[last_span]
-        else:
-            return self.root_run_tree
+    def get_trace_metadata(self) -> dict[str, str]:
+        if not self.ready or not self.spans:
+            return {}
+        _, run_tree = self.spans[self.trace_id]
+        return {
+            "trace_id": str(self.trace_id),
+            "trace_url": run_tree.get_url(),
+            "trace_provider": self.type,
+        }
+
+    def _start_trace(self, trace_id: UUID, **kwargs):
+        trace = ls.trace(run_id=trace_id, run_type="chain", client=self.client, **kwargs)
+        run_tree = trace.__enter__()
+        self.spans[trace_id] = (trace, run_tree)
+
+    def _end_trace(self, trace_id: UUID, outputs: dict[str, Any] | None, error: Exception | None):
+        trace, run_tree = self.spans.pop(trace_id)
+        run_tree.end(outputs=outputs or {}, error=str(error) if error else None)
+        trace.__exit__()
