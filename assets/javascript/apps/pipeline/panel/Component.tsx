@@ -15,7 +15,7 @@ export default function Component({label, onClick, onDragStart, parentRef, hasHe
       draggable={true}
       onClick={onClick}
       onDragStart={onDragStart}
-      className="relative my-2 px-4 py-2 shadow-sm rounded-md border-2 border-stone-300 bg-base-100 hover:cursor-pointer hover:bg-slate-200 dark:hover:bg-opacity-20"
+      className="relative my-2 px-4 py-2 shadow-xs rounded-md border-2 border-stone-300 bg-base-100 hover:cursor-pointer hover:bg-slate-200 dark:hover:bg-slate-200/20"
     >
       <div className="m-1 text-center">
         <span className="font-bold">{label}</span>

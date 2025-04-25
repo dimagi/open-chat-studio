@@ -401,6 +401,11 @@ class BooleanNode(Passthrough):
     model_config = ConfigDict(json_schema_extra=NodeSchema(label="Conditional Node"))
 
     input_equals: str
+    tag_output_message: bool = Field(
+        default=False,
+        description="Tag the output message with the selected route",
+        json_schema_extra=UiSchema(widget=Widgets.toggle),
+    )
 
     def _process_conditional(self, state: PipelineState, node_id: str | None = None) -> Literal["true", "false"]:
         if self.input_equals == state["messages"][-1]:
@@ -414,6 +419,11 @@ class BooleanNode(Passthrough):
 
 class RouterMixin(BaseModel):
     keywords: list[str] = Field(default_factory=list, json_schema_extra=UiSchema(widget=Widgets.keywords))
+    tag_output_message: bool = Field(
+        default=False,
+        description="Tag the output message with the selected route",
+        json_schema_extra=UiSchema(widget=Widgets.toggle),
+    )
 
     @field_validator("keywords")
     def ensure_keywords_exist(cls, value, info: FieldValidationInfo):
@@ -445,7 +455,14 @@ class RouterNode(RouterMixin, Passthrough, HistoryMixin):
         json_schema_extra=NodeSchema(
             label="LLM Router",
             documentation_link=settings.DOCUMENTATION_LINKS["node_llm_router"],
-            field_order=["llm_provider_id", "llm_temperature", "history_type", "prompt", "keywords"],
+            field_order=[
+                "llm_provider_id",
+                "llm_temperature",
+                "history_type",
+                "prompt",
+                "keywords",
+                "tag_output_message",
+            ],
         )
     )
     prompt: str = Field(
@@ -453,6 +470,19 @@ class RouterNode(RouterMixin, Passthrough, HistoryMixin):
         min_length=1,
         json_schema_extra=UiSchema(widget=Widgets.expandable_text),
     )
+
+    @model_validator(mode="after")
+    def check_prompt_variables(self) -> Self:
+        context = {
+            "prompt": self.prompt,
+        }
+        try:
+            validate_prompt_variables(
+                context=context, prompt_key="prompt", known_vars=set([PromptVars.PARTICIPANT_DATA])
+            )
+            return self
+        except ValidationError as e:
+            raise PydanticCustomError("invalid_prompt", e.error_dict["prompt"][0].message, {"field": "prompt"})
 
     def _process_conditional(self, state: PipelineState, node_id=None):
         prompt = OcsPromptTemplate.from_messages(
@@ -477,13 +507,11 @@ class RouterNode(RouterMixin, Passthrough, HistoryMixin):
             keyword = getattr(result, "route", None)
         except PydanticValidationError:
             keyword = None
-
         if not keyword:
             keyword = self.keywords[0]
 
         if session:
             self._save_history(session, node_id, node_input, keyword)
-
         return keyword
 
 

@@ -149,11 +149,17 @@ def router_node(provider_id: str, provider_model_id: str, keywords: list[str], *
     }
 
 
-def state_key_router_node(route_key: str, keywords: list[str], data_source="temp_state"):
+def state_key_router_node(route_key: str, keywords: list[str], data_source="temp_state", tag_output=False):
     return {
         "id": str(uuid4()),
         "type": nodes.StaticRouterNode.__name__,
-        "params": {"name": "static router", "data_source": data_source, "route_key": route_key, "keywords": keywords},
+        "params": {
+            "name": "static router",
+            "data_source": data_source,
+            "route_key": route_key,
+            "keywords": keywords,
+            "tag_output_message": tag_output,
+        },
     }
 
 

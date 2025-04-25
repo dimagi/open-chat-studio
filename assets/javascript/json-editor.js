@@ -143,11 +143,11 @@ class JsonEditor {
    */
   createEditor() {
     // Add Tailwind styling to the editor container
-    this.element.classList.add('border', 'rounded-md', 'overflow-hidden', 'shadow-sm', 'focus-within:ring-2', 'focus-within:ring-primary-focus', 'bg-base-100', 'relative');
+    this.element.classList.add('border', 'rounded-md', 'overflow-hidden', 'shadow-xs', 'focus-within:ring-2', 'focus-within:ring-primary-focus', 'bg-base-100', 'relative');
     
     // Create format button
     const formatBtn = document.createElement('button');
-    formatBtn.className = 'absolute bottom-2 right-2 z-10 text-xs bg-base-200 hover:bg-base-300 text-base-content px-2 py-1 rounded transition-colors';
+    formatBtn.className = 'absolute bottom-2 right-2 z-10 text-xs bg-base-200 hover:bg-base-300 text-base-content px-2 py-1 rounded-sm transition-colors';
     formatBtn.textContent = 'Format';
     formatBtn.addEventListener('click', (e) => {
       e.preventDefault();

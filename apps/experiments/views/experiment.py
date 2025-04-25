@@ -1,4 +1,5 @@
 import logging
+import unicodedata
 import uuid
 from datetime import datetime
 from typing import cast
@@ -53,7 +54,7 @@ from apps.experiments.decorators import (
 )
 from apps.experiments.email import send_chat_link_email, send_experiment_invitation
 from apps.experiments.exceptions import ChannelAlreadyUtilizedException
-from apps.experiments.filters import apply_dynamic_filters
+from apps.experiments.filters import FIELD_TYPE_FILTERS, apply_dynamic_filters
 from apps.experiments.forms import (
     ConsentForm,
     ExperimentForm,
@@ -95,6 +96,11 @@ from apps.utils.base_experiment_table_view import BaseExperimentTableView
 DEFAULT_ERROR_MESSAGE = (
     "Sorry something went wrong. This was likely an intermittent error related to load."
     "Please try again, and wait a few minutes if this keeps happening."
+)
+
+CUSTOM_ERROR_MESSAGE = (
+    "The chatbot is currently unavailable. We are working hard to resolve the issue as quickly"
+    " as possible and apologize for any inconvenience. Thank you for your patience."
 )
 
 
@@ -247,6 +253,7 @@ class CreateExperiment(BaseExperimentView, CreateView):
 
     def form_valid(self, form, file_formset):
         with transaction.atomic():
+            form.instance.name = unicodedata.normalize("NFC", form.instance.name)
             self.object = form.save()
             if file_formset:
                 files = file_formset.save(self.request)
@@ -291,8 +298,13 @@ def _get_voice_provider_alpine_context(request):
     exclude_services = [SyntheticVoice.OpenAIVoiceEngine]
     if flag_is_active(request, "open_ai_voice_engine"):
         exclude_services = []
+
+    form_attrs = {"enctype": "multipart/form-data"}
+    if request.origin == "experiments":
+        form_attrs["x-data"] = "experiment"
+
     return {
-        "form_attrs": {"x-data": "experiment", "enctype": "multipart/form-data"},
+        "form_attrs": form_attrs,
         # map provider ID to provider type
         "voice_providers_types": dict(request.team.voiceprovider_set.values_list("id", "type")),
         "synthetic_voice_options": sorted(
@@ -487,6 +499,7 @@ def base_single_experiment_view(request, team_slug, experiment_id, template_name
         "available_tags": [tag.name for tag in experiment.team.tag_set.filter(is_system_tag=False)],
         "experiment_versions": experiment.get_version_name_list(),
         "deployed_version": deployed_version,
+        "field_type_filters": FIELD_TYPE_FILTERS,
         "channel_list": channel_list,
         **_get_events_context(experiment, team_slug, request.origin),
     }
@@ -788,7 +801,13 @@ def get_message_response(request, team_slug: str, experiment_id: uuid.UUID, sess
         elif response := result.get("response"):
             message_details["message"] = {"content": response}
         if error := result.get("error"):
-            message_details["error_msg"] = error if experiment.debug_mode_enabled else DEFAULT_ERROR_MESSAGE
+            if not experiment.debug_mode_enabled:
+                if "Invalid parameter" in error:  # TODO: temporary
+                    message_details["error_msg"] = CUSTOM_ERROR_MESSAGE
+                else:
+                    message_details["error_msg"] = DEFAULT_ERROR_MESSAGE
+            else:
+                message_details["error_msg"] = error
     elif progress["complete"]:
         message_details["error_msg"] = DEFAULT_ERROR_MESSAGE
 

@@ -41,10 +41,17 @@
       {% include "experiments/components/experiment_details.html" %}
     </div>
 
-    <div role="tablist" class="mt-4 tabs tabs-bordered max-w-5xl">
+    <div role="tablist" class="mt-4 tabs tabs-border max-w-5xl">
       <input type="radio" name="experiment_tabs-{{ session.id }}" role="tab" class="tab" aria-label="Messages" checked/>
       <div role="tabpanel" class="tab-content pt-3">
-        {% include "experiments/components/experiment_chat.html" %}
+        <div id="messages-container" class="min-w-full"
+             hx-get="{% url 'experiments:experiment_session_messages_view' request.team.slug experiment.public_id experiment_session.external_id %}"
+             hx-trigger="intersect once"
+             hx-indicator="#messages-initial-loading">
+          <div id="messages-initial-loading" class="flex items-center justify-center p-10">
+            <span class="loading loading-spinner"></span>
+          </div>
+        </div>
       </div>
       {% if perms.experiments.view_participantdata %}
         <input type="radio" name="experiment_tabs-{{ session.id }}" role="tab" class="tab" aria-label="Participant Data" />

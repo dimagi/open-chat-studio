@@ -1,57 +1,88 @@
-@import "tailwindcss/base";
-@import "tailwindcss/components";
+@import "tailwindcss" source("../../");
+@config '../../tailwind.config.js';
+@plugin "@tailwindcss/typography";
+@source inline("alert-success", "alert-info", "alert-error", "alert-warning", "alertify-notifier");
+@custom-variant dark (&:where([data-theme=dark], [data-theme=dark] *));
+
+@plugin "daisyui" {
+  themes: light --default, dark --prefersdark;
+}
+
+@plugin "daisyui/theme" {
+  name: "dark";
+  --color-base-content: oklch(0.746477 0.0216 264.436);
+}
+
 
 @import './app/chat.css';
-@import './app/table.css';
+@import './app/table.css' layer(components);
 @import './app/alertify.css';
 @import './app/pg-components.css';
-@import './app/prompt-builder.css';
-@import "tailwindcss/utilities.css";
+@import './app/prompt-builder.css' layer(components);
 
-@layer components {
 
-  .section {
-    @apply m-4;
+
+/*
+  The default border color has changed to `currentcolor` in Tailwind CSS v4,
+  so we've added these compatibility styles to make sure everything still
+  looks the same as it did with Tailwind CSS v3.
+
+  If we ever want to remove these styles, we need to add an explicit border
+  color utility to any element that depends on these defaults.
+  See https://tailwindcss.com/docs/upgrade-guide#default-border-color
+*/
+@layer base {
+  *,
+  ::after,
+  ::before,
+  ::backdrop,
+  ::file-selector-button {
+    border-color: var(--color-gray-200, currentcolor);
   }
+}
 
+@utility section {
+  @apply m-4;
+}
+
+@utility help {
   /* forms */
-  .help {
-    @apply text-xs text-gray-700;
-  }
+  @apply text-xs text-gray-700;
+}
 
-  .app {
-    @apply m-4;
-  }
+@utility app {
+  @apply m-4;
+}
 
-  .app-card {
-    @apply lg:shadow-md p-4 mb-2 mt-2 lg:mt-0 lg:p-8;
-  }
+@utility app-card {
+  @apply lg:shadow-md p-4 mb-2 mt-2 lg:mt-0 lg:p-8;
+}
 
-  .tab:is(input[type="radio"]) {
-  	@apply whitespace-nowrap;
+@utility tab {
+  &:is(input[type='radio']) {
+    @apply whitespace-nowrap;
   }
 }
 
 /* subscriptions */
 
-@layer components {
+@utility plan {
+  @apply h-full px-8 py-4 border-4 rounded-md border-white;
 
-  .plan {
-    @apply h-full px-8 py-4 border-4 rounded-md border-white;
+  &.is-selected {
+    @apply border-blue-500 border-black/100;
   }
-
-  .plan.is-selected {
-    @apply border-blue-500 border-opacity-100;
-  }
-
 }
 
+@utility is-selected {
+  &.plan {
+    @apply border-blue-500 border-black/100;
+  }
+}
 
 /* chat UI stuff*/
-@layer components {
-  .htmx-request {
-    @apply loading;
-  }
+@utility htmx-request {
+  @apply loading;
 }
 
 /* set css variables to DaisyUI default colors: https://daisyui.com/docs/colors/ */
@@ -63,7 +94,7 @@
 }
 
 .ts-wrapper {
-  @apply w-full !ml-0;
+  @apply w-full ml-0!;
 }
 
 .ts-control {
@@ -106,25 +137,29 @@ input[type=number]::-webkit-outer-spin-button {
 
 /* Override ugly daisyui badges */
 .badge-success {
-  @apply inline-flex items-center rounded-md bg-green-50 px-2 py-1 text-xs font-medium text-green-700 ring-1 ring-inset ring-green-600/20;
+  @apply border-none inline-flex items-center rounded-md bg-green-50 px-2 py-1 text-xs font-medium text-green-700 ring-1 ring-inset ring-green-600/20;
 }
 
 .badge-info {
-  @apply inline-flex items-center rounded-md bg-blue-50 px-2 py-1 text-xs font-medium text-blue-700 ring-1 ring-inset ring-blue-700/10;
+  @apply border-none inline-flex items-center rounded-md bg-blue-50 px-2 py-1 text-xs font-medium text-blue-700 ring-1 ring-inset ring-blue-700/10;
 }
 
 .badge-warning {
-  @apply inline-flex items-center rounded-md bg-yellow-50 px-2 py-1 text-xs font-medium text-yellow-800 ring-1 ring-inset ring-yellow-600/20;
+  @apply border-none inline-flex items-center rounded-md bg-yellow-50 px-2 py-1 text-xs font-medium text-yellow-800 ring-1 ring-inset ring-yellow-600/20;
 }
 
 .badge-error {
-  @apply inline-flex items-center rounded-md bg-red-50 px-2 py-1 text-xs font-medium text-red-700 ring-1 ring-inset ring-red-600/10;
+  @apply border-none inline-flex items-center rounded-md bg-red-50 px-2 py-1 text-xs font-medium text-red-700 ring-1 ring-inset ring-red-600/10;
 }
 
 .badge-green {
-  @apply bg-green-100 text-green-800 text-sm font-medium me-2 px-2.5 py-0.5 rounded-md dark:bg-green-900 dark:text-green-300;
+  @apply border-none bg-green-100 text-green-800 text-sm font-medium me-2 px-2.5 py-0.5 rounded-md dark:bg-green-900 dark:text-green-300;
 }
 
 .badge-neutral {
-  @apply rounded-md
+  @apply border-none rounded-md
+}
+
+.menu-active {
+  background-color: oklch(0.313815 0.021108 254.139);
 }

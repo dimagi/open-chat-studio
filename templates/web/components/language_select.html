@@ -3,7 +3,7 @@
   <div class="my-2">
     <form id="language-select" action="{% url 'set_language' %}" method="post">
       {% csrf_token %}
-      <select name="language" class="select select-bordered select-sm max-w-xs py-0">
+      <select name="language" class="select select-sm max-w-xs py-0">
         {% get_current_language as LANGUAGE_CODE %}
         {% get_available_languages as LANGUAGES %}
         {% get_language_info_list for LANGUAGES as languages %}
