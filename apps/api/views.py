@@ -311,7 +311,7 @@ class ExperimentSessionViewSet(mixins.ListModelMixin, mixins.RetrieveModelMixin,
     lookup_url_kwarg = "id"
 
     def get_serializer(self, *args, **kwargs):
-        action = getattr(self, "action")
+        action = self.action
         if action == "retrieve":
             kwargs["include_messages"] = True
 

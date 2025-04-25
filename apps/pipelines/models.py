@@ -240,7 +240,7 @@ class Pipeline(BaseTeamModel, VersionsMixin):
         for node in nodes:
             name_to_flow_id[node.params.get("name")].append(node.flow_id)
 
-        for name, flow_ids in name_to_flow_id.items():
+        for _name, flow_ids in name_to_flow_id.items():
             if len(flow_ids) > 1:
                 for flow_id in flow_ids:
                     errors[flow_id].update({"name": "All node names must be unique"})

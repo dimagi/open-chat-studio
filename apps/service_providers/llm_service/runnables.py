@@ -511,7 +511,7 @@ class AssistantChat(RunnableSerializable[dict, ChainOutput]):
     def _get_response_with_retries(self, config, input_dict, thread_id) -> tuple[str, str]:
         assistant_runnable = self.adapter.get_openai_assistant()
 
-        for i in range(3):
+        for _i in range(3):
             error = None
             try:
                 return self._get_response(assistant_runnable, input_dict, config)
