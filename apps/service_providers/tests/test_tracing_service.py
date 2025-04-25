@@ -10,7 +10,7 @@ from apps.service_providers.tracing.service import TracingService
 class TestTracingService:
     @pytest.fixture()
     def mock_tracer(self):
-        return MockTracer("mock", {})
+        return MockTracer()
 
     @pytest.fixture()
     def tracing_service(self, mock_tracer):
@@ -130,9 +130,6 @@ class TestTracingService:
             assert not empty_tracing_service.activated
 
     def test_get_langchain_callbacks(self, tracing_service, mock_tracer):
-        mock_callback = MagicMock()
-        mock_tracer.get_langchain_callback = MagicMock(return_value=mock_callback)
-
         # Test with activated service
         with tracing_service.trace("test", "session", "user"):
             callbacks = tracing_service.get_langchain_callbacks()
@@ -143,9 +140,6 @@ class TestTracingService:
         assert callbacks == []
 
     def test_get_langchain_config(self, tracing_service, mock_tracer):
-        mock_callback = MagicMock()
-        mock_tracer.get_langchain_callback = MagicMock(return_value=mock_callback)
-
         with tracing_service.trace("test_trace", "session_id", "user_id"):
             config = tracing_service.get_langchain_config()
             assert config["run_name"] == "test_trace run"

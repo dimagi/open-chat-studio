@@ -1,4 +1,5 @@
 from typing import Any
+from unittest.mock import MagicMock
 from uuid import UUID
 
 from langchain_core.callbacks import BaseCallbackHandler
@@ -8,8 +9,8 @@ from apps.service_providers.tracing.const import SpanLevel
 
 
 class MockTracer(Tracer):
-    def __init__(self, type_, config: dict):
-        super().__init__(type_, config)
+    def __init__(self):
+        super().__init__("mock", {})
         self.trace = None
         self.spans: dict[UUID, dict] = {}
 
@@ -67,7 +68,7 @@ class MockTracer(Tracer):
         span["ended"] = True
 
     def get_langchain_callback(self) -> BaseCallbackHandler:
-        raise NotImplementedError()
+        return MagicMock()
 
     def get_trace_metadata(self) -> dict[str, str]:
-        return {"trace_id": self.trace["id"]}
+        return {"trace_id": str(self.trace["id"])}

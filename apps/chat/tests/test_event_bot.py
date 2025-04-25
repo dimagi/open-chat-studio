@@ -13,7 +13,7 @@ from apps.utils.langchain import build_fake_llm_service
 def event_bot():
     session = MagicMock(spec=ExperimentSession)
     experiment = MagicMock(spec=Experiment)
-    return EventBot(session, experiment)
+    return EventBot("test", session, experiment)
 
 
 @patch("apps.chat.bots.get_default_model")

@@ -74,19 +74,12 @@ def test_get_safe_response_creates_ai_message_for_default_messages():
 @pytest.mark.django_db()
 def test_tracing_service():
     session = ExperimentSessionFactory()
-    provider = TraceProvider(type="langfuse", config={})
-    session.experiment.trace_provider = provider
-    service = "apps.service_providers.tracing.LangFuseTracer"
-    with (
-        patch(f"{service}.get_langchain_callback") as mock_get_callback,
-        patch(f"{service}.get_trace_metadata") as get_trace_metadata,
-        mock_llm(responses=["response"]),
-    ):
-        get_trace_metadata.return_value = {"trace": "demo"}
-        bot = TopicBot(session, session.experiment, TracingService.empty())
+    trace_service = mock.Mock(wraps=TracingService.empty())
+    with mock_llm(responses=["response"]):
+        bot = TopicBot(session, session.experiment, trace_service)
         assert bot.process_input("test").content == "response"
-        mock_get_callback.assert_called_once()
-        assert get_trace_metadata.call_count == 2
+        trace_service.get_langchain_config.assert_called_once()
+        assert trace_service.get_trace_metadata.call_count == 2
 
 
 @pytest.mark.django_db()
@@ -101,16 +94,10 @@ def test_tracing_service_reentry():
         verify that it was called. The calls to the provider are still passed
         through to the actual service."""
         session.experiment.trace_provider = provider
-
-        bot = TopicBot(session, session.experiment, TracingService.empty())
-        assert bot.trace_service is not None
-
-        # spy on the service
-        mock_service = mock.Mock(wraps=bot.trace_service)
-        bot.trace_service = mock_service
-
+        trace_service = mock.Mock(wraps=TracingService.create_for_experiment(session.experiment))
+        bot = TopicBot(session, session.experiment, trace_service)
         assert bot.process_input("test").content == response
-        mock_service.get_langchain_config.assert_called_once()
+        trace_service.get_langchain_config.assert_called_once()
 
     with mock_llm(responses=["response1", "response2"]):
         _run_bot_with_wrapped_service(session, "response1")
