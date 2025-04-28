@@ -96,11 +96,10 @@ class ExperimentSessionSerializer(serializers.ModelSerializer):
     experiment = ExperimentSerializer(read_only=True)
     participant = ParticipantSerializer(read_only=True)
     messages = serializers.SerializerMethodField()
-    state = serializers.JSONField()
 
     class Meta:
         model = ExperimentSession
-        fields = ["url", "id", "team", "experiment", "participant", "created_at", "updated_at", "messages", "state"]
+        fields = ["url", "id", "team", "experiment", "participant", "created_at", "updated_at", "messages"]
 
     def __init__(self, *args, **kwargs):
         self._include_messages = kwargs.pop("include_messages", False)
