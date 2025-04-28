@@ -3,7 +3,8 @@
 from django.db import migrations
 from apps.pipelines.nodes.nodes import RouterNode, StaticRouterNode
 
-def set_default_key_value(apps, schema_editor):
+def _set_default_key_value(apps, schema_editor):
+    """Populate the default keyword index for router nodes."""
     Node = apps.get_model('pipelines', 'Node')
     router_types = [StaticRouterNode.__name__, RouterNode.__name__]
 
@@ -25,4 +26,4 @@ class Migration(migrations.Migration):
         ('pipelines', '0014_set_default_history_mode'),
     ]
 
-    operations = [migrations.RunPython(set_default_key_value, reverse_code=migrations.RunPython.noop)]
+    operations = [migrations.RunPython(_set_default_key_value, reverse_code=migrations.RunPython.noop)]
