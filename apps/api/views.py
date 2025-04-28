@@ -367,7 +367,7 @@ class ExperimentSessionViewSet(mixins.ListModelMixin, mixins.RetrieveModelMixin,
         return Response(output, status=status.HTTP_201_CREATED, headers=headers)
 
     @action(detail=True, methods=["post"])
-    def end_experiment_session(self, request, id=None):
+    def end_experiment_session(self, request, id):
         try:
             session = ExperimentSession.objects.get(external_id=id)
         except ExperimentSession.DoesNotExist:
@@ -376,7 +376,7 @@ class ExperimentSessionViewSet(mixins.ListModelMixin, mixins.RetrieveModelMixin,
         return Response(status=status.HTTP_200_OK)
 
     @action(detail=True, methods=["patch"])
-    def update_state(self, request, id=None):
+    def update_state(self, request, id):
         state = request.data.get("state")
         if not state:
             return Response({"error": "Missing 'state' in request"}, status=status.HTTP_400_BAD_REQUEST)
