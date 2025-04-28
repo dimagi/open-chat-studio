@@ -237,7 +237,7 @@ def test_reset_conversation_does_not_create_new_session(_call_predict, test_chan
     message2 = base_messages.text_message(participant_id=participant_id, message_text=ExperimentChannel.RESET_COMMAND)
     _send_user_message_on_channel(test_channel, message2)
 
-    sessions = ExperimentSession.objects.for_chat_id(participant_id).all()
+    sessions = ExperimentSession.objects.filter(participant__identifier=participant_id).all()
     assert len(sessions) == 1
     # The reset command should not be saved in the history
     assert sessions[0].chat.get_langchain_messages() == []
