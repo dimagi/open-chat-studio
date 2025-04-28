@@ -22,11 +22,7 @@ def _format_comments(user_comments: list[UserComment]) -> str:
 def get_filtered_sessions(request, experiment, query_params, include_api=False):
     from apps.channels.models import ChannelPlatform
 
-    sessions_queryset = (
-        ExperimentSession.objects.with_last_message_created_at()
-        .filter(experiment=experiment)
-        .select_related("participant__user")
-    )
+    sessions_queryset = ExperimentSession.objects.filter(experiment=experiment).select_related("participant__user")
 
     if not include_api:
         sessions_queryset = sessions_queryset.exclude(experiment_channel__platform=ChannelPlatform.API)

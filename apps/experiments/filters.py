@@ -3,7 +3,7 @@ from datetime import datetime
 from enum import StrEnum
 
 from django.contrib.contenttypes.models import ContentType
-from django.db.models import Exists, OuterRef, Q
+from django.db.models import Exists, OuterRef, Q, Subquery
 
 from apps.annotations.models import CustomTaggedItem
 from apps.chat.models import Chat, ChatMessage
@@ -38,6 +38,7 @@ FIELD_TYPE_FILTERS = {
 
 
 def apply_dynamic_filters(query_set, request, parsed_params=None):
+    query_set = _prepare_queryset(query_set)
     param_source = parsed_params if parsed_params is not None else request.GET
     filter_conditions = Q()
     filter_applied = False
@@ -63,6 +64,29 @@ def apply_dynamic_filters(query_set, request, parsed_params=None):
         query_set = query_set.filter(filter_conditions).distinct()
 
     return query_set
+
+
+def _prepare_queryset(queryset):
+    """Prepare the queryset by annotating with first and last message timestamps."""
+    first_message_subquery = (
+        ChatMessage.objects.filter(
+            chat__experiment_session=OuterRef("pk"),
+        )
+        .order_by("created_at")
+        .values("created_at")[:1]
+    )
+
+    last_message_subquery = (
+        ChatMessage.objects.filter(
+            chat__experiment_session=OuterRef("pk"),
+        )
+        .order_by("-created_at")
+        .values("created_at")[:1]
+    )
+
+    queryset = queryset.annotate(first_message_created_at=Subquery(first_message_subquery))
+    queryset = queryset.annotate(last_message_created_at=Subquery(last_message_subquery))
+    return queryset
 
 
 def build_filter_condition(column, operator, value):
