@@ -129,8 +129,6 @@ class ExperimentSessionsTableView(LoginAndTeamRequiredMixin, SingleTableView, Pe
             .filter(team=self.request.team, experiment__id=self.kwargs["experiment_id"])
             .select_related("participant__user")
         )
-        if not self.request.GET.get("show-all"):
-            query_set = query_set.exclude(experiment_channel__platform=ChannelPlatform.API)
         query_set = apply_dynamic_filters(query_set, self.request)
         return query_set
 
@@ -472,7 +470,6 @@ def base_single_experiment_view(request, team_slug, experiment_id, template_name
     channels = experiment.experimentchannel_set.exclude(platform__in=[ChannelPlatform.WEB, ChannelPlatform.API]).all()
     used_platforms = {channel.platform_enum for channel in channels}
     available_platforms = ChannelPlatform.for_dropdown(used_platforms, experiment.team)
-
     platform_forms = {}
     form_kwargs = {"experiment": experiment}
     for platform in available_platforms:
@@ -490,6 +487,7 @@ def base_single_experiment_view(request, team_slug, experiment_id, template_name
         elif assistant := experiment.assistant:
             bot_type_chip = Chip(label=f"Assistant: {assistant.name}", url=assistant.get_absolute_url())
 
+    channel_list = ChannelPlatform.for_filter(experiment.team)
     context = {
         "active_tab": active_tab,
         "bot_type_chip": bot_type_chip,
@@ -502,6 +500,7 @@ def base_single_experiment_view(request, team_slug, experiment_id, template_name
         "experiment_versions": experiment.get_version_name_list(),
         "deployed_version": deployed_version,
         "field_type_filters": FIELD_TYPE_FILTERS,
+        "channel_list": channel_list,
         **_get_events_context(experiment, team_slug, request.origin),
     }
     if active_tab != "chatbots":
@@ -1093,8 +1092,7 @@ def generate_chat_export(request, team_slug: str, experiment_id: str):
     experiment = get_object_or_404(Experiment, id=experiment_id)
     parsed_url = urlparse(request.headers.get("HX-Current-URL"))
     query_params = parse_qs(parsed_url.query)
-    include_api = request.POST.get("show-all") == "on"
-    task_id = async_export_chat.delay(experiment_id, query_params, include_api)
+    task_id = async_export_chat.delay(experiment_id, query_params)
     return TemplateResponse(
         request, "experiments/components/exports.html", {"experiment": experiment, "task_id": task_id}
     )

@@ -63,7 +63,7 @@
           <!-- Value Input (Choice, String, Timestamp) -->
           <template x-if="filter.operator">
             <div class="relative">
-              <template x-if="filterData.columns[filter.column]?.type === 'choice' && ['any of', 'all of'].includes(filter.operator)">
+              <template x-if="filterData.columns[filter.column]?.type === 'choice' && ['any of', 'all of', 'excludes'].includes(filter.operator)">
                 <div class="relative">
                   <div @click="filter.showOptions = !filter.showOptions" class="w-40 px-3 border border-base-200 rounded-lg bg-base-100 text-sm cursor-pointer flex justify-between items-center" style="height: 2rem;">
                     <span x-text="filter.selectedValues.length ? (filter.selectedValues.join(', ').length > 18 ? filter.selectedValues.join(', ').substring(0, 18) + '...' : filter.selectedValues.join(', ')) : 'Select'"></span>
@@ -116,6 +116,7 @@
   const tags = JSON.parse(document.getElementById('available-tags-data').textContent);
   const versionsList = JSON.parse(document.getElementById('experiment-versions-data').textContent);
   const fieldTypeFilters = JSON.parse(document.getElementById('field-type-filters').textContent);
+  const channelsList = JSON.parse(document.getElementById('channel-list-data').textContent);
   document.addEventListener('alpine:init', () => {
     Alpine.data('filterComponent', () => ({
       filterData: {
@@ -127,12 +128,28 @@
           'first_message': {type: 'timestamp', operators: fieldTypeFilters.timestamp, label: 'First Message'},
           'last_message': {type: 'timestamp', operators: fieldTypeFilters.timestamp, label: 'Last Message'},
           'tags': {type: 'choice', operators: fieldTypeFilters.choice, options: tags, label: 'Tags' },
-          'versions': {type: 'choice', operators: fieldTypeFilters.choice, options: versionsList, label: 'Versions'}
+          'versions': {type: 'choice', operators: fieldTypeFilters.choice, options: versionsList, label: 'Versions'},
+          'channels': {type: 'choice', operators: fieldTypeFilters.choice, options: channelsList, label: 'Channels'}
         }
       },
 
       init() {
         this.loadFiltersFromUrl();
+        let defaultFilterApplied = false;
+        // set default filter to exclude API sessions
+        if (this.filterData.filters.length === 1 && !this.filterData.filters[0].column) {
+          this.filterData.filters = [{
+            column: 'channels',
+            operator: 'excludes',
+            value: '',
+            selectedValues: ['API'],
+            availableOperators: ['any of', 'all of', 'excludes'],
+            showOptions: false,
+            searchQuery: '',
+            filteredOptions: channelsList
+          }];
+          defaultFilterApplied = true;
+        }
         const urlParams = new URLSearchParams(window.location.search);
         const showAllCheckbox = document.querySelector('input[name="show-all"]');
         if (urlParams.has('show-all') && showAllCheckbox) {
@@ -145,7 +162,7 @@
         }
           // Always trigger a data load on init to ensure correct data is shown
         this.$nextTick(() => {
-          this.triggerFilterChange(false); // Don't update URL again since we just loaded from it
+          this.triggerFilterChange(defaultFilterApplied); // Don't update URL again since we just loaded from it
         });
       },
 
@@ -263,7 +280,7 @@
               filter.availableOperators = this.filterData.columns[columnParam].operators;
               filter.operator = operatorParam;
 
-              if (['any of', 'all of'].includes(operatorParam) && valueParam) {
+              if (['any of', 'all of', 'excludes'].includes(operatorParam) && valueParam) {
                 try {
                   filter.selectedValues = JSON.parse(valueParam);
                   if (this.filterData.columns[columnParam].options) {
@@ -307,7 +324,7 @@
           params.set(`filter_${i}_column`, filter.column);
           params.set(`filter_${i}_operator`, filter.operator);
 
-          if (['any of', 'all of'].includes(filter.operator)) {
+          if (['any of', 'all of', 'excludes'].includes(filter.operator)) {
             if (filter.selectedValues && filter.selectedValues.length > 0) {
               params.set(`filter_${i}_value`, JSON.stringify(filter.selectedValues));
             }
@@ -339,7 +356,7 @@
             filterParams[`filter_${i}_column`] = filter.column;
             filterParams[`filter_${i}_operator`] = filter.operator;
 
-            if (['any of', 'all of'].includes(filter.operator)) {
+            if (['any of', 'all of', 'excludes'].includes(filter.operator)) {
               if (filter.selectedValues && filter.selectedValues.length > 0) {
                 filterParams[`filter_${i}_value`] = JSON.stringify(filter.selectedValues);
               }

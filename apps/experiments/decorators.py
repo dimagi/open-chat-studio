@@ -8,6 +8,7 @@ from django.shortcuts import get_object_or_404
 from django.urls import reverse
 
 from apps.experiments.models import Experiment, ExperimentSession, SessionStatus
+from apps.teams.decorators import TeamAccessDenied
 
 MAX_AGE = 180 * 24 * 60 * 60  # 6 months
 
@@ -70,7 +71,7 @@ def get_chat_session_access_cookie_data(request, fail_silently=False):
         )
     except Exception as e:
         if fail_silently:
-            return
+            return None
         raise e
 
 
@@ -95,10 +96,10 @@ def verify_session_access_cookie(view):
         try:
             access_value = get_chat_session_access_cookie_data(request)
         except (signing.BadSignature, KeyError):
-            raise Http404()
+            raise TeamAccessDenied() if request.user.is_superuser else Http404()
 
         if not _validate_access_cookie_data(request.experiment, request.experiment_session, access_value):
-            raise Http404()
+            raise TeamAccessDenied() if request.user.is_superuser else Http404()
 
         return view(request, *args, **kwargs)
 

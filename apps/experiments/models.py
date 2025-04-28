@@ -136,7 +136,7 @@ class VersionFieldDisplayFormatters:
     def format_pipeline(pipeline) -> str:
         if not pipeline:
             return ""
-        name = pipeline.name.split(f" v{pipeline.version_number}")[0]
+        name = str(pipeline)
         template = get_template("generic/chip.html")
         url = (
             pipeline.get_absolute_url() if pipeline.is_working_version else pipeline.working_version.get_absolute_url()
