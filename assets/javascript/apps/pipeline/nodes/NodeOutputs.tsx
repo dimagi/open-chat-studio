@@ -13,7 +13,7 @@ export default function NodeOutputs({data}: {
   };
 
   const generateOutputLabel = (outputIndex: number, output_label:string) => {
-    const defaultIndex = data.params.defaultKeywordIndex;
+    const defaultIndex = data.params.default_keyword_index;
     const isDefault = outputIndex === defaultIndex;
 
     if (multipleOutputs) {

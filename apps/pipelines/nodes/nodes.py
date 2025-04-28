@@ -419,7 +419,7 @@ class BooleanNode(Passthrough):
 
 class RouterMixin(BaseModel):
     keywords: list[str] = Field(default_factory=list, json_schema_extra=UiSchema(widget=Widgets.keywords))
-    defaultKeywordIndex: int = Field(default=0)
+    default_keyword_index: int = Field(default=0)
     tag_output_message: bool = Field(
         default=False,
         description="Tag the output message with the selected route",
@@ -484,7 +484,7 @@ class RouterNode(RouterMixin, Passthrough, HistoryMixin):
             raise PydanticCustomError("invalid_prompt", e.error_dict["prompt"][0].message, {"field": "prompt"})
 
     def _process_conditional(self, state: PipelineState, node_id=None):
-        default_keyword = self.keywords[self.defaultKeywordIndex] if self.keywords else None
+        default_keyword = self.keywords[self.default_keyword_index] if self.keywords else None
         prompt = OcsPromptTemplate.from_messages(
             [
                 ("system", f"{self.prompt}\nThe default routing destination is: {default_keyword}"),
@@ -511,7 +511,7 @@ class RouterNode(RouterMixin, Passthrough, HistoryMixin):
         except PydanticValidationError:
             keyword = None
         if not keyword:
-            keyword = self.keywords[self.defaultKeywordIndex]
+            keyword = self.keywords[self.default_keyword_index]
 
         if session:
             self._save_history(session, node_id, node_input, keyword)
@@ -562,7 +562,7 @@ class StaticRouterNode(RouterMixin, Passthrough):
         for keyword in self.keywords:
             if keyword.lower() == result_lower:
                 return keyword
-        return self.keywords[self.defaultKeywordIndex]
+        return self.keywords[self.default_keyword_index]
 
 
 class ExtractStructuredDataNodeMixin:
