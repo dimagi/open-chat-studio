@@ -659,15 +659,11 @@ components:
           type: string
           format: date-time
           readOnly: true
-        state:
-          type: object
-          additionalProperties: {}
       required:
       - created_at
       - experiment
       - id
       - participant
-      - state
       - team
       - updated_at
       - url
@@ -731,16 +727,12 @@ components:
           items:
             $ref: '#/components/schemas/Message'
           readOnly: true
-        state:
-          type: object
-          additionalProperties: {}
       required:
       - created_at
       - experiment
       - id
       - messages
       - participant
-      - state
       - team
       - updated_at
       - url
