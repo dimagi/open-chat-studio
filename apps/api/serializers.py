@@ -96,10 +96,11 @@ class ExperimentSessionSerializer(serializers.ModelSerializer):
     experiment = ExperimentSerializer(read_only=True)
     participant = ParticipantSerializer(read_only=True)
     messages = serializers.SerializerMethodField()
+    state = serializers.JSONField()
 
     class Meta:
         model = ExperimentSession
-        fields = ["url", "id", "team", "experiment", "participant", "created_at", "updated_at", "messages"]
+        fields = ["url", "id", "team", "experiment", "participant", "created_at", "updated_at", "messages", "state"]
 
     def __init__(self, *args, **kwargs):
         self._include_messages = kwargs.pop("include_messages", False)
@@ -124,10 +125,11 @@ class ExperimentSessionCreateSerializer(serializers.ModelSerializer):
         required=False, label="Participant identifier", help_text="Channel specific participant identifier"
     )
     messages = MessageSerializer(many=True, required=False)
+    state = serializers.JSONField(required=False)
 
     class Meta:
         model = ExperimentSession
-        fields = ["url", "experiment", "participant", "messages"]
+        fields = ["url", "experiment", "participant", "messages", "state"]
 
     @transaction.atomic
     def create(self, validated_data):

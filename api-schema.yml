@@ -349,6 +349,34 @@ paths:
       responses:
         '200':
           description: No response body
+  /api/sessions/{id}/update_state/:
+    patch:
+      operationId: session_update_state
+      summary: Update Experiment Session State
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: string
+        description: ID of the session
+        required: true
+      tags:
+      - Experiment Sessions
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/Patchedupdate_state_serializer'
+      security:
+      - apiKeyAuth: []
+      - tokenAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/update_state_response'
+          description: ''
   /api/trigger_bot:
     post:
       operationId: trigger_bot_message
@@ -631,11 +659,15 @@ components:
           type: string
           format: date-time
           readOnly: true
+        state:
+          type: object
+          additionalProperties: {}
       required:
       - created_at
       - experiment
       - id
       - participant
+      - state
       - team
       - updated_at
       - url
@@ -658,6 +690,9 @@ components:
           type: array
           items:
             $ref: '#/components/schemas/Message'
+        state:
+          type: object
+          additionalProperties: {}
       required:
       - experiment
       - url
@@ -696,12 +731,16 @@ components:
           items:
             $ref: '#/components/schemas/Message'
           readOnly: true
+        state:
+          type: object
+          additionalProperties: {}
       required:
       - created_at
       - experiment
       - id
       - messages
       - participant
+      - state
       - team
       - updated_at
       - url
@@ -880,6 +919,12 @@ components:
           type: boolean
           default: false
           title: Delete Schedule
+    Patchedupdate_state_serializer:
+      type: object
+      properties:
+        state:
+          type: object
+          additionalProperties: {}
     PlatformEnum:
       enum:
       - telegram
@@ -939,6 +984,17 @@ components:
       - identifier
       - platform
       - prompt_text
+    update_state_response:
+      type: object
+      properties:
+        success:
+          type: boolean
+        new_state:
+          type: object
+          additionalProperties: {}
+      required:
+      - new_state
+      - success
   securitySchemes:
     apiKeyAuth:
       type: apiKey
