@@ -3,7 +3,7 @@
 {% else %}
   {% url 'experiments:poll_messages' team_slug=request.team.slug experiment_id=experiment.public_id session_id=session.external_id as poll_url%}
 {% endif %}
-<div id="message-list" class="chat-pane dark:bg-gray-800" data-url="{{ poll_url }}">
+<div id="message-list" class="chat-pane" data-url="{{ poll_url }}">
   {% if not session.has_display_messages %}
     {% if session.seed_task_id %}
       {% with session.seed_task_id as task_id %}
@@ -32,7 +32,7 @@
 </div>
 {% include 'experiments/chat/input_bar.html' %}
 {% if experiment.consent_form or experiment.post_survey %}
-  <div class="w-full text-center bg-gray-300 dark:bg-gray-800">
+  <div class="w-full text-center bg-base-300">
     <label for="end-experiment-modal" class="btn btn-warning btn-xs">End Experiment</label>
   </div>
   {% include 'experiments/chat/end_experiment_modal.html' %}

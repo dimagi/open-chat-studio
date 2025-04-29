@@ -3,7 +3,7 @@
 {% else %}
   {% url 'experiments:experiment_session_message' team_slug=request.team.slug experiment_id=experiment.public_id session_id=session.external_id version_number=session.get_experiment_version_number as message_url%}
 {% endif %}
-<form class="w-full p-2 bg-gray-300 dark:bg-gray-800"
+<form class="w-full p-2 bg-base-300"
       autocomplete="off"
       hx-post="{{ message_url}}"
       hx-swap="outerHTML"
