@@ -260,8 +260,7 @@ class TestExperimentSession:
                 TimePeriod.WEEKS,
                 2,
                 1,
-                "Test (Message id={message.external_id}, message=hi): "
-                "Every 1 weeks on Monday, 2 times. {next_trigger}",
+                "Test (Message id={message.external_id}, message=hi): Every 1 weeks on Monday, 2 times. {next_trigger}",
             ),
             (
                 TimePeriod.MONTHS,
@@ -1035,6 +1034,6 @@ def _compare_models(original, new, expected_changed_fields: list) -> set:
     field_difference = original.compare_with_model(new, original.get_fields_to_exclude()).difference(
         set(expected_changed_fields)
     )
-    assert (
-        field_difference == set()
-    ), f"These fields differ between the experiment versions, but should not: {field_difference}"
+    assert field_difference == set(), (
+        f"These fields differ between the experiment versions, but should not: {field_difference}"
+    )

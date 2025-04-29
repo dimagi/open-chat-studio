@@ -39,8 +39,7 @@ class LlmProviderObjectManagerObjectManager(AuditingManager):
 
 
 class ProviderMixin:
-    def add_files(self, *args, **kwargs):
-        ...
+    def add_files(self, *args, **kwargs): ...
 
 
 @dataclasses.dataclass

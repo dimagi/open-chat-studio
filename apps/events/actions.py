@@ -21,11 +21,9 @@ class EventActionHandlerBase:
             Callback for whenever the associated action is updated.
     """
 
-    def invoke(self, session, *args, **kwargs):
-        ...
+    def invoke(self, session, *args, **kwargs): ...
 
-    def event_action_updated(self, action):
-        ...
+    def event_action_updated(self, action): ...
 
 
 class LogAction(EventActionHandlerBase):
