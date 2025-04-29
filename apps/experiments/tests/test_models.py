@@ -261,8 +261,7 @@ class TestExperimentSession:
                 TimePeriod.WEEKS,
                 2,
                 1,
-                "Test (Message id={message.external_id}, message=hi): "
-                "Every 1 weeks on Monday, 2 times. {next_trigger}",
+                "Test (Message id={message.external_id}, message=hi): Every 1 weeks on Monday, 2 times. {next_trigger}",
             ),
             (
                 TimePeriod.MONTHS,

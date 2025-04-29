@@ -6,7 +6,7 @@ def get_protocol(is_secure: bool = settings.USE_HTTPS_IN_ABSOLUTE_URLS) -> str:
     """
     Returns the default protocol for the server ("http" or "https").
     """
-    return f'http{"s" if is_secure else ""}'
+    return f"http{'s' if is_secure else ''}"
 
 
 def get_server_root(is_secure: bool = settings.USE_HTTPS_IN_ABSOLUTE_URLS) -> str:

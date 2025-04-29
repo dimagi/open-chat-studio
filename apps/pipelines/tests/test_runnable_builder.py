@@ -860,7 +860,7 @@ def test_single_node_unreachable(pipeline):
     nodes = [start_node(), passthrough_node(), end_node(), passthrough_node()]
     edges = [
         {
-            "id": f"{node['id']}->{nodes[i+1]['id']}",
+            "id": f"{node['id']}->{nodes[i + 1]['id']}",
             "source": node["id"],
             "target": nodes[i + 1]["id"],
         }
@@ -881,7 +881,7 @@ def test_subgraph_unreachable_should_build(pipeline):
     # Start -> Passthrough -> End
     reachable_edges = [
         {
-            "id": f"{node['id']}->{nodes[i+1]['id']}",
+            "id": f"{node['id']}->{nodes[i + 1]['id']}",
             "source": node["id"],
             "target": nodes[i + 1]["id"],
         }
@@ -890,7 +890,7 @@ def test_subgraph_unreachable_should_build(pipeline):
     # Passthrough 2 -> Passthrough 3 -> Passthrough 4
     unreachable_edges = [
         {
-            "id": f"{node['id']}->{nodes[i+1]['id']}",
+            "id": f"{node['id']}->{nodes[i + 1]['id']}",
             "source": node["id"],
             "target": nodes[i + 1]["id"],
         }
