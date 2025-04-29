@@ -7,7 +7,7 @@ from apps.chat.models import ChatMessageType
 from apps.experiments.models import ExperimentSession
 from apps.pipelines.models import PipelineEventInputs
 from apps.pipelines.nodes.base import PipelineState
-from apps.service_providers.tracing import TracingService
+from apps.service_providers.tracing import TraceInfo, TracingService
 from apps.utils.django_db import MakeInterval
 
 
@@ -105,9 +105,8 @@ class SendMessageToBotAction(EventActionHandlerBase):
         except KeyError:
             message = "The user hasn't responded, please prompt them again."
 
-        session.ad_hoc_bot_message(
-            "event", instruction_prompt=message, metadata={"action_type": action.action_type, "action_id": action.id}
-        )
+        trace_info = TraceInfo(name="event", metadata={"action_type": action.action_type, "action_id": action.id})
+        session.ad_hoc_bot_message(message, trace_info)
 
         last_message = session.chat.messages.last()
         if last_message:

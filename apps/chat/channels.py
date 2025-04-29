@@ -42,7 +42,7 @@ from apps.files.models import File
 from apps.service_providers.llm_service.history_managers import ExperimentHistoryManager
 from apps.service_providers.llm_service.runnables import GenerationCancelled
 from apps.service_providers.speech_service import SynthesizedAudio
-from apps.service_providers.tracing import TracingService
+from apps.service_providers.tracing import TraceInfo, TracingService
 from apps.slack.utils import parse_session_external_id
 from apps.teams.utils import current_team
 from apps.users.models import CustomUser
@@ -706,19 +706,19 @@ class ChannelBase(ABC):
         history_manager = ExperimentHistoryManager(
             session=self.experiment_session, experiment=self.experiment, trace_service=self.trace_service
         )
-        metadata = {"message_type": self.message.content_type}
-        return EventBot(
-            "unsupported message", self.experiment_session, self.experiment, history_manager, metadata
-        ).get_user_message(UNSUPPORTED_MESSAGE_BOT_PROMPT.format(supported_types=self.supported_message_types))
+        trace_info = TraceInfo(name="unsupported message", metadata={"message_type": self.message.content_type})
+        return EventBot(self.experiment_session, self.experiment, trace_info, history_manager).get_user_message(
+            UNSUPPORTED_MESSAGE_BOT_PROMPT.format(supported_types=self.supported_message_types)
+        )
 
     def _inform_user_of_error(self, exception):
         """Simply tells the user that something went wrong to keep them in the loop.
         This method will not raise an error if something went wrong during this operation.
         """
 
-        metadata = {"error": str(exception)}
+        trace_info = TraceInfo(name="error", metadata={"error": str(exception)})
         try:
-            bot_message = EventBot("error", self.experiment_session, self.experiment, metadata).get_user_message(
+            bot_message = EventBot(self.experiment_session, self.experiment, trace_info).get_user_message(
                 "Tell the user that something went wrong while processing their message and that they should "
                 "try again later."
             )

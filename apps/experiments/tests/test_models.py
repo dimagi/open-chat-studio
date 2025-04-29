@@ -20,6 +20,7 @@ from apps.experiments.models import (
     SyntheticVoice,
 )
 from apps.service_providers.llm_service.prompt_context import ParticipantDataProxy
+from apps.service_providers.tracing import TraceInfo
 from apps.utils.factories.assistants import OpenAiAssistantFactory
 from apps.utils.factories.events import (
     EventActionFactory,
@@ -393,7 +394,7 @@ class TestExperimentSession:
 
         def _test():
             experiment_session.ad_hoc_bot_message(
-                "test", instruction_prompt="Tell the user we're testing", fail_silently=fail_silently
+                "Tell the user we're testing", TraceInfo(name="test"), fail_silently=fail_silently
             )
             call = mock_channel.send_message_to_user.mock_calls[0]
             assert call.args[0] == "We're testing"

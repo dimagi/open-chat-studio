@@ -4,7 +4,7 @@ import secrets
 import uuid
 from datetime import datetime
 from functools import cached_property
-from typing import Any, Self
+from typing import Self
 from uuid import uuid4
 
 import markdown
@@ -37,7 +37,7 @@ from apps.custom_actions.mixins import CustomActionOperationMixin
 from apps.experiments import model_audit_fields
 from apps.experiments.versioning import VersionDetails, VersionField, VersionsMixin, VersionsObjectManagerMixin, differs
 from apps.generics.chips import Chip
-from apps.service_providers.tracing import TracingService
+from apps.service_providers.tracing import TraceInfo, TracingService
 from apps.teams.models import BaseTeamModel, Team
 from apps.teams.utils import current_team
 from apps.utils.models import BaseModel
@@ -1585,35 +1585,30 @@ class ExperimentSession(BaseTeamModel):
 
     def ad_hoc_bot_message(
         self,
-        name: str,
         instruction_prompt: str,
+        trace_info: TraceInfo,
         fail_silently=True,
         use_experiment: Experiment | None = None,
-        metadata: dict[str, Any] | None = None,
     ):
         """Sends a bot message to this session. The bot message will be crafted using `instruction_prompt` and
         this session's history.
 
         Parameters:
-            name: The name of the message for use in tracing
             instruction_prompt: The instruction prompt for the LLM
+            trace_info: Metadata for adding to the trace
             fail_silently: Exceptions will not be suppresed if this is True
             use_experiment: The experiment whose data to use. This is useful for multi-bot setups where we want a
             specific child bot to handle the check-in.
-            metadata: tracing metadata
         """
         with current_team(self.team):
-            bot_message = self._bot_prompt_for_user(
-                name, instruction_prompt=instruction_prompt, use_experiment=use_experiment, metadata=metadata
-            )
+            bot_message = self._bot_prompt_for_user(instruction_prompt, trace_info, use_experiment=use_experiment)
             self.try_send_message(message=bot_message, fail_silently=fail_silently)
 
     def _bot_prompt_for_user(
         self,
-        name: str,
         instruction_prompt: str,
+        trace_info: TraceInfo,
         use_experiment: Experiment | None = None,
-        metadata: dict[str, Any] | None = None,
     ) -> str:
         """Sends the `instruction_prompt` along with the chat history to the LLM to formulate an appropriate prompt
         message. The response from the bot will be saved to the chat history.
@@ -1624,7 +1619,7 @@ class ExperimentSession(BaseTeamModel):
         experiment = use_experiment or self.experiment
         trace_service = TracingService.create_for_experiment(self.experiment)
         history_manager = ExperimentHistoryManager(session=self, experiment=experiment, trace_service=trace_service)
-        bot = EventBot(name, self, experiment, history_manager, metadata)
+        bot = EventBot(self, experiment, trace_info, history_manager)
         return bot.get_user_message(instruction_prompt)
 
     def try_send_message(self, message: str, fail_silently=True):

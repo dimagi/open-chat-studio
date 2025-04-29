@@ -7,6 +7,7 @@ from apps.channels.datamodels import SlackMessage
 from apps.channels.models import ChannelPlatform, ExperimentChannel
 from apps.chat.channels import SlackChannel
 from apps.chat.models import ChatMessage, ChatMessageType
+from apps.service_providers.tracing import TraceInfo
 from apps.slack.utils import make_session_external_id
 from apps.utils.factories.channels import ExperimentChannelFactory
 
@@ -44,7 +45,7 @@ def test_ad_hoc_bot_message(messaging_service, get_user_message, slack_channel):
         "SLACK_USER_ID",
         session_external_id=make_session_external_id("channel_id", "thread_ts"),
     )
-    session.ad_hoc_bot_message("slack test", "Hello")
+    session.ad_hoc_bot_message("Hello", TraceInfo(name="slack test"))
     assert messaging_service.send_text_message.call_args_list == [
         mock.call("Hi", from_="", to="channel_id", thread_ts="thread_ts", platform=ChannelPlatform.SLACK)
     ]

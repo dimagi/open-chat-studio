@@ -17,7 +17,7 @@ from apps.pipelines.nodes.base import PipelineState
 from apps.service_providers.llm_service.default_models import get_default_model
 from apps.service_providers.llm_service.prompt_context import PromptTemplateContext
 from apps.service_providers.llm_service.runnables import create_experiment_runnable
-from apps.service_providers.tracing import TracingService
+from apps.service_providers.tracing import TraceInfo, TracingService
 
 if TYPE_CHECKING:
     from apps.channels.datamodels import Attachment
@@ -317,17 +317,15 @@ class EventBot:
 
     def __init__(
         self,
-        name: str,
         session: ExperimentSession,
         experiment: Experiment,
+        trace_info: TraceInfo,
         history_manager=None,
-        metadata: dict[str, Any] | None = None,
     ):
-        self.name = name
         self.session = session
         self.experiment = experiment or session.experiment_version
         self.history_manager = history_manager
-        self.metadata = metadata
+        self.trace_info = trace_info
 
     def get_user_message(self, event_prompt: str) -> str:
         provider = self.llm_provider
@@ -345,11 +343,11 @@ class EventBot:
             trace_service = TracingService.create_for_experiment(self.experiment)
 
         with trace_service.trace_or_span(
-            name=f"{self.experiment.name} - {self.name}",
+            name=f"{self.experiment.name} - {self.trace_info.name}",
             session_id=str(self.session.external_id),
             user_id=str(self.session.participant.identifier),
             inputs={"input": event_prompt},
-            metadata=self.metadata,
+            metadata=self.trace_info.metadata,
         ):
             config = trace_service.get_langchain_config()
             response = llm.invoke(

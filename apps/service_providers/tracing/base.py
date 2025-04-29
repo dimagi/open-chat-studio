@@ -1,3 +1,4 @@
+import dataclasses
 from abc import ABC, abstractmethod
 from typing import Any
 from uuid import UUID
@@ -88,3 +89,9 @@ class Tracer(ABC):
 
     def get_trace_metadata(self) -> dict[str, str]:
         return {}
+
+
+@dataclasses.dataclass
+class TraceInfo:
+    name: str
+    metadata: dict[str, Any] = dataclasses.field(default_factory=dict)
