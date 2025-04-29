@@ -649,11 +649,11 @@ export function KeywordsWidget(props: WidgetParams) {
   const setEdges = usePipelineStore((state) => state.setEdges);
   const updateNodeInternals = useUpdateNodeInternals()
 
-  function getNewNodeData(old: Node, keywords: any[], defaultKeywordIndex?: number) {
+  function getNewNodeData(old: Node, keywords: any[], newDefaultIndex?: number) {
     return produce(old, next => {
       next.data.params["keywords"] = keywords;
-      if (defaultKeywordIndex !== undefined) {
-        next.data.params["defaultKeywordIndex"] = defaultKeywordIndex;
+      if (newDefaultIndex !== undefined) {
+        next.data.params["default_keyword_index"] = newDefaultIndex;
       }
     });
   }
@@ -679,7 +679,7 @@ export function KeywordsWidget(props: WidgetParams) {
     setNode(props.nodeId, (old) => {
       const updatedList = [...(old.data.params["keywords"] || [])];
       updatedList.splice(index, 1);
-      const defaultIndex = old.data.params["defaultKeywordIndex"] || 0;
+      const defaultIndex = old.data.params["default_keyword_index"] || 0;
 
       let newDefaultIndex = defaultIndex;
       if (index === defaultIndex) {
@@ -723,7 +723,7 @@ export function KeywordsWidget(props: WidgetParams) {
 
   const length = (Array.isArray(props.nodeParams.keywords) ? props.nodeParams.keywords.length : 1);
   const keywords = Array.isArray(props.nodeParams.keywords) ? props.nodeParams["keywords"] : [];
-  const defaultIndex = props.nodeParams.defaultKeywordIndex;
+  const defaultIndex = props.nodeParams.default_keyword_index;
   const canDelete = length > 1;
 
   return (
