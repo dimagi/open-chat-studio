@@ -1,6 +1,7 @@
 import uuid
 
 from langchain_core.callbacks import BaseCallbackHandler
+from langgraph.types import Command
 from loguru import logger
 
 
@@ -52,6 +53,8 @@ class LoggingCallbackHandler(BaseCallbackHandler):
             output = None
             if isinstance(outputs, str):
                 output = outputs
+            elif isinstance(outputs, Command):
+                output = outputs.update
             elif "messages" in outputs:
                 output = outputs["messages"][-1]
             self.logger.info(
