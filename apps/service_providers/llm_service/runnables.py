@@ -521,7 +521,7 @@ class AssistantChat(RunnableSerializable[dict, ChainOutput]):
             except ValueError as e:
                 error = e
                 if re.search(r"cancelling|cancelled", str(e)):
-                    raise GenerationCancelled(ChainOutput(output="", prompt_tokens=0, completion_tokens=0)) from None
+                    raise GenerationCancelled(ChainOutput(output="", prompt_tokens=0, completion_tokens=0)) from e
         raise GenerationError("Failed to get response after 3 retries") from error
 
     def _handle_api_error(self, thread_id: str, assistant_runnable: OpenAIAssistantRunnable, exc):

@@ -17,7 +17,7 @@ from apps.pipelines.nodes.base import PipelineState
 from apps.service_providers.llm_service.default_models import get_default_model
 from apps.service_providers.llm_service.prompt_context import PromptTemplateContext
 from apps.service_providers.llm_service.runnables import create_experiment_runnable
-from apps.service_providers.tracing import TracingService
+from apps.service_providers.tracing import TraceInfo, TracingService
 
 if TYPE_CHECKING:
     from apps.channels.datamodels import Attachment
@@ -45,11 +45,11 @@ def notify_users_of_violation(session_id: int, safety_layer_id: int):
     notify_users_of_safety_violations_task.delay(session_id, safety_layer_id)
 
 
-def get_bot(session: ExperimentSession, experiment: Experiment | None = None, disable_tools: bool = False):
+def get_bot(session: ExperimentSession, experiment: Experiment, trace_service, disable_tools: bool = False):
     experiment = experiment or session.experiment_version
     if experiment.pipeline_id:
-        return PipelineBot(session, experiment=experiment, disable_reminder_tools=disable_tools)
-    return TopicBot(session, experiment, disable_tools=disable_tools)
+        return PipelineBot(session, experiment, trace_service, disable_reminder_tools=disable_tools)
+    return TopicBot(session, experiment, trace_service, disable_tools=disable_tools)
 
 
 class TopicBot:
@@ -66,8 +66,8 @@ class TopicBot:
         conversation history of the participant's chat with the router / main bot.
     """
 
-    def __init__(self, session: ExperimentSession, experiment: Experiment | None = None, disable_tools: bool = False):
-        self.experiment = experiment or session.experiment_version
+    def __init__(self, session: ExperimentSession, experiment: Experiment, trace_service, disable_tools: bool = False):
+        self.experiment = experiment
         self.disable_tools = disable_tools
         self.prompt = self.experiment.prompt_text
         self.input_formatter = self.experiment.input_formatter
@@ -89,7 +89,7 @@ class TopicBot:
         self.default_tag = None
         self.terminal_chain = None
         self.processor_experiment = None
-        self.trace_service = TracingService.create_for_experiment(self.experiment)
+        self.trace_service = trace_service
 
         # The chain that generated the AI message
         self.generator_chain = None
@@ -208,13 +208,8 @@ class TopicBot:
 
             return self.generator_chain.history_manager.ai_message
 
-        with self.trace_service.trace(
-            trace_name=self.experiment.name,
-            session_id=str(self.session.external_id),
-            user_id=str(self.session.participant.identifier),
-        ):
-            config = self.trace_service.get_langchain_config()
-            return main_bot_chain.invoke(user_input, config=config)
+        config = self.trace_service.get_langchain_config()
+        return main_bot_chain.invoke(user_input, config=config)
 
     def _get_safe_response(self, safety_layer: SafetyLayer):
         if safety_layer.prompt_to_bot:
@@ -273,9 +268,10 @@ class SafetyBot:
 
 
 class PipelineBot:
-    def __init__(self, session: ExperimentSession, experiment: Experiment, disable_reminder_tools=False):
+    def __init__(self, session: ExperimentSession, experiment: Experiment, trace_service, disable_reminder_tools=False):
         self.experiment = experiment
         self.session = session
+        self.trace_service = trace_service
         self.disable_reminder_tools = disable_reminder_tools
 
     def process_input(
@@ -292,6 +288,7 @@ class PipelineBot:
             ),
             self.session,
             self.experiment,
+            self.trace_service,
             save_input_to_history=save_input_to_history,
             disable_reminder_tools=self.disable_reminder_tools,
         )
@@ -318,12 +315,19 @@ class EventBot:
         """
     )
 
-    def __init__(self, session: ExperimentSession, experiment: Experiment, history_manager=None):
+    def __init__(
+        self,
+        session: ExperimentSession,
+        experiment: Experiment,
+        trace_info: TraceInfo,
+        history_manager=None,
+    ):
         self.session = session
         self.experiment = experiment or session.experiment_version
         self.history_manager = history_manager
+        self.trace_info = trace_info
 
-    def get_user_message(self, event_prompt: str):
+    def get_user_message(self, event_prompt: str) -> str:
         provider = self.llm_provider
         if not provider:
             raise Exception("No LLM provider found")
@@ -338,10 +342,12 @@ class EventBot:
         else:
             trace_service = TracingService.create_for_experiment(self.experiment)
 
-        with trace_service.trace(
-            trace_name=self.experiment.name,
+        with trace_service.trace_or_span(
+            name=f"{self.experiment.name} - {self.trace_info.name}",
             session_id=str(self.session.external_id),
             user_id=str(self.session.participant.identifier),
+            inputs={"input": event_prompt},
+            metadata=self.trace_info.metadata,
         ):
             config = trace_service.get_langchain_config()
             response = llm.invoke(
@@ -351,13 +357,11 @@ class EventBot:
                 ],
                 config=config,
             )
+            trace_service.set_current_span_outputs({"response": response.content})
 
-        message = response.content
-        if self.history_manager:
-            self.history_manager.save_message_to_history(
-                message,
-                type_=ChatMessageType.AI,
-            )
+            message = response.content
+            if self.history_manager:
+                self.history_manager.save_message_to_history(message, type_=ChatMessageType.AI)
         return message
 
     @property
@@ -381,14 +385,13 @@ class EventBot:
             if len(messages) > 10:
                 break
         if messages:
-            formatted_history = "\n".join(reversed(messages))
             return textwrap.dedent(
-                f"""
+                """
                 Here are the most recent messages in the conversation:
                 ```
-                {formatted_history}
+                {}
                 ```
                 """
-            )
+            ).format("\n".join(reversed(messages)))
         else:
             return "\nThis is the start of the conversation so there is no previous message history"

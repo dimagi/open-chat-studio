@@ -8,9 +8,12 @@ from threading import RLock
 from typing import TYPE_CHECKING, Any
 from uuid import UUID
 
+from langfuse.client import StatefulSpanClient, StatefulTraceClient
+
 from . import Tracer
 from .base import ServiceNotInitializedException, ServiceReentryException
 from .callback import wrap_callback
+from .const import SpanLevel
 
 if TYPE_CHECKING:
     from langchain.callbacks.base import BaseCallbackHandler
@@ -31,47 +34,94 @@ class LangFuseTracer(Tracer):
     def __init__(self, type_, config: dict):
         super().__init__(type_, config)
         self.client = None
-        self.trace = None
+        self.trace: StatefulTraceClient | None = None
+        self.spans: dict[UUID, StatefulSpanClient] = {}
 
     @property
     def ready(self) -> bool:
         return bool(self.trace)
 
-    def begin_trace(self, trace_name: str, trace_id: UUID, session_id: str, user_id: str):
+    def start_trace(
+        self,
+        trace_name: str,
+        trace_id: UUID,
+        session_id: str,
+        user_id: str,
+        inputs: dict[str, Any] | None = None,
+        metadata: dict[str, Any] | None = None,
+    ) -> None:
         if self.trace:
             raise ServiceReentryException("Service does not support reentrant use.")
 
-        super().begin_trace(trace_name, trace_id, session_id, user_id)
+        super().start_trace(trace_name, trace_id, session_id, user_id, inputs)
 
         self.client = client_manager.get(self.config)
-        self.trace = self.client.trace(name=trace_name, session_id=session_id, user_id=user_id)
+        self.trace = self.client.trace(
+            name=trace_name, session_id=session_id, user_id=user_id, input=inputs, metadata=metadata
+        )
+
+    def end_trace(self, outputs: dict[str, Any] | None = None, error: Exception | None = None) -> None:
+        super().end_trace(outputs=outputs, error=error)
+        if not self.ready:
+            raise ServiceNotInitializedException("Service not initialized.")
+
+        if outputs or error:
+            outputs = outputs or {}
+            outputs = {**outputs, "error": str(error)} if error else outputs
+            self.trace.update(output=outputs)
+
+        self.client.flush()
+        self.client = None
+        self.trace = None
+        self.spans.clear()
 
     def start_span(
-        self, span_id: str, span_name: str, inputs: dict[str, Any], metadata: dict[str, Any] | None = None
+        self,
+        span_id: UUID,
+        span_name: str,
+        inputs: dict[str, Any],
+        metadata: dict[str, Any] | None = None,
+        level: SpanLevel = "DEFAULT",
     ) -> None:
-        # TODO: add implementation
-        pass
+        if not self.ready:
+            return
 
-    def end_span(self, span_id: str, outputs: dict[str, Any] | None = None, error: Exception | None = None) -> None:
-        # TODO: add implementation
-        pass
+        content_span = {
+            "id": str(span_id),
+            "name": span_name,
+            "input": inputs,
+            "metadata": metadata or {},
+            "level": level,
+        }
+
+        self.spans[span_id] = self._get_current_span().span(**content_span)
+
+    def end_span(self, span_id: UUID, outputs: dict[str, Any] | None = None, error: Exception | None = None) -> None:
+        if not self.ready:
+            return
+
+        span = self.spans.pop(span_id, None)
+        if span:
+            output: dict = {}
+            output |= outputs or {}
+            output |= {"error": str(error)} if error else {}
+
+            content = {
+                "output": output,
+                "status_message": str(error) if error else None,
+                "level": "ERROR" if error else None,
+            }
+            span.end(**content)
 
     def get_langchain_callback(self) -> BaseCallbackHandler:
-        from langfuse.callback import CallbackHandler
-
-        if not self.trace:
+        if not self.ready:
             raise ServiceReentryException("Service does not support reentrant use.")
 
-        callback = CallbackHandler(
-            stateful_client=self.trace,
-            update_stateful_client=True,
-            user_id=self.user_id,
-            session_id=self.session_id,
-        )
+        callback = self._get_current_span().get_langchain_handler(update_parent=False)
         return wrap_callback(callback)
 
     def get_trace_metadata(self) -> dict[str, str]:
-        if not self.trace:
+        if not self.ready:
             raise ServiceNotInitializedException("Service not initialized.")
 
         return {
@@ -80,10 +130,12 @@ class LangFuseTracer(Tracer):
             "trace_provider": self.type,
         }
 
-    def end_trace(self):
-        if not self.ready:
-            raise ServiceNotInitializedException("Service not initialized.")
-        self.client.flush()
+    def _get_current_span(self) -> StatefulTraceClient | StatefulSpanClient:
+        if self.spans:
+            last_span = next(reversed(self.spans))
+            return self.spans[last_span]
+        else:
+            return self.trace
 
 
 class ClientManager:

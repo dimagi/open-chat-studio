@@ -937,9 +937,11 @@ def test_supported_and_unsupported_attachments(experiment):
 @pytest.mark.django_db()
 def test_chat_message_returned_for_cancelled_generate():
     session = ExperimentSessionFactory()
-    channel = TestChannel(session.experiment, None)
+    channel = TestChannel(session.experiment, None, session)
+    channel._add_message = Mock()
     channel._new_user_message = Mock()
     channel._new_user_message.side_effect = GenerationCancelled(output="Cancelled")
-    response = channel.new_user_message("Hi there")
+    channel.message = base_messages.text_message("123", "hi")
+    response = channel.new_user_message(channel.message)
 
     assert type(response) is ChatMessage

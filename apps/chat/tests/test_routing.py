@@ -6,7 +6,8 @@ from langchain_core.messages import HumanMessage, SystemMessage
 from apps.chat.bots import TopicBot
 from apps.chat.models import ChatMessageType
 from apps.experiments.models import ExperimentRoute
-from apps.service_providers.models import TraceProvider
+from apps.service_providers.tests.mock_tracer import MockTracer
+from apps.service_providers.tracing import TracingService
 from apps.utils.factories.assistants import OpenAiAssistantFactory
 from apps.utils.factories.experiment import ExperimentFactory, ExperimentSessionFactory
 from apps.utils.factories.team import TeamFactory
@@ -29,7 +30,7 @@ def test_experiment_routing(with_default, routing_response, expected_tag):
     session = ExperimentSessionFactory(experiment=experiment)
     fake_service = build_fake_llm_service(responses=[routing_response, "How can I help today?"], token_counts=[0])
     with patch("apps.experiments.models.Experiment.get_llm_service", new=lambda x: fake_service):
-        bot = TopicBot(session)
+        bot = TopicBot(session, experiment, TracingService.empty())
         response = bot.process_input("Hi")
     assert response.content == "How can I help today?"
     assert bot.processor_experiment == ExperimentRoute.objects.get(parent=experiment, keyword=expected_tag).child
@@ -45,10 +46,12 @@ def test_experiment_routing(with_default, routing_response, expected_tag):
 def test_experiment_routing_with_tracing():
     experiment = _make_experiment_with_routing()
     session = ExperimentSessionFactory(experiment=experiment)
-    provider = TraceProvider(type="langfuse", config={})
-    session.experiment.trace_provider = provider
-    with mock_llm(responses=["anything", "How can I help today?"], token_counts=[0]) as fake_service:
-        bot = TopicBot(session)
+    trace_service = TracingService([MockTracer()])
+    with (
+        trace_service.trace("test", "123", "bob"),
+        mock_llm(responses=["anything", "How can I help today?"], token_counts=[0]) as fake_service,
+    ):
+        bot = TopicBot(session, experiment, trace_service)
         response = bot.process_input("Hi")
     assert response.content == "How can I help today?"
     assert fake_service.llm.get_call_messages() == [
@@ -87,7 +90,7 @@ def test_experiment_routing_with_assistant(
     fake_service = build_fake_llm_service(responses=[routing_response], token_counts=[0])
 
     with patch("apps.experiments.models.Experiment.get_llm_service", new=lambda x: fake_service):
-        bot = TopicBot(session)
+        bot = TopicBot(session, experiment, TracingService.empty())
         response = bot.process_input("Hi")
     assert response.content == "How can I help today?"
 

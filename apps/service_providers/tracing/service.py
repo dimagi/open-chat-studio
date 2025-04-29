@@ -20,12 +20,9 @@ logger = logging.getLogger("ocs.tracing")
 class TracingService:
     def __init__(self, tracers: list[Tracer]):
         self._tracers = tracers
-        self.activated = False
 
-        self.inputs: dict[str, dict] = defaultdict(dict)
-        self.inputs_metadata: dict[str, dict] = defaultdict(dict)
-        self.outputs: dict[str, dict] = defaultdict(dict)
-        self.outputs_metadata: dict[str, dict] = defaultdict(dict)
+        self.outputs: dict[UUID, dict] = defaultdict(dict)
+        self.span_stack: list[tuple[UUID, str]] = []
 
         self.trace_name: str | None = None
         self.trace_id: UUID | None = None
@@ -47,39 +44,67 @@ class TracingService:
 
         return cls(tracers)
 
+    @property
+    def activated(self):
+        return bool(self.trace_id)
+
     @contextmanager
-    def trace(self, trace_name: str, session_id: str, user_id: str):
-        self.session_id = session_id
-        self.trace_name = trace_name
-        self.user_id = user_id
+    def trace_or_span(
+        self, name: str, session_id: str, user_id: str, inputs: dict[str, Any], metadata: dict[str, Any] | None = None
+    ):
+        """Context manager for tracing or spanning.
+
+        This context manager will start a trace if there isn't already one,
+        otherwise it will start a span.
+        """
+        if not self.trace_id:
+            with self.trace(name, session_id, user_id, inputs, metadata):
+                yield self
+        else:
+            with self.span(name, inputs, metadata):
+                yield self
+
+    @contextmanager
+    def trace(
+        self,
+        trace_name: str,
+        session_id: str,
+        user_id: str,
+        inputs: dict[str, Any] | None = None,
+        metadata: dict[str, str] | None = None,
+    ):
         self.trace_id = uuid.uuid4()
+        self.trace_name = trace_name
+        self.session_id = session_id
+        self.user_id = user_id
 
         try:
-            self._begin_traces()
-            self.activated = True
+            self._start_traces(inputs, metadata)
             yield self
-        finally:
+        except Exception as e:
+            self._end_traces(e)
+            raise
+        else:
             self._end_traces()
 
-    def _begin_traces(self):
+    def _start_traces(self, inputs: dict[str, Any] | None = None, metadata: dict[str, str] | None = None):
         for tracer in self._tracers:
             try:
-                tracer.begin_trace(self.trace_name, self.trace_id, self.session_id, self.user_id)
+                tracer.start_trace(self.trace_name, self.trace_id, self.session_id, self.user_id, inputs, metadata)
             except Exception:  # noqa BLE001
-                logger.error("Error initializing tracer %s", tracer.__class__.__name__, exc_info=True)
+                logger.exception("Error initializing tracer %s", tracer.__class__.__name__)
 
-    def _end_traces(self):
+    def _end_traces(self, error: Exception | None = None):
         for tracer in self._active_tracers:
             try:
-                tracer.end_trace()
+                tracer.end_trace(self.outputs.get(self.trace_id), error)
             except Exception:  # noqa BLE001
-                logger.error("Error ending tracer %s", tracer.__class__.__name__, exc_info=True)
-        self._reset_io()
+                logger.exception("Error ending tracer %s", tracer.__class__.__name__)
+        self._reset()
 
     @contextmanager
     def span(
         self,
-        span_id: str,
         span_name: str,
         inputs: dict[str, Any],
         metadata: dict[str, Any] | None = None,
@@ -88,12 +113,14 @@ class TracingService:
             yield self
             return
 
+        span_id = uuid.uuid4()
         self._start_span(
             span_id,
             span_name,
             inputs,
             metadata,
         )
+
         try:
             yield self
         except Exception as e:
@@ -102,14 +129,14 @@ class TracingService:
         else:
             self._end_span(span_id, span_name)
 
-    def set_outputs(
+    def set_current_span_outputs(
         self,
-        span_id: str,
         outputs: dict[str, Any],
-        output_metadata: dict[str, Any] | None = None,
     ) -> None:
+        if not self.activated:
+            return
+        span_id, _ = self._get_current_span_info()
         self.outputs[span_id] |= outputs or {}
-        self.outputs_metadata[span_id] |= output_metadata or {}
 
     def get_langchain_callbacks(self) -> list["BaseCallbackHandler"]:
         if not self.activated:
@@ -124,19 +151,19 @@ class TracingService:
         return callbacks
 
     def get_langchain_config(self, *, callbacks: list = None, configurable: dict = None) -> RunnableConfig:
-        if not self.activated:
-            return {}
-
         extra_callbacks = callbacks or []
         tracer_callbacks = self.get_langchain_callbacks()
-        config = {
-            "run_name": self.trace_name,
-            "callbacks": tracer_callbacks + extra_callbacks,
-            "metadata": {
-                "participant-id": self.user_id,
-                "session-id": self.session_id,
-            },
-        }
+        _, span_name = self._get_current_span_info()
+        metadata = {}
+        if self.user_id:
+            metadata["participant-id"] = self.user_id
+        if self.session_id:
+            metadata["session-id"] = self.session_id
+        config = RunnableConfig(
+            run_name=f"{span_name or 'OCS'} run",
+            callbacks=tracer_callbacks + extra_callbacks,
+            metadata=metadata,
+        )
         if configurable is not None:
             config["configurable"] = {**configurable}
         return config
@@ -158,15 +185,15 @@ class TracingService:
 
     def _start_span(
         self,
-        span_id: str,
+        span_id: UUID,
         span_name: str,
         inputs: dict[str, Any],
         metadata: dict[str, Any] | None = None,
     ) -> None:
-        self.inputs[span_id] = inputs
-        self.inputs_metadata[span_id] = metadata or {}
         if not self.activated:
             return
+
+        self.span_stack.append((span_id, span_name))
 
         for tracer in self._active_tracers:
             try:
@@ -179,15 +206,19 @@ class TracingService:
             except Exception:  # noqa BLE001
                 logger.exception(f"Error starting span {span_name}")
 
-    def _end_span(self, span_id: str, span_name: str, error: Exception | None = None) -> None:
+    def _end_span(self, span_id: UUID, span_name: str, error: Exception | None = None) -> None:
         if not self.activated:
             return
+
+        popped_span_id, _ = self.span_stack.pop()
+        if not popped_span_id == span_id:
+            logger.error("Span ID mismatch: expected %s, got %s", popped_span_id, span_id)
 
         for tracer in self._active_tracers:
             try:
                 tracer.end_span(
                     span_id=span_id,
-                    outputs=self.outputs[span_id],
+                    outputs=self.outputs.get(span_id, None),
                     error=error,
                 )
             except Exception:  # noqa BLE001
@@ -197,8 +228,15 @@ class TracingService:
     def _active_tracers(self) -> list[Tracer]:
         return [tracer for tracer in self._tracers if tracer.ready]
 
-    def _reset_io(self) -> None:
-        self.inputs = defaultdict(dict)
-        self.inputs_metadata = defaultdict(dict)
+    def _reset(self) -> None:
+        self.trace_id = None
+        self.trace_name = None
+        self.session_id = None
+        self.user_id = None
         self.outputs = defaultdict(dict)
-        self.outputs_metadata = defaultdict(dict)
+        self.span_stack = []
+
+    def _get_current_span_info(self) -> tuple[UUID, str]:
+        if self.span_stack:
+            return self.span_stack[-1]
+        return self.trace_id, self.trace_name
