@@ -114,7 +114,7 @@ def _queryset_update_with_auditing(queryset, **kw):
                 pk = value.pop("pk")
                 new_values[pk] = value
         else:
-            new_values = {pk: new_values for pk in old_values.keys()}
+            new_values = {pk: new_values for pk in old_values}
 
         # create and write the audit events _after_ the update succeeds
         request = field_audit.request.get()
