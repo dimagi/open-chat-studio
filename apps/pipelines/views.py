@@ -217,7 +217,8 @@ def _pipeline_node_schemas():
     node_classes = [
         cls
         for _, cls in inspect.getmembers(nodes, inspect.isclass)
-        if issubclass(cls, nodes.PipelineNode) and cls != nodes.PipelineNode
+        if issubclass(cls, nodes.PipelineNode | nodes.PipelineRouterNode)
+        and cls not in (nodes.PipelineNode, nodes.PipelineRouterNode)
     ]
     for node_class in node_classes:
         schemas.append(_get_node_schema(node_class))
