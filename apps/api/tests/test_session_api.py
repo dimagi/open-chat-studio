@@ -249,3 +249,47 @@ def test_end_experiment_session_success(client, session):
     assert response.status_code == status.HTTP_200_OK
     session.refresh_from_db()
     assert session.status == "pending-review"
+
+
+@pytest.mark.django_db()
+def test_update_experiment_session_state_success(session):
+    team = Team.objects.create(name="Test Team")
+    session.team = team
+    session.save()
+    url = f"/api/sessions/{session.external_id}/update_state/"
+    user = session.experiment.team.members.first()
+    client = ApiTestClient(user, session.experiment.team)
+    new_state = {"some": "new_state", "updated": True}
+
+    response = client.patch(url, data={"state": new_state}, format="json")
+
+    assert response.status_code == status.HTTP_200_OK
+    response_data = response.json()
+    assert response_data["success"] is True
+    assert response_data["state"] == new_state
+    session.refresh_from_db()
+    assert session.state == new_state
+
+
+@pytest.mark.django_db()
+def test_create_session_with_messages_and_json_state(experiment):
+    user = experiment.team.members.first()
+    client = ApiTestClient(user, experiment.team)
+    state = {"status": "active", "updated_at": "2025-04-28T00:00:00Z"}
+    data = {
+        "experiment": experiment.public_id,
+        "messages": [
+            {"role": "assistant", "content": "test"},
+            {"role": "user", "content": "test"},
+        ],
+        "state": state,
+    }
+
+    response = client.post(reverse("api:session-list"), data=data, format="json")
+    response_json = response.json()
+
+    assert response.status_code == 201, response_json
+    session = ExperimentSession.objects.get(external_id=response_json["id"])
+    assert session.state == state, f"Expected state {state}, but got {session.state}"
+    assert response_json == get_session_json(session)
+    assert session.chat.messages.count() == 2
