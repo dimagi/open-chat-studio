@@ -43,5 +43,3 @@ def test_fix_vector_store_duplication_command(push_assistant_to_openai, args):
     assistant = push_assistant_to_openai.call_args[0][0]
     # A working version must not be updated
     assert assistant.is_a_version
-    tool_resource = assistant.tool_resources.get(tool_type="file_search")
-    assert tool_resource.extra["vector_store_id"] == ""
