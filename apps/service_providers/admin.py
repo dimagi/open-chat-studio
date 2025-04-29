@@ -33,7 +33,7 @@ class LlmProviderModelAdmin(admin.ModelAdmin):
     def related_experiments(self, obj):
         experiments = Experiment.objects.filter(llm_provider_model_id=str(obj.id))
         experiment_urls = [
-            f"<a href={reverse('admin:experiments_experiment_change',args=[experiment.id])} >{str(experiment)}</a>"
+            f"<a href={reverse('admin:experiments_experiment_change', args=[experiment.id])} >{str(experiment)}</a>"
             for experiment in experiments
         ]
         return format_html("<br>".join(experiment_urls))
@@ -43,7 +43,7 @@ class LlmProviderModelAdmin(admin.ModelAdmin):
     def related_assistants(self, obj):
         assistants = OpenAiAssistant.objects.filter(llm_provider_model_id=str(obj.id))
         assistant_urls = [
-            f"<a href={reverse('admin:assistants_openaiassistant_change',args=[assistant.id])} >{str(assistant)}</a>"
+            f"<a href={reverse('admin:assistants_openaiassistant_change', args=[assistant.id])} >{str(assistant)}</a>"
             for assistant in assistants
         ]
         return format_html("<br>".join(assistant_urls))
@@ -54,7 +54,7 @@ class LlmProviderModelAdmin(admin.ModelAdmin):
         nodes = Node.objects.filter(params__llm_provider_model_id=str(obj.id))
         pipelines = set(node.pipeline for node in nodes)
         pipeline_urls = [
-            f"<a href={reverse('admin:pipelines_pipeline_change',args=[pipeline.id])} >{str(pipeline)}</a>"
+            f"<a href={reverse('admin:pipelines_pipeline_change', args=[pipeline.id])} >{str(pipeline)}</a>"
             for pipeline in pipelines
         ]
         return format_html("<br>".join(pipeline_urls))

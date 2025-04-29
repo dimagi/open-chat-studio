@@ -86,7 +86,7 @@ def test_assistant_tool_artifact_response(create_run, create_message, create_fil
     file_type_info = ""
     if "code_interpreter" in builtin_tools:
         file_type_info = (
-            "\n\nFile type information:\n\n| File Path | Mime Type |" "\n| /mnt/data/file-123abc | text/plain |\n"
+            "\n\nFile type information:\n\n| File Path | Mime Type |\n| /mnt/data/file-123abc | text/plain |\n"
         )
 
     assert create_message.call_args == (

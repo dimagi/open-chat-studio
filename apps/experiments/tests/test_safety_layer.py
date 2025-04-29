@@ -5,6 +5,7 @@ from django.urls import reverse
 
 from apps.chat.bots import TopicBot
 from apps.experiments.models import SafetyLayer
+from apps.service_providers.tracing import TracingService
 from apps.utils.factories.experiment import ExperimentFactory, ExperimentSessionFactory
 from apps.utils.factories.team import TeamWithUsersFactory
 
@@ -23,7 +24,7 @@ def test_safety_layer_violation(notify_users_of_violation_mock, create_conversat
     layer = SafetyLayer.objects.create(prompt_text="Is this message safe?", team=experiment.team)
     experiment.safety_layers.add(layer)
 
-    bot = TopicBot(experiment_session)
+    bot = TopicBot(experiment_session, experiment, TracingService.empty())
     bot.conversation = Mock()
     bot._call_predict = Mock()
     user_message = "It's my way or the highway!"

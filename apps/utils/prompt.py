@@ -132,7 +132,7 @@ class OcsPromptTemplate(ChatPromptTemplate):
                 inner_input = {var_name: inner_input}
 
             else:
-                msg = f"Expected mapping type as input to {self.__class__.__name__}. " f"Received {type(inner_input)}."
+                msg = f"Expected mapping type as input to {self.__class__.__name__}. Received {type(inner_input)}."
                 raise TypeError(msg)
 
         root_vars = {get_root_var(var) for var in self.input_variables}

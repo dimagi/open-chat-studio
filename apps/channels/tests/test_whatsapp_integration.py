@@ -80,8 +80,9 @@ class TestTwilio:
     ):
         """Test that the twilio integration can use the WhatsappChannel implementation"""
         synthesize_voice_mock.return_value = SynthesizedAudio(audio=BytesIO(b"123"), duration=10, format="mp3")
-        with patch("apps.service_providers.messaging_service.TwilioService.s3_client"), patch(
-            "apps.service_providers.messaging_service.TwilioService.client"
+        with (
+            patch("apps.service_providers.messaging_service.TwilioService.s3_client"),
+            patch("apps.service_providers.messaging_service.TwilioService.client"),
         ):
             get_llm_response_mock.return_value = ChatMessage(content="Hi")
             get_voice_transcript_mock.return_value = "Hi"

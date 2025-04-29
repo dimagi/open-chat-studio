@@ -5,6 +5,7 @@ from langchain_core.messages import AIMessage
 
 from apps.chat.bots import EventBot
 from apps.experiments.models import Experiment, ExperimentSession
+from apps.service_providers.tracing import TraceInfo
 from apps.utils.factories.experiment import ExperimentSessionFactory
 from apps.utils.langchain import build_fake_llm_service
 
@@ -13,7 +14,7 @@ from apps.utils.langchain import build_fake_llm_service
 def event_bot():
     session = MagicMock(spec=ExperimentSession)
     experiment = MagicMock(spec=Experiment)
-    return EventBot(session, experiment)
+    return EventBot(session, experiment, TraceInfo(name="test"))
 
 
 @patch("apps.chat.bots.get_default_model")
@@ -61,7 +62,7 @@ def test_get_user_message_with_llm_provider(mock_get_llm_service):
     fake_llm_service = build_fake_llm_service(responses=["this is a test message"], token_counts=[30, 20, 10])
     mock_get_llm_service.return_value = fake_llm_service
     session = ExperimentSessionFactory()
-    event_bot = EventBot(session, session.experiment)
+    event_bot = EventBot(session, session.experiment, TraceInfo(name="test"))
     response = event_bot.get_user_message("Test event prompt")
     mock_get_llm_service.assert_called()
     assert response == "this is a test message"

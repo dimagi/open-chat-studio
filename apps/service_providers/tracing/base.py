@@ -1,8 +1,11 @@
+import dataclasses
 from abc import ABC, abstractmethod
 from typing import Any
 from uuid import UUID
 
 from langchain_core.callbacks import BaseCallbackHandler
+
+from apps.service_providers.tracing.const import SpanLevel
 
 
 class ServiceReentryException(Exception):
@@ -29,7 +32,15 @@ class Tracer(ABC):
         raise NotImplementedError
 
     @abstractmethod
-    def begin_trace(self, trace_name: str, trace_id: UUID, session_id: str, user_id: str):
+    def start_trace(
+        self,
+        trace_name: str,
+        trace_id: UUID,
+        session_id: str,
+        user_id: str,
+        inputs: dict[str, Any] | None = None,
+        metadata: dict[str, Any] | None = None,
+    ) -> None:
         """This must be called before any tracing methods are called.
 
         Args:
@@ -37,30 +48,36 @@ class Tracer(ABC):
             trace_id (UUID): The unique identifier for the trace.
             session_id (str): The session identifier.
             user_id (str): The user identifier.
+            inputs (dict[str, Any] | None): The inputs to the trace.
+            metadata (dict[str, Any] | None): Additional metadata for the trace.
         """
         self.trace_name = trace_name
         self.trace_id = trace_id
         self.session_id = session_id
         self.user_id = user_id
 
-    def end_trace(self):  # noqa: B027
+    def end_trace(self, outputs: dict[str, Any] | None = None, error: Exception | None = None) -> None:
         """This must be called after all tracing methods are called to finalize the trace."""
-        pass
+        self.trace_name = None
+        self.trace_id = None
+        self.session_id = None
+        self.user_id = None
 
     @abstractmethod
     def start_span(
         self,
-        span_id: str,
+        span_id: UUID,
         span_name: str,
         inputs: dict[str, Any],
         metadata: dict[str, Any] | None = None,
+        level: SpanLevel = "DEFAULT",
     ) -> None:
         raise NotImplementedError
 
     @abstractmethod
     def end_span(
         self,
-        span_id: str,
+        span_id: UUID,
         outputs: dict[str, Any] | None = None,
         error: Exception | None = None,
     ) -> None:
@@ -72,3 +89,9 @@ class Tracer(ABC):
 
     def get_trace_metadata(self) -> dict[str, str]:
         return {}
+
+
+@dataclasses.dataclass
+class TraceInfo:
+    name: str
+    metadata: dict[str, Any] = dataclasses.field(default_factory=dict)
