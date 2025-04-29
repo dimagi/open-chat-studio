@@ -981,11 +981,11 @@ components:
       properties:
         success:
           type: boolean
-        new_state:
+        state:
           type: object
           additionalProperties: {}
       required:
-      - new_state
+      - state
       - success
   securitySchemes:
     apiKeyAuth:

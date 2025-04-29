@@ -256,7 +256,7 @@ update_state_response_serializer = inline_serializer(
     name="update_state_response",
     fields={
         "success": serializers.BooleanField(),
-        "new_state": serializers.JSONField(),
+        "state": serializers.JSONField(),
     },
 )
 
@@ -389,7 +389,7 @@ class ExperimentSessionViewSet(mixins.ListModelMixin, mixins.RetrieveModelMixin,
         session.state = state
         session.save()
 
-        return Response({"success": True, "new_state": session.state}, status=status.HTTP_200_OK)
+        return Response({"success": True, "state": session.state}, status=status.HTTP_200_OK)
 
 
 class BinaryRenderer(BaseRenderer):
