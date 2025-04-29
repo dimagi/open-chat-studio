@@ -266,7 +266,7 @@ def test_update_experiment_session_state_success(session):
     assert response.status_code == status.HTTP_200_OK
     response_data = response.json()
     assert response_data["success"] is True
-    assert response_data["new_state"] == new_state
+    assert response_data["state"] == new_state
     session.refresh_from_db()
     assert session.state == new_state
 
