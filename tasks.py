@@ -47,12 +47,12 @@ def requirements(c: Context, upgrade_all=False, upgrade_package=None):
 
     c.run(cmd)
 
-    result = c.run("uv pip install -r pyproject.yml --dry-run", echo=True, pty=True)
+    result = c.run("uv sync --frozen --dev --dry-run", echo=True, pty=True)
     if "no changes" in result.stdout:
         return None
 
     if _confirm("\nDo you want to sync your venv with the new requirements?", _exit=False):
-        c.run("uv pip install -r pyproject.yml", echo=True, pty=True)
+        c.run("uv sync --frozen --dev", echo=True, pty=True)
         return None
     return None
 
