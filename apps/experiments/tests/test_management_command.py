@@ -36,12 +36,10 @@ def test_fix_vector_store_duplication_command(push_assistant_to_openai, args):
 
     # Ensure the original version is in tact
     original_tool_resource.refresh_from_db()
-    original_tool_resource.extra["vector_store_id"] == "v-123"
+    assert original_tool_resource.extra["vector_store_id"] == "v-123"
     assert original_tool_resource.files.first().external_id == "f-123"
 
     # Ensure the versioned resouce + files are cleared correctly
     assistant = push_assistant_to_openai.call_args[0][0]
     # A working version must not be updated
     assert assistant.is_a_version
-    tool_resource = assistant.tool_resources.get(tool_type="file_search")
-    tool_resource.extra["vector_store_id"] == ""

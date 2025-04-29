@@ -239,7 +239,7 @@ class Pipeline(BaseTeamModel, VersionsMixin):
         for node in nodes:
             name_to_flow_id[node.params.get("name")].append(node.flow_id)
 
-        for name, flow_ids in name_to_flow_id.items():
+        for _name, flow_ids in name_to_flow_id.items():
             if len(flow_ids) > 1:
                 for flow_id in flow_ids:
                     errors[flow_id].update({"name": "All node names must be unique"})
@@ -379,12 +379,12 @@ class Pipeline(BaseTeamModel, VersionsMixin):
         return chat_message
 
     @transaction.atomic()
-    def create_new_version(self, *args, **kwargs):
+    def create_new_version(self):
         version_number = self.version_number
         self.version_number = version_number + 1
         self.save(update_fields=["version_number"])
 
-        pipeline_version = super().create_new_version(save=False, *args, **kwargs)
+        pipeline_version = super().create_new_version(save=False)
         pipeline_version.version_number = version_number
         pipeline_version.save()
 

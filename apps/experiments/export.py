@@ -20,11 +20,7 @@ def _format_comments(user_comments: list[UserComment]) -> str:
 
 
 def get_filtered_sessions(request, experiment, query_params):
-    sessions_queryset = (
-        ExperimentSession.objects.with_last_message_created_at()
-        .filter(experiment=experiment)
-        .select_related("participant__user")
-    )
+    sessions_queryset = ExperimentSession.objects.filter(experiment=experiment).select_related("participant__user")
     sessions_queryset = apply_dynamic_filters(sessions_queryset, request, parsed_params=query_params)
 
     return sessions_queryset

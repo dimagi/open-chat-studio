@@ -68,7 +68,7 @@ class CustomActionForm(forms.ModelForm):
         try:
             validate_user_input_url(server_url, strict=not settings.DEBUG)
         except InvalidURL as e:
-            raise forms.ValidationError(f"The server URL is invalid: {str(e)}")
+            raise forms.ValidationError(f"The server URL is invalid: {str(e)}") from None
 
         return server_url
 
@@ -102,7 +102,7 @@ def validate_api_schema(api_schema):
     try:
         OpenAPISpec.from_spec_dict(api_schema)
     except ValueError:
-        raise forms.ValidationError("Invalid OpenAPI schema.")
+        raise forms.ValidationError("Invalid OpenAPI schema.") from None
 
     paths = api_schema.get("paths", {})
     if not paths:
@@ -129,9 +129,9 @@ def validate_api_schema_full(operations, schema, server_url, url_validator):
         try:
             url_validator(urljoin(server_url, op.path))
         except forms.ValidationError:
-            raise forms.ValidationError(f"Invalid path: {op.path}")
+            raise forms.ValidationError(f"Invalid path: {op.path}") from None
 
         try:
             openapi_spec_op_to_function_def(spec, op.path, op.method)
         except ValueError as e:
-            raise forms.ValidationError({"allowed_operations": f"The '{op}' operation is not supported ({e})"})
+            raise forms.ValidationError({"allowed_operations": f"The '{op}' operation is not supported ({e})"}) from e

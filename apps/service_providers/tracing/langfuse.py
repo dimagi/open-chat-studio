@@ -203,7 +203,7 @@ class ClientManager:
 
         with self.lock:
             logger.debug("Shutting down all langfuse clients (%s)", len(self.clients))
-            for key, (_, client) in self.clients.items():
+            for _key, (_, client) in self.clients.items():
                 client.shutdown()
             self.clients = {}
 
