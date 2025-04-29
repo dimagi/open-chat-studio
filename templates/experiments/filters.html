@@ -125,6 +125,7 @@
         loading: false,
         columns: {
           'participant': {type: 'string', operators: fieldTypeFilters.string, label: 'Participant'},
+          'first_message': {type: 'timestamp', operators: fieldTypeFilters.timestamp, label: 'First Message'},
           'last_message': {type: 'timestamp', operators: fieldTypeFilters.timestamp, label: 'Last Message'},
           'tags': {type: 'choice', operators: fieldTypeFilters.choice, options: tags, label: 'Tags' },
           'versions': {type: 'choice', operators: fieldTypeFilters.choice, options: versionsList, label: 'Versions'},

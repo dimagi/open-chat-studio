@@ -175,8 +175,8 @@ def test_different_sessions_created_for_different_users(test_channel):
     # Assertions
     experiment_sessions_count = ExperimentSession.objects.count()
     assert experiment_sessions_count == 2
-    assert ExperimentSession.objects.for_chat_id(user_1_chat_id).exists()
-    assert ExperimentSession.objects.for_chat_id(user_2_chat_id).exists()
+    assert ExperimentSession.objects.filter(participant__identifier=user_1_chat_id).exists()
+    assert ExperimentSession.objects.filter(participant__identifier=user_2_chat_id).exists()
 
 
 @pytest.mark.django_db()
@@ -217,7 +217,7 @@ def test_reset_command_creates_new_experiment_session(user_input, test_channel):
     reset_message = base_messages.text_message(participant_id=participant_id, message_text=user_input)
     response = test_channel.new_user_message(reset_message)
     assert response.content == "Conversation reset"
-    sessions = ExperimentSession.objects.for_chat_id(participant_id).order_by("created_at").all()
+    sessions = ExperimentSession.objects.filter(participant__identifier=participant_id).order_by("created_at").all()
     assert len(sessions) == 2
     new_session = sessions[0]
     old_session = sessions[1]
@@ -237,7 +237,7 @@ def test_reset_conversation_does_not_create_new_session(_call_predict, test_chan
     message2 = base_messages.text_message(participant_id=participant_id, message_text=ExperimentChannel.RESET_COMMAND)
     _send_user_message_on_channel(test_channel, message2)
 
-    sessions = ExperimentSession.objects.for_chat_id(participant_id).all()
+    sessions = ExperimentSession.objects.filter(participant__identifier=participant_id).all()
     assert len(sessions) == 1
     # The reset command should not be saved in the history
     assert sessions[0].chat.get_langchain_messages() == []
