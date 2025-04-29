@@ -74,6 +74,7 @@ def test_running_pipeline_creates_run(pipeline: Pipeline, session: ExperimentSes
         input_message_metadata={},
         output_message_metadata={},
         output_message_tags=[],
+        path=[[None, "start", ["end"]], ["start", "end", []]],
     )
 
     assert len(run.log["entries"]) == 8

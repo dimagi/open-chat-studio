@@ -33,6 +33,7 @@ from apps.pipelines.nodes.base import (
     NodeSchema,
     OptionsSource,
     PipelineNode,
+    PipelineRouterNode,
     PipelineState,
     UiSchema,
     Widgets,
@@ -395,7 +396,7 @@ class EndNode(Passthrough):
 
 
 @deprecated_node(message="Use the 'Router' node instead.")
-class BooleanNode(Passthrough):
+class BooleanNode(PipelineRouterNode):
     """Branches based whether the input matches a certain value"""
 
     model_config = ConfigDict(json_schema_extra=NodeSchema(label="Conditional Node"))
@@ -413,12 +414,18 @@ class BooleanNode(Passthrough):
         return "false"
 
     def get_output_map(self):
-        """A mapping from the output handles on the frontend to the return values of process_conditional"""
+        """A mapping from the output handles on the frontend to the return values of _process_conditional"""
         return {"output_0": "true", "output_1": "false"}
+
+    def get_output_tags(self, selected_route) -> list[str]:
+        if self.tag_output_message:
+            return [f"{self.name}:{selected_route}"]
+        return []
 
 
 class RouterMixin(BaseModel):
     keywords: list[str] = Field(default_factory=list, json_schema_extra=UiSchema(widget=Widgets.keywords))
+    default_keyword_index: int = Field(default=0)
     tag_output_message: bool = Field(
         default=False,
         description="Tag the output message with the selected route",
@@ -429,10 +436,8 @@ class RouterMixin(BaseModel):
     def ensure_keywords_exist(cls, value, info: FieldValidationInfo):
         if not all(entry for entry in value):
             raise PydanticCustomError("invalid_keywords", "Keywords cannot be empty")
-
         if len(set(value)) != len(value):
             raise PydanticCustomError("invalid_keywords", "Keywords must be unique")
-
         return value
 
     def _create_router_schema(self):
@@ -447,8 +452,13 @@ class RouterMixin(BaseModel):
         """
         return {f"output_{output_num}": keyword for output_num, keyword in enumerate(self.keywords)}
 
+    def get_output_tags(self, selected_route) -> list[str]:
+        if self.tag_output_message:
+            return [f"{self.name}:{selected_route}"]
+        return []
 
-class RouterNode(RouterMixin, Passthrough, HistoryMixin):
+
+class RouterNode(RouterMixin, PipelineRouterNode, HistoryMixin):
     """Routes the input to one of the linked nodes using an LLM"""
 
     model_config = ConfigDict(
@@ -485,10 +495,14 @@ class RouterNode(RouterMixin, Passthrough, HistoryMixin):
             raise PydanticCustomError("invalid_prompt", e.error_dict["prompt"][0].message, {"field": "prompt"})
 
     def _process_conditional(self, state: PipelineState, node_id=None):
+        default_keyword = self.keywords[self.default_keyword_index] if self.keywords else None
         prompt = OcsPromptTemplate.from_messages(
-            [("system", self.prompt), MessagesPlaceholder("history", optional=True), ("human", "{input}")]
+            [
+                ("system", f"{self.prompt}\nThe default routing destination is: {default_keyword}"),
+                MessagesPlaceholder("history", optional=True),
+                ("human", "{input}"),
+            ]
         )
-
         session: ExperimentSession = state["experiment_session"]
         node_input = state["messages"][-1]
 
@@ -508,14 +522,14 @@ class RouterNode(RouterMixin, Passthrough, HistoryMixin):
         except PydanticValidationError:
             keyword = None
         if not keyword:
-            keyword = self.keywords[0]
+            keyword = self.keywords[self.default_keyword_index]
 
         if session:
             self._save_history(session, node_id, node_input, keyword)
         return keyword
 
 
-class StaticRouterNode(RouterMixin, Passthrough):
+class StaticRouterNode(RouterMixin, PipelineRouterNode):
     """Routes the input to a linked node using the temp state of the pipeline or participant data"""
 
     class DataSource(TextChoices):
@@ -559,7 +573,7 @@ class StaticRouterNode(RouterMixin, Passthrough):
         for keyword in self.keywords:
             if keyword.lower() == result_lower:
                 return keyword
-        return self.keywords[0]
+        return self.keywords[self.default_keyword_index]
 
 
 class ExtractStructuredDataNodeMixin:

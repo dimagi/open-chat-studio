@@ -6,6 +6,7 @@ from django.contrib.contenttypes.models import ContentType
 from django.db.models import Exists, OuterRef, Q
 
 from apps.annotations.models import CustomTaggedItem
+from apps.channels.models import ChannelPlatform
 from apps.chat.models import Chat, ChatMessage
 
 
@@ -22,6 +23,7 @@ class Operators(StrEnum):
     AFTER = "after"
     ANY_OF = "any of"
     ALL_OF = "all of"
+    EXCLUDES = "excludes"
 
 
 FIELD_TYPE_FILTERS = {
@@ -33,7 +35,7 @@ FIELD_TYPE_FILTERS = {
         Operators.ENDS_WITH,
     ],
     "timestamp": [Operators.ON, Operators.BEFORE, Operators.AFTER],
-    "choice": [Operators.ANY_OF, Operators.ALL_OF],
+    "choice": [Operators.ANY_OF, Operators.ALL_OF, Operators.EXCLUDES],
 }
 
 
@@ -76,6 +78,8 @@ def build_filter_condition(column, operator, value):
         return build_tags_filter(operator, value)
     elif column == "versions":
         return build_versions_filter(operator, value)
+    elif column == "channels":
+        return build_channels_filter(operator, value)
     return None
 
 
@@ -122,12 +126,14 @@ def build_tags_filter(operator, value):
             for tag in selected_tags:
                 conditions &= Exists(
                     CustomTaggedItem.objects.filter(
-                        object_id=OuterRef("id"),
+                        object_id=OuterRef("chat__id"),
                         content_type_id=content_type,
                         tag__name=tag,
                     )
                 )
             return conditions
+        elif operator == Operators.EXCLUDES:
+            return ~Q(chat__tags__name__in=selected_tags)
     except json.JSONDecodeError:
         pass
     return None
@@ -139,7 +145,7 @@ def build_versions_filter(operator, value):
         if not version_strings:
             return None
         version_tags = [v for v in version_strings if v]
-        if operator == Operators.ANY_OF:
+        if operator in [Operators.ANY_OF, Operators.EXCLUDES]:
             tag_exists = [
                 ChatMessage.objects.filter(
                     chat=OuterRef("chat"),
@@ -152,7 +158,7 @@ def build_versions_filter(operator, value):
             for query in tag_exists:
                 combined_query |= Q(Exists(query))
 
-            return combined_query
+            return ~combined_query if operator == Operators.EXCLUDES else combined_query
 
         elif operator == Operators.ALL_OF:
             q_objects = Q()
@@ -164,6 +170,31 @@ def build_versions_filter(operator, value):
                 ).values("id")
                 q_objects &= Q(Exists(tag_exists))
             return q_objects
+    except json.JSONDecodeError:
+        pass
+    return None
+
+
+def build_channels_filter(operator, value):
+    try:
+        selected_display_names = json.loads(value)
+        if not selected_display_names:
+            return None
+
+        display_to_value = {label: val for val, label in ChannelPlatform.choices}
+        selected_values = [display_to_value.get(name.strip()) for name in selected_display_names]
+        selected_values = [val for val in selected_values if val is not None]
+        if not selected_values:
+            return None
+        if operator == Operators.ANY_OF:
+            return Q(experiment_channel__platform__in=selected_values)
+        elif operator == Operators.ALL_OF:
+            conditions = Q()
+            for channel in selected_values:
+                conditions &= Q(experiment_channel__platform__iexact=channel)
+            return conditions
+        elif operator == Operators.EXCLUDES:
+            return ~Q(experiment_channel__platform__in=selected_values)
     except json.JSONDecodeError:
         pass
     return None

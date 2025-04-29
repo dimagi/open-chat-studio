@@ -14,6 +14,11 @@
       "type": "array",
       "ui:widget": "keywords"
     },
+    "default_keyword_index": {
+      "default": 0,
+      "title": "Default Keyword Index",
+      "type": "integer"
+    },
     "tag_output_message": {
       "default": false,
       "description": "Tag the output message with the selected route",

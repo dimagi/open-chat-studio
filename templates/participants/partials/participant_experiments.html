@@ -9,15 +9,10 @@
       <th scope="col" class=""></th>
     </tr>
   </thead>
-  <tbody class="divide-y divide-gray-200">
+  <tbody class="divide-y divide-gray-200" x-data="{ selectedId: {{ selected_experiment.id|default:'null' }} }">
     {% for experiment in experiments %}
       <tr
-        {% if experiment.id == selected_experiment.id %}
-          class="cursor-pointer bg-gray-300"
-        {% else %}
-          class="cursor-pointer"
-        {% endif %}
-
+        class="cursor-pointer"
         x-on:click="window.location.href = new URL('{% url 'participants:single-participant-home-with-experiment' participant.team.slug participant.id experiment.id %}#{{experiment.id}}', window.location.origin)"
       >
         <td class="whitespace-nowrap px-3 py-4 text-sm text-gray-500">
@@ -28,16 +23,14 @@
         <td class="whitespace-nowrap px-3 py-4 text-sm text-gray-500">{{ experiment.joined_on|default:"" }}</td>
         <td class="px-3 py-4 text-sm text-gray-500">{{ experiment.last_message|default:"" }}</td>
         <td class="">
-          {% if experiment.id == selected_experiment.id %}
-            <i class="fa-solid fa-chevron-down"></i>
-          {% else %}
-            <i class="fa-solid fa-chevron-up"></i>
-          {% endif %}
+          <i class="fa-solid"
+             :class="selectedId == {{ experiment.id }} ? 'fa-chevron-down' : 'fa-chevron-up'"
+             x-on:click.stop="selectedId = {{ experiment.id }}"></i>
         </td>
       </tr>
-      {% if experiment.id == selected_experiment.id %}
+      <template x-if="selectedId == {{ experiment.id }}">
         {% include 'participants/partials/experiment_data.html' with experiment=selected_experiment %}
-      {% endif %}
+      </template>
     {% endfor %}
   </tbody>
 </table>
