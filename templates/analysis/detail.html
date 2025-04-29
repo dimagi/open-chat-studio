@@ -1,0 +1,75 @@
+{% extends "web/app/app_base.html" %}
+
+{% block app %}
+    <div class="container mx-auto px-4 py-8">
+        <div class="flex justify-between items-center mb-6">
+            <h1 class="text-2xl font-bold">{{ object.name }}</h1>
+            <div>
+                {% if object.is_complete %}
+                    <a href="{% url 'analysis:download' team.slug object.id %}" class="bg-green-600 hover:bg-green-700 text-white px-4 py-2 rounded">
+                        Download Results
+                    </a>
+                {% endif %}
+                <a href="{% url 'analysis:list' team.slug %}" class="ml-2 text-gray-600 hover:text-gray-800">
+                    Back to List
+                </a>
+            </div>
+        </div>
+
+        <div class="p-6 mb-6">
+            <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div>
+                    <h2 class="text-lg font-semibold mb-2">Details</h2>
+                    <p><strong>Status:</strong> {{ object.get_status_display }}</p>
+                    <p><strong>Experiment:</strong> {{ object.experiment.name }}</p>
+                    <p><strong>Created:</strong> {{ object.created_at }}</p>
+                    <p><strong>Created By:</strong> {{ object.created_by }}</p>
+                </div>
+                <div>
+                    <h2 class="text-lg font-semibold mb-2">Description</h2>
+                    <p>{{ object.description|default:"No description provided" }}</p>
+                </div>
+            </div>
+        </div>
+
+        {% if object.error_message %}
+            <div class="bg-red-100 border border-red-400 text-red-700 px-4 py-3 rounded mb-6">
+                <h2 class="text-lg font-semibold mb-2">Error</h2>
+                <p>{{ object.error_message }}</p>
+            </div>
+        {% endif %}
+
+        <div class="p-6 mb-6">
+            <h2 class="text-lg font-semibold mb-4">Sessions ({{ object.sessions.count }})</h2>
+            <ul class="divide-y divide-gray-200">
+                {% for session in object.sessions.all %}
+                    <li class="py-3">
+                        <div class="flex justify-between">
+                            <span>{{ session.participant }}</span>
+                            <span class="text-gray-500">{{ session.external_id }}</span>
+                        </div>
+                    </li>
+                {% empty %}
+                    <li class="py-3 text-gray-500">No sessions selected</li>
+                {% endfor %}
+            </ul>
+        </div>
+
+        <div class="p-6">
+            <h2 class="text-lg font-semibold mb-4">Queries ({{ object.queries.count }})</h2>
+            <ul class="divide-y divide-gray-200">
+                {% for query in object.queries.all %}
+                    <li class="py-3">
+                        <p class="font-medium">{{ query.name }}</p>
+                        <p class="text-gray-700">{{ query.prompt }}</p>
+                        {% if query.output_format %}
+                            <p class="text-gray-500 text-sm">Format: {{ query.output_format }}</p>
+                        {% endif %}
+                    </li>
+                {% empty %}
+                    <li class="py-3 text-gray-500">No queries found</li>
+                {% endfor %}
+            </ul>
+        </div>
+    </div>
+{% endblock %}
