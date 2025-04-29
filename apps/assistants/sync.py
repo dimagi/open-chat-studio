@@ -55,6 +55,7 @@ Once enabled on the assistant, the thread can add its own files to its vector st
 files, as well as those provided by the assistant.
 """
 
+import contextlib
 import logging
 import pathlib
 from functools import wraps
@@ -90,10 +91,8 @@ def wrap_openai_errors(fn):
         except openai.APIError as e:
             message = e.message
             if isinstance(e.body, dict):
-                try:
+                with contextlib.suppress(KeyError, AttributeError):
                     message = e.body["message"]
-                except (KeyError, AttributeError):
-                    pass
 
             raise OpenAiSyncError(message) from e
         except ValidationError as e:
@@ -338,10 +337,8 @@ def _fetch_file_from_openai(assistant: OpenAiAssistant, file_id: str) -> File:
     client = assistant.llm_provider.get_llm_service().get_raw_client()
     openai_file = client.files.retrieve(file_id)
     filename = openai_file.filename
-    try:
+    with contextlib.suppress(Exception):
         filename = pathlib.Path(openai_file.filename).name
-    except Exception:
-        pass
 
     # Can't retrieve content from openai assistant files
     # content = client.files.retrieve_content(openai_file.id)
@@ -474,10 +471,8 @@ def _update_or_create_vector_store(assistant, name, vector_store_id, file_ids) -
     if not vector_store_id and assistant.assistant_id:
         # check if there is a vector store attached to this assistant that we don't know about
         openai_assistant = client.beta.assistants.retrieve(assistant.assistant_id)
-        try:
+        with contextlib.suppress(AttributeError, IndexError):
             vector_store_id = openai_assistant.tool_resources.file_search.vector_store_ids[0]
-        except (AttributeError, IndexError):
-            pass
 
     if vector_store_id:
         _sync_vector_store_files_to_openai(client, vector_store_id, file_ids)
@@ -547,10 +542,8 @@ def get_and_store_openai_file(client, file_id: str, team_id: int) -> File:
     """Retrieve the content of the openai file with id=`file_id` and create a new `File` instance"""
     file = client.files.retrieve(file_id)
     filename = file.filename
-    try:
+    with contextlib.suppress(Exception):
         filename = pathlib.Path(file.filename).name
-    except Exception:
-        pass
 
     file_content_obj = client.files.content(file_id)
 
