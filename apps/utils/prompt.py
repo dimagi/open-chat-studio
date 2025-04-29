@@ -32,7 +32,7 @@ def _inspect_prompt(context: str, prompt_key) -> tuple[set, str]:
     prompt_variables = set()
     prompt_text = context.get(prompt_key, "")
     try:
-        for literal, field_name, format_spec, conversion in Formatter().parse(prompt_text):
+        for _literal, field_name, format_spec, conversion in Formatter().parse(prompt_text):
             if field_name is not None:
                 if format_spec or conversion:
                     conversion = f"!{conversion}" if conversion else ""
@@ -44,7 +44,7 @@ def _inspect_prompt(context: str, prompt_key) -> tuple[set, str]:
                     )
                 prompt_variables.add(get_root_var(field_name))
     except ValueError as e:
-        raise ValidationError({prompt_key: f"Invalid format in prompt: {e}"})
+        raise ValidationError({prompt_key: f"Invalid format in prompt: {e}"}) from None
 
     return prompt_variables, prompt_text
 

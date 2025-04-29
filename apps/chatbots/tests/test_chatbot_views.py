@@ -152,7 +152,7 @@ def attach_middleware_to_request(request):
     session_middleware = SessionMiddleware(lambda req: None)
     session_middleware.process_request(request)
     request.session.save()
-    setattr(request, "_messages", FallbackStorage(request))
+    request._messages = FallbackStorage(request)
 
 
 @pytest.mark.django_db()

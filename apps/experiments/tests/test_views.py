@@ -71,7 +71,7 @@ def test_create_experiment_success(client, team_with_users):
     assert response.status_code == 302, response.context["form"].errors
     experiment = Experiment.objects.filter(owner=user).first()
     assert experiment is not None
-    experiment.tools == [AgentTools.ONE_OFF_REMINDER]
+    assert experiment.tools == [AgentTools.ONE_OFF_REMINDER]
 
 
 @override_settings(CELERY_TASK_ALWAYS_EAGER=True)

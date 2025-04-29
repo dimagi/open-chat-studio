@@ -186,7 +186,7 @@ class TestTurnio:
     def test_outbound_and_status_messages_ignored(self, handle_turn_message_task, message, client):
         url = reverse("channels:new_turn_message", kwargs={"experiment_id": str(uuid4())})
         response = client.post(url, data=message, content_type="application/json")
-        response.status_code == 200
+        assert response.status_code == 200
         handle_turn_message_task.assert_not_called()
 
     @pytest.mark.django_db()

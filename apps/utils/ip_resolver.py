@@ -15,9 +15,9 @@ def resolve_to_ips(hostname, port=80):
             proto=socket.IPPROTO_TCP,  # Restrict to TCP
         )
     except socket.gaierror as e:
-        raise CannotResolveHost(hostname, e)
+        raise CannotResolveHost(hostname, e) from None
     except TimeoutError as e:
-        raise CannotResolveHost(hostname, e)
+        raise CannotResolveHost(hostname, e) from None
     finally:
         socket.setdefaulttimeout(None)  # Reset timeout
 

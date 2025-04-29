@@ -289,7 +289,7 @@ class VoiceProvider(BaseTeamModel, ProviderMixin):
                     )
                 except IntegrityError:
                     message = f"Unable to upload '{file.name}' voice. This voice might already exist"
-                    raise ValidationError(message)
+                    raise ValidationError(message) from None
 
     def remove_file(self, file_id: int):
         synthetic_voice = self.syntheticvoice_set.get(file_id=file_id)

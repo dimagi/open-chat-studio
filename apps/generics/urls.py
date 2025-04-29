@@ -2,7 +2,7 @@ from django.urls import path
 
 
 def make_crud_urls(views_module, model_name: str, prefix: str = "", new=True, edit=True, delete=True):
-    f"""Make the CRUD URLs for a given model.
+    """Make the CRUD URLs for a given model.
 
     Views (all are expected to be class based views):
     * home: {model_name}Home - name: {prefix}_home

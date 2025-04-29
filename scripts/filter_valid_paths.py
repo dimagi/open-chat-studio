@@ -200,7 +200,9 @@ def debug_path(path, patterns):
             if len(path_parts) != len(pattern_parts):
                 continue
 
-            matches = sum(1 for pp, ptp in zip(path_parts, pattern_parts) if pp == ptp or ptp == "[variable]")
+            matches = sum(
+                1 for pp, ptp in zip(path_parts, pattern_parts, strict=False) if pp == ptp or ptp == "[variable]"
+            )
 
             if matches >= len(path_parts) - 1:
                 closest.append((pattern, matches))
