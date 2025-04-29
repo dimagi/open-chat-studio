@@ -429,9 +429,7 @@ class CreateExperimentVersion(LoginAndTeamRequiredMixin, CreateView):
             return True
 
         files_missing_local, files_missing_remote = get_out_of_sync_files(experiment.assistant)
-        if files_missing_local or files_missing_remote:
-            return True
-        return False
+        return bool(files_missing_local or files_missing_remote)
 
     def get_success_url(self):
         url = reverse(
