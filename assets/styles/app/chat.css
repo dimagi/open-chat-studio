@@ -1,5 +1,5 @@
 @utility chat-pane {
-  @apply overflow-y-auto flex flex-col grow p-4 space-y-4 bg-gray-50;
+  @apply overflow-y-auto flex flex-col grow p-4 space-y-4 bg-base-300;
 }
 
 @utility chat-message {
