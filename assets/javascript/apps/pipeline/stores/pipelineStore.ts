@@ -28,6 +28,7 @@ const createPipelineStore: StateCreator<
 > = (set, get) => ({
   nodes: [],
   edges: [],
+  readOnly: false,
   reactFlowInstance: null,
   setReactFlowInstance: (newState) => {
     set({reactFlowInstance: newState});
@@ -38,17 +39,20 @@ const createPipelineStore: StateCreator<
       });
     }
   },
+  setReadOnly: (value: boolean) => set({ readOnly: value }),
   onNodesChange: (changes: NodeChange[]) => {
     set({
       nodes: applyNodeChanges(changes, get().nodes),
     });
   },
   onEdgesChange: (changes: EdgeChange[]) => {
+    if (get().readOnly) return;
     set({
       edges: applyEdgeChanges(changes, get().edges),
     });
   },
   setNodes: (change) => {
+    if (get().readOnly) return;
     const newChange = typeof change === "function" ? change(get().nodes) : change;
     const newEdges = get().edges;
 
@@ -63,6 +67,7 @@ const createPipelineStore: StateCreator<
     );
   },
   setEdges: (change) => {
+    if (get().readOnly) return;
     const newChange = typeof change === "function" ? change(get().edges) : change;
 
     set({
@@ -75,6 +80,7 @@ const createPipelineStore: StateCreator<
     );
   },
   setNode: (id: string, change: Node | ((oldState: Node) => Node)) => {
+    if (get().readOnly) return;
     const newChange =
       typeof change === "function"
         ? change(get().nodes.find((node) => node.id === id)!)
@@ -93,6 +99,7 @@ const createPipelineStore: StateCreator<
     return get().nodes.find((node) => node.id === id);
   },
   deleteNode: (nodeId) => {
+    if (get().readOnly) return;
     if (typeof nodeId === "string" && !nodeId) {
       return
     } else if (Array.isArray(nodeId) && !nodeId.length) {
@@ -120,6 +127,7 @@ const createPipelineStore: StateCreator<
     );
   },
   deleteEdge: (edgeId) => {
+    if (get().readOnly) return;
     get().setEdges(
       get().edges.filter((edge) =>
         typeof edgeId === "string"
@@ -129,6 +137,7 @@ const createPipelineStore: StateCreator<
     );
   },
   clearEdgeLabels: () => {
+    if (get().readOnly) return;
     // Not calling setEdges so we don't autoSave
     set({
       edges: get().edges.map(
@@ -141,6 +150,7 @@ const createPipelineStore: StateCreator<
     });
   },
   setEdgeLabel: (sourceId, outputHandle, label) => {
+    if (get().readOnly) return;
     // Not calling setEdges so we don't autoSave
     set({
       edges: get().edges.map(
@@ -157,6 +167,7 @@ const createPipelineStore: StateCreator<
     });
   },
   onConnect: (connection) => {
+    if (get().readOnly) return;
     let newEdges: Edge[] = [];
     get().setEdges((oldEdges) => {
       newEdges = addEdge(connection, oldEdges);
@@ -168,6 +179,7 @@ const createPipelineStore: StateCreator<
       );
   },
   addNode: (node, position) => {
+    if (get().readOnly) return;
     let minimumX = Infinity;
     let minimumY = Infinity;
     let newNodes: Node[] = get().nodes;

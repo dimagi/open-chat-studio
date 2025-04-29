@@ -95,6 +95,7 @@ class EditPipeline(LoginAndTeamRequiredMixin, TemplateView, PermissionRequiredMi
             "node_schemas": _pipeline_node_schemas(),
             "parameter_values": _pipeline_node_parameter_values(self.request.team, llm_providers, llm_provider_models),
             "default_values": _pipeline_node_default_values(llm_providers, llm_provider_models),
+            "read_only": pipeline.is_a_version,
             "flags_enabled": [
                 flag for flag in ui_feature_flags if Flag.get(flag).is_active_for_team(self.request.team)
             ],

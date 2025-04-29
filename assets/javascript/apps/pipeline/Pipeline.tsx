@@ -1,6 +1,6 @@
 import "reactflow/dist/style.css";
 import "./styles.css"
-import React, {useCallback, useState} from "react";
+import React, {useCallback, useState, useEffect} from "react";
 import ReactFlow, {
   Background,
   BackgroundVariant,
@@ -43,6 +43,8 @@ const edgeTypes: EdgeTypes = {
 export default function Pipeline() {
   const nodes = usePipelineStore((state) => state.nodes);
   const edges = usePipelineStore((state) => state.edges);
+  const readOnly = usePipelineStore((state) => state.readOnly);
+  const setReadOnly = usePipelineStore((state) => state.setReadOnly);
   const onNodesChange = usePipelineStore((state) => state.onNodesChange);
   const onEdgesChange = usePipelineStore((state) => state.onEdgesChange);
   const onConnect = usePipelineStore((state) => state.onConnect);
@@ -61,6 +63,11 @@ export default function Pipeline() {
 
   const [lastSelection, setLastSelection] = useState<OnSelectionChangeParams | null>(null);
   const [selectedOverlay, setSelectedOverlay] = useState<string | null>(null);
+
+  useEffect(() => {
+    const readOnlyValue = JSON.parse(document.getElementById("read-only")?.textContent || "false");
+    setReadOnly(readOnlyValue);
+  }, [setReadOnly]);
 
   const onDragOver = useCallback((event: React.DragEvent) => {
     event.preventDefault();
@@ -146,6 +153,11 @@ export default function Pipeline() {
   return (
     <div className="h-[80vh]">
       <ReactFlow
+        edgesUpdatable={!readOnly}
+        edgesFocusable={!readOnly}
+        nodesDraggable={!readOnly}
+        nodesConnectable={!readOnly}
+        draggable={!readOnly}
         nodes={nodes}
         edges={edges}
         onNodesChange={onNodesChange}

@@ -5,6 +5,8 @@ export type PipelineStoreType = {
   setReactFlowInstance: (newState: ReactFlowInstance) => void;
   nodes: Node[];
   edges: Edge[];
+  readOnly: boolean;
+  setReadOnly: (value: boolean) => void;
   onNodesChange: OnNodesChange;
   onEdgesChange: OnEdgesChange;
   setNodes: (update: Node[] | ((oldState: Node[]) => Node[])) => void;
