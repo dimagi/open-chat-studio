@@ -32,8 +32,8 @@ indent-width = 4
 target-version = "py311"
 
 [tool.ruff.lint]
-select = ["E", "F", "I", "UP", "DJ", "PT", "B", "SIM103", "SIM105", "SIM107", "SIM109", "SIM110", "SIM112", "SIM113", "SIM114", "SIM115", "SIM116", "SIM118", "SIM201", "SIM202", "SIM208", "SIM210", "SIM211", "SIM212", "SIM220", "SIM221", "SIM222", "SIM223", "SIM300", "SIM401", "SIM905", "SIM910"]
-ignore = ["PT019"]
+select = ["E", "F", "I", "UP", "DJ", "PT", "B", "SIM"]
+ignore = ["PT019", "SIM102", "SIM108", "SIM117"]
 fixable = ["ALL"]
 unfixable = []
 dummy-variable-rgx = "^(_+|(_+[a-zA-Z0-9_]*[a-zA-Z0-9]+?))$"
