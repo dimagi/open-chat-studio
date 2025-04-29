@@ -209,7 +209,7 @@ class PipelineGraph(pydantic.BaseModel):
         for node in reachable_nodes:
             for edge in self.edges_by_source[node.id]:
                 if not edge.is_conditional():
-                    # conditional edges are handled by router note outputs
+                    # conditional edges are handled by router node outputs
                     state_graph.add_edge(edge.source, edge.target)
 
     def _validate_start_end_nodes(self):
