@@ -55,7 +55,7 @@ class CustomAction(BaseTeamModel):
         try:
             self.operations = get_operations_from_spec_dict(self.api_schema)
         except Exception as e:
-            raise ValidationError(f"Invalid OpenAPI schema: {e}")
+            raise ValidationError(f"Invalid OpenAPI schema: {e}") from e
         super().save(*args, **kwargs)
 
     def __str__(self):

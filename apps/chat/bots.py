@@ -7,7 +7,7 @@ from langchain_core.runnables import chain
 from pydantic import ValidationError
 
 from apps.annotations.models import TagCategories
-from apps.chat.conversation import BasicConversation, Conversation
+from apps.chat.conversation import BasicConversation
 from apps.chat.exceptions import ChatException
 from apps.chat.models import ChatMessage, ChatMessageType
 from apps.events.models import StaticTriggerType
@@ -27,7 +27,7 @@ def create_conversation(
     prompt_str: str,
     source_material: str,
     llm: BaseChatModel,
-) -> Conversation:
+) -> BasicConversation:
     try:
         return BasicConversation(
             prompt_str=prompt_str,

@@ -511,7 +511,7 @@ class AssistantChat(RunnableSerializable[dict, ChainOutput]):
     def _get_response_with_retries(self, config, input_dict, thread_id) -> tuple[str, str]:
         assistant_runnable = self.adapter.get_openai_assistant()
 
-        for i in range(3):
+        for _i in range(3):
             error = None
             try:
                 return self._get_response(assistant_runnable, input_dict, config)
@@ -521,7 +521,7 @@ class AssistantChat(RunnableSerializable[dict, ChainOutput]):
             except ValueError as e:
                 error = e
                 if re.search(r"cancelling|cancelled", str(e)):
-                    raise GenerationCancelled(ChainOutput(output="", prompt_tokens=0, completion_tokens=0))
+                    raise GenerationCancelled(ChainOutput(output="", prompt_tokens=0, completion_tokens=0)) from None
         raise GenerationError("Failed to get response after 3 retries") from error
 
     def _handle_api_error(self, thread_id: str, assistant_runnable: OpenAIAssistantRunnable, exc):

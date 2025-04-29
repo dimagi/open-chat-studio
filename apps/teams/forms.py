@@ -66,7 +66,7 @@ class TeamSignupForm(SignupForm):
                         "That invitation could not be found. "
                         "Please double check your invitation link or sign in to continue."
                     )
-                )
+                ) from None
 
             if invite.is_accepted:
                 raise forms.ValidationError(

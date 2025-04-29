@@ -13,7 +13,7 @@ from django.views.decorators.csrf import csrf_exempt
 from django.views.decorators.http import require_POST
 from drf_spectacular.types import OpenApiTypes
 from drf_spectacular.utils import OpenApiExample, OpenApiParameter, extend_schema, extend_schema_view, inline_serializer
-from rest_framework import filters, mixins, status
+from rest_framework import filters, mixins, serializers, status
 from rest_framework.decorators import action, api_view, renderer_classes
 from rest_framework.exceptions import NotFound
 from rest_framework.renderers import BaseRenderer
@@ -245,6 +245,22 @@ def _create_update_schedules(request, experiment, participant, schedule_data):
         ScheduledMessage.objects.bulk_create(new)
 
 
+update_state_serializer = inline_serializer(
+    name="update_state_serializer",
+    fields={
+        "state": serializers.JSONField(),
+    },
+)
+
+update_state_response_serializer = inline_serializer(
+    name="update_state_response",
+    fields={
+        "success": serializers.BooleanField(),
+        "state": serializers.JSONField(),
+    },
+)
+
+
 @extend_schema_view(
     list=extend_schema(
         operation_id="session_list",
@@ -300,6 +316,21 @@ def _create_update_schedules(request, experiment, participant, schedule_data):
         request=inline_serializer("end_session_serializer", {}),
         responses=inline_serializer("end_session_serializer", {}),
     ),
+    update_state=extend_schema(
+        operation_id="session_update_state",
+        summary="Update Experiment Session State",
+        tags=["Experiment Sessions"],
+        parameters=[
+            OpenApiParameter(
+                name="id",
+                type=OpenApiTypes.STR,
+                location=OpenApiParameter.PATH,
+                description="ID of the session",
+            ),
+        ],
+        request=update_state_serializer,
+        responses={200: update_state_response_serializer},
+    ),
 )
 class ExperimentSessionViewSet(mixins.ListModelMixin, mixins.RetrieveModelMixin, GenericViewSet):
     permission_classes = [DjangoModelPermissionsWithView]
@@ -311,7 +342,7 @@ class ExperimentSessionViewSet(mixins.ListModelMixin, mixins.RetrieveModelMixin,
     lookup_url_kwarg = "id"
 
     def get_serializer(self, *args, **kwargs):
-        action = getattr(self, "action")
+        action = self.action
         if action == "retrieve":
             kwargs["include_messages"] = True
 
@@ -336,13 +367,29 @@ class ExperimentSessionViewSet(mixins.ListModelMixin, mixins.RetrieveModelMixin,
         return Response(output, status=status.HTTP_201_CREATED, headers=headers)
 
     @action(detail=True, methods=["post"])
-    def end_experiment_session(self, request, id=None):
+    def end_experiment_session(self, request, id):
         try:
             session = ExperimentSession.objects.get(external_id=id)
         except ExperimentSession.DoesNotExist:
             return Response({"error": "Session not found:{id}"}, status=status.HTTP_404_NOT_FOUND)
         session.end()
         return Response(status=status.HTTP_200_OK)
+
+    @action(detail=True, methods=["patch"])
+    def update_state(self, request, id):
+        state = request.data.get("state")
+        if not state:
+            return Response({"error": "Missing 'state' in request"}, status=status.HTTP_400_BAD_REQUEST)
+
+        try:
+            session = ExperimentSession.objects.get(external_id=id)
+        except ExperimentSession.DoesNotExist:
+            return Response({"error": f"Session not found: {id}"}, status=status.HTTP_404_NOT_FOUND)
+
+        session.state = state
+        session.save()
+
+        return Response({"success": True, "state": session.state}, status=status.HTTP_200_OK)
 
 
 class BinaryRenderer(BaseRenderer):
@@ -362,7 +409,7 @@ def file_content_view(request, pk: int):
     try:
         return FileResponse(file.file.open(), as_attachment=True, filename=file.file.name)
     except FileNotFoundError:
-        raise Http404()
+        raise Http404() from None
 
 
 @csrf_exempt
@@ -383,7 +430,7 @@ def generate_key(request: Request):
             participant__identifier=connect_id, system_metadata__commcare_connect_channel_id=commcare_connect_channel_id
         )
     except ParticipantData.DoesNotExist:
-        raise Http404()
+        raise Http404() from None
 
     if not participant_data.encryption_key:
         participant_data.generate_encryption_key()

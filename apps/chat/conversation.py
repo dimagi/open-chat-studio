@@ -1,5 +1,4 @@
 import logging
-from abc import ABC, abstractmethod
 
 from langchain.chains.conversation.base import ConversationChain
 from langchain.chains.llm import LLMChain
@@ -41,19 +40,7 @@ SUMMARY_COMPRESSION_PROMPT = PromptTemplate.from_template(_SUMMARY_COMPRESSION_T
 log = logging.getLogger("ocs.bots")
 
 
-class Conversation(ABC):
-    @abstractmethod
-    def predict(self, input: str) -> tuple[str, int, int]:
-        raise NotImplementedError
-
-    def load_memory_from_chat(self, chat: Chat, max_token_limit: int):
-        pass
-
-    def load_memory_from_messages(self, messages):
-        pass
-
-
-class BasicConversation(Conversation):
+class BasicConversation:
     """
     A wrapper class that provides a single way/API to interact with the LLMs, regardless of it being a normal
     conversation or agent implementation

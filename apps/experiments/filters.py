@@ -3,7 +3,7 @@ from datetime import datetime
 from enum import StrEnum
 
 from django.contrib.contenttypes.models import ContentType
-from django.db.models import Exists, OuterRef, Q
+from django.db.models import Exists, OuterRef, Q, Subquery
 
 from apps.annotations.models import CustomTaggedItem
 from apps.channels.models import ChannelPlatform
@@ -40,6 +40,7 @@ FIELD_TYPE_FILTERS = {
 
 
 def apply_dynamic_filters(query_set, request, parsed_params=None):
+    query_set = _prepare_queryset(query_set)
     param_source = parsed_params if parsed_params is not None else request.GET
     filter_conditions = Q()
     filter_applied = False
@@ -67,13 +68,38 @@ def apply_dynamic_filters(query_set, request, parsed_params=None):
     return query_set
 
 
+def _prepare_queryset(queryset):
+    """Prepare the queryset by annotating with first and last message timestamps."""
+    first_message_subquery = (
+        ChatMessage.objects.filter(
+            chat__experiment_session=OuterRef("pk"),
+        )
+        .order_by("created_at")
+        .values("created_at")[:1]
+    )
+
+    last_message_subquery = (
+        ChatMessage.objects.filter(
+            chat__experiment_session=OuterRef("pk"),
+        )
+        .order_by("-created_at")
+        .values("created_at")[:1]
+    )
+
+    queryset = queryset.annotate(first_message_created_at=Subquery(first_message_subquery))
+    queryset = queryset.annotate(last_message_created_at=Subquery(last_message_subquery))
+    return queryset
+
+
 def build_filter_condition(column, operator, value):
     if not value:
         return None
     if column == "participant":
         return build_participant_filter(operator, value)
     elif column == "last_message":
-        return build_timestamp_filter(operator, value)
+        return build_timestamp_filter(operator, value, "last_message_created_at")
+    elif column == "first_message":
+        return build_timestamp_filter(operator, value, "first_message_created_at")
     elif column == "tags":
         return build_tags_filter(operator, value)
     elif column == "versions":
@@ -98,16 +124,16 @@ def build_participant_filter(operator, value):
     return None
 
 
-def build_timestamp_filter(operator, value):
+def build_timestamp_filter(operator, value, field=None):
     """Build filter condition for timestamp"""
     try:
         date_value = datetime.strptime(value, "%Y-%m-%d").date()
         if operator == Operators.ON:
-            return Q(last_message_created_at__date=date_value)
+            return Q(**{f"{field}__date": date_value})
         elif operator == Operators.BEFORE:
-            return Q(last_message_created_at__date__lt=date_value)
+            return Q(**{f"{field}__date__lt": date_value})
         elif operator == Operators.AFTER:
-            return Q(last_message_created_at__date__gt=date_value)
+            return Q(**{f"{field}__date__gt": date_value})
     except (ValueError, TypeError):
         pass
     return None
@@ -126,7 +152,7 @@ def build_tags_filter(operator, value):
             for tag in selected_tags:
                 conditions &= Exists(
                     CustomTaggedItem.objects.filter(
-                        object_id=OuterRef("chat__id"),
+                        object_id=OuterRef("chat_id"),
                         content_type_id=content_type,
                         tag__name=tag,
                     )

@@ -41,11 +41,11 @@ def clean_custom_action_operations(form):
         try:
             action_id, operation_id = op.split(":", 1)
         except ValueError:
-            raise ValidationError("Invalid format for custom action operation")
+            raise ValidationError("Invalid format for custom action operation") from None
         try:
             action_id = int(action_id)
         except ValueError:
-            raise ValidationError("Invalid custom action operation")
+            raise ValidationError("Invalid custom action operation") from None
         parsed_operations.append({"custom_action_id": action_id, "operation_id": operation_id})
     return parsed_operations
 
