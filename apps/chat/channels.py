@@ -480,9 +480,9 @@ class ChannelBase(ABC):
 
         if self.voice_replies_supported and self.experiment.synthetic_voice:
             voice_config = self.experiment.voice_response_behaviour
-            if voice_config == VoiceResponseBehaviours.ALWAYS:
-                reply_text = False
-            elif voice_config == VoiceResponseBehaviours.RECIPROCAL and user_sent_voice:
+            if voice_config == VoiceResponseBehaviours.ALWAYS or (
+                voice_config == VoiceResponseBehaviours.RECIPROCAL and user_sent_voice
+            ):
                 reply_text = False
 
         if self.supports_multimedia:
