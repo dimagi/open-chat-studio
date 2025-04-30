@@ -24,7 +24,7 @@ class FileStatus(models.TextChoices):
 class CollectionFile(models.Model):
     file = models.ForeignKey("files.File", on_delete=models.CASCADE)
     collection = models.ForeignKey("documents.Collection", on_delete=models.CASCADE)
-    status = models.CharField(max_length=64, choices=FileStatus.choices, default=FileStatus.IN_PROGRESS)
+    status = models.CharField(max_length=64, choices=FileStatus.choices, blank=True)
 
     def __str__(self) -> str:
         return f"{self.file.name} in {self.collection.name}"

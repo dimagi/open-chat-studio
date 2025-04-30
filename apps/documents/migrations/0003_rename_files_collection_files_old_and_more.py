@@ -53,7 +53,7 @@ class Migration(migrations.Migration):
             name='CollectionFile',
             fields=[
                 ('id', models.BigAutoField(auto_created=True, primary_key=True, serialize=False, verbose_name='ID')),
-                ('status', models.CharField(choices=[('in_progress', 'In Progress'), ('completed', 'Completed'), ('failed', 'Failed')], default='in_progress', max_length=64)),
+                ('status', models.CharField(choices=[('in_progress', 'In Progress'), ('completed', 'Completed'), ('failed', 'Failed')], blank=True, max_length=64)),
                 ('collection', models.ForeignKey(on_delete=django.db.models.deletion.CASCADE, to='documents.collection')),
                 ('file', models.ForeignKey(on_delete=django.db.models.deletion.CASCADE, to='files.file')),
             ],
