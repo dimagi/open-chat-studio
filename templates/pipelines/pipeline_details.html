@@ -17,18 +17,20 @@
         </div>
         <div class="justify-self-end">
           <div class="join">
-            <div class="tooltip" data-tip="Edit">
+            <div class="tooltip" data-tip="{{ edit_button.tooltip_text }}">
               <a class="btn btn-primary join-item btn-sm"
                  href="{% url 'pipelines:edit' team.slug pipeline.id %}">
-                <i class="fa-solid fa-pencil"></i>
+                <i class="fa-solid {{ edit_button.icon }}"></i>
               </a>
             </div>
-            <div class="tooltip" data-tip="Delete">
-              <a class="btn btn-primary join-item btn-sm"
-                 href="{% url 'pipelines:delete' team.slug pipeline.id %}">
-                <i class="fa-solid fa-trash"></i>
-              </a>
-            </div>
+            {% if pipeline.is_working_version %}
+              <div class="tooltip" data-tip="Delete">
+                <a class="btn btn-primary join-item btn-sm"
+                   href="{% url 'pipelines:delete' team.slug pipeline.id %}">
+                  <i class="fa-solid fa-trash"></i>
+                </a>
+              </div>
+            {% endif %}
           </div>
         </div>
       </div>

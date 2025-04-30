@@ -95,6 +95,7 @@ class EditPipeline(LoginAndTeamRequiredMixin, TemplateView, PermissionRequiredMi
             "parameter_values": _pipeline_node_parameter_values(self.request.team, llm_providers, llm_provider_models),
             "default_values": _pipeline_node_default_values(llm_providers, llm_provider_models),
             "flags_enabled": [flag.name for flag in Flag.objects.all() if flag.is_active_for_team(self.request.team)],
+            "read_only": pipeline.is_a_version,
         }
 
 
@@ -280,6 +281,10 @@ def pipeline_details(request, team_slug: str, pk: int):
         "pipelines/pipeline_details.html",
         {
             "pipeline": pipeline,
+            "edit_button": {
+                "tooltip_text": "View" if pipeline.is_a_version else "Edit",
+                "icon": "fa-eye" if pipeline.is_a_version else "fa-pencil",
+            },
         },
     )
 
