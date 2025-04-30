@@ -180,14 +180,18 @@ export default function Pipeline() {
         panOnScrollMode={PanOnScrollMode.Free}
         fitView={true}
       >
-        <ComponentList
-          isOpen={selectedOverlay == "componentList"}
-          setIsOpen={(open) => setSelectedOverlay(open ? "componentList" : null)}
-        />
-        <TestMessageBox
-           isOpen={selectedOverlay == "textBox"}
-          setIsOpen={(open) => setSelectedOverlay(open ? "textBox" : null)}
-        />
+        {!readOnly && (
+          <>
+            <ComponentList
+              isOpen={selectedOverlay == "componentList"}
+              setIsOpen={(open) => setSelectedOverlay(open ? "componentList" : null)}
+            />
+            <TestMessageBox
+              isOpen={selectedOverlay == "textBox"}
+              setIsOpen={(open) => setSelectedOverlay(open ? "textBox" : null)}
+            />
+          </>
+        )}
         {editingNode && <EditPanel key={editingNode.id} nodeId={editingNode.id} />}
         <Controls showZoom showFitView showInteractive position="bottom-left"/>
         <Background
