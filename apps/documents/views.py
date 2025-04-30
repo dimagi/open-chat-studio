@@ -29,13 +29,16 @@ class CollectionsHome(LoginAndTeamRequiredMixin, TemplateView):
             "files_list_url": reverse("documents:files_list", kwargs={"team_slug": team_slug}),
             "upload_files_url": reverse("documents:upload_files", kwargs={"team_slug": team_slug}),
             "collections_list_url": reverse("documents:collections_list", kwargs={"team_slug": team_slug}),
+            "index_list_url": reverse("documents:index_list", kwargs={"team_slug": team_slug}),
             "new_collection_url": reverse("documents:new_collection", kwargs={"team_slug": team_slug}),
+            "new_index_url": reverse("documents:new_index", kwargs={"team_slug": team_slug}),
             "files_count": File.objects.filter(
                 team__slug=team_slug, is_version=False, purpose=FilePurpose.COLLECTION
             ).count(),
             "max_summary_length": settings.MAX_SUMMARY_LENGTH,
             "supported_file_types": settings.MEDIA_SUPPORTED_FILE_TYPES,
-            "collections_count": self.request.team.collection_set.filter(is_version=False).count(),
+            "collections_count": self.request.team.collection_set.filter(is_version=False, is_index=False).count(),
+            "indexes_count": self.request.team.collection_set.filter(is_version=False, is_index=True).count(),
         }
 
         if tab_name == "files":
@@ -86,7 +89,7 @@ class FileDetails(BaseDetailsView):
     def get_context_data(self, *args, **kwargs):
         context = super().get_context_data(*args, **kwargs)
         file = self.get_object()
-        collections = file.collections.filter(is_version=False).all()
+        collections = file.collections.filter(is_version=False, is_index=False).all()
         context["current_collection_ids"] = [col.id for col in collections]
         context["current_collection_names"] = [col.name for col in collections]
         context["max_summary_length"] = settings.MAX_SUMMARY_LENGTH
@@ -97,7 +100,7 @@ class FileDetails(BaseDetailsView):
         context["archive_url"] = reverse(
             "documents:archive_file", kwargs={"team_slug": self.kwargs["team_slug"], "pk": file.id}
         )
-        context["available_collections"] = self.request.team.collection_set.filter(is_version=False)
+        context["available_collections"] = self.request.team.collection_set.filter(is_version=False, is_index=False)
         return context
 
 
@@ -190,7 +193,7 @@ class CollectionListView(BaseObjectListView):
     permission_required = "documents.view_collection"
 
     def get_queryset(self):
-        return super().get_queryset().filter(is_version=False)
+        return super().get_queryset().filter(is_version=False, is_index=False)
 
 
 class CollectionDetails(BaseDetailsView):
@@ -199,7 +202,7 @@ class CollectionDetails(BaseDetailsView):
     permission_required = "documents.view_collection"
 
     def get_queryset(self):
-        return super().get_queryset().filter(team__slug=self.kwargs["team_slug"], is_version=False)
+        return super().get_queryset().filter(team__slug=self.kwargs["team_slug"], is_version=False, is_index=False)
 
     def get_context_data(self, *args, **kwargs):
         context = super().get_context_data(*args, **kwargs)
@@ -220,7 +223,7 @@ class CollectionDetails(BaseDetailsView):
 def new_collection(request, team_slug: str):
     """Create a new collection"""
     try:
-        Collection.objects.create(team=request.team, name=request.POST.get("name"))
+        Collection.objects.create(team=request.team, name=request.POST.get("name"), is_index=False)
     except IntegrityError:
         messages.error(request, "A collection with that name already exists.")
     return redirect(reverse("documents:collections", kwargs={"team_slug": team_slug, "tab_name": "collections"}))
@@ -229,7 +232,7 @@ def new_collection(request, team_slug: str):
 @login_and_team_required
 @permission_required("documents.delete_collection")
 def archive_collection(request, team_slug: str, pk: int):
-    collection = get_object_or_404(Collection, team__slug=team_slug, id=pk)
+    collection = get_object_or_404(Collection, team__slug=team_slug, id=pk, is_index=False)
     if nodes := collection.get_node_references():
         response = render_to_string(
             "assistants/partials/referenced_objects.html",
@@ -251,7 +254,83 @@ def archive_collection(request, team_slug: str, pk: int):
 @login_and_team_required
 @permission_required("documents.change_collection")
 def edit_collection(request, team_slug: str, pk: int):
-    collection = get_object_or_404(Collection, team__slug=team_slug, id=pk)
+    collection = get_object_or_404(Collection, team__slug=team_slug, id=pk, is_index=False)
     collection.name = request.POST["name"]
     collection.save(update_fields=["name"])
     return redirect(reverse("documents:collections", kwargs={"team_slug": team_slug, "tab_name": "collections"}))
+
+
+class IndexListView(BaseObjectListView):
+    template_name = "documents/shared/list.html"
+    model = Collection
+    paginate_by = 10
+    details_url_name = "documents:index_details"
+    tab_name = "document_index"
+    permission_required = "documents.view_collection"
+
+    def get_queryset(self):
+        return super().get_queryset().filter(is_version=False, is_index=True)
+
+
+class IndexDetails(BaseDetailsView):
+    template_name = "documents/index_details.html"
+    model = Collection
+    permission_required = "documents.view_collection"
+
+    def get_queryset(self):
+        return super().get_queryset().filter(team__slug=self.kwargs["team_slug"], is_version=False, is_index=True)
+
+    def get_context_data(self, *args, **kwargs):
+        context = super().get_context_data(*args, **kwargs)
+        index = self.get_object()
+        context["edit_url"] = reverse(
+            "documents:edit_index", kwargs={"team_slug": self.kwargs["team_slug"], "pk": index.id}
+        )
+        context["archive_url"] = reverse(
+            "documents:archive_index", kwargs={"team_slug": self.kwargs["team_slug"], "pk": index.id}
+        )
+        return context
+
+
+@require_POST
+@login_and_team_required
+@permission_required("documents.add_collection")
+@transaction.atomic()
+def new_index(request, team_slug: str):
+    """Create a new document index"""
+    try:
+        Collection.objects.create(team=request.team, name=request.POST.get("name"), is_index=True)
+    except IntegrityError:
+        messages.error(request, "A document index with that name already exists.")
+    return redirect(reverse("documents:collections", kwargs={"team_slug": team_slug, "tab_name": "document_index"}))
+
+
+@login_and_team_required
+@permission_required("documents.delete_collection")
+def archive_index(request, team_slug: str, pk: int):
+    index = get_object_or_404(Collection, team__slug=team_slug, id=pk, is_index=True)
+    if nodes := index.get_node_references():
+        response = render_to_string(
+            "assistants/partials/referenced_objects.html",
+            context={
+                "object_name": "document index",
+                "pipeline_nodes": [
+                    Chip(label=node.pipeline.name, url=node.pipeline.get_absolute_url()) for node in nodes.all()
+                ],
+            },
+        )
+        return HttpResponse(response, headers={"HX-Reswap": "none"}, status=400)
+    else:
+        index.archive()
+        messages.success(request, "Document index archived")
+        return HttpResponse()
+
+
+@require_POST
+@login_and_team_required
+@permission_required("documents.change_collection")
+def edit_index(request, team_slug: str, pk: int):
+    index = get_object_or_404(Collection, team__slug=team_slug, id=pk, is_index=True)
+    index.name = request.POST["name"]
+    index.save(update_fields=["name"])
+    return redirect(reverse("documents:collections", kwargs={"team_slug": team_slug, "tab_name": "document_index"}))
