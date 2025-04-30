@@ -47,7 +47,6 @@
         <h2 class="text-lg font-semibold mb-4">Analysis Progress</h2>
         <div class="progress-wrapper">
           <div id="progress-bar" class="progress-bar h-4 bg-blue-200 dark:bg-blue-700 rounded-full overflow-hidden">
-            {#                    <div id="progress-bar-indicator" class="h-full bg-blue-500 dark:bg-blue-300 transition-all duration-300" style="width: 0%"></div>#}
           </div>
         </div>
         <div id="progress-bar-message" class="mt-2 text-sm text-center">Waiting for progress to start...</div>
@@ -103,7 +102,13 @@
     </div>
 
     <div class="p-6 mb-6">
-      <h2 class="text-lg font-semibold mb-4">Sessions ({{ object.sessions.count }})</h2>
+      <div class="flex justify-between" id="chat-exports">
+        <h2 class="text-lg font-semibold mb-4">Sessions ({{ object.sessions.count }})</h2>
+        <a class="btn btn-sm btn-primary"
+           href="{% url 'analysis:export_sessions' team.slug object.id %}">
+          Export Sessions
+        </a>
+      </div>
       {% render_table session_table "table/tailwind_js_pagination.html" %}
     </div>
   </div>

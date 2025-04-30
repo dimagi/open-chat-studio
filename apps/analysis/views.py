@@ -5,6 +5,7 @@ from django.urls import reverse
 from django.views.generic import CreateView, DeleteView, DetailView
 from django_tables2 import SingleTableView
 
+from apps.experiments.export import filtered_export_to_csv
 from apps.experiments.models import Experiment
 from apps.teams.mixins import LoginAndTeamRequiredMixin
 
@@ -96,4 +97,15 @@ def download_analysis_results(request, team_slug, pk):
 
     response = HttpResponse(analysis.result_file.read(), content_type="text/csv")
     response["Content-Disposition"] = f'attachment; filename="{analysis.name}_results.csv"'
+    return response
+
+
+def export_sessions(request, team_slug, pk):
+    analysis = get_object_or_404(TranscriptAnalysis, id=pk, team__slug=team_slug)
+    sessions = analysis.sessions.all()
+
+    csv_content = filtered_export_to_csv(analysis.experiment, sessions)
+
+    response = HttpResponse(csv_content.getvalue(), content_type="text/csv")
+    response["Content-Disposition"] = f'attachment; filename="{analysis.name}_sessions_export.csv"'
     return response
