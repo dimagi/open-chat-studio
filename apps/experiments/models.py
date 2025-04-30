@@ -138,9 +138,7 @@ class VersionFieldDisplayFormatters:
             return ""
         name = str(pipeline)
         template = get_template("generic/chip.html")
-        url = (
-            pipeline.get_absolute_url() if pipeline.is_working_version else pipeline.working_version.get_absolute_url()
-        )
+        url = pipeline.get_absolute_url()
         return template.render({"chip": Chip(label=name, url=url)})
 
     @staticmethod
