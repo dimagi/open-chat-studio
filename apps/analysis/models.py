@@ -31,6 +31,17 @@ class TranscriptAnalysis(BaseTeamModel):
     error_message = models.TextField(blank=True)
     job_id = models.CharField(max_length=255, blank=True)
     public_id = models.UUIDField(default=uuid.uuid4, unique=True, editable=False)
+    llm_provider = models.ForeignKey(
+        "service_providers.LlmProvider", on_delete=models.SET_NULL, null=True, blank=True, verbose_name="LLM Provider"
+    )
+    llm_provider_model = models.ForeignKey(
+        "service_providers.LlmProviderModel",
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        help_text="The LLM model to use",
+        verbose_name="LLM Model",
+    )
 
     def __str__(self):
         return self.name

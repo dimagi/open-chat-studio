@@ -4,6 +4,7 @@ import io
 from django import forms
 
 from apps.experiments.models import ExperimentSession
+from apps.service_providers.models import LlmProvider, LlmProviderModel
 
 from .models import AnalysisQuery, TranscriptAnalysis
 
@@ -37,6 +38,24 @@ class TranscriptAnalysisForm(forms.ModelForm):
                 label="Select Sessions to Analyze",
             )
 
+            # Set up LLM provider model field
+            llm_providers = LlmProvider.objects.filter(team=self.team).all()
+            llm_provider_models_by_type = {}
+            for model in LlmProviderModel.objects.for_team(self.team):
+                llm_provider_models_by_type.setdefault(model.type, []).append(model)
+            model_choices = []
+            for provider in llm_providers:
+                for model in llm_provider_models_by_type.get(provider.type, []):
+                    print((f"{provider.id}:{model.id}", f"{provider.name} - {model!s}"))
+                    model_choices.append((f"{provider.id}:{model.id}", f"{provider.name} - {model!s}"))
+
+            self.fields["provider_model"] = forms.ChoiceField(
+                choices=model_choices,
+                required=True,
+                label="Select LLM Provider Model",
+                help_text="Choose the LLM model to use for analyzing transcripts.",
+            )
+
     def clean_query_file(self):
         query_file = self.cleaned_data.get("query_file")
         if not query_file:
@@ -64,8 +83,29 @@ class TranscriptAnalysisForm(forms.ModelForm):
 
         return query_file
 
+    def clean_llm_provider_model(self):
+        provider_model = self.cleaned_data.get("provider_model")
+        if not provider_model:
+            raise forms.ValidationError("Please select a valid LLM provider model.")
+
+        # Validate the selected model
+        try:
+            provider_id, model_id = map(int, provider_model.split(":"))
+            if not LlmProviderModel.objects.filter(team=self.team, id=model_id).exists():
+                raise forms.ValidationError("Invalid LLM provider model selected.")
+            if not LlmProvider.objects.filter(team=self.team, id=provider_id).exists():
+                raise forms.ValidationError("Invalid LLM provider selected.")
+        except ValueError:
+            raise forms.ValidationError("Invalid selection for LLM provider model.") from None
+
+        return provider_model
+
     def save(self, commit=True):
         instance = super().save(commit=False)
+        provider_id, model_id = map(int, self.cleaned_data["provider_model"].split(":"))
+        instance.llm_provider_id = provider_id
+        instance.llm_provider_model_id = model_id
+
         if commit:
             instance.save()
 

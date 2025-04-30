@@ -34,13 +34,12 @@ def process_transcript_analysis(analysis_id):
         analysis.save(update_fields=["status"])
 
         with current_team(analysis.team):
-            # Get the LLM service
-            llm_service = analysis.experiment.get_llm_service()
-            if not llm_service:
-                raise ValueError("No LLM service available for this experiment")
+            # Get the appropriate LLM provider based on the model's type
+            # Use the first available provider of the right type
+            llm_service = analysis.llm_provider.get_llm_service()
 
-            # Get model
-            model_name = analysis.experiment.get_llm_provider_model_name()
+            # Get model using the selected provider model
+            model_name = analysis.llm_provider_model.name
             llm = llm_service.get_chat_model(model_name, temperature=0.1)  # Low temperature for analysis
 
             # Prepare results container

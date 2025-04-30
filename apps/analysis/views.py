@@ -8,6 +8,7 @@ from django_tables2 import SingleTableView
 from apps.experiments.models import Experiment
 from apps.teams.mixins import LoginAndTeamRequiredMixin
 
+from ..experiments.tables import ExperimentSessionsTable
 from .forms import TranscriptAnalysisForm
 from .models import TranscriptAnalysis
 from .tables import TranscriptAnalysisTable
@@ -65,6 +66,11 @@ class TranscriptAnalysisDetailView(LoginAndTeamRequiredMixin, DetailView):
 
     def get_queryset(self):
         return TranscriptAnalysis.objects.filter(team=self.request.team)
+
+    def get_context_data(self, **kwargs):
+        context = super().get_context_data(**kwargs)
+        context["session_table"] = ExperimentSessionsTable(data=self.object.sessions.all())
+        return context
 
 
 class TranscriptAnalysisDeleteView(LoginAndTeamRequiredMixin, DeleteView):

@@ -1,4 +1,5 @@
 {% extends "web/app/app_base.html" %}
+{% load django_tables2 %}
 
 {% block app %}
     <div class="container mx-auto px-4 py-8">
@@ -6,7 +7,7 @@
             <h1 class="text-2xl font-bold">{{ object.name }}</h1>
             <div>
                 {% if object.is_complete %}
-                    <a href="{% url 'analysis:download' team.slug object.id %}" class="bg-green-600 hover:bg-green-700 text-white px-4 py-2 rounded">
+                    <a href="{% url 'analysis:download' team.slug object.id %}" class="btn btn-success text-white px-4 py-2 rounded">
                         Download Results
                     </a>
                 {% endif %}
@@ -39,22 +40,6 @@
             </div>
         {% endif %}
 
-        <div class="p-6 mb-6">
-            <h2 class="text-lg font-semibold mb-4">Sessions ({{ object.sessions.count }})</h2>
-            <ul class="divide-y divide-gray-200">
-                {% for session in object.sessions.all %}
-                    <li class="py-3">
-                        <div class="flex justify-between">
-                            <span>{{ session.participant }}</span>
-                            <span class="text-gray-500">{{ session.external_id }}</span>
-                        </div>
-                    </li>
-                {% empty %}
-                    <li class="py-3 text-gray-500">No sessions selected</li>
-                {% endfor %}
-            </ul>
-        </div>
-
         <div class="p-6">
             <h2 class="text-lg font-semibold mb-4">Queries ({{ object.queries.count }})</h2>
             <ul class="divide-y divide-gray-200">
@@ -70,6 +55,11 @@
                     <li class="py-3 text-gray-500">No queries found</li>
                 {% endfor %}
             </ul>
+        </div>
+
+        <div class="p-6 mb-6">
+            <h2 class="text-lg font-semibold mb-4">Sessions ({{ object.sessions.count }})</h2>
+            {% render_table session_table "table/tailwind_js_pagination.html" %}
         </div>
     </div>
 {% endblock %}
