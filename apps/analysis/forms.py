@@ -86,7 +86,7 @@ class TranscriptAnalysisForm(forms.ModelForm):
 
         return query_file
 
-    def clean_llm_provider_model(self):
+    def clean_provider_model(self):
         provider_model = self.cleaned_data.get("provider_model")
         if not provider_model:
             raise forms.ValidationError("Please select a valid LLM provider model.")
