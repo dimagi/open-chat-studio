@@ -1,5 +1,4 @@
 {% extends "web/app/app_base.html" %}
-{% load django_tables2 %}
 {% load static %}
 
 {% block page_head %}
@@ -9,6 +8,15 @@
   {% endif %}
 {% endblock %}
 
+{% block breadcrumbs %}
+  <div class="text-sm breadcrumbs" aria-label="breadcrumbs">
+    <ul>
+      <li><a href="{% url 'analysis:list' request.team.slug %}">Session Analysis</a></li>
+      <li class="pg-breadcrumb-active" aria-current="page">Analysis {{object.name}}</li>
+    </ul>
+  </div>
+{% endblock %}
+
 {% block app %}
   <div class="container mx-auto px-4 py-8">
     <div class="flex justify-between items-center mb-6">
@@ -16,22 +24,20 @@
       <div>
         {% if object.is_complete %}
           <a href="{% url 'analysis:download' team.slug object.id %}"
-             class="btn btn-success text-white px-4 py-2 rounded">
+             class="btn btn-success">
+            <i class="fa-solid fa-download"></i>
             Download Results
           </a>
         {% endif %}
-        <a href="{% url 'analysis:list' team.slug %}" class="ml-2 text-gray-600 hover:text-gray-800">
-          Back to List
-        </a>
       </div>
     </div>
 
-    <div class="p-6 mb-6">
+    <div class="mb-6">
       <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
         <div>
           <h2 class="text-lg font-semibold mb-2">Details</h2>
           <p><strong>Status:</strong> {{ object.get_status_display }}</p>
-          <p><strong>Experiment:</strong> {{ object.experiment.name }}</p>
+          <p><strong>Experiment:</strong> {% include "generic/object_chip.html" with object=object.experiment %}</p>
           <p><strong>Created:</strong> {{ object.created_at }}</p>
           <p><strong>Created By:</strong> {{ object.created_by }}</p>
         </div>
@@ -43,7 +49,7 @@
     </div>
 
     {% if object.is_processing and celery_job_id %}
-      <div class="p-6 mb-6 bg-blue-50 dark:bg-blue-900/30 rounded-lg">
+      <div class="mb-6 bg-blue-50 dark:bg-blue-900/30 rounded-lg">
         <h2 class="text-lg font-semibold mb-4">Analysis Progress</h2>
         <div class="progress-wrapper">
           <div id="progress-bar" class="progress-bar h-4 bg-blue-200 dark:bg-blue-700 rounded-full overflow-hidden">
@@ -84,7 +90,7 @@
       </div>
     {% endif %}
 
-    <div class="p-6">
+    <div class="mb-6">
       <h2 class="text-lg font-semibold mb-4">Queries ({{ object.queries.count }})</h2>
       <ul class="divide-y divide-gray-200">
         {% for query in object.queries.all %}
@@ -101,7 +107,7 @@
       </ul>
     </div>
 
-    <div class="p-6 mb-6">
+    <div class="mb-6">
       <div class="flex justify-between" id="chat-exports">
         <h2 class="text-lg font-semibold mb-4">Sessions ({{ object.sessions.count }})</h2>
         <a class="btn btn-sm btn-primary"
@@ -109,7 +115,7 @@
           Export Sessions
         </a>
       </div>
-      {% render_table session_table "table/tailwind_js_pagination.html" %}
+      {% include "table/single_table.html" with table=session_table %}
     </div>
   </div>
 {% endblock %}

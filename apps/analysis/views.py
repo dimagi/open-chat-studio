@@ -24,6 +24,11 @@ class TranscriptAnalysisListView(LoginAndTeamRequiredMixin, SingleTableView):
     def get_queryset(self):
         return TranscriptAnalysis.objects.filter(team=self.request.team)
 
+    def get_context_data(self, **kwargs):
+        context = super().get_context_data(**kwargs)
+        context["active_tab"] = "analysis"
+        return context
+
 
 class TranscriptAnalysisCreateView(LoginAndTeamRequiredMixin, CreateView):
     model = TranscriptAnalysis
@@ -38,6 +43,7 @@ class TranscriptAnalysisCreateView(LoginAndTeamRequiredMixin, CreateView):
 
     def get_context_data(self, **kwargs):
         context = super().get_context_data(**kwargs)
+        context["active_tab"] = "analysis"
         context["experiment"] = get_object_or_404(
             Experiment, id=self.kwargs.get("experiment_id"), team=self.request.team
         )
@@ -69,6 +75,7 @@ class TranscriptAnalysisDetailView(LoginAndTeamRequiredMixin, DetailView):
 
     def get_context_data(self, **kwargs):
         context = super().get_context_data(**kwargs)
+        context["active_tab"] = "analysis"
         context["session_table"] = ExperimentSessionsTable(data=self.object.sessions.all())
 
         if self.object.job_id and not self.object.is_complete and not self.object.is_failed:
@@ -86,6 +93,11 @@ class TranscriptAnalysisDeleteView(LoginAndTeamRequiredMixin, DeleteView):
 
     def get_success_url(self):
         return reverse("analysis:list", args=[self.request.team.slug])
+
+    def get_context_data(self, **kwargs):
+        context = super().get_context_data(**kwargs)
+        context["active_tab"] = "analysis"
+        return context
 
 
 def download_analysis_results(request, team_slug, pk):

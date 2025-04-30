@@ -1,5 +1,4 @@
 {% extends "web/app/app_base.html" %}
-{% load django_tables2 %}
 
 {% block app %}
     <div class="container mx-auto px-4 py-8">
@@ -7,6 +6,6 @@
             <h1 class="text-2xl font-bold">Transcript Analysis</h1>
         </div>
 
-        {% render_table table %}
+        {% include "table/single_table.html" %}
     </div>
 {% endblock %}
