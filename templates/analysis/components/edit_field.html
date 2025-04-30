@@ -2,7 +2,7 @@
 
 <div id="{{ field_name }}-field">
   <form
-    hx-post="{% url "analysis:update_field" team.slug object.id %}"
+    hx-post="{% url 'analysis:update_field' team.slug object.id %}"
     hx-trigger="submit"
     hx-target="#{{ field_name }}-field"
     hx-swap="outerHTML"
