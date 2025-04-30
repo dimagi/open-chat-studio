@@ -1,47 +1,12 @@
 {% load i18n %}
 
-<div
-  id="queries-container"
-  x-data="{
-          editingQuery: null,
-          queries: {{ queries_json }},
-          addQuery() {
-          const newQuery = {
-          id: '',
-          name: '',
-          prompt: '',
-          output_format: '',
-          order: this.queries.length
-          };
-          this.queries.push(newQuery);
-          this.editingQuery = this.queries.length - 1;
-          },
-
-          removeQuery(index) {
-          this.queries.splice(index, 1);
-          // Update order
-          this.queries.forEach((q, i) => q.order = i);
-          this.editingQuery = null;
-          },
-
-          startEditing(index) {
-          this.editingQuery = index;
-          },
-
-          cancelEditing() {
-          if (!this.queries[this.editingQuery].id) {
-          this.removeQuery(this.editingQuery);
-          }
-          this.editingQuery = null;
-          }
-          }"
->
+<div id="queries-container" x-data="{ showNew: false}">
   <div class="flex justify-between items-center mb-4">
     <h2 class="text-lg font-semibold">Queries ({{ object.queries.count }})</h2>
     <button
       type="button"
       class="btn btn-sm btn-outline"
-      @click="addQuery()"
+      @click="showNew = true"
     >
       <i class="fa-solid fa-plus"></i> Add Query
     </button>
@@ -49,88 +14,60 @@
 
   <!-- Query list -->
   <div class="space-y-4">
-    <template x-for="(query, index) in queries" :key="query.id">
-      <div class="border rounded-lg p-4" :class="editingQuery === index ? 'bg-gray-50' : ''">
-        <!-- View mode -->
-        <div x-show="editingQuery !== index">
-          <div class="flex justify-between items-center mb-2">
-            <h3 class="font-medium" x-text="query.name || 'New Query'"></h3>
-            <div class="flex gap-2">
-              <button type="button" class="text-blue-500" @click="startEditing(index)">
-                <i class="fa-solid fa-pen-to-square"></i>
-              </button>
-              <button type="button" class="text-red-500" @click="removeQuery(index)">
-                <i class="fa-solid fa-trash"></i>
-              </button>
-            </div>
-          </div>
-          <p class="text-gray-700" x-text="query.prompt"></p>
-          <p class="text-gray-500 text-sm" x-show="query.output_format">Format: <span x-text="query.output_format"></span></p>
-        </div>
+    {% for query in object.queries.all %}
+      {% include "analysis/components/query.html" %}
+    {% empty %}
+      <p class="py-3 text-gray-500">No queries found</p>
+    {% endfor %}
 
-        <!-- Edit mode -->
-        <form
-          x-show="editingQuery === index"
-          x-cloak=""
-          hx-post="{% url 'analysis:update_queries' team.slug object.id %}"
-          hx-target="#queries-container"
-          hx-swap="outerHTML"
-        >
-          {% csrf_token %}
+    <!-- Edit mode -->
+    <form
+      class="border rounded-lg p-4"
+      x-show="showNew"
+      x-cloak=""
+      hx-post="{% url 'analysis:add_query' team.slug object.id %}"
+      hx-target="#queries-container"
+      hx-swap="outerHTML"
+    >
+      {% csrf_token %}
 
-          <div class="flex justify-between items-center mb-2">
-            <h3 class="font-medium">Edit Query</h3>
-            <button type="button" class="text-red-500" @click="removeQuery(index)">
-              <i class="fa-solid fa-trash"></i>
-            </button>
-          </div>
-
-          <input type="hidden" name="id" :value="query.id">
-          <input type="hidden" name="order" :value="index">
-
-          <div class="mb-3">
-            <label class="block text-sm font-medium mb-1">Name</label>
-            <input
-              type="text"
-              name="name"
-              x-model="query.name"
-              class="input input-bordered w-full"
-              placeholder="Enter query name"
-            >
-          </div>
-
-          <div class="mb-3">
-            <label class="block text-sm font-medium mb-1">Prompt</label>
-            <textarea
-              name="prompt"
-              x-model="query.prompt"
-              class="textarea textarea-bordered w-full"
-              rows="3"
-              placeholder="Enter query prompt"
-            ></textarea>
-          </div>
-
-          <div class="mb-3">
-            <label class="block text-sm font-medium mb-1">Output Format</label>
-            <input
-              type="text"
-              name="output_format"
-              x-model="query.output_format"
-              class="input input-bordered w-full"
-              placeholder="Output format (e.g., JSON, CSV)"
-            >
-          </div>
-
-          <div class="flex gap-2 mt-4 justify-end">
-            <button type="submit" class="btn btn-sm btn-primary">Save</button>
-            <button type="button" class="btn btn-sm" @click="cancelEditing()">Cancel</button>
-          </div>
-        </form>
+      <div class="mb-2">
+        <h3 class="font-medium">Edit Query</h3>
       </div>
-    </template>
 
-    <div x-show="queries.length === 0" class="py-3 text-gray-500">
-      No queries found
-    </div>
+      <div class="mb-3">
+        <label class="block text-sm font-medium mb-1">Name</label>
+        <input
+          type="text"
+          name="name"
+          class="input input-bordered w-full"
+          placeholder="Enter query name"
+        >
+      </div>
+
+      <div class="mb-3">
+        <label class="block text-sm font-medium mb-1">Prompt</label>
+        <textarea
+          name="prompt"
+          class="textarea textarea-bordered w-full"
+          rows="3"
+          placeholder="Enter query prompt"
+        ></textarea>
+      </div>
+
+      <div class="mb-3">
+        <label class="block text-sm font-medium mb-1">Output Format</label>
+        <input
+          type="text"
+          name="output_format"
+          class="input input-bordered w-full"
+          placeholder="Output format (e.g., JSON, CSV)"
+        >
+      </div>
+
+      <div class="flex gap-2 mt-4 justify-end">
+        <button type="submit" class="btn btn-sm btn-primary">Save</button>
+      </div>
+    </form>
   </div>
 </div>

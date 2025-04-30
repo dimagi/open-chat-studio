@@ -15,5 +15,6 @@ urlpatterns = [
     path("<int:pk>/clone/", views.clone, name="clone"),
     # HTMX update endpoints
     path("<int:pk>/update_field/", views.update_field, name="update_field"),
-    path("<int:pk>/update/queries/", views.update_queries, name="update_queries"),
+    path("<int:pk>/add_query/", views.add_query, name="add_query"),
+    path("<int:pk>/query/<int:query_id>/", views.update_query, name="update_query"),
 ]

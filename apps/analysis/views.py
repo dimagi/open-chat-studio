@@ -1,4 +1,3 @@
-import json
 from functools import cached_property
 
 from django.contrib import messages
@@ -87,23 +86,6 @@ class TranscriptAnalysisDetailView(LoginAndTeamRequiredMixin, DetailView):
         if self.object.job_id and not self.object.is_complete and not self.object.is_failed:
             context["celery_job_id"] = self.object.job_id
 
-        # Add URLs for HTMX updates
-        context["update_field_url"] = reverse("analysis:update_field", args=[self.request.team.slug, self.object.id])
-
-        # Convert queries to JSON for Alpine.js
-        queries_data = []
-        for query in self.object.queries.all():
-            queries_data.append(
-                {
-                    "id": query.id,
-                    "name": query.name,
-                    "prompt": query.prompt,
-                    "output_format": query.output_format,
-                    "order": query.order,
-                }
-            )
-        context["queries_json"] = json.dumps(queries_data)
-
         return context
 
 
@@ -190,86 +172,89 @@ def clone(request, team_slug, pk):
 
 
 @login_and_team_required
-@require_POST
 def update_field(request, team_slug, pk):
     analysis = get_object_or_404(TranscriptAnalysis, id=pk, team__slug=team_slug)
 
-    field_name = request.POST.get("field-name", "").strip()
-    if not field_name:
-        return JsonResponse({"error": "Field name is required."}, status=400)
+    if request.method == "POST":
+        field_name = request.POST.get("field_name", "").strip()
+        field_type = request.POST.get("field_type", "").strip()
+        if not field_name:
+            return JsonResponse({"error": "Field name is required."}, status=400)
 
-    value = request.POST.get(field_name, "").strip()
-    if value:
-        setattr(analysis, field_name, value)
-        analysis.save(update_fields=[field_name])
+        value = request.POST.get(field_name, "").strip()
+        if value:
+            setattr(analysis, field_name, value)
+            analysis.save(update_fields=[field_name])
+        return render(
+            request,
+            "analysis/components/editable_field.html",
+            {
+                "value": getattr(analysis, field_name),
+                "field_name": field_name,
+                "field_type": field_type,
+                "object": analysis,
+            },
+        )
+
+    field_name = request.GET.get("field_name", "")
+    field_type = request.GET.get("field_type", "")
 
     return render(
         request,
-        "analysis/components/editable_field.html",
+        "analysis/components/edit_field.html",
         {
             "label": field_name.capitalize(),
-            "value": value,
+            "value": getattr(analysis, field_name),
             "field_name": field_name,
-            "is_textarea": False,
-            "update_url": reverse("analysis:update_field", args=[team_slug, pk]),
-            "target_id": f"{field_name}-field",
+            "field_type": field_type,
+            "object": analysis,
         },
     )
 
 
-@login_and_team_required
 @require_POST
-def update_queries(request, team_slug, pk):
+@login_and_team_required
+def add_query(request, team_slug, pk):
     analysis = get_object_or_404(TranscriptAnalysis, id=pk, team__slug=team_slug)
 
-    query_id = request.POST.get("id", "")
     name = request.POST.get("name", "")
     prompt = request.POST.get("prompt", "")
     output_format = request.POST.get("output_format", "")
-    order = int(request.POST.get("order", 0))
 
-    # For existing queries
-    if query_id and query_id.isdigit():
-        query_id = int(query_id)
-        try:
-            query = AnalysisQuery.objects.get(id=query_id, analysis=analysis)
-            query.name = name
-            query.prompt = prompt
-            query.output_format = output_format
-            query.order = order
-            query.save()
-        except AnalysisQuery.DoesNotExist:
-            pass
-    elif prompt:  # Only create if there's at least a prompt
-        AnalysisQuery.objects.create(
-            analysis=analysis,
-            name=name,
-            prompt=prompt,
-            output_format=output_format,
-            order=order,
-        )
+    AnalysisQuery.objects.create(
+        analysis=analysis,
+        name=name,
+        prompt=prompt,
+        output_format=output_format,
+        order=AnalysisQuery.objects.filter(analysis=analysis).count() + 1,
+    )
 
-    # Prepare data for the template
-    queries_data = []
-    for query in analysis.queries.all():
-        queries_data.append(
-            {
-                "id": query.id,
-                "name": query.name,
-                "prompt": query.prompt,
-                "output_format": query.output_format,
-                "order": query.order,
-            }
-        )
+    return HttpResponse(headers={"HX-Refresh": "true"})
 
-    queries_json = json.dumps(queries_data)
+
+@login_and_team_required
+def update_query(request, team_slug, pk, query_id):
+    query = get_object_or_404(AnalysisQuery, id=query_id, analysis_id=pk, analysis__team__slug=team_slug)
+
+    template = "analysis/components/query_edit.html"
+    if request.method == "DELETE":
+        query.delete()
+        return HttpResponse()
+    elif request.method == "POST":
+        name = request.POST.get("name", "")
+        prompt = request.POST.get("prompt", "")
+        output_format = request.POST.get("output_format", "")
+        order = int(request.POST.get("order", 0))
+
+        query.name = name
+        query.prompt = prompt
+        query.output_format = output_format
+        query.order = order
+        query.save()
+        template = "analysis/components/query.html"
 
     return render(
         request,
-        "analysis/components/editable_queries.html",
-        {
-            "object": analysis,
-            "team": analysis.team,
-            "queries_json": queries_json,
-        },
+        template,
+        {"query": query, "object": query.analysis},
     )

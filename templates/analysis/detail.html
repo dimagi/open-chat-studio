@@ -19,7 +19,7 @@
   <div class="container mx-auto px-4 py-8">
     <div class="flex justify-between items-center mb-6">
       <div id="name-field" class="mt-4">
-        {% include "analysis/components/editable_field.html" with label="Name" value=object.name field_name="name" is_textarea=False update_url=update_field_url target_id="name-field" %}
+        {% include "analysis/components/editable_field.html" with value=object.name field_name="name" field_type="input" %}
       </div>
       <div>
         {% if object.is_complete %}
@@ -50,7 +50,7 @@
         <div>
           <h2 class="text-lg font-semibold mb-2">Description</h2>
           <div id="description-field">
-            {% include "analysis/components/editable_field.html" with label="Description" value=object.description field_name="description" is_textarea=True update_url=update_field_url target_id="description-field" %}
+            {% include "analysis/components/editable_field.html" with value=object.description field_name="description" field_type="textarea" %}
           </div>
         </div>
       </div>
