@@ -17,7 +17,7 @@
                 <a href="{% url 'documents:collections' request.team.slug 'collections' %}" class="btn btn-sm join-item {% if tab_name == 'collections' %}btn-active{% endif %}">
                     Collections ({{ collections_count }})
                 </a>
-                <a href="{% url 'documents:collections' request.team.slug 'document_index' %}" class="btn btn-sm join-item {% if tab_name == 'collections' %}btn-active{% endif %}">
+                <a href="{% url 'documents:collections' request.team.slug 'document_index' %}" class="btn btn-sm join-item {% if tab_name == 'document_index' %}btn-active{% endif %}">
                     Document Indexes ({{ indexes_count }})
                 </a>
             </div>

@@ -10,7 +10,7 @@ from django.urls import reverse
 from django.views.decorators.http import require_POST
 from django.views.generic import DetailView, ListView, TemplateView
 
-from apps.documents.models import Collection
+from apps.documents.models import Collection, CollectionFile
 from apps.files.models import File, FilePurpose
 from apps.generics.chips import Chip
 from apps.teams.decorators import login_and_team_required
@@ -171,17 +171,15 @@ def _update_collection_membership(file: File, collection_ids: list[str]):
     new_collections = set(collections) - existing_collections
     collections_to_remove_files_from = existing_collections - set(collections)
 
-    RepoFileClass = Collection.files.through
-
     # Handle new collections
     repo_files = []
     for id in new_collections:
-        repo_files.append(RepoFileClass(file=file, collection_id=id))
+        repo_files.append(CollectionFile(file=file, collection_id=id))
 
-    RepoFileClass.objects.bulk_create(repo_files)
+    CollectionFile.objects.bulk_create(repo_files)
 
     # Handle outdated collections
-    RepoFileClass.objects.filter(file=file, collection_id__in=collections_to_remove_files_from).delete()
+    CollectionFile.objects.filter(file=file, collection_id__in=collections_to_remove_files_from).delete()
 
 
 class CollectionListView(BaseObjectListView):
@@ -200,19 +198,27 @@ class CollectionDetails(BaseDetailsView):
     template_name = "documents/collection_details.html"
     model = Collection
     permission_required = "documents.view_collection"
+    edit_url_name = "documents:edit_collection"
+    archive_url_name = "documents:archive_collection"
+    is_index = False
 
     def get_queryset(self):
-        return super().get_queryset().filter(team__slug=self.kwargs["team_slug"], is_version=False, is_index=False)
+        return (
+            super().get_queryset().filter(team__slug=self.kwargs["team_slug"], is_version=False, is_index=self.is_index)
+        )
 
     def get_context_data(self, *args, **kwargs):
         context = super().get_context_data(*args, **kwargs)
         collection = self.get_object()
         context["edit_url"] = reverse(
-            "documents:edit_collection", kwargs={"team_slug": self.kwargs["team_slug"], "pk": collection.id}
+            self.edit_url_name, kwargs={"team_slug": self.kwargs["team_slug"], "pk": collection.id}
         )
         context["archive_url"] = reverse(
-            "documents:archive_collection", kwargs={"team_slug": self.kwargs["team_slug"], "pk": collection.id}
+            self.archive_url_name, kwargs={"team_slug": self.kwargs["team_slug"], "pk": collection.id}
         )
+        context["current_file_ids"] = list(collection.files.values_list("id", flat=True))
+        context["current_file_names"] = list(collection.files.values_list("name", flat=True))
+        context["available_files"] = collection.team.file_set.all()
         return context
 
 
@@ -257,6 +263,7 @@ def edit_collection(request, team_slug: str, pk: int):
     collection = get_object_or_404(Collection, team__slug=team_slug, id=pk, is_index=False)
     collection.name = request.POST["name"]
     collection.save(update_fields=["name"])
+    _update_file_membership(collection, file_ids=request.POST.getlist("files"))
     return redirect(reverse("documents:collections", kwargs={"team_slug": team_slug, "tab_name": "collections"}))
 
 
@@ -272,24 +279,13 @@ class IndexListView(BaseObjectListView):
         return super().get_queryset().filter(is_version=False, is_index=True)
 
 
-class IndexDetails(BaseDetailsView):
-    template_name = "documents/index_details.html"
-    model = Collection
-    permission_required = "documents.view_collection"
+class IndexDetails(CollectionDetails):
+    is_index = True
+    edit_url_name = "documents:edit_index"
+    archive_url_name = "documents:archive_index"
 
     def get_queryset(self):
-        return super().get_queryset().filter(team__slug=self.kwargs["team_slug"], is_version=False, is_index=True)
-
-    def get_context_data(self, *args, **kwargs):
-        context = super().get_context_data(*args, **kwargs)
-        index = self.get_object()
-        context["edit_url"] = reverse(
-            "documents:edit_index", kwargs={"team_slug": self.kwargs["team_slug"], "pk": index.id}
-        )
-        context["archive_url"] = reverse(
-            "documents:archive_index", kwargs={"team_slug": self.kwargs["team_slug"], "pk": index.id}
-        )
-        return context
+        return super().get_queryset().filter(is_index=True)
 
 
 @require_POST
@@ -333,4 +329,24 @@ def edit_index(request, team_slug: str, pk: int):
     index = get_object_or_404(Collection, team__slug=team_slug, id=pk, is_index=True)
     index.name = request.POST["name"]
     index.save(update_fields=["name"])
+    _update_file_membership(index, file_ids=request.POST.getlist("files"))
     return redirect(reverse("documents:collections", kwargs={"team_slug": team_slug, "tab_name": "document_index"}))
+
+
+def _update_file_membership(collection: Collection, file_ids: list[str]):
+    """Handles updating the files that belong to a collection"""
+    files = collection.team.file_set.filter(id__in=file_ids, is_version=False).values_list("id", flat=True)
+
+    existing_files = set(collection.files.values_list("id", flat=True))
+    new_files = set(files) - existing_files
+    files_to_remove = existing_files - set(files)
+
+    # Handle new files
+    repo_files = []
+    for id in new_files:
+        repo_files.append(CollectionFile(collection=collection, file_id=id))
+
+    CollectionFile.objects.bulk_create(repo_files)
+
+    # Handle files to remove
+    CollectionFile.objects.filter(collection=collection, file_id__in=files_to_remove).delete()

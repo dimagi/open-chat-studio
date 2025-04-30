@@ -15,11 +15,40 @@
             <dd class="text-sm">{{ object.size }} MB</dd>
         </div>
 
-        <div class="py-3">
+        <div class="py-3" x-show="!editing">
             <dt class="text-sm font-medium">Files ({{ object.files.count }})</dt>
             <dd class="text-sm">
-                {{ object.file_names|join:', ' }}
+                {{ current_file_names|join:', ' }}
+            </dd>
+        </div>
+
+        <div class="py-3 col-span-2" x-data="{file_ids: {{ current_file_ids }}}" x-show="editing">
+            <dt class="text-sm font-medium">Files</dt>
+            <dd class="text-sm">
+                <span x-show="!editing">{{ current_file_names|join:", " }}</span>
+                <div x-cloak x-show="editing">
+                    <select x-model="file_ids" id="file-select" name="files" multiple placeholder="Select files" autocomplete="off">
+                        {% for file in available_files %}
+                            <option
+                                value="{{ file.id }}"
+                                {% if file.id in current_file_ids %}selected{% endif %}
+                            >
+                                {{ file.name }}
+                            </option>
+                        {% endfor %}
+                    </select>
+                </div>
             </dd>
         </div>
     </dl>
+{% endblock %}
+
+{% block extra_js %}
+    <script>
+        new TomSelect("#file-select", {
+            plugins: ["remove_button", "caret_position", "input_autogrow"],
+            maxItems: null,
+            create: false,
+        });
+    </script>
 {% endblock %}
