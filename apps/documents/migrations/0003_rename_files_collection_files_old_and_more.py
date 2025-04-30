@@ -7,14 +7,12 @@ def _port_collection_files_to_new_field(apps, schema_editor):
         CollectionFilesOld = apps.get_model('documents', 'Collection_files_old')
         CollectionFile = apps.get_model('documents', 'CollectionFile')
         
-        updates = []
         for cf in CollectionFilesOld.objects.all().iterator(100):
             CollectionFile.objects.get_or_create(
                 collection_id=cf.collection_id,
                 file_id=cf.file_id,
             )
 
-        CollectionFile.objects.bulk_create(updates)
 
 def _delete_new_collection_files(apps, schema_editor):
     CollectionFile = apps.get_model('documents', 'CollectionFile')

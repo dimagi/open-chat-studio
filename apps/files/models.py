@@ -127,7 +127,7 @@ class File(BaseTeamModel, VersionsMixin):
             external_id=self.external_id,
             content_size=self.content_size,
             content_type=self.content_type,
-            schema=self.schema,
+            metadata=self.metadata,
             team=self.team,
         )
         if self.file and self.file.storage.exists(self.file.name):
