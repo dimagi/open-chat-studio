@@ -58,7 +58,7 @@ def process_transcript_analysis(self, analysis_id):
             for index, session in enumerate(sessions):
                 progress_value = int((index / total_sessions) * 100)
                 progress_recorder.set_progress(
-                    progress_value, 100, description=f"Processing session {index+1}/{total_sessions}"
+                    progress_value, 100, description=f"Processing session {index + 1}/{total_sessions}"
                 )
 
                 # Get the transcript
@@ -79,7 +79,7 @@ def process_transcript_analysis(self, analysis_id):
                     progress_recorder.set_progress(
                         progress_value,
                         100,
-                        description=f"Session {index+1}/{total_sessions}: Query {q_index+1}/{len(queries)}",
+                        description=f"Session {index + 1}/{total_sessions}: Query {q_index + 1}/{len(queries)}",
                     )
 
                     prompt = f"""
