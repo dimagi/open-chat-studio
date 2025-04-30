@@ -1441,6 +1441,10 @@ class SessionStatus(models.TextChoices):
 
 class ExperimentSessionObjectManager(models.Manager):
     def with_last_message_created_at(self):
+        return self.annotate_with_last_message_created_at(self.get_queryset())
+
+    @staticmethod
+    def annotate_with_last_message_created_at(queryset):
         last_message_subquery = (
             ChatMessage.objects.filter(
                 chat__experiment_session=models.OuterRef("pk"),
@@ -1448,7 +1452,7 @@ class ExperimentSessionObjectManager(models.Manager):
             .order_by("-created_at")
             .values("created_at")[:1]
         )
-        return self.get_queryset().annotate(last_message_created_at=models.Subquery(last_message_subquery))
+        return queryset.annotate(last_message_created_at=models.Subquery(last_message_subquery))
 
 
 class ExperimentSession(BaseTeamModel):

@@ -6,10 +6,10 @@ from django.shortcuts import get_object_or_404, redirect, render
 from django.urls import reverse
 from django.views.decorators.http import require_POST
 from django.views.generic import CreateView, DeleteView, DetailView
-from django_tables2 import SingleTableView
+from django_tables2 import RequestConfig, SingleTableView
 
 from apps.experiments.export import filtered_export_to_csv
-from apps.experiments.models import Experiment
+from apps.experiments.models import Experiment, ExperimentSession
 from apps.teams.mixins import LoginAndTeamRequiredMixin
 
 from ..experiments.tables import ExperimentSessionsTable
@@ -24,6 +24,12 @@ class TranscriptAnalysisListView(LoginAndTeamRequiredMixin, SingleTableView):
     model = TranscriptAnalysis
     table_class = TranscriptAnalysisTable
     template_name = "analysis/list.html"
+
+    def get(self, request, *args, **kwargs):
+        if request.headers.get("hx-request") == "true":
+            table = self.get_table(**self.get_table_kwargs())
+            return render(request, "table/single_table.html", {"table": table})
+        return super().get(request, *args, **kwargs)
 
     def get_queryset(self):
         return TranscriptAnalysis.objects.filter(team=self.request.team)
@@ -75,18 +81,29 @@ class TranscriptAnalysisDetailView(LoginAndTeamRequiredMixin, DetailView):
     model = TranscriptAnalysis
     template_name = "analysis/detail.html"
 
+    def get(self, request, *args, **kwargs):
+        if request.headers.get("hx-request") == "true":
+            self.object = self.get_object()
+            return render(request, "table/single_table.html", {"table": self.get_table()})
+        return super().get(request, *args, **kwargs)
+
     def get_queryset(self):
         return TranscriptAnalysis.objects.filter(team=self.request.team)
 
     def get_context_data(self, **kwargs):
         context = super().get_context_data(**kwargs)
         context["active_tab"] = "analysis"
-        context["session_table"] = ExperimentSessionsTable(data=self.object.sessions.all())
+        context["session_table"] = self.get_table()
 
         if self.object.job_id and not self.object.is_complete and not self.object.is_failed:
             context["celery_job_id"] = self.object.job_id
 
         return context
+
+    def get_table(self):
+        queryset = ExperimentSession.objects.annotate_with_last_message_created_at(self.object.sessions.all())
+        table = ExperimentSessionsTable(data=queryset)
+        return RequestConfig(self.request).configure(table)
 
 
 class TranscriptAnalysisDeleteView(LoginAndTeamRequiredMixin, DeleteView):
