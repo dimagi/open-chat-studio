@@ -15,6 +15,7 @@ from apps.chatbots.tables import ChatbotSessionsTable, ChatbotTable
 from apps.experiments.decorators import experiment_session_view, verify_session_access_cookie
 from apps.experiments.models import Experiment, SessionStatus
 from apps.experiments.tables import ExperimentVersionsTable
+from apps.experiments.tasks import async_create_experiment_version
 from apps.experiments.views import CreateExperiment, ExperimentSessionsTableView, ExperimentVersionsTableView
 from apps.experiments.views.experiment import (
     BaseExperimentView,
@@ -219,3 +220,16 @@ def start_chatbot_session_public_embed(request, team_slug: str, experiment_id: u
 @xframe_options_exempt
 def chatbot_chat_embed(request, team_slug: str, experiment_id: uuid.UUID, session_id: str):
     return experiment_chat_embed(request, team_slug, experiment_id, session_id)
+
+
+def copy_chatbot(request, team_slug, *args, **kwargs):
+    experiment = get_object_or_404(Experiment.objects.get_all(), id=kwargs["pk"], team=request.team)
+    # copy chatbot
+    experiment = experiment.create_new_version(
+        version_description=experiment.description, make_default=False, copy_experiment=True
+    )
+    # create default version for copied chatbot
+    async_create_experiment_version(
+        experiment_id=experiment.id, version_description=experiment.version_description, make_default=True
+    )
+    return single_chatbot_home(request, team_slug, experiment.id)

@@ -803,17 +803,20 @@ class Experiment(BaseTeamModel, VersionsMixin, CustomActionOperationMixin):
         return self.get_api_url()
 
     @transaction.atomic()
-    def create_new_version(self, version_description: str | None = None, make_default: bool = False):
+    def create_new_version(
+        self, version_description: str | None = None, make_default: bool = False, copy_experiment: bool = False
+    ):
         """
         Creates a copy of an experiment as a new version of the original experiment.
         """
         version_number = self.version_number
-        self.version_number = version_number + 1
-        self.save(update_fields=["version_number"])
+        if not copy_experiment:
+          self.version_number = version_number + 1
+          self.save(update_fields=["version_number"])
 
         # Fetch a new instance so the previous instance reference isn't simply being updated. I am not 100% sure
         # why simply chaing the pk, id and _state.adding wasn't enough.
-        new_version = super().create_new_version(save=False)
+        new_version = super().create_new_version(save=False, copy_experiment=copy_experiment)
         new_version.version_description = version_description or ""
         new_version.public_id = uuid4()
         new_version.version_number = version_number
@@ -830,14 +833,16 @@ class Experiment(BaseTeamModel, VersionsMixin, CustomActionOperationMixin):
             self.versions.filter(is_default_version=True).update(
                 is_default_version=False, audit_action=AuditAction.AUDIT
             )
-
+        if copy_experiment:
+            new_version.name = new_version.name + "_copy"
+            new_version.version_number = 1
         new_version.save()
 
         self._copy_safety_layers_to_new_version(new_version)
         self._copy_routes_to_new_version(new_version)
         self._copy_trigger_to_new_version(trigger_queryset=self.static_triggers, new_version=new_version)
         self._copy_trigger_to_new_version(trigger_queryset=self.timeout_triggers, new_version=new_version)
-        self._copy_pipeline_to_new_version(new_version)
+        self._copy_pipeline_to_new_version(new_version, copy_experiment)
         self._copy_custom_action_operations_to_new_version(new_experiment=new_version)
         self._copy_assistant_to_new_version(new_version)
 
@@ -872,10 +877,10 @@ class Experiment(BaseTeamModel, VersionsMixin, CustomActionOperationMixin):
         for channel in ExperimentChannel.objects.filter(experiment_id=self.id):
             channel.soft_delete()
 
-    def _copy_pipeline_to_new_version(self, new_version):
+    def _copy_pipeline_to_new_version(self, new_version, copy_experiment: bool = False):
         if not self.pipeline:
             return
-        new_version.pipeline = self.pipeline.create_new_version()
+        new_version.pipeline = self.pipeline.create_new_version(copy_experiment=copy_experiment)
         new_version.save(update_fields=["pipeline"])
 
     def _copy_assistant_to_new_version(self, new_version):

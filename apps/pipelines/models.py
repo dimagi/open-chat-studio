@@ -22,6 +22,7 @@ from apps.experiments.versioning import VersionDetails, VersionField, VersionsMi
 from apps.pipelines.exceptions import PipelineBuildError
 from apps.pipelines.executor import patch_executor
 from apps.pipelines.flow import Flow, FlowNode, FlowNodeData
+from apps.pipelines.helper import duplicate_pipeline_with_new_ids
 from apps.pipelines.logging import PipelineLoggingCallbackHandler
 from apps.pipelines.nodes.base import PipelineState
 from apps.pipelines.nodes.helpers import temporary_session
@@ -379,19 +380,23 @@ class Pipeline(BaseTeamModel, VersionsMixin):
         return chat_message
 
     @transaction.atomic()
-    def create_new_version(self):
+    def create_new_version(self, copy_experiment: bool = False):
         version_number = self.version_number
         self.version_number = version_number + 1
         self.save(update_fields=["version_number"])
-
-        pipeline_version = super().create_new_version(save=False)
+        pipeline_version = super().create_new_version(save=False, copy_experiment=copy_experiment)
+        if copy_experiment:
+            pipeline_version.data = duplicate_pipeline_with_new_ids(self.data)
+            pipeline_version.save()
+            pipeline_version.update_nodes_from_data()
         pipeline_version.version_number = version_number
         pipeline_version.save()
 
-        for node in self.node_set.all():
-            node_version = node.create_new_version()
-            node_version.pipeline = pipeline_version
-            node_version.save(update_fields=["pipeline"])
+        if not copy_experiment:
+            for node in self.node_set.all():
+                node_version = node.create_new_version()
+                node_version.pipeline = pipeline_version
+                node_version.save(update_fields=["pipeline"])
 
         return pipeline_version
 
