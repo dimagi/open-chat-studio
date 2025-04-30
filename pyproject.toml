@@ -5,6 +5,74 @@ requires-python = ">=3.11"
 description = "A web application for building and deploying chatbots."
 readme = "README.md"
 license = "BSD-3-Clause"
+dependencies = [
+    "Django",
+    "Markdown",
+    "anthropic",
+    "azure-cognitiveservices-speech",
+    "boto3",
+    "celery",
+    "celery-progress",
+    "celery[redis]",
+    "django-allauth",
+    "django-allauth-2fa",
+    "django-anymail",
+    "django-cleanup",
+    "django-cryptography-django5",
+    "django-environ",
+    "django-field-audit>=1.2.7",
+    "django-health-check",
+    "django-redis",
+    "django-storages[s3]",
+    "django-tables2",
+    "django-taggit",
+    "django-template-partials",
+    "django-tz-detect",
+    "django-waffle",
+    "django_celery_beat",
+    "djangorestframework",
+    "djangorestframework-api-key",
+    "drf-spectacular",
+    "fbmessenger",
+    "ffmpeg",  # Audio transcription
+    "httpx",
+    "jinja2",
+    "langchain>=0.3,<0.4",
+    "langchain-core>=0.3.23,<0.4",
+    "langchain-anthropic",
+    "langchain-openai>0.3.9",
+    "langchain_google_genai",
+    "langchain-community>=0.3,<0.4",
+    "langfuse>=2.59.7",
+    "langgraph>=0.2.20",
+    "loguru",
+    "nh3",
+    "openai",
+    "openapi_pydantic",
+    "pandas",
+    "psycopg[binary]",
+    "pyTelegramBotAPI==4.12.0",
+    "pydantic",
+    "pydub",  # Audio transcription
+    "pypdf",
+    "RestrictedPython",
+    "sentry-sdk",
+    "slack-bolt",
+    "taskbadger",
+    "tenacity",
+    "tiktoken",
+    "transformers>=4.48.0",  # this is required by the tokenizer that langchain uses
+    "turn-python>=0.2.0",
+    "twilio",
+    "whitenoise[brotli]",
+    "phonenumberslite",
+    "emoji",
+    "python-magic",
+    "requests>=2.32.3",
+    "urllib3>=2.3.0",
+    "pycryptodome",
+    "python-docx",
+]
 
 [project.urls]
 Homepage = "https://sites.dimagi.com/open-chat-studio"
@@ -50,3 +118,25 @@ line-ending = "auto"
 [tool.ruff.lint.flake8-pytest-style]
 mark-parentheses = true
 fixture-parentheses = true
+
+[dependency-groups]
+dev = [
+    "pre-commit",
+    "ruff",
+    "mock",
+    "freezegun",
+    "invoke",
+    "termcolor",
+    "watchfiles",
+    "pytest",
+    "pytest-django",
+    "factory-boy",
+    "pytest-httpx",
+    "pytest-cov",
+    "pytest-xdist",
+]
+
+prod = [
+    "gunicorn",
+    "gevent",
+]
