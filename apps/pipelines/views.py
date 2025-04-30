@@ -86,7 +86,6 @@ class EditPipeline(LoginAndTeamRequiredMixin, TemplateView, PermissionRequiredMi
         data = super().get_context_data(**kwargs)
         llm_providers = LlmProvider.objects.filter(team=self.request.team).values("id", "name", "type").all()
         llm_provider_models = LlmProviderModel.objects.for_team(self.request.team).all()
-        ui_feature_flags = ["document_management"]
         pipeline = Pipeline.objects.get(id=kwargs["pk"], team=self.request.team)
         return {
             **data,
@@ -95,9 +94,7 @@ class EditPipeline(LoginAndTeamRequiredMixin, TemplateView, PermissionRequiredMi
             "node_schemas": _pipeline_node_schemas(),
             "parameter_values": _pipeline_node_parameter_values(self.request.team, llm_providers, llm_provider_models),
             "default_values": _pipeline_node_default_values(llm_providers, llm_provider_models),
-            "flags_enabled": [
-                flag for flag in ui_feature_flags if Flag.get(flag).is_active_for_team(self.request.team)
-            ],
+            "flags_enabled": [flag.name for flag in Flag.objects.all() if flag.is_active_for_team(self.request.team)],
         }
 
 
