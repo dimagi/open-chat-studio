@@ -1,11 +1,14 @@
 import csv
 import io
+from urllib.parse import parse_qs, urlparse
 
 from django import forms
+from django.urls import reverse
+from django.utils.html import format_html
 
-from apps.experiments.models import ExperimentSession
 from apps.service_providers.models import LlmProvider, LlmProviderModel
 
+from ..experiments.export import get_filtered_sessions
 from .models import AnalysisQuery, TranscriptAnalysis
 
 
@@ -20,40 +23,41 @@ class TranscriptAnalysisForm(forms.ModelForm):
         fields = ["name", "description", "query_file"]
 
     def __init__(self, *args, **kwargs):
-        self.experiment_id = kwargs.pop("experiment_id", None)
+        self.request = kwargs.pop("request", None)
+        self.experiment = kwargs.pop("experiment", None)
         self.team = kwargs.pop("team", None)
         super().__init__(*args, **kwargs)
 
-        if self.experiment_id and self.team:
-            # Get available sessions for the given experiment
-            sessions = ExperimentSession.objects.filter(
-                experiment_id=self.experiment_id, team=self.team
-            ).select_related("participant")
+        referer = self.request.headers.get("referer")
+        parsed_url = urlparse(referer)
+        query_params = parse_qs(parsed_url.query)
+        sessions = get_filtered_sessions(self.request, self.experiment, query_params)
+        session_ids = sessions.values_list("id", flat=True)
 
-            # Add multiple choice field for sessions
-            self.fields["sessions"] = forms.ModelMultipleChoiceField(
-                queryset=sessions,
-                widget=forms.CheckboxSelectMultiple,
-                required=True,
-                label="Select Sessions to Analyze",
-            )
+        self.fields["sessions"] = SessionChoiceField(
+            queryset=sessions.select_related("experiment", "team"),
+            widget=forms.CheckboxSelectMultiple,
+            required=True,
+            label="Selected Sessions to Analyze",
+            initial=session_ids,
+        )
 
-            # Set up LLM provider model field
-            llm_providers = LlmProvider.objects.filter(team=self.team).all()
-            llm_provider_models_by_type = {}
-            for model in LlmProviderModel.objects.for_team(self.team):
-                llm_provider_models_by_type.setdefault(model.type, []).append(model)
-            model_choices = []
-            for provider in llm_providers:
-                for model in llm_provider_models_by_type.get(provider.type, []):
-                    model_choices.append((f"{provider.id}:{model.id}", f"{provider.name} - {model!s}"))
+        # Set up LLM provider model field
+        llm_providers = LlmProvider.objects.filter(team=self.team).all()
+        llm_provider_models_by_type = {}
+        for model in LlmProviderModel.objects.for_team(self.team):
+            llm_provider_models_by_type.setdefault(model.type, []).append(model)
+        model_choices = []
+        for provider in llm_providers:
+            for model in llm_provider_models_by_type.get(provider.type, []):
+                model_choices.append((f"{provider.id}:{model.id}", f"{provider.name} - {model!s}"))
 
-            self.fields["provider_model"] = forms.ChoiceField(
-                choices=model_choices,
-                required=True,
-                label="Select LLM Provider Model",
-                help_text="Choose the LLM model to use for analyzing transcripts.",
-            )
+        self.fields["provider_model"] = forms.ChoiceField(
+            choices=model_choices,
+            required=True,
+            label="Select LLM Provider Model",
+            help_text="Choose the LLM model to use for analyzing transcripts.",
+        )
 
     def clean_query_file(self):
         query_file = self.cleaned_data.get("query_file")
@@ -140,3 +144,17 @@ class TranscriptAnalysisForm(forms.ModelForm):
             AnalysisQuery.objects.create(
                 analysis=analysis, name=name, prompt=prompt, output_format=output_format, order=i
             )
+
+
+class SessionChoiceField(forms.ModelMultipleChoiceField):
+    def label_from_instance(self, obj):
+        label = f"{obj.external_id} - {obj.participant.user.username}" if obj.participant else str(obj.external_id)
+        url = reverse(
+            "experiments:experiment_session_view",
+            kwargs={
+                "team_slug": obj.team.slug,
+                "experiment_id": obj.experiment.public_id,
+                "session_id": obj.external_id,
+            },
+        )
+        return format_html('<a class="link" href="{}" target="_blank">{}</a>', url, label)

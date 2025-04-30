@@ -1,3 +1,5 @@
+from functools import cached_property
+
 from django.contrib import messages
 from django.http import HttpResponse
 from django.shortcuts import get_object_or_404, redirect
@@ -35,18 +37,21 @@ class TranscriptAnalysisCreateView(LoginAndTeamRequiredMixin, CreateView):
     form_class = TranscriptAnalysisForm
     template_name = "analysis/create.html"
 
+    @cached_property
+    def experiment(self):
+        return get_object_or_404(Experiment, id=self.kwargs.get("experiment_id"), team=self.request.team)
+
     def get_form_kwargs(self):
         kwargs = super().get_form_kwargs()
-        kwargs["experiment_id"] = self.kwargs.get("experiment_id")
+        kwargs["request"] = self.request
+        kwargs["experiment"] = self.experiment
         kwargs["team"] = self.request.team
         return kwargs
 
     def get_context_data(self, **kwargs):
         context = super().get_context_data(**kwargs)
         context["active_tab"] = "analysis"
-        context["experiment"] = get_object_or_404(
-            Experiment, id=self.kwargs.get("experiment_id"), team=self.request.team
-        )
+        context["experiment"] = self.experiment
         return context
 
     def form_valid(self, form):
