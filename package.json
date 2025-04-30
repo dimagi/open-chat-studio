@@ -59,7 +59,7 @@
     "alpinejs": "^3.14.3",
     "axios": "^1.8.2",
     "chart.js": "^4.4.6",
-    "dompurify": "^3.2.4",
+    "dompurify": "^3.2.5",
     "htmx.org": "^1.9.12",
     "immer": "^10.1.1",
     "js-cookie": "^3.0.5",
