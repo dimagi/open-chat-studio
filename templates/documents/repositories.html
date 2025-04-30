@@ -17,9 +17,6 @@
                 <a href="{% url 'documents:collections' request.team.slug 'collections' %}" class="btn btn-sm join-item {% if tab_name == 'collections' %}btn-active{% endif %}">
                     Collections ({{ collections_count }})
                 </a>
-                <a href="{% url 'documents:collections' request.team.slug 'document_index' %}" class="btn btn-sm join-item {% if tab_name == 'document_index' %}btn-active{% endif %}">
-                    Document Indexes ({{ indexes_count }})
-                </a>
             </div>
             <div>
                 {% if tab_name == "files" %}
@@ -28,10 +25,6 @@
 
                 {% if tab_name == "collections" %}
                     {% include 'documents/shared/tab_content.html' with object_list_url=collections_list_url add_new_modal_template='documents/new_collection_modal.html' add_new_modal_title="New Collection" modal_submit_url=new_collection_url %}
-                {% endif %}
-
-                {% if tab_name == "document_index" %}
-                    {% include 'documents/shared/tab_content.html' with object_list_url=index_list_url add_new_modal_template='documents/new_collection_modal.html' add_new_modal_title="New Document Index" modal_submit_url=new_index_url %}
                 {% endif %}
             </div>
         </div>

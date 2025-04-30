@@ -29,16 +29,13 @@ class CollectionsHome(LoginAndTeamRequiredMixin, TemplateView):
             "files_list_url": reverse("documents:files_list", kwargs={"team_slug": team_slug}),
             "upload_files_url": reverse("documents:upload_files", kwargs={"team_slug": team_slug}),
             "collections_list_url": reverse("documents:collections_list", kwargs={"team_slug": team_slug}),
-            "index_list_url": reverse("documents:index_list", kwargs={"team_slug": team_slug}),
             "new_collection_url": reverse("documents:new_collection", kwargs={"team_slug": team_slug}),
-            "new_index_url": reverse("documents:new_index", kwargs={"team_slug": team_slug}),
             "files_count": File.objects.filter(
                 team__slug=team_slug, is_version=False, purpose=FilePurpose.COLLECTION
             ).count(),
             "max_summary_length": settings.MAX_SUMMARY_LENGTH,
             "supported_file_types": settings.MEDIA_SUPPORTED_FILE_TYPES,
             "collections_count": self.request.team.collection_set.filter(is_version=False, is_index=False).count(),
-            "indexes_count": self.request.team.collection_set.filter(is_version=False, is_index=True).count(),
         }
 
         if tab_name == "files":
@@ -265,72 +262,6 @@ def edit_collection(request, team_slug: str, pk: int):
     collection.save(update_fields=["name"])
     _update_file_membership(collection, file_ids=request.POST.getlist("files"))
     return redirect(reverse("documents:collections", kwargs={"team_slug": team_slug, "tab_name": "collections"}))
-
-
-class IndexListView(BaseObjectListView):
-    template_name = "documents/shared/list.html"
-    model = Collection
-    paginate_by = 10
-    details_url_name = "documents:index_details"
-    tab_name = "document_index"
-    permission_required = "documents.view_collection"
-
-    def get_queryset(self):
-        return super().get_queryset().filter(is_version=False, is_index=True)
-
-
-class IndexDetails(CollectionDetails):
-    is_index = True
-    edit_url_name = "documents:edit_index"
-    archive_url_name = "documents:archive_index"
-
-    def get_queryset(self):
-        return super().get_queryset().filter(is_index=True)
-
-
-@require_POST
-@login_and_team_required
-@permission_required("documents.add_collection")
-@transaction.atomic()
-def new_index(request, team_slug: str):
-    """Create a new document index"""
-    try:
-        Collection.objects.create(team=request.team, name=request.POST.get("name"), is_index=True)
-    except IntegrityError:
-        messages.error(request, "A document index with that name already exists.")
-    return redirect(reverse("documents:collections", kwargs={"team_slug": team_slug, "tab_name": "document_index"}))
-
-
-@login_and_team_required
-@permission_required("documents.delete_collection")
-def archive_index(request, team_slug: str, pk: int):
-    index = get_object_or_404(Collection, team__slug=team_slug, id=pk, is_index=True)
-    if nodes := index.get_node_references():
-        response = render_to_string(
-            "assistants/partials/referenced_objects.html",
-            context={
-                "object_name": "document index",
-                "pipeline_nodes": [
-                    Chip(label=node.pipeline.name, url=node.pipeline.get_absolute_url()) for node in nodes.all()
-                ],
-            },
-        )
-        return HttpResponse(response, headers={"HX-Reswap": "none"}, status=400)
-    else:
-        index.archive()
-        messages.success(request, "Document index archived")
-        return HttpResponse()
-
-
-@require_POST
-@login_and_team_required
-@permission_required("documents.change_collection")
-def edit_index(request, team_slug: str, pk: int):
-    index = get_object_or_404(Collection, team__slug=team_slug, id=pk, is_index=True)
-    index.name = request.POST["name"]
-    index.save(update_fields=["name"])
-    _update_file_membership(index, file_ids=request.POST.getlist("files"))
-    return redirect(reverse("documents:collections", kwargs={"team_slug": team_slug, "tab_name": "document_index"}))
 
 
 def _update_file_membership(collection: Collection, file_ids: list[str]):

@@ -18,10 +18,4 @@ urlpatterns = [
     path("collections/<int:pk>/details", views.CollectionDetails.as_view(), name="collection_details"),
     path("collections/<int:pk>/archive", views.archive_collection, name="archive_collection"),
     path("collections/<int:pk>/edit", views.edit_collection, name="edit_collection"),
-    # Document indexes
-    path("indexes/", views.IndexListView.as_view(), name="index_list"),
-    path("indexes/new", views.new_index, name="new_index"),
-    path("indexes/<int:pk>/details", views.IndexDetails.as_view(), name="index_details"),
-    path("indexes/<int:pk>/archive", views.archive_index, name="archive_index"),
-    path("indexes/<int:pk>/edit", views.edit_index, name="edit_index"),
 ]
