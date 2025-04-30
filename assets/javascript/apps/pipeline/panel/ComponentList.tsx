@@ -124,8 +124,6 @@ export default function ComponentList({isOpen, setIsOpen}: ComponentListParams) 
     </ComponentHelp>;
   })
 
-  const readOnly = JSON.parse(document.getElementById("read-only")?.textContent || "false");
-
   const onscroll = (event: React.UIEvent<HTMLElement>) => {
     setScrollPosition(event.currentTarget.scrollTop)
   }
@@ -133,10 +131,9 @@ export default function ComponentList({isOpen, setIsOpen}: ComponentListParams) 
   return (
     <div className="relative">
       <button
-        className={`btn btn-circle btn-ghost absolute top-4 left-4 z-10 ${readOnly ? 'text-primary/50' : 'text-primary'}`}
+        className="btn btn-circle btn-ghost absolute top-4 left-4 z-10 text-primary"
         onClick={togglePanel}
         title="Add Node"
-        disabled={readOnly}
       >
         <i
           className={`fas ${

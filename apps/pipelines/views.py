@@ -284,6 +284,10 @@ def pipeline_details(request, team_slug: str, pk: int):
         "pipelines/pipeline_details.html",
         {
             "pipeline": pipeline,
+            "edit_button": {
+                "tooltip_text": "View" if pipeline.is_a_version else "Edit",
+                "icon": "fa-eye" if pipeline.is_a_version else "fa-pencil",
+            },
         },
     )
 
