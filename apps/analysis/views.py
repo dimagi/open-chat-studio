@@ -222,47 +222,32 @@ def update_field(request, team_slug, pk):
 def update_queries(request, team_slug, pk):
     analysis = get_object_or_404(TranscriptAnalysis, id=pk, team__slug=team_slug)
 
-    query_count = int(request.POST.get("query_count", 0))
+    query_id = request.POST.get("id", "")
+    name = request.POST.get("name", "")
+    prompt = request.POST.get("prompt", "")
+    output_format = request.POST.get("output_format", "")
+    order = int(request.POST.get("order", 0))
 
-    # Track existing query IDs to identify which ones to delete
-    existing_query_ids = set(analysis.queries.values_list("id", flat=True))
-    updated_query_ids = set()
-
-    # Update/create queries
-    for i in range(query_count):
-        query_id = request.POST.get(f"query_id_{i}", "")
-        name = request.POST.get(f"query_name_{i}", "")
-        prompt = request.POST.get(f"query_prompt_{i}", "")
-        output_format = request.POST.get(f"query_output_format_{i}", "")
-        order = int(request.POST.get(f"query_order_{i}", i))
-
-        # For existing queries
-        if query_id and not query_id.startswith("new-") and query_id.isdigit():
-            query_id = int(query_id)
-            try:
-                query = AnalysisQuery.objects.get(id=query_id, analysis=analysis)
-                query.name = name
-                query.prompt = prompt
-                query.output_format = output_format
-                query.order = order
-                query.save()
-                updated_query_ids.add(query_id)
-            except AnalysisQuery.DoesNotExist:
-                pass
-        # For new queries
-        elif prompt:  # Only create if there's at least a prompt
-            new_query = AnalysisQuery.objects.create(
-                analysis=analysis,
-                name=name,
-                prompt=prompt,
-                output_format=output_format,
-                order=order,
-            )
-            updated_query_ids.add(new_query.id)
-
-    # Delete queries that weren't updated
-    queries_to_delete = existing_query_ids - updated_query_ids
-    AnalysisQuery.objects.filter(id__in=queries_to_delete).delete()
+    # For existing queries
+    if query_id and query_id.isdigit():
+        query_id = int(query_id)
+        try:
+            query = AnalysisQuery.objects.get(id=query_id, analysis=analysis)
+            query.name = name
+            query.prompt = prompt
+            query.output_format = output_format
+            query.order = order
+            query.save()
+        except AnalysisQuery.DoesNotExist:
+            pass
+    elif prompt:  # Only create if there's at least a prompt
+        AnalysisQuery.objects.create(
+            analysis=analysis,
+            name=name,
+            prompt=prompt,
+            output_format=output_format,
+            order=order,
+        )
 
     # Prepare data for the template
     queries_data = []

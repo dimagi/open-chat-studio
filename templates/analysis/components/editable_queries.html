@@ -3,24 +3,36 @@
 <div
   id="queries-container"
   x-data="{
-          editing: false,
+          editingQuery: null,
           queries: {{ queries_json }},
-          newId: 0,
-
           addQuery() {
-          this.queries.push({
-          id: 'new-' + this.newId++,
+          const newQuery = {
+          id: '',
           name: '',
           prompt: '',
           output_format: '',
           order: this.queries.length
-          });
+          };
+          this.queries.push(newQuery);
+          this.editingQuery = this.queries.length - 1;
           },
 
           removeQuery(index) {
           this.queries.splice(index, 1);
           // Update order
           this.queries.forEach((q, i) => q.order = i);
+          this.editingQuery = null;
+          },
+
+          startEditing(index) {
+          this.editingQuery = index;
+          },
+
+          cancelEditing() {
+          if (!this.queries[this.editingQuery].id) {
+          this.removeQuery(this.editingQuery);
+          }
+          this.editingQuery = null;
           }
           }"
 >
@@ -28,61 +40,59 @@
     <h2 class="text-lg font-semibold">Queries ({{ object.queries.count }})</h2>
     <button
       type="button"
-      class="text-blue-500 hover:text-blue-700"
-      @click="editing = !editing"
-      x-show="!editing"
+      class="btn btn-sm btn-outline"
+      @click="addQuery()"
     >
-      <i class="fa-solid fa-pen-to-square"></i> Edit
+      <i class="fa-solid fa-plus"></i> Add Query
     </button>
   </div>
 
-  <!-- View mode -->
-  <div x-show="!editing">
-    <ul class="divide-y divide-gray-200">
-      {% for query in object.queries.all %}
-        <li class="py-3">
-          <p class="font-medium">{{ query.name }}</p>
-          <p class="text-gray-700">{{ query.prompt }}</p>
-          {% if query.output_format %}
-            <p class="text-gray-500 text-sm">Format: {{ query.output_format }}</p>
-          {% endif %}
-        </li>
-      {% empty %}
-        <li class="py-3 text-gray-500">No queries found</li>
-      {% endfor %}
-    </ul>
-  </div>
-
-  <!-- Edit mode -->
-  <form
-    x-show="editing"
-    x-cloak=""
-    hx-post="{% url 'analysis:update_queries' team.slug object.id %}"
-    hx-trigger="submit"
-    hx-target="#queries-container"
-    hx-swap="outerHTML"
-    @submit="editing = false"
-  >
-    {% csrf_token %}
-
-    <div class="space-y-4">
-      <template x-for="(query, index) in queries" :key="query.id">
-        <div class="border rounded-lg p-4 bg-gray-50">
+  <!-- Query list -->
+  <div class="space-y-4">
+    <template x-for="(query, index) in queries" :key="query.id">
+      <div class="border rounded-lg p-4" :class="editingQuery === index ? 'bg-gray-50' : ''">
+        <!-- View mode -->
+        <div x-show="editingQuery !== index">
           <div class="flex justify-between items-center mb-2">
             <h3 class="font-medium" x-text="query.name || 'New Query'"></h3>
+            <div class="flex gap-2">
+              <button type="button" class="text-blue-500" @click="startEditing(index)">
+                <i class="fa-solid fa-pen-to-square"></i>
+              </button>
+              <button type="button" class="text-red-500" @click="removeQuery(index)">
+                <i class="fa-solid fa-trash"></i>
+              </button>
+            </div>
+          </div>
+          <p class="text-gray-700" x-text="query.prompt"></p>
+          <p class="text-gray-500 text-sm" x-show="query.output_format">Format: <span x-text="query.output_format"></span></p>
+        </div>
+
+        <!-- Edit mode -->
+        <form
+          x-show="editingQuery === index"
+          x-cloak=""
+          hx-post="{% url 'analysis:update_queries' team.slug object.id %}"
+          hx-target="#queries-container"
+          hx-swap="outerHTML"
+        >
+          {% csrf_token %}
+
+          <div class="flex justify-between items-center mb-2">
+            <h3 class="font-medium">Edit Query</h3>
             <button type="button" class="text-red-500" @click="removeQuery(index)">
               <i class="fa-solid fa-trash"></i>
             </button>
           </div>
 
-          <input type="hidden" :name="'query_id_' + index" :value="query.id">
-          <input type="hidden" :name="'query_order_' + index" :value="index">
+          <input type="hidden" name="id" :value="query.id">
+          <input type="hidden" name="order" :value="index">
 
           <div class="mb-3">
             <label class="block text-sm font-medium mb-1">Name</label>
             <input
               type="text"
-              :name="'query_name_' + index"
+              name="name"
               x-model="query.name"
               class="input input-bordered w-full"
               placeholder="Enter query name"
@@ -92,7 +102,7 @@
           <div class="mb-3">
             <label class="block text-sm font-medium mb-1">Prompt</label>
             <textarea
-              :name="'query_prompt_' + index"
+              name="prompt"
               x-model="query.prompt"
               class="textarea textarea-bordered w-full"
               rows="3"
@@ -100,29 +110,27 @@
             ></textarea>
           </div>
 
-          <div>
+          <div class="mb-3">
             <label class="block text-sm font-medium mb-1">Output Format</label>
             <input
               type="text"
-              :name="'query_output_format_' + index"
+              name="output_format"
               x-model="query.output_format"
               class="input input-bordered w-full"
               placeholder="Output format (e.g., JSON, CSV)"
             >
           </div>
-        </div>
-      </template>
-    </div>
 
-    <input type="hidden" name="query_count" x-bind:value="queries.length">
+          <div class="flex gap-2 mt-4 justify-end">
+            <button type="submit" class="btn btn-sm btn-primary">Save</button>
+            <button type="button" class="btn btn-sm" @click="cancelEditing()">Cancel</button>
+          </div>
+        </form>
+      </div>
+    </template>
 
-    <div class="flex gap-2 mt-4">
-      <button type="button" class="btn btn-sm btn-outline" @click="addQuery()">
-        <i class="fa-solid fa-plus"></i> Add Query
-      </button>
-      <div class="flex-grow"></div>
-      <button type="submit" class="btn btn-sm btn-primary">Save All Queries</button>
-      <button type="button" class="btn btn-sm" @click="editing = false">Cancel</button>
+    <div x-show="queries.length === 0" class="py-3 text-gray-500">
+      No queries found
     </div>
-  </form>
+  </div>
 </div>
