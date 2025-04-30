@@ -1,8 +1,8 @@
-{% extends "web/base.html" %}
+{% extends "web/app/app_base.html" %}
 
-{% block content %}
+{% block app %}
     <div class="container mx-auto px-4 py-8">
-        <div class="bg-white rounded-lg shadow p-6">
+        <div class="p-6">
             <h1 class="text-2xl font-bold mb-4">Confirm Delete</h1>
 
             <p class="mb-6">Are you sure you want to delete the analysis "{{ object.name }}"?</p>
@@ -13,7 +13,7 @@
                     <button type="submit" class="bg-red-600 hover:bg-red-700 text-white px-4 py-2 rounded">
                         Yes, Delete
                     </button>
-                    <a href="{% url 'analysis:detail' team_slug object.id %}" class="bg-gray-200 hover:bg-gray-300 text-gray-800 px-4 py-2 rounded">
+                    <a href="{% url 'analysis:detail' team.slug object.id %}" class="bg-gray-200 hover:bg-gray-300 text-gray-800 px-4 py-2 rounded">
                         Cancel
                     </a>
                 </div>

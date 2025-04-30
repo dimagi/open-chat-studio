@@ -48,7 +48,6 @@ class TranscriptAnalysisCreateView(LoginAndTeamRequiredMixin, CreateView):
         form.instance.experiment_id = self.kwargs.get("experiment_id")
         response = super().form_valid(form)
 
-        # Start the background processing
         task = process_transcript_analysis.delay(self.object.id)
         self.object.job_id = task.id
         self.object.save(update_fields=["job_id"])

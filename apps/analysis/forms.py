@@ -46,7 +46,6 @@ class TranscriptAnalysisForm(forms.ModelForm):
             model_choices = []
             for provider in llm_providers:
                 for model in llm_provider_models_by_type.get(provider.type, []):
-                    print((f"{provider.id}:{model.id}", f"{provider.name} - {model!s}"))
                     model_choices.append((f"{provider.id}:{model.id}", f"{provider.name} - {model!s}"))
 
             self.fields["provider_model"] = forms.ChoiceField(
@@ -122,23 +121,22 @@ class TranscriptAnalysisForm(forms.ModelForm):
 
     def _process_query_file(self, analysis, query_file):
         """Process the CSV query file and create AnalysisQuery objects"""
-        try:
-            decoded_file = query_file.read().decode("utf-8")
-            io_string = io.StringIO(decoded_file)
-            reader = csv.reader(io_string)
+        query_file.seek(0)
+        decoded_file = query_file.read().decode("utf-8")
+        io_string = io.StringIO(decoded_file)
+        reader = csv.reader(io_string)
 
-            for i, row in enumerate(reader):
-                if not row or (len(row) == 1 and not row[0].strip()):
-                    continue  # Skip empty rows
+        for i, row in enumerate(reader):
+            if not row or (len(row) == 1 and not row[0].strip()):
+                continue  # Skip empty rows
 
-                name = row[0] if len(row) > 0 else ""
-                prompt = row[1] if len(row) > 1 else name  # If only one column, use it as both name and prompt
-                output_format = row[2] if len(row) > 2 else ""
+            if row[0].strip().lower() == "query name":
+                continue  # Skip header
 
-                AnalysisQuery.objects.create(
-                    analysis=analysis, name=name, prompt=prompt, output_format=output_format, order=i
-                )
-        except Exception as e:
-            # Log the error but don't stop the process
-            # In a real app, we might want to delete the analysis or mark it as failed
-            print(f"Error processing query file: {str(e)}")
+            name = row[0] if len(row) > 0 else ""
+            prompt = row[1] if len(row) > 1 else name  # If only one column, use it as both name and prompt
+            output_format = row[2] if len(row) > 2 else ""
+
+            AnalysisQuery.objects.create(
+                analysis=analysis, name=name, prompt=prompt, output_format=output_format, order=i
+            )
