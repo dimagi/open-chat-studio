@@ -1,3 +1,4 @@
+{% load waffle_tags %}
 <div class="flex flex-row gap-1" id="chat-exports">
     <button class="btn btn-sm btn-outline btn-primary no-animation"
             hx-post="{% url 'experiments:generate_chat_export' team.slug experiment.id %}"
@@ -26,5 +27,9 @@
         </a>
     {% endif %}
 
-    {% include "analysis/components/analysis_button.html" with team_slug=team.slug experiment=experiment %}
+    {% flag "session-analysis" %}
+        <a href="{% url 'analysis:create' team.slug experiment.id %}" class="btn btn-sm btn-outline btn-secondary">
+            <i class="fas fa-chart-line mr-1"></i> Analyze Transcripts
+        </a>
+    {% endflag %}
 </div>
