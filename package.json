@@ -21,7 +21,7 @@
     "@babel/preset-env": "^7.26.9",
     "@babel/preset-react": "^7.25.9",
     "@babel/preset-typescript": "^7.26.0",
-    "@eslint/js": "^9.23.0",
+    "@eslint/js": "^9.25.1",
     "@tailwindcss/typography": "^0.5.16",
     "@types/lodash": "^4.17.13",
     "@types/react": "^18.3.12",
