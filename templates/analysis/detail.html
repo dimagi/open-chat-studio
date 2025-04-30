@@ -26,6 +26,10 @@
             Download Results
           </a>
         {% endif %}
+        <a href="{% url 'analysis:clone' team.slug object.id %}" class="btn">
+          <i class="fa-solid fa-clone"></i>
+          Clone
+        </a>
         <a href="{% url 'analysis:delete' team.slug object.id %}" class="btn">
           <i class="fa-solid fa-trash"></i>
         </a>

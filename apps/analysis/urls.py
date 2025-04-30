@@ -12,4 +12,5 @@ urlpatterns = [
     path("<int:pk>/delete/e/", views.TranscriptAnalysisDeleteView.as_view(), name="delete"),
     path("<int:pk>/download/", views.download_analysis_results, name="download"),
     path("<int:pk>/export-sessions/", views.export_sessions, name="export_sessions"),
+    path("<int:pk>/clone/", views.clone, name="clone"),
 ]

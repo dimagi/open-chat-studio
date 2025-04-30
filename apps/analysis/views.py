@@ -14,7 +14,7 @@ from apps.teams.mixins import LoginAndTeamRequiredMixin
 from ..experiments.tables import ExperimentSessionsTable
 from ..teams.decorators import login_and_team_required
 from .forms import TranscriptAnalysisForm
-from .models import TranscriptAnalysis
+from .models import AnalysisQuery, TranscriptAnalysis
 from .tables import TranscriptAnalysisTable
 from .tasks import process_transcript_analysis
 
@@ -142,3 +142,29 @@ def export_sessions(request, team_slug, pk):
     response = HttpResponse(csv_content.getvalue(), content_type="text/csv")
     response["Content-Disposition"] = f'attachment; filename="{analysis.name}_sessions_export.csv"'
     return response
+
+
+@login_and_team_required
+def clone(request, team_slug, pk):
+    analysis = get_object_or_404(TranscriptAnalysis, id=pk, team__slug=team_slug)
+    new_analysis = TranscriptAnalysis.objects.create(
+        name=f"Copy of {analysis.name}",
+        description=analysis.description,
+        query_file=analysis.query_file,
+        experiment=analysis.experiment,
+        team=request.team,
+        created_by=request.user,
+        llm_provider_id=analysis.llm_provider_id,
+        llm_provider_model_id=analysis.llm_provider_model_id,
+    )
+
+    for query in analysis.queries.all():
+        AnalysisQuery.objects.create(
+            analysis=new_analysis,
+            name=query.name,
+            prompt=query.prompt,
+            output_format=query.output_format,
+            order=query.order,
+        )
+
+    return redirect(new_analysis.get_absolute_url())
