@@ -21,12 +21,14 @@
       <h1 class="text-2xl font-bold">{{ object.name }}</h1>
       <div>
         {% if object.is_complete %}
-          <a href="{% url 'analysis:download' team.slug object.id %}"
-             class="btn btn-success">
+          <a href="{% url 'analysis:download' team.slug object.id %}" class="btn btn-success">
             <i class="fa-solid fa-download"></i>
             Download Results
           </a>
         {% endif %}
+        <a href="{% url 'analysis:delete' team.slug object.id %}" class="btn">
+          <i class="fa-solid fa-trash"></i>
+        </a>
       </div>
     </div>
 
