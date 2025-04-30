@@ -3,9 +3,7 @@
 
 {% block page_head %}
   {{ block.super }}
-  {% if celery_job_id %}
-    <script src="{% static 'celery_progress/celery_progress.js' %}"></script>
-  {% endif %}
+  <script src="{% static 'celery_progress/celery_progress.js' %}"></script>
 {% endblock %}
 
 {% block breadcrumbs %}
@@ -48,39 +46,16 @@
       </div>
     </div>
 
-    {% if object.is_processing and celery_job_id %}
-      <div class="mb-6 bg-blue-50 dark:bg-blue-900/30 rounded-lg">
-        <h2 class="text-lg font-semibold mb-4">Analysis Progress</h2>
-        <div class="progress-wrapper">
-          <div id="progress-bar" class="progress-bar h-4 bg-blue-200 dark:bg-blue-700 rounded-full overflow-hidden">
-          </div>
-        </div>
-        <div id="progress-bar-message" class="mt-2 text-sm text-center">Waiting for progress to start...</div>
+    {% if not object.is_complete %}
+      <div class="mb-6">
+        <button class="btn btn-primary"
+                hx-get="{% url 'analysis:run' team.slug object.id %}"
+                hx-swap="outerHTML"
+        >
+          <i class="fa-solid fa-play"></i>
+          Run Analysis
+        </button>
       </div>
-
-      <script>
-        document.addEventListener("DOMContentLoaded", function () {
-          const progressUrl = "{% url 'celery_progress:task_status' celery_job_id %}";
-          CeleryProgressBar.initProgressBar(progressUrl, {
-            onSuccess: () => {
-              location.reload()
-            },
-            onProgress: (progressBarElement, progressBarMessageElement, progress) => {
-              progressBarElement.style.width = progress.percent + "%";
-              let description = progress.description || progress.current + ' of ' + progress.total + ' processed';
-              if (progress.current === 0) {
-                if (progress.pending === true) {
-                  progressBarMessageElement.textContent = 'Waiting for task to start...';
-                } else {
-                  progressBarMessageElement.textContent = 'Task started...';
-                }
-              } else {
-                progressBarMessageElement.textContent = description;
-              }
-            }
-          })
-        });
-      </script>
     {% endif %}
 
     {% if object.error_message %}

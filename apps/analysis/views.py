@@ -2,7 +2,7 @@ from functools import cached_property
 
 from django.contrib import messages
 from django.http import HttpResponse
-from django.shortcuts import get_object_or_404, redirect
+from django.shortcuts import get_object_or_404, redirect, render
 from django.urls import reverse
 from django.views.generic import CreateView, DeleteView, DetailView
 from django_tables2 import SingleTableView
@@ -12,6 +12,7 @@ from apps.experiments.models import Experiment
 from apps.teams.mixins import LoginAndTeamRequiredMixin
 
 from ..experiments.tables import ExperimentSessionsTable
+from ..teams.decorators import login_and_team_required
 from .forms import TranscriptAnalysisForm
 from .models import TranscriptAnalysis
 from .tables import TranscriptAnalysisTable
@@ -63,8 +64,6 @@ class TranscriptAnalysisCreateView(LoginAndTeamRequiredMixin, CreateView):
         task = process_transcript_analysis.delay(self.object.id)
         self.object.job_id = task.id
         self.object.save(update_fields=["job_id"])
-
-        messages.success(self.request, "Analysis job created and processing started.")
         return response
 
     def get_success_url(self):
@@ -105,6 +104,22 @@ class TranscriptAnalysisDeleteView(LoginAndTeamRequiredMixin, DeleteView):
         return context
 
 
+@login_and_team_required
+def run_analysis(request, team_slug, pk):
+    analysis = get_object_or_404(TranscriptAnalysis, id=pk, team__slug=team_slug)
+
+    if analysis.is_complete:
+        messages.error(request, "Analysis has already been completed.")
+        return redirect(analysis.get_absolute_url())
+
+    task = process_transcript_analysis.delay(analysis.id)
+    analysis.job_id = task.id
+    analysis.save(update_fields=["job_id"])
+
+    return render(request, "analysis/components/progress.html", {"celery_job_id": task.id})
+
+
+@login_and_team_required
 def download_analysis_results(request, team_slug, pk):
     analysis = get_object_or_404(TranscriptAnalysis, id=pk, team__slug=team_slug)
 
@@ -117,6 +132,7 @@ def download_analysis_results(request, team_slug, pk):
     return response
 
 
+@login_and_team_required
 def export_sessions(request, team_slug, pk):
     analysis = get_object_or_404(TranscriptAnalysis, id=pk, team__slug=team_slug)
     sessions = analysis.sessions.all()
