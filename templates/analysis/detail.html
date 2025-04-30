@@ -44,6 +44,7 @@
           <h2 class="text-lg font-semibold mb-2">Details</h2>
           <p><strong>Status:</strong> {{ object.get_status_display }}</p>
           <p><strong>Experiment:</strong> {% include "generic/object_chip.html" with object=object.experiment %}</p>
+          <p><strong>LLM:</strong> {{ object.llm_provider_model }}</p>
           <p><strong>Created:</strong> {{ object.created_at }}</p>
           <p><strong>Created By:</strong> {{ object.created_by }}</p>
         </div>
