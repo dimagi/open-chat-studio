@@ -9,6 +9,12 @@
      href="{% url type|add:':edit' record.team.slug record.id %}" title="View">
     <i class="fa-solid fa-pencil"></i>
   </a>
+  {% if type == 'chatbots' %}
+    <a class="btn btn-sm"
+       href="{% url type|add:':copy' record.team.slug record.id %}" title="Copy Experiment">
+      <i class="fa-solid fa-copy"></i>
+    </a>
+  {% endif %}
 {% else %}
   <a class="btn btn-sm"
      href="{% url type|add:':edit' record.team.slug record.id %}" title="View">
