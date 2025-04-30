@@ -18,7 +18,7 @@
     "@babel/cli": "^7.25.9",
     "@babel/compat-data": "^7.26.5",
     "@babel/core": "^7.26.10",
-    "@babel/preset-env": "^7.25.8",
+    "@babel/preset-env": "^7.26.9",
     "@babel/preset-react": "^7.25.9",
     "@babel/preset-typescript": "^7.26.0",
     "@eslint/js": "^9.23.0",
