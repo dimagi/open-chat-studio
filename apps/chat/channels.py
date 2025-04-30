@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import contextlib
 import logging
 import re
 from abc import ABC, abstractmethod
@@ -192,10 +193,8 @@ class ChannelBase(ABC):
         return get_bot(self.experiment_session, self.experiment, self.trace_service)
 
     def reset_bot(self):
-        try:
+        with contextlib.suppress(AttributeError):
             del self.bot
-        except AttributeError:
-            pass
 
     @property
     def participant_identifier(self) -> str:
@@ -323,10 +322,8 @@ class ChannelBase(ABC):
         return self._extract_user_query()
 
     def reset_user_query(self):
-        try:
+        with contextlib.suppress(AttributeError):
             del self.user_query
-        except AttributeError:
-            pass
 
     def _add_message(self, message: BaseMessage):
         """Adds the message to the handler in order to extract session information"""
@@ -497,9 +494,9 @@ class ChannelBase(ABC):
 
         if self.voice_replies_supported and self.experiment.synthetic_voice:
             voice_config = self.experiment.voice_response_behaviour
-            if voice_config == VoiceResponseBehaviours.ALWAYS:
-                reply_text = False
-            elif voice_config == VoiceResponseBehaviours.RECIPROCAL and user_sent_voice:
+            if voice_config == VoiceResponseBehaviours.ALWAYS or (
+                voice_config == VoiceResponseBehaviours.RECIPROCAL and user_sent_voice
+            ):
                 reply_text = False
 
         if self.supports_multimedia:

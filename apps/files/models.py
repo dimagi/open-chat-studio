@@ -1,3 +1,4 @@
+import contextlib
 import mimetypes
 import pathlib
 
@@ -87,10 +88,8 @@ class File(BaseTeamModel, VersionsMixin):
     @staticmethod
     def get_content_type(file):
         filename = file.name
-        try:
+        with contextlib.suppress(Exception):
             filename = pathlib.Path(filename).name
-        except Exception:
-            pass
         try:
             return mimetypes.guess_type(filename)[0] or "application/octet-stream"
         except Exception:

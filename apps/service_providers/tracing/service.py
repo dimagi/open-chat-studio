@@ -211,7 +211,7 @@ class TracingService:
             return
 
         popped_span_id, _ = self.span_stack.pop()
-        if not popped_span_id == span_id:
+        if popped_span_id != span_id:
             logger.error("Span ID mismatch: expected %s, got %s", popped_span_id, span_id)
 
         for tracer in self._active_tracers:
