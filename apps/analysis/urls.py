@@ -13,4 +13,7 @@ urlpatterns = [
     path("<int:pk>/download/", views.download_analysis_results, name="download"),
     path("<int:pk>/export-sessions/", views.export_sessions, name="export_sessions"),
     path("<int:pk>/clone/", views.clone, name="clone"),
+    # HTMX update endpoints
+    path("<int:pk>/update_field/", views.update_field, name="update_field"),
+    path("<int:pk>/update/queries/", views.update_queries, name="update_queries"),
 ]

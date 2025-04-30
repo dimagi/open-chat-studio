@@ -10,7 +10,7 @@
   <div class="text-sm breadcrumbs" aria-label="breadcrumbs">
     <ul>
       <li><a href="{% url 'analysis:list' request.team.slug %}">Session Analysis</a></li>
-      <li class="pg-breadcrumb-active" aria-current="page">Analysis {{object.name}}</li>
+      <li class="pg-breadcrumb-active" aria-current="page">Analysis {{ object.name }}</li>
     </ul>
   </div>
 {% endblock %}
@@ -18,7 +18,9 @@
 {% block app %}
   <div class="container mx-auto px-4 py-8">
     <div class="flex justify-between items-center mb-6">
-      <h1 class="text-2xl font-bold">{{ object.name }}</h1>
+      <div id="name-field" class="mt-4">
+        {% include "analysis/components/editable_field.html" with label="Name" value=object.name field_name="name" is_textarea=False update_url=update_field_url target_id="name-field" %}
+      </div>
       <div>
         {% if object.is_complete %}
           <a href="{% url 'analysis:download' team.slug object.id %}" class="btn btn-success">
@@ -47,7 +49,9 @@
         </div>
         <div>
           <h2 class="text-lg font-semibold mb-2">Description</h2>
-          <p>{{ object.description|default:"No description provided" }}</p>
+          <div id="description-field">
+            {% include "analysis/components/editable_field.html" with label="Description" value=object.description field_name="description" is_textarea=True update_url=update_field_url target_id="description-field" %}
+          </div>
         </div>
       </div>
     </div>
@@ -72,20 +76,7 @@
     {% endif %}
 
     <div class="mb-6">
-      <h2 class="text-lg font-semibold mb-4">Queries ({{ object.queries.count }})</h2>
-      <ul class="divide-y divide-gray-200">
-        {% for query in object.queries.all %}
-          <li class="py-3">
-            <p class="font-medium">{{ query.name }}</p>
-            <p class="text-gray-700">{{ query.prompt }}</p>
-            {% if query.output_format %}
-              <p class="text-gray-500 text-sm">Format: {{ query.output_format }}</p>
-            {% endif %}
-          </li>
-        {% empty %}
-          <li class="py-3 text-gray-500">No queries found</li>
-        {% endfor %}
-      </ul>
+      {% include "analysis/components/editable_queries.html" with queries_json=queries_json %}
     </div>
 
     <div class="mb-6">
