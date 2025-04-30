@@ -158,6 +158,7 @@ def clone(request, team_slug, pk):
         llm_provider_id=analysis.llm_provider_id,
         llm_provider_model_id=analysis.llm_provider_model_id,
     )
+    new_analysis.sessions.set(analysis.sessions.all())
 
     for query in analysis.queries.all():
         AnalysisQuery.objects.create(
