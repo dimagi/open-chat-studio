@@ -9,9 +9,7 @@ def duplicate_pipeline_with_new_ids(pipeline_data):
     for node in pipeline_data.get("nodes", []):
         old_id = node["id"]
         node_type = node.get("type")
-        data_type = node.get("data", {}).get(
-            "type"
-        )
+        data_type = node.get("data", {}).get("type")
 
         if node_type == "startNode" or node_type == "endNode":
             new_id = str(uuid4())
