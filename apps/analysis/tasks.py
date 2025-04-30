@@ -3,6 +3,7 @@ import io
 import logging
 
 from celery import shared_task
+from celery_progress.backend import ProgressRecorder
 from django.core.files.base import ContentFile
 
 from apps.teams.utils import current_team
@@ -12,26 +13,18 @@ from .models import AnalysisStatus, TranscriptAnalysis
 logger = logging.getLogger("ocs.analysis")
 
 
-@shared_task
-def process_transcript_analysis(analysis_id):
-    """
-    Process a transcript analysis job:
-    1. Load the transcript analysis record
-    2. Get all selected sessions
-    3. For each session:
-        a. Get all messages to form the transcript
-        b. For each query in the analysis:
-            i. Query OpenAI with the transcript and the query
-            ii. Store the result
-    4. Compile all results into a CSV file
-    5. Update the analysis record with the result file
-    """
+@shared_task(bind=True)
+def process_transcript_analysis(self, analysis_id):
+    progress_recorder = ProgressRecorder(self)
+
     try:
         analysis = TranscriptAnalysis.objects.select_related("experiment", "created_by").get(id=analysis_id)
 
         # Update status to processing
         analysis.status = AnalysisStatus.PROCESSING
         analysis.save(update_fields=["status"])
+
+        progress_recorder.set_progress(0, 100, description="Starting analysis...")
 
         with current_team(analysis.team):
             # Get the appropriate LLM provider based on the model's type
@@ -58,8 +51,16 @@ def process_transcript_analysis(analysis_id):
 
             # Process each session
             sessions = analysis.sessions.all().prefetch_related("chat__messages")
+            total_sessions = sessions.count()
 
-            for session in sessions:
+            progress_recorder.set_progress(0, 100, description=f"Processing {total_sessions} sessions...")
+
+            for index, session in enumerate(sessions):
+                progress_value = int((index / total_sessions) * 100)
+                progress_recorder.set_progress(
+                    progress_value, 100, description=f"Processing session {index+1}/{total_sessions}"
+                )
+
                 # Get the transcript
                 transcript = ""
                 for message in session.chat.messages.all().order_by("created_at"):
@@ -74,7 +75,13 @@ def process_transcript_analysis(analysis_id):
                 session_row = [session.external_id, str(session.participant) if session.participant else "Anonymous"]
 
                 # Process each query
-                for query in queries:
+                for q_index, query in enumerate(queries):
+                    progress_recorder.set_progress(
+                        progress_value,
+                        100,
+                        description=f"Session {index+1}/{total_sessions}: Query {q_index+1}/{len(queries)}",
+                    )
+
                     prompt = f"""
                     Analyze the following conversation transcript according to this query:
                     
@@ -104,19 +111,22 @@ def process_transcript_analysis(analysis_id):
                 results.append(session_row)
 
             # Create CSV file from results
+            progress_recorder.set_progress(100, 100, description="Creating CSV file...")
+
             csv_buffer = io.StringIO()
             writer = csv.writer(csv_buffer)
             for row in results:
                 writer.writerow(row)
 
             # Save the result file
+            progress_recorder.set_progress(100, 100, description="Saving results...")
+
             filename = f"{analysis.name}_results.csv"
             analysis.result_file.save(filename, ContentFile(csv_buffer.getvalue().encode("utf-8")), save=False)
             analysis.status = AnalysisStatus.COMPLETED
             analysis.save()
 
-            return {"status": "success", "analysis_id": analysis_id}
-
+            progress_recorder.set_progress(100, 100, description="Analysis complete")
     except Exception as e:
         logger.exception(f"Error processing transcript analysis {analysis_id}: {e}")
         try:
@@ -124,6 +134,6 @@ def process_transcript_analysis(analysis_id):
             analysis.status = AnalysisStatus.FAILED
             analysis.error_message = str(e)
             analysis.save()
+            progress_recorder.set_progress(100, 100, description=f"Analysis failed: {str(e)}")
         except:  # noqa E722
             pass
-        return {"status": "error", "error": str(e)}

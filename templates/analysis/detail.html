@@ -1,65 +1,110 @@
 {% extends "web/app/app_base.html" %}
 {% load django_tables2 %}
+{% load static %}
+
+{% block page_head %}
+  {{ block.super }}
+  {% if celery_job_id %}
+    <script src="{% static 'celery_progress/celery_progress.js' %}"></script>
+  {% endif %}
+{% endblock %}
 
 {% block app %}
-    <div class="container mx-auto px-4 py-8">
-        <div class="flex justify-between items-center mb-6">
-            <h1 class="text-2xl font-bold">{{ object.name }}</h1>
-            <div>
-                {% if object.is_complete %}
-                    <a href="{% url 'analysis:download' team.slug object.id %}" class="btn btn-success text-white px-4 py-2 rounded">
-                        Download Results
-                    </a>
-                {% endif %}
-                <a href="{% url 'analysis:list' team.slug %}" class="ml-2 text-gray-600 hover:text-gray-800">
-                    Back to List
-                </a>
-            </div>
-        </div>
-
-        <div class="p-6 mb-6">
-            <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
-                <div>
-                    <h2 class="text-lg font-semibold mb-2">Details</h2>
-                    <p><strong>Status:</strong> {{ object.get_status_display }}</p>
-                    <p><strong>Experiment:</strong> {{ object.experiment.name }}</p>
-                    <p><strong>Created:</strong> {{ object.created_at }}</p>
-                    <p><strong>Created By:</strong> {{ object.created_by }}</p>
-                </div>
-                <div>
-                    <h2 class="text-lg font-semibold mb-2">Description</h2>
-                    <p>{{ object.description|default:"No description provided" }}</p>
-                </div>
-            </div>
-        </div>
-
-        {% if object.error_message %}
-            <div class="bg-red-100 border border-red-400 text-red-700 px-4 py-3 rounded mb-6">
-                <h2 class="text-lg font-semibold mb-2">Error</h2>
-                <p>{{ object.error_message }}</p>
-            </div>
+  <div class="container mx-auto px-4 py-8">
+    <div class="flex justify-between items-center mb-6">
+      <h1 class="text-2xl font-bold">{{ object.name }}</h1>
+      <div>
+        {% if object.is_complete %}
+          <a href="{% url 'analysis:download' team.slug object.id %}"
+             class="btn btn-success text-white px-4 py-2 rounded">
+            Download Results
+          </a>
         {% endif %}
-
-        <div class="p-6">
-            <h2 class="text-lg font-semibold mb-4">Queries ({{ object.queries.count }})</h2>
-            <ul class="divide-y divide-gray-200">
-                {% for query in object.queries.all %}
-                    <li class="py-3">
-                        <p class="font-medium">{{ query.name }}</p>
-                        <p class="text-gray-700">{{ query.prompt }}</p>
-                        {% if query.output_format %}
-                            <p class="text-gray-500 text-sm">Format: {{ query.output_format }}</p>
-                        {% endif %}
-                    </li>
-                {% empty %}
-                    <li class="py-3 text-gray-500">No queries found</li>
-                {% endfor %}
-            </ul>
-        </div>
-
-        <div class="p-6 mb-6">
-            <h2 class="text-lg font-semibold mb-4">Sessions ({{ object.sessions.count }})</h2>
-            {% render_table session_table "table/tailwind_js_pagination.html" %}
-        </div>
+        <a href="{% url 'analysis:list' team.slug %}" class="ml-2 text-gray-600 hover:text-gray-800">
+          Back to List
+        </a>
+      </div>
     </div>
+
+    <div class="p-6 mb-6">
+      <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+        <div>
+          <h2 class="text-lg font-semibold mb-2">Details</h2>
+          <p><strong>Status:</strong> {{ object.get_status_display }}</p>
+          <p><strong>Experiment:</strong> {{ object.experiment.name }}</p>
+          <p><strong>Created:</strong> {{ object.created_at }}</p>
+          <p><strong>Created By:</strong> {{ object.created_by }}</p>
+        </div>
+        <div>
+          <h2 class="text-lg font-semibold mb-2">Description</h2>
+          <p>{{ object.description|default:"No description provided" }}</p>
+        </div>
+      </div>
+    </div>
+
+    {% if object.is_processing and celery_job_id %}
+      <div class="p-6 mb-6 bg-blue-50 dark:bg-blue-900/30 rounded-lg">
+        <h2 class="text-lg font-semibold mb-4">Analysis Progress</h2>
+        <div class="progress-wrapper">
+          <div id="progress-bar" class="progress-bar h-4 bg-blue-200 dark:bg-blue-700 rounded-full overflow-hidden">
+            {#                    <div id="progress-bar-indicator" class="h-full bg-blue-500 dark:bg-blue-300 transition-all duration-300" style="width: 0%"></div>#}
+          </div>
+        </div>
+        <div id="progress-bar-message" class="mt-2 text-sm text-center">Waiting for progress to start...</div>
+      </div>
+
+      <script>
+        document.addEventListener("DOMContentLoaded", function () {
+          const progressUrl = "{% url 'celery_progress:task_status' celery_job_id %}";
+          CeleryProgressBar.initProgressBar(progressUrl, {
+            onSuccess: () => {
+              location.reload()
+            },
+            onProgress: (progressBarElement, progressBarMessageElement, progress) => {
+              progressBarElement.style.width = progress.percent + "%";
+              let description = progress.description || progress.current + ' of ' + progress.total + ' processed';
+              if (progress.current === 0) {
+                if (progress.pending === true) {
+                  progressBarMessageElement.textContent = 'Waiting for task to start...';
+                } else {
+                  progressBarMessageElement.textContent = 'Task started...';
+                }
+              } else {
+                progressBarMessageElement.textContent = description;
+              }
+            }
+          })
+        });
+      </script>
+    {% endif %}
+
+    {% if object.error_message %}
+      <div class="bg-red-100 border border-red-400 text-red-700 px-4 py-3 rounded mb-6">
+        <h2 class="text-lg font-semibold mb-2">Error</h2>
+        <p>{{ object.error_message }}</p>
+      </div>
+    {% endif %}
+
+    <div class="p-6">
+      <h2 class="text-lg font-semibold mb-4">Queries ({{ object.queries.count }})</h2>
+      <ul class="divide-y divide-gray-200">
+        {% for query in object.queries.all %}
+          <li class="py-3">
+            <p class="font-medium">{{ query.name }}</p>
+            <p class="text-gray-700">{{ query.prompt }}</p>
+            {% if query.output_format %}
+              <p class="text-gray-500 text-sm">Format: {{ query.output_format }}</p>
+            {% endif %}
+          </li>
+        {% empty %}
+          <li class="py-3 text-gray-500">No queries found</li>
+        {% endfor %}
+      </ul>
+    </div>
+
+    <div class="p-6 mb-6">
+      <h2 class="text-lg font-semibold mb-4">Sessions ({{ object.sessions.count }})</h2>
+      {% render_table session_table "table/tailwind_js_pagination.html" %}
+    </div>
+  </div>
 {% endblock %}
