@@ -1,3 +1,4 @@
+import contextlib
 import logging
 
 from langchain.chains.conversation.base import ConversationChain
@@ -75,11 +76,8 @@ class BasicConversation:
     def system_prompt(self):
         prompt_to_use = SystemMessagePromptTemplate.from_template(self.prompt_str)
         if self.source_material:
-            try:
+            with contextlib.suppress(KeyError):
                 prompt_to_use = prompt_to_use.format(source_material=self.source_material)
-            except KeyError:
-                # no source material found in prompt, just use it "naked"
-                pass
         return prompt_to_use
 
     def load_memory_from_messages(self, messages: list[BaseMessage]):

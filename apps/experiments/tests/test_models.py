@@ -53,7 +53,7 @@ def experiment_session():
 class TestSyntheticVoice:
     @django_db_with_data()
     def test_team_scoped_services(self):
-        assert SyntheticVoice.TEAM_SCOPED_SERVICES == [SyntheticVoice.OpenAIVoiceEngine]
+        assert [SyntheticVoice.OpenAIVoiceEngine] == SyntheticVoice.TEAM_SCOPED_SERVICES
 
     @django_db_with_data()
     def test_get_for_team_returns_all_general_services(self):
@@ -1035,6 +1035,6 @@ def _compare_models(original, new, expected_changed_fields: list) -> set:
     field_difference = original.compare_with_model(new, original.get_fields_to_exclude()).difference(
         set(expected_changed_fields)
     )
-    assert (
-        field_difference == set()
-    ), f"These fields differ between the experiment versions, but should not: {field_difference}"
+    assert field_difference == set(), (
+        f"These fields differ between the experiment versions, but should not: {field_difference}"
+    )

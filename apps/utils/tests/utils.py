@@ -1,3 +1,5 @@
+import contextlib
+
 from django.apps import AppConfig, apps
 
 
@@ -27,8 +29,6 @@ def tear_down_test_app(label):
     """
     Remove the test app from the app registry.
     """
-    try:
+    with contextlib.suppress(KeyError):
         del apps.app_configs[label]
-    except KeyError:
-        pass
     apps.clear_cache()
