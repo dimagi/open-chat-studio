@@ -12,7 +12,6 @@ class Migration(migrations.Migration):
     initial = True
 
     dependencies = [
-        ('analysis', '0011_remove_rungroup_analysis_remove_analysisrun_group_and_more'),
         ('experiments', '0110_alter_participantdata_data'),
         ('service_providers', '0026_add_google_gemini_models'),
         ('teams', '0007_create_commcare_connect_flag'),

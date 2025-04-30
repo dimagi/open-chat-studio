@@ -216,6 +216,7 @@ class Migration(migrations.Migration):
 
     dependencies = [
         ('service_providers', '0019_llmprovidermodel'),
+        ('pipelines', '0008_pipelinechatmessages_node_id_and_more'),
     ]
 
     operations = [migrations.RunPython(_create_llm_provider_models, reverse_code=_delete_all_llm_provider_models)
