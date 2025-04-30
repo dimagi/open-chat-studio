@@ -43,6 +43,11 @@ class Migration(migrations.Migration):
             name='openai_vector_store_id',
             field=models.CharField(blank=True, max_length=255),
         ),
+        migrations.AddField(
+            model_name='collection',
+            name='is_index',
+            field=models.BooleanField(default=False),
+        ),
         # Add new through model
         migrations.CreateModel(
             name='CollectionFile',

@@ -54,6 +54,7 @@ class Collection(BaseTeamModel, VersionsMixin):
         verbose_name="LLM Provider",
     )
     openai_vector_store_id = models.CharField(blank=True, max_length=255)
+    is_index = models.BooleanField(default=False)
 
     objects = CollectionObjectManager()
 
