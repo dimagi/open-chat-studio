@@ -28,7 +28,7 @@ class TranscriptAnalysisForm(forms.ModelForm):
         self.team = kwargs.pop("team", None)
         super().__init__(*args, **kwargs)
 
-        referer = self.request.headers.get("referer")
+        referer = self.request.headers.get("referer") or ""
         parsed_url = urlparse(referer)
         query_params = parse_qs(parsed_url.query)
         sessions = get_filtered_sessions(self.request, self.experiment, query_params)
@@ -94,7 +94,7 @@ class TranscriptAnalysisForm(forms.ModelForm):
         # Validate the selected model
         try:
             provider_id, model_id = map(int, provider_model.split(":"))
-            if not LlmProviderModel.objects.filter(team=self.team, id=model_id).exists():
+            if not LlmProviderModel.objects.for_team(self.team).filter(id=model_id).exists():
                 raise forms.ValidationError("Invalid LLM provider model selected.")
             if not LlmProvider.objects.filter(team=self.team, id=provider_id).exists():
                 raise forms.ValidationError("Invalid LLM provider selected.")

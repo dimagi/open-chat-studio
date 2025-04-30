@@ -4,14 +4,14 @@
       <h3 class="font-medium">{{ query.name }}</h3>
       <div class="flex gap-2">
         <button type="button" class="text-blue-500"
-                hx-get="{% url 'analysis:update_query' team.slug object.id query.id %}"
+                hx-get="{% url 'analysis:update_query' request.team.slug object.id query.id %}"
                 hx-target="#query-{{ query.id }}"
                 hx-swap="outerHTML"
         >
           <i class="fa-solid fa-pen-to-square"></i>
         </button>
         <button type="button" class="text-red-500"
-                hx-delete="{% url 'analysis:update_query' team.slug object.id query.id %}"
+                hx-delete="{% url 'analysis:update_query' request.team.slug object.id query.id %}"
                 hx-target="#query-{{ query.id }}"
                 hx-swap="outerHTML"
         >

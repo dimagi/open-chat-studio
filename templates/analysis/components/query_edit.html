@@ -1,6 +1,6 @@
 <div class="border rounded-lg p-4" id="query-{{ query.id }}">
   <form
-    hx-post="{% url 'analysis:update_query' team.slug object.id query.id %}"
+    hx-post="{% url 'analysis:update_query' request.team.slug object.id query.id %}"
     hx-target="#query-{{ query.id }}"
     hx-swap="outerHTML"
   >

@@ -1,7 +1,7 @@
 from functools import cached_property
 
 from django.contrib import messages
-from django.http import HttpResponse, JsonResponse
+from django.http import FileResponse, HttpResponse, JsonResponse
 from django.shortcuts import get_object_or_404, redirect, render
 from django.urls import reverse
 from django.views.decorators.http import require_POST
@@ -126,7 +126,7 @@ class TranscriptAnalysisDeleteView(LoginAndTeamRequiredMixin, DeleteView):
 def run_analysis(request, team_slug, pk):
     analysis = get_object_or_404(TranscriptAnalysis, id=pk, team__slug=team_slug)
 
-    if analysis.is_complete:
+    if analysis.is_complete or analysis.is_processing:
         messages.error(request, "Analysis has already been completed.")
         return redirect(analysis.get_absolute_url())
 
@@ -145,7 +145,7 @@ def download_analysis_results(request, team_slug, pk):
         messages.error(request, "Analysis results are not available yet.")
         return redirect(analysis.get_absolute_url())
 
-    response = HttpResponse(analysis.result_file.read(), content_type="text/csv")
+    response = FileResponse(analysis.result_file.open("rb"), content_type="text/csv")
     response["Content-Disposition"] = f'attachment; filename="{analysis.name}_results.csv"'
     return response
 
@@ -192,9 +192,13 @@ def clone(request, team_slug, pk):
 @login_and_team_required
 def update_field(request, team_slug, pk):
     analysis = get_object_or_404(TranscriptAnalysis, id=pk, team__slug=team_slug)
+    allowed_fields = {"name", "description"}
 
     if request.method == "POST":
         field_name = request.POST.get("field_name", "").strip()
+        if field_name not in allowed_fields:
+            return JsonResponse({"error": "Editing this field is not permitted."}, status=403)
+
         field_type = request.POST.get("field_type", "").strip()
         if not field_name:
             return JsonResponse({"error": "Field name is required."}, status=400)

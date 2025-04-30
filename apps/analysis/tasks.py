@@ -82,10 +82,12 @@ def process_transcript_analysis(self, analysis_id):
                         description=f"Session {index + 1}/{total_sessions}: Query {q_index + 1}/{len(queries)}",
                     )
 
+                    sanitized_query = query.prompt.replace("{", "{{").replace("}", "}}")
+
                     prompt = f"""
                     Analyze the following conversation transcript according to this query:
                     
-                    QUERY: {query.prompt}
+                    QUERY: {sanitized_query}
                     
                     TRANSCRIPT:
                     {transcript}

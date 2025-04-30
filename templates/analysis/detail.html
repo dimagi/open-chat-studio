@@ -23,16 +23,16 @@
       </div>
       <div>
         {% if object.is_complete %}
-          <a href="{% url 'analysis:download' team.slug object.id %}" class="btn btn-success">
+          <a href="{% url 'analysis:download' request.team.slug object.id %}" class="btn btn-success">
             <i class="fa-solid fa-download"></i>
             Download Results
           </a>
         {% endif %}
-        <a href="{% url 'analysis:clone' team.slug object.id %}" class="btn">
+        <a href="{% url 'analysis:clone' request.team.slug object.id %}" class="btn">
           <i class="fa-solid fa-clone"></i>
           Clone
         </a>
-        <a href="{% url 'analysis:delete' team.slug object.id %}" class="btn">
+        <a href="{% url 'analysis:delete' request.team.slug object.id %}" class="btn">
           <i class="fa-solid fa-trash"></i>
         </a>
       </div>
@@ -60,7 +60,7 @@
     {% if not object.is_complete %}
       <div class="mb-6">
         <button class="btn btn-primary"
-                hx-get="{% url 'analysis:run' team.slug object.id %}"
+                hx-get="{% url 'analysis:run' request.team.slug object.id %}"
                 hx-swap="outerHTML"
         >
           <i class="fa-solid fa-play"></i>
@@ -84,7 +84,7 @@
       <div class="flex justify-between" id="chat-exports">
         <h2 class="text-lg font-semibold mb-4">Sessions ({{ object.sessions.count }})</h2>
         <a class="btn btn-sm btn-primary"
-           href="{% url 'analysis:export_sessions' team.slug object.id %}">
+           href="{% url 'analysis:export_sessions' request.team.slug object.id %}">
           Export Sessions
         </a>
       </div>
