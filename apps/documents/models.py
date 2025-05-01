@@ -110,4 +110,4 @@ class Collection(BaseTeamModel, VersionsMixin):
         return new_version
 
     def get_absolute_url(self):
-        return reverse("documents:collections", args=[self.team.slug, "collections"])
+        return reverse("documents:single_collection_home", args=[self.team.slug, self.id])

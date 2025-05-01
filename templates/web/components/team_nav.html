@@ -50,7 +50,7 @@
   {% flag "document_management" %}
     {% if perms.documents.view_collection %}
       <li>
-        <a href="{% url 'documents:collections' request.team.slug 'files' %}"
+        <a href="{% url 'documents:collection_home' request.team.slug %}"
            {% if active_tab == 'manage_files' %}class="menu-active"{% endif %}>
           <i class="fa fa-folder" aria-hidden="true"></i></i>
         {% translate "Manage Files" %}
