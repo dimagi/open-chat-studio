@@ -17,7 +17,7 @@
   </div>
 {% endblock %}
 {% block form %}
-  <div x-data="{isIndex: null}">
+  <div x-data="{isIndex: {% if form.instance.is_index %}true{% else %}false{% endif %}}">
     {% render_form_fields form "name" "is_index" %}
 
     <div x-cloak x-show="isIndex">
