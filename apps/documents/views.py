@@ -45,11 +45,21 @@ def single_collection_home(request, team_slug: str, pk: int):
         file_status=models.Subquery(
             CollectionFile.objects.filter(collection=collection, file=models.OuterRef("pk")).values("status")[:1]
         ),
+        chunking_strategy=models.Subquery(
+            CollectionFile.objects.filter(collection=collection, file=models.OuterRef("pk")).values(
+                "metadata__chunking_strategy"
+            )[:1]
+        ),
     )
+    # Load the labels for the file statuses
+    collection_files = available_files.filter(is_linked=True)
+    for file in collection_files:
+        if file.file_status:
+            file.file_status = FileStatus(file.file_status)
 
     context = {
         "collection": collection,
-        "collection_files": available_files.filter(is_linked=True),
+        "collection_files": collection_files,
         "supported_file_types": settings.MEDIA_SUPPORTED_FILE_TYPES,
         "max_summary_length": settings.MAX_SUMMARY_LENGTH,
         "available_files": available_files.filter(is_linked=False),
@@ -66,8 +76,15 @@ def add_collection_files(request, team_slug: str, pk: int):
     files = collection.team.file_set.filter(id__in=file_ids, is_version=False)
     status = FileStatus.IN_PROGRESS if collection.is_index else ""
 
+    metadata = {}
+    if collection.is_index:
+        metadata["chunking_strategy"] = {
+            "size": request.POST.get("chunk_size"),
+            "overlap": request.POST.get("chunk_overlap"),
+        }
+
     CollectionFile.objects.bulk_create(
-        [CollectionFile(collection=collection, file=file, status=status) for file in files]
+        [CollectionFile(collection=collection, file=file, status=status, metadata=metadata) for file in files]
     )
 
     messages.success(request, f"Added {len(files)} files to collection")

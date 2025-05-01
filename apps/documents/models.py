@@ -25,6 +25,7 @@ class CollectionFile(models.Model):
     file = models.ForeignKey("files.File", on_delete=models.CASCADE)
     collection = models.ForeignKey("documents.Collection", on_delete=models.CASCADE)
     status = models.CharField(max_length=64, choices=FileStatus.choices, blank=True)
+    metadata = models.JSONField(default=dict)
 
     def __str__(self) -> str:
         return f"{self.file.name} in {self.collection.name}"
