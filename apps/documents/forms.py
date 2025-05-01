@@ -32,7 +32,7 @@ class FileForm(forms.ModelForm):
         model = File
         fields = ["name", "summary", "file"]
         help_texts = {
-            "summary": "The summary of the file. This is only needed when the file will not be used for RAG.",
+            "summary": "This is only needed when the file will not be used for RAG",
         }
 
     def __init__(self, *args, **kwargs):
