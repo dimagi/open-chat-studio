@@ -16,6 +16,7 @@ from apps.documents.tables import CollectionsTable, FilesTable
 from apps.files.models import File
 from apps.teams.decorators import login_and_team_required
 from apps.teams.mixins import LoginAndTeamRequiredMixin
+from apps.utils.search import similarity_search
 
 
 class CollectionHome(LoginAndTeamRequiredMixin, TemplateView):
@@ -28,6 +29,7 @@ class CollectionHome(LoginAndTeamRequiredMixin, TemplateView):
             # "title_help_content": render_help_with_link("", "survey"),
             "new_object_url": reverse("documents:collection_new", args=[team_slug]),
             "table_url": reverse("documents:collection_table", args=[team_slug]),
+            "enable_search": True,
         }
 
 
@@ -87,7 +89,10 @@ class CollectionTableView(SingleTableView):
     template_name = "table/single_table.html"
 
     def get_queryset(self):
-        return Collection.objects.filter(team=self.request.team, is_version=False)
+        queryset = Collection.objects.filter(team=self.request.team, is_version=False).order_by("-created_at")
+        if search := self.request.GET.get("search"):
+            queryset = similarity_search(queryset, search_phase=search, columns=["name"])
+        return queryset
 
 
 class CollectionFormMixin:
@@ -155,6 +160,7 @@ class FileHome(LoginAndTeamRequiredMixin, TemplateView):
             "title": "Files",
             "new_object_url": reverse("documents:file_new", args=[team_slug]),
             "table_url": reverse("documents:file_table", args=[team_slug]),
+            "enable_search": True,
         }
 
 
@@ -165,7 +171,10 @@ class FileTableView(SingleTableView):
     template_name = "table/single_table.html"
 
     def get_queryset(self):
-        return File.objects.filter(team=self.request.team, is_version=False)
+        queryset = File.objects.filter(team=self.request.team, is_version=False).order_by("-created_at")
+        if search := self.request.GET.get("search"):
+            queryset = similarity_search(queryset, search_phase=search, columns=["name", "summary"], score=0.1)
+        return queryset
 
 
 class CreateFile(LoginAndTeamRequiredMixin, CreateView):
