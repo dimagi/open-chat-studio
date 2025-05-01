@@ -70,6 +70,16 @@ def add_collection_files(request, team_slug: str, pk: int):
     return redirect("documents:single_collection_home", team_slug=team_slug, pk=pk)
 
 
+@login_and_team_required
+@permission_required("documents.change_collection")
+@require_POST
+def delete_collection_file(request, team_slug: str, pk: int, file_id: int):
+    collection = get_object_or_404(Collection, id=pk, team__slug=team_slug)
+    CollectionFile.objects.filter(collection=collection, file_id=file_id).delete()
+    messages.success(request, "File removed from collection")
+    return redirect("documents:single_collection_home", team_slug=team_slug, pk=pk)
+
+
 class CollectionTableView(SingleTableView):
     model = Collection
     paginate_by = 25

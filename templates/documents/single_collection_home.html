@@ -78,9 +78,15 @@
                 {% endif %}
               </div>
               <div class="flex items-center gap-2 ml-4">
-                <a href="{% url 'files:base' team.slug file.id %}" class="btn btn-xs">
+                <a href="{% url 'files:base' team.slug file.id %}" class="btn btn-sm">
                   <i class="fa-solid fa-eye"></i>
                 </a>
+                <form action="{% url 'documents:delete_collection_file' team.slug collection.id file.id %}" method="POST" class="inline">
+                  {% csrf_token %}
+                  <button type="submit" class="btn btn-sm">
+                    <i class="fa-solid fa-trash"></i>
+                  </button>
+                </form>
               </div>
             </div>
           {% empty %}
