@@ -84,7 +84,7 @@ def delete_collection_file(request, team_slug: str, pk: int, file_id: int):
     return redirect("documents:single_collection_home", team_slug=team_slug, pk=pk)
 
 
-class CollectionTableView(SingleTableView):
+class CollectionTableView(LoginAndTeamRequiredMixin, SingleTableView):
     model = Collection
     paginate_by = 25
     table_class = CollectionsTable
@@ -104,8 +104,7 @@ class CollectionFormMixin:
         return kwargs
 
 
-# TODO: Add loginrequired and permission_required for other views as well
-class CreateCollection(CollectionFormMixin, CreateView):
+class CreateCollection(LoginAndTeamRequiredMixin, CollectionFormMixin, CreateView):
     model = Collection
     form_class = CollectionForm
     template_name = "documents/collection_form.html"
@@ -128,7 +127,7 @@ class CreateCollection(CollectionFormMixin, CreateView):
         return response
 
 
-class EditCollection(CollectionFormMixin, UpdateView):
+class EditCollection(LoginAndTeamRequiredMixin, CollectionFormMixin, UpdateView):
     model = Collection
     form_class = CollectionForm
     template_name = "documents/collection_form.html"
@@ -178,7 +177,7 @@ class FileHome(LoginAndTeamRequiredMixin, TemplateView):
         }
 
 
-class FileTableView(SingleTableView):
+class FileTableView(LoginAndTeamRequiredMixin, SingleTableView):
     model = File
     paginate_by = 25
     table_class = FilesTable
