@@ -20,6 +20,12 @@
         <div>
           <h1 class="pg-title">{{ collection.name }} {% if collection.is_index %}<span class="badge badge-sm badge-ghost">Document Index</span>{% endif %}</h1>
           <div class="text-sm text-base-content/60 mt-1">
+            {% if collection.is_index %}
+              <span class="pg-text-muted">OpenAI vector store id: {% include "generic/copy_chip.html" with copy_element_id="copy_vector_store_id" copy_value=collection.openai_vector_store_id extra_styles="btn-ghost" %}</span>
+
+            {% endif %}
+          </div>
+          <div class="text-sm text-base-content/60 mt-1">
             {{ collection.files.count }} files • {{ collection.size }} MB total
           </div>
         </div>

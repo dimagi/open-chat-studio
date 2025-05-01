@@ -548,3 +548,19 @@ def get_and_store_openai_file(client, file_id: str, team_id: int) -> File:
     file_content_obj = client.files.content(file_id)
 
     return File.from_external_source(filename, file_content_obj, file_id, "openai", team_id)
+
+
+def create_vector_store(llm_provider, name: str, vector_store_id: str | None = None) -> str:
+    client = llm_provider.get_llm_service().get_raw_client()
+    vector_store = client.vector_stores.create(name=name)
+    return vector_store.id
+
+
+def delete_vector_store(llm_provider, vector_store_id: str, fail_silently: bool = False):
+    client = llm_provider.get_llm_service().get_raw_client()
+    try:
+        client.vector_stores.delete(vector_store_id=vector_store_id)
+    except (openai.NotFoundError, ValueError) as e:
+        logger.exception("Vector store %s not found in OpenAI", vector_store_id)
+        if not fail_silently:
+            raise e
