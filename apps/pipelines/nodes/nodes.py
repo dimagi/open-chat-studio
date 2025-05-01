@@ -261,6 +261,13 @@ class LLMResponseWithPrompt(LLMResponse, HistoryMixin):
             widget=Widgets.select, options_source=OptionsSource.collection, flag_required="document_management"
         ),
     )
+    document_index_id: OptionalInt = Field(
+        None,
+        title="Document Index",
+        json_schema_extra=UiSchema(
+            widget=Widgets.select, options_source=OptionsSource.document_index, flag_required="document_management"
+        ),
+    )
     tools: list[str] = Field(
         default_factory=list,
         description="The tools to enable for the bot",
