@@ -4,6 +4,7 @@ from django.contrib.auth.decorators import permission_required
 from django.db import models
 from django.http import HttpResponse
 from django.shortcuts import get_object_or_404, redirect, render
+from django.template.loader import render_to_string
 from django.urls import reverse
 from django.views import View
 from django.views.decorators.http import require_POST
@@ -14,6 +15,7 @@ from apps.documents.forms import CollectionForm, FileForm
 from apps.documents.models import Collection, CollectionFile, FileStatus
 from apps.documents.tables import CollectionsTable, FilesTable
 from apps.files.models import File
+from apps.generics.chips import Chip
 from apps.teams.decorators import login_and_team_required
 from apps.teams.mixins import LoginAndTeamRequiredMixin
 from apps.utils.search import similarity_search
@@ -145,10 +147,22 @@ class EditCollection(CollectionFormMixin, UpdateView):
 
 class DeleteCollection(LoginAndTeamRequiredMixin, View):
     def delete(self, request, team_slug: str, pk: int):
-        collection = get_object_or_404(Collection, id=pk, team=request.team)
-        collection.archive()
-        messages.success(request, "Collection Deleted")
-        return HttpResponse()
+        collection = get_object_or_404(Collection, team__slug=team_slug, id=pk)
+        if nodes := collection.get_node_references():
+            response = render_to_string(
+                "assistants/partials/referenced_objects.html",
+                context={
+                    "object_name": "collection",
+                    "pipeline_nodes": [
+                        Chip(label=node.pipeline.name, url=node.pipeline.get_absolute_url()) for node in nodes.all()
+                    ],
+                },
+            )
+            return HttpResponse(response, headers={"HX-Reswap": "none"}, status=400)
+        else:
+            collection.archive()
+            messages.success(request, "Collection deleted")
+            return HttpResponse()
 
 
 class FileHome(LoginAndTeamRequiredMixin, TemplateView):
@@ -227,8 +241,18 @@ class DeleteFile(LoginAndTeamRequiredMixin, View):
     permission_required = "files.delete_file"
 
     def delete(self, request, team_slug: str, pk: int):
-        file = get_object_or_404(File, id=pk, team=request.team)
-        file.is_archived = True
-        file.save()
-        messages.success(request, "File Deleted")
-        return HttpResponse()
+        file = get_object_or_404(File, team__slug=team_slug, id=pk)
+
+        if collections := file.get_collection_references():
+            response = render_to_string(
+                "assistants/partials/referenced_objects.html",
+                context={
+                    "object_name": "file",
+                    "pipeline_nodes": [Chip(label=col.name, url=col.get_absolute_url()) for col in collections],
+                },
+            )
+            return HttpResponse(response, headers={"HX-Reswap": "none"}, status=400)
+        else:
+            file.archive()
+            messages.success(request, "File deleted")
+            return HttpResponse()
