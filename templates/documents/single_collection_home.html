@@ -65,16 +65,16 @@
         <div class="grid grid-cols-1 gap-4">
           {% for file in collection_files %}
             <div class="flex items-center justify-between p-3 bg-base-200 rounded-lg">
-              <div class="flex items-center gap-3 flex-1">
-                <div class="flex items-center gap-2 min-w-fit">
+              <div class="flex flex-col flex-1 gap-1">
+                <div class="flex items-center gap-2">
                   <span class="text-sm font-medium">{{ file.name }}</span>
-                  {% if file.file_status %}
-                    <span class="badge badge-sm badge-ghost">{{ file.file_status }}</span>
-                  {% endif %}
                   <div class="text-xs badge badge-ghost">{{ file.size_mb }} MB</div>
+                  {% if file.file_status %}
+                    <span class="text-sm">Index status: <span class="badge badge-sm badge-ghost"> {{ file.file_status }}</span></span>
+                  {% endif %}
                 </div>
                 {% if not collection.is_index %}
-                  <span class="text-xs text-base-content/70 truncate">{{ file.summary|default:'No summary available' }}</span>
+                  <span class="text-xs text-base-content/70">{{ file.summary|default:'No summary available' }}</span>
                 {% endif %}
               </div>
               <div class="flex items-center gap-2 ml-4">
