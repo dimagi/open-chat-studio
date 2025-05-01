@@ -1,6 +1,7 @@
 from django import forms
 
 from apps.documents.models import Collection
+from apps.files.models import File
 from apps.service_providers.models import LlmProviderTypes
 
 
@@ -24,3 +25,16 @@ class CollectionForm(forms.ModelForm):
             self.fields["is_index"].widget.attrs["disabled"] = True
         else:
             self.fields["is_index"].widget.attrs = {"x-model": "isIndex"}
+
+
+class FileForm(forms.ModelForm):
+    class Meta:
+        model = File
+        fields = ["name", "summary", "file"]
+        help_texts = {
+            "summary": "The summary of the file. This is only needed when the file will not be used for RAG.",
+        }
+
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        self.fields["file"].widget.attrs.update({"class": "file-input"})

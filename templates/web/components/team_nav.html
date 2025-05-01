@@ -51,10 +51,19 @@
     {% if perms.documents.view_collection %}
       <li>
         <a href="{% url 'documents:collection_home' request.team.slug %}"
-           {% if active_tab == 'manage_files' %}class="menu-active"{% endif %}>
+           {% if active_tab == 'collections' %}class="menu-active"{% endif %}>
           <i class="fa fa-folder" aria-hidden="true"></i></i>
-        {% translate "Manage Files" %}
+        {% translate "Collections" %}
       </a>
+      <ul>
+        <li>
+          <a href="{% url 'documents:file_home' request.team.slug %}"
+             {% if active_tab == 'files' %}class="menu-active"{% endif %}>
+            <i class="fa fa-folder" aria-hidden="true"></i></i>
+          {% translate "Files" %}
+        </a>
+      </li>
+      </ul>
       </li>
     {% endif %}
   {% endflag %}

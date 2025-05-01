@@ -12,3 +12,4 @@ urlpatterns = [
 ]
 
 urlpatterns.extend(make_crud_urls(views, "Collection", "collection"))
+urlpatterns.extend(make_crud_urls(views, "File", "file"))

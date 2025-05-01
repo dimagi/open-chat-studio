@@ -10,9 +10,9 @@ from django.views.decorators.http import require_POST
 from django.views.generic import CreateView, TemplateView, UpdateView
 from django_tables2 import SingleTableView
 
-from apps.documents.forms import CollectionForm
+from apps.documents.forms import CollectionForm, FileForm
 from apps.documents.models import Collection, CollectionFile, FileStatus
-from apps.documents.tables import CollectionsTable
+from apps.documents.tables import CollectionsTable, FilesTable
 from apps.files.models import File
 from apps.teams.decorators import login_and_team_required
 from apps.teams.mixins import LoginAndTeamRequiredMixin
@@ -23,7 +23,7 @@ class CollectionHome(LoginAndTeamRequiredMixin, TemplateView):
 
     def get_context_data(self, team_slug: str, **kwargs):
         return {
-            "active_tab": "manage_files",
+            "active_tab": "collections",
             "title": "Collections",
             # "title_help_content": render_help_with_link("", "survey"),
             "new_object_url": reverse("documents:collection_new", args=[team_slug]),
@@ -105,11 +105,11 @@ class CreateCollection(CollectionFormMixin, CreateView):
     extra_context = {
         "title": "Create Collection",
         "button_text": "Create",
-        "active_tab": "manage_files",
+        "active_tab": "collections",
     }
 
     def get_success_url(self):
-        return reverse("documents:collection_edit", args=[self.request.team.slug, self.object.id])
+        return reverse("documents:single_collection_home", args=[self.request.team.slug, self.object.id])
 
     def form_valid(self, form):
         form.instance.team = self.request.team
@@ -128,7 +128,7 @@ class EditCollection(CollectionFormMixin, UpdateView):
     extra_context = {
         "title": "Update Collection",
         "button_text": "Update",
-        "active_tab": "manage_files",
+        "active_tab": "collections",
     }
 
     def get_queryset(self):
@@ -143,4 +143,83 @@ class DeleteCollection(LoginAndTeamRequiredMixin, View):
         collection = get_object_or_404(Collection, id=pk, team=request.team)
         collection.archive()
         messages.success(request, "Collection Deleted")
+        return HttpResponse()
+
+
+class FileHome(LoginAndTeamRequiredMixin, TemplateView):
+    template_name = "generic/object_home.html"
+
+    def get_context_data(self, team_slug: str, **kwargs):
+        return {
+            "active_tab": "files",
+            "title": "Files",
+            "new_object_url": reverse("documents:file_new", args=[team_slug]),
+            "table_url": reverse("documents:file_table", args=[team_slug]),
+        }
+
+
+class FileTableView(SingleTableView):
+    model = File
+    paginate_by = 25
+    table_class = FilesTable
+    template_name = "table/single_table.html"
+
+    def get_queryset(self):
+        return File.objects.filter(team=self.request.team, is_version=False)
+
+
+class CreateFile(LoginAndTeamRequiredMixin, CreateView):
+    template_name = "documents/file_form.html"
+    model = File
+    form_class = FileForm
+    permission_required = "files.add_file"
+    extra_context = {
+        "title": "Upload File",
+        "button_text": "Upload",
+        "active_tab": "files",
+        "form_attrs": {"enctype": "multipart/form-data"},
+    }
+
+    def get_success_url(self):
+        return reverse("documents:file_home", args=[self.request.team.slug])
+
+    def form_valid(self, form):
+        form.instance.team = self.request.team
+        response = super().form_valid(form)
+        messages.success(self.request, "File uploaded successfully")
+        return response
+
+
+class EditFile(LoginAndTeamRequiredMixin, UpdateView):
+    template_name = "documents/file_form.html"
+    model = File
+    form_class = FileForm
+    permission_required = "files.change_file"
+    extra_context = {
+        "title": "Edit File",
+        "button_text": "Update",
+        "active_tab": "files",
+        "form_attrs": {"enctype": "multipart/form-data"},
+    }
+
+    def get_queryset(self):
+        return File.objects.filter(team=self.request.team)
+
+    def get_success_url(self):
+        return reverse("documents:file_home", args=[self.request.team.slug])
+
+    def post(self, request, *args, **kwargs):
+        response = super().post(request, *args, **kwargs)
+        messages.success(request, "File updated successfully")
+        return response
+
+
+class DeleteFile(LoginAndTeamRequiredMixin, View):
+    permission_required = "files.delete_file"
+
+    def delete(self, request, team_slug: str, pk: int):
+        file = get_object_or_404(File, id=pk, team=request.team)
+        file.is_archived = True
+        file.save()
+        messages.success(request, "File Deleted")
         return HttpResponse()
