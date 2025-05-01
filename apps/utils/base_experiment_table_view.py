@@ -1,5 +1,4 @@
 from django.contrib.auth.mixins import PermissionRequiredMixin
-from django.contrib.postgres.search import TrigramSimilarity
 from django.db.models import Q
 from django_tables2 import SingleTableView
 
@@ -28,14 +27,5 @@ class BaseExperimentTableView(LoginAndTeamRequiredMixin, SingleTableView, Permis
                 search_phase=search,
                 columns=["name", "description"],
                 extra_conditions=Q(owner__username__icontains=search),
-            )
-            name_similarity = TrigramSimilarity("name", search)
-            description_similarity = TrigramSimilarity("description", search)
-            query_set = (
-                query_set.annotate(
-                    similarity=name_similarity + description_similarity,
-                )
-                .filter(Q(similarity__gt=0.2) | Q(owner__username__icontains=search))
-                .order_by("-similarity")
             )
         return query_set
