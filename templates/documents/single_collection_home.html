@@ -63,22 +63,22 @@
         </dialog>
 
         <div class="grid grid-cols-1 gap-4">
-          {% for collection_file in collection_files %}
+          {% for file in collection_files %}
             <div class="flex items-center justify-between p-3 bg-base-200 rounded-lg">
-              <div class="flex items-center gap-3">
-                <div class="flex items-center gap-2">
-                  <span class="text-sm">{{ collection_file.file.name }}</span>
-                  {% if collection_file.status %}
-                    <span class="badge badge-sm badge-ghost">{{ collection_file.status }}</span>
+              <div class="flex items-center gap-3 flex-1">
+                <div class="flex items-center gap-2 min-w-fit">
+                  <span class="text-sm font-medium">{{ file.name }}</span>
+                  {% if file.file_status %}
+                    <span class="badge badge-sm badge-ghost">{{ file.file_status }}</span>
                   {% endif %}
+                  <div class="text-xs badge badge-ghost">{{ file.size_mb }} MB</div>
                 </div>
                 {% if not collection.is_index %}
-                  <span class="text-xs text-base-content/70">{{ collection_file.file.summary|default:'No summary available' }}</span>
+                  <span class="text-xs text-base-content/70 truncate">{{ file.summary|default:'No summary available' }}</span>
                 {% endif %}
-                <div class="text-xs badge badge-ghost">{{ file.size_mb }} MB</div>
               </div>
-              <div class="flex items-center gap-2">
-                <a href="{% url 'files:base' team.slug collection_file.file.id %}" class="btn btn-xs">
+              <div class="flex items-center gap-2 ml-4">
+                <a href="{% url 'files:base' team.slug file.id %}" class="btn btn-xs">
                   <i class="fa-solid fa-eye"></i>
                 </a>
               </div>

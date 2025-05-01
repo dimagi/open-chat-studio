@@ -1,6 +1,7 @@
 from django.conf import settings
 from django.contrib import messages
 from django.contrib.auth.decorators import permission_required
+from django.db import models
 from django.http import HttpResponse
 from django.shortcuts import get_object_or_404, redirect, render
 from django.urls import reverse
@@ -33,14 +34,21 @@ class CollectionHome(LoginAndTeamRequiredMixin, TemplateView):
 @login_and_team_required
 @permission_required("documents.view_collection", raise_exception=True)
 def single_collection_home(request, team_slug: str, pk: int):
-    collection = get_object_or_404(Collection, id=pk, team__slug=team_slug)
-    linked_files = collection.files.values_list("id", flat=True)
+    collection = get_object_or_404(Collection.objects.select_related("team"), id=pk, team__slug=team_slug)
+
+    available_files = File.objects.filter(team__slug=team_slug, is_version=False).annotate(
+        is_linked=models.Exists(CollectionFile.objects.filter(collection=collection, file=models.OuterRef("pk"))),
+        file_status=models.Subquery(
+            CollectionFile.objects.filter(collection=collection, file=models.OuterRef("pk")).values("status")[:1]
+        ),
+    )
+
     context = {
         "collection": collection,
-        "collection_files": CollectionFile.objects.filter(collection__id=pk),
+        "collection_files": available_files.filter(is_linked=True),
         "supported_file_types": settings.MEDIA_SUPPORTED_FILE_TYPES,
         "max_summary_length": settings.MAX_SUMMARY_LENGTH,
-        "available_files": File.objects.filter(team__slug=team_slug, is_version=False).exclude(id__in=linked_files),
+        "available_files": available_files.filter(is_linked=False),
     }
     return render(request, "documents/single_collection_home.html", context)
 
