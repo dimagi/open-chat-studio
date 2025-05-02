@@ -39,9 +39,7 @@ class CollectionHome(LoginAndTeamRequiredMixin, TemplateView):
 @permission_required("documents.view_collection", raise_exception=True)
 def single_collection_home(request, team_slug: str, pk: int):
     collection = get_object_or_404(Collection.objects.select_related("team"), id=pk, team__slug=team_slug)
-
-    available_files = File.objects.filter(team__slug=team_slug, is_version=False).annotate(
-        is_linked=models.Exists(CollectionFile.objects.filter(collection=collection, file=models.OuterRef("pk"))),
+    collection_files = collection.files.annotate(
         file_status=models.Subquery(
             CollectionFile.objects.filter(collection=collection, file=models.OuterRef("pk")).values("status")[:1]
         ),
@@ -52,7 +50,6 @@ def single_collection_home(request, team_slug: str, pk: int):
         ),
     )
     # Load the labels for the file statuses
-    collection_files = available_files.filter(is_linked=True)
     for file in collection_files:
         if file.file_status:
             file.file_status = FileStatus(file.file_status)
@@ -62,7 +59,6 @@ def single_collection_home(request, team_slug: str, pk: int):
         "collection_files": collection_files,
         "supported_file_types": settings.MEDIA_SUPPORTED_FILE_TYPES,
         "max_summary_length": settings.MAX_SUMMARY_LENGTH,
-        "available_files": available_files.filter(is_linked=False),
     }
     return render(request, "documents/single_collection_home.html", context)
 
