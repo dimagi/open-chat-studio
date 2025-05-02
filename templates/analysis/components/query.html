@@ -1,0 +1,27 @@
+<div class="border rounded-lg p-4" id="query-{{ query.id }}">
+  <div>
+    <div class="flex justify-between items-center mb-2">
+      <h3 class="font-medium">{{ query.name }}</h3>
+      <div class="flex gap-2">
+        <button type="button" class="text-blue-500"
+                hx-get="{% url 'analysis:update_query' request.team.slug object.id query.id %}"
+                hx-target="#query-{{ query.id }}"
+                hx-swap="outerHTML"
+        >
+          <i class="fa-solid fa-pen-to-square"></i>
+        </button>
+        <button type="button" class="text-red-500"
+                hx-delete="{% url 'analysis:update_query' request.team.slug object.id query.id %}"
+                hx-target="#query-{{ query.id }}"
+                hx-swap="outerHTML"
+        >
+          <i class="fa-solid fa-trash"></i>
+        </button>
+      </div>
+    </div>
+    <p class="text-gray-700">{{ query.prompt }}</p>
+    {% if query.output_format %}
+      <p class="text-gray-500 text-sm">Format: {{ query.output_format }}</p>
+    {% endif %}
+  </div>
+</div>

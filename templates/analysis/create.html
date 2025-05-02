@@ -1,0 +1,45 @@
+{% extends "web/app/app_base.html" %}
+{% load form_tags %}
+
+{% block app %}
+    <div class="container mx-auto px-4 py-8">
+        <h1 class="text-2xl font-bold mb-6">Create Transcript Analysis</h1>
+
+        <div class="p-6">
+            <form method="post" enctype="multipart/form-data">
+                {% csrf_token %}
+                {% render_form_fields form %}
+
+                <div class="mt-6">
+                    <button type="submit" class="bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded">
+                        Create Analysis
+                    </button>
+                    <a href="{% url 'experiments:single_experiment_home' request.team.slug experiment.id %}" class="ml-2 text-gray-600 hover:text-gray-800">
+                        Cancel
+                    </a>
+                </div>
+            </form>
+        </div>
+
+        <div class="mt-8">
+            <h2 class="text-xl font-semibold mb-4">How to Create a Query File</h2>
+            <div class="bg-gray-50 p-4 rounded-lg">
+                <p class="mb-2">Create a CSV file with the following columns:</p>
+                <ol class="list-decimal ml-6 mb-4">
+                    <li><strong>Query Name</strong> - A short name for the query</li>
+                    <li><strong>Query Description</strong> - The full query prompt to use</li>
+                    <li><strong>Output Format</strong> (optional) - Preferred format for the result</li>
+                </ol>
+                <p class="mb-2 font-semibold">The column headers are optional but the order must match what's shown above.</p>
+                <p class="mb-2">Example queries:</p>
+                <div class="bg-white p-3 rounded border">
+<pre>Query Name,Query Description,Output Format
+Emotions,What emotions did the user express during this conversation?,Brief phrases separated by commas
+Main Issue,What was the main issue the user was trying to solve?,One short paragraph
+Satisfaction,Did the bot provide a satisfactory resolution?,Yes/No/Partial
+Solution Quality,Rate the quality of the solution provided by the bot on a scale from 1-5,Number 1-5</pre>
+                </div>
+            </div>
+        </div>
+    </div>
+{% endblock %}

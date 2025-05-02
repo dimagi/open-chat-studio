@@ -1,0 +1,94 @@
+{% extends "web/app/app_base.html" %}
+{% load static %}
+
+{% block page_head %}
+  {{ block.super }}
+  <script src="{% static 'celery_progress/celery_progress.js' %}"></script>
+{% endblock %}
+
+{% block breadcrumbs %}
+  <div class="text-sm breadcrumbs" aria-label="breadcrumbs">
+    <ul>
+      <li><a href="{% url 'analysis:list' request.team.slug %}">Session Analysis</a></li>
+      <li class="pg-breadcrumb-active" aria-current="page">Analysis {{ object.name }}</li>
+    </ul>
+  </div>
+{% endblock %}
+
+{% block app %}
+  <div class="container mx-auto px-4 py-8">
+    <div class="flex justify-between items-center mb-6">
+      <div id="name-field" class="mt-4">
+        {% include "analysis/components/editable_field.html" with value=object.name field_name="name" field_type="input" %}
+      </div>
+      <div>
+        {% if object.is_complete %}
+          <a href="{% url 'analysis:download' request.team.slug object.id %}" class="btn btn-success">
+            <i class="fa-solid fa-download"></i>
+            Download Results
+          </a>
+        {% endif %}
+        <a href="{% url 'analysis:clone' request.team.slug object.id %}" class="btn">
+          <i class="fa-solid fa-clone"></i>
+          Clone
+        </a>
+        <a href="{% url 'analysis:delete' request.team.slug object.id %}" class="btn">
+          <i class="fa-solid fa-trash"></i>
+        </a>
+      </div>
+    </div>
+
+    <div class="mb-6">
+      <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+        <div>
+          <h2 class="text-lg font-semibold mb-2">Details</h2>
+          <p><strong>Status:</strong> {{ object.get_status_display }}</p>
+          <p><strong>Experiment:</strong> {% include "generic/object_chip.html" with object=object.experiment %}</p>
+          <p><strong>LLM:</strong> {{ object.llm_provider_model }}</p>
+          <p><strong>Created:</strong> {{ object.created_at }}</p>
+          <p><strong>Created By:</strong> {{ object.created_by }}</p>
+        </div>
+        <div>
+          <h2 class="text-lg font-semibold mb-2">Description</h2>
+          <div id="description-field">
+            {% include "analysis/components/editable_field.html" with value=object.description field_name="description" field_type="textarea" %}
+          </div>
+        </div>
+      </div>
+    </div>
+
+    {% if not object.is_complete %}
+      <div class="mb-6">
+        <button class="btn btn-primary"
+                hx-get="{% url 'analysis:run' request.team.slug object.id %}"
+                hx-swap="outerHTML"
+        >
+          <i class="fa-solid fa-play"></i>
+          Run Analysis
+        </button>
+      </div>
+    {% endif %}
+
+    {% if object.error_message %}
+      <div class="bg-red-100 border border-red-400 text-red-700 px-4 py-3 rounded mb-6">
+        <h2 class="text-lg font-semibold mb-2">Error</h2>
+        <p>{{ object.error_message }}</p>
+      </div>
+    {% endif %}
+
+    <div class="mb-6">
+      {% include "analysis/components/editable_queries.html" with queries_json=queries_json %}
+    </div>
+
+    <div class="mb-6">
+      <div class="flex justify-between" id="chat-exports">
+        <h2 class="text-lg font-semibold mb-4">Sessions ({{ object.sessions.count }})</h2>
+        <a class="btn btn-sm btn-primary"
+           href="{% url 'analysis:export_sessions' request.team.slug object.id %}">
+          Export Sessions
+        </a>
+      </div>
+      {% include "table/single_table.html" with table=session_table %}
+    </div>
+  </div>
+{% endblock %}
