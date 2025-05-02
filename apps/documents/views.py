@@ -81,7 +81,7 @@ def add_collection_files(request, team_slug: str, pk: int):
                     team=request.team,
                     name=uploaded_file.name,
                     file=uploaded_file,
-                    summary=request.POST[uploaded_file.name] if collection.is_index else "",
+                    summary=request.POST[uploaded_file.name] if not collection.is_index else "",
                 )
             )
 
