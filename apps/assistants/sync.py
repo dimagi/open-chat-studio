@@ -479,9 +479,26 @@ def _update_or_create_vector_store(assistant, name, vector_store_id, file_ids) -
         return vector_store_id
 
     vector_store = client.vector_stores.create(name=name, file_ids=file_ids[:100])
-    for chunk in chunk_list(file_ids[100:], 500):
-        client.vector_stores.file_batches.create(vector_store_id=vector_store.id, file_ids=chunk)
-    return vector_store.id
+    return link_files_to_vector_store(client, vector_store.id, file_ids[:100])
+
+
+def link_files_to_vector_store(
+    client, vector_store_id: str, file_ids: list[str], chunk_size=None, chunk_overlap=None
+) -> str:
+    """Link OpenAI files `file_ids` to the vector store `vector_store_id` in OpenAI."""
+    # TODO: Test
+    chunking_strategy = None
+    if chunk_size and chunk_overlap:
+        chunking_strategy = {
+            "type": "static",
+            "static": {"max_chunk_size_tokens": chunk_size, "chunk_overlap_tokens": chunk_overlap},
+        }
+
+    for chunk in chunk_list(file_ids, 500):
+        client.vector_stores.file_batches.create(
+            vector_store_id=vector_store_id, file_ids=chunk, chunking_strategy=chunking_strategy
+        )
+    return vector_store_id
 
 
 def _openai_assistant_to_ocs_kwargs(assistant: Assistant, team=None, llm_provider=None) -> dict:

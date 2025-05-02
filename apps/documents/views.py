@@ -1,3 +1,12 @@
+"""
+TODOs:
+- Docstring and test `sync_openai_vector_store`
+- Move the index specific logic into an IndexService class. This class should be responsible for calling OpenAI when
+necessary.
+- Retry logic in case the calls to OpenAI fails
+- When user changes the LLM provider, we should remove the old vector store and create a new one + re-upload files
+"""
+
 import logging
 
 from django.conf import settings
@@ -89,17 +98,23 @@ def add_collection_files(request, team_slug: str, pk: int):
 
         # Create file links
         status = FileStatus.PENDING if collection.is_index else ""
+        chunking_strategy = {}
         metadata = {}
         if collection.is_index:
-            metadata["chunking_strategy"] = {
-                "size": request.POST.get("chunk_size"),
-                "overlap": request.POST.get("chunk_overlap"),
+            chunking_strategy = {
+                "chunk_size": int(request.POST.get("chunk_size")),
+                "chunk_overlap": int(request.POST.get("chunk_overlap")),
             }
+            metadata["chunking_strategy"] = chunking_strategy
 
         collection_files = CollectionFile.objects.bulk_create(
             [CollectionFile(collection=collection, file=file, status=status, metadata=metadata) for file in files]
         )
-        upload_files_to_vector_store_task.delay([f.id for f in collection_files])
+
+        if collection.is_index:
+            upload_files_to_vector_store_task.delay(
+                [f.id for f in collection_files], chuking_strategy=chunking_strategy
+            )
 
     messages.success(request, f"Added {len(files)} files to collection")
     return redirect("documents:single_collection_home", team_slug=team_slug, pk=pk)
@@ -114,8 +129,6 @@ def delete_collection_file(request, team_slug: str, pk: int, file_id: int):
     )
 
     if collection_file.collection.is_index:
-        # TODO: Move the index specific logic into an IndexService class. This class should be responsible for calling
-        # OpenAI when necessary.
         client = collection_file.collection.llm_provider.get_llm_service().get_raw_client()
         delete_file_from_openai(client, collection_file.file)
 
@@ -145,7 +158,6 @@ class CollectionFormMixin:
         return kwargs
 
     def sync_openai_vector_store(self, collection: Collection, remove_old_vector_store: bool = False):
-        # TODO: Docstring and test
         try:
             if remove_old_vector_store:
                 delete_vector_store(collection.llm_provider, collection.openai_vector_store_id, fail_silently=True)
@@ -227,11 +239,10 @@ class DeleteCollection(LoginAndTeamRequiredMixin, View):
             if collection.is_index and collection.openai_vector_store_id:
                 try:
                     delete_vector_store(collection.llm_provider, collection.openai_vector_store_id)
+                    messages.success(request, "Collection deleted")
                 except Exception as e:
                     logger.exception(f"Could not delete vector store for collection {collection.id}. {e}")
                     messages.error(self.request, "Could not delete the vector store at OpenAI. Please try again later")
-                    return HttpResponse()
 
             collection.archive()
-            messages.success(request, "Collection deleted")
             return HttpResponse()
