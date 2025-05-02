@@ -271,6 +271,10 @@ class LLMResponseWithPrompt(LLMResponse, HistoryMixin):
         description="Custom actions to enable for the bot",
         json_schema_extra=UiSchema(widget=Widgets.multiselect, options_source=OptionsSource.custom_actions),
     )
+    tag: str = Field(
+        default="Tag to add to output message",
+        json_schema_extra=UiSchema(widget=Widgets.expandable_text),
+    )
 
     @model_validator(mode="after")
     def check_prompt_variables(self) -> Self:
@@ -342,6 +346,7 @@ class LLMResponseWithPrompt(LLMResponse, HistoryMixin):
             node_id=node_id,
             output=result.output,
             output_message_metadata=history_manager.output_message_metadata,
+            tag=f"{self.name}:{self.tag}" if self.tag and self.tag.strip() else None,
         )
 
 

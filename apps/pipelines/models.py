@@ -339,6 +339,7 @@ class Pipeline(BaseTeamModel, VersionsMixin):
                     ChatMessageType.AI,
                     metadata=output_metadata,
                     tags=output.get("output_message_tags"),
+                    tag=output.get("tag"),
                 )
                 ai_message.add_version_tag(
                     version_number=experiment.version_number, is_a_version=experiment.is_a_version
@@ -367,7 +368,13 @@ class Pipeline(BaseTeamModel, VersionsMixin):
         )
 
     def _save_message_to_history(
-        self, session: ExperimentSession, message: str, type_: ChatMessageType, metadata: dict, tags: list[str] = None
+        self,
+        session: ExperimentSession,
+        message: str,
+        type_: ChatMessageType,
+        metadata: dict,
+        tags: list[str] = None,
+        tag: str = None,
     ) -> ChatMessage:
         chat_message = ChatMessage.objects.create(
             chat=session.chat, message_type=type_.value, content=message, metadata=metadata
@@ -376,6 +383,8 @@ class Pipeline(BaseTeamModel, VersionsMixin):
         if tags:
             for tag in tags:
                 chat_message.add_system_tag(tag, TagCategories.BOT_RESPONSE)
+        if tag:
+            chat_message.add_system_tag(tag, "")
         return chat_message
 
     @transaction.atomic()
