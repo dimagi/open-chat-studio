@@ -68,7 +68,7 @@
                     {% endif %}
                   </div>
                 {% endif %}
-                <span class="text-sm font-medium">{{ file.name }}</span>
+                <span class="text-sm font-medium">{% include "generic/chip.html" with chip=file.as_chip %}</span>
                 <div class="text-xs badge badge-ghost">{{ file.size_mb }} MB</div>
               </div>
               {% if collection.is_index %}

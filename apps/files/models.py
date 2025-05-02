@@ -9,6 +9,7 @@ from django.db import models
 from django.urls import reverse
 
 from apps.experiments.versioning import VersionDetails, VersionField, VersionsMixin, VersionsObjectManagerMixin
+from apps.generics.chips import Chip
 from apps.teams.models import BaseTeamModel
 from apps.utils.conversions import bytes_to_megabytes
 from apps.web.meta import absolute_url
@@ -145,3 +146,7 @@ class File(BaseTeamModel, VersionsMixin):
 
     def get_absolute_url(self):
         return reverse("files:file_edit", args=[self.team.slug, self.id])
+
+    def as_chip(self) -> Chip:
+        label = self.name
+        return Chip(label=label, url=self.get_absolute_url())
