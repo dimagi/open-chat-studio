@@ -43,98 +43,64 @@
         </button>
       </div>
 
-      <dialog id="chooseFilesModal" class="modal">
-        <div class="modal-box">
-          <h3 class="font-bold text-lg mb-4">Add Files to Collection</h3>
-          <form method="dialog">
-            <button class="btn btn-sm btn-circle btn-ghost absolute right-2 top-2">✕</button>
-          </form>
-          <form action="{% url 'documents:add_collection_files' team.slug collection.id %}" method="POST">
-            {% csrf_token %}
-            <select id="file-select" name="files" multiple placeholder="Select files" class="w-full">
-              {% for file in available_files %}
-                <option value="{{ file.id }}">{{ file.name }}</option>
-              {% endfor %}
-            </select>
-            {% if collection.is_index %}
-              <fieldset class="fieldset mt-4">
-                <legend class="fieldset-legend">Chunking Strategy</legend>
-                <input name="chunk_size" type="text" class="input" value="800" required />
-                <p class="label">Chunk Size (tokens)</p>
-                <input name="chunk_overlap" type="text" class="input" value="800" required />
-                <p class="label">Chunk Overlap (tokens)</p>
-              </fieldset>
-            {% endif %}
-            <div class="modal-action">
-              <button type="submit" class="btn btn-primary">Save</button>
-            </div>
-          </form>
-        </dialog>
+      {% include 'documents/file_upload_modal.html' %}
 
-        <div class="grid grid-cols-1 gap-4">
-          {% for file in collection_files %}
-            <div class="flex items-center justify-between p-3 bg-base-200 rounded-lg">
-              <div class="flex flex-col flex-1 gap-1">
-                <div class="flex items-center gap-2">
-                  {% if file.file_status %}
-                    <div class="tooltip" data-tip="{{ file.file_status.label }}">
-                      {% if file.file_status == 'in_progress' %}
-                        <div class="inline-grid *:[grid-area:1/1]">
-                          <div aria-label="warning" class="status status-warning animate-ping"></div>
-                          <div aria-label="warning" class="status status-warning"></div>
-                        </div>
-                      {% elif file.file_status == 'completed' %}
-                        <div class="inline-grid *:[grid-area:1/1]">
-                          <div aria-label="success" class="status status-success"></div>
-                        </div>
-                      {% else %}
-                        <div class="inline-grid *:[grid-area:1/1]">
-                          <div aria-label="error" class="status status-error"></div>
-                        </div>
-                      {% endif %}
-                    </div>
-                  {% endif %}
-                  <span class="text-sm font-medium">{{ file.name }}</span>
-                  <div class="text-xs badge badge-ghost">{{ file.size_mb }} MB</div>
-                </div>
-                {% if collection.is_index %}
-                  <div class="flex flex-row items-center gap-2">
-                    <span class="text-xs text-base-content/70">Chunking Strategy:</span>
-                    <div class="badge badge-sm badge-ghost">Size: {{ file.chunking_strategy.size }} tokens</div>
-                    <div class="badge badge-sm badge-ghost">Overlap: {{ file.chunking_strategy.overlap }} tokens</div>
+      <div class="grid grid-cols-1 gap-4">
+        {% for file in collection_files %}
+          <div class="flex items-center justify-between p-3 bg-base-200 rounded-lg">
+            <div class="flex flex-col flex-1 gap-1">
+              <div class="flex items-center gap-2">
+                {% if file.file_status %}
+                  <div class="tooltip" data-tip="{{ file.file_status.label }}">
+                    {% if file.file_status == 'in_progress' %}
+                      <div class="inline-grid *:[grid-area:1/1]">
+                        <div aria-label="warning" class="status status-warning animate-ping"></div>
+                        <div aria-label="warning" class="status status-warning"></div>
+                      </div>
+                    {% elif file.file_status == 'completed' %}
+                      <div class="inline-grid *:[grid-area:1/1]">
+                        <div aria-label="success" class="status status-success"></div>
+                      </div>
+                    {% else %}
+                      <div class="inline-grid *:[grid-area:1/1]">
+                        <div aria-label="error" class="status status-error"></div>
+                      </div>
+                    {% endif %}
                   </div>
-                {% else %}
-                  <span class="text-xs text-base-content/70">{{ file.summary|default:'No summary available' }}</span>
                 {% endif %}
+                <span class="text-sm font-medium">{{ file.name }}</span>
+                <div class="text-xs badge badge-ghost">{{ file.size_mb }} MB</div>
               </div>
-              <div class="flex items-center gap-2 ml-4">
-                <a href="{% url 'files:base' team.slug file.id %}" class="btn btn-sm">
-                  <i class="fa-solid fa-eye"></i>
-                </a>
-                <form action="{% url 'documents:delete_collection_file' team.slug collection.id file.id %}" method="POST" class="inline">
-                  {% csrf_token %}
-                  <button type="submit" class="btn btn-sm">
-                    <i class="fa-solid fa-trash"></i>
-                  </button>
-                </form>
-              </div>
+              {% if collection.is_index %}
+                <div class="flex flex-row items-center gap-2">
+                  <span class="text-xs text-base-content/70">Chunking Strategy:</span>
+                  <div class="badge badge-sm badge-ghost">Size: {{ file.chunking_strategy.size }} tokens</div>
+                  <div class="badge badge-sm badge-ghost">Overlap: {{ file.chunking_strategy.overlap }} tokens</div>
+                </div>
+              {% else %}
+                <span class="text-xs text-base-content/70">{{ file.summary|default:'No summary available' }}</span>
+              {% endif %}
             </div>
-          {% empty %}
-            <div class="text-center text-base-content/60 py-8">
-              No files in this collection
+            <div class="flex items-center gap-2 ml-4">
+              <a href="{% url 'files:base' team.slug file.id %}" class="btn btn-sm">
+                <i class="fa-solid fa-eye"></i>
+              </a>
+              <form action="{% url 'documents:delete_collection_file' team.slug collection.id file.id %}" method="POST" class="inline">
+                {% csrf_token %}
+                <button type="submit" class="btn btn-sm">
+                  <i class="fa-solid fa-trash"></i>
+                </button>
+              </form>
             </div>
-          {% endfor %}
-        </div>
+          </div>
+        {% empty %}
+          <div class="text-center text-base-content/60 py-8">
+            No files in this collection
+          </div>
+        {% endfor %}
       </div>
     </div>
-
-    <script>
-      new TomSelect("#file-select", {
-        plugins: ["remove_button", "caret_position", "input_autogrow"],
-        maxItems: null,
-        create: false,
-      });
-    </script>
+  </div>
 {% endblock %}
 
 

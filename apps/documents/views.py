@@ -1,7 +1,7 @@
 from django.conf import settings
 from django.contrib import messages
 from django.contrib.auth.decorators import permission_required
-from django.db import models
+from django.db import models, transaction
 from django.http import HttpResponse
 from django.shortcuts import get_object_or_404, redirect, render
 from django.template.loader import render_to_string
@@ -67,25 +67,37 @@ def single_collection_home(request, team_slug: str, pk: int):
     return render(request, "documents/single_collection_home.html", context)
 
 
+@require_POST
 @login_and_team_required
 @permission_required("documents.change_collection")
-@require_POST
 def add_collection_files(request, team_slug: str, pk: int):
     collection = get_object_or_404(Collection, id=pk, team__slug=team_slug)
-    file_ids = request.POST.getlist("files")
-    files = collection.team.file_set.filter(id__in=file_ids, is_version=False)
-    status = FileStatus.IN_PROGRESS if collection.is_index else ""
+    # Create files
+    with transaction.atomic():
+        files = []
+        for uploaded_file in request.FILES.getlist("files"):
+            files.append(
+                File.objects.create(
+                    team=request.team,
+                    name=uploaded_file.name,
+                    file=uploaded_file,
+                    summary=request.POST[uploaded_file.name] if collection.is_index else "",
+                )
+            )
 
-    metadata = {}
-    if collection.is_index:
-        metadata["chunking_strategy"] = {
-            "size": request.POST.get("chunk_size"),
-            "overlap": request.POST.get("chunk_overlap"),
-        }
+        # Create file links
+        status = FileStatus.IN_PROGRESS if collection.is_index else ""
+        metadata = {}
+        if collection.is_index:
+            metadata["chunking_strategy"] = {
+                "size": request.POST.get("chunk_size"),
+                "overlap": request.POST.get("chunk_overlap"),
+            }
 
-    CollectionFile.objects.bulk_create(
-        [CollectionFile(collection=collection, file=file, status=status, metadata=metadata) for file in files]
-    )
+        CollectionFile.objects.bulk_create(
+            [CollectionFile(collection=collection, file=file, status=status, metadata=metadata) for file in files]
+        )
+        # TODO: Call task to upload files to OpenAI
 
     messages.success(request, f"Added {len(files)} files to collection")
     return redirect("documents:single_collection_home", team_slug=team_slug, pk=pk)

@@ -1,0 +1,75 @@
+<dialog id="chooseFilesModal" class="modal" x-data="modalData">
+    <div class="modal-box max-w-none w-1/2 max-h-3/5 overflow-y-auto">
+        <h3 class="font-bold text-lg mb-4">Add Files to Collection</h3>
+        <form method="dialog">
+            <button class="btn btn-sm btn-circle btn-ghost absolute right-2 top-2">✕</button>
+        </form>
+        <form class="mt-2 flex flex-col gap-5" action="{% url 'documents:add_collection_files' team.slug collection.id %}" method="POST" enctype="multipart/form-data">
+            {% csrf_token %}
+            {% if collection.is_index %}
+                <fieldset class="fieldset mt-4">
+                    <legend class="fieldset-legend">Chunking Strategy</legend>
+                    <input name="chunk_size" type="text" class="input" value="800" required />
+                    <p class="label">Chunk Size (tokens)</p>
+                    <input name="chunk_overlap" type="text" class="input" value="800" required />
+                    <p class="label">Chunk Overlap (tokens)</p>
+                </fieldset>
+            {% endif %}
+            <input
+                x-ref="fileUpload"
+                name="files"
+                @change="handleFileChange($event)"
+                type="file"
+                multiple
+                class="file-input w-full max-w-xs"
+                accept="{{ supported_file_types }}"/>
+
+            <template x-for="(file, index) in uploaded_files" :key="index">
+                <div class="grid grid-cols-2 gap-1 border-b border-base-300 py-3 items-center">
+                    <span class="col-span-1" x-text="file.name"></span>
+                    <div class="col-span-1 flex flex-row gap-1 items-center">
+                        <textarea
+                            :name="file.name"
+                            class="col-span-1 textarea textarea-bordered w-full placeholder:text-gray-500"
+                            maxlength="{{ max_summary_length }}"
+                            placeholder="Enter a summary of the file..."
+                        ></textarea>
+                        <button aria-label="Remove File" title="Remove File" type="button" class="btn btn-xs" @click="removeFile(index)">
+                            <i class="fa-solid fa-trash htmx-hide"></i>
+                        </button>
+                    </div>
+                </div>
+            </template>
+            <div class="modal-action">
+                <button class="btn btn-primary mt-2" :disabled="uploaded_files.length === 0">Submit</button>
+            </div>
+        </form>
+    </div>
+</dialog>
+
+<script>
+    document.addEventListener('alpine:init', () => {
+        Alpine.data('modalData', () => ({
+            message: "",
+            uploaded_files: [],
+            selected_collection: null,
+            handleFileChange(event) {
+                const files = Array.from(event.target.files);
+                this.uploaded_files.push(...files);
+
+                const dataTransfer = new DataTransfer();
+                this.uploaded_files.forEach(file => dataTransfer.items.add(file));
+                event.target.files = dataTransfer.files;
+            },
+            removeFile(index) {
+                this.uploaded_files.splice(index, 1);
+                const dataTransfer = new DataTransfer();
+
+                this.uploaded_files.forEach(file => {
+                    dataTransfer.items.add(file)
+                });
+                this.$refs.fileUpload.files = dataTransfer.files;
+            }
+        }))
+    })
+</script>
