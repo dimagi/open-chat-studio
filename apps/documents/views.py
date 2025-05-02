@@ -88,7 +88,7 @@ def add_collection_files(request, team_slug: str, pk: int):
             )
 
         # Create file links
-        status = FileStatus.IN_PROGRESS if collection.is_index else ""
+        status = FileStatus.PENDING if collection.is_index else ""
         metadata = {}
         if collection.is_index:
             metadata["chunking_strategy"] = {

@@ -16,6 +16,7 @@ class CollectionObjectManager(VersionsObjectManagerMixin, AuditingManager):
 
 class FileStatus(models.TextChoices):
     # See https://platform.openai.com/docs/api-reference/vector-stores-files/file-object
+    PENDING = ("pending", _("Pending"))
     IN_PROGRESS = ("in_progress", _("In Progress"))
     COMPLETED = "completed", _("Completed")
     FAILED = "failed", _("Failed")

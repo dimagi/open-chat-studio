@@ -56,9 +56,11 @@
           <div class="flex items-center justify-between p-3 bg-base-200 rounded-lg">
             <div class="flex flex-col flex-1 gap-1">
               <div class="flex items-center gap-2">
-                {% if file.file_status %}
+                {% if collection.is_index %}
                   <div class="tooltip" data-tip="{{ file.file_status.label }}">
-                    {% if file.file_status == 'in_progress' %}
+                    {% if file.file_status == 'pending' %}
+                      <span class="status"></span>
+                    {% elif file.file_status == 'in_progress' %}
                       <div class="inline-grid *:[grid-area:1/1]">
                         <div aria-label="warning" class="status status-warning animate-ping"></div>
                         <div aria-label="warning" class="status status-warning"></div>
