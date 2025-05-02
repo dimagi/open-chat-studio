@@ -144,4 +144,4 @@ class File(BaseTeamModel, VersionsMixin):
         return absolute_url(reverse("experiments:download_file", args=[self.team.slug, experiment_session_id, self.id]))
 
     def get_absolute_url(self):
-        return reverse("documents:file_edit", args=[self.team.slug, self.id])
+        return reverse("files:file_edit", args=[self.team.slug, self.id])

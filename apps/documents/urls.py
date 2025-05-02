@@ -1,5 +1,7 @@
+from django.urls import path
+
 from apps.documents import views
-from apps.generics.urls import make_crud_urls, path
+from apps.generics.urls import make_crud_urls
 
 app_name = "documents"
 
@@ -12,4 +14,3 @@ urlpatterns = [
 ]
 
 urlpatterns.extend(make_crud_urls(views, "Collection", "collection"))
-urlpatterns.extend(make_crud_urls(views, "File", "file"))

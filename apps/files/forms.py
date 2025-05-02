@@ -49,3 +49,16 @@ class MultipleFileField(forms.FileField):
 
 class MultipleFileFieldForm(forms.Form):
     file = MultipleFileField()
+
+
+class FileForm(forms.ModelForm):
+    class Meta:
+        model = File
+        fields = ["name", "summary", "file"]
+        help_texts = {
+            "summary": "This is only needed when the file will not be used for RAG",
+        }
+
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        self.fields["file"].widget.attrs.update({"class": "file-input"})

@@ -57,7 +57,7 @@
       </a>
       <ul>
         <li>
-          <a href="{% url 'documents:file_home' request.team.slug %}"
+          <a href="{% url 'files:file_home' request.team.slug %}"
              {% if active_tab == 'files' %}class="menu-active"{% endif %}>
             <i class="fa fa-folder" aria-hidden="true"></i></i>
           {% translate "Files" %}
