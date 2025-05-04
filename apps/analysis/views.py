@@ -127,7 +127,7 @@ def run_analysis(request, team_slug, pk):
     analysis = get_object_or_404(TranscriptAnalysis, id=pk, team__slug=team_slug)
 
     if analysis.is_complete or analysis.is_processing:
-        messages.error(request, "Analysis has already been completed.")
+        messages.error(request, "Analysis has already been completed or is in progress.")
         return redirect(analysis.get_absolute_url())
 
     task = process_transcript_analysis.delay(analysis.id)
