@@ -66,12 +66,7 @@ class TranscriptAnalysisCreateView(LoginAndTeamRequiredMixin, CreateView):
         form.instance.team = self.request.team
         form.instance.created_by = self.request.user
         form.instance.experiment_id = self.kwargs.get("experiment_id")
-        response = super().form_valid(form)
-
-        task = process_transcript_analysis.delay(self.object.id)
-        self.object.job_id = task.id
-        self.object.save(update_fields=["job_id"])
-        return response
+        return super().form_valid(form)
 
     def get_success_url(self):
         return reverse("analysis:detail", args=[self.request.team.slug, self.object.id])
