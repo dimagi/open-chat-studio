@@ -148,7 +148,7 @@ class TranscriptAnalysisForm(forms.ModelForm):
 
 class SessionChoiceField(forms.ModelMultipleChoiceField):
     def label_from_instance(self, obj):
-        label = f"{obj.external_id} - {obj.participant.user.username}" if obj.participant else str(obj.external_id)
+        label = f"{obj.external_id} - {obj.participant.identifier}" if obj.participant else str(obj.external_id)
         url = reverse(
             "experiments:experiment_session_view",
             kwargs={
