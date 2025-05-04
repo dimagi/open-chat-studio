@@ -88,8 +88,6 @@ class TranscriptAnalysisDetailView(LoginAndTeamRequiredMixin, DetailView):
     def get_context_data(self, **kwargs):
         context = super().get_context_data(**kwargs)
         context["active_tab"] = "analysis"
-        context["session_table"] = self.get_table()
-
         if self.object.job_id and not self.object.is_complete and not self.object.is_failed:
             context["celery_job_id"] = self.object.job_id
 
