@@ -14,8 +14,9 @@ from .models import AnalysisQuery, TranscriptAnalysis
 
 class TranscriptAnalysisForm(forms.ModelForm):
     query_file = forms.FileField(
+        required=False,
         help_text="Upload a CSV file with query prompts. "
-        "Each row should contain Query Name, Query Description, and optionally Output Format."
+        "Each row should contain Query Name, Query Description, and optionally Output Format.",
     )
 
     class Meta:
