@@ -59,15 +59,19 @@
 
     {% if celery_job_id %}
       {% include "analysis/components/progress.html" %}
-    {% elif not object.is_complete and not object.is_processing and object.queries.exists %}
+    {% elif not object.is_complete and not object.is_processing %}
       <div class="mb-6">
-        <button class="btn btn-primary"
-                hx-get="{% url 'analysis:run' request.team.slug object.id %}"
-                hx-swap="outerHTML"
-        >
-          <i class="fa-solid fa-play"></i>
-          Run Analysis
-        </button>
+        {% with enabled=object.queries.exists %}
+          <button class="btn btn-primary"
+                  hx-get="{% url 'analysis:run' request.team.slug object.id %}"
+                  hx-swap="outerHTML"
+                  {% if not enabled %}disabled=""{% endif %}
+          >
+            <i class="fa-solid fa-play"></i>
+            Run Analysis
+          </button>
+          {% if not enabled %}<p class="text-sm text-base-content/50">Add queries first</p>{% endif %}
+        {% endwith %}
       </div>
     {% endif %}
 

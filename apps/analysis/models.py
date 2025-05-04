@@ -61,6 +61,10 @@ class TranscriptAnalysis(BaseTeamModel):
     def is_processing(self):
         return self.status == AnalysisStatus.PROCESSING
 
+    @property
+    def is_pending(self):
+        return self.status == AnalysisStatus.PENDING
+
 
 class AnalysisQuery(models.Model):
     """

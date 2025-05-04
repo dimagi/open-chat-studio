@@ -3,17 +3,19 @@
 <div id="queries-container" x-data="{ showNew: false}">
   <div class="flex justify-between items-center mb-4">
     <h2 class="text-lg font-semibold">Queries ({{ object.queries.count }})</h2>
-    <button
-      type="button"
-      class="btn btn-sm btn-outline"
-      @click="showNew = true"
-    >
-      <i class="fa-solid fa-plus"></i> Add Query
-    </button>
+    {% if object.is_pending %}
+      <button
+        type="button"
+        class="btn btn-sm btn-outline"
+        @click="showNew = true"
+      >
+        <i class="fa-solid fa-plus"></i> Add Query
+      </button>
+    {% endif %}
   </div>
 
   <!-- Query list -->
-  <div class="space-y-4">
+  <div class="space-y-2">
     {% for query in object.queries.all %}
       {% include "analysis/components/query.html" %}
     {% empty %}
