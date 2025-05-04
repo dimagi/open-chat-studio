@@ -252,10 +252,13 @@ def add_query(request, team_slug, pk):
 @login_and_team_required
 def update_query(request, team_slug, pk, query_id):
     query = get_object_or_404(AnalysisQuery, id=query_id, analysis_id=pk, analysis__team__slug=team_slug)
+    analysis = query.analysis
 
     template = "analysis/components/query_edit.html"
     if request.method == "DELETE":
         query.delete()
+        if not analysis.queries.exists():
+            return HttpResponse(headers={"HX-Refresh": "true"})
         return HttpResponse()
     elif request.method == "POST":
         name = request.POST.get("name", "")

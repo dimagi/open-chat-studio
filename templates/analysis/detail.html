@@ -59,7 +59,7 @@
 
     {% if celery_job_id %}
       {% include "analysis/components/progress.html" %}
-    {% elif not object.is_complete and not object.is_processing%}
+    {% elif not object.is_complete and not object.is_processing and object.queries.exists %}
       <div class="mb-6">
         <button class="btn btn-primary"
                 hx-get="{% url 'analysis:run' request.team.slug object.id %}"
