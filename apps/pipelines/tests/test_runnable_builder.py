@@ -287,6 +287,7 @@ def test_conditional_node(pipeline, experiment_session):
     assert output["outputs"] == {
         start["id"]: {"message": "hello"},
         boolean["id"]: {"message": "hello", "output_handle": "output_0"},
+        "boolean": {"route": "true", "output": "hello"},
         template_true["id"]: {"message": "said hello"},
         end["id"]: {"message": "said hello"},
     }
@@ -296,6 +297,7 @@ def test_conditional_node(pipeline, experiment_session):
     assert output["outputs"] == {
         start["id"]: {"message": "bad"},
         boolean["id"]: {"message": "bad", "output_handle": "output_1"},
+        "boolean": {"output": "bad", "route": "false"},
         template_false["id"]: {"message": "didn't say hello, said bad"},
         end["id"]: {"message": "didn't say hello, said bad"},
     }
@@ -1238,14 +1240,22 @@ def test_router_node_output_structure(provider, provider_model, pipeline, experi
             outputs={"123": {"message": "hello world"}},
             messages=["hello world"],
             experiment_session=experiment_session,
+            temp_state={"user_input": "hello world", "outputs": {}},
+            path=[],
         )
-        conditional_branch = node.process_conditional(state, node_id="123")
 
-        assert "123" in state["outputs"]
-        assert "output_handle" in state["outputs"]["123"]
-        assert node.name in state["outputs"]
-        assert "route" in state["outputs"][node.name]
-        assert "output" in state["outputs"][node.name]
+        with mock.patch.object(node, "_process_conditional", return_value="A"):
+            node_id = "123"
+            edge_map = {"A": "next_node_a", "B": "next_node_b"}
+            incoming_edges = ["123"]
+            router_func = node.build_router_function(node_id, edge_map, incoming_edges)
 
-        assert state["outputs"][node.name]["route"] == conditional_branch
-        assert state["outputs"][node.name]["output"] == "hello world"
+            command = router_func(state, {"metadata": {"langgraph_triggers": []}})
+
+            assert node.name in state["outputs"]
+            assert "route" in state["outputs"][node.name]
+            assert "output" in state["outputs"][node.name]
+            assert state["outputs"][node.name]["route"] == "A"
+            assert state["outputs"][node.name]["output"] == state["node_input"]
+
+            assert command.goto == "next_node_a"
