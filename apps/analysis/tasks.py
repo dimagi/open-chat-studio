@@ -126,7 +126,7 @@ def process_transcript_analysis(self, analysis_id):
             filename = f"{analysis.name}_results.csv"
             analysis.result_file.save(filename, ContentFile(csv_buffer.getvalue().encode("utf-8")), save=False)
             analysis.status = AnalysisStatus.COMPLETED
-            analysis.job_id = None
+            analysis.job_id = ""
             analysis.save()
 
             progress_recorder.set_progress(100, 100, description="Analysis complete")
@@ -136,7 +136,7 @@ def process_transcript_analysis(self, analysis_id):
             analysis = TranscriptAnalysis.objects.get(id=analysis_id)
             analysis.status = AnalysisStatus.FAILED
             analysis.error_message = str(e)
-            analysis.job_id = None
+            analysis.job_id = ""
             analysis.save()
             progress_recorder.set_progress(100, 100, description=f"Analysis failed: {str(e)}")
         except:  # noqa E722
