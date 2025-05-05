@@ -1,0 +1,33 @@
+{% load i18n %}
+
+<div id="{{ field_name }}-field">
+  <form
+    hx-post="{% url 'analysis:update_field' request.team.slug object.id %}"
+    hx-trigger="submit"
+    hx-target="#{{ field_name }}-field"
+    hx-swap="outerHTML"
+    class="py-2"
+  >
+    {% csrf_token %}
+    {% if field_type == "textarea" %}
+      <textarea
+        name="{{ field_name }}"
+        class="textarea textarea-bordered w-full"
+        rows="3"
+      >{{ value }}</textarea>
+    {% else %}
+      <input
+        type="text"
+        name="{{ field_name }}"
+        value="{{ value }}"
+        class="input input-bordered w-full"
+      >
+    {% endif %}
+    <input type="hidden" name="field_name" value="{{ field_name }}">
+    <input type="hidden" name="field_type" value="{{ field_type }}">
+
+    <div class="flex gap-2 mt-2">
+      <button type="submit" class="btn btn-sm btn-primary">Save</button>
+    </div>
+  </form>
+</div>

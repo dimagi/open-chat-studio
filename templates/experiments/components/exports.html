@@ -1,10 +1,10 @@
+{% load waffle_tags %}
 <div class="flex flex-row gap-1" id="chat-exports">
     <button class="btn btn-sm btn-outline btn-primary no-animation"
             hx-post="{% url 'experiments:generate_chat_export' team.slug experiment.id %}"
             hx-trigger="click"
             hx-swap="outerHTML"
             hx-target="#chat-exports"
-            hx-include="[name='show-all']"
             {% if task_id %}disabled{% endif %}>
         {% if task_id %}
             <span class="loading loading-bars loading-xs"></span> Generating
@@ -26,4 +26,10 @@
             Download export
         </a>
     {% endif %}
+
+    {% flag "session-analysis" %}
+        <a href="{% url 'analysis:create' team.slug experiment.id %}" class="btn btn-sm btn-outline btn-secondary">
+            <i class="fas fa-chart-line mr-1"></i> Analyze Transcripts
+        </a>
+    {% endflag %}
 </div>

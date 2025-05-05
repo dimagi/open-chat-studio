@@ -1,3 +1,4 @@
+import contextlib
 import mimetypes
 import pathlib
 
@@ -29,7 +30,6 @@ class File(BaseTeamModel, VersionsMixin):
     external_id = models.CharField(max_length=255, blank=True)
     content_size = models.PositiveIntegerField(null=True, blank=True)
     content_type = models.CharField(blank=True)
-    schema = models.JSONField(default=dict, blank=True)
     expiry_date = models.DateTimeField(null=True)
     summary = models.TextField(max_length=settings.MAX_SUMMARY_LENGTH, blank=True)  # This is roughly 1 short paragraph
     purpose = models.CharField(max_length=255, choices=FilePurpose.choices)
@@ -41,6 +41,8 @@ class File(BaseTeamModel, VersionsMixin):
         related_name="versions",
     )
     is_archived = models.BooleanField(default=False)
+    metadata = models.JSONField(default=dict)
+
     objects = FileObjectManager()
 
     def __str__(self) -> str:
@@ -86,10 +88,8 @@ class File(BaseTeamModel, VersionsMixin):
     @staticmethod
     def get_content_type(file):
         filename = file.name
-        try:
+        with contextlib.suppress(Exception):
             filename = pathlib.Path(filename).name
-        except Exception:
-            pass
         try:
             return mimetypes.guess_type(filename)[0] or "application/octet-stream"
         except Exception:
@@ -127,7 +127,7 @@ class File(BaseTeamModel, VersionsMixin):
             external_id=self.external_id,
             content_size=self.content_size,
             content_type=self.content_type,
-            schema=self.schema,
+            metadata=self.metadata,
             team=self.team,
         )
         if self.file and self.file.storage.exists(self.file.name):
@@ -138,7 +138,7 @@ class File(BaseTeamModel, VersionsMixin):
         return new_file
 
     def get_collection_references(self):
-        return self.collection_set.all()
+        return self.collections.all()
 
     def download_link(self, experiment_session_id: int) -> str:
         return absolute_url(reverse("experiments:download_file", args=[self.team.slug, experiment_session_id, self.id]))

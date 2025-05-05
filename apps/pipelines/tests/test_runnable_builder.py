@@ -314,7 +314,7 @@ def test_router_node_prompt(get_llm_service, provider, provider_model, pipeline,
         llm_provider_id=provider.id,
         llm_provider_model_id=provider_model.id,
     )
-    node.process_conditional(
+    node._process_conditional(
         PipelineState(
             outputs={"123": {"message": "a"}},
             messages=["a"],
@@ -860,7 +860,7 @@ def test_single_node_unreachable(pipeline):
     nodes = [start_node(), passthrough_node(), end_node(), passthrough_node()]
     edges = [
         {
-            "id": f"{node['id']}->{nodes[i+1]['id']}",
+            "id": f"{node['id']}->{nodes[i + 1]['id']}",
             "source": node["id"],
             "target": nodes[i + 1]["id"],
         }
@@ -881,7 +881,7 @@ def test_subgraph_unreachable_should_build(pipeline):
     # Start -> Passthrough -> End
     reachable_edges = [
         {
-            "id": f"{node['id']}->{nodes[i+1]['id']}",
+            "id": f"{node['id']}->{nodes[i + 1]['id']}",
             "source": node["id"],
             "target": nodes[i + 1]["id"],
         }
@@ -890,7 +890,7 @@ def test_subgraph_unreachable_should_build(pipeline):
     # Passthrough 2 -> Passthrough 3 -> Passthrough 4
     unreachable_edges = [
         {
-            "id": f"{node['id']}->{nodes[i+1]['id']}",
+            "id": f"{node['id']}->{nodes[i + 1]['id']}",
             "source": node["id"],
             "target": nodes[i + 1]["id"],
         }
@@ -1127,7 +1127,7 @@ def test_input_with_format_strings():
         pipeline_version=1,
         temp_state={},
     )
-    resp = Passthrough(name="test").process("node_id", [], state, {})
+    resp = Passthrough(name="test").process("node_id", [], [], state, {})
 
     assert resp["messages"] == ["Is this it {the thing}"]
 

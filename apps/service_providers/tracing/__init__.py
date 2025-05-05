@@ -1,5 +1,7 @@
-__all__ = ["TraceService", "LangFuseTraceService", "LangSmithTraceService"]
+__all__ = ["Tracer", "LangFuseTracer", "LangSmithTracer", "TracingService", "OCS_TRACE_PROVIDER", "TraceInfo"]
 
-from .base import TraceService
-from .langfuse import LangFuseTraceService
-from .langsmith import LangSmithTraceService
+from .base import TraceInfo, Tracer
+from .const import OCS_TRACE_PROVIDER
+from .langfuse import LangFuseTracer
+from .langsmith import LangSmithTracer
+from .service import TracingService

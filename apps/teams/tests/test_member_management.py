@@ -63,7 +63,7 @@ class TeamMemberManagementViewTest(TestCase):
         c.force_login(self.admin)
         for membership in [self.admin_membership, self.admin_membership2, self.normal_membership]:
             response = c.get(self._get_membership_url(membership))
-            assert 200 == response.status_code
+            assert response.status_code == 200
             assert membership.user.get_display_name() in response.content.decode("utf-8")
 
     def test_admins_can_change_others_roles(self):
@@ -71,13 +71,13 @@ class TeamMemberManagementViewTest(TestCase):
         c.force_login(self.admin)
         # change member to admin
         response = self._change_role(c, self.normal_membership, self.admin_groups)
-        assert 200 == response.status_code
+        assert response.status_code == 200
         # confirm updated
         self._check_groups(self.normal_membership, self.admin_group_ids)
 
         # change back
         response = self._change_role(c, self.normal_membership, self.member_groups)
-        assert 200 == response.status_code
+        assert response.status_code == 200
         # confirm updated
         self._check_groups(self.normal_membership, self.member_group_ids)
 
@@ -100,7 +100,7 @@ class TeamMemberManagementViewTest(TestCase):
         c = Client()
         c.force_login(self.member)
         response = c.get(self._get_membership_url(self.normal_membership))
-        assert 200 == response.status_code
+        assert response.status_code == 200
         assert self.member.get_display_name() in response.content.decode("utf-8")
 
     def test_members_can_leave_team(self):
@@ -114,16 +114,16 @@ class TeamMemberManagementViewTest(TestCase):
     def test_members_cant_view_other_members(self):
         c = Client()
         c.force_login(self.member)
-        for other_membership in [self.admin_membership, self.normal_membership2]:
+        for _other_membership in [self.admin_membership, self.normal_membership2]:
             response = c.get(self._get_membership_url(self.admin_membership))
             # should either be a 404 or a redirect
-            assert 200 != response.status_code
+            assert response.status_code != 200
 
     def test_members_cant_change_others_roles(self):
         c = Client()
         c.force_login(self.member)
         response = self._change_role(c, self.normal_membership2, self.admin_groups)
-        assert 200 != response.status_code
+        assert response.status_code != 200
         # confirm not changed
         self._check_groups(self.normal_membership2, set())
 
@@ -149,7 +149,7 @@ class TeamMemberManagementViewTest(TestCase):
 
         # confirm it doesn't work
         response = self._remove_member(c, self.admin_membership)
-        assert 200 != response.status_code
+        assert response.status_code != 200
         assert Membership.objects.filter(pk=self.admin_membership.pk).exists()
 
     def _check_groups(self, membership, expected_group_ids):

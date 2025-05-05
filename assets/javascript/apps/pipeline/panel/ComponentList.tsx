@@ -124,7 +124,6 @@ export default function ComponentList({isOpen, setIsOpen}: ComponentListParams) 
     </ComponentHelp>;
   })
 
-
   const onscroll = (event: React.UIEvent<HTMLElement>) => {
     setScrollPosition(event.currentTarget.scrollTop)
   }

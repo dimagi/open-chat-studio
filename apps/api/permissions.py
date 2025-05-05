@@ -32,7 +32,7 @@ class BaseKeyAuthentication(BaseAuthentication):
         try:
             token = UserAPIKey.objects.get_from_key(key)
         except UserAPIKey.DoesNotExist:
-            raise exceptions.AuthenticationFailed(_("Invalid token."))
+            raise exceptions.AuthenticationFailed(_("Invalid token.")) from None
 
         if not token.user.is_active:
             raise exceptions.AuthenticationFailed(_("User inactive or deleted."))

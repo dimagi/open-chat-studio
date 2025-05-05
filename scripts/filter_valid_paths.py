@@ -117,11 +117,7 @@ def is_valid_path(path, compiled_patterns, normalized_paths_cache, prefix_tree=N
         return False
 
     # Check against all compiled patterns
-    for pattern in compiled_patterns:
-        if pattern.match(normalized_path):
-            return True
-
-    return False
+    return any(pattern.match(normalized_path) for pattern in compiled_patterns)
 
 
 def build_prefix_tree(patterns):
@@ -200,7 +196,9 @@ def debug_path(path, patterns):
             if len(path_parts) != len(pattern_parts):
                 continue
 
-            matches = sum(1 for pp, ptp in zip(path_parts, pattern_parts) if pp == ptp or ptp == "[variable]")
+            matches = sum(
+                1 for pp, ptp in zip(path_parts, pattern_parts, strict=False) if pp == ptp or ptp == "[variable]"
+            )
 
             if matches >= len(path_parts) - 1:
                 closest.append((pattern, matches))

@@ -3,15 +3,15 @@
 }
 
 .timeline-item {
-    @apply cursor-pointer flex p-4 relative rounded-sm before:bg-gray-200 after:border-gray-600  hover:after:border-gray-900
+    @apply cursor-pointer flex p-4 relative rounded-xs before:bg-gray-200 after:border-gray-600  hover:after:border-gray-900
 }
 
 .timeline-item-header {
-    @apply w-16 flex-grow-0 flex-shrink-0 text-xs font-bold
+    @apply w-16 grow-0 shrink-0 text-xs font-bold
 }
 
 .timeline-item-content {
-    @apply flex-grow text-base pl-5
+    @apply grow text-base pl-5
 }
 
 .timeline-item-content {

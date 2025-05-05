@@ -1,0 +1,128 @@
+{
+  "description": "Routes the input to one of the linked nodes using an LLM",
+  "properties": {
+    "llm_provider_id": {
+      "title": "LLM Model",
+      "type": "integer",
+      "ui:widget": "llm_provider_model"
+    },
+    "llm_provider_model_id": {
+      "title": "Llm Provider Model Id",
+      "type": "integer",
+      "ui:widget": "none"
+    },
+    "llm_temperature": {
+      "default": 0.7,
+      "maximum": 2.0,
+      "minimum": 0.0,
+      "title": "Temperature",
+      "type": "number",
+      "ui:widget": "range"
+    },
+    "history_type": {
+      "enum": [
+        "node",
+        "named",
+        "global",
+        "none"
+      ],
+      "title": "PipelineChatHistoryTypes",
+      "type": "string",
+      "default": "none",
+      "ui:enumLabels": [
+        "Node",
+        "Named",
+        "Global",
+        "No History"
+      ],
+      "ui:widget": "history"
+    },
+    "history_name": {
+      "default": null,
+      "title": "History Name",
+      "ui:widget": "none",
+      "type": "string"
+    },
+    "history_mode": {
+      "enum": [
+        "summarize",
+        "truncate_tokens",
+        "max_history_length"
+      ],
+      "title": "PipelineChatHistoryModes",
+      "type": "string",
+      "default": "summarize",
+      "ui:enumLabels": [
+        "Summarize",
+        "Truncate Tokens",
+        "Max History Length"
+      ],
+      "ui:widget": "history_mode"
+    },
+    "user_max_token_limit": {
+      "default": null,
+      "title": "User Max Token Limit",
+      "ui:widget": "none",
+      "type": "integer"
+    },
+    "max_history_length": {
+      "default": 10,
+      "title": "Max History Length",
+      "type": "integer",
+      "ui:widget": "none"
+    },
+    "name": {
+      "title": "Node Name",
+      "type": "string",
+      "ui:widget": "node_name"
+    },
+    "keywords": {
+      "items": {
+        "type": "string"
+      },
+      "title": "Keywords",
+      "type": "array",
+      "ui:widget": "keywords"
+    },
+    "default_keyword_index": {
+      "default": 0,
+      "title": "Default Keyword Index",
+      "type": "integer"
+    },
+    "tag_output_message": {
+      "default": false,
+      "description": "Tag the output message with the selected route",
+      "title": "Tag Output Message",
+      "type": "boolean",
+      "ui:widget": "toggle"
+    },
+    "prompt": {
+      "default": "You are an extremely helpful router",
+      "minLength": 1,
+      "title": "Prompt",
+      "type": "string",
+      "ui:widget": "expandable_text"
+    }
+  },
+  "required": [
+    "llm_provider_id",
+    "llm_provider_model_id",
+    "name"
+  ],
+  "title": "RouterNode",
+  "type": "object",
+  "ui:can_add": true,
+  "ui:can_delete": true,
+  "ui:deprecated": false,
+  "ui:documentation_link": "/concepts/pipelines/nodes/#llm-router",
+  "ui:flow_node_type": "pipelineNode",
+  "ui:label": "LLM Router",
+  "ui:order": [
+    "llm_provider_id",
+    "llm_temperature",
+    "history_type",
+    "prompt",
+    "keywords",
+    "tag_output_message"
+  ]
+}

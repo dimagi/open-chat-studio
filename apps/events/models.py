@@ -16,6 +16,7 @@ from apps.events import actions
 from apps.events.const import TOTAL_FAILURES
 from apps.experiments.models import Experiment, ExperimentSession
 from apps.experiments.versioning import VersionDetails, VersionField, VersionsMixin, VersionsObjectManagerMixin
+from apps.service_providers.tracing import TraceInfo
 from apps.teams.models import BaseTeamModel
 from apps.utils.models import BaseModel
 from apps.utils.slug import get_next_unique_id
@@ -252,6 +253,8 @@ class TimeoutTrigger(BaseModel, VersionsMixin):
                 failure_count=Subquery(failure_count_for_last_message),
             )
             .filter(
+                last_human_message_created_at__gte=self.updated_at,
+                # last message received after trigger config was updated
                 last_human_message_created_at__lt=trigger_time,
                 last_human_message_created_at__isnull=False,
             )  # The last message was received before the trigger time
@@ -414,8 +417,16 @@ class ScheduledMessage(BaseTeamModel):
             # Schedules probably created by the API
             return
 
+        trace_info = TraceInfo(
+            name="scheduled message",
+            metadata={
+                "schedule_id": self.external_id,
+                "trigger_number": self.total_triggers,
+            },
+        )
         experiment_session.ad_hoc_bot_message(
             self.params["prompt_text"],
+            trace_info,
             fail_silently=False,
             use_experiment=self._get_experiment_to_generate_response(),
         )

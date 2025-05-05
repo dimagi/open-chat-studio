@@ -11,6 +11,7 @@ from pydantic_core import ValidationError
 from apps.pipelines.const import STANDARD_OUTPUT_NAME
 from apps.pipelines.exceptions import PipelineBuildError, PipelineNodeBuildError
 from apps.pipelines.models import Pipeline
+from apps.pipelines.nodes.base import PipelineRouterNode
 from apps.pipelines.nodes.nodes import EndNode, StartNode
 
 
@@ -123,7 +124,7 @@ class PipelineGraph(pydantic.BaseModel):
         try:
             compiled_graph = state_graph.compile()
         except ValueError as e:
-            raise PipelineBuildError(str(e))
+            raise PipelineBuildError(str(e)) from e
         return compiled_graph
 
     def _validate_no_parallel_nodes(self):
@@ -190,25 +191,25 @@ class PipelineGraph(pydantic.BaseModel):
 
         for node in nodes:
             try:
+                node_instance = node.pipeline_node_instance
                 incoming_edges = [edge.source for edge in self.edges if edge.target == node.id]
-                state_graph.add_node(node.id, partial(node.pipeline_node_instance.process, node.id, incoming_edges))
+                if isinstance(node_instance, PipelineRouterNode):
+                    edge_map = self.conditional_edge_map[node.id]
+                    router_function = node_instance.build_router_function(node.id, edge_map, incoming_edges)
+                    state_graph.add_node(node.id, router_function)
+                else:
+                    outgoing_edges = [edge.target for edge in self.edges if edge.source == node.id]
+                    state_graph.add_node(
+                        node.id, partial(node_instance.process, node.id, incoming_edges, outgoing_edges)
+                    )
             except ValidationError as ex:
-                raise PipelineNodeBuildError(ex)
+                raise PipelineNodeBuildError(ex) from ex
 
     def _add_edges_to_graph(self, state_graph: StateGraph, reachable_nodes: list[Node]):
-        seen_sources = set()
         for node in reachable_nodes:
             for edge in self.edges_by_source[node.id]:
-                if edge.is_conditional():
-                    if edge.source in seen_sources:
-                        continue
-                    state_graph.add_conditional_edges(
-                        edge.source,
-                        partial(node.pipeline_node_instance.process_conditional, node_id=edge.source),
-                        self.conditional_edge_map[edge.source],
-                    )
-                    seen_sources.add(edge.source)
-                else:
+                if not edge.is_conditional():
+                    # conditional edges are handled by router node outputs
                     state_graph.add_edge(edge.source, edge.target)
 
     def _validate_start_end_nodes(self):

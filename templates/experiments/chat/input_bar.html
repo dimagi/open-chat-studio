@@ -3,7 +3,7 @@
 {% else %}
   {% url 'experiments:experiment_session_message' team_slug=request.team.slug experiment_id=experiment.public_id session_id=session.external_id version_number=session.get_experiment_version_number as message_url%}
 {% endif %}
-<form class="w-full p-2 bg-gray-300"
+<form class="w-full p-2 bg-base-300"
       autocomplete="off"
       hx-post="{{ message_url}}"
       hx-swap="outerHTML"
@@ -19,7 +19,7 @@
             <div class="dropdown dropdown-top">
               <div tabindex="0" role="button" class="btn m-1"><i class="fa-solid fa-paperclip"></i></div>
               <ul tabindex="0"
-                  class="dropdown-content menu bg-base-100 rounded-box z-[1] w-40 p-2 shadow content-start">
+                  class="dropdown-content menu bg-base-100 rounded-box z-1 w-40 p-2 shadow-sm content-start">
                 <li>
                   <a x-bind:disabled="disableCodeInterpreterUpload" @click="$refs.codeInterpreter.click()">Code
                     Interpreter</a>
@@ -39,7 +39,7 @@
                 @change="handleFileChange($event, 'code_interpreter_files')"
                 multiple
                 accept=".c,.cs,.cpp,.doc,.docx,.html,.java,.json,.md,.pdf,.php,.pptx,.py,.py,.rb,.tex,.txt,.css,.js,.sh,.ts,.csv,.jpeg,.jpg,.gif,.png,.tar,.xlsx,.xml,.zip"
-                class="file-input file-input-bordered file-input-sm w-full max-w-xs"
+                class="file-input file-input-sm w-full max-w-xs"
               />
             {% endpartialdef %}
             {% partialdef file-search-input inline=True %}
@@ -52,7 +52,7 @@
                 @change="handleFileChange($event, 'file_search_files')"
                 multiple
                 accept=".c,.cs,.cpp,.doc,.docx,.html,.java,.json,.md,.pdf,.php,.pptx,.py,.py,.rb,.tex,.txt,.css,.js,.sh,.ts"
-                class="file-input file-input-bordered file-input-sm w-full max-w-xs"
+                class="file-input file-input-sm w-full max-w-xs"
               />
             {% endpartialdef %}
           </div>
@@ -69,7 +69,7 @@
           {% partial file-search-input %}
         {% endif %}
       {% endif %}
-      <input x-model="message" name="message" type="text" placeholder="Type your message..." aria-label="Message" autocomplete="off" class="input input-bordered input-primary w-full">
+      <input x-model="message" name="message" type="text" placeholder="Type your message..." aria-label="Message" autocomplete="off" class="input input-primary w-full">
       <button type="submit" id="message-submit" class="ml-2 btn btn-primary" disabled>Send</button>
     </div>
     {% if assistant %}

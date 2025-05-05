@@ -135,7 +135,7 @@ def _handle_failure(args: FailureArgs) -> BoltResponse:
     request = args.request
     team = request.context["team"]
     bolt_logger.debug(
-        "Handling an OAuth callback failure " f"(reason: {args.reason}, error: {args.error}, request: {request.query})"
+        f"Handling an OAuth callback failure (reason: {args.reason}, error: {args.error}, request: {request.query})"
     )
     response = BoltResponse(
         status=302,

@@ -86,7 +86,6 @@ class EditPipeline(LoginAndTeamRequiredMixin, TemplateView, PermissionRequiredMi
         data = super().get_context_data(**kwargs)
         llm_providers = LlmProvider.objects.filter(team=self.request.team).values("id", "name", "type").all()
         llm_provider_models = LlmProviderModel.objects.for_team(self.request.team).all()
-        ui_feature_flags = ["document_management"]
         pipeline = Pipeline.objects.get(id=kwargs["pk"], team=self.request.team)
         return {
             **data,
@@ -95,9 +94,8 @@ class EditPipeline(LoginAndTeamRequiredMixin, TemplateView, PermissionRequiredMi
             "node_schemas": _pipeline_node_schemas(),
             "parameter_values": _pipeline_node_parameter_values(self.request.team, llm_providers, llm_provider_models),
             "default_values": _pipeline_node_default_values(llm_providers, llm_provider_models),
-            "flags_enabled": [
-                flag for flag in ui_feature_flags if Flag.get(flag).is_active_for_team(self.request.team)
-            ],
+            "flags_enabled": [flag.name for flag in Flag.objects.all() if flag.is_active_for_team(self.request.team)],
+            "read_only": pipeline.is_a_version,
         }
 
 
@@ -217,7 +215,8 @@ def _pipeline_node_schemas():
     node_classes = [
         cls
         for _, cls in inspect.getmembers(nodes, inspect.isclass)
-        if issubclass(cls, nodes.PipelineNode) and cls != nodes.PipelineNode
+        if issubclass(cls, nodes.PipelineNode | nodes.PipelineRouterNode)
+        and cls not in (nodes.PipelineNode, nodes.PipelineRouterNode)
     ]
     for node_class in node_classes:
         schemas.append(_get_node_schema(node_class))
@@ -232,7 +231,7 @@ def _get_node_schema(node_class):
     schema.pop("$defs", None)
 
     # Remove type ambiguity for optional fields
-    for key, value in schema["properties"].items():
+    for _key, value in schema["properties"].items():
         if "anyOf" in value:
             any_of = value.pop("anyOf")
             value["type"] = [item["type"] for item in any_of if item["type"] != "null"][0]  # take the first type
@@ -282,6 +281,10 @@ def pipeline_details(request, team_slug: str, pk: int):
         "pipelines/pipeline_details.html",
         {
             "pipeline": pipeline,
+            "edit_button": {
+                "tooltip_text": "View" if pipeline.is_a_version else "Edit",
+                "icon": "fa-eye" if pipeline.is_a_version else "fa-pencil",
+            },
         },
     )
 

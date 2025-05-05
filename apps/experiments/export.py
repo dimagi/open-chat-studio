@@ -4,6 +4,7 @@ import io
 from apps.annotations.models import Tag, UserComment
 from apps.experiments.filters import apply_dynamic_filters
 from apps.experiments.models import ExperimentSession
+from apps.service_providers.tracing import OCS_TRACE_PROVIDER
 
 
 def _format_tags(tags: list[Tag]) -> str:
@@ -18,17 +19,8 @@ def _format_comments(user_comments: list[UserComment]) -> str:
     return " | ".join([str(comment) for comment in user_comments])
 
 
-def get_filtered_sessions(request, experiment, query_params, include_api=False):
-    from apps.channels.models import ChannelPlatform
-
-    sessions_queryset = (
-        ExperimentSession.objects.with_last_message_created_at()
-        .filter(experiment=experiment)
-        .select_related("participant__user")
-    )
-
-    if not include_api:
-        sessions_queryset = sessions_queryset.exclude(experiment_channel__platform=ChannelPlatform.API)
+def get_filtered_sessions(request, experiment, query_params):
+    sessions_queryset = ExperimentSession.objects.filter(experiment=experiment).select_related("participant__user")
     sessions_queryset = apply_dynamic_filters(sessions_queryset, request, parsed_params=query_params)
 
     return sessions_queryset
@@ -71,7 +63,7 @@ def filtered_export_to_csv(experiment, sessions_queryset):
 
     for session in queryset:
         for message in session.chat.messages.all():
-            trace_id = message.trace_info.get("trace_id", "") if message.trace_info else ""
+            trace_id = _get_trace_id_for_export(message)
             row = [
                 message.id,
                 message.created_at,
@@ -93,3 +85,21 @@ def filtered_export_to_csv(experiment, sessions_queryset):
             ]
             writer.writerow(row)
     return csv_in_memory
+
+
+def _get_trace_id_for_export(message):
+    """Returns the trace info from the message.
+    This will return the first non-OCS trace info if it exists.
+    """
+    if trace_infos := message.trace_info:
+        non_ocs_trace = [
+            info
+            for info in trace_infos
+            if (
+                not info.get("trace_provider")  # legacy data
+                or info.get("trace_provider") != OCS_TRACE_PROVIDER  # exclude OCS trace provider
+            )
+        ]
+        if non_ocs_trace:
+            return non_ocs_trace[0].get("trace_id", "")
+    return ""

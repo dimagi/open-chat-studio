@@ -1,3 +1,4 @@
+import contextlib
 import threading
 import time
 from unittest import mock
@@ -203,10 +204,8 @@ def test_prune_worker(client_manager, config, langfuse_mock):
     # Act & Assert
     with mock.patch("time.sleep", side_effect=mock_sleep):
         with mock.patch.object(client_manager, "_prune_stale") as prune_mock:
-            try:
+            with contextlib.suppress(InterruptedError):
                 client_manager._prune_worker()
-            except InterruptedError:
-                pass
 
             # Assert _prune_stale was called 3 times
             assert prune_mock.call_count == 3

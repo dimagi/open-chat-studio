@@ -5,8 +5,8 @@
         </div>
     {% else %}
         {% if field.changed %}
-            {% include 'experiments/components/versions/diff_field.html' with version_field=field.previous_field_version bg_classes="bg-red-400 bg-opacity-20" text_highlight_classes="bg-red-600 bg-opacity-40" %}
-            {% include 'experiments/components/versions/diff_field.html' with version_field=field bg_classes="bg-green-400 bg-opacity-20" text_highlight_classes="bg-green-600 bg-opacity-40" %}
+            {% include 'experiments/components/versions/diff_field.html' with version_field=field.previous_field_version bg_classes="bg-red-400/20" text_highlight_classes="bg-red-600/40" %}
+            {% include 'experiments/components/versions/diff_field.html' with version_field=field bg_classes="bg-green-400/20" text_highlight_classes="bg-green-600/40" %}
         {% else %}
             {% if field.previous_field_version %}
                 <div class="text-sm col-span-1 px-1">

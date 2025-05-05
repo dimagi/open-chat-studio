@@ -14,6 +14,7 @@ from apps.service_providers.llm_service.adapters import AssistantAdapter
 from apps.service_providers.llm_service.history_managers import ExperimentHistoryManager
 from apps.service_providers.llm_service.runnables import AgentAssistantChat
 from apps.service_providers.tests.test_assistant_runnable import _create_run, _create_thread_messages
+from apps.service_providers.tracing import TracingService
 from apps.utils.factories.assistants import OpenAiAssistantFactory
 from apps.utils.factories.experiment import ExperimentSessionFactory
 from apps.utils.langchain import build_fake_llm_service
@@ -85,7 +86,7 @@ def test_assistant_tool_artifact_response(create_run, create_message, create_fil
     file_type_info = ""
     if "code_interpreter" in builtin_tools:
         file_type_info = (
-            "\n\nFile type information:\n\n| File Path | Mime Type |" "\n| /mnt/data/file-123abc | text/plain |\n"
+            "\n\nFile type information:\n\n| File Path | Mime Type |\n| /mnt/data/file-123abc | text/plain |\n"
         )
 
     assert create_message.call_args == (
@@ -150,6 +151,6 @@ def get_runnable(session, tool):
     with patch("apps.service_providers.llm_service.adapters.get_assistant_tools") as get_tools:
         get_tools.return_value = [tool]
         assistant_adapter = AssistantAdapter.for_experiment(session.experiment, session)
-        history_manager = ExperimentHistoryManager.for_assistant(session=session, experiment=session.experiment)
+        history_manager = ExperimentHistoryManager.for_assistant(session, session.experiment, TracingService.empty())
         runnable = AgentAssistantChat(adapter=assistant_adapter, history_manager=history_manager)
     return runnable

@@ -1,5 +1,6 @@
 from django.db import models, transaction
 from django.urls import reverse
+from django.utils.translation import gettext_lazy as _
 from field_audit import audit_fields
 from field_audit.models import AuditingManager
 
@@ -13,13 +14,29 @@ class CollectionObjectManager(VersionsObjectManagerMixin, AuditingManager):
     pass
 
 
+class FileStatus(models.TextChoices):
+    # See https://platform.openai.com/docs/api-reference/vector-stores-files/file-object
+    IN_PROGRESS = ("in_progress", _("In Progress"))
+    COMPLETED = "completed", _("Completed")
+    FAILED = "failed", _("Failed")
+
+
+class CollectionFile(models.Model):
+    file = models.ForeignKey("files.File", on_delete=models.CASCADE)
+    collection = models.ForeignKey("documents.Collection", on_delete=models.CASCADE)
+    status = models.CharField(max_length=64, choices=FileStatus.choices, blank=True)
+
+    def __str__(self) -> str:
+        return f"{self.file.name} in {self.collection.name}"
+
+
 @audit_fields(
     "name",
     audit_special_queryset_writes=True,
 )
 class Collection(BaseTeamModel, VersionsMixin):
     name = models.CharField(max_length=255)
-    files = models.ManyToManyField("files.File", blank=False)
+    files = models.ManyToManyField("files.File", blank=False, through=CollectionFile, related_name="collections")
     working_version = models.ForeignKey(
         "self",
         on_delete=models.CASCADE,
@@ -29,6 +46,15 @@ class Collection(BaseTeamModel, VersionsMixin):
     )
     is_archived = models.BooleanField(default=False)
     version_number = models.PositiveIntegerField(default=1)
+    llm_provider = models.ForeignKey(
+        "service_providers.LlmProvider",
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        verbose_name="LLM Provider",
+    )
+    openai_vector_store_id = models.CharField(blank=True, max_length=255)
+    is_index = models.BooleanField(default=False)
 
     objects = CollectionObjectManager()
 

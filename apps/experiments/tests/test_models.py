@@ -20,6 +20,7 @@ from apps.experiments.models import (
     SyntheticVoice,
 )
 from apps.service_providers.llm_service.prompt_context import ParticipantDataProxy
+from apps.service_providers.tracing import TraceInfo
 from apps.utils.factories.assistants import OpenAiAssistantFactory
 from apps.utils.factories.events import (
     EventActionFactory,
@@ -52,7 +53,7 @@ def experiment_session():
 class TestSyntheticVoice:
     @django_db_with_data()
     def test_team_scoped_services(self):
-        assert SyntheticVoice.TEAM_SCOPED_SERVICES == [SyntheticVoice.OpenAIVoiceEngine]
+        assert [SyntheticVoice.OpenAIVoiceEngine] == SyntheticVoice.TEAM_SCOPED_SERVICES
 
     @django_db_with_data()
     def test_get_for_team_returns_all_general_services(self):
@@ -260,8 +261,7 @@ class TestExperimentSession:
                 TimePeriod.WEEKS,
                 2,
                 1,
-                "Test (Message id={message.external_id}, message=hi): "
-                "Every 1 weeks on Monday, 2 times. {next_trigger}",
+                "Test (Message id={message.external_id}, message=hi): Every 1 weeks on Monday, 2 times. {next_trigger}",
             ),
             (
                 TimePeriod.MONTHS,
@@ -393,7 +393,7 @@ class TestExperimentSession:
 
         def _test():
             experiment_session.ad_hoc_bot_message(
-                instruction_prompt="Tell the user we're testing", fail_silently=fail_silently
+                "Tell the user we're testing", TraceInfo(name="test"), fail_silently=fail_silently
             )
             call = mock_channel.send_message_to_user.mock_calls[0]
             assert call.args[0] == "We're testing"
@@ -1035,6 +1035,6 @@ def _compare_models(original, new, expected_changed_fields: list) -> set:
     field_difference = original.compare_with_model(new, original.get_fields_to_exclude()).difference(
         set(expected_changed_fields)
     )
-    assert (
-        field_difference == set()
-    ), f"These fields differ between the experiment versions, but should not: {field_difference}"
+    assert field_difference == set(), (
+        f"These fields differ between the experiment versions, but should not: {field_difference}"
+    )
