@@ -95,9 +95,9 @@ def code_completion(user_query, current_code, error=None, iteration_count=0) -> 
             If the node does not exist or has no route defined, it returns `None`.
 
         def get_node_path(node_name: str) -> list | None:
-            Returns a list containing the sequence of node names leading to the target node.
-            The list represents the path through the routing chain to the specified node.
-            If the node is not found, it returns `None`.
+            Returns a list containing the sequence of nodes leading to the target node.
+            If the node is not found in the pipeline path, returns a list containing
+            only the specified node name.
 
         def get_all_routes() -> dict:
             Returns a dictionary containing all routing decisions in the pipeline.
