@@ -52,7 +52,7 @@
     "@codemirror/lang-json": "^6.0.1",
     "@codemirror/lang-python": "^6.1.7",
     "@sentry/webpack-plugin": "^3.3.1",
-    "@tailwindcss/postcss": "^4.1.4",
+    "@tailwindcss/postcss": "^4.1.5",
     "@uiw/codemirror-theme-github": "^4.23.11",
     "@uiw/react-codemirror": "^4.23.7",
     "alertifyjs": "^1.14.0",
