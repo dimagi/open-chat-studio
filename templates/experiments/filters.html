@@ -128,7 +128,7 @@
           'first_message': {type: 'timestamp', operators: fieldTypeFilters.timestamp, label: 'First Message'},
           'last_message': {type: 'timestamp', operators: fieldTypeFilters.timestamp, label: 'Last Message'},
           'tags': {type: 'choice', operators: fieldTypeFilters.choice, options: tags, label: 'Tags' },
-          'versions': {type: 'choice', operators: fieldTypeFilters.choice, options: versionsList, label: 'Versions'},
+          'versions': {type: 'choice', operators: fieldTypeFilters.choice.filter(op => op === 'any of' || op === 'excludes'), options: versionsList, label: 'Versions'},
           'channels': {type: 'choice', operators: fieldTypeFilters.choice, options: channelsList, label: 'Channels'}
         }
       },
