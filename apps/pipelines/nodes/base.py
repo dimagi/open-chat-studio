@@ -155,9 +155,14 @@ class PipelineState(dict):
         return routes_dict
 
     @classmethod
-    def from_router_output(cls, node_id, node_name, output, output_handle, tags, route_path) -> Self:
+    def from_router_output(
+        cls, node_id, node_name, output, output_handle, tags, route_path, conditional_branch
+    ) -> Self:
         return cls(
-            outputs={node_id: {"output_handle": output_handle, "message": output}},
+            outputs={
+                node_id: {"output_handle": output_handle, "message": output},
+                node_name: {"route": conditional_branch, "output": output},
+            },
             temp_state={"outputs": {node_name: output}},
             output_message_tags=tags,
             path=[route_path],
@@ -294,15 +299,11 @@ class PipelineRouterNode(BasePipelineNode):
 
             conditional_branch = self._process_conditional(state, node_id)
             output_handle = next((k for k, v in output_map.items() if v == conditional_branch), None)
-            state["outputs"][self.name] = {
-                "route": conditional_branch,
-                "output": state["node_input"],
-            }
             tags = self.get_output_tags(conditional_branch)
             target_node_id = edge_map[conditional_branch]
             route_path = (state["node_source"], node_id, [target_node_id])
             output = PipelineState.from_router_output(
-                node_id, self.name, state["node_input"], output_handle, tags, route_path
+                node_id, self.name, state["node_input"], output_handle, tags, route_path, conditional_branch
             )
             return Command(
                 update=output,
