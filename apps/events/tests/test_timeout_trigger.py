@@ -191,13 +191,13 @@ def test_failure_count_reached(session):
         frozen_time.tick(delta=timedelta(minutes=11))
         assert len(timeout_trigger.timed_out_sessions()) == 1
 
-        assert timeout_trigger._has_triggers_left(session, message) is True
+        assert timeout_trigger._has_triggers_left(timeout_trigger, session, message) is True
         for _ in range(TOTAL_FAILURES):
             timeout_trigger.event_logs.create(
                 session=session, chat_message=message, status=EventLogStatusChoices.FAILURE
             )
 
-        assert timeout_trigger._has_triggers_left(session, message) is False
+        assert timeout_trigger._has_triggers_left(timeout_trigger, session, message) is False
         assert len(timeout_trigger.timed_out_sessions()) == 0
 
         # The timeout passes after the next message is sent

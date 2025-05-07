@@ -39,7 +39,8 @@ class StaticTriggerObjectManager(VersionsObjectManagerMixin, models.Manager):
 
 
 class TimeoutTriggerObjectManager(VersionsObjectManagerMixin, models.Manager):
-    pass
+    def published_versions(self):
+        return self.filter(experiment__is_default_version=True)
 
 
 class EventActionType(models.TextChoices):
@@ -121,13 +122,15 @@ class StaticTrigger(BaseModel, VersionsMixin):
         return "StaticTrigger"
 
     def fire(self, session):
+        working_version = self.get_working_version()
         try:
             result = ACTION_HANDLERS[self.action.action_type]().invoke(session, self.action)
-            self.event_logs.create(session=session, status=EventLogStatusChoices.SUCCESS, log=result)
+            working_version.event_logs.create(session=session, status=EventLogStatusChoices.SUCCESS, log=result)
             return result
         except Exception as e:
             logging.exception(e)
-            self.event_logs.create(session=session, status=EventLogStatusChoices.FAILURE, log=str(e))
+            working_version.event_logs.create(session=session, status=EventLogStatusChoices.FAILURE, log=str(e))
+        return None
 
     @transaction.atomic()
     def delete(self, *args, **kwargs):
@@ -276,26 +279,27 @@ class TimeoutTrigger(BaseModel, VersionsMixin):
 
         result = None
 
+        working_version = self.get_working_version()
         try:
             result = ACTION_HANDLERS[self.action.action_type]().invoke(session, self.action)
-            self.event_logs.create(
+            working_version.event_logs.create(
                 session=session, chat_message=last_human_message, status=EventLogStatusChoices.SUCCESS, log=result
             )
         except Exception as e:
-            self.event_logs.create(
+            working_version.event_logs.create(
                 session=session, chat_message=last_human_message, status=EventLogStatusChoices.FAILURE, log=str(e)
             )
 
-        if not self._has_triggers_left(session, last_human_message):
+        if not self._has_triggers_left(working_version, session, last_human_message):
             from apps.events.tasks import enqueue_static_triggers
 
             enqueue_static_triggers.delay(session.id, StaticTriggerType.LAST_TIMEOUT)
 
         return result
 
-    def _has_triggers_left(self, session, message):
+    def _has_triggers_left(self, working_version, session, message):
         has_succeeded = (
-            self.event_logs.filter(
+            working_version.event_logs.filter(
                 session=session,
                 chat_message=message,
                 status=EventLogStatusChoices.SUCCESS,
@@ -303,7 +307,7 @@ class TimeoutTrigger(BaseModel, VersionsMixin):
             >= self.total_num_triggers
         )
         failed = (
-            self.event_logs.filter(
+            working_version.event_logs.filter(
                 session=session,
                 chat_message=message,
                 status=EventLogStatusChoices.FAILURE,
