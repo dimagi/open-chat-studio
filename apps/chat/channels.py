@@ -706,7 +706,7 @@ class ChannelBase(ABC):
         )
         trace_info = TraceInfo(name="unsupported message", metadata={"message_type": self.message.content_type})
         chat_message = ChatMessage.objects.create(
-            chat=self.experiment_session.chat, message_type=ChatMessageType.HUMAN, content=self.message.message_text
+            chat=self.experiment_session.chat, message_type=ChatMessageType.AI, content=self.message.message_text
         )
         chat_message.add_system_tag("unsupported_message_type", TagCategories.ERROR)
         return EventBot(self.experiment_session, self.experiment, trace_info, history_manager).get_user_message(
