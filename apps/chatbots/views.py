@@ -10,7 +10,7 @@ from django.views.decorators.http import require_POST
 from django.views.generic import TemplateView
 
 from apps.chat.channels import WebChannel
-from apps.chatbots.forms import ChatbotForm
+from apps.chatbots.forms import ChatbotForm, CopyChatbotForm
 from apps.chatbots.tables import ChatbotSessionsTable, ChatbotTable
 from apps.experiments.decorators import experiment_session_view, verify_session_access_cookie
 from apps.experiments.models import Experiment, SessionStatus
@@ -224,14 +224,16 @@ def chatbot_chat_embed(request, team_slug: str, experiment_id: uuid.UUID, sessio
 
 @login_and_team_required
 def copy_chatbot(request, team_slug, *args, **kwargs):
-    new_name = request.GET.get("new_name")
-    experiment = get_object_or_404(Experiment.objects.get_all(), id=kwargs["pk"], team=request.team)
-    # copy chatbot
-    experiment = experiment.create_new_version(
-        version_description=experiment.description, make_default=False, is_copy=True, name=new_name
-    )
-    # create default version for copied chatbot
-    async_create_experiment_version(
-        experiment_id=experiment.id, version_description=experiment.version_description, make_default=True
-    )
+    form = CopyChatbotForm(request.POST)
+    if form.is_valid():
+        new_name = form.cleaned_data["new_name"]
+        experiment = get_object_or_404(Experiment.objects.get_all(), id=kwargs["pk"], team=request.team)
+        # copy chatbot
+        experiment = experiment.create_new_version(
+            version_description=experiment.description, make_default=False, is_copy=True, name=new_name
+        )
+        # create default version for copied chatbot
+        async_create_experiment_version(
+            experiment_id=experiment.id, version_description=experiment.version_description, make_default=True
+        )
     return single_chatbot_home(request, team_slug, experiment.id)

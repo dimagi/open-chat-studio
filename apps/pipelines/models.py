@@ -382,7 +382,8 @@ class Pipeline(BaseTeamModel, VersionsMixin):
     @transaction.atomic()
     def create_new_version(self, is_copy: bool = False):
         version_number = self.version_number
-        self.version_number = 1 if is_copy else self.version_number + 1
+        if not is_copy:
+            self.version_number = self.version_number + 1
         self.save(update_fields=["version_number"])
         pipeline_version = super().create_new_version(save=False, is_copy=is_copy)
         if is_copy:
