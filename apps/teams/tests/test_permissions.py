@@ -150,7 +150,7 @@ def test_custom_permissions():
     for app in apps.get_app_configs():
         for model in app.get_models():
             for permission in model._meta.permissions:
-                assert permission[0] in CUSTOM_PERMISSIONS.get(
-                    app.label, {}
-                ), "permissions not in CUSTOM_PERMISSIONS dict"
+                assert permission[0] in CUSTOM_PERMISSIONS.get(app.label, {}), (
+                    "permissions not in CUSTOM_PERMISSIONS dict"
+                )
                 assert permission[0] in mapped_permissions, "permissions must be mapped to at least one group"

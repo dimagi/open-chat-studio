@@ -53,7 +53,7 @@ class TokenCountingCallbackHandler(BaseCallbackHandler):
         **kwargs: Any,
     ) -> Any:
         """Run when LLM errors and collect token usage."""
-        response = kwargs.get("response", None)
+        response = kwargs.get("response")
         if not response:
             return
         self.on_llm_end(response, run_id=run_id)

@@ -35,6 +35,7 @@ from apps.pipelines.views import _pipeline_node_default_values, _pipeline_node_p
 from apps.service_providers.models import LlmProvider, LlmProviderModel
 from apps.teams.decorators import login_and_team_required, team_required
 from apps.teams.mixins import LoginAndTeamRequiredMixin
+from apps.teams.models import Flag
 from apps.utils.base_experiment_table_view import BaseExperimentTableView
 
 
@@ -88,6 +89,7 @@ class EditChatbot(LoginAndTeamRequiredMixin, TemplateView, PermissionRequiredMix
         llm_providers = LlmProvider.objects.filter(team=self.request.team).values("id", "name", "type").all()
         llm_provider_models = LlmProviderModel.objects.for_team(self.request.team).all()
         experiment = get_object_or_404(Experiment.objects.get_all(), id=kwargs["pk"], team=self.request.team)
+
         return {
             **data,
             "pipeline_id": experiment.pipeline_id,
@@ -96,6 +98,7 @@ class EditChatbot(LoginAndTeamRequiredMixin, TemplateView, PermissionRequiredMix
             "parameter_values": _pipeline_node_parameter_values(self.request.team, llm_providers, llm_provider_models),
             "default_values": _pipeline_node_default_values(llm_providers, llm_provider_models),
             "origin": "chatbots",
+            "flags_enabled": [flag.name for flag in Flag.objects.all() if flag.is_active_for_team(self.request.team)],
         }
 
 

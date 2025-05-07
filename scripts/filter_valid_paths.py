@@ -117,11 +117,7 @@ def is_valid_path(path, compiled_patterns, normalized_paths_cache, prefix_tree=N
         return False
 
     # Check against all compiled patterns
-    for pattern in compiled_patterns:
-        if pattern.match(normalized_path):
-            return True
-
-    return False
+    return any(pattern.match(normalized_path) for pattern in compiled_patterns)
 
 
 def build_prefix_tree(patterns):

@@ -105,8 +105,7 @@ def get_prompt_builder_history(request, team_slug: str):
     # Initialize temporary output format
     output_temp = defaultdict(list)
 
-    history_id = 0  # Initial history_id for the oldest item
-    for history in histories:
+    for history_id, history in enumerate(histories):
         # Adding history_id to JSON history object
         history_data = history.history
         history_data["history_id"] = history_id
@@ -128,8 +127,6 @@ def get_prompt_builder_history(request, team_slug: str):
 
         # Populating the temporary output dictionary
         output_temp[history.created_at.date()].append(event)
-
-        history_id += 1  # Incrementing history_id for each newer history
 
     # Convert to the final desired output format
     output_list = [

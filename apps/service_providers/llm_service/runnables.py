@@ -64,9 +64,9 @@ def create_experiment_runnable(
 
     assert experiment.llm_provider, "Experiment must have an LLM provider"
     assert experiment.llm_provider_model.name, "Experiment must have an LLM model"
-    assert (
-        experiment.llm_provider.type == experiment.llm_provider_model.type
-    ), "Experiment provider and provider model should be of the same type"
+    assert experiment.llm_provider.type == experiment.llm_provider_model.type, (
+        "Experiment provider and provider model should be of the same type"
+    )
 
     history_manager = ExperimentHistoryManager.for_llm_chat(
         session=session,

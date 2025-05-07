@@ -59,13 +59,13 @@ class TeamMixinTest(TestCase):
 
     def assertSuccessfulRequest(self, view_cls, user, team_slug):
         response = self._call_view(view_cls, user, team_slug)
-        assert 200 == response.status_code
+        assert response.status_code == 200
         assert f"Go {team_slug}" == response.content.decode("utf-8")
         unset_current_team()
 
     def assertRedirectToLogin(self, view_cls, user, team_slug):
         response = self._call_view(view_cls, user, team_slug)
-        assert 302 == response.status_code
+        assert response.status_code == 302
         assert "/login/" in response.url
         unset_current_team()
 

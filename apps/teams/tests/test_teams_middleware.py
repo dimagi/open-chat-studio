@@ -23,45 +23,45 @@ class TeamsAuthTest(TestCase):
 
     def test_unauthenticated_view(self):
         response = self.client.get(reverse("web:home"))
-        assert 200 == response.status_code
+        assert response.status_code == 200
         self._assertRequestHasTeam(response, None)
 
     def test_authenticated_non_team_view(self):
         self._login(self.sox_admin)
         response = self.client.get(reverse("users:user_profile"))
-        assert 200 == response.status_code, response
+        assert response.status_code == 200, response
         self._assertRequestHasTeam(response, self.sox, self.sox_admin)
 
     def test_team_view(self):
         self._login(self.sox_admin)
         response = self.client.get(reverse("single_team:manage_team", args=[self.sox.slug]))
-        assert 200 == response.status_code
+        assert response.status_code == 200
         self._assertRequestHasTeam(response, self.sox, self.sox_admin)
 
     def test_team_view_no_membership(self):
         self._login(self.sox_admin)
         response = self.client.get(reverse("single_team:manage_team", args=[self.yanks.slug]))
-        assert 404 == response.status_code
+        assert response.status_code == 404
         self._assertRequestHasTeam(response, self.yanks, None)
 
     def test_team_view_missing_team(self):
         self._login(self.sox_admin)
         response = self.client.get(reverse("single_team:manage_team", args=["missing"]))
-        assert 404 == response.status_code
+        assert response.status_code == 404
         self._assertRequestHasTeam(response, None, None)
 
     def test_team_admin_view(self):
         self._login(self.sox_admin)
         invite = self._create_invitation()
         response = self.client.post(reverse("single_team:resend_invitation", args=[self.sox.slug, invite.id]))
-        assert 200 == response.status_code
+        assert response.status_code == 200
         self._assertRequestHasTeam(response, self.sox, self.sox_admin)
 
     def test_team_admin_view_denied(self):
         self._login(self.yanks_member)
         invite = self._create_invitation()
         response = self.client.post(reverse("single_team:resend_invitation", args=[self.yanks.slug, invite.id]))
-        assert 403 == response.status_code
+        assert response.status_code == 403
         self._assertRequestHasTeam(response, self.yanks, self.yanks_member)
 
     def _login(self, user):
