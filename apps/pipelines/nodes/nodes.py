@@ -26,6 +26,7 @@ from RestrictedPython import compile_restricted, safe_builtins, safe_globals
 from apps.assistants.models import OpenAiAssistant
 from apps.chat.agent.tools import get_node_tools
 from apps.chat.conversation import compress_chat_history, compress_pipeline_chat_history
+from apps.documents.models import Collection
 from apps.experiments.models import ExperimentSession, ParticipantData
 from apps.pipelines.exceptions import PipelineNodeBuildError, PipelineNodeRunError
 from apps.pipelines.models import Node, PipelineChatHistory, PipelineChatHistoryModes, PipelineChatHistoryTypes
@@ -303,6 +304,18 @@ class LLMResponseWithPrompt(LLMResponse, HistoryMixin):
     def validate_custom_actions(cls, value):
         if value is None:
             return []
+        return value
+
+    @field_validator("document_index_id", mode="before")
+    def validate_document_index_id(cls, value, info: FieldValidationInfo):
+        if not value:
+            return value
+
+        collection = Collection.objects.get(id=value)
+        if collection.llm_provider_id != info.data.get("llm_provider_id"):
+            raise PydanticCustomError(
+                "invalid_document_index", "The document index must use the same LLM provider as the node"
+            )
         return value
 
     def _process(self, input, state: PipelineState, node_id: str) -> PipelineState:
