@@ -1,3 +1,4 @@
+{% load i18n %}
 <dialog id="chooseFilesModal" class="modal" x-data="modalData" x-on:toggle="if (event.newState === 'open') { $nextTick(() => { $refs.fileUpload.click() }) }">
     <div class="modal-box max-w-none w-1/2 max-h-3/5 overflow-y-auto">
         <h3 class="font-bold text-lg mb-4">Add Files to Collection</h3>
@@ -7,13 +8,29 @@
         <form class="mt-2 flex flex-col" action="{% url 'documents:add_collection_files' team.slug collection.id %}" method="POST" enctype="multipart/form-data">
             {% csrf_token %}
             {% if collection.is_index %}
-                <fieldset class="fieldset mt-4">
+                <div class="fieldset w-full">
                     <legend class="fieldset-legend">Chunking Strategy</legend>
-                    <input name="chunk_size" type="text" class="input" value="800" required />
-                    <p class="label">Chunk Size (tokens)</p>
-                    <input name="chunk_overlap" type="text" class="input" value="800" required />
-                    <p class="label">Chunk Overlap (tokens)</p>
-                </fieldset>
+                    <label class="label font-bold" for="chunk_size">
+                        <div>
+                            Chunk Size
+                            {% blocktranslate asvar chuck_size_help %}
+                                The file contents will be divided into chunks of this many tokens each.
+                            {% endblocktranslate %}
+                            <small class="form-text text-muted">{% include "generic/help.html" with help_content=chuck_size_help %}</small>
+                        </div>
+                    </label>
+                    <input name="chunk_size" type="number" class="input" value="800" required />
+                    <label class="label font-bold" for="chunk_overlap">
+                        <div>
+                            Chunk Overlap
+                            {% blocktranslate asvar chunk_overlap_help %}
+                                Each chunk will overlap this many tokens with the previous chunk.
+                            {% endblocktranslate %}
+                            <small class="form-text text-muted">{% include "generic/help.html" with help_content=chunk_overlap_help %}</small>
+                        </div>
+                    </label>
+                    <input name="chunk_overlap" type="number" class="input" value="400" required />
+                </div>
             {% endif %}
             <input
                 x-ref="fileUpload"
