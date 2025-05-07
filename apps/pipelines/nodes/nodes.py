@@ -344,6 +344,11 @@ class LLMResponseWithPrompt(LLMResponse, HistoryMixin):
             disabled_tools=self.disabled_tools,
         )
 
+        if self.document_index_id:
+            collection = Collection.objects.get(id=self.document_index_id)
+            builtin_tools = {"type": "file_search", "vector_store_ids": [collection.openai_vector_store_id]}
+            tools.append(builtin_tools)
+
         allowed_tools = chat_adapter.get_allowed_tools()
         if len(tools) != len(allowed_tools):
             self.logger.info(
