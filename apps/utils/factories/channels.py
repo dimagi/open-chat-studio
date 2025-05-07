@@ -11,6 +11,6 @@ class ExperimentChannelFactory(factory.django.DjangoModelFactory):
 
     team = factory.SubFactory(team_factory.TeamFactory)
     name = factory.Faker("name")
-    experiment = factory.SubFactory(experiment_factory.ExperimentFactory)
+    experiment = factory.SubFactory(experiment_factory.ExperimentFactory, team=factory.SelfAttribute("..team"))
     platform = ChannelPlatform.TELEGRAM
     extra_data = {"bot_token": "123"}
