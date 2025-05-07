@@ -222,11 +222,13 @@ def chatbot_chat_embed(request, team_slug: str, experiment_id: uuid.UUID, sessio
     return experiment_chat_embed(request, team_slug, experiment_id, session_id)
 
 
+@login_and_team_required
 def copy_chatbot(request, team_slug, *args, **kwargs):
+    new_name = request.GET.get("new_name")
     experiment = get_object_or_404(Experiment.objects.get_all(), id=kwargs["pk"], team=request.team)
     # copy chatbot
     experiment = experiment.create_new_version(
-        version_description=experiment.description, make_default=False, copy_experiment=True
+        version_description=experiment.description, make_default=False, is_copy=True, name=new_name
     )
     # create default version for copied chatbot
     async_create_experiment_version(

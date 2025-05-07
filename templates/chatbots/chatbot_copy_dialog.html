@@ -1,0 +1,52 @@
+<dialog id="chatbot_copy_modal" class="modal">
+  <div class="modal-box">
+    <h3 class="font-bold text-lg">Copy Chatbot</h3>
+    <p class="py-4">Are you sure you want to create a copy of this chatbot?</p>
+
+    <div class="form-control my-4">
+      <label for="copied-chatbot-name" class="label mb-2">
+        <span class="label-text font-bold">New Chatbot Name</span>
+      </label>
+      <input type="text" id="copied-chatbot-name" name="copied_chatbot_name"
+             placeholder="Enter name for copied chatbot"
+             class="input input-bordered w-full" />
+    </div>
+
+    <div class="modal-action">
+      <form method="dialog">
+        <button class="btn">Cancel</button>
+      </form>
+      <button class="btn btn-primary" onclick="confirmChatbotCopy()">Confirm</button>
+    </div>
+  </div>
+</dialog>
+
+<script>
+  let currentExperimentId = null;
+  let currentTeamSlug = null;
+
+  function openCopyDialog(experimentId, teamSlug) {
+    currentExperimentId = experimentId;
+    currentTeamSlug = teamSlug;
+
+    const nameInput = document.getElementById('copied-chatbot-name');
+    if (nameInput) {
+      nameInput.value = '';
+    }
+    const modal = document.getElementById('chatbot_copy_modal');
+    modal.showModal();
+  }
+
+  function confirmChatbotCopy() {
+    const nameInput = document.getElementById('copied-chatbot-name');
+    const copiedName = nameInput.value.trim();
+
+    if (!copiedName) {
+      alert("Please enter a name for the copied chatbot.");
+      return;
+    }
+
+    const url = `/a/${currentTeamSlug}/chatbots/${currentExperimentId}/copy/?new_name=${encodeURIComponent(copiedName)}`;
+    window.location.href = url;
+  }
+</script>

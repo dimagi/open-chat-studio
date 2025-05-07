@@ -804,13 +804,17 @@ class Experiment(BaseTeamModel, VersionsMixin, CustomActionOperationMixin):
 
     @transaction.atomic()
     def create_new_version(
-        self, version_description: str | None = None, make_default: bool = False, copy_experiment: bool = False
+        self,
+        version_description: str | None = None,
+        make_default: bool = False,
+        is_copy: bool = False,
+        name: str = None,
     ):
         """
         Creates a copy of an experiment as a new version of the original experiment.
         """
         version_number = self.version_number
-        if not copy_experiment:
+        if not is_copy:
             self.version_number = version_number + 1
             self.save(update_fields=["version_number"])
         elif self.child_links.exists() or self.assistant:
@@ -818,7 +822,7 @@ class Experiment(BaseTeamModel, VersionsMixin, CustomActionOperationMixin):
 
         # Fetch a new instance so the previous instance reference isn't simply being updated. I am not 100% sure
         # why simply chaing the pk, id and _state.adding wasn't enough.
-        new_version = super().create_new_version(save=False, copy_experiment=copy_experiment)
+        new_version = super().create_new_version(save=False, is_copy=is_copy)
         new_version.version_description = version_description or ""
         new_version.public_id = uuid4()
         new_version.version_number = version_number
@@ -835,21 +839,21 @@ class Experiment(BaseTeamModel, VersionsMixin, CustomActionOperationMixin):
             self.versions.filter(is_default_version=True).update(
                 is_default_version=False, audit_action=AuditAction.AUDIT
             )
-        if copy_experiment:
-            new_version.name = new_version.name + "_copy"
+        if is_copy:
+            new_version.name = name if name is not None else new_version.name + "_copy"
             new_version.version_number = 1
         new_version.save()
 
-        self._copy_safety_layers_to_new_version(new_version, copy_experiment)
+        self._copy_safety_layers_to_new_version(new_version, is_copy)
         self._copy_routes_to_new_version(new_version)
         self._copy_trigger_to_new_version(
-            trigger_queryset=self.static_triggers, new_version=new_version, copy_experiment=copy_experiment
+            trigger_queryset=self.static_triggers, new_version=new_version, is_copy=is_copy
         )
         self._copy_trigger_to_new_version(
-            trigger_queryset=self.timeout_triggers, new_version=new_version, copy_experiment=copy_experiment
+            trigger_queryset=self.timeout_triggers, new_version=new_version, is_copy=is_copy
         )
-        self._copy_pipeline_to_new_version(new_version, copy_experiment)
-        self._copy_custom_action_operations_to_new_version(new_experiment=new_version, copy_experiment=copy_experiment)
+        self._copy_pipeline_to_new_version(new_version, is_copy)
+        self._copy_custom_action_operations_to_new_version(new_experiment=new_version, is_copy=is_copy)
         self._copy_assistant_to_new_version(new_version)
 
         new_version.files.set(self.files.all())
@@ -883,10 +887,10 @@ class Experiment(BaseTeamModel, VersionsMixin, CustomActionOperationMixin):
         for channel in ExperimentChannel.objects.filter(experiment_id=self.id):
             channel.soft_delete()
 
-    def _copy_pipeline_to_new_version(self, new_version, copy_experiment: bool = False):
+    def _copy_pipeline_to_new_version(self, new_version, is_copy: bool = False):
         if not self.pipeline:
             return
-        new_version.pipeline = self.pipeline.create_new_version(copy_experiment=copy_experiment)
+        new_version.pipeline = self.pipeline.create_new_version(is_copy=is_copy)
         new_version.save(update_fields=["pipeline"])
 
     def _copy_assistant_to_new_version(self, new_version):
@@ -920,8 +924,8 @@ class Experiment(BaseTeamModel, VersionsMixin, CustomActionOperationMixin):
         else:
             setattr(new_version, attr_name, attr_instance.create_new_version())
 
-    def _copy_safety_layers_to_new_version(self, new_version: "Experiment", copy_experiment: bool = False):
-        if copy_experiment:
+    def _copy_safety_layers_to_new_version(self, new_version: "Experiment", is_copy: bool = False):
+        if is_copy:
             new_version.safety_layers.set(self.safety_layers.all())
         else:
             duplicated_layers = []
@@ -937,9 +941,9 @@ class Experiment(BaseTeamModel, VersionsMixin, CustomActionOperationMixin):
         for route in self.child_links.all():
             route.create_new_version(new_version)
 
-    def _copy_trigger_to_new_version(self, trigger_queryset, new_version, copy_experiment: bool = False):
+    def _copy_trigger_to_new_version(self, trigger_queryset, new_version, is_copy: bool = False):
         for trigger in trigger_queryset.all():
-            trigger.create_new_version(new_experiment=new_version, copy_experiment=copy_experiment)
+            trigger.create_new_version(new_experiment=new_version, is_copy=is_copy)
 
     @property
     def is_public(self) -> bool:

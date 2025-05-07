@@ -75,10 +75,10 @@
               </a>
             </div>
             <div class="tooltip" data-tip="Copy">
-              <a class="btn btn-primary join-item btn-sm rounded-r-full"
-                 href="{% url 'chatbots:copy' team.slug experiment.id %}">
+              <button class="btn btn-primary join-item btn-sm rounded-r-full copy-button"
+                      onclick="openCopyDialog({{ experiment.id }}, '{{ team.slug }}')">
                 <i class="fa-solid fa-copy"></i>
-              </a>
+              </button>
             </div>
           {% else %}
             <div class="tooltip" data-tip="View">
@@ -120,6 +120,7 @@
         </div>
         {% if experiment.is_public %}
           {% include "experiments/share/dialog.html" with origin="chatbots" %}
+          {% include "chatbots/chatbot_copy_dialog.html"%}
         {% endif %}
       {#  Commented elements included for Tailwind processing #}
       {#  <i class="fa-brands fa-telegram"></i> #}
