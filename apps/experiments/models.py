@@ -17,6 +17,7 @@ from django.db.models import (
     BooleanField,
     Case,
     Count,
+    OuterRef,
     Q,
     Subquery,
     UniqueConstraint,
@@ -1294,11 +1295,20 @@ class Participant(BaseTeamModel):
 
     def get_experiments_for_display(self):
         """Used by the html templates to display various stats about the participant's participation."""
+        exp_scoped_human_message = ChatMessage.objects.filter(
+            chat__experiment_session__participant=self,
+            message_type="human",
+            chat__experiment_session__experiment__id=OuterRef("id"),
+        )
+        last_message = exp_scoped_human_message.order_by("-created_at")[:1].values("created_at")
         joined_on = self.experimentsession_set.order_by("created_at")[:1].values("created_at")
         return (
             Experiment.objects.get_all()
+            .annotate(
+                joined_on=Subquery(joined_on),
+                last_message=Subquery(last_message),
+            )
             .filter(Q(sessions__participant=self) | Q(id__in=Subquery(self.data_set.values("experiment"))))
-            .annotate(joined_on=Subquery(joined_on))
             .distinct()
         )
 
