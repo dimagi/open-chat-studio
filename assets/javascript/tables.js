@@ -1,6 +1,13 @@
+const rowHandlers = new WeakMap();
+
 function initializeRowClickHandlers() {
     document.querySelectorAll('tr[data-redirect-url]:not([data-redirect-url=""])').forEach(function (element) {
-      element.addEventListener('click', function (event) {
+      if (rowHandlers.has(element)) {
+        const oldHandler = rowHandlers.get(element);
+        element.removeEventListener('click', oldHandler);
+      }
+
+      const handler = function (event) {
         if (event.target.tagName === 'TR' || event.target.tagName === 'TD') {
           let editUrl = this.getAttribute('data-redirect-url');
           try {
@@ -14,7 +21,9 @@ function initializeRowClickHandlers() {
             console.error('Invalid URL:', editUrl);
           }
         }
-      });
+      };
+      rowHandlers.set(element, handler);
+      element.addEventListener('click', handler);
     });
   }
 
@@ -23,3 +32,7 @@ function initializeRowClickHandlers() {
   } else {
     initializeRowClickHandlers();
   }
+
+  document.addEventListener('htmx:afterSettle', function() {
+    initializeRowClickHandlers();
+  });
