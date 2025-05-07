@@ -23,3 +23,7 @@ function initializeRowClickHandlers() {
   } else {
     initializeRowClickHandlers();
   }
+
+  document.addEventListener('htmx:afterSettle', function() {
+    initializeRowClickHandlers();
+  });
