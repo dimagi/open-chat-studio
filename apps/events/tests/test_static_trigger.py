@@ -1,10 +1,12 @@
 from datetime import timedelta
 from unittest import mock
+from unittest.mock import call
 
 import pytest
 from django.test import RequestFactory, override_settings
 from django.utils import timezone
 
+from apps.chat.channels import _start_experiment_session
 from apps.chat.models import Chat, ChatMessage, ChatMessageType
 from apps.events.models import (
     EventAction,
@@ -14,6 +16,7 @@ from apps.events.models import (
     TimeoutTrigger,
 )
 from apps.events.views import _delete_event_view
+from apps.utils.factories.channels import ExperimentChannelFactory
 from apps.utils.factories.experiment import (
     ExperimentFactory,
     ExperimentSessionFactory,
@@ -101,3 +104,35 @@ def test_delete():
 
     static_trigger.refresh_from_db()
     assert static_trigger.is_archived, "The static trigger should be archived"
+
+
+@override_settings(CELERY_TASK_ALWAYS_EAGER=True)
+@pytest.mark.django_db()
+def test_start_session_fires_participant_joined_event(team):
+    experiment = ExperimentFactory(team=team)
+    _assert_participant_joined_event_fired(
+        experiment,
+        [StaticTriggerType.PARTICIPANT_JOINED_EXPERIMENT, StaticTriggerType.CONVERSATION_START],
+    )
+    # 2nd call with the same experiment should not fire the participant joined event
+    _assert_participant_joined_event_fired(
+        experiment,
+        [StaticTriggerType.CONVERSATION_START],
+    )
+
+    # another call with a different experiment to check that the event is fired again
+    _assert_participant_joined_event_fired(
+        ExperimentFactory(team=team),
+        [StaticTriggerType.PARTICIPANT_JOINED_EXPERIMENT, StaticTriggerType.CONVERSATION_START],
+    )
+
+
+def _assert_participant_joined_event_fired(experiment, expected_events):
+    with mock.patch("apps.events.tasks.enqueue_static_triggers.run") as mock_fire_trigger:
+        session = _start_experiment_session(
+            working_experiment=experiment,
+            experiment_channel=ExperimentChannelFactory(team=experiment.team, experiment=experiment),
+            participant_identifier="test_participant",
+        )
+
+        mock_fire_trigger.assert_has_calls([call(session.id, event) for event in expected_events])
