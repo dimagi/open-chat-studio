@@ -26,7 +26,8 @@ def duplicate_pipeline_with_new_ids(pipeline_data):
 
         if "params" in new_node["data"]:
             new_node["data"]["params"] = new_node["data"]["params"].copy()
-            new_node["data"]["params"]["name"] = new_id
+            if new_node["data"]["params"].get("name") == old_id:
+                new_node["data"]["params"]["name"] = new_id
 
         new_nodes.append(new_node)
 
@@ -54,10 +55,6 @@ def duplicate_pipeline_with_new_ids(pipeline_data):
         new_edge["id"] = new_edge_id
         new_edge["source"] = new_source_id
         new_edge["target"] = new_target_id
-        if "sourceHandle" in edge:
-            new_edge["sourceHandle"] = edge["sourceHandle"]
-        if "targetHandle" in edge:
-            new_edge["targetHandle"] = edge["targetHandle"]
 
         new_edges.append(new_edge)
 
