@@ -28,6 +28,13 @@ def test_get_static_triggers_to_fire_with_valid_data(experiment_session):
         action=EventAction.objects.create(action_type=EventActionType.LOG),
         type=StaticTriggerType.CONVERSATION_START,
     )
+    # create an archived trigger
+    StaticTrigger.objects.create(
+        experiment=experiment_session.experiment,
+        action=EventAction.objects.create(action_type=EventActionType.LOG),
+        type=StaticTriggerType.CONVERSATION_START,
+        is_archived=True,
+    )
     # Create a trigger with a different type
     StaticTrigger.objects.create(
         experiment=experiment_session.experiment,
@@ -111,3 +118,23 @@ def test_enqueue_static_triggers_calls_fire_for_each_trigger(experiment_session)
         assert mock_fire.call_count == 2
         mock_fire.assert_any_call(trigger1.id, experiment_session.id)
         mock_fire.assert_any_call(trigger2.id, experiment_session.id)
+
+
+@pytest.mark.django_db()
+def test_get_static_triggers_to_fire_with_versioning(experiment_session):
+    experiment_session.experiment.create_new_version(make_default=True)
+
+    # add trigger after versioning
+    trigger = StaticTrigger.objects.create(
+        experiment=experiment_session.experiment,
+        action=EventAction.objects.create(action_type=EventActionType.LOG),
+        type=StaticTriggerType.CONVERSATION_START,
+    )
+
+    trigger_ids = _get_static_triggers_to_fire(experiment_session.id, StaticTriggerType.CONVERSATION_START)
+    assert len(trigger_ids) == 0
+
+    experiment_session.experiment.create_new_version(make_default=True)
+    trigger_ids = _get_static_triggers_to_fire(experiment_session.id, StaticTriggerType.CONVERSATION_START)
+    assert len(trigger_ids) == 1
+    assert StaticTrigger.objects.get(pk=trigger_ids[0]).working_version_id == trigger.id
