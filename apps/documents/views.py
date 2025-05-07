@@ -9,6 +9,7 @@ necessary.
 
 import logging
 
+import openai
 from django.conf import settings
 from django.contrib import messages
 from django.contrib.auth.decorators import permission_required
@@ -29,6 +30,7 @@ from apps.documents.tables import CollectionsTable
 from apps.documents.tasks import upload_files_to_vector_store_task
 from apps.files.models import File
 from apps.generics.chips import Chip
+from apps.service_providers.models import LlmProvider
 from apps.teams.decorators import login_and_team_required
 from apps.teams.mixins import LoginAndTeamRequiredMixin
 from apps.utils.search import similarity_search
@@ -111,10 +113,8 @@ def add_collection_files(request, team_slug: str, pk: int):
             [CollectionFile(collection=collection, file=file, status=status, metadata=metadata) for file in files]
         )
 
-        if collection.is_index:
-            upload_files_to_vector_store_task.delay(
-                [f.id for f in collection_files], chuking_strategy=chunking_strategy
-            )
+    if collection.is_index:
+        upload_files_to_vector_store_task.delay([f.id for f in collection_files], chuking_strategy=chunking_strategy)
 
     messages.success(request, f"Added {len(files)} files to collection")
     return redirect("documents:single_collection_home", team_slug=team_slug, pk=pk)
@@ -123,6 +123,7 @@ def add_collection_files(request, team_slug: str, pk: int):
 @require_POST
 @login_and_team_required
 @permission_required("documents.change_collection")
+@transaction.atomic()
 def delete_collection_file(request, team_slug: str, pk: int, file_id: int):
     collection_file = get_object_or_404(
         CollectionFile.objects.select_related("collection", "file"), collection_id=pk, file_id=file_id
@@ -157,10 +158,13 @@ class CollectionFormMixin:
         kwargs["request"] = self.request
         return kwargs
 
-    def sync_openai_vector_store(self, collection: Collection, remove_old_vector_store: bool = False):
+    def sync_openai_vector_store(
+        self, collection: Collection, remove_old_vector_store: bool = False, old_llm_provider_id: int | None = None
+    ):
         try:
-            if remove_old_vector_store and collection.openai_vector_store_id:
-                delete_vector_store(collection.llm_provider, collection.openai_vector_store_id, fail_silently=True)
+            if remove_old_vector_store and old_llm_provider_id and collection.openai_vector_store_id:
+                llm_provider = LlmProvider.objects.get(id=old_llm_provider_id)
+                delete_vector_store(llm_provider, collection.openai_vector_store_id, fail_silently=True)
 
             vector_store_name = f"collection-{collection.team.slug}-{collection.name}-{collection.id}"
             vector_store_id = create_vector_store(collection.llm_provider, name=vector_store_name)
@@ -217,7 +221,9 @@ class EditCollection(LoginAndTeamRequiredMixin, CollectionFormMixin, UpdateView)
     def form_valid(self, form):
         resposne = super().form_valid(form)
         if form.instance.is_index and "llm_provider" in form.changed_data:
-            self.sync_openai_vector_store(form.instance, remove_old_vector_store=True)
+            self.sync_openai_vector_store(
+                form.instance, remove_old_vector_store=True, old_llm_provider_id=form.instance.llm_provider_id
+            )
         return resposne
 
 
@@ -240,9 +246,14 @@ class DeleteCollection(LoginAndTeamRequiredMixin, View):
                 try:
                     delete_vector_store(collection.llm_provider, collection.openai_vector_store_id)
                     messages.success(request, "Collection deleted")
+                except openai.NotFoundError:
+                    messages.warning(
+                        self.request, "Could not find the vector store at OpenAI. It may have been deleted already"
+                    )
                 except Exception as e:
                     logger.exception(f"Could not delete vector store for collection {collection.id}. {e}")
                     messages.error(self.request, "Could not delete the vector store at OpenAI. Please try again later")
+                    return HttpResponse()
 
             collection.archive()
             return HttpResponse()
