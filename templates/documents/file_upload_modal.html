@@ -39,7 +39,7 @@
                                     :name="file.name"
                                     class="textarea textarea-bordered w-full placeholder:text-gray-500"
                                     maxlength="{{ max_summary_length }}"
-                                    placeholder="Enter a summary of the file...`"
+                                    :placeholder="`Summary for ${file.name} ...`"
                                 ></textarea>
                             </div>
                         {% endif %}
