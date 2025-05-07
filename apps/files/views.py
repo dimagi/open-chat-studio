@@ -249,6 +249,6 @@ class DeleteFile(LoginAndTeamRequiredMixin, View):
             )
             return HttpResponse(response, headers={"HX-Reswap": "none"}, status=400)
         else:
-            file.archive()
+            file.delete_or_archive()
             messages.success(request, "File deleted")
             return HttpResponse()

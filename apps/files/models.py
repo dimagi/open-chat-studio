@@ -150,3 +150,10 @@ class File(BaseTeamModel, VersionsMixin):
     def as_chip(self) -> Chip:
         label = self.name
         return Chip(label=label, url=self.get_absolute_url())
+
+    def delete_or_archive(self):
+        """Deletes the file if it has no versions, otherwise archives it."""
+        if self.has_versions:
+            self.archive()
+        else:
+            self.delete()

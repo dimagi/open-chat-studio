@@ -91,9 +91,11 @@ def add_collection_files(request, team_slug: str, pk: int):
 @login_and_team_required
 @permission_required("documents.change_collection")
 @require_POST
+@transaction.atomic()
 def delete_collection_file(request, team_slug: str, pk: int, file_id: int):
-    collection = get_object_or_404(Collection, id=pk, team__slug=team_slug)
-    CollectionFile.objects.filter(collection=collection, file_id=file_id).delete()
+    collection_file = get_object_or_404(CollectionFile, collection_id=pk, file_id=file_id)
+    collection_file.file.delete_or_archive()
+    collection_file.delete()
     messages.success(request, "File removed from collection")
     return redirect("documents:single_collection_home", team_slug=team_slug, pk=pk)
 
