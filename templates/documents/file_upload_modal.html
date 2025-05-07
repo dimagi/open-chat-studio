@@ -1,4 +1,4 @@
-<dialog id="chooseFilesModal" class="modal" x-data="modalData">
+<dialog id="chooseFilesModal" class="modal" x-data="modalData" x-on:toggle="if (event.newState === 'open') { $nextTick(() => { $refs.fileUpload.click() }) }">
     <div class="modal-box max-w-none w-1/2 max-h-3/5 overflow-y-auto">
         <h3 class="font-bold text-lg mb-4">Add Files to Collection</h3>
         <form method="dialog">
