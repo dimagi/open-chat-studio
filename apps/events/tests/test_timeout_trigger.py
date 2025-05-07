@@ -111,11 +111,14 @@ def test_timed_out_sessions_fired(mock_fire_trigger, session):
         session.chat = chat
         session.save()
 
+        experiment_version = session.experiment.create_new_version(make_default=True)
+        trigger_version = experiment_version.timeout_triggers.first()
+
         frozen_time.tick(delta=timedelta(minutes=15))
         timed_out_sessions = timeout_trigger.timed_out_sessions()
         assert len(timed_out_sessions) == 1
         enqueue_timed_out_events()
-        mock_fire_trigger.assert_called_with(timeout_trigger.id, session.id)
+        mock_fire_trigger.assert_called_with(trigger_version.id, session.id)
 
 
 @pytest.mark.django_db()

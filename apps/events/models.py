@@ -243,7 +243,7 @@ class TimeoutTrigger(BaseModel, VersionsMixin):
 
         sessions = (
             ExperimentSession.objects.filter(
-                experiment=self.experiment,
+                experiment=self.experiment.get_working_version(),
                 ended_at=None,
             )
             .exclude(status__in=STATUSES_FOR_COMPLETE_CHATS)
