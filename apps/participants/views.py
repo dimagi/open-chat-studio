@@ -3,7 +3,7 @@ import json
 from django.contrib.auth.decorators import permission_required
 from django.contrib.auth.mixins import PermissionRequiredMixin
 from django.db.models import Q
-from django.shortcuts import get_object_or_404, redirect, render
+from django.shortcuts import get_object_or_404, render
 from django.urls import reverse
 from django.views.decorators.http import require_POST
 from django.views.generic import CreateView, TemplateView
@@ -135,13 +135,6 @@ class EditParticipantData(LoginAndTeamRequiredMixin, TemplateView, PermissionReq
                 "participant_data": json.dumps(new_data, indent=4) if not error else raw_data,
                 "error": error,
             },
-        )
-        return redirect(
-            reverse(
-                "participants:single-participant-home-with-experiment",
-                args=[self.request.team.slug, participant_id, experiment.id],
-            )
-            + f"#{experiment.id}"
         )
 
 
