@@ -35,12 +35,19 @@ ACTION_HANDLERS = {
 
 
 class StaticTriggerObjectManager(VersionsObjectManagerMixin, models.Manager):
-    pass
+    def published_versions(self):
+        return self.filter(experiment__is_default_version=True)
+
+    def get_published_version(self, trigger):
+        return self.published_versions().get(working_version_id=trigger.get_working_version_id())
 
 
 class TimeoutTriggerObjectManager(VersionsObjectManagerMixin, models.Manager):
     def published_versions(self):
         return self.filter(experiment__is_default_version=True)
+
+    def get_published_version(self, trigger):
+        return self.published_versions().get(working_version_id=trigger.get_working_version_id())
 
 
 class EventActionType(models.TextChoices):
@@ -470,7 +477,36 @@ class ScheduledMessage(BaseTeamModel):
 
     @cached_property
     def params(self):
-        return self.custom_schedule_params or (self.action.params if self.action else {})
+        if self.custom_schedule_params:
+            return self.custom_schedule_params
+
+        if not self.action:
+            return {}
+
+        # use the latest version of the params
+        return self.published_action.params
+
+    @cached_property
+    def published_action(self):
+        """The action associated with the published version of the trigger that created this message"""
+        if not self.action:
+            return None
+
+        try:
+            trigger = self.action.static_trigger
+            trigger = StaticTrigger.objects.get_published_version(trigger)
+            return trigger.action
+        except StaticTrigger.DoesNotExist:
+            pass
+
+        try:
+            trigger = self.action.timeout_trigger
+            trigger = TimeoutTrigger.objects.get_published_version(trigger)
+            return trigger.action
+        except TimeoutTrigger.DoesNotExist:
+            pass
+
+        return self.action
 
     @property
     def name(self) -> str:
