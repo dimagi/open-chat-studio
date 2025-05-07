@@ -9,11 +9,11 @@
       <th scope="col" class=""></th>
     </tr>
   </thead>
-  <tbody class="divide-y divide-gray-200" x-data="{ selectedId: {{ selected_experiment.id|default:'null' }} }">
+  <tbody class="divide-y divide-gray-200">
     {% for experiment in experiments %}
       <tr
         class="cursor-pointer"
-        x-on:click="window.location.href = new URL('{% url 'participants:single-participant-home-with-experiment' participant.team.slug participant.id experiment.id %}#{{experiment.id}}', window.location.origin)"
+        data-redirect-url="{% url 'participants:single-participant-home-with-experiment' participant.team.slug participant.id experiment.id %}#{{experiment.id}}"
       >
         <td class="whitespace-nowrap px-3 py-4 text-sm text-gray-500">
           <a id="{{ experiment.id }}">
@@ -23,14 +23,12 @@
         <td class="whitespace-nowrap px-3 py-4 text-sm text-gray-500">{{ experiment.joined_on|default:"" }}</td>
         <td class="px-3 py-4 text-sm text-gray-500">{{ experiment.last_message|default:"" }}</td>
         <td class="">
-          <i class="fa-solid"
-             :class="selectedId == {{ experiment.id }} ? 'fa-chevron-down' : 'fa-chevron-up'"
-             x-on:click.stop="selectedId = {{ experiment.id }}"></i>
+          <i class="fa-solid {% if selected_experiment == experiment %}fa-chevron-down{% else %}fa-chevron-up{% endif %}"></i>
         </td>
       </tr>
-      <template x-if="selectedId == {{ experiment.id }}">
+      {% if selected_experiment == experiment %}
         {% include 'participants/partials/experiment_data.html' with experiment=selected_experiment %}
-      </template>
+      {% endif %}
     {% endfor %}
   </tbody>
 </table>
