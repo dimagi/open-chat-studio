@@ -34,7 +34,7 @@ class ParticipantHome(LoginAndTeamRequiredMixin, TemplateView, PermissionRequire
         }
 
 
-class CreateParticipant(CreateView, PermissionRequiredMixin):
+class CreateParticipant(LoginAndTeamRequiredMixin, CreateView, PermissionRequiredMixin):
     permission_required = "experiments.add_participant"
     model = Participant
     form_class = ParticipantForm
@@ -54,7 +54,7 @@ class CreateParticipant(CreateView, PermissionRequiredMixin):
         return super().form_valid(form)
 
 
-class ParticipantTableView(SingleTableView):
+class ParticipantTableView(LoginAndTeamRequiredMixin, SingleTableView, PermissionRequiredMixin):
     model = Participant
     paginate_by = 25
     table_class = ParticipantTable
@@ -78,7 +78,7 @@ class SingleParticipantHome(LoginAndTeamRequiredMixin, TemplateView, PermissionR
 
     def get_context_data(self, *args, **kwargs):
         context = super().get_context_data(*args, **kwargs)
-        participant = Participant.objects.get(id=self.kwargs["participant_id"])
+        participant = get_object_or_404(Participant, pk=self.kwargs["participant_id"])
         context["active_tab"] = "participants"
         context["participant"] = participant
         participant_experiments = participant.get_experiments_for_display()
