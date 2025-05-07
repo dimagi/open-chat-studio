@@ -7,39 +7,47 @@
         </form>
         <form class="mt-2 flex flex-col" action="{% url 'documents:add_collection_files' team.slug collection.id %}" method="POST" enctype="multipart/form-data">
             {% csrf_token %}
-            {% if collection.is_index %}
-                <div class="fieldset w-full">
-                    <legend class="fieldset-legend">Chunking Strategy</legend>
-                    <label class="label font-bold" for="chunk_size">
-                        <div>
-                            Chunk Size
-                            {% blocktranslate asvar chuck_size_help %}
-                                The file contents will be divided into chunks of this many tokens each.
-                            {% endblocktranslate %}
-                            <small class="form-text text-muted">{% include "generic/help.html" with help_content=chuck_size_help %}</small>
-                        </div>
-                    </label>
-                    <input name="chunk_size" type="number" class="input" value="800" required />
-                    <label class="label font-bold" for="chunk_overlap">
-                        <div>
-                            Chunk Overlap
-                            {% blocktranslate asvar chunk_overlap_help %}
-                                Each chunk will overlap this many tokens with the previous chunk.
-                            {% endblocktranslate %}
-                            <small class="form-text text-muted">{% include "generic/help.html" with help_content=chunk_overlap_help %}</small>
-                        </div>
-                    </label>
-                    <input name="chunk_overlap" type="number" class="input" value="400" required />
-                </div>
-            {% endif %}
             <input
                 x-ref="fileUpload"
                 name="files"
                 @change="handleFileChange($event)"
                 type="file"
                 multiple
-                class="file-input w-full max-w-xs"
+                class="file-input"
                 accept="{{ supported_file_types }}"/>
+            {% if collection.is_index %}
+                <div class="fieldset w-full">
+                    <legend class="fieldset-legend">Chunking Strategy</legend>
+                    <div class="flex gap-2">
+                        <div>
+                            <label class="label font-bold" for="chunk_size">
+                                <div>
+                                    Chunk Size
+                                    {% blocktranslate asvar chuck_size_help %}
+                                        The file contents will be divided into chunks of this many tokens each.
+                                    {% endblocktranslate %}
+                                    <small
+                                        class="form-text text-muted">{% include "generic/help.html" with help_content=chuck_size_help %}</small>
+                                </div>
+                            </label>
+                            <input name="chunk_size" type="number" class="input" value="800" required/>
+                        </div>
+                        <div>
+                            <label class="label font-bold" for="chunk_overlap">
+                                <div>
+                                    Chunk Overlap
+                                    {% blocktranslate asvar chunk_overlap_help %}
+                                        Each chunk will overlap this many tokens with the previous chunk.
+                                    {% endblocktranslate %}
+                                    <small
+                                        class="form-text text-muted">{% include "generic/help.html" with help_content=chunk_overlap_help %}</small>
+                                </div>
+                            </label>
+                            <input name="chunk_overlap" type="number" class="input" value="400" required/>
+                        </div>
+                    </div>
+                </div>
+            {% endif %}
 
             <div class="divide-y divide-base-300">
                 <template x-for="(file, index) in uploaded_files" :key="index">
