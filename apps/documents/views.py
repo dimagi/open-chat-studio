@@ -159,7 +159,7 @@ class CollectionFormMixin:
 
     def sync_openai_vector_store(self, collection: Collection, remove_old_vector_store: bool = False):
         try:
-            if remove_old_vector_store:
+            if remove_old_vector_store and collection.openai_vector_store_id:
                 delete_vector_store(collection.llm_provider, collection.openai_vector_store_id, fail_silently=True)
 
             vector_store_name = f"collection-{collection.team.slug}-{collection.name}-{collection.id}"
