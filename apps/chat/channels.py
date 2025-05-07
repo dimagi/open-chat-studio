@@ -708,7 +708,7 @@ class ChannelBase(ABC):
         chat_message = ChatMessage.objects.create(
             chat=self.experiment_session.chat, message_type=ChatMessageType.HUMAN, content=self.message.message_text
         )
-        chat_message.add_system_tag("unsupported_message_type", TagCategories.BOT_RESPONSE)
+        chat_message.add_system_tag("unsupported_message_type", TagCategories.ERROR)
         return EventBot(self.experiment_session, self.experiment, trace_info, history_manager).get_user_message(
             UNSUPPORTED_MESSAGE_BOT_PROMPT.format(supported_types=self.supported_message_types)
         )
