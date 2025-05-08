@@ -828,10 +828,16 @@ class Experiment(BaseTeamModel, VersionsMixin, CustomActionOperationMixin):
         new_version.public_id = uuid4()
         new_version.version_number = version_number
 
-        self._copy_attr_to_new_version("source_material", new_version, is_copy)
-        self._copy_attr_to_new_version("consent_form", new_version, is_copy)
-        self._copy_attr_to_new_version("pre_survey", new_version, is_copy)
-        self._copy_attr_to_new_version("post_survey", new_version, is_copy)
+        if not is_copy:
+            # nothing to do for copy - just reference the same object in the new copy
+            self._copy_attr_to_new_version("source_material", new_version)
+            self._copy_attr_to_new_version("consent_form", new_version)
+            self._copy_attr_to_new_version("pre_survey", new_version)
+            self._copy_attr_to_new_version("post_survey", new_version)
+            self._copy_assistant_to_new_version(new_version)
+
+            # not supported for copying
+            self._copy_routes_to_new_version(new_version)
 
         if not is_copy and (new_version.version_number == 1 or make_default):
             new_version.is_default_version = True
@@ -854,11 +860,6 @@ class Experiment(BaseTeamModel, VersionsMixin, CustomActionOperationMixin):
         )
         self._copy_pipeline_to_new_version(new_version, is_copy)
         self._copy_custom_action_operations_to_new_version(new_experiment=new_version, is_copy=is_copy)
-
-        if not is_copy:
-            # not supported for copying
-            self._copy_routes_to_new_version(new_version)
-            self._copy_assistant_to_new_version(new_version)
 
         new_version.files.set(self.files.all())
         return new_version
@@ -903,7 +904,7 @@ class Experiment(BaseTeamModel, VersionsMixin, CustomActionOperationMixin):
         new_version.assistant = self.assistant.create_new_version()
         new_version.save(update_fields=["assistant"])
 
-    def _copy_attr_to_new_version(self, attr_name, new_version: "Experiment", is_copy=False):
+    def _copy_attr_to_new_version(self, attr_name, new_version: "Experiment"):
         """Copies the attribute `attr_name` to the new version by creating a new version of the related record and
         linking that to `new_version`
 
@@ -917,10 +918,6 @@ class Experiment(BaseTeamModel, VersionsMixin, CustomActionOperationMixin):
         """
         attr_instance = getattr(self, attr_name)
         if not attr_instance:
-            return
-
-        if is_copy:
-            setattr(new_version, attr_name, attr_instance)
             return
 
         latest_attr_version = attr_instance.latest_version
