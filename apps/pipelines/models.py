@@ -17,7 +17,7 @@ from apps.annotations.models import TagCategories
 from apps.chat.models import ChatMessage, ChatMessageType
 from apps.custom_actions.form_utils import set_custom_actions
 from apps.custom_actions.mixins import CustomActionOperationMixin
-from apps.experiments.models import Experiment, ExperimentSession
+from apps.experiments.models import Experiment, ExperimentSession, SourceMaterial
 from apps.experiments.versioning import VersionDetails, VersionField, VersionsMixin, VersionsObjectManagerMixin
 from apps.pipelines.exceptions import PipelineBuildError
 from apps.pipelines.executor import patch_executor
@@ -512,6 +512,15 @@ class Node(BaseModel, VersionsMixin, CustomActionOperationMixin):
                 else:
                     new_version.params["collection_id"] = self.latest_version.params.get("collection_id")
 
+            if source_material_id := new_version.params.get("source_material_id"):
+                source_material = SourceMaterial.objects.filter(id=source_material_id).first()
+                if not source_material:
+                    new_version.params["source_material_id"] = None
+                else:
+                    if not source_material.has_versions or source_material.compare_with_latest():
+                        source_material = source_material.create_new_version()
+                        new_version.params["source_material_id"] = str(source_material.id)
+
         new_version.save()
         self._copy_custom_action_operations_to_new_version(new_node=new_version)
 
@@ -571,6 +580,10 @@ class Node(BaseModel, VersionsMixin, CustomActionOperationMixin):
                     name = "media"
                     if value:
                         value = Collection.objects.filter(id=value).first()
+                case "source_material_id":
+                    name = "source_material"
+                    if value:
+                        value = SourceMaterial.objects.filter(id=value).first()
 
             param_versions.append(
                 VersionField(group_name=node_name, name=name, raw_value=value, to_display=display_formatter),
