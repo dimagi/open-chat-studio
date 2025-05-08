@@ -165,7 +165,8 @@ class CustomActionOperation(BaseModel, VersionsMixin):
         new_instance.experiment = new_experiment
         new_instance.assistant = new_assistant
         new_instance.node = new_node
-        new_instance.operation_schema = get_standalone_schema_for_action_operation(new_instance)
+        if not is_copy:
+            new_instance.operation_schema = get_standalone_schema_for_action_operation(new_instance)
         new_instance.save()
         return new_instance
 

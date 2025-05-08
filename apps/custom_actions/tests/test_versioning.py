@@ -1,42 +1,8 @@
 import pytest
 
-from apps.custom_actions.models import CustomAction, CustomActionOperation
+from apps.custom_actions.models import CustomActionOperation
+from apps.utils.factories.custom_actions import CustomActionFactory
 from apps.utils.factories.pipelines import NodeFactory, PipelineFactory
-
-ACTION_SCHEMA = {
-    "openapi": "3.0.0",
-    "info": {"title": "Weather API", "version": "1.0.0"},
-    "servers": [{"url": "https://api.weather.com"}],
-    "paths": {
-        "/weather": {
-            "get": {
-                "summary": "Get weather",
-                "parameters": [
-                    {"$ref": "#/components/parameters/Location"},
-                ],
-            },
-            "post": {
-                "summary": "Update weather",
-            },
-        },
-        "/pollen": {
-            "get": {
-                "summary": "Get pollen count",
-            }
-        },
-    },
-    "components": {
-        "parameters": {
-            "Location": {
-                "name": "location",
-                "in": "query",
-                "required": True,
-                "schema": {"type": "string"},
-                "description": "The location to get the weather for",
-            },
-        }
-    },
-}
 
 EXPECTED_POLLEN_GET_SCHEMA = {
     "openapi": "3.0.0",
@@ -84,15 +50,7 @@ EXPECTED_WEATHER_GET_SCHEMA = {
 
 @pytest.fixture()
 def custom_action(experiment):
-    return CustomAction.objects.create(
-        team=experiment.team,
-        name="Custom Action",
-        description="Custom action description",
-        prompt="Custom action prompt",
-        api_schema=ACTION_SCHEMA,
-        allowed_operations=["weather_get"],
-        server_url="https://api.weather.com",
-    )
+    return CustomActionFactory()
 
 
 @pytest.mark.django_db()
