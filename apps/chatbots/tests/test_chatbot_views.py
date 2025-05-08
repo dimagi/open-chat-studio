@@ -13,10 +13,14 @@ from apps.chatbots.views import (
     CreateChatbotVersion,
     chatbot_session_pagination_view,
 )
-from apps.experiments.models import Experiment, ExperimentSession, Participant
+from apps.experiments.models import Experiment, ExperimentSession, Participant, SafetyLayer
 from apps.generics.views import generic_home
 from apps.pipelines.models import Pipeline
 from apps.teams.helpers import get_team_membership_for_request
+from apps.utils.factories.events import StaticTriggerFactory, TimeoutTriggerFactory
+from apps.utils.factories.experiment import ExperimentFactory
+from apps.utils.factories.openai import AssistantFactory
+from apps.utils.factories.pipelines import PipelineFactory
 
 
 @pytest.mark.django_db()
@@ -298,3 +302,32 @@ def test_chatbot_sessions_table_view(team_with_users):
     response = view(request, team_slug=team.slug, experiment_id=experiment.id)
     assert response.status_code == 200
     assert isinstance(response.context_data["table"], ChatbotSessionsTable)
+
+
+# @pytest.mark.django_db()
+# def test_copy_chatbot(client, team_with_users):
+#     team = team_with_users
+#     user = team.members.first()
+#     team = user.teams.first()
+#     client.force_login(user)
+#     experiment = ExperimentFactory(team=team, owner=user, version_number=4, name="Original Bot")
+#     experiment.working_version = experiment
+#     experiment.save()
+#
+#     PipelineFactory.create(experiment=experiment)
+#     AssistantFactory.create(experiment=experiment)
+#     StaticTriggerFactory.create(experiment=experiment)
+#     TimeoutTriggerFactory.create(experiment=experiment)
+#     layer1 = SafetyLayer.objects.create(prompt_text="Is this message safe?", team=team, prompt_to_bot="Unsafe reply")
+#     experiment.safety_layers.add(layer1)
+#
+#     url = reverse("chatbots:copy", kwargs={"pk": experiment.id, "team_slug": team.slug})
+#     response = client.post(url, data={"new_name": "Copied Bot"})
+#
+#     assert response.status_code == 200
+#     new_experiment = Experiment.objects.exclude(id=experiment.id).get(working_version=None)
+#
+#     assert new_experiment.name == "Copied Bot"
+#     assert new_experiment.version_number == 2
+#     assert new_experiment.assistant is not None
+#     assert new_experiment.working_version is None
