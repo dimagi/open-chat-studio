@@ -6,6 +6,7 @@ import pytz
 from dateutil.relativedelta import relativedelta
 from django.contrib.contenttypes.fields import GenericForeignKey, GenericRelation
 from django.contrib.contenttypes.models import ContentType
+from django.core.exceptions import ObjectDoesNotExist
 from django.db import models, transaction
 from django.db.models import F, Func, OuterRef, Q, Subquery, functions
 from django.utils import timezone
@@ -496,14 +497,14 @@ class ScheduledMessage(BaseTeamModel):
             trigger = self.action.static_trigger
             trigger = StaticTrigger.objects.get_published_version(trigger)
             return trigger.action
-        except StaticTrigger.DoesNotExist:
+        except ObjectDoesNotExist:
             pass
 
         try:
             trigger = self.action.timeout_trigger
             trigger = TimeoutTrigger.objects.get_published_version(trigger)
             return trigger.action
-        except TimeoutTrigger.DoesNotExist:
+        except ObjectDoesNotExist:
             pass
 
         return self.action
