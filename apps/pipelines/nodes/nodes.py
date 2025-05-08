@@ -335,6 +335,11 @@ class LLMResponseWithPrompt(LLMResponse, HistoryMixin):
 
         node = Node.objects.get(flow_id=node_id, pipeline__version_number=pipeline_version)
         tools = get_node_tools(node, session, attachment_callback=history_manager.attach_file_id)
+        if self.document_index_id:
+            collection = Collection.objects.get(id=self.document_index_id)
+            builtin_tools = {"type": "file_search", "vector_store_ids": [collection.openai_vector_store_id]}
+            tools.append(builtin_tools)
+
         chat_adapter = ChatAdapter.for_pipeline(
             session=session,
             node=self,
@@ -343,11 +348,6 @@ class LLMResponseWithPrompt(LLMResponse, HistoryMixin):
             tools=tools,
             disabled_tools=self.disabled_tools,
         )
-
-        if self.document_index_id:
-            collection = Collection.objects.get(id=self.document_index_id)
-            builtin_tools = {"type": "file_search", "vector_store_ids": [collection.openai_vector_store_id]}
-            tools.append(builtin_tools)
 
         allowed_tools = chat_adapter.get_allowed_tools()
         if len(tools) != len(allowed_tools):

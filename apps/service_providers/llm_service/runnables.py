@@ -227,9 +227,12 @@ class SimpleLLMChat(LLMChat):
 
 class AgentLLMChat(LLMChat):
     def _parse_output(self, output):
-        if output := output.get("output"):
-            return output[0]["text"]
-        return ""
+        output = output.get("output", "")
+        if isinstance(output, list):
+            # Responses API responses are lists
+            return "\n".join([o["text"] for o in output])
+        else:
+            return output
 
     def _build_chain(self) -> Runnable[dict[str, Any], dict]:
         tools = self.adapter.get_allowed_tools()
