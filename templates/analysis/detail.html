@@ -59,13 +59,25 @@
 
     {% if celery_job_id %}
       {% include "analysis/components/progress.html" %}
-    {% elif not object.is_complete and not object.is_processing %}
+    {% elif not object.is_processing %}
       <div class="mb-6">
         {% with enabled=object.queries.exists %}
-          <button class="btn btn-primary"
+          <button class="btn btn-primary" id="run-analysis"
                   hx-get="{% url 'analysis:run' request.team.slug object.id %}"
                   hx-swap="outerHTML"
                   {% if not enabled %}disabled=""{% endif %}
+                  {% if object.result_file %}
+                    hx-trigger="confirmed"
+                    onClick="alertify.confirm().setting({
+                             title: 'Confirm',
+                             message: 'This will overwrite the existing results. Do you want to continue?',
+                             transition: 'fade',
+                             onok: function() {
+                             htmx.trigger('#run-analysis', 'confirmed');
+                             },
+                             }).show();
+                            "
+                  {% endif %}
           >
             <i class="fa-solid fa-play"></i>
             Run Analysis
