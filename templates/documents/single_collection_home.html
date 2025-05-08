@@ -52,20 +52,20 @@
       {% include 'documents/file_upload_modal.html' %}
 
       <div class="grid grid-cols-1 gap-4">
-        {% for file in collection_files %}
+        {% for collection_file in collection_files %}
           <div class="flex items-center justify-between p-3 bg-base-200 rounded-lg">
             <div class="flex flex-col flex-1 gap-1">
               <div class="flex items-center gap-2">
-                {% if collection.is_index %}
-                  <div class="tooltip" data-tip="{{ file.file_status.label }}">
-                    {% if file.file_status == 'pending' %}
+                {% if collection_file.status %}
+                  <div class="tooltip" data-tip="{{ collection_file.status }}">
+                    {% if collection_file.status == 'pending' %}
                       <span class="status"></span>
-                    {% elif file.file_status == 'in_progress' %}
+                    {% elif collection_file.status == 'in_progress' %}
                       <div class="inline-grid *:[grid-area:1/1]">
                         <div aria-label="warning" class="status status-warning animate-ping"></div>
                         <div aria-label="warning" class="status status-warning"></div>
                       </div>
-                    {% elif file.file_status == 'completed' %}
+                    {% elif collection_file.status == 'completed' %}
                       <div class="inline-grid *:[grid-area:1/1]">
                         <div aria-label="success" class="status status-success"></div>
                       </div>
@@ -76,24 +76,24 @@
                     {% endif %}
                   </div>
                 {% endif %}
-                <span class="text-sm font-medium">{% include "generic/chip.html" with chip=file.as_chip %}</span>
-                <div class="text-xs badge badge-ghost">{{ file.size_mb }} MB</div>
+                <span class="text-sm font-medium">{% include "generic/chip.html" with chip=collection_file.file.as_chip %}</span>
+                <div class="text-xs badge badge-ghost">{{ collection_file.file_size_mb }} MB</div>
               </div>
               {% if collection.is_index %}
                 <div class="flex flex-row items-center gap-2">
                   <span class="text-xs text-base-content/70">Chunking Strategy:</span>
-                  <div class="badge badge-sm badge-ghost">Size: {{ file.chunking_strategy.chunk_size }} tokens</div>
-                  <div class="badge badge-sm badge-ghost">Overlap: {{ file.chunking_strategy.chunk_overlap }} tokens</div>
+                  <div class="badge badge-sm badge-ghost">Size: {{ collection_file.chunking_strategy.size }} tokens</div>
+                  <div class="badge badge-sm badge-ghost">Overlap: {{ collection_file.chunking_strategy.overlap }} tokens</div>
                 </div>
               {% else %}
-                <span class="text-xs text-base-content/70">{{ file.summary|default:'No summary available' }}</span>
+                <span class="text-xs text-base-content/70">{{ collection_file.file.summary|default:'No summary available' }}</span>
               {% endif %}
             </div>
             <div class="flex items-center gap-2 ml-4">
-              <a href="{% url 'files:base' team.slug file.id %}" class="btn btn-sm">
+              <a href="{% url 'files:base' team.slug collection_file.file.id %}" class="btn btn-sm">
                 <i class="fa-solid fa-eye"></i>
               </a>
-              <form action="{% url 'documents:delete_collection_file' team.slug collection.id file.id %}" method="POST" class="inline">
+              <form action="{% url 'documents:delete_collection_file' team.slug collection.id collection_file.file.id %}" method="POST" class="inline">
                 {% csrf_token %}
                 <button type="submit" class="btn btn-sm">
                   <i class="fa-solid fa-trash"></i>

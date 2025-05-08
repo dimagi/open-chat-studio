@@ -31,6 +31,14 @@ class CollectionFile(models.Model):
     def __str__(self) -> str:
         return f"{self.file.name} in {self.collection.name}"
 
+    @property
+    def file_size_mb(self):
+        return self.file.size_mb
+
+    @property
+    def chunking_strategy(self):
+        return self.metadata.get("chunking_strategy", {})
+
 
 @audit_fields(
     "name",

@@ -13,7 +13,7 @@ import openai
 from django.conf import settings
 from django.contrib import messages
 from django.contrib.auth.decorators import permission_required
-from django.db import models, transaction
+from django.db import transaction
 from django.http import HttpResponse
 from django.shortcuts import get_object_or_404, redirect, render
 from django.template.loader import render_to_string
@@ -56,20 +56,9 @@ class CollectionHome(LoginAndTeamRequiredMixin, TemplateView):
 @permission_required("documents.view_collection", raise_exception=True)
 def single_collection_home(request, team_slug: str, pk: int):
     collection = get_object_or_404(Collection.objects.select_related("team"), id=pk, team__slug=team_slug)
-    collection_files = collection.files.annotate(
-        file_status=models.Subquery(
-            CollectionFile.objects.filter(collection=collection, file=models.OuterRef("pk")).values("status")[:1]
-        ),
-        chunking_strategy=models.Subquery(
-            CollectionFile.objects.filter(collection=collection, file=models.OuterRef("pk")).values(
-                "metadata__chunking_strategy"
-            )[:1]
-        ),
-    )
+
+    collection_files = CollectionFile.objects.filter(collection=collection)
     # Load the labels for the file statuses
-    for file in collection_files:
-        if file.file_status:
-            file.file_status = FileStatus(file.file_status)
 
     context = {
         "collection": collection,
@@ -129,6 +118,7 @@ def delete_collection_file(request, team_slug: str, pk: int, file_id: int):
         CollectionFile.objects.select_related("collection", "file"), collection_id=pk, file_id=file_id
     )
 
+    collection_file.file.delete_or_archive()
     if collection_file.collection.is_index:
         client = collection_file.collection.llm_provider.get_llm_service().get_raw_client()
         delete_file_from_openai(client, collection_file.file)
