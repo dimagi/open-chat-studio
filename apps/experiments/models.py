@@ -833,7 +833,7 @@ class Experiment(BaseTeamModel, VersionsMixin, CustomActionOperationMixin):
         self._copy_attr_to_new_version("pre_survey", new_version, is_copy)
         self._copy_attr_to_new_version("post_survey", new_version, is_copy)
 
-        if new_version.version_number == 1 or make_default:
+        if not is_copy and (new_version.version_number == 1 or make_default):
             new_version.is_default_version = True
 
         if make_default:
