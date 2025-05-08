@@ -82,8 +82,8 @@
               {% if collection.is_index %}
                 <div class="flex flex-row items-center gap-2">
                   <span class="text-xs text-base-content/70">Chunking Strategy:</span>
-                  <div class="badge badge-sm badge-ghost">Size: {{ collection_file.chunking_strategy.size }} tokens</div>
-                  <div class="badge badge-sm badge-ghost">Overlap: {{ collection_file.chunking_strategy.overlap }} tokens</div>
+                  <div class="badge badge-sm badge-ghost">Size: {{ collection_file.chunking_strategy.chunk_size }} tokens</div>
+                  <div class="badge badge-sm badge-ghost">Overlap: {{ collection_file.chunking_strategy.chunk_overlap }} tokens</div>
                 </div>
               {% else %}
                 <span class="text-xs text-base-content/70">{{ collection_file.file.summary|default:'No summary available' }}</span>
