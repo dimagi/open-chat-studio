@@ -13,14 +13,10 @@ from apps.chatbots.views import (
     CreateChatbotVersion,
     chatbot_session_pagination_view,
 )
-from apps.experiments.models import Experiment, ExperimentSession, Participant, SafetyLayer
+from apps.experiments.models import Experiment, ExperimentSession, Participant
 from apps.generics.views import generic_home
 from apps.pipelines.models import Pipeline
 from apps.teams.helpers import get_team_membership_for_request
-from apps.utils.factories.events import StaticTriggerFactory, TimeoutTriggerFactory
-from apps.utils.factories.experiment import ExperimentFactory
-from apps.utils.factories.openai import AssistantFactory
-from apps.utils.factories.pipelines import PipelineFactory
 
 
 @pytest.mark.django_db()
