@@ -243,7 +243,6 @@ class AgentLLMChat(LLMChat):
             agent=agent,
             tools=tools,
             max_execution_time=120,
-            handle_parsing_errors=lambda *args, **kwargs: print(f"PARSING ERROR HANDLING: {args} {kwargs}"),
         )
 
     def _filter_for_ocs_tools(self, tools: list):
