@@ -377,6 +377,8 @@ class TestCopyExperiment:
                             "template_string": "{{input}}",
                         },
                     },
+                    "type": "pipelineNode",
+                    "position": {"x": 1086.2033684962435, "y": 91.8445271200375},
                 },
                 {
                     "id": "end",
@@ -386,6 +388,8 @@ class TestCopyExperiment:
                     },
                 },
             ],
+            "errors": {"test": "value"},
+            "viewport": {"x": 235.23538305148782, "y": 365.64304629840245, "zoom": 0.5570968254096753},
         }
         pipeline = PipelineFactory(data=pipeline_data)
         experiment = ExperimentFactory(team=pipeline.team, pipeline=pipeline)
@@ -398,7 +402,6 @@ class TestCopyExperiment:
         node_ids = {node.type: node.flow_id for node in experiment_copy.pipeline.node_set.all()}
         assert experiment_copy.pipeline.data != pipeline_data
         assert experiment_copy.pipeline.data == {
-            "errors": {},
             "edges": [
                 {
                     "id": "start->render",
@@ -429,6 +432,8 @@ class TestCopyExperiment:
                             "template_string": "{{input}}",
                         },
                     },
+                    "type": "pipelineNode",
+                    "position": {"x": 1086.2033684962435, "y": 91.8445271200375},
                 },
                 {
                     "id": node_ids["EndNode"],
@@ -438,4 +443,6 @@ class TestCopyExperiment:
                     },
                 },
             ],
+            "errors": {"test": "value"},
+            "viewport": {"x": 235.23538305148782, "y": 365.64304629840245, "zoom": 0.5570968254096753},
         }
