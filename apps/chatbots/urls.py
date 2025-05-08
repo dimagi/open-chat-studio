@@ -65,4 +65,5 @@ urlpatterns = [
         views.chatbot_chat_embed,
         name="chatbot_chat_embed",
     ),
+    path("<int:pk>/copy/", views.copy_chatbot, name="copy"),
 ]

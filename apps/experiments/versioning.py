@@ -311,7 +311,7 @@ class VersionsMixin:
     DEFAULT_EXCLUDED_KEYS = ["id", "created_at", "updated_at", "working_version", "versions", "version_number"]
 
     @transaction.atomic()
-    def create_new_version(self, save=True):
+    def create_new_version(self, save=True, is_copy=False):
         """
         Creates a new version of this instance and sets the `working_version_id` (if this model supports it) to the
         original instance ID
@@ -321,7 +321,7 @@ class VersionsMixin:
         new_instance.pk = None
         new_instance.id = None
         new_instance._state.adding = True
-        if hasattr(new_instance, "working_version_id"):
+        if hasattr(new_instance, "working_version_id") and not is_copy:
             new_instance.working_version_id = working_version_id
 
         if save:
