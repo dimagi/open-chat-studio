@@ -846,7 +846,6 @@ class Experiment(BaseTeamModel, VersionsMixin, CustomActionOperationMixin):
         new_version.save()
 
         self._copy_safety_layers_to_new_version(new_version, is_copy)
-        self._copy_routes_to_new_version(new_version)
         self._copy_trigger_to_new_version(
             trigger_queryset=self.static_triggers, new_version=new_version, is_copy=is_copy
         )
@@ -855,7 +854,11 @@ class Experiment(BaseTeamModel, VersionsMixin, CustomActionOperationMixin):
         )
         self._copy_pipeline_to_new_version(new_version, is_copy)
         self._copy_custom_action_operations_to_new_version(new_experiment=new_version, is_copy=is_copy)
-        self._copy_assistant_to_new_version(new_version)
+
+        if not is_copy:
+            # not supported for copying
+            self._copy_routes_to_new_version(new_version)
+            self._copy_assistant_to_new_version(new_version)
 
         new_version.files.set(self.files.all())
         return new_version
