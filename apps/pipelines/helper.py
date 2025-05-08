@@ -34,4 +34,4 @@ def duplicate_pipeline_with_new_ids(pipeline_data):
         edge["source"] = new_source_id
         edge["target"] = new_target_id
 
-    return new_data
+    return new_data, old_to_new_node_ids

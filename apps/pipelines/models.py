@@ -7,6 +7,7 @@ from functools import cached_property
 from uuid import uuid4
 
 import pydantic
+from django.core.exceptions import ObjectDoesNotExist
 from django.core.serializers.json import DjangoJSONEncoder
 from django.db import models, transaction
 from django.urls import reverse
@@ -387,17 +388,16 @@ class Pipeline(BaseTeamModel, VersionsMixin):
             self.save(update_fields=["version_number"])
         pipeline_version = super().create_new_version(save=False, is_copy=is_copy)
         pipeline_version.version_number = version_number
+        id_mapping = {}
         if is_copy:
             pipeline_version.name = f"{self.name} Copy"
-            pipeline_version.data = duplicate_pipeline_with_new_ids(self.data)
-            pipeline_version.save()
-            pipeline_version.update_nodes_from_data()
-        else:
-            pipeline_version.save()
-            for node in self.node_set.all():
-                node_version = node.create_new_version()
-                node_version.pipeline = pipeline_version
-                node_version.save(update_fields=["pipeline"])
+            data, id_mapping = duplicate_pipeline_with_new_ids(self.data)
+            pipeline_version.data = data
+        pipeline_version.save()
+        for node in self.node_set.all():
+            node_version = node.create_new_version(is_copy=is_copy, new_flow_id=id_mapping[node.flow_id])
+            node_version.pipeline = pipeline_version
+            node_version.save(update_fields=["pipeline"])
 
         return pipeline_version
 
@@ -484,7 +484,7 @@ class Node(BaseModel, VersionsMixin, CustomActionOperationMixin):
     def __str__(self):
         return self.flow_id
 
-    def create_new_version(self):
+    def create_new_version(self, is_copy=False, new_flow_id=None):
         """
         Create a new version of the node and if the node is an assistant node, create a new version of the assistant
         and update the `assistant_id` in the node params to the new assistant version id.
@@ -493,20 +493,22 @@ class Node(BaseModel, VersionsMixin, CustomActionOperationMixin):
         from apps.documents.models import Collection
         from apps.pipelines.nodes.nodes import AssistantNode, LLMResponseWithPrompt
 
-        new_version = super().create_new_version(save=False)
+        new_version = super().create_new_version(save=False, is_copy=is_copy)
+        if is_copy and new_flow_id:
+            new_version.flow_id = new_flow_id
 
-        if self.type == AssistantNode.__name__ and new_version.params.get("assistant_id"):
+        if not is_copy and self.type == AssistantNode.__name__ and new_version.params.get("assistant_id"):
             assistant = OpenAiAssistant.objects.get(id=new_version.params.get("assistant_id"))
             if not assistant.is_a_version:
                 assistant_version = assistant.create_new_version()
                 # convert to string to be consistent with values from the UI
                 new_version.params["assistant_id"] = str(assistant_version.id)
 
-        if self.type == LLMResponseWithPrompt.__name__:
-            if collection_id := self.params.get("collection_id"):
+        if not is_copy and self.type == LLMResponseWithPrompt.__name__:
+            if collection_id := new_version.params.get("collection_id"):
                 collection = Collection.objects.get(id=collection_id)
 
-                if collection.has_versions is False or collection.compare_with_latest():
+                if not collection.has_versions or collection.compare_with_latest():
                     collection_version = collection.create_new_version()
                     new_version.params["collection_id"] = str(collection_version.id)
                 else:
@@ -522,7 +524,7 @@ class Node(BaseModel, VersionsMixin, CustomActionOperationMixin):
                         new_version.params["source_material_id"] = str(source_material.id)
 
         new_version.save()
-        self._copy_custom_action_operations_to_new_version(new_node=new_version)
+        self._copy_custom_action_operations_to_new_version(new_node=new_version, is_copy=is_copy)
 
         return new_version
 
@@ -629,7 +631,7 @@ class Node(BaseModel, VersionsMixin, CustomActionOperationMixin):
                 try:
                     obj = spec.get_object(instance_id)
                     obj.archive()
-                except self.model_cls.DoesNotExist:
+                except ObjectDoesNotExist:
                     versioning_logger.exception(
                         f"Failed to archive {spec.param_name} with id {instance_id}, since it could not be found"
                     )
