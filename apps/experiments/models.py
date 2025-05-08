@@ -828,17 +828,6 @@ class Experiment(BaseTeamModel, VersionsMixin, CustomActionOperationMixin):
         new_version.public_id = uuid4()
         new_version.version_number = version_number
 
-        if not is_copy:
-            # nothing to do for copy - just reference the same object in the new copy
-            self._copy_attr_to_new_version("source_material", new_version)
-            self._copy_attr_to_new_version("consent_form", new_version)
-            self._copy_attr_to_new_version("pre_survey", new_version)
-            self._copy_attr_to_new_version("post_survey", new_version)
-            self._copy_assistant_to_new_version(new_version)
-
-            # not supported for copying
-            self._copy_routes_to_new_version(new_version)
-
         if not is_copy and (new_version.version_number == 1 or make_default):
             new_version.is_default_version = True
 
@@ -850,6 +839,17 @@ class Experiment(BaseTeamModel, VersionsMixin, CustomActionOperationMixin):
             new_version.name = name if name is not None else new_version.name + "_copy"
             new_version.version_number = 1
         new_version.save()
+
+        if not is_copy:
+            # nothing to do for copy - just reference the same object in the new copy
+            self._copy_attr_to_new_version("source_material", new_version)
+            self._copy_attr_to_new_version("consent_form", new_version)
+            self._copy_attr_to_new_version("pre_survey", new_version)
+            self._copy_attr_to_new_version("post_survey", new_version)
+            self._copy_assistant_to_new_version(new_version)
+
+            # not supported for copying
+            self._copy_routes_to_new_version(new_version)
 
         self._copy_safety_layers_to_new_version(new_version, is_copy)
         self._copy_trigger_to_new_version(
