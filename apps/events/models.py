@@ -140,7 +140,7 @@ class StaticTrigger(BaseModel, VersionsMixin):
         """Create a duplicate and assign the `new_experiment` to it. Also duplicate all EventActions"""
         new_instance = super().create_new_version(save=False, is_copy=is_copy)
         new_instance.experiment = new_experiment
-        new_instance.action = new_instance.action.create_new_version()
+        new_instance.action = new_instance.action.create_new_version(is_copy=is_copy)
         new_instance.save()
         return new_instance
 
