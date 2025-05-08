@@ -54,7 +54,8 @@ def single_collection_home(request, team_slug: str, pk: int):
     context = {
         "collection": collection,
         "collection_files": collection_files,
-        "supported_file_types": settings.MEDIA_SUPPORTED_FILE_TYPES,
+        "collections_supported_file_types": settings.SUPPORTED_FILE_TYPES["collections"],
+        "file_search_supported_file_types": settings.SUPPORTED_FILE_TYPES["file_search"],
         "max_summary_length": settings.MAX_SUMMARY_LENGTH,
     }
     return render(request, "documents/single_collection_home.html", context)
