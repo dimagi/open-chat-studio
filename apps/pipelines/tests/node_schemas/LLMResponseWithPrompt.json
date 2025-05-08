@@ -97,6 +97,14 @@
       "ui:widget": "select",
       "type": "integer"
     },
+    "document_index_id": {
+      "default": null,
+      "title": "Document Index",
+      "ui:flagRequired": "document_management",
+      "ui:optionsSource": "document_index",
+      "ui:widget": "select",
+      "type": "integer"
+    },
     "tools": {
       "description": "The tools to enable for the bot",
       "items": {
