@@ -390,12 +390,11 @@ class Pipeline(BaseTeamModel, VersionsMixin):
         pipeline_version.version_number = version_number
         id_mapping = {}
         if is_copy:
-            pipeline_version.name = f"{self.name} Copy"
             data, id_mapping = duplicate_pipeline_with_new_ids(self.data)
             pipeline_version.data = data
         pipeline_version.save()
         for node in self.node_set.all():
-            node_version = node.create_new_version(is_copy=is_copy, new_flow_id=id_mapping[node.flow_id])
+            node_version = node.create_new_version(is_copy=is_copy, new_flow_id=id_mapping.get(node.flow_id))
             node_version.pipeline = pipeline_version
             node_version.save(update_fields=["pipeline"])
 

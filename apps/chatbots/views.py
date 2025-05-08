@@ -232,11 +232,11 @@ def copy_chatbot(request, team_slug, *args, **kwargs):
         new_name = form.cleaned_data["new_name"]
         experiment = get_object_or_404(Experiment.objects.get_all(), id=kwargs["pk"], team=request.team)
         # copy chatbot
-        experiment = experiment.create_new_version(
-            version_description=experiment.description, make_default=False, is_copy=True, name=new_name
-        )
+        new_experiment = experiment.create_new_version(make_default=False, is_copy=True, name=new_name)
         # create default version for copied chatbot
-        async_create_experiment_version(
-            experiment_id=experiment.id, version_description=experiment.version_description, make_default=True
+        task_id = async_create_experiment_version.delay(
+            experiment_id=new_experiment.id, version_description="", make_default=True
         )
-    return single_chatbot_home(request, team_slug, experiment.id)
+        new_experiment.create_version_task_id = task_id
+        new_experiment.save(update_fields=["create_version_task_id"])
+    return single_chatbot_home(request, team_slug, new_experiment.id)

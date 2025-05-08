@@ -895,7 +895,11 @@ class Experiment(BaseTeamModel, VersionsMixin, CustomActionOperationMixin):
     def _copy_pipeline_to_new_version(self, new_version, is_copy: bool = False):
         if not self.pipeline:
             return
-        new_version.pipeline = self.pipeline.create_new_version(is_copy=is_copy)
+        new_pipeline = self.pipeline.create_new_version(is_copy=is_copy)
+        if is_copy:
+            new_pipeline.name = new_version.name
+            new_pipeline.save(update_fields=["name"])
+        new_version.pipeline = new_pipeline
         new_version.save(update_fields=["pipeline"])
 
     def _copy_assistant_to_new_version(self, new_version):
