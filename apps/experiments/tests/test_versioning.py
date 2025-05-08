@@ -397,7 +397,7 @@ class TestCopyExperiment:
         experiment_copy = experiment.create_new_version(is_copy=True)
         assert experiment_copy.pipeline != pipeline
         assert experiment_copy.pipeline.is_working_version
-        assert experiment_copy.pipeline.name == pipeline.name + " Copy"
+        assert experiment_copy.pipeline.name == experiment_copy.name
         assert experiment_copy.pipeline.node_set.count() == 3
         node_ids = {node.type: node.flow_id for node in experiment_copy.pipeline.node_set.all()}
         assert experiment_copy.pipeline.data != pipeline_data
