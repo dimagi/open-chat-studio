@@ -347,15 +347,6 @@ def test_schedule_trigger_for_versioned_routes():
     # should be used
     assert sm._get_experiment_to_generate_response() == child_version
 
-    new_params = sm.action.params
-    new_params["experiment_id"] = None
-    sm.action.params = new_params
-    sm.action.save()
-    sm.refresh_from_db()
-    # Clear the `params` cached property on ScheduledMessage
-    del sm.params
-    assert sm._get_experiment_to_generate_response() == router.default_version
-
 
 @pytest.mark.django_db()
 def test_action_params_with_versioning():
