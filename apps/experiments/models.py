@@ -811,6 +811,9 @@ class Experiment(BaseTeamModel, VersionsMixin, CustomActionOperationMixin):
         """
         Creates a copy of an experiment as a new version of the original experiment.
         """
+        if make_default and is_copy:
+            raise ValueError("Cannot make a copy of an experiment the default version")
+
         version_number = self.version_number
         if not is_copy:
             self.version_number = version_number + 1
