@@ -121,7 +121,7 @@
             {% endif %}
           </ul>
         </div>
-        {% include "chatbots/chatbot_copy_dialog.html"  with chatbot_id=experiment.id team_slug=request.team.slug%}
+        {% include "chatbots/chatbot_copy_dialog.html" with chatbot_id=experiment.id team_slug=request.team.slug name=experiment.name %}
         {% if experiment.is_public %}
           {% include "experiments/share/dialog.html" %}
         {% endif %}
