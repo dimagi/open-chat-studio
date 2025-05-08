@@ -1,5 +1,4 @@
 {% if record.is_editable %}
-  {% include "chatbots/chatbot_copy_dialog.html" with chatbot_id=record.id team_slug=record.team.slug%}
   <form method="post" action="{% url type|add:':start_authed_web_session' record.team.slug record.id record.get_working_version.version_number %}" class="inline">
     {% csrf_token %}
     <button type="submit" class="btn btn-sm" title="New Session">
@@ -10,12 +9,6 @@
      href="{% url type|add:':edit' record.team.slug record.id %}" title="View">
     <i class="fa-solid fa-pencil"></i>
   </a>
-  {% if type == 'chatbots' %}
-    <a class="btn btn-sm"
-       onclick="chatbot_copy_modal.showModal()">
-      <i class="fa-solid fa-copy"></i>
-    </a>
-  {% endif %}
 {% else %}
   <a class="btn btn-sm"
      href="{% url type|add:':edit' record.team.slug record.id %}" title="View">
