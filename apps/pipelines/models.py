@@ -495,6 +495,8 @@ class Node(BaseModel, VersionsMixin, CustomActionOperationMixin):
         new_version = super().create_new_version(save=False, is_copy=is_copy)
         if is_copy and new_flow_id:
             new_version.flow_id = new_flow_id
+            if new_version.type not in ("StartNode", "EndNode"):
+                new_version.params["name"] = new_flow_id
 
         if not is_copy and self.type == AssistantNode.__name__ and new_version.params.get("assistant_id"):
             assistant = OpenAiAssistant.objects.get(id=new_version.params.get("assistant_id"))

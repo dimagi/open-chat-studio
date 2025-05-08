@@ -3,7 +3,7 @@ import uuid
 from django.contrib.auth.decorators import permission_required
 from django.contrib.auth.mixins import PermissionRequiredMixin
 from django.http import HttpResponseRedirect
-from django.shortcuts import get_object_or_404
+from django.shortcuts import get_object_or_404, redirect
 from django.urls import reverse
 from django.views.decorators.clickjacking import xframe_options_exempt
 from django.views.decorators.http import require_POST
@@ -227,16 +227,20 @@ def chatbot_chat_embed(request, team_slug: str, experiment_id: uuid.UUID, sessio
 
 @login_and_team_required
 def copy_chatbot(request, team_slug, *args, **kwargs):
-    form = CopyChatbotForm(request.POST)
-    if form.is_valid():
-        new_name = form.cleaned_data["new_name"]
-        experiment = get_object_or_404(Experiment.objects.get_all(), id=kwargs["pk"], team=request.team)
-        # copy chatbot
-        new_experiment = experiment.create_new_version(make_default=False, is_copy=True, name=new_name)
-        # create default version for copied chatbot
-        task_id = async_create_experiment_version.delay(
-            experiment_id=new_experiment.id, version_description="", make_default=True
-        )
-        new_experiment.create_version_task_id = task_id
-        new_experiment.save(update_fields=["create_version_task_id"])
-    return single_chatbot_home(request, team_slug, new_experiment.id)
+    if request.method == "POST":
+        form = CopyChatbotForm(request.POST)
+        if form.is_valid():
+            new_name = form.cleaned_data["new_name"]
+            experiment = get_object_or_404(Experiment.objects.get_all(), id=kwargs["pk"], team=request.team)
+            # copy chatbot
+            new_experiment = experiment.create_new_version(make_default=False, is_copy=True, name=new_name)
+            # create default version for copied chatbot
+            task_id = async_create_experiment_version.delay(
+                experiment_id=new_experiment.id, version_description="", make_default=True
+            )
+            new_experiment.create_version_task_id = task_id
+            new_experiment.save(update_fields=["create_version_task_id"])
+        return redirect("chatbots:single_chatbot_home", team_slug=team_slug, experiment_id=new_experiment.id)
+    else:
+        experiment_id = kwargs["pk"]
+        return single_chatbot_home(request, team_slug, experiment_id)
