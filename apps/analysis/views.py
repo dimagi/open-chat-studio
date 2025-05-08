@@ -91,6 +91,9 @@ class TranscriptAnalysisDetailView(LoginAndTeamRequiredMixin, DetailView):
         if self.object.job_id and not self.object.is_complete and not self.object.is_failed:
             context["celery_job_id"] = self.object.job_id
 
+        if results := self.object.result_file:
+            with results.open("r") as file:
+                context["results_preview"] = "".join(file.readlines()[:10])
         return context
 
     def get_table(self):

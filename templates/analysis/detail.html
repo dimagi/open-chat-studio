@@ -87,6 +87,15 @@
       </div>
     {% endif %}
 
+    {% if results_preview %}
+      <div class="mb-4">
+        <h2 class="text-lg font-semibold mb-2">Result Preview</h2>
+        <div class="text-sm overflow-x-scroll">
+          <pre>{{ results_preview|escape }}</pre>
+        </div>
+      </div>
+    {% endif %}
+
     {% if object.error_message %}
       <div class="bg-red-100 border border-red-400 text-red-700 px-4 py-3 rounded mb-6">
         <h2 class="text-lg font-semibold mb-2">Error</h2>
