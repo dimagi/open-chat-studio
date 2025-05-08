@@ -386,14 +386,14 @@ class Pipeline(BaseTeamModel, VersionsMixin):
             self.version_number = self.version_number + 1
             self.save(update_fields=["version_number"])
         pipeline_version = super().create_new_version(save=False, is_copy=is_copy)
+        pipeline_version.version_number = version_number
         if is_copy:
+            pipeline_version.name = f"{self.name} Copy"
             pipeline_version.data = duplicate_pipeline_with_new_ids(self.data)
             pipeline_version.save()
             pipeline_version.update_nodes_from_data()
-        pipeline_version.version_number = version_number
-        pipeline_version.save()
-
-        if not is_copy:
+        else:
+            pipeline_version.save()
             for node in self.node_set.all():
                 node_version = node.create_new_version()
                 node_version.pipeline = pipeline_version
