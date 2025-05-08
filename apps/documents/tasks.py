@@ -3,7 +3,7 @@ import logging
 from celery.app import shared_task
 from taskbadger.celery import Task as TaskbadgerTask
 
-from apps.assistants.sync import create_files_remote, link_files_to_vector_store
+from apps.assistants.sync import VectorStoreManager, create_files_remote
 from apps.documents.models import CollectionFile, FileStatus
 
 logger = logging.getLogger("ocs.documents.tasks.upload_files_to_openai")
@@ -21,6 +21,8 @@ def upload_files_to_vector_store_task(collection_file_ids: list[int], chuking_st
 
     file_ids = []
     collection_files_to_update = []
+    vector_store_manager = VectorStoreManager(client)
+
     for collection_file in collection_files:
         try:
             remote_file_id = create_files_remote(client, files=[collection_file.file])
@@ -32,8 +34,7 @@ def upload_files_to_vector_store_task(collection_file_ids: list[int], chuking_st
 
         collection_files_to_update.append(collection_file)
 
-    link_files_to_vector_store(
-        client,
+    vector_store_manager.link_files_to_vector_store(
         vector_store_id=collection.openai_vector_store_id,
         file_ids=file_ids,
         chunk_size=chuking_strategy["chunk_size"],
