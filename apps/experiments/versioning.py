@@ -2,7 +2,7 @@ from collections import defaultdict
 from dataclasses import dataclass
 from dataclasses import field as data_field
 from difflib import Differ
-from typing import TYPE_CHECKING, Any, Self
+from typing import Any, Self
 
 from django.core.exceptions import FieldDoesNotExist
 from django.db import transaction
@@ -18,9 +18,6 @@ from django.db.models import (
 from django.db.models.functions import Cast, Concat
 
 from apps.utils.models import VersioningMixin
-
-if TYPE_CHECKING:
-    pass
 
 
 def differs(original: Any, new: Any, exclude_model_fields: list[str] | None = None, early_abort=False) -> bool:
