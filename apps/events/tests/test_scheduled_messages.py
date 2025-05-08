@@ -7,7 +7,7 @@ from dateutil.relativedelta import relativedelta
 from django.utils import timezone
 from freezegun import freeze_time
 
-from apps.events.models import EventActionType, ScheduledMessage, TimePeriod
+from apps.events.models import EventActionType, ScheduledMessage, StaticTrigger, StaticTriggerType, TimePeriod
 from apps.events.tasks import poll_scheduled_messages
 from apps.experiments.models import ExperimentRoute
 from apps.utils.factories.events import EventActionFactory, ScheduledMessageFactory
@@ -21,7 +21,7 @@ def _construct_event_action(time_period: TimePeriod, experiment_id: int, frequen
         "time_period": time_period,
         "frequency": frequency,
         "repetitions": repetitions,
-        "prompt_text": "",
+        "prompt_text": "hi",
         "experiment_id": experiment_id,
     }
     return EventActionFactory(params=params, action_type=EventActionType.SCHEDULETRIGGER), params
@@ -347,11 +347,39 @@ def test_schedule_trigger_for_versioned_routes():
     # should be used
     assert sm._get_experiment_to_generate_response() == child_version
 
-    new_params = sm.action.params
-    new_params["experiment_id"] = None
-    sm.action.params = new_params
-    sm.action.save()
-    sm.refresh_from_db()
-    # Clear the `params` cached property on ScheduledMessage
-    del sm.params
-    assert sm._get_experiment_to_generate_response() == router.default_version
+
+@pytest.mark.django_db()
+def test_action_params_with_versioning():
+    """Test that the message params get updated when new versions of the experiment are created."""
+    session = ExperimentSessionFactory()
+    event_action, params = _construct_event_action(
+        frequency=1, time_period=TimePeriod.DAYS, repetitions=2, experiment_id=session.experiment.id
+    )
+    trigger = StaticTrigger.objects.create(
+        experiment=session.experiment,
+        action=event_action,
+        type=StaticTriggerType.CONVERSATION_START,
+    )
+    trigger.fire(session)
+
+    messages = ScheduledMessage.objects.filter(experiment=session.experiment).all()
+    assert len(messages) == 1
+
+    # no versioning yet, so the message should reference the working version
+    assert messages[0].params["prompt_text"] == params["prompt_text"]
+
+    event_action.params["prompt_text"] = "hello"
+    event_action.save()
+
+    experiment_version = session.experiment.create_new_version(make_default=False)
+
+    # still references working version since there is no default version
+    message = ScheduledMessage.objects.get(id=messages[0].id)
+    assert message.params["prompt_text"] == params["prompt_text"]
+
+    experiment_version.is_default_version = True
+    experiment_version.save()
+
+    # now it should reference the published version
+    message = ScheduledMessage.objects.get(id=message.id)
+    assert message.params["prompt_text"] == "hello"
