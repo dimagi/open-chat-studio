@@ -5,6 +5,7 @@ from django.contrib import messages
 from django.contrib.auth.decorators import permission_required
 from django.contrib.auth.mixins import PermissionRequiredMixin
 from django.db import transaction
+from django.db.models import Subquery
 from django.http import FileResponse, Http404, HttpResponse
 from django.shortcuts import get_object_or_404, redirect, render
 from django.template import loader
@@ -15,6 +16,7 @@ from django.views import View
 from django.views.generic import CreateView, TemplateView, UpdateView
 from django_tables2 import SingleTableView
 
+from apps.documents.models import CollectionFile
 from apps.files.forms import FileForm, MultipleFileFieldForm
 from apps.files.models import File
 from apps.files.tables import FilesTable
@@ -180,7 +182,10 @@ class FileTableView(LoginAndTeamRequiredMixin, SingleTableView):
     template_name = "table/single_table.html"
 
     def get_queryset(self):
-        queryset = File.objects.filter(team=self.request.team, is_version=False).order_by("-created_at")
+        collection_files_subquery = CollectionFile.objects.values_list("file_id").distinct()
+        queryset = File.objects.filter(
+            id__in=Subquery(collection_files_subquery), team=self.request.team, is_version=False
+        ).order_by("-created_at")
         if search := self.request.GET.get("search"):
             queryset = similarity_search(queryset, search_phase=search, columns=["name", "summary"], score=0.1)
         return queryset
