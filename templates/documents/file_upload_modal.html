@@ -1,0 +1,106 @@
+{% load i18n %}
+<dialog id="chooseFilesModal" class="modal" x-data="modalData" x-on:toggle="if (event.newState === 'open') { $nextTick(() => { $refs.fileUpload.click() }) }">
+    <div class="modal-box max-w-none w-1/2 max-h-3/5 overflow-y-auto">
+        <h3 class="font-bold text-lg mb-4">Add Files to Collection</h3>
+        <form method="dialog">
+            <button class="btn btn-sm btn-circle btn-ghost absolute right-2 top-2">✕</button>
+        </form>
+        <form class="mt-2 flex flex-col" action="{% url 'documents:add_collection_files' team.slug collection.id %}" method="POST" enctype="multipart/form-data">
+            {% csrf_token %}
+            <input
+                x-ref="fileUpload"
+                name="files"
+                @change="handleFileChange($event)"
+                type="file"
+                multiple
+                class="file-input"
+                accept="{{ supported_file_types }}"/>
+            {% if collection.is_index %}
+                <div class="fieldset w-full">
+                    <legend class="fieldset-legend">Chunking Strategy</legend>
+                    <div class="flex gap-2">
+                        <div>
+                            <label class="label font-bold" for="chunk_size">
+                                <div>
+                                    Chunk Size
+                                    {% blocktranslate asvar chuck_size_help %}
+                                        The file contents will be divided into chunks of this many tokens each.
+                                    {% endblocktranslate %}
+                                    <small
+                                        class="form-text text-muted">{% include "generic/help.html" with help_content=chuck_size_help %}</small>
+                                </div>
+                            </label>
+                            <input name="chunk_size" type="number" class="input" value="800" required/>
+                        </div>
+                        <div>
+                            <label class="label font-bold" for="chunk_overlap">
+                                <div>
+                                    Chunk Overlap
+                                    {% blocktranslate asvar chunk_overlap_help %}
+                                        Each chunk will overlap this many tokens with the previous chunk.
+                                    {% endblocktranslate %}
+                                    <small
+                                        class="form-text text-muted">{% include "generic/help.html" with help_content=chunk_overlap_help %}</small>
+                                </div>
+                            </label>
+                            <input name="chunk_overlap" type="number" class="input" value="400" required/>
+                        </div>
+                    </div>
+                </div>
+            {% endif %}
+
+            <div class="divide-y divide-base-300">
+                <template x-for="(file, index) in uploaded_files" :key="index">
+                    <div class="py-3">
+                        <div class="flex items-center justify-between">
+                            <div x-text="file.name"></div>
+                            <button aria-label="Remove File" title="Remove File" type="button" class="btn btn-xs" @click="removeFile(index)">
+                                <i class="fa-solid fa-trash htmx-hide"></i>
+                            </button>
+                        </div>
+                        {% if not collection.is_index %}
+                            <div class="mt-2">
+                                <textarea
+                                    :name="file.name"
+                                    class="textarea textarea-bordered w-full placeholder:text-gray-500"
+                                    maxlength="{{ max_summary_length }}"
+                                    :placeholder="`Summary for ${file.name} ...`"
+                                ></textarea>
+                            </div>
+                        {% endif %}
+                    </div>
+                </template>
+            </div>
+            <div class="modal-action">
+                <button class="btn btn-primary mt-2" :disabled="uploaded_files.length === 0">Submit</button>
+            </div>
+        </form>
+    </div>
+</dialog>
+
+<script>
+    document.addEventListener('alpine:init', () => {
+        Alpine.data('modalData', () => ({
+            message: "",
+            uploaded_files: [],
+            selected_collection: null,
+            handleFileChange(event) {
+                const files = Array.from(event.target.files);
+                this.uploaded_files.push(...files);
+
+                const dataTransfer = new DataTransfer();
+                this.uploaded_files.forEach(file => dataTransfer.items.add(file));
+                event.target.files = dataTransfer.files;
+            },
+            removeFile(index) {
+                this.uploaded_files.splice(index, 1);
+                const dataTransfer = new DataTransfer();
+
+                this.uploaded_files.forEach(file => {
+                    dataTransfer.items.add(file)
+                });
+                this.$refs.fileUpload.files = dataTransfer.files;
+            }
+        }))
+    })
+</script>

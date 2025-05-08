@@ -1,0 +1,14 @@
+{% extends "generic/object_home.html" %}
+{% load django_tables2 %}
+
+{% block pre_table %}
+  <div class="flex justify-end mb-4">
+    <a href="{% url 'documents:file_new' request.team.slug %}" class="btn btn-sm btn-primary">
+      <i class="fa-solid fa-plus"></i> Upload File
+    </a>
+  </div>
+{% endblock %}
+
+{% block table %}
+  {% render_table table %}
+{% endblock %}
