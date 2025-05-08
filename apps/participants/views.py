@@ -3,14 +3,13 @@ import json
 from django.contrib.auth.decorators import permission_required
 from django.contrib.auth.mixins import PermissionRequiredMixin
 from django.db.models import Q
-from django.http import JsonResponse
-from django.shortcuts import get_object_or_404, redirect, render
+from django.shortcuts import get_object_or_404, render
 from django.urls import reverse
 from django.views.decorators.http import require_POST
 from django.views.generic import CreateView, TemplateView
 from django_tables2 import SingleTableView
 
-from apps.experiments.models import Experiment, Participant, ParticipantData
+from apps.experiments.models import Experiment, ExperimentSession, Participant, ParticipantData
 from apps.participants.forms import ParticipantForm
 from apps.teams.decorators import login_and_team_required
 from apps.teams.mixins import LoginAndTeamRequiredMixin
@@ -35,7 +34,7 @@ class ParticipantHome(LoginAndTeamRequiredMixin, TemplateView, PermissionRequire
         }
 
 
-class CreateParticipant(CreateView, PermissionRequiredMixin):
+class CreateParticipant(LoginAndTeamRequiredMixin, CreateView, PermissionRequiredMixin):
     permission_required = "experiments.add_participant"
     model = Participant
     form_class = ParticipantForm
@@ -55,7 +54,7 @@ class CreateParticipant(CreateView, PermissionRequiredMixin):
         return super().form_valid(form)
 
 
-class ParticipantTableView(SingleTableView):
+class ParticipantTableView(LoginAndTeamRequiredMixin, SingleTableView, PermissionRequiredMixin):
     model = Participant
     paginate_by = 25
     table_class = ParticipantTable
@@ -79,7 +78,7 @@ class SingleParticipantHome(LoginAndTeamRequiredMixin, TemplateView, PermissionR
 
     def get_context_data(self, *args, **kwargs):
         context = super().get_context_data(*args, **kwargs)
-        participant = Participant.objects.get(id=self.kwargs["participant_id"])
+        participant = get_object_or_404(Participant, pk=self.kwargs["participant_id"])
         context["active_tab"] = "participants"
         context["participant"] = participant
         participant_experiments = participant.get_experiments_for_display()
@@ -91,8 +90,9 @@ class SingleParticipantHome(LoginAndTeamRequiredMixin, TemplateView, PermissionR
 
         context["experiments"] = participant_experiments
         context["selected_experiment"] = experiment
+        sessions = participant.experimentsession_set.filter(experiment=experiment).all()
         context["session_table"] = ExperimentSessionsTable(
-            participant.experimentsession_set.filter(experiment=experiment).all(),
+            ExperimentSession.objects.annotate_with_last_message_created_at(sessions),
             extra_columns=[("participant", None)],  # remove participant column
         )
         data = participant.get_data_for_experiment(experiment)
@@ -136,13 +136,6 @@ class EditParticipantData(LoginAndTeamRequiredMixin, TemplateView, PermissionReq
                 "error": error,
             },
         )
-        return redirect(
-            reverse(
-                "participants:single-participant-home-with-experiment",
-                args=[self.request.team.slug, participant_id, experiment.id],
-            )
-            + f"#{experiment.id}"
-        )
 
 
 @login_and_team_required
@@ -155,18 +148,6 @@ def edit_name(request, team_slug: str, pk: int):
             participant.save()
         return render(request, "participants/partials/participant_name.html", {"participant": participant})
     return render(request, "participants/partials/edit_name.html", {"participant": participant})
-
-
-@login_and_team_required
-@permission_required("experiments.view_participant")
-def search_participant_api(request, team_slug: str):
-    search = request.GET.get("q")
-    query = Participant.objects.filter(team=request.team)
-    if search:
-        query = query.filter(Q(identifier__icontains=search) | Q(name__icontains=search))
-
-    results = query.order_by("identifier")[:10]
-    return JsonResponse({"results": [{"name": p.name, "identifier": p.identifier} for p in results]})
 
 
 @login_and_team_required

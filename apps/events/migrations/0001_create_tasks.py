@@ -25,6 +25,8 @@ def delete_periodic_task(apps, schema_editor):
 
 
 class Migration(migrations.Migration):
-    dependencies = []
+    dependencies = [
+        ("django_celery_beat", "0019_alter_periodictasks_options"),
+    ]
 
     operations = [migrations.RunPython(create_periodic_task, delete_periodic_task)]
