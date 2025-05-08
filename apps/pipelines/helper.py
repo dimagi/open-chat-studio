@@ -38,21 +38,7 @@ def duplicate_pipeline_with_new_ids(pipeline_data):
         new_source_id = old_to_new_node_ids.get(old_source_id, old_source_id)
         new_target_id = old_to_new_node_ids.get(old_target_id, old_target_id)
 
-        target_node_data_type = None
-        for node in new_nodes:
-            if node["id"] == new_target_id and "data" in node and "type" in node["data"]:
-                target_node_data_type = node["data"]["type"]
-                break
-
-        edge_id_parts = [new_source_id]
-        if target_node_data_type and target_node_data_type not in ["StartNode", "EndNode"]:
-            edge_id_parts.append(target_node_data_type)
-
-        edge_id_parts.append(new_target_id)
-        new_edge_id = f"reactflow__edge-{'-'.join(edge_id_parts)}-{uuid4().hex[:8]}"
-
         new_edge = edge.copy()
-        new_edge["id"] = new_edge_id
         new_edge["source"] = new_source_id
         new_edge["target"] = new_target_id
 

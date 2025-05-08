@@ -344,3 +344,98 @@ class TestCopyExperiment:
         assert operation_copy.operation_id == weather_get.operation_id
         assert operation_copy.custom_action == custom_action
         assert operation_copy._operation_schema == {}
+
+    def test_copy_pipeline(self):
+        pipeline_data = {
+            "edges": [
+                {
+                    "id": "start->render",
+                    "source": "start",
+                    "target": "render",
+                },
+                {
+                    "id": "render->end",
+                    "source": "render",
+                    "target": "end",
+                },
+            ],
+            "nodes": [
+                {
+                    "id": "start",
+                    "data": {
+                        "id": "start",
+                        "type": "StartNode",
+                    },
+                },
+                {
+                    "id": "render",
+                    "data": {
+                        "id": "render",
+                        "type": "RenderTemplate",
+                        "params": {
+                            "name": "render template",
+                            "template_string": "{{input}}",
+                        },
+                    },
+                },
+                {
+                    "id": "end",
+                    "data": {
+                        "id": "end",
+                        "type": "EndNode",
+                    },
+                },
+            ],
+        }
+        pipeline = PipelineFactory(data=pipeline_data)
+        experiment = ExperimentFactory(team=pipeline.team, pipeline=pipeline)
+
+        experiment_copy = experiment.create_new_version(is_copy=True)
+        assert experiment_copy.pipeline != pipeline
+        assert experiment_copy.pipeline.is_working_version
+        assert experiment_copy.pipeline.name == pipeline.name + " Copy"
+        assert experiment_copy.pipeline.node_set.count() == 3
+        node_ids = {node.type: node.flow_id for node in experiment_copy.pipeline.node_set.all()}
+        assert experiment_copy.pipeline.data != pipeline_data
+        assert experiment_copy.pipeline.data == {
+            "errors": {},
+            "edges": [
+                {
+                    "id": "start->render",
+                    "source": node_ids["StartNode"],
+                    "target": node_ids["RenderTemplate"],
+                },
+                {
+                    "id": "render->end",
+                    "source": node_ids["RenderTemplate"],
+                    "target": node_ids["EndNode"],
+                },
+            ],
+            "nodes": [
+                {
+                    "id": node_ids["StartNode"],
+                    "data": {
+                        "id": node_ids["StartNode"],
+                        "type": "StartNode",
+                    },
+                },
+                {
+                    "id": node_ids["RenderTemplate"],
+                    "data": {
+                        "id": node_ids["RenderTemplate"],
+                        "type": "RenderTemplate",
+                        "params": {
+                            "name": "render template",
+                            "template_string": "{{input}}",
+                        },
+                    },
+                },
+                {
+                    "id": node_ids["EndNode"],
+                    "data": {
+                        "id": node_ids["EndNode"],
+                        "type": "EndNode",
+                    },
+                },
+            ],
+        }
