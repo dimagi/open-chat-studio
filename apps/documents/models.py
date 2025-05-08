@@ -25,9 +25,18 @@ class CollectionFile(models.Model):
     file = models.ForeignKey("files.File", on_delete=models.CASCADE)
     collection = models.ForeignKey("documents.Collection", on_delete=models.CASCADE)
     status = models.CharField(max_length=64, choices=FileStatus.choices, blank=True)
+    metadata = models.JSONField(default=dict)
 
     def __str__(self) -> str:
         return f"{self.file.name} in {self.collection.name}"
+
+    @property
+    def file_size_mb(self):
+        return self.file.size_mb
+
+    @property
+    def chunking_strategy(self):
+        return self.metadata.get("chunking_strategy", {})
 
 
 @audit_fields(
@@ -110,4 +119,4 @@ class Collection(BaseTeamModel, VersionsMixin):
         return new_version
 
     def get_absolute_url(self):
-        return reverse("documents:collections", args=[self.team.slug, "collections"])
+        return reverse("documents:single_collection_home", args=[self.team.slug, self.id])
