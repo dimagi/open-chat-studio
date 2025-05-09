@@ -4,7 +4,7 @@ from collections import defaultdict
 from celery.app import shared_task
 from taskbadger.celery import Task as TaskbadgerTask
 
-from apps.assistants.sync import OpenAIVectorStoreManager, create_files_remote
+from apps.assistants.sync import OpenAiSyncError, OpenAIVectorStoreManager, create_files_remote
 from apps.documents.models import Collection, CollectionFile, FileStatus
 from apps.service_providers.models import LlmProvider
 
@@ -97,10 +97,24 @@ def _upload_files_to_vector_store(
 
         collection_files_to_update.append(collection_file)
 
-    vector_store_manager.link_files_to_vector_store(
-        vector_store_id=collection.openai_vector_store_id,
-        file_ids=file_ids,
-        chunk_size=chunk_size,
-        chunk_overlap=chunk_overlap,
-    )
+    try:
+        vector_store_manager.link_files_to_vector_store(
+            vector_store_id=collection.openai_vector_store_id,
+            file_ids=file_ids,
+            chunk_size=chunk_size,
+            chunk_overlap=chunk_overlap,
+        )
+
+    except OpenAiSyncError:
+        logger.exception(
+            "Failed to link files to vector store",
+            extra={
+                "file_ids": file_ids,
+                "team": collection.team.slug,
+                "collection_id": collection.id,
+            },
+        )
+        for collection_file in collection_files_to_update:
+            collection_file.status = FileStatus.FAILED
+
     CollectionFile.objects.bulk_update(collection_files_to_update, ["status"])
