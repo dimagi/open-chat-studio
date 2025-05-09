@@ -287,6 +287,7 @@ def test_conditional_node(pipeline, experiment_session):
     assert output["outputs"] == {
         start["id"]: {"message": "hello"},
         boolean["id"]: {"message": "hello", "output_handle": "output_0"},
+        "boolean": {"route": "true", "output": "hello"},
         template_true["id"]: {"message": "said hello"},
         end["id"]: {"message": "said hello"},
     }
@@ -296,6 +297,7 @@ def test_conditional_node(pipeline, experiment_session):
     assert output["outputs"] == {
         start["id"]: {"message": "bad"},
         boolean["id"]: {"message": "bad", "output_handle": "output_1"},
+        "boolean": {"output": "bad", "route": "false"},
         template_false["id"]: {"message": "didn't say hello, said bad"},
         end["id"]: {"message": "didn't say hello, said bad"},
     }
@@ -316,7 +318,7 @@ def test_router_node_prompt(get_llm_service, provider, provider_model, pipeline,
     )
     node._process_conditional(
         PipelineState(
-            outputs={"123": {}},
+            outputs={"123": {"message": "a"}},
             messages=["a"],
             experiment_session=experiment_session,
         ),
@@ -1220,3 +1222,38 @@ def test_router_node(get_llm_service, provider, provider_model, pipeline, experi
     assert output["messages"][-1] == "D d"
     output = runnable.invoke(PipelineState(messages=["z"], experiment_session=experiment_session))
     assert output["messages"][-1] == "A z"
+
+
+@pytest.mark.django_db()
+def test_router_node_output_structure(provider, provider_model, pipeline, experiment_session):
+    service = build_fake_llm_echo_service()
+    with mock.patch("apps.service_providers.models.LlmProvider.get_llm_service", return_value=service):
+        node = RouterNode(
+            name="test_router",
+            prompt="PD: {participant_data}",
+            keywords=["A"],
+            llm_provider_id=provider.id,
+            llm_provider_model_id=provider_model.id,
+        )
+        state = PipelineState(
+            outputs={"123": {"message": "hello world"}},
+            messages=["hello world"],
+            experiment_session=experiment_session,
+            temp_state={"user_input": "hello world", "outputs": {}},
+            path=[],
+        )
+        with mock.patch.object(node, "_process_conditional", return_value="A"):
+            node_id = "123"
+            edge_map = {"A": "next_node_a", "B": "next_node_b"}
+            incoming_edges = ["123"]
+            router_func = node.build_router_function(node_id, edge_map, incoming_edges)
+            command = router_func(state, {"metadata": {"langgraph_triggers": []}})
+
+            output_state = command.update
+
+            assert node.name in output_state["outputs"]
+            assert "route" in output_state["outputs"][node.name]
+            assert "output" in output_state["outputs"][node.name]
+            assert output_state["outputs"][node.name]["route"] == "A"
+            assert output_state["outputs"][node.name]["output"] == state["node_input"]
+            assert command.goto == "next_node_a"

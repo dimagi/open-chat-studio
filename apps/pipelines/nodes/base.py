@@ -108,10 +108,113 @@ class PipelineState(dict):
 
         return cls(**kwargs)
 
+    def _get_node_mappings(self):
+        """
+        Helper method to get node ID to name mappings.
+        Returns a tuple of (node_id_to_name, name_to_node_id) dictionaries.
+        """
+        from apps.pipelines.models import Node
+
+        pipeline_version = self.get("pipeline_version")
+        nodes = Node.objects.filter(pipeline__version_number=pipeline_version)
+
+        node_id_to_name = {node.flow_id: node.params.get("name") for node in nodes}
+        name_to_node_id = {node.params.get("name"): node.flow_id for node in nodes}
+
+        return node_id_to_name, name_to_node_id
+
+    def get_node_id(self, node_name: str):
+        """
+        Helper method to get a node ID from a node name.
+        """
+        _, name_to_node_id = self._get_node_mappings()
+        return name_to_node_id.get(node_name, node_name)
+
+    def get_node_name(self, node_id: str):
+        """
+        Helper method to get a node name from a node ID.
+        """
+        node_id_to_name, _ = self._get_node_mappings()
+        return node_id_to_name.get(node_id, node_id)
+
+    def get_route(self, node_name: str) -> str | None:
+        """
+        Gets the route selected by a specific router node.
+        """
+        outputs = self.get("outputs", {})
+        node_id_to_name, name_to_node_id = self._get_node_mappings()
+
+        if node_name in outputs and "route" in outputs[node_name]:
+            return outputs[node_name].get("route")
+
+        node_id = name_to_node_id.get(node_name)
+
+        if node_id and node_id in outputs and "route" in outputs[node_id]:
+            return outputs[node_id].get("route")
+
+        for node_identifier, data in outputs.items():
+            if node_id_to_name.get(node_identifier) == node_name and "route" in data:
+                return data.get("route")
+
+        return None
+
+    def get_node_path(self, node_name: str) -> list | None:
+        """
+        Gets the path (list of node names) leading to the specified node.
+        Returns:
+            A list containing the sequence of nodes leading to the target node.
+            If the node is not found in the pipeline path, returns a list containing
+            only the specified node name.
+        """
+        path = []
+        outputs = self.get("outputs", {})
+        node_id_to_name, name_to_node_id = self._get_node_mappings()
+        current_node_id = name_to_node_id.get(node_name, node_name)
+
+        while current_node_id:
+            current_name = node_id_to_name.get(current_node_id, current_node_id)
+            path.insert(0, current_name)
+
+            parent_node_id = None
+            for _, current, targets in self.get("path", []):
+                if current_node_id in targets or current_node_id == targets[0]:
+                    parent_node_id = current
+                    break
+
+            if not parent_node_id:
+                for node, data in outputs.items():
+                    if "route" in data and data["route"] == current_node_id:
+                        parent_node_id = node
+                        break
+
+            current_node_id = parent_node_id
+
+        return path if path else None
+
+    def get_all_routes(self) -> dict:
+        """
+        Gets all routing decisions in the pipeline.
+        """
+        routes_dict = {}
+        outputs = self.get("outputs", {})
+        node_id_to_name, _ = self._get_node_mappings()
+
+        for node_id, node_data in outputs.items():
+            if "route" in node_data:
+                node_name = node_id_to_name.get(node_id, node_id)
+                routes_dict[node_name] = node_data["route"]
+
+        return routes_dict
+
     @classmethod
-    def from_router_output(cls, node_id, node_name, output, output_handle, tags, route_path) -> Self:
+    def from_router_output(
+        cls, node_id, node_name, output, output_handle, tags, route_path, conditional_branch
+    ) -> Self:
         return cls(
-            outputs={node_id: {"output_handle": output_handle, "message": output}},
+            outputs={
+                node_id: {"output_handle": output_handle, "message": output},
+                node_name: {"route": conditional_branch, "output": output},
+            },
             temp_state={"outputs": {node_name: output}},
             output_message_tags=tags,
             path=[route_path],
@@ -252,7 +355,7 @@ class PipelineRouterNode(BasePipelineNode):
             target_node_id = edge_map[conditional_branch]
             route_path = (state["node_source"], node_id, [target_node_id])
             output = PipelineState.from_router_output(
-                node_id, self.name, state["node_input"], output_handle, tags, route_path
+                node_id, self.name, state["node_input"], output_handle, tags, route_path, conditional_branch
             )
             return Command(
                 update=output,
