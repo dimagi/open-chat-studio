@@ -80,6 +80,10 @@ class Collection(BaseTeamModel, VersionsMixin):
         return self.name
 
     @property
+    def index_name(self) -> str:
+        return f"collection-{self.team.slug}-{self.name}-{self.id}"
+
+    @property
     def size(self) -> float:
         """Returns the size of this collection in megabytes"""
         bytes = self.files.aggregate(bytes=models.Sum("content_size"))["bytes"] or 0
