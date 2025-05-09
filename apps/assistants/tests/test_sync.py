@@ -36,7 +36,7 @@ class ObjectWithId:
 @patch("openai.resources.vector_stores.VectorStores.create", return_value=ObjectWithId(id="vs_123"))
 @patch("openai.resources.beta.Assistants.create", return_value=AssistantFactory.build(id="test_id"))
 @patch("openai.resources.Files.create", side_effect=FileObjectFactory.create_batch(3))
-def test_push_assistant_to_openai_create(mock_file_create, assistant_create, vs_create, fb_create):
+def test_push_assistant_to_openai_create(mock_file_create, assistant_create, vs_create):
     local_assistant = OpenAiAssistantFactory(builtin_tools=["code_interpreter", "file_search"])
     files = FileFactory.create_batch(3)
 
