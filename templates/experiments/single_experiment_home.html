@@ -70,12 +70,12 @@
             </div>
             <div class="tooltip" data-tip="Edit">
               <a class="btn btn-primary join-item btn-sm
-                        {% if not experiment.pipeline %}rounded-r-full{% endif %}"
+                        {% if not allow_copy %}rounded-r-full{% endif %}"
                  href="{% url 'experiments:edit' team.slug experiment.id %}">
                 <i class="fa-solid fa-pencil"></i>
               </a>
             </div>
-            {% if experiment.pipeline %}
+            {% if allow_copy %}
               <div class="tooltip" data-tip="Copy">
                 <button class="btn btn-primary join-item btn-sm rounded-r-full copy-button"
                         onclick="chatbot_copy_modal.showModal()">
