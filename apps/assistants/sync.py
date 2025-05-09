@@ -571,7 +571,7 @@ class OpenAIVectorStoreManager:
         try:
             self.client.vector_stores.delete(vector_store_id=vector_store_id)
         except (openai.NotFoundError, ValueError) as e:
-            logger.exception("Vector store %s not found in OpenAI", vector_store_id)
+            logger.warning("Vector store %s not found in OpenAI", vector_store_id)
             if not fail_silently:
                 raise e
 
