@@ -262,11 +262,11 @@ class LLMResponseWithPrompt(LLMResponse, HistoryMixin):
             widget=Widgets.select, options_source=OptionsSource.collection, flag_required="document_management"
         ),
     )
-    document_index_id: OptionalInt = Field(
+    collection_index_id: OptionalInt = Field(
         None,
-        title="Document Index",
+        title="Collection Index",
         json_schema_extra=UiSchema(
-            widget=Widgets.select, options_source=OptionsSource.document_index, flag_required="document_management"
+            widget=Widgets.select, options_source=OptionsSource.collection_index, flag_required="document_management"
         ),
     )
     tools: list[str] = Field(
@@ -306,15 +306,15 @@ class LLMResponseWithPrompt(LLMResponse, HistoryMixin):
             return []
         return value
 
-    @field_validator("document_index_id", mode="before")
-    def validate_document_index_id(cls, value, info: FieldValidationInfo):
+    @field_validator("collection_index_id", mode="before")
+    def validate_collection_index_id(cls, value, info: FieldValidationInfo):
         if not value:
             return value
 
         collection = Collection.objects.get(id=value)
         if collection.llm_provider_id != info.data.get("llm_provider_id"):
             raise PydanticCustomError(
-                "invalid_document_index", "The document index must use the same LLM provider as the node"
+                "invalid_collection_index", "The collection index must use the same LLM provider as the node"
             )
         return value
 
@@ -335,8 +335,8 @@ class LLMResponseWithPrompt(LLMResponse, HistoryMixin):
 
         node = Node.objects.get(flow_id=node_id, pipeline__version_number=pipeline_version)
         tools = get_node_tools(node, session, attachment_callback=history_manager.attach_file_id)
-        if self.document_index_id:
-            collection = Collection.objects.get(id=self.document_index_id)
+        if self.collection_index_id:
+            collection = Collection.objects.get(id=self.collection_index_id)
             builtin_tools = {"type": "file_search", "vector_store_ids": [collection.openai_vector_store_id]}
             tools.append(builtin_tools)
 

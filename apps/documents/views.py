@@ -14,7 +14,7 @@ from django.views.decorators.http import require_POST
 from django.views.generic import CreateView, TemplateView, UpdateView
 from django_tables2 import SingleTableView
 
-from apps.assistants.sync import VectorStoreManager, delete_file_from_openai
+from apps.assistants.sync import OpenAIVectorStoreManager, delete_file_from_openai
 from apps.documents.forms import CollectionForm
 from apps.documents.models import Collection, CollectionFile, FileStatus
 from apps.documents.tables import CollectionsTable
@@ -159,7 +159,7 @@ class CreateCollection(LoginAndTeamRequiredMixin, CollectionFormMixin, CreateVie
         response = super().form_valid(form)
         if form.instance.is_index:
             collection = form.instance
-            manager = VectorStoreManager.from_llm_provider(collection.llm_provider)
+            manager = OpenAIVectorStoreManager.from_llm_provider(collection.llm_provider)
             collection.openai_vector_store_id = manager.create_vector_store(name=collection.index_name)
             collection.save(update_fields=["openai_vector_store_id"])
 
@@ -190,7 +190,7 @@ class EditCollection(LoginAndTeamRequiredMixin, CollectionFormMixin, UpdateView)
 
         if form.instance.is_index and "llm_provider" in form.changed_data:
             with transaction.atomic():
-                new_manager = VectorStoreManager.from_llm_provider(collection.llm_provider)
+                new_manager = OpenAIVectorStoreManager.from_llm_provider(collection.llm_provider)
                 collection.openai_vector_store_id = new_manager.create_vector_store(collection.index_name)
                 collection.save(update_fields=["openai_vector_store_id"])
 
@@ -220,7 +220,7 @@ class DeleteCollection(LoginAndTeamRequiredMixin, View):
         else:
             if collection.is_index and collection.openai_vector_store_id:
                 try:
-                    manager = VectorStoreManager.from_llm_provider(collection.llm_provider)
+                    manager = OpenAIVectorStoreManager.from_llm_provider(collection.llm_provider)
                     manager.delete_vector_store(collection.openai_vector_store_id)
                     messages.success(request, "Collection deleted")
                 except openai.NotFoundError:

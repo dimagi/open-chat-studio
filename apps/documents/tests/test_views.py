@@ -16,7 +16,7 @@ class TestEditCollection:
         team = TeamWithUsersFactory()
         return CollectionFactory(name="Tester", team=team, is_index=True, llm_provider=LlmProviderFactory(team=team))
 
-    @mock.patch("apps.documents.views.VectorStoreManager")
+    @mock.patch("apps.documents.views.OpenAIVectorStoreManager")
     @mock.patch("apps.documents.tasks.migrate_vector_stores.delay")
     def test_update_collection_with_llm_provider_change(self, migrate_mock, manager_mock, collection, client):
         new_llm_provider = LlmProviderFactory(team=collection.team)

@@ -11,7 +11,7 @@ from openai.pagination import SyncCursorPage
 from apps.assistants.models import ToolResources
 from apps.assistants.sync import (
     OpenAiSyncError,
-    VectorStoreManager,
+    OpenAIVectorStoreManager,
     _update_or_create_vector_store,
     delete_openai_assistant,
     get_out_of_sync_files,
@@ -32,11 +32,11 @@ class ObjectWithId:
 
 
 @pytest.mark.django_db()
-@patch("openai.resources.vector_stores.file_batches.FileBatches.create")
+@patch("openai.resources.vector_stores.file_batches.FileBatches.create", Mock())
 @patch("openai.resources.vector_stores.VectorStores.create", return_value=ObjectWithId(id="vs_123"))
 @patch("openai.resources.beta.Assistants.create", return_value=AssistantFactory.build(id="test_id"))
 @patch("openai.resources.Files.create", side_effect=FileObjectFactory.create_batch(3))
-def test_push_assistant_to_openai_create(mock_file_create, assistant_create, vs_create, fb_create):
+def test_push_assistant_to_openai_create(mock_file_create, assistant_create, vs_create):
     local_assistant = OpenAiAssistantFactory(builtin_tools=["code_interpreter", "file_search"])
     files = FileFactory.create_batch(3)
 
@@ -354,7 +354,7 @@ class TestVectorStoreManager:
     @patch("openai.resources.vector_stores.file_batches.FileBatches.create")
     def test_link_files_to_vector_store(self, mock_file_batches_create):
         """Test linking files to vector store with and without chunking strategy"""
-        manager = VectorStoreManager.from_llm_provider(LlmProviderFactory())
+        manager = OpenAIVectorStoreManager.from_llm_provider(LlmProviderFactory())
         vector_store_id = "vs_123"
         file_ids = [f"file_{i}" for i in range(600)]  # Create more than 500 files to test batching
 
@@ -407,7 +407,7 @@ class TestVectorStoreManager:
     @patch("openai.resources.vector_stores.VectorStores.retrieve")
     def test_get(self, mock_retrieve):
         """Test retrieving a vector store"""
-        manager = VectorStoreManager.from_llm_provider(LlmProviderFactory())
+        manager = OpenAIVectorStoreManager.from_llm_provider(LlmProviderFactory())
         vector_store_id = "vs_123"
         expected_result = ObjectWithId(id=vector_store_id)
         mock_retrieve.return_value = expected_result
@@ -420,7 +420,7 @@ class TestVectorStoreManager:
     @patch("openai.resources.vector_stores.VectorStores.create")
     def test_create_vector_store(self, mock_create):
         """Test creating a vector store with and without files"""
-        manager = VectorStoreManager.from_llm_provider(LlmProviderFactory())
+        manager = OpenAIVectorStoreManager.from_llm_provider(LlmProviderFactory())
         expected_id = "vs_123"
         mock_create.return_value = ObjectWithId(id=expected_id)
 
@@ -440,7 +440,7 @@ class TestVectorStoreManager:
     @patch("openai.resources.vector_stores.VectorStores.delete")
     def test_delete_vector_store(self, mock_delete):
         """Test deleting a vector store with different error scenarios"""
-        manager = VectorStoreManager.from_llm_provider(LlmProviderFactory())
+        manager = OpenAIVectorStoreManager.from_llm_provider(LlmProviderFactory())
         vector_store_id = "vs_123"
 
         # Test successful deletion
@@ -463,7 +463,7 @@ class TestVectorStoreManager:
     @patch("openai.resources.vector_stores.files.Files.delete")
     def test_delete_file(self, mock_delete):
         """Test deleting a file from a vector store"""
-        manager = VectorStoreManager.from_llm_provider(LlmProviderFactory())
+        manager = OpenAIVectorStoreManager.from_llm_provider(LlmProviderFactory())
         vector_store_id = "vs_123"
         file_id = "file_123"
 

@@ -39,6 +39,10 @@ class CollectionFile(models.Model):
     def chunking_strategy(self):
         return self.metadata.get("chunking_strategy", {})
 
+    @property
+    def status_enum(self):
+        return FileStatus(self.status)
+
 
 @audit_fields(
     "name",

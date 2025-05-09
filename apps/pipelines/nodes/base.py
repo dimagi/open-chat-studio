@@ -294,7 +294,7 @@ class OptionsSource(StrEnum):
     agent_tools = "agent_tools"
     custom_actions = "custom_actions"
     collection = "collection"
-    document_index = "document_index"
+    collection_index = "collection_index"
 
 
 class UiSchema(BaseModel):

@@ -4,7 +4,7 @@ from collections import defaultdict
 from celery.app import shared_task
 from taskbadger.celery import Task as TaskbadgerTask
 
-from apps.assistants.sync import VectorStoreManager, create_files_remote
+from apps.assistants.sync import OpenAIVectorStoreManager, create_files_remote
 from apps.documents.models import Collection, CollectionFile, FileStatus
 from apps.service_providers.models import LlmProvider
 
@@ -62,7 +62,7 @@ def migrate_vector_stores(collection_id: int, from_vector_store_id: str, from_ll
 
 
 def _cleanup_old_vector_store(llm_provider_id: int, vector_store_id: str, file_ids: list[str]):
-    old_manager = VectorStoreManager.from_llm_provider(LlmProvider.objects.get(id=llm_provider_id))
+    old_manager = OpenAIVectorStoreManager.from_llm_provider(LlmProvider.objects.get(id=llm_provider_id))
     old_manager.delete_vector_store(vector_store_id)
 
     for file_id in file_ids:
@@ -75,7 +75,7 @@ def _upload_files_to_vector_store(
     """Upload files to OpenAI and link them to the vector store"""
     file_ids = []
     collection_files_to_update = []
-    vector_store_manager = VectorStoreManager(client)
+    vector_store_manager = OpenAIVectorStoreManager(client)
 
     for collection_file in collection_files:
         try:
@@ -84,8 +84,15 @@ def _upload_files_to_vector_store(
             remote_file_ids = create_files_remote(client, files=[file])
             collection_file.status = FileStatus.COMPLETED
             file_ids.extend(remote_file_ids)
-        except Exception as e:
-            logger.exception(f"Failed to upload file {collection_file.file.id} to OpenAI: {e}")
+        except Exception:
+            logger.exception(
+                "Failed to upload file to OpenAI",
+                extra={
+                    "file_id": collection_file.file.id,
+                    "team": collection.team.slug,
+                    "collection_id": collection.id,
+                },
+            )
             collection_file.status = FileStatus.FAILED
 
         collection_files_to_update.append(collection_file)
