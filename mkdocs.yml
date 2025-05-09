@@ -57,3 +57,5 @@ nav:
     - Guidelines: contributing/index.md
   - Getting Started: 
     - Overview: getting-started/index.md
+  - Architecture:
+    - Overview: architecture/index.md
