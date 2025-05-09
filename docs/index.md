@@ -1,17 +1,27 @@
-# Welcome to MkDocs
+---
+hide:
+  - navigation
+---
+# Open Chat Studio Developer Documentation
 
-For full documentation visit [mkdocs.org](https://www.mkdocs.org).
+Welcome to the Open Chat Studio developer documentation. This guide is designed to help you understand the architecture, setup your development environment, and contribute to the project effectively.
 
-## Commands
+## What is Open Chat Studio?
 
-* `mkdocs new [dir-name]` - Create a new project.
-* `mkdocs serve` - Start the live-reloading docs server.
-* `mkdocs build` - Build the documentation site.
-* `mkdocs -h` - Print help message and exit.
+Open Chat Studio is a platform for building, deploying, and evaluating AI-powered chat experiences. It provides tools for working with various LLMs (Language Learning Models), creating chatbots, managing conversations, and integrating with different messaging platforms.
 
-## Project layout
+For user facing documentation, please visit [docs.openchatstudio.com](https://docs.openchatstudio.com).
 
-    mkdocs.yml    # The configuration file.
-    docs/
-        index.md  # The documentation homepage.
-        ...       # Other markdown pages, images and other files.
+## Key Features
+
+- Create LLM-based based chatbots
+- Create and manage conversational agents
+- Connect to various messaging platforms
+- Track and analyze conversations
+- Customize conversation flows and logic
+- Integrate with various service providers
+
+## Documentation Sections
+
+- [Contributing](./contributing/index.md): Guidelines for contributing to the project
+- [Getting Started](./getting-started/index.md): Setup your development environment

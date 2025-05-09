@@ -1,10 +1,15 @@
 # Open Chat Studio
 
-Experiments with AI, GPT and LLMs. See [this wiki](https://dimagi.atlassian.net/wiki/spaces/OCS/overview) for more information.
+Open Chat Studio is a platform for building, deploying, and evaluating AI-powered chat applications. It provides tools for working with various LLMs (Language Learning Models), creating chatbots, managing conversations, and integrating with different messaging platforms.
 
 [![Deploy](https://www.herokucdn.com/deploy/button.svg)](https://www.heroku.com/deploy?template=https://github.com/dimagi/open-chat-studio)
 
-## Dev Environment Setup
+* [User Documentation](https://docs.openchatstudio.com)
+* [Developer Documentation](https://docs.dev.openchatstudio.com)
+
+## Contributing
+
+We welcome contributions to Open Chat Studio! If you're interested in contributing, please check out our [contributing guidelines](https://docs.dev.openchatstudio.com/contributing/) for more information on how to get started.
 
 This project uses [UV](https://docs.astral.sh/uv/getting-started/installation/) and
 [Invoke](https://www.pyinvoke.org/) for dev automation. You can view the list of available commands with:

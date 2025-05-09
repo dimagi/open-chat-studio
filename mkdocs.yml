@@ -50,17 +50,10 @@ markdown_extensions:
 
 plugins:
 - search
-- mkdocstrings:
-    enabled: true
-    default_handler: python
-    handlers:
-      python:
-        options:
-          paths: [src]
-          heading_level: 3
-          show_root_full_path: false
-          show_root_heading: true
-          show_signature: true
-          show_signature_annotations: true
-          show_source: false
-          show_symbol_type_heading: true
+
+nav:
+  - Home: index.md
+  - Contributing:
+    - Guidelines: contributing/index.md
+  - Getting Started: 
+    - Overview: getting-started/index.md
