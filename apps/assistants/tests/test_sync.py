@@ -32,7 +32,7 @@ class ObjectWithId:
 
 
 @pytest.mark.django_db()
-@patch("openai.resources.vector_stores.file_batches.FileBatches.create")
+@patch("openai.resources.vector_stores.file_batches.FileBatches.create", Mock())
 @patch("openai.resources.vector_stores.VectorStores.create", return_value=ObjectWithId(id="vs_123"))
 @patch("openai.resources.beta.Assistants.create", return_value=AssistantFactory.build(id="test_id"))
 @patch("openai.resources.Files.create", side_effect=FileObjectFactory.create_batch(3))
