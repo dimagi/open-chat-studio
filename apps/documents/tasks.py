@@ -29,7 +29,7 @@ def upload_files_to_vector_store_task(collection_file_ids: list[int], chuking_st
             collection_file.status = FileStatus.COMPLETED
             file_ids.extend(remote_file_id)
         except Exception as e:
-            logger.exception(f"Failed to upload file {collection_file.file.id} to OpenAI: {e}")
+            logger.exception("Failed to upload file to OpenAI", extra={"file_id":  collection_file.file.id, "team": collection.team.slug, "collection_id": collection.id})
             collection_file.status = FileStatus.FAILED
 
         collection_files_to_update.append(collection_file)
