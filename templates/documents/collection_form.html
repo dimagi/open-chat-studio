@@ -17,11 +17,16 @@
   </div>
 {% endblock %}
 {% block form %}
-  <div x-data="{isIndex: {% if form.instance.is_index %}true{% else %}false{% endif %}}">
+  <div x-data="{isIndex: {% if form.instance.is_index %}true{% else %}false{% endif %}, currentProvider: '{{ form.instance.llm_provider_id }}', llmProvider: '{{ form.instance.llm_provider_id }}'}">
     {% render_form_fields form "name" "is_index" %}
 
     <div x-cloak x-show="isIndex">
-      {% render_form_fields form "llm_provider" %}
+      {% render_field form.llm_provider xmodel="llmProvider" %}
+      {% if form.instance.id %}
+        <div role="alert" class="mt-2 alert alert-warning alert-soft" x-cloak x-show="currentProvider !== llmProvider">
+          <span>Changing the LLM provider will create a new vector store and remove the old vector store. This might take a while. Continue with caution</span>
+        </div>
+      {% endif %}
     </div>
   </div>
 {% endblock form %}
