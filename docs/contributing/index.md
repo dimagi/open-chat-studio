@@ -1,7 +1,3 @@
----
-hide:
-  - navigation
----
 # Contributing
 
 Thank you for your interest in contributing to Open Chat Studio! This guide will help you understand the contribution process and code style conventions.
@@ -49,13 +45,7 @@ To contribute, pick a task from the [Good First Issues board](https://github.com
 
 ### 3. Submit a Pull Request (PR)
 
-1. Follow our [Pull Request guidelines](https://github.com/dimagi/open-chat-studio/blob/master/CONTRIBUTING_PR.md).
-2. Link your Pull Request to the related issue ([instructions](https://docs.github.com/en/issues/tracking-your-work-with-issues/linking-a-pull-request-to-an-issue#manually-linking-a-pull-request-to-an-issue-using-the-pull-request-sidebar)).
-3. Request an AI review by commenting `@coderabbit review` on your PR (optional but recommended for larger changes).
-4. Address any suggested improvements.
-5. Change the PR status to "Ready for review" and assign reviewers.
-6. Incorporate reviewer feedback.
-7. Once approved, the changes can be merged.
+Follow our [Pull Request guidelines](./pull_requests.md).
 
 ## Getting Help
 
