@@ -3,6 +3,8 @@ site_url: https://dev.openchatstudio.com
 repo_url: https://github.com/dimagi/open-chat-studio
 theme:
   name: material
+  logo: assets/logo.png
+  favicon: assets/favicon.ico
   features:
     - header.autohide
     - navigation.expand
@@ -50,6 +52,9 @@ markdown_extensions:
 
 plugins:
 - search
+
+extra_css:
+  - assets/css/extra.css
 
 nav:
   - Home: index.md

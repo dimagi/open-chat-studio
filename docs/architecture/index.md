@@ -15,7 +15,7 @@ Open Chat Studio is built as a Django web application with a modular design. It 
 - **Backend**: Django, Django REST Framework, Celery
 - **Database**: PostgreSQL
 - **Cache/Message Broker**: Redis
-- **Frontend**: HTML, CSS (Tailwind), JavaScript
+- **Frontend**: HTML, CSS ([Tailwind](http://tailwindcss.com/) + [DaisyUI](https://daisyui.com/)), [htmx](https://htmx.org/), [AlpineJS](https://alpinejs.dev/), [ReactJS](https://react.dev/) with [React Flow](https://reactflow.dev/) (for specific components)
 - **External Services**: OpenAI, Azure, etc.
 
 ## Key Concepts
