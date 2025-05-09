@@ -415,12 +415,12 @@ def _sync_vector_store_files_to_openai(client, vector_store_id, files_ids: list[
             break
         kwargs["after"] = vector_store_files.last_id
 
+    vector_store_manager = OpenAIVectorStoreManager(client)
     for file_id in to_delete_remote:
-        client.vector_stores.files.delete(vector_store_id=vector_store_id, file_id=file_id)
+        vector_store_manager.delete_file(vector_store_id=vector_store_id, file_id=file_id)
 
     if files_ids:
-        for chunk in chunk_list(files_ids, 500):
-            client.vector_stores.file_batches.create(vector_store_id=vector_store_id, file_ids=chunk)
+        vector_store_manager.link_files_to_vector_store(vector_store_id=vector_store_id, file_ids=files_ids)
 
 
 def _ocs_assistant_to_openai_kwargs(assistant: OpenAiAssistant) -> dict:
@@ -462,9 +462,11 @@ def _sync_tool_resources(assistant):
 
 def _update_or_create_vector_store(assistant, name, vector_store_id, file_ids) -> str:
     client = assistant.llm_provider.get_llm_service().get_raw_client()
+    vector_store_manager = OpenAIVectorStoreManager(client)
+
     if vector_store_id:
         try:
-            client.vector_stores.retrieve(vector_store_id)
+            vector_store_manager.get(vector_store_id)
         except openai.NotFoundError:
             vector_store_id = None
 
@@ -478,10 +480,9 @@ def _update_or_create_vector_store(assistant, name, vector_store_id, file_ids) -
         _sync_vector_store_files_to_openai(client, vector_store_id, file_ids)
         return vector_store_id
 
-    vector_store = client.vector_stores.create(name=name, file_ids=file_ids[:100])
-    for chunk in chunk_list(file_ids[100:], 500):
-        client.vector_stores.file_batches.create(vector_store_id=vector_store.id, file_ids=chunk)
-    return vector_store.id
+    vector_store_id = vector_store_manager.create_vector_store(name=name, file_ids=file_ids[:100])
+    vector_store_manager.link_files_to_vector_store(vector_store_id, file_ids[100:])
+    return vector_store_id
 
 
 def _openai_assistant_to_ocs_kwargs(assistant: Assistant, team=None, llm_provider=None) -> dict:
@@ -548,3 +549,51 @@ def get_and_store_openai_file(client, file_id: str, team_id: int) -> File:
     file_content_obj = client.files.content(file_id)
 
     return File.from_external_source(filename, file_content_obj, file_id, "openai", team_id)
+
+
+class OpenAIVectorStoreManager:
+    def __init__(self, client: openai.OpenAI):
+        self.client = client
+
+    @classmethod
+    def from_llm_provider(cls, llm_provider):
+        return cls(llm_provider.get_llm_service().get_raw_client())
+
+    def get(self, vector_store_id: str):
+        return self.client.vector_stores.retrieve(vector_store_id)
+
+    def create_vector_store(self, name: str, file_ids: list = None) -> str:
+        file_ids = file_ids or []
+        vector_store = self.client.vector_stores.create(name=name, file_ids=file_ids)
+        return vector_store.id
+
+    def delete_vector_store(self, vector_store_id: str, fail_silently: bool = False):
+        try:
+            self.client.vector_stores.delete(vector_store_id=vector_store_id)
+        except (openai.NotFoundError, ValueError) as e:
+            logger.warning("Vector store %s not found in OpenAI", vector_store_id)
+            if not fail_silently:
+                raise e
+
+    def delete_file(self, vector_store_id: str, file_id: str):
+        try:
+            self.client.vector_stores.files.delete(vector_store_id=vector_store_id, file_id=file_id)
+        except openai.NotFoundError:
+            logger.warning("File %s not found in OpenAI", file_id)
+
+    def link_files_to_vector_store(
+        self, vector_store_id: str, file_ids: list[str], chunk_size=None, chunk_overlap=None
+    ) -> str:
+        """Link OpenAI files `file_ids` to the vector store `vector_store_id` in OpenAI."""
+        chunking_strategy = None
+        if chunk_size and chunk_overlap:
+            chunking_strategy = {
+                "type": "static",
+                "static": {"max_chunk_size_tokens": chunk_size, "chunk_overlap_tokens": chunk_overlap},
+            }
+
+        for chunk in chunk_list(file_ids, 500):
+            self.client.vector_stores.file_batches.create(
+                vector_store_id=vector_store_id, file_ids=chunk, chunking_strategy=chunking_strategy
+            )
+        return vector_store_id

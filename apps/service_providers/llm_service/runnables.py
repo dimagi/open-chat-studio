@@ -227,16 +227,29 @@ class SimpleLLMChat(LLMChat):
 
 class AgentLLMChat(LLMChat):
     def _parse_output(self, output):
-        return output.get("output", "")
+        output = output.get("output", "")
+        if isinstance(output, list):
+            # Responses API responses are lists
+            return "\n".join([o["text"] for o in output])
+        else:
+            return output
 
     def _build_chain(self) -> Runnable[dict[str, Any], dict]:
         tools = self.adapter.get_allowed_tools()
         agent = create_tool_calling_agent(llm=self.adapter.get_chat_model(), tools=tools, prompt=self.prompt)
+
+        tools = self._filter_for_ocs_tools(tools)
         return AgentExecutor.from_agent_and_tools(
             agent=agent,
             tools=tools,
             max_execution_time=120,
         )
+
+    def _filter_for_ocs_tools(self, tools: list):
+        """Filter out tools that are not OCS tools. `AgentExecutor` expects a list of runnable tools, so we need to
+        remove all tools that are run by the LLM provider
+        """
+        return [t for t in tools if not isinstance(t, dict)]
 
     @property
     def prompt(self):

@@ -110,7 +110,7 @@ class MoveScheduledMessageDateTool(CustomBaseTool):
         weekday: schemas.WeekdaysEnum,
         hour: int,
         minute: int,
-        specified_date: datetime | None = None,
+        specified_date: datetime | None,
     ):
         try:
             message = ScheduledMessage.objects.get(

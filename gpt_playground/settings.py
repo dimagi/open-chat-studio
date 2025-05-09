@@ -639,6 +639,9 @@ AI_HELPER_API_KEY = env("AI_HELPER_API_KEY", default="")
 
 # Document Management
 MAX_SUMMARY_LENGTH = 1024
-MEDIA_SUPPORTED_FILE_TYPES = (
-    ".txt,.pdf,.doc,.docx,.xls,.xlsx,.csv,.jpg,.jpeg,.png,.gif,.bmp,.webp,.svg,.mp4,.mov,.avi,.mp3,.wav"
-)
+SUPPORTED_FILE_TYPES = {
+    "file_search": (
+        ".c,.cs,.cpp,.doc,.docx,.html,.java,.json,.md,.pdf,.php,.pptx,.py,.py,.rb,.tex,.txt,.css,.js,.sh,.ts"
+    ),
+    "collections": ".txt,.pdf,.doc,.docx,.xls,.xlsx,.csv,.jpg,.jpeg,.png,.gif,.bmp,.webp,.svg,.mp4,.mov,.avi,.mp3,.wav",
+}
