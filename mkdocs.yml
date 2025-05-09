@@ -60,6 +60,7 @@ nav:
   - Home: index.md
   - Contributing:
     - Guidelines: contributing/index.md
+    - Pull Requests: contributing/pull_requests.md
   - Getting Started: 
     - Overview: getting-started/index.md
   - Architecture:
