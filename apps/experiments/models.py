@@ -818,7 +818,7 @@ class Experiment(BaseTeamModel, VersionsMixin, CustomActionOperationMixin):
         if not is_copy:
             self.version_number = version_number + 1
             self.save(update_fields=["version_number"])
-        elif self.child_links.exists() or self.assistant:
+        elif self.child_links.exists():
             raise ValueError("Failed to create copy of chatbot")
 
         # Fetch a new instance so the previous instance reference isn't simply being updated. I am not 100% sure
