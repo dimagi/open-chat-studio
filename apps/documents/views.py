@@ -14,7 +14,7 @@ from django.views.decorators.http import require_POST
 from django.views.generic import CreateView, TemplateView, UpdateView
 from django_tables2 import SingleTableView
 
-from apps.assistants.sync import OpenAiSyncError, VectorStoreManager, delete_file_from_openai
+from apps.assistants.sync import OpenAiSyncError, OpenAIVectorStoreManager, delete_file_from_openai
 from apps.documents.forms import CollectionForm
 from apps.documents.models import Collection, CollectionFile, FileStatus
 from apps.documents.tables import CollectionsTable
@@ -146,12 +146,12 @@ class CollectionFormMixin:
         # TODO: Upload files to the new vector store
         try:
             if remove_old_vector_store and old_llm_provider_id and collection.openai_vector_store_id:
-                old_provider_manager = VectorStoreManager.from_llm_provider(
+                old_provider_manager = OpenAIVectorStoreManager.from_llm_provider(
                     LlmProvider.objects.get(id=old_llm_provider_id)
                 )
                 old_provider_manager.delete_vector_store(collection.openai_vector_store_id, fail_silently=True)
 
-            manager = VectorStoreManager.from_llm_provider(collection.llm_provider)
+            manager = OpenAIVectorStoreManager.from_llm_provider(collection.llm_provider)
             collection.openai_vector_store_id = manager.create_vector_store(
                 name=f"collection-{collection.team.slug}-{collection.name}-{collection.id}"
             )
@@ -230,7 +230,7 @@ class DeleteCollection(LoginAndTeamRequiredMixin, View):
         else:
             if collection.is_index and collection.openai_vector_store_id:
                 try:
-                    manager = VectorStoreManager.from_llm_provider(collection.llm_provider)
+                    manager = OpenAIVectorStoreManager.from_llm_provider(collection.llm_provider)
                     manager.delete_vector_store(collection.openai_vector_store_id)
                     messages.success(request, "Collection deleted")
                 except openai.NotFoundError:

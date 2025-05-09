@@ -415,7 +415,7 @@ def _sync_vector_store_files_to_openai(client, vector_store_id, files_ids: list[
             break
         kwargs["after"] = vector_store_files.last_id
 
-    vector_store_manager = VectorStoreManager(client)
+    vector_store_manager = OpenAIVectorStoreManager(client)
     for file_id in to_delete_remote:
         vector_store_manager.delete_file(vector_store_id=vector_store_id, file_id=file_id)
 
@@ -462,7 +462,7 @@ def _sync_tool_resources(assistant):
 
 def _update_or_create_vector_store(assistant, name, vector_store_id, file_ids) -> str:
     client = assistant.llm_provider.get_llm_service().get_raw_client()
-    vector_store_manager = VectorStoreManager(client)
+    vector_store_manager = OpenAIVectorStoreManager(client)
 
     if vector_store_id:
         try:
@@ -551,7 +551,7 @@ def get_and_store_openai_file(client, file_id: str, team_id: int) -> File:
     return File.from_external_source(filename, file_content_obj, file_id, "openai", team_id)
 
 
-class VectorStoreManager:
+class OpenAIVectorStoreManager:
     def __init__(self, client: openai.OpenAI):
         self.client = client
 

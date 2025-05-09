@@ -3,7 +3,7 @@ import logging
 from celery.app import shared_task
 from taskbadger.celery import Task as TaskbadgerTask
 
-from apps.assistants.sync import VectorStoreManager, create_files_remote
+from apps.assistants.sync import OpenAIVectorStoreManager, create_files_remote
 from apps.documents.models import CollectionFile, FileStatus
 
 logger = logging.getLogger("ocs.documents.tasks.upload_files_to_openai")
@@ -21,7 +21,7 @@ def upload_files_to_vector_store_task(collection_file_ids: list[int], chuking_st
 
     file_ids = []
     collection_files_to_update = []
-    vector_store_manager = VectorStoreManager(client)
+    vector_store_manager = OpenAIVectorStoreManager(client)
 
     for collection_file in collection_files:
         try:
