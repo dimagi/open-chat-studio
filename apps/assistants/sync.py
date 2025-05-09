@@ -579,7 +579,7 @@ class OpenAIVectorStoreManager:
         try:
             self.client.vector_stores.files.delete(vector_store_id=vector_store_id, file_id=file_id)
         except openai.NotFoundError:
-            logger.debug("File %s not found in OpenAI", file_id)
+            logger.warning("File %s not found in OpenAI", file_id)
 
     def link_files_to_vector_store(
         self, vector_store_id: str, file_ids: list[str], chunk_size=None, chunk_overlap=None
