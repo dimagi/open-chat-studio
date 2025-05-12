@@ -27,5 +27,6 @@ class BaseExperimentTableView(LoginAndTeamRequiredMixin, SingleTableView, Permis
                 search_phase=search,
                 columns=["name", "description"],
                 extra_conditions=Q(owner__username__icontains=search),
+                score=0.1,
             )
         return query_set
