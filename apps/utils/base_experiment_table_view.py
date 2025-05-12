@@ -14,7 +14,7 @@ class BaseExperimentTableView(LoginAndTeamRequiredMixin, SingleTableView, Permis
         query_set = (
             self.model.objects.get_all()
             .filter(team=self.request.team, working_version__isnull=True)
-            .order_by("is_archived")
+            .order_by("is_archived", "name")
         )
         show_archived = self.request.GET.get("show_archived") == "on"
         if not show_archived:
