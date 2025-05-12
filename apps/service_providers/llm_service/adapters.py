@@ -152,7 +152,7 @@ class ChatAdapter(BaseAdapter):
         resource.files.add(*files)
         return {"cited_files": file_ids}
 
-    def _get_internal_file_ids(self, external_file_ids: list[str]) -> dict[str, list[str]]:
+    def _get_internal_file_ids(self, external_file_ids: list[str]) -> list[int]:
         """Returns the database ids of the files whose external ids are in `external_file_ids`."""
         return list(File.objects.filter(external_id__in=external_file_ids).values_list("id", flat=True))
 
