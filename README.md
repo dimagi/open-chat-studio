@@ -4,8 +4,8 @@ Open Chat Studio is a platform for building, deploying, and evaluating AI-powere
 
 [![Deploy](https://www.herokucdn.com/deploy/button.svg)](https://www.heroku.com/deploy?template=https://github.com/dimagi/open-chat-studio)
 
-* [User Documentation](https://docs.openchatstudio.com)
-* [Developer Documentation](https://docs.dev.openchatstudio.com)
+[Documentation](https://docs.openchatstudio.com)
+[Developer Documentation](http://developers.openchatstudio.com/)
 
 ## Contributing
 
