@@ -80,7 +80,8 @@ class GeminiTokenCounter(TokenCounter):
         if not self.google_api_key:
             raise ValueError("KEY not found!")
 
-        self.client = genai.Client(api_key=self.google_api_key)
+        genai.configure(api_key=self.google_api_key)
+        self.client = genai
         self.model = GenerativeModel(self.model)
 
     def get_tokens_from_response(self, response: LLMResult) -> None | tuple[int, int]:
