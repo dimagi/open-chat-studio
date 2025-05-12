@@ -199,12 +199,12 @@ class ChatMessage(BaseModel, TaggedModelMixin, UserCommentsMixin):
         external_ids = []
         ids = []
 
-        if external_file_ids := self.metadata.get("openai_file_ids", []):
-            external_ids.extend(external_file_ids)
-
-        if file_ids := self.metadata.get("ocs_attachment_file_ids", []):
-            # ocs attachments doesn't have external ids
-            ids.extend(file_ids)
+        metadata_key = ["openai_file_ids", "ocs_attachment_file_ids", "cited_files"]
+        for source in metadata_key:
+            # openai_file_ids is a list of external ids
+            id_list = external_ids if source == "openai_file_ids" else ids
+            if file_ids := self.metadata.get(source, []):
+                id_list.extend(file_ids)
 
         return File.objects.filter(Q(id__in=ids) | Q(external_id__in=external_ids), chatattachment__chat=self.chat)
 
