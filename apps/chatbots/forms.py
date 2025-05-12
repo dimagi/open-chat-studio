@@ -38,3 +38,10 @@ class ChatbotForm(forms.ModelForm):
             experiment.save()
             self.save_m2m()
         return experiment
+
+
+class CopyChatbotForm(forms.Form):
+    new_name = forms.CharField(
+        max_length=255,
+        required=True,
+    )

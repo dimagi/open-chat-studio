@@ -91,6 +91,9 @@ class TranscriptAnalysisDetailView(LoginAndTeamRequiredMixin, DetailView):
         if self.object.job_id and not self.object.is_complete and not self.object.is_failed:
             context["celery_job_id"] = self.object.job_id
 
+        if results := self.object.result_file:
+            with results.open("r") as file:
+                context["results_preview"] = "".join(file.readlines()[:10])
         return context
 
     def get_table(self):
@@ -119,9 +122,9 @@ class TranscriptAnalysisDeleteView(LoginAndTeamRequiredMixin, DeleteView):
 def run_analysis(request, team_slug, pk):
     analysis = get_object_or_404(TranscriptAnalysis, id=pk, team__slug=team_slug)
 
-    if analysis.is_complete or analysis.is_processing:
+    if analysis.is_processing:
         messages.error(request, "Analysis has already been completed or is in progress.")
-        return redirect(analysis.get_absolute_url())
+        return HttpResponse(headers={"hx-redirect": analysis.get_absolute_url()})
 
     task = process_transcript_analysis.delay(analysis.id)
     analysis.job_id = task.id

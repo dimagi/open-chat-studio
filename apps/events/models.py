@@ -146,11 +146,11 @@ class StaticTrigger(BaseModel, VersionsMixin):
         return result
 
     @transaction.atomic()
-    def create_new_version(self, new_experiment: Experiment):
+    def create_new_version(self, new_experiment: Experiment, is_copy: bool = False):
         """Create a duplicate and assign the `new_experiment` to it. Also duplicate all EventActions"""
-        new_instance = super().create_new_version(save=False)
+        new_instance = super().create_new_version(save=False, is_copy=is_copy)
         new_instance.experiment = new_experiment
-        new_instance.action = new_instance.action.create_new_version()
+        new_instance.action = new_instance.action.create_new_version(is_copy=is_copy)
         new_instance.save()
         return new_instance
 
@@ -193,11 +193,11 @@ class TimeoutTrigger(BaseModel, VersionsMixin):
     objects = TimeoutTriggerObjectManager()
 
     @transaction.atomic()
-    def create_new_version(self, new_experiment: Experiment):
+    def create_new_version(self, new_experiment: Experiment, is_copy: bool = False):
         """Create a duplicate and assign the `new_experiment` to it. Also duplicate all EventActions"""
-        new_instance = super().create_new_version(save=False)
+        new_instance = super().create_new_version(save=False, is_copy=is_copy)
         new_instance.experiment = new_experiment
-        new_instance.action = new_instance.action.create_new_version()
+        new_instance.action = new_instance.action.create_new_version(is_copy=is_copy)
         new_instance.save()
         return new_instance
 
