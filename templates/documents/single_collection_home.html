@@ -18,7 +18,13 @@
     <div class="flex flex-col gap-2">
       <div class="flex justify-between items-start">
         <div>
-          <h1 class="pg-title">{{ collection.name }} {% if collection.is_index %}<span class="badge badge-sm badge-ghost">Document Index</span>{% endif %}</h1>
+          <h1 class="pg-title">{{ collection.name }} {% if collection.is_index %}<span class="badge badge-sm badge-ghost">Collection Index</span>{% endif %}</h1>
+          <div class="text-sm text-base-content/60 mt-1">
+            {% if collection.is_index %}
+              <span class="pg-text-muted">OpenAI vector store id: {% include "generic/copy_chip.html" with copy_element_id="copy_vector_store_id" copy_value=collection.openai_vector_store_id extra_styles="btn-ghost" %}</span>
+
+            {% endif %}
+          </div>
           <div class="text-sm text-base-content/60 mt-1">
             {{ collection.files.count }} files • {{ collection.size }} MB total
           </div>
@@ -51,8 +57,10 @@
             <div class="flex flex-col flex-1 gap-1">
               <div class="flex items-center gap-2">
                 {% if collection_file.status %}
-                  <div class="tooltip" data-tip="{{ collection_file.status }}">
-                    {% if collection_file.status == 'in_progress' %}
+                  <div class="tooltip" data-tip="{{ collection_file.status_enum.label }}">
+                    {% if collection_file.status == 'pending' %}
+                      <span class="status"></span>
+                    {% elif collection_file.status == 'in_progress' %}
                       <div class="inline-grid *:[grid-area:1/1]">
                         <div aria-label="warning" class="status status-warning animate-ping"></div>
                         <div aria-label="warning" class="status status-warning"></div>
@@ -74,8 +82,8 @@
               {% if collection.is_index %}
                 <div class="flex flex-row items-center gap-2">
                   <span class="text-xs text-base-content/70">Chunking Strategy:</span>
-                  <div class="badge badge-sm badge-ghost">Size: {{ collection_file.chunking_strategy.size }} tokens</div>
-                  <div class="badge badge-sm badge-ghost">Overlap: {{ collection_file.chunking_strategy.overlap }} tokens</div>
+                  <div class="badge badge-sm badge-ghost">Size: {{ collection_file.chunking_strategy.chunk_size }} tokens</div>
+                  <div class="badge badge-sm badge-ghost">Overlap: {{ collection_file.chunking_strategy.chunk_overlap }} tokens</div>
                 </div>
               {% else %}
                 <span class="text-xs text-base-content/70">{{ collection_file.file.summary|default:'No summary available' }}</span>

@@ -130,7 +130,7 @@ class CreateOpenAiAssistant(BaseOpenAiAssistantView, CreateView):
             return self.form_invalid(form)
         except Exception as e:
             logger.exception(f"Could not push assistant to OpenAI. {e}")
-            messages.error(self.request, "Could not create the assistant at OpenAI. Pleas try again later")
+            messages.error(self.request, "Could not create the assistant at OpenAI. Please try again later")
         return HttpResponseRedirect(self.get_success_url())
 
 
@@ -154,7 +154,7 @@ class EditOpenAiAssistant(BaseOpenAiAssistantView, UpdateView):
             return self.form_invalid(form)
         except Exception as e:
             logger.exception(f"Could not push assistant to OpenAI. {e}")
-            messages.error(self.request, "Could not create the assistant at OpenAI. Pleas try again later")
+            messages.error(self.request, "Could not create the assistant at OpenAI. Please try again later")
         return response
 
 
