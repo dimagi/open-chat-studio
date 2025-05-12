@@ -123,6 +123,7 @@ class LLMChat(RunnableSerializable[str, ChainOutput]):
 
     def invoke(self, input: str, config: RunnableConfig | None = None, *args, **kwargs) -> ChainOutput:
         ai_message = None
+        ai_message_metadata = {}
         callback = self.adapter.callback_handler
         config = ensure_config(config)
         merged_config = merge_configs(ensure_config(config), {"callbacks": [callback]})
@@ -135,7 +136,9 @@ class LLMChat(RunnableSerializable[str, ChainOutput]):
         try:
             if include_conversation_history:
                 self._populate_memory(input)
-            ai_message = self._get_output_check_cancellation(input, merged_config)
+            ai_message, file_citations = self._get_output_check_cancellation(input, merged_config)
+            ai_message_metadata = self.adapter.get_output_message_metadata(file_citations)
+
             result = ChainOutput(
                 output=ai_message, prompt_tokens=callback.prompt_tokens, completion_tokens=callback.completion_tokens
             )
@@ -149,7 +152,7 @@ class LLMChat(RunnableSerializable[str, ChainOutput]):
                 output=ai_message,
                 save_output_to_history=save_output_to_history,
                 experiment_tag=experiment_tag,
-                output_message_metadata={},
+                output_message_metadata=ai_message_metadata,
             )
 
         return result
@@ -162,14 +165,22 @@ class LLMChat(RunnableSerializable[str, ChainOutput]):
 
         output = ""
         context = self._get_input_chain_context()
+
+        file_citations = []
         for token in chain.stream({**self._get_input(input), **context}, config):
             output += self._parse_output(token)
+            file_citations.extend(self._get_file_citations(token))
             if self._chat_is_cancelled():
-                return output
-        return output
+                return output, file_citations
+
+        return output, set(file_citations)
 
     def _parse_output(self, output):
         return output
+
+    def _get_file_citations(self, output):
+        # Files are referenced by agents only
+        return []
 
     def _chat_is_cancelled(self):
         if self.cancelled:
@@ -233,6 +244,21 @@ class AgentLLMChat(LLMChat):
             return "\n".join([o["text"] for o in output])
         else:
             return output
+
+    def _get_file_citations(self, token):
+        """
+        Return a list of files' external ids cited in the token.
+        """
+        annotations = []
+        if isinstance(token, dict):
+            # is the same structure used when other services cite files?
+            outputs = token.get("output", "")
+            if isinstance(outputs, list):
+                for output in outputs:
+                    annotation_entries = output.get("annotations", [])
+                    file_names = [entry["file_id"] for entry in annotation_entries]
+                    annotations.extend(file_names)
+        return annotations
 
     def _build_chain(self) -> Runnable[dict[str, Any], dict]:
         tools = self.adapter.get_allowed_tools()
