@@ -207,6 +207,7 @@
       {% flag "events" %}
         <input type="radio" name="tab_group" role="tab" class="tab" aria-label="Events" id="tab-events" />
       {% endflag %}
+      <input type="radio" name="tab_group" role="tab" class="tab" aria-label="Settings" id="tab-settings" />
     </div>
 
     {% if perms.chat.view_chat %}
@@ -255,6 +256,12 @@
         </div>
       </div>
     {% endflag %}
+
+    <div role="tabpanel" class="tab-content" id="content-settings">
+      <div class="app-card">
+        {% include "chatbots/settings_content.html" %}
+      </div>
+    </div>
     <script>
       function showTabContent(tabId) {
         const tabContents = document.querySelectorAll('.tab-content');

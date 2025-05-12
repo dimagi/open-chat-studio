@@ -2,18 +2,19 @@ import uuid
 
 from django.contrib.auth.decorators import permission_required
 from django.contrib.auth.mixins import PermissionRequiredMixin
-from django.http import HttpResponseRedirect
+from django.http import HttpResponse, HttpResponseRedirect
 from django.shortcuts import get_object_or_404
+from django.template.loader import render_to_string
 from django.urls import reverse
 from django.views.decorators.clickjacking import xframe_options_exempt
-from django.views.decorators.http import require_POST
+from django.views.decorators.http import require_GET, require_POST
 from django.views.generic import TemplateView
 
 from apps.chat.channels import WebChannel
 from apps.chatbots.forms import ChatbotForm
 from apps.chatbots.tables import ChatbotSessionsTable, ChatbotTable
 from apps.experiments.decorators import experiment_session_view, verify_session_access_cookie
-from apps.experiments.models import Experiment, SessionStatus
+from apps.experiments.models import Experiment, SessionStatus, SyntheticVoice
 from apps.experiments.tables import ExperimentVersionsTable
 from apps.experiments.views import CreateExperiment, ExperimentSessionsTableView, ExperimentVersionsTableView
 from apps.experiments.views.experiment import (
@@ -36,6 +37,126 @@ from apps.teams.decorators import login_and_team_required, team_required
 from apps.teams.mixins import LoginAndTeamRequiredMixin
 from apps.teams.models import Flag
 from apps.utils.base_experiment_table_view import BaseExperimentTableView
+
+
+@login_and_team_required
+@permission_required("experiments.change_experiment", raise_exception=True)
+@require_GET
+def settings_edit_mode(request, team_slug, experiment_id):
+    if request.team.slug != team_slug:
+        return HttpResponse("Unauthorized", status=403)
+
+    experiment = get_object_or_404(Experiment, id=experiment_id, team=request.team)
+    available_voice_providers = request.team.voiceprovider_set.all()
+    available_synthetic_voices = SyntheticVoice.get_for_team(request.team)
+    available_trace_providers = request.team.traceprovider_set.all()
+    available_consent_forms = request.team.consentform_set.exclude(is_version=True)
+    available_surveys = request.team.survey_set.exclude(is_version=True)
+
+    context = {
+        "experiment": experiment,
+        "edit_mode": True,
+        "available_voice_providers": available_voice_providers,
+        "available_synthetic_voices": available_synthetic_voices,
+        "available_trace_providers": available_trace_providers,
+        "available_consent_forms": available_consent_forms,
+        "available_surveys": available_surveys,
+        "request": request,
+    }
+
+    return HttpResponse(render_to_string("chatbots/settings_content.html", context, request=request))
+
+
+@login_and_team_required
+@permission_required("experiments.change_experiment", raise_exception=True)
+@require_GET
+def cancel_edit_mode(request, team_slug, experiment_id):
+    if request.team.slug != team_slug:
+        return HttpResponse("Unauthorized", status=403)
+
+    experiment = get_object_or_404(Experiment, id=experiment_id, team=request.team)
+    context = {
+        "experiment": experiment,
+        "request": request,
+        "edit_mode": False,
+    }
+    return HttpResponse(render_to_string("chatbots/settings_content.html", context, request=request))
+
+
+@login_and_team_required
+@permission_required("experiments.change_experiment", raise_exception=True)
+@require_POST
+def save_all_settings(request, team_slug, experiment_id):
+    if request.team.slug != team_slug:
+        return HttpResponse("Unauthorized", status=403)
+    experiment = get_object_or_404(Experiment, id=experiment_id, team=request.team)
+    if "description" in request.POST:
+        experiment.description = request.POST.get("description", "")
+
+    if "seed_message" in request.POST:
+        experiment.seed_message = request.POST.get("seed_message", "")
+    if "voice_provider" in request.POST:
+        provider_id = request.POST.get("voice_provider")
+        if provider_id:
+            experiment.voice_provider_id = provider_id
+        else:
+            experiment.voice_provider = None
+    if "synthetic_voice" in request.POST:
+        voice_id = request.POST.get("synthetic_voice")
+        if voice_id:
+            experiment.synthetic_voice_id = voice_id
+        else:
+            experiment.synthetic_voice = None
+    if "trace_provider" in request.POST:
+        provider_id = request.POST.get("trace_provider")
+        if provider_id:
+            experiment.trace_provider_id = provider_id
+        else:
+            experiment.trace_provider = None
+    if "consent_form" in request.POST:
+        form_id = request.POST.get("consent_form")
+        if form_id:
+            experiment.consent_form_id = form_id
+        else:
+            experiment.consent_form = None
+    if "pre_survey" in request.POST:
+        survey_id = request.POST.get("pre_survey")
+        if survey_id:
+            experiment.pre_survey_id = survey_id
+        else:
+            experiment.pre_survey = None
+
+    if "post_survey" in request.POST:
+        survey_id = request.POST.get("post_survey")
+        if survey_id:
+            experiment.post_survey_id = survey_id
+        else:
+            experiment.post_survey = None
+
+    experiment.echo_transcript = "echo_transcript" in request.POST
+    experiment.use_processor_bot_voice = "use_processor_bot_voice" in request.POST
+    experiment.debug_mode_enabled = "debug_mode_enabled" in request.POST
+    experiment.conversational_consent_enabled = "conversational_consent_enabled" in request.POST
+
+    if "voice_response_behaviour" in request.POST:
+        experiment.voice_response_behaviour = request.POST.get("voice_response_behaviour", "")
+
+    if "participant_allowlist" in request.POST:
+        raw_text = request.POST.get("participant_allowlist", "")
+        identifiers = [line.strip() for line in raw_text.split("\n") if line.strip()]
+        cleaned_identifiers = []
+        for identifier in identifiers:
+            cleaned_identifiers.append(identifier.replace(" ", ""))
+        experiment.participant_allowlist = cleaned_identifiers
+
+    experiment.save()
+
+    context = {
+        "experiment": experiment,
+        "request": request,
+        "edit_mode": False,
+    }
+    return HttpResponse(render_to_string("chatbots/settings_content.html", context, request=request))
 
 
 @login_and_team_required

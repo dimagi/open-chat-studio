@@ -1,0 +1,260 @@
+<div id="settings-wrapper">
+  <div class="flex justify-end mb-6">
+    {% if edit_mode %}
+      <div class="flex gap-2">
+        <button id="save-all-button"
+                class="btn btn-success btn-sm"
+                hx-post="/a/{{ request.team.slug }}/chatbots/{{ experiment.id }}/settings/save-all/"
+                hx-include="#settings-form"
+                hx-target="#settings-wrapper"
+                hx-swap="outerHTML">
+          Save
+        </button>
+        <button id="cancel-edit-button"
+                class="btn btn-danger btn-sm"
+                hx-get="/a/{{ request.team.slug }}/chatbots/{{ experiment.id }}/settings/cancel-edit/"
+                hx-target="#settings-wrapper"
+                hx-swap="outerHTML">
+          Cancel
+        </button>
+      </div>
+    {% else %}
+      <div id="edit-buttons-container">
+        {% if experiment.is_editable %}
+          <button id="edit-all-button"
+                  class="btn btn-primary btn-sm"
+                  hx-get="/a/{{ request.team.slug }}/chatbots/{{ experiment.id }}/settings/edit-mode/"
+                  hx-target="#settings-wrapper"
+                  hx-swap="outerHTML">
+            Edit
+          </button>
+        {% endif %}
+      </div>
+    {% endif %}
+  </div>
+
+  {% if edit_mode %}<form id="settings-form">{% endif %}
+  <div class="mb-6" id="description-section">
+    <h4 class="text-md font-bold mb-2">Description</h4>
+    <div class="p-4 bg-base-200 rounded-md" id="description-{% if edit_mode %}edit{% else %}content{% endif %}">
+      {% if edit_mode %}
+        <div class="form-control w-full">
+          <textarea name="description" rows="3" class="textarea textarea-bordered w-full">{{ experiment.description }}</textarea>
+        </div>
+      {% else %}
+        <p>{{ experiment.description|default:"No description provided" }}</p>
+      {% endif %}
+    </div>
+  </div>
+
+  <div class="mb-6" id="voice-section">
+    <h4 class="text-md font-bold mb-2">Voice</h4>
+    <div class="p-4 bg-base-200 rounded-md">
+      <div class="grid grid-cols-2 gap-4">
+        {% if edit_mode %}
+          <div class="form-control">
+            <label class="label"><span class="label-text">Provider</span></label>
+            <select name="voice_provider" class="select select-bordered w-full">
+              <option value="">None</option>
+              {% for provider in available_voice_providers %}
+                <option value="{{ provider.id }}" {% if experiment.voice_provider_id == provider.id %}selected{% endif %}>{{ provider.name }}</option>
+              {% endfor %}
+            </select>
+          </div>
+          <div class="form-control">
+            <label class="label"><span class="label-text">Synthetic Voice</span></label>
+            <select name="synthetic_voice" class="select select-bordered w-full">
+              <option value="">None</option>
+              {% for voice in available_synthetic_voices %}
+                <option value="{{ voice.id }}" {% if experiment.synthetic_voice_id == voice.id %}selected{% endif %}>{{ voice.name }}</option>
+              {% endfor %}
+            </select>
+          </div>
+          <div class="form-control">
+            <label class="label"><span class="label-text">Response Type</span></label>
+            <select name="voice_response_behaviour" class="select select-bordered w-full">
+              <option value="">None</option>
+              <option value="reciprocal" {% if experiment.voice_response_behaviour == 'reciprocal' %}selected{% endif %}>Reciprocal</option>
+              <option value="always" {% if experiment.voice_response_behaviour == 'always' %}selected{% endif %}>Always</option>
+              <option value="never" {% if experiment.voice_response_behaviour == 'never' %}selected{% endif %}>Never</option>
+            </select>
+          </div>
+          <div class="form-control">
+            <label class="label cursor-pointer justify-start">
+              <input type="checkbox" name="echo_transcript" class="checkbox" {% if experiment.echo_transcript %}checked{% endif %}>
+              <span class="ml-2">Echo Transcript</span>
+            </label>
+          </div>
+          <div class="form-control">
+            <label class="label cursor-pointer justify-start">
+              <input type="checkbox" name="use_processor_bot_voice" class="checkbox" {% if experiment.use_processor_bot_voice %}checked{% endif %}>
+              <span class="ml-2">Use Processor Bot Voice</span>
+            </label>
+          </div>
+        {% else %}
+          <div>
+            <span class="font-semibold">Provider:</span>
+            <span id="voice_provider-content">{{ experiment.voice_provider.name|default:"None" }}</span>
+          </div>
+          <div>
+            <span class="font-semibold">Synthetic Voice:</span>
+            <span id="synthetic_voice-content">{{ experiment.synthetic_voice.name|default:"None" }}</span>
+          </div>
+          <div>
+            <span class="font-semibold">Response Type:</span>
+            <span id="voice_response_behaviour-content">{{ experiment.voice_response_behaviour|default:"None" }}</span>
+          </div>
+          <div>
+            <span class="font-semibold">Echo Transcript:</span>
+            <span id="echo_transcript-content">{{ experiment.echo_transcript|yesno:"Yes,No" }}</span>
+          </div>
+          <div>
+            <span class="font-semibold">Use Processor Bot Voice:</span>
+            <span id="use_processor_bot_voice-content">{{ experiment.use_processor_bot_voice|yesno:"Yes,No" }}</span>
+          </div>
+        {% endif %}
+      </div>
+    </div>
+  </div>
+
+  <div class="mb-6" id="tracing-section">
+    <h4 class="text-md font-bold mb-2">Tracing</h4>
+    <div class="p-4 bg-base-200 rounded-md">
+      {% if edit_mode %}
+        <div class="form-control mb-2">
+          <label class="label"><span class="label-text">Trace Provider</span></label>
+          <select name="trace_provider" class="select select-bordered w-full">
+            <option value="">None</option>
+            {% for provider in available_trace_providers %}
+              <option value="{{ provider.id }}" {% if experiment.trace_provider_id == provider.id %}selected{% endif %}>{{ provider.name }}</option>
+            {% endfor %}
+          </select>
+        </div>
+        <div class="form-control">
+          <label class="label cursor-pointer justify-start">
+            <input type="checkbox" name="debug_mode_enabled" class="checkbox" {% if experiment.debug_mode_enabled %}checked{% endif %}>
+            <span class="ml-2">Debug Mode</span>
+          </label>
+        </div>
+      {% else %}
+        <div>
+          <span class="font-semibold">Trace Provider:</span>
+          <span id="trace_provider-content">{{ experiment.trace_provider.name|default:"None" }}</span>
+        </div>
+        <div>
+          <span class="font-semibold">Debug Mode:</span>
+          <span id="debug_mode_enabled-content">{{ experiment.debug_mode_enabled|yesno:"Enabled,Disabled" }}</span>
+        </div>
+      {% endif %}
+    </div>
+  </div>
+
+  <div class="mb-6" id="consent-section">
+    <h4 class="text-md font-bold mb-2">Consent</h4>
+    <div class="p-4 bg-base-200 rounded-md">
+      {% if edit_mode %}
+        <div class="form-control mb-2">
+          <label class="label cursor-pointer justify-start">
+            <input type="checkbox" name="conversational_consent_enabled" class="checkbox" {% if experiment.conversational_consent_enabled %}checked{% endif %}>
+            <span class="ml-2">Conversational Consent</span>
+          </label>
+        </div>
+        <div class="form-control">
+          <label class="label"><span class="label-text">Consent Form</span></label>
+          <select name="consent_form" class="select select-bordered w-full">
+            <option value="">None</option>
+            {% for form in available_consent_forms %}
+              <option value="{{ form.id }}" {% if experiment.consent_form_id == form.id %}selected{% endif %}>{{ form.name }}</option>
+            {% endfor %}
+          </select>
+        </div>
+      {% else %}
+        <div>
+          <span class="font-semibold">Conversational Consent:</span>
+          <span id="conversational_consent_enabled-content">{{ experiment.conversational_consent_enabled|yesno:"Enabled,Disabled" }}</span>
+        </div>
+        <div>
+          <span class="font-semibold">Consent Form:</span>
+          <span id="consent_form-content">{{ experiment.consent_form.name|default:"None" }}</span>
+        </div>
+      {% endif %}
+    </div>
+  </div>
+
+  <div class="mb-6" id="surveys-section">
+    <h4 class="text-md font-bold mb-2">Surveys</h4>
+    <div class="p-4 bg-base-200 rounded-md">
+      {% if edit_mode %}
+        <div class="form-control mb-2">
+          <label class="label"><span class="label-text">Pre-Survey</span></label>
+          <select name="pre_survey" class="select select-bordered w-full">
+            <option value="">None</option>
+            {% for survey in available_surveys %}
+              <option value="{{ survey.id }}" {% if experiment.pre_survey_id == survey.id %}selected{% endif %}>{{ survey.name }}</option>
+            {% endfor %}
+          </select>
+        </div>
+        <div class="form-control">
+          <label class="label"><span class="label-text">Post-Survey</span></label>
+          <select name="post_survey" class="select select-bordered w-full">
+            <option value="">None</option>
+            {% for survey in available_surveys %}
+              <option value="{{ survey.id }}" {% if experiment.post_survey_id == survey.id %}selected{% endif %}>{{ survey.name }}</option>
+            {% endfor %}
+          </select>
+        </div>
+      {% else %}
+        <div>
+          <span class="font-semibold">Pre-Survey:</span>
+          <span id="pre_survey-content">{{ experiment.pre_survey.name|default:"None" }}</span>
+        </div>
+        <div>
+          <span class="font-semibold">Post-Survey:</span>
+          <span id="post_survey-content">{{ experiment.post_survey.name|default:"None" }}</span>
+        </div>
+      {% endif %}
+    </div>
+  </div>
+
+  <div class="mb-6" id="allowlist-section">
+    <h4 class="text-md font-bold mb-2">Participant Allowlist</h4>
+    <div class="p-4 bg-base-200 rounded-md" id="participant_allowlist-{% if edit_mode %}edit{% else %}content{% endif %}">
+      {% if edit_mode %}
+        <div class="form-control">
+          <textarea name="participant_allowlist" rows="5" class="textarea textarea-bordered w-full" placeholder="Enter one identifier per line">{% for participant in experiment.participant_allowlist %}{{ participant }}
+          {% endfor %}</textarea>
+          <label class="label">
+            <span class="label-text-alt">Enter one identifier per line. Phone numbers should be in E164 format (e.g., +27123456789)</span>
+          </label>
+        </div>
+      {% else %}
+        {% if experiment.participant_allowlist %}
+          <ul class="list-disc list-inside">
+            {% for participant in experiment.participant_allowlist %}
+              <li>{{ participant }}</li>
+            {% empty %}
+              <p>No participants in allowlist. Chatbot is publicly accessible.</p>
+            {% endfor %}
+          </ul>
+        {% else %}
+          <p>No allowlist configured. Chatbot is publicly accessible.</p>
+        {% endif %}
+      {% endif %}
+    </div>
+  </div>
+
+  <div class="mb-6" id="seed-message-section">
+    <h4 class="text-md font-bold mb-2">Seed Message</h4>
+    <div class="p-4 bg-base-200 rounded-md" id="seed_message-{% if edit_mode %}edit{% else %}content{% endif %}">
+      {% if edit_mode %}
+        <div class="form-control">
+          <textarea name="seed_message" rows="3" class="textarea textarea-bordered w-full">{{ experiment.seed_message }}</textarea>
+        </div>
+      {% else %}
+        <p>{{ experiment.seed_message|default:"No seed message configured" }}</p>
+      {% endif %}
+    </div>
+  </div>
+
+  {% if edit_mode %}</form>{% endif %}
+</div>
