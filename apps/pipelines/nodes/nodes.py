@@ -985,9 +985,9 @@ class CodeNode(PipelineNode):
                 "set_temp_state_key": self._set_temp_state_key(state),
                 "get_session_state_key": self._get_session_state_key(state["experiment_session"]),
                 "set_session_state_key": self._set_session_state_key(state["experiment_session"]),
-                "get_route": lambda node_name: pipeline_state.get_route(node_name),
-                "get_node_path": lambda node_name: pipeline_state.get_node_path(node_name),
-                "get_all_routes": lambda: pipeline_state.get_all_routes(),
+                "get_route": pipeline_state.get_route,
+                "get_node_path": pipeline_state.get_node_path,
+                "get_all_routes": pipeline_state.get_all_routes,
             }
         )
         return custom_globals
