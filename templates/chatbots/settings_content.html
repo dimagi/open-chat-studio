@@ -4,7 +4,7 @@
       <div class="flex gap-2">
         <button id="save-all-button"
                 class="btn btn-success btn-sm"
-                hx-post="/a/{{ request.team.slug }}/chatbots/{{ experiment.id }}/settings/save-all/"
+                hx-post="{% url 'chatbots:save_all_settings' request.team.slug experiment.id %}"
                 hx-include="#settings-form"
                 hx-target="#settings-wrapper"
                 hx-swap="outerHTML">
@@ -12,7 +12,7 @@
         </button>
         <button id="cancel-edit-button"
                 class="btn btn-danger btn-sm"
-                hx-get="/a/{{ request.team.slug }}/chatbots/{{ experiment.id }}/settings/cancel-edit/"
+                hx-get="{% url 'chatbots:cancel_edit_mode' request.team.slug experiment.id %}"
                 hx-target="#settings-wrapper"
                 hx-swap="outerHTML">
           Cancel
@@ -23,7 +23,7 @@
         {% if experiment.is_editable %}
           <button id="edit-all-button"
                   class="btn btn-primary btn-sm"
-                  hx-get="/a/{{ request.team.slug }}/chatbots/{{ experiment.id }}/settings/edit-mode/"
+                  hx-get="{% url 'chatbots:settings_edit_mode' request.team.slug experiment.id %}"
                   hx-target="#settings-wrapper"
                   hx-swap="outerHTML">
             Edit
