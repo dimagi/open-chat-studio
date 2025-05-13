@@ -123,11 +123,6 @@ class ChatMessage(BaseModel, TaggedModelMixin, UserCommentsMixin):
             metadata={"is_summary": True},
         )
 
-    def save(self, *args, **kwargs):
-        if self.is_summary:
-            raise ValueError("Cannot save a summary message")
-        super().save(*args, **kwargs)
-
     @property
     def trace_info(self) -> list[dict]:
         trace_info = self.metadata.get("trace_info")
@@ -139,11 +134,6 @@ class ChatMessage(BaseModel, TaggedModelMixin, UserCommentsMixin):
             trace_info["trace_provider"] = self.metadata.get("trace_provider")
             return [trace_info]
         return trace_info
-
-    def get_summary_message(self):
-        if not self.summary:
-            raise ValueError("Message does not have a summary")
-        return ChatMessage.make_summary_message(self)
 
     @property
     def is_ai_message(self):
@@ -164,6 +154,16 @@ class ChatMessage(BaseModel, TaggedModelMixin, UserCommentsMixin):
     @property
     def role(self):
         return ChatMessageType(self.message_type).role
+
+    def save(self, *args, **kwargs):
+        if self.is_summary:
+            raise ValueError("Cannot save a summary message")
+        super().save(*args, **kwargs)
+
+    def get_summary_message(self):
+        if not self.summary:
+            raise ValueError("Message does not have a summary")
+        return ChatMessage.make_summary_message(self)
 
     def to_langchain_dict(self) -> dict:
         return self._get_langchain_dict(self.content, self.message_type)
