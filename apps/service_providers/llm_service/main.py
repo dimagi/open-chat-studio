@@ -256,7 +256,8 @@ class GoogleLlmService(LlmService):
 
     def attach_built_in_tools(self, built_in_tools: list[str], tools: list[BaseTool]):
         pass
-        # Commenting it for now until we fix it otherwise gemini would not work if code execution or web search is selected in the node
+        # Commenting it for now until we fix it
+        # otherwise gemini would not work if code execution or web search is selected in the node
 
         # if not built_in_tools:
         #     return
