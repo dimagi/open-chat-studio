@@ -266,7 +266,7 @@ class AgentLLMChat(LLMChat):
                 for output in outputs:
                     annotation_entries = output.get("annotations", [])
                     file_ids = [entry["file_id"] for entry in annotation_entries]
-                    files.extend(list(File.objects.filter(external_id__in=file_ids).all()))
+                    files.extend(File.objects.filter(external_id__in=file_ids).all())
         return files
 
     def _build_chain(self) -> Runnable[dict[str, Any], dict]:
