@@ -36,28 +36,26 @@ def _index_collection_files(collection_id: int, all_files: bool) -> list[str]:
     """
     collection = Collection.objects.prefetch_related("llm_provider").get(id=collection_id)
     client = collection.llm_provider.get_llm_service().get_raw_client()
-
-    # Set in progress status
-    queryset = CollectionFile.objects.filter(collection=collection)
-    if all_files:
-        collection_file_ids = queryset.values_list("id", flat=True)
-    else:
-        collection_file_ids = queryset.filter(status=FileStatus.PENDING).values_list("id", flat=True)
-
-    queryset.filter(id__in=collection_file_ids).update(status=FileStatus.IN_PROGRESS)
     previous_remote_file_ids = []
+
+    queryset = CollectionFile.objects.filter(collection=collection)
+    if not all_files:
+        queryset = queryset.filter(status=FileStatus.PENDING)
 
     # Link files to the new vector store
     # First, sort by chunking strategy
     strategy_file_map = defaultdict(list)
     default_chunking_strategy = {"chunk_size": 800, "chunk_overlap": 400}
 
-    for collection_file in queryset.filter(id__in=collection_file_ids).select_related("file").iterator(100):
+    for collection_file in queryset.select_related("file").iterator(100):
         strategy = collection_file.metadata.get("chunking_strategy", default_chunking_strategy)
         strategy_file_map[(strategy["chunk_size"], strategy["chunk_overlap"])].append(collection_file)
 
         if collection_file.file.external_id:
             previous_remote_file_ids.append(collection_file.file.external_id)
+
+    # Update the status of all files in queryset to IN_PROGRESS
+    queryset.update(status=FileStatus.IN_PROGRESS)
 
     # Second, for each chunking strategy, upload files to the vector store
     for strategy_tuple, collection_files in strategy_file_map.items():
