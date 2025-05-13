@@ -397,8 +397,8 @@ class AssistantChat(RunnableSerializable[dict, ChainOutput]):
         assistant_file_ids = self.adapter.get_assistant_file_ids()
 
         file_ids = set()
-        image_file_attachments = []
-        file_path_attachments = []
+        image_file_attachments: list[File] = []
+        file_path_attachments: list[File] = []
         output_message = ""
 
         message = messages_list[0]
@@ -462,12 +462,10 @@ class AssistantChat(RunnableSerializable[dict, ChainOutput]):
 
         # Attach the generated files to the chat object as an annotation
         if file_path_attachments:
-            resource, _created = chat.attachments.get_or_create(tool_type="file_path")
-            resource.files.add(*file_path_attachments)
+            chat.attach_files(attachment_type="file_path", files=file_path_attachments)
 
         if image_file_attachments:
-            resource, _created = chat.attachments.get_or_create(tool_type="image_file")
-            resource.files.add(*image_file_attachments)
+            chat.attach_files(attachment_type="image_file", files=image_file_attachments)
 
         # replace all instance of `[some filename.pdf](https://example.com/download/file-abc)` with
         # just the link text

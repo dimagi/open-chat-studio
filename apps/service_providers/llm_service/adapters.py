@@ -146,8 +146,7 @@ class ChatAdapter(BaseAdapter):
         if not cited_files:
             return {}
 
-        resource, _created = self.session.chat.attachments.get_or_create(tool_type="file_citation")
-        resource.files.add(*cited_files)
+        self.session.chat.attach_files(attachment_type="file_citation", files=cited_files)
         return {"cited_files": [file.id for file in cited_files]}
 
 
