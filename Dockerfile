@@ -29,7 +29,8 @@ RUN --mount=type=cache,target=/root/.cache \
     uv sync \
       --frozen \
       --no-group dev \
-      --group prod
+      --group prod \
+      --compile-bytecode
 
 FROM node:22 AS build-node
 RUN nodejs -v && npm -v
