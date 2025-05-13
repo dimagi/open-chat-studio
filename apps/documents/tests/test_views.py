@@ -53,7 +53,8 @@ class TestEditCollection:
             from_llm_provider_id=mock.ANY,
         )
 
-    def test_update_collection_without_llm_provider_change(self, collection, client):
+    @mock.patch("apps.documents.views.migrate_vector_stores.delay")
+    def test_update_collection_without_llm_provider_change(self, migrate_vector_stores_task, collection, client):
         client.force_login(collection.team.members.first())
         url = reverse("documents:collection_edit", args=[collection.team.slug, collection.id])
         new_name = "Updated Collection Name"
@@ -70,3 +71,4 @@ class TestEditCollection:
         assert response.status_code == 302
         collection.refresh_from_db()
         assert collection.name == new_name
+        migrate_vector_stores_task.assert_not_called()
