@@ -295,6 +295,7 @@ class OptionsSource(StrEnum):
     custom_actions = "custom_actions"
     collection = "collection"
     built_in_tools = "built_in_tools"
+    collection_index = "collection_index"
 
 
 class UiSchema(BaseModel):

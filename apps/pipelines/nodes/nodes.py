@@ -26,6 +26,7 @@ from RestrictedPython import compile_restricted, safe_builtins, safe_globals
 from apps.assistants.models import OpenAiAssistant
 from apps.chat.agent.tools import get_node_tools
 from apps.chat.conversation import compress_chat_history, compress_pipeline_chat_history
+from apps.documents.models import Collection
 from apps.experiments.models import ExperimentSession, ParticipantData
 from apps.pipelines.exceptions import PipelineNodeBuildError, PipelineNodeRunError
 from apps.pipelines.models import Node, PipelineChatHistory, PipelineChatHistoryModes, PipelineChatHistoryTypes
@@ -261,6 +262,13 @@ class LLMResponseWithPrompt(LLMResponse, HistoryMixin):
             widget=Widgets.select, options_source=OptionsSource.collection, flag_required="document_management"
         ),
     )
+    collection_index_id: OptionalInt = Field(
+        None,
+        title="Collection Index",
+        json_schema_extra=UiSchema(
+            widget=Widgets.select, options_source=OptionsSource.collection_index, flag_required="document_management"
+        ),
+    )
     tools: list[str] = Field(
         default_factory=list,
         description="The tools to enable for the bot",
@@ -304,6 +312,18 @@ class LLMResponseWithPrompt(LLMResponse, HistoryMixin):
             return []
         return value
 
+    @field_validator("collection_index_id", mode="before")
+    def validate_collection_index_id(cls, value, info: FieldValidationInfo):
+        if not value:
+            return value
+
+        collection = Collection.objects.get(id=value)
+        if collection.llm_provider_id != info.data.get("llm_provider_id"):
+            raise PydanticCustomError(
+                "invalid_collection_index", "The collection index must use the same LLM provider as the node"
+            )
+        return value
+
     def _process(self, input, state: PipelineState, node_id: str) -> PipelineState:
         session: ExperimentSession | None = state.get("experiment_session")
         pipeline_version = state.get("pipeline_version")
@@ -325,6 +345,11 @@ class LLMResponseWithPrompt(LLMResponse, HistoryMixin):
         llm_service = self.get_llm_service()
         if llm_service:
             llm_service.attach_built_in_tools(built_in_tools, tools)
+        if self.collection_index_id:
+            collection = Collection.objects.get(id=self.collection_index_id)
+            builtin_tools = {"type": "file_search", "vector_store_ids": [collection.openai_vector_store_id]}
+            tools.append(builtin_tools)
+
         chat_adapter = ChatAdapter.for_pipeline(
             session=session,
             node=self,

@@ -135,6 +135,9 @@ dev = [
     "pytest-cov",
     "pytest-xdist",
 ]
+docs = [
+    "mkdocs-material>=9.6.12",
+]
 
 prod = [
     "gunicorn",
