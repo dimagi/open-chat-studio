@@ -55,7 +55,9 @@ def _index_collection_files(collection_id: int, all_files: bool) -> list[str]:
     for collection_file in queryset.filter(id__in=collection_file_ids).select_related("file").iterator(100):
         strategy = collection_file.metadata.get("chunking_strategy", default_chunking_strategy)
         strategy_file_map[(strategy["chunk_size"], strategy["chunk_overlap"])].append(collection_file)
-        previous_remote_file_ids.append(collection_file.file.external_id)
+
+        if collection_file.file.external_id:
+            previous_remote_file_ids.append(collection_file.file.external_id)
 
     # Second, for each chunking strategy, upload files to the vector store
     for strategy_tuple, collection_files in strategy_file_map.items():
