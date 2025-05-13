@@ -10,6 +10,7 @@ from langchain_core.language_models import BaseChatModel
 from langchain_core.load import dumpd
 from langchain_core.messages import HumanMessage
 from langchain_core.runnables import RunnableConfig, ensure_config
+from langchain_core.tools import BaseTool
 from langchain_google_genai import ChatGoogleGenerativeAI
 from langchain_openai.chat_models import AzureChatOpenAI, ChatOpenAI
 from openai import OpenAI
@@ -115,6 +116,9 @@ class LlmService(pydantic.BaseModel):
     def get_callback_handler(self, model: str) -> BaseCallbackHandler:
         raise NotImplementedError
 
+    def attach_built_in_tools(self, built_in_tools: list[str], tools: list[BaseTool]):
+        raise NotImplementedError
+
 
 class OpenAIGenericService(LlmService):
     openai_api_key: str
@@ -168,6 +172,13 @@ class OpenAILlmService(OpenAIGenericService):
         )
         return transcript.text
 
+    def attach_built_in_tools(self, built_in_tools: list[str], tools: list[BaseTool]):
+        if not built_in_tools:
+            return
+        for tool_name in built_in_tools:
+            if tool_name == "web-search":
+                tools.append({"type": "web_search_preview"})
+
 
 class AzureLlmService(LlmService):
     openai_api_key: str
@@ -186,6 +197,9 @@ class AzureLlmService(LlmService):
     def get_callback_handler(self, model: str) -> BaseCallbackHandler:
         return TokenCountingCallbackHandler(OpenAITokenCounter(model))
 
+    def attach_built_in_tools(self, built_in_tools: list[str], tools: list[BaseTool]):
+        pass
+
 
 class AnthropicLlmService(LlmService):
     anthropic_api_key: str
@@ -201,6 +215,9 @@ class AnthropicLlmService(LlmService):
 
     def get_callback_handler(self, model: str) -> BaseCallbackHandler:
         return TokenCountingCallbackHandler(AnthropicTokenCounter())
+
+    def attach_built_in_tools(self, built_in_tools: list[str], tools: list[BaseTool]):
+        pass
 
 
 class DeepSeekLlmService(LlmService):
@@ -218,6 +235,9 @@ class DeepSeekLlmService(LlmService):
     def get_callback_handler(self, model: str) -> BaseCallbackHandler:
         return TokenCountingCallbackHandler(OpenAITokenCounter(model))
 
+    def attach_built_in_tools(self, built_in_tools: list[str], tools: list[BaseTool]):
+        pass
+
 
 class GoogleLlmService(LlmService):
     google_api_key: str
@@ -231,3 +251,6 @@ class GoogleLlmService(LlmService):
 
     def get_callback_handler(self, model: str) -> BaseCallbackHandler:
         return TokenCountingCallbackHandler(GeminiTokenCounter(model, self.google_api_key))
+
+    def attach_built_in_tools(self, built_in_tools: list[str], tools: list[BaseTool]):
+        pass

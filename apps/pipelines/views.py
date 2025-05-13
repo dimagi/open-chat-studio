@@ -22,7 +22,7 @@ from django_tables2 import SingleTableView
 from apps.assistants.models import OpenAiAssistant
 from apps.custom_actions.form_utils import get_custom_action_operation_choices
 from apps.documents.models import Collection
-from apps.experiments.models import AgentTools, Experiment, SourceMaterial
+from apps.experiments.models import AgentTools, BuiltInTools, Experiment, SourceMaterial
 from apps.pipelines.flow import FlowPipelineData
 from apps.pipelines.models import Pipeline, PipelineRun
 from apps.pipelines.nodes.base import OptionsSource
@@ -190,6 +190,7 @@ def _pipeline_node_parameter_values(team, llm_providers, llm_provider_models):
         ),
         OptionsSource.agent_tools: [_option(value, label) for value, label in AgentTools.user_tool_choices()],
         OptionsSource.custom_actions: [_option(val, display_val) for val, display_val in custom_action_operations],
+        OptionsSource.built_in_tools: [_option(value, label) for value, label in BuiltInTools.built_in_tools()],
     }
 
 
