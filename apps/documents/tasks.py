@@ -1,6 +1,8 @@
+import contextlib
 import logging
 from collections import defaultdict
 
+import openai
 from celery.app import shared_task
 from taskbadger.celery import Task as TaskbadgerTask
 
@@ -124,4 +126,5 @@ def _cleanup_old_vector_store(llm_provider_id: int, vector_store_id: str, file_i
     old_manager.delete_vector_store(vector_store_id)
 
     for file_id in file_ids:
-        old_manager.client.files.delete(file_id)
+        with contextlib.suppress(openai.NotFoundError):
+            old_manager.client.files.delete(file_id)
