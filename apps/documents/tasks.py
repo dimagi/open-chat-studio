@@ -15,17 +15,17 @@ logger = logging.getLogger("ocs.documents.tasks.upload_files_to_openai")
 
 @shared_task(base=TaskbadgerTask, ignore_result=True)
 def index_collection_files_task(collection_id: int):
-    _index_collection_files(collection_id, all_files=False)
+    index_collection_files(collection_id, all_files=False)
 
 
 @shared_task(base=TaskbadgerTask, ignore_result=True)
 def migrate_vector_stores(collection_id: int, from_vector_store_id: str, from_llm_provider_id: int):
     """Migrate vector stores from one provider to another"""
-    previous_remote_ids = _index_collection_files(collection_id, all_files=True)
+    previous_remote_ids = index_collection_files(collection_id, all_files=True)
     _cleanup_old_vector_store(from_llm_provider_id, from_vector_store_id, previous_remote_ids)
 
 
-def _index_collection_files(collection_id: int, all_files: bool) -> list[str]:
+def index_collection_files(collection_id: int, all_files: bool) -> list[str]:
     """
     Upload files to OpenAI and link them to the vector store. If `all_files` is `False`, only the files with a Pending
     status will be uploaded. If `all_files` is `True`, all files will be uploaded.

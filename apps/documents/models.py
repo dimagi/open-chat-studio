@@ -5,6 +5,7 @@ from django.utils.translation import gettext_lazy as _
 from field_audit import audit_fields
 from field_audit.models import AuditingManager
 
+from apps.assistants.sync import OpenAIVectorStoreManager
 from apps.experiments.versioning import VersionDetails, VersionField, VersionsMixin, VersionsObjectManagerMixin
 from apps.teams.models import BaseTeamModel
 from apps.utils.conversions import bytes_to_megabytes
@@ -113,19 +114,43 @@ class Collection(BaseTeamModel, VersionsMixin):
 
     @transaction.atomic()
     def create_new_version(self, save=True):
+        """
+        When a collection is indexed, we need to create a new vector store when versioning and upload the file versions
+        to it.
+        """
+        from apps.documents.tasks import index_collection_files
+
         version_number = self.version_number
         self.version_number = version_number + 1
         self.save(update_fields=["version_number"])
 
         new_version = super().create_new_version(save=False)
         new_version.version_number = version_number
+        vector_store_present = bool(new_version.openai_vector_store_id)
+        new_version.openai_vector_store_id = ""
         new_version.save()
 
         file_versions = []
         for file in self.files.iterator(chunk_size=15):
-            file_versions.append(file.create_new_version())
+            file_version = file.create_new_version(save=False)
+            file_version.external_id = ""
+            file_version.save()
+            file_versions.append(file_version)
 
         new_version.files.add(*file_versions)
+
+        if self.is_index and vector_store_present:
+            # Create vector store at llm service
+            # Optimization suggestion: Only when the file set changed, should we create a new vector store at the
+            # provider
+            manager = OpenAIVectorStoreManager.from_llm_provider(new_version.llm_provider)
+            version_name = f"{new_version.index_name} v{new_version.version_number}"
+            new_version.openai_vector_store_id = manager.create_vector_store(name=version_name)
+            new_version.save(update_fields=["openai_vector_store_id"])
+
+            # Upload files to vector store
+            index_collection_files(new_version.id, all_files=True)
+
         return new_version
 
     def get_absolute_url(self):
