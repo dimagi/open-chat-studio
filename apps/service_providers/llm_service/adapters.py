@@ -141,15 +141,14 @@ class ChatAdapter(BaseAdapter):
         # TODO: change this to something specific to the current chat message
         return self.session.chat.metadata.get("cancelled", False)
 
-    def get_output_message_metadata(self, file_citations: list) -> dict:
-        """`file_citations` is a list of external IDs of files that are cited in the response."""
-        if not file_citations:
+    def get_output_message_metadata(self, cited_files: list[File]) -> dict:
+        """`cited_files` is a list of files that are cited in the response."""
+        if not cited_files:
             return {}
 
-        files = File.objects.filter(external_id__in=file_citations)
         resource, _created = self.session.chat.attachments.get_or_create(tool_type="file_citation")
-        resource.files.add(*files)
-        return {"cited_files": [files.id for file in files]}
+        resource.files.add(*cited_files)
+        return {"cited_files": [file.id for file in cited_files]}
 
 
 class AssistantAdapter(BaseAdapter):

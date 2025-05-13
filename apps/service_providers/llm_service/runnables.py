@@ -1,6 +1,7 @@
 import logging
 import re
 import time
+from dataclasses import dataclass
 from typing import TYPE_CHECKING, Any, Literal
 
 import openai
@@ -33,6 +34,12 @@ if TYPE_CHECKING:
     from apps.channels.datamodels import Attachment
 
 logger = logging.getLogger("ocs.runnables")
+
+
+@dataclass
+class LlmChatResponse:
+    text: str
+    cited_files: list[File]
 
 
 class GenerationError(Exception):
@@ -136,8 +143,10 @@ class LLMChat(RunnableSerializable[str, ChainOutput]):
         try:
             if include_conversation_history:
                 self._populate_memory(input)
-            ai_message, file_citations = self._get_output_check_cancellation(input, merged_config)
-            ai_message_metadata = self.adapter.get_output_message_metadata(file_citations)
+
+            llm_response = self._get_output_check_cancellation(input, merged_config)
+            ai_message = llm_response.text
+            ai_message_metadata = self.adapter.get_output_message_metadata(llm_response.cited_files)
 
             result = ChainOutput(
                 output=ai_message, prompt_tokens=callback.prompt_tokens, completion_tokens=callback.completion_tokens
@@ -160,25 +169,25 @@ class LLMChat(RunnableSerializable[str, ChainOutput]):
     def _get_input(self, input: str):
         return {self.input_key: self.adapter.format_input(input)}
 
-    def _get_output_check_cancellation(self, input, config):
+    def _get_output_check_cancellation(self, input, config) -> LlmChatResponse:
         chain = self._build_chain().with_config(run_name="get_llm_response")
 
         output = ""
         context = self._get_input_chain_context()
 
-        file_citations = []
+        cited_files = []
         for token in chain.stream({**self._get_input(input), **context}, config):
             output += self._parse_output(token)
-            file_citations.extend(self._get_file_citations(token))
+            cited_files.extend(self._get_cited_files(token))
             if self._chat_is_cancelled():
-                return output, file_citations
+                break
 
-        return output, set(file_citations)
+        return LlmChatResponse(text=output, cited_files=cited_files)
 
     def _parse_output(self, output):
         return output
 
-    def _get_file_citations(self, output):
+    def _get_cited_files(self, token: str | dict) -> list[File]:
         # Files are referenced by agents only
         return []
 
@@ -242,23 +251,23 @@ class AgentLLMChat(LLMChat):
         if isinstance(output, list):
             # Responses API responses are lists
             return "\n".join([o["text"] for o in output])
-        else:
-            return output
 
-    def _get_file_citations(self, token):
+        return output
+
+    def _get_cited_files(self, token: str | dict) -> list[File]:
         """
-        Return a list of files' external ids cited in the token.
+        Return a list of files that are referenced in the token
         """
-        annotations = []
+        files = []
         if isinstance(token, dict):
             # is the same structure used when other services cite files?
             outputs = token.get("output", "")
             if isinstance(outputs, list):
                 for output in outputs:
                     annotation_entries = output.get("annotations", [])
-                    file_names = [entry["file_id"] for entry in annotation_entries]
-                    annotations.extend(file_names)
-        return annotations
+                    file_ids = [entry["file_id"] for entry in annotation_entries]
+                    files.extend(list(File.objects.filter(external_id__in=file_ids).all()))
+        return files
 
     def _build_chain(self) -> Runnable[dict[str, Any], dict]:
         tools = self.adapter.get_allowed_tools()
