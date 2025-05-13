@@ -249,7 +249,7 @@ class AgentLLMChat(LLMChat):
         """Filter out tools that are not OCS tools. `AgentExecutor` expects a list of runnable tools, so we need to
         remove all tools that are run by the LLM provider
         """
-        return [t for t in tools if not isinstance(t, (dict, GenAITool))]
+        return [t for t in tools if not isinstance(t, (dict | GenAITool))]
 
     @property
     def prompt(self):
