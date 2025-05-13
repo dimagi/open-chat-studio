@@ -18,7 +18,7 @@ from apps.assistants.sync import OpenAIVectorStoreManager, delete_file_from_open
 from apps.documents.forms import CollectionForm
 from apps.documents.models import Collection, CollectionFile, FileStatus
 from apps.documents.tables import CollectionsTable
-from apps.documents.tasks import migrate_vector_stores, upload_files_to_vector_store_task
+from apps.documents.tasks import index_collection_files_task, migrate_vector_stores
 from apps.files.models import File
 from apps.generics.chips import Chip
 from apps.teams.decorators import login_and_team_required
@@ -89,12 +89,12 @@ def add_collection_files(request, team_slug: str, pk: int):
             }
             metadata["chunking_strategy"] = chunking_strategy
 
-        collection_files = CollectionFile.objects.bulk_create(
+        CollectionFile.objects.bulk_create(
             [CollectionFile(collection=collection, file=file, status=status, metadata=metadata) for file in files]
         )
 
     if collection.is_index:
-        upload_files_to_vector_store_task.delay([f.id for f in collection_files], chuking_strategy=chunking_strategy)
+        index_collection_files_task.delay(collection.id)
 
     messages.success(request, f"Added {len(files)} files to collection")
     return redirect("documents:single_collection_home", team_slug=team_slug, pk=pk)

@@ -6,8 +6,8 @@ from apps.assistants.sync import OpenAiSyncError
 from apps.documents.models import CollectionFile, FileStatus
 from apps.documents.tasks import (
     _upload_files_to_vector_store,
+    index_collection_files_task,
     migrate_vector_stores,
-    upload_files_to_vector_store_task,
 )
 from apps.files.models import File
 from apps.utils.factories.documents import CollectionFactory
@@ -49,9 +49,7 @@ class TestUploadFilesToVectorStore:
         create_files_remote.return_value = ["ext-file-id"]
         mock_vector_store_manager.link_files_to_vector_store.return_value = "vs_123"
 
-        upload_files_to_vector_store_task(
-            collection_file_ids=[collection_file.id], chuking_strategy={"chunk_size": 1000, "chunk_overlap": 100}
-        )
+        index_collection_files_task(collection_file.collection_id)
         # Verify file status was updated
         collection_file.refresh_from_db()
         assert collection_file.status == FileStatus.COMPLETED
@@ -66,9 +64,7 @@ class TestUploadFilesToVectorStore:
         """Test handling of upload failures"""
         create_files_remote.side_effect = Exception("Upload failed")
 
-        upload_files_to_vector_store_task(
-            collection_file_ids=[collection_file.id], chuking_strategy={"chunk_size": 1000, "chunk_overlap": 100}
-        )
+        index_collection_files_task(collection_file.collection_id)
 
         collection_file.refresh_from_db()
         assert collection_file.status == FileStatus.FAILED
@@ -78,9 +74,7 @@ class TestUploadFilesToVectorStore:
         """Test handling of OpenAiSyncError during file upload"""
         mock_vector_store_manager.link_files_to_vector_store.side_effect = OpenAiSyncError("Failed to sync with OpenAI")
 
-        upload_files_to_vector_store_task(
-            collection_file_ids=[collection_file.id], chuking_strategy={"chunk_size": 1000, "chunk_overlap": 100}
-        )
+        index_collection_files_task(collection_file.collection_id)
 
         collection_file.refresh_from_db()
         assert collection_file.status == FileStatus.FAILED
