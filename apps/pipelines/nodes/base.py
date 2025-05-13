@@ -249,7 +249,13 @@ class BasePipelineNode(BaseModel, ABC):
             ]
         elif len(incoming_edges) == 1:
             incoming_edge = incoming_edges[0]
-            state["node_input"] = state["outputs"][incoming_edge]["message"]
+            try:
+                state["node_input"] = state["outputs"][incoming_edge]["message"]
+            except KeyError:
+                for node_data in state["outputs"].values():
+                    if "node_id" in node_data and node_data["node_id"] == incoming_edge:
+                        state["node_input"] = node_data["output"]
+                        break
             state["node_source"] = incoming_edge
         else:
             # state.path is a list of tuples (previous, current, next)
