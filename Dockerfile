@@ -55,7 +55,7 @@ RUN --mount=target=/var/lib/apt/lists,type=cache,sharing=locked \
     apt-get update \
     && apt-get install -y \
     # psycopg2 dependencies
-    libpq-dev \
+    libpq5 \
     # Translations dependencies
     gettext \
     # audio/video dependencies
