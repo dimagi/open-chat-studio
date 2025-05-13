@@ -302,7 +302,7 @@ class LLMResponseWithPrompt(LLMResponse, HistoryMixin):
                 "invalid_prompt", e.error_dict["prompt"][0].message, {"field": "prompt"}
             ) from None
 
-    @field_validator("tools", mode="before")
+    @field_validator("tools", "built_in_tools", mode="before")
     def ensure_value(cls, value: str):
         return value or []
 

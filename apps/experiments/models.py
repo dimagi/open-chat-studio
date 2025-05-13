@@ -524,8 +524,8 @@ class BuiltInTools(models.TextChoices):
     RECURRING_REMINDER = "web-search", gettext("Web Search")
     ONE_OFF_REMINDER = "code-execution", gettext("Code Execution")
 
-    @classmethod
-    def built_in_tools(cls) -> list["AgentTools"]:
+    @staticmethod
+    def built_in_tools() -> list["BuiltInTools"]:
         return [(tool.value, tool.label) for tool in BuiltInTools]
 
 
