@@ -341,7 +341,7 @@ class LLMResponseWithPrompt(LLMResponse, HistoryMixin):
 
         node = Node.objects.get(flow_id=node_id, pipeline__version_number=pipeline_version)
         tools = get_node_tools(node, session, attachment_callback=history_manager.attach_file_id)
-        built_in_tools = node.params.get("built_in_tools")
+        built_in_tools = self.built_in_tools
         llm_service = self.get_llm_service()
         if llm_service:
             llm_service.attach_built_in_tools(built_in_tools, tools)
@@ -358,7 +358,6 @@ class LLMResponseWithPrompt(LLMResponse, HistoryMixin):
             tools=tools,
             disabled_tools=self.disabled_tools,
         )
-
         allowed_tools = chat_adapter.get_allowed_tools()
         if len(tools) != len(allowed_tools):
             self.logger.info(

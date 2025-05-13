@@ -3,6 +3,7 @@ from time import sleep
 from typing import Any
 
 import pydantic
+from google.ai.generativelanguage_v1beta.types import Tool as GenAITool
 from langchain.agents.openai_assistant import OpenAIAssistantRunnable as BrokenOpenAIAssistantRunnable
 from langchain_anthropic import ChatAnthropic
 from langchain_core.callbacks import BaseCallbackHandler, CallbackManager
@@ -178,6 +179,8 @@ class OpenAILlmService(OpenAIGenericService):
         for tool_name in built_in_tools:
             if tool_name == "web-search":
                 tools.append({"type": "web_search_preview"})
+            else:
+                raise ValueError(f"Unsupported built-in tool for openai: '{tool_name}'")
 
 
 class AzureLlmService(LlmService):
@@ -253,4 +256,12 @@ class GoogleLlmService(LlmService):
         return TokenCountingCallbackHandler(GeminiTokenCounter(model, self.google_api_key))
 
     def attach_built_in_tools(self, built_in_tools: list[str], tools: list[BaseTool]):
-        pass
+        if not built_in_tools:
+            return
+        for tool_name in built_in_tools:
+            if tool_name == "web-search":
+                tools.append(GenAITool(google_search={}))
+            elif tool_name == "code-execution":
+                tools.append(GenAITool(code_execution={}))
+            else:
+                raise ValueError(f"Unsupported built-in tool for gemini: '{tool_name}'")
