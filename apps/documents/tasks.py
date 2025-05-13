@@ -43,7 +43,6 @@ def _index_collection_files(collection_id: int, all_files: bool) -> list[str]:
         collection_file_ids = queryset.filter(status=FileStatus.PENDING).values_list("id", flat=True)
 
     queryset.filter(id__in=collection_file_ids).update(status=FileStatus.IN_PROGRESS)
-    queryset.update(status=FileStatus.IN_PROGRESS)
 
     previous_remote_file_ids = []
 
