@@ -43,21 +43,17 @@ def _index_collection_files(collection_id: int, all_files: bool) -> list[str]:
         collection_file_ids = queryset.filter(status=FileStatus.PENDING).values_list("id", flat=True)
 
     queryset.filter(id__in=collection_file_ids).update(status=FileStatus.IN_PROGRESS)
-
     previous_remote_file_ids = []
 
     # Link files to the new vector store
     # First, sort by chunking strategy
-    try:
-        strategy_file_map = defaultdict(list)
-        for collection_file in queryset.select_related("file").iterator(100):
-            previous_remote_file_ids.append(collection_file.file.external_id)
-            strategy = collection_file.metadata["chunking_strategy"]
-            strategy_file_map[(strategy["chunk_size"], strategy["chunk_overlap"])].append(collection_file)
-    except Exception:
-        logger.exception("Failed to upload files to OpenAI")
-        queryset.update(status=FileStatus.FAILED)
-        return previous_remote_file_ids
+    strategy_file_map = defaultdict(list)
+    default_chunking_strategy = {"chunk_size": 800, "chunk_overlap": 400}
+
+    for collection_file in queryset.filter(id__in=collection_file_ids).select_related("file").iterator(100):
+        strategy = collection_file.metadata.get("chunking_strategy", default_chunking_strategy)
+        strategy_file_map[(strategy["chunk_size"], strategy["chunk_overlap"])].append(collection_file)
+        previous_remote_file_ids.append(collection_file.file.external_id)
 
     # Second, for each chunking strategy, upload files to the vector store
     for strategy_tuple, collection_files in strategy_file_map.items():
