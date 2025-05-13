@@ -85,7 +85,7 @@ class Collection(BaseTeamModel, VersionsMixin):
 
     @property
     def index_name(self) -> str:
-        return f"collection-{self.team.slug}-{self.name}-{self.id}"
+        return f"collection-{self.team.slug}-{slugify(self.name)}-{self.id}"
 
     @property
     def size(self) -> float:
