@@ -212,8 +212,12 @@ class PipelineState(dict):
     ) -> Self:
         return cls(
             outputs={
-                node_id: {"output_handle": output_handle, "message": output},
-                node_name: {"route": conditional_branch, "output": output},
+                node_name: {
+                    "node_id": node_id,
+                    "output_handle": output_handle,
+                    "route": conditional_branch,
+                    "output": output,
+                },
             },
             temp_state={"outputs": {node_name: output}},
             output_message_tags=tags,
