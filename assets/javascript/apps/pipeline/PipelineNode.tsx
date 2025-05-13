@@ -101,7 +101,10 @@ function NodeHeader({nodeId, nodeSchema, nodeName}: {nodeId: string, nodeSchema:
   const icon = nodeSchema["ui:icon"];
   return (
       <div>
-        {icon && <i className={`text-primary/70 absolute ml-2 mt-1 top-4 left-2 ${icon}`}></i>}
+        {icon &&
+          <div className="text-primary/70 absolute ml-2 mt-1 top-4 left-2 tooltip tooltip-top" data-tip={nodeSchema["ui:label"]}>
+            <i className={icon}></i>
+          </div>}
         <div className="m-1 text-lg font-bold text-center align-middle">
           <DeprecationNotice nodeSchema={nodeSchema}/>
           {header}
