@@ -51,7 +51,8 @@ class BaseAdapter:
 
     def get_allowed_tools(self):
         if self.disabled_tools:
-            return [tool for tool in self.tools if tool.name not in self.disabled_tools]
+            # Modl builtin tools doesn't have a name attribute and are dicts
+            return [tool for tool in self.tools if hasattr(tool, "name") and tool.name not in self.disabled_tools]
         return self.tools
 
 
