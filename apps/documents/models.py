@@ -100,7 +100,9 @@ class Collection(BaseTeamModel, VersionsMixin):
         return list(self.files.values_list("name", flat=True))
 
     def get_node_references(self) -> models.QuerySet:
-        return get_related_pipelines_queryset(self, "collection_id").distinct()
+        index_references = get_related_pipelines_queryset(self, "collection_index_id").distinct()
+        collection_references = get_related_pipelines_queryset(self, "collection_id").distinct()
+        return index_references | collection_references
 
     @property
     def version_details(self) -> VersionDetails:
