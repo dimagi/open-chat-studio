@@ -63,7 +63,9 @@ class RenderTemplate(PipelineNode):
 
     model_config = ConfigDict(
         json_schema_extra=NodeSchema(
-            label="Render a template", documentation_link=settings.DOCUMENTATION_LINKS["node_template"]
+            label="Render a template",
+            icon="fa-solid fa-robot",
+            documentation_link=settings.DOCUMENTATION_LINKS["node_template"],
         )
     )
     template_string: str = Field(
@@ -245,7 +247,11 @@ class LLMResponseWithPrompt(LLMResponse, HistoryMixin):
     """Uses and LLM to respond to the input."""
 
     model_config = ConfigDict(
-        json_schema_extra=NodeSchema(label="LLM", documentation_link=settings.DOCUMENTATION_LINKS["node_llm"])
+        json_schema_extra=NodeSchema(
+            label="LLM",
+            icon="fa-solid fa-wand-magic-sparkles",
+            documentation_link=settings.DOCUMENTATION_LINKS["node_llm"],
+        )
     )
 
     source_material_id: OptionalInt = Field(
@@ -375,7 +381,9 @@ class SendEmail(PipelineNode):
 
     model_config = ConfigDict(
         json_schema_extra=NodeSchema(
-            label="Send an email", documentation_link=settings.DOCUMENTATION_LINKS["node_email"]
+            label="Send an email",
+            icon="fa-solid fa-envelope",
+            documentation_link=settings.DOCUMENTATION_LINKS["node_email"],
         )
     )
 
@@ -493,6 +501,7 @@ class RouterNode(RouterMixin, PipelineRouterNode, HistoryMixin):
     model_config = ConfigDict(
         json_schema_extra=NodeSchema(
             label="LLM Router",
+            icon="fa-solid fa-arrows-split-up-and-left",
             documentation_link=settings.DOCUMENTATION_LINKS["node_llm_router"],
             field_order=[
                 "llm_provider_id",
@@ -571,6 +580,7 @@ class StaticRouterNode(RouterMixin, PipelineRouterNode):
     model_config = ConfigDict(
         json_schema_extra=NodeSchema(
             label="Static Router",
+            icon="fa-solid fa-arrows-split-up-and-left",
             documentation_link=settings.DOCUMENTATION_LINKS["node_static_router"],
             field_order=["data_source", "route_key", "keywords"],
         )
@@ -747,6 +757,7 @@ class ExtractStructuredData(ExtractStructuredDataNodeMixin, LLMResponse, Structu
     model_config = ConfigDict(
         json_schema_extra=NodeSchema(
             label="Extract Structured Data",
+            icon="fa-solid fa-database",
             documentation_link=settings.DOCUMENTATION_LINKS["node_extract_structured_data"],
         )
     )
@@ -768,6 +779,7 @@ class ExtractParticipantData(ExtractStructuredDataNodeMixin, LLMResponse, Struct
     model_config = ConfigDict(
         json_schema_extra=NodeSchema(
             label="Update Participant Data",
+            icon="fa-solid fa-user-pen",
             documentation_link=settings.DOCUMENTATION_LINKS["node_update_participant_data"],
         )
     )
@@ -839,7 +851,9 @@ class AssistantNode(PipelineNode):
 
     model_config = ConfigDict(
         json_schema_extra=NodeSchema(
-            label="OpenAI Assistant", documentation_link=settings.DOCUMENTATION_LINKS["node_assistant"]
+            label="OpenAI Assistant",
+            icon="fa-solid fa-user-tie",
+            documentation_link=settings.DOCUMENTATION_LINKS["node_assistant"],
         )
     )
 
@@ -923,7 +937,11 @@ class CodeNode(PipelineNode):
     """Runs python"""
 
     model_config = ConfigDict(
-        json_schema_extra=NodeSchema(label="Python Node", documentation_link=settings.DOCUMENTATION_LINKS["node_code"])
+        json_schema_extra=NodeSchema(
+            label="Python Node",
+            icon="fa-solid fa-file-code",
+            documentation_link=settings.DOCUMENTATION_LINKS["node_code"],
+        )
     )
     code: str = Field(
         default=DEFAULT_FUNCTION,

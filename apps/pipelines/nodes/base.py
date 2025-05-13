@@ -321,6 +321,7 @@ class UiSchema(BaseModel):
 
 class NodeSchema(BaseModel):
     label: str
+    icon: str = None
     flow_node_type: Literal["pipelineNode", "startNode", "endNode"] = "pipelineNode"
     can_delete: bool = None
     can_add: bool = None
@@ -360,6 +361,8 @@ class NodeSchema(BaseModel):
             schema["ui:order"] = self.field_order
         if self.documentation_link:
             schema["ui:documentation_link"] = self.documentation_link
+        if self.icon:
+            schema["ui:icon"] = self.icon
 
 
 def deprecated_node(cls=None, *, message=None):
