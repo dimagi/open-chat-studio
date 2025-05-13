@@ -606,7 +606,7 @@ class OpenAIVectorStoreManager:
                 )
             return vector_store_id
         except Exception as e:
-            logger.exception(
+            logger.warning(
                 "Failed to link files to OpenAI vector store",
                 extra={"vector_store_id": vector_store_id, "chunking_strategy": chunking_strategy},
             )
