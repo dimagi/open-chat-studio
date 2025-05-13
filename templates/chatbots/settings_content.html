@@ -1,3 +1,4 @@
+{% load form_tags %}
 <div id="settings-wrapper">
   <div class="flex justify-end mb-6">
     {% if edit_mode %}
@@ -38,9 +39,7 @@
     <h4 class="text-md font-bold mb-2">Description</h4>
     <div class="p-4 bg-base-200 rounded-md" id="description-{% if edit_mode %}edit{% else %}content{% endif %}">
       {% if edit_mode %}
-        <div class="form-control w-full">
-          <textarea name="description" rows="3" class="textarea textarea-bordered w-full">{{ experiment.description }}</textarea>
-        </div>
+        {% render_form_fields form "description" %}
       {% else %}
         <p>{{ experiment.description|default:"No description provided" }}</p>
       {% endif %}
@@ -52,45 +51,7 @@
     <div class="p-4 bg-base-200 rounded-md">
       <div class="grid grid-cols-2 gap-4">
         {% if edit_mode %}
-          <div class="form-control">
-            <label class="label"><span class="label-text">Provider</span></label>
-            <select name="voice_provider" class="select select-bordered w-full">
-              <option value="">None</option>
-              {% for provider in available_voice_providers %}
-                <option value="{{ provider.id }}" {% if experiment.voice_provider_id == provider.id %}selected{% endif %}>{{ provider.name }}</option>
-              {% endfor %}
-            </select>
-          </div>
-          <div class="form-control">
-            <label class="label"><span class="label-text">Synthetic Voice</span></label>
-            <select name="synthetic_voice" class="select select-bordered w-full">
-              <option value="">None</option>
-              {% for voice in available_synthetic_voices %}
-                <option value="{{ voice.id }}" {% if experiment.synthetic_voice_id == voice.id %}selected{% endif %}>{{ voice.name }}</option>
-              {% endfor %}
-            </select>
-          </div>
-          <div class="form-control">
-            <label class="label"><span class="label-text">Response Type</span></label>
-            <select name="voice_response_behaviour" class="select select-bordered w-full">
-              <option value="">None</option>
-              <option value="reciprocal" {% if experiment.voice_response_behaviour == 'reciprocal' %}selected{% endif %}>Reciprocal</option>
-              <option value="always" {% if experiment.voice_response_behaviour == 'always' %}selected{% endif %}>Always</option>
-              <option value="never" {% if experiment.voice_response_behaviour == 'never' %}selected{% endif %}>Never</option>
-            </select>
-          </div>
-          <div class="form-control">
-            <label class="label cursor-pointer justify-start">
-              <input type="checkbox" name="echo_transcript" class="checkbox" {% if experiment.echo_transcript %}checked{% endif %}>
-              <span class="ml-2">Echo Transcript</span>
-            </label>
-          </div>
-          <div class="form-control">
-            <label class="label cursor-pointer justify-start">
-              <input type="checkbox" name="use_processor_bot_voice" class="checkbox" {% if experiment.use_processor_bot_voice %}checked{% endif %}>
-              <span class="ml-2">Use Processor Bot Voice</span>
-            </label>
-          </div>
+          {% render_form_fields form "voice_provider" "synthetic_voice" "voice_response_behaviour" "echo_transcript" "use_processor_bot_voice" %}
         {% else %}
           <div>
             <span class="font-semibold">Provider:</span>
@@ -121,21 +82,7 @@
     <h4 class="text-md font-bold mb-2">Tracing</h4>
     <div class="p-4 bg-base-200 rounded-md">
       {% if edit_mode %}
-        <div class="form-control mb-2">
-          <label class="label"><span class="label-text">Trace Provider</span></label>
-          <select name="trace_provider" class="select select-bordered w-full">
-            <option value="">None</option>
-            {% for provider in available_trace_providers %}
-              <option value="{{ provider.id }}" {% if experiment.trace_provider_id == provider.id %}selected{% endif %}>{{ provider.name }}</option>
-            {% endfor %}
-          </select>
-        </div>
-        <div class="form-control">
-          <label class="label cursor-pointer justify-start">
-            <input type="checkbox" name="debug_mode_enabled" class="checkbox" {% if experiment.debug_mode_enabled %}checked{% endif %}>
-            <span class="ml-2">Debug Mode</span>
-          </label>
-        </div>
+        {% render_form_fields form "trace_provider" "debug_mode_enabled" %}
       {% else %}
         <div>
           <span class="font-semibold">Trace Provider:</span>
@@ -153,21 +100,7 @@
     <h4 class="text-md font-bold mb-2">Consent</h4>
     <div class="p-4 bg-base-200 rounded-md">
       {% if edit_mode %}
-        <div class="form-control mb-2">
-          <label class="label cursor-pointer justify-start">
-            <input type="checkbox" name="conversational_consent_enabled" class="checkbox" {% if experiment.conversational_consent_enabled %}checked{% endif %}>
-            <span class="ml-2">Conversational Consent</span>
-          </label>
-        </div>
-        <div class="form-control">
-          <label class="label"><span class="label-text">Consent Form</span></label>
-          <select name="consent_form" class="select select-bordered w-full">
-            <option value="">None</option>
-            {% for form in available_consent_forms %}
-              <option value="{{ form.id }}" {% if experiment.consent_form_id == form.id %}selected{% endif %}>{{ form.name }}</option>
-            {% endfor %}
-          </select>
-        </div>
+        {% render_form_fields form "conversational_consent_enabled"%}
       {% else %}
         <div>
           <span class="font-semibold">Conversational Consent:</span>
@@ -185,24 +118,7 @@
     <h4 class="text-md font-bold mb-2">Surveys</h4>
     <div class="p-4 bg-base-200 rounded-md">
       {% if edit_mode %}
-        <div class="form-control mb-2">
-          <label class="label"><span class="label-text">Pre-Survey</span></label>
-          <select name="pre_survey" class="select select-bordered w-full">
-            <option value="">None</option>
-            {% for survey in available_surveys %}
-              <option value="{{ survey.id }}" {% if experiment.pre_survey_id == survey.id %}selected{% endif %}>{{ survey.name }}</option>
-            {% endfor %}
-          </select>
-        </div>
-        <div class="form-control">
-          <label class="label"><span class="label-text">Post-Survey</span></label>
-          <select name="post_survey" class="select select-bordered w-full">
-            <option value="">None</option>
-            {% for survey in available_surveys %}
-              <option value="{{ survey.id }}" {% if experiment.post_survey_id == survey.id %}selected{% endif %}>{{ survey.name }}</option>
-            {% endfor %}
-          </select>
-        </div>
+        {% render_form_fields form "pre_survey" "post_survey" %}
       {% else %}
         <div>
           <span class="font-semibold">Pre-Survey:</span>
@@ -223,9 +139,11 @@
         <div class="form-control">
           <textarea name="participant_allowlist" rows="5" class="textarea textarea-bordered w-full" placeholder="Enter one identifier per line">{% for participant in experiment.participant_allowlist %}{{ participant }}
           {% endfor %}</textarea>
-          <label class="label">
-            <span class="label-text-alt">Enter one identifier per line. Phone numbers should be in E164 format (e.g., +27123456789)</span>
-          </label>
+          <div class="text-xs text-gray-500 mt-1 mb-2">
+            To limit the set of participants that can chat with this bot, simply add their identifiers in this list.
+            When the list is empty, the bot will accessible via its public link.
+          </div>
+          {% include "generic/copy_chip.html" with copy_element_id="id_participant_allowlist" action_text="Copy participant list" extra_styles="btn-ghost" %}
         </div>
       {% else %}
         {% if experiment.participant_allowlist %}
@@ -247,9 +165,7 @@
     <h4 class="text-md font-bold mb-2">Seed Message</h4>
     <div class="p-4 bg-base-200 rounded-md" id="seed_message-{% if edit_mode %}edit{% else %}content{% endif %}">
       {% if edit_mode %}
-        <div class="form-control">
-          <textarea name="seed_message" rows="3" class="textarea textarea-bordered w-full">{{ experiment.seed_message }}</textarea>
-        </div>
+        {% render_form_fields form "seed_message" %}
       {% else %}
         <p>{{ experiment.seed_message|default:"No seed message configured" }}</p>
       {% endif %}

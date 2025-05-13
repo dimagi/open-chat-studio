@@ -14,6 +14,7 @@ from apps.chat.channels import WebChannel
 from apps.chatbots.forms import ChatbotForm
 from apps.chatbots.tables import ChatbotSessionsTable, ChatbotTable
 from apps.experiments.decorators import experiment_session_view, verify_session_access_cookie
+from apps.experiments.forms import ExperimentForm
 from apps.experiments.models import Experiment, SessionStatus, SyntheticVoice
 from apps.experiments.tables import ExperimentVersionsTable
 from apps.experiments.views import CreateExperiment, ExperimentSessionsTableView, ExperimentVersionsTableView
@@ -53,6 +54,8 @@ def settings_edit_mode(request, team_slug, experiment_id):
     available_consent_forms = request.team.consentform_set.exclude(is_version=True)
     available_surveys = request.team.survey_set.exclude(is_version=True)
 
+    form = ExperimentForm(request=request, instance=experiment)
+
     context = {
         "experiment": experiment,
         "edit_mode": True,
@@ -62,6 +65,7 @@ def settings_edit_mode(request, team_slug, experiment_id):
         "available_consent_forms": available_consent_forms,
         "available_surveys": available_surveys,
         "request": request,
+        "form": form,
     }
 
     return HttpResponse(render_to_string("chatbots/settings_content.html", context, request=request))
