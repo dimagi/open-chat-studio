@@ -258,16 +258,16 @@ class AgentLLMChat(LLMChat):
         """
         Return a list of files that are referenced in the token
         """
-        files = []
+        remote_file_ids = []
         if isinstance(token, dict):
             # is the same structure used when other services cite files?
             outputs = token.get("output", "")
             if isinstance(outputs, list):
                 for output in outputs:
                     annotation_entries = output.get("annotations", [])
-                    remote_file_ids = [entry["file_id"] for entry in annotation_entries]
-                    files.extend(File.objects.filter(external_id__in=remote_file_ids).all())
-        return files
+                    remote_file_ids.extend([entry["file_id"] for entry in annotation_entries])
+
+        return File.objects.filter(external_id__in=remote_file_ids).all()
 
     def _build_chain(self) -> Runnable[dict[str, Any], dict]:
         tools = self.adapter.get_allowed_tools()
