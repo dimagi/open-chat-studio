@@ -30,7 +30,7 @@ class Node(pydantic.BaseModel):
 
     @cached_property
     def pipeline_node_instance(self):
-        return self.pipeline_node_class(_node_id=self.id, _django_node=self.django_node, **self.params)
+        return self.pipeline_node_class(node_id=self.id, django_node=self.django_node, **self.params)
 
 
 class Edge(pydantic.BaseModel):

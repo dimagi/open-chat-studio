@@ -13,7 +13,6 @@ def test_pipline_state_json_serializable():
         messages=["a", "b", "c"],
         outputs={"a": "a", "b": "b", "c": "c"},
         experiment_session=ExperimentSession(id=1),
-        pipeline_version=1,
         temp_state={
             "user_input": "input",
             "outputs": {"a": "a", "b": "b", "c": "c"},

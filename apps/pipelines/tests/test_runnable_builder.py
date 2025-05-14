@@ -93,7 +93,6 @@ def test_full_email_sending_pipeline(get_llm_service, provider, provider_model, 
     state = PipelineState(
         messages=["Ice is not a liquid. When it is melted it turns into water."],
         experiment_session=ExperimentSessionFactory(),
-        pipeline_version=1,
     )
     create_runnable(pipeline, nodes).invoke(state)
     assert len(mail.outbox) == 1
@@ -163,7 +162,7 @@ def test_llm_with_prompt_response(
         end_node(),
     ]
     output = create_runnable(pipeline, nodes).invoke(
-        PipelineState(messages=[user_input], experiment_session=experiment_session, pipeline_version=1)
+        PipelineState(messages=[user_input], experiment_session=experiment_session)
     )["messages"][-1]
     expected_output = (
         f"Node 2: {source_material.material} Node 1: Use this {source_material.material} to answer questions "
@@ -1050,7 +1049,6 @@ def test_multiple_valid_inputs(pipeline):
     state = PipelineState(
         messages=["not hello"],
         experiment_session=experiment_session,
-        pipeline_version=1,
     )
     output = create_runnable(pipeline, nodes, edges, lenient=False).invoke(state)
     assert output["messages"][-1] == "T: not hello"
@@ -1124,7 +1122,6 @@ def test_input_with_format_strings():
     state = PipelineState(
         messages=["Is this it {the thing}"],
         experiment_session=ExperimentSessionFactory.build(),
-        pipeline_version=1,
         temp_state={},
     )
     resp = Passthrough(name="test").process("node_id", [], [], state, {})

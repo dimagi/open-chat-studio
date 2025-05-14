@@ -75,7 +75,6 @@ class PipelineState(dict):
     messages: Annotated[Sequence[Any], operator.add]
     outputs: Annotated[dict, add_messages]
     experiment_session: ExperimentSession
-    pipeline_version: int
     temp_state: Annotated[TempState, add_temp_state_messages]
     input_message_metadata: Annotated[dict, merge_dicts]
     output_message_metadata: Annotated[dict, merge_dicts]
@@ -123,8 +122,8 @@ class BasePipelineNode(BaseModel, ABC):
 
     _config: RunnableConfig | None = None
 
-    _node_id: str
-    _django_node: Any
+    node_id: str = Field(exclude=True)
+    django_node: Any = Field(exclude=True)
 
     name: str = Field(title="Node Name", json_schema_extra={"ui:widget": "node_name"})
 

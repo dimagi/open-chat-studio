@@ -338,7 +338,7 @@ class LLMResponseWithPrompt(LLMResponse, HistoryMixin):
             chat_model=chat_model,
         )
 
-        tools = get_node_tools(self._django_node, session, attachment_callback=history_manager.attach_file_id)
+        tools = get_node_tools(self.django_node, session, attachment_callback=history_manager.attach_file_id)
         if self.collection_index_id:
             collection = Collection.objects.get(id=self.collection_index_id)
             builtin_tools = {"type": "file_search", "vector_store_ids": [collection.openai_vector_store_id]}
