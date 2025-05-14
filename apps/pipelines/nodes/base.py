@@ -137,7 +137,7 @@ class PipelineState(dict):
         node_id_to_name, _ = self._get_node_mappings()
         return node_id_to_name.get(node_id, node_id)
 
-    def get_route(self, node_name: str) -> str | None:
+    def get_selected_route(self, node_name: str) -> str | None:
         """
         Gets the route selected by a specific router node.
         """

@@ -536,8 +536,8 @@ function CodeNodeEditor(
       detail: "Sets the given key in the session's state. Overwrites the current value",
       boost: 1
     }),
-    get_route: snip("get_route(\"${node_name}\")", {
-      label: "get_route",
+    get_selected_route: snip("get_selected_route(\"${router_node_name}\")", {
+      label: "get_selected_route",
       type: "keyword",
       detail: "Gets the route selected by a specific router node",
       boost: 1

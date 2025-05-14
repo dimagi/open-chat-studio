@@ -90,7 +90,7 @@ def code_completion(user_query, current_code, error=None, iteration_count=0) -> 
             Sets the value of the session state's key with the given name to the provided data.
             This will override any existing data.
 
-        def get_route(node_name: str) -> str | None:
+        def get_selected_route(router_node_name: str) -> str | None:
             Returns the route selected by a specific router node with the given name.
             If the node does not exist or has no route defined, it returns `None`.
 
