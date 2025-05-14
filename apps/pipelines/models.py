@@ -290,7 +290,7 @@ class Pipeline(BaseTeamModel, VersionsMixin):
 
         with temporary_session(self.team, user_id) as session:
             runnable = PipelineGraph.build_runnable_from_pipeline(self)
-            input = PipelineState(messages=[input], experiment_session=session, pipeline_version=self.version_number)
+            input = PipelineState(messages=[input], experiment_session=session)
             with patch_executor():
                 output = runnable.invoke(input, config={"max_concurrency": 1})
             output = PipelineState(**output).json_safe()
