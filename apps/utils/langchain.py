@@ -12,7 +12,6 @@ from langchain_core.language_models import BaseLanguageModel
 from langchain_core.messages import AIMessage, AIMessageChunk, BaseMessage, BaseMessageChunk
 from langchain_core.outputs import ChatGeneration, ChatGenerationChunk, ChatResult
 from langchain_core.runnables import RunnableConfig, RunnableSerializable
-from langchain_core.tools import BaseTool
 from langchain_core.utils.function_calling import convert_to_openai_tool
 from langchain_core.utils.pydantic import TypeBaseModel, is_basemodel_subclass
 from openai import OpenAI
@@ -116,8 +115,8 @@ class FakeLlmService(LlmService):
     def get_callback_handler(self, model: str) -> BaseCallbackHandler:
         return TokenCountingCallbackHandler(self.token_counter)
 
-    def attach_built_in_tools(self, built_in_tools: list[str], tools: list[BaseTool]):
-        pass
+    def attach_built_in_tools(self, built_in_tools: list[str]) -> list:
+        return []
 
 
 class FakeAssistant(RunnableSerializable[dict, OutputType]):
