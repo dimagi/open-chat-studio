@@ -1,0 +1,30 @@
+<dialog id="chatbot_copy_modal" class="modal">
+  <div class="modal-box">
+    <h3 class="font-bold text-lg">Copy Chatbot</h3>
+    <p class="py-4">Are you sure you want to create a copy of this chatbot?</p>
+
+    <form method="post" action="{% url 'chatbots:copy' team_slug=team_slug pk=chatbot_id %}" id="copy-chatbot-form">
+      {% csrf_token %}
+      <div class="form-control my-4">
+        <label for="copied-chatbot-name" class="label mb-2">
+          <span class="label-text font-bold">
+            New Chatbot Name
+            <span class="text-red-500">*</span>
+          </span>
+        </label>
+        <input type="text" id="copied-chatbot-name" name="new_name"
+               placeholder="Enter name for copied chatbot"
+               class="input input-bordered w-full"
+               required value="{{ name }} (copy)"/>
+      </div>
+    </form>
+
+    <div class="modal-action">
+      <form method="dialog">
+        <button class="btn">Cancel</button>
+      </form>
+      <button type="submit" class="btn btn-primary" form="copy-chatbot-form">Confirm</button>
+    </div>
+
+  </div>
+</dialog>

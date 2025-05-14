@@ -17,6 +17,7 @@ from telebot import TeleBot
 from telebot.apihelper import ApiTelegramException
 from telebot.util import antiflood, smart_split
 
+from apps.annotations.models import TagCategories
 from apps.channels import audio
 from apps.channels.clients.connect_client import CommCareConnectClient
 from apps.channels.models import ChannelPlatform, ExperimentChannel
@@ -704,6 +705,10 @@ class ChannelBase(ABC):
             session=self.experiment_session, experiment=self.experiment, trace_service=self.trace_service
         )
         trace_info = TraceInfo(name="unsupported message", metadata={"message_type": self.message.content_type})
+        chat_message = ChatMessage.objects.create(
+            chat=self.experiment_session.chat, message_type=ChatMessageType.AI, content=self.message.message_text
+        )
+        chat_message.add_system_tag("unsupported_message_type", TagCategories.ERROR)
         return EventBot(self.experiment_session, self.experiment, trace_info, history_manager).get_user_message(
             UNSUPPORTED_MESSAGE_BOT_PROMPT.format(supported_types=self.supported_message_types)
         )
@@ -1150,7 +1155,7 @@ def _start_experiment_session(
         if timezone:
             participant.update_memory(data={"timezone": timezone}, experiment=working_experiment)
 
-    if participant.experimentsession_set.count() == 1:
+    if participant.experimentsession_set.filter(experiment=working_experiment).count() == 1:
         enqueue_static_triggers.delay(session.id, StaticTriggerType.PARTICIPANT_JOINED_EXPERIMENT)
     enqueue_static_triggers.delay(session.id, StaticTriggerType.CONVERSATION_START)
     return session

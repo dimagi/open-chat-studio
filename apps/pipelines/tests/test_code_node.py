@@ -406,7 +406,6 @@ def test_render_template_with_context_keys(pipeline, experiment_session):
         experiment_session=experiment_session,
         messages=["Cycling"],
         temp_state={"my_key": "example_key"},
-        pipeline_version=1,
         outputs={},
     )
     nodes = [

@@ -135,7 +135,12 @@ def _pipeline_node_parameter_values(team, llm_providers, llm_provider_models):
     """Returns the possible values for each input type"""
     source_materials = SourceMaterial.objects.working_versions_queryset().filter(team=team).values("id", "topic").all()
     assistants = OpenAiAssistant.objects.working_versions_queryset().filter(team=team).values("id", "name").all()
-    collections = Collection.objects.working_versions_queryset().filter(team=team).values("id", "name").all()
+    collections = (
+        Collection.objects.working_versions_queryset().filter(team=team, is_index=False).values("id", "name").all()
+    )
+    collection_indexes = (
+        Collection.objects.working_versions_queryset().filter(team=team, is_index=True).values("id", "name").all()
+    )
 
     def _option(value, label, type_=None, edit_url: str | None = None, max_token_limit=None):
         data = {"value": value, "label": label}
@@ -184,6 +189,16 @@ def _pipeline_node_parameter_values(team, llm_providers, llm_provider_models):
                     label=collection["name"],
                 )
                 for collection in collections
+            ]
+        ),
+        OptionsSource.collection_index: (
+            [_option("", "Select a Collection Index")]
+            + [
+                _option(
+                    value=index["id"],
+                    label=index["name"],
+                )
+                for index in collection_indexes
             ]
         ),
         OptionsSource.agent_tools: [_option(value, label) for value, label in AgentTools.user_tool_choices()],

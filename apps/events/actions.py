@@ -109,6 +109,7 @@ class SendMessageToBotAction(EventActionHandlerBase):
         last_message = session.chat.messages.last()
         if last_message:
             return last_message.content
+        return ""
 
 
 class PipelineStartAction(EventActionHandlerBase):
@@ -133,7 +134,7 @@ class PipelineStartAction(EventActionHandlerBase):
             messages = [session.chat.messages.last().to_langchain_message()]
 
         input = "\n".join(f"{message.type}: {message.content}" for message in messages)
-        state = PipelineState(messages=[input], experiment_session=session, pipeline_version=pipeline.version_number)
+        state = PipelineState(messages=[input], experiment_session=session)
         trace_service = TracingService.create_for_experiment(session.experiment)
         with trace_service.trace(
             trace_name=f"{session.experiment.name} - event pipeline execution",

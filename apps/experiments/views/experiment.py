@@ -499,6 +499,7 @@ def base_single_experiment_view(request, team_slug, experiment_id, template_name
         "deployed_version": deployed_version,
         "field_type_filters": FIELD_TYPE_FILTERS,
         "channel_list": channel_list,
+        "allow_copy": not experiment.child_links.exists(),
         **_get_events_context(experiment, team_slug, request.origin),
     }
     if active_tab != "chatbots":

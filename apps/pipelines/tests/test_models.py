@@ -13,6 +13,7 @@ from apps.pipelines.tests.utils import create_runnable, end_node, llm_response_w
 from apps.utils.factories.assistants import OpenAiAssistantFactory
 from apps.utils.factories.documents import CollectionFactory
 from apps.utils.factories.events import EventActionFactory, ExperimentFactory, StaticTriggerFactory
+from apps.utils.factories.experiment import SourceMaterialFactory
 from apps.utils.factories.pipelines import NodeFactory, PipelineFactory
 from apps.utils.factories.service_provider_factories import (
     LlmProviderFactory,
@@ -68,7 +69,7 @@ class TestVersioningNodes:
             assert original_node_assistant_id == str(assistant.id)
             assert node_version_assistant_id == str(assistant_version.id)
 
-    def test_version_llm_with_prompt_node(self):
+    def test_version_llm_with_prompt_node_with_collection(self):
         node_type = LLMResponseWithPrompt.__name__
         collection = CollectionFactory()
         pipeline = PipelineFactory()
@@ -81,6 +82,19 @@ class TestVersioningNodes:
         pipeline.create_new_version()
         assert node.versions.first().params["collection_id"] == str(collection.versions.first().id)
         assert node.versions.last().params["collection_id"] == str(collection.versions.first().id)
+
+    def test_version_llm_with_prompt_node_with_source_material(self):
+        node_type = LLMResponseWithPrompt.__name__
+        source_material = SourceMaterialFactory()
+        pipeline = PipelineFactory()
+        NodeFactory(type=node_type, pipeline=pipeline, params={"source_material_id": str(source_material.id)})
+
+        pipeline_version = pipeline.create_new_version()
+        source_material_version = source_material.latest_version
+
+        assert pipeline_version.node_set.count() == 3
+        node_version = pipeline_version.node_set.filter(type=node_type).first()
+        assert node_version.params["source_material_id"] == str(source_material_version.id)
 
 
 @pytest.mark.django_db()

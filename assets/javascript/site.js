@@ -6,3 +6,4 @@ import './alpine';
 import './alertify';
 import './tom-select';
 import './theme-toggle';
+import './tables'

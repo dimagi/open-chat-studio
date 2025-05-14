@@ -10,13 +10,18 @@ logger = logging.getLogger("ocs.events")
 
 @shared_task(ignore_result=True)
 def enqueue_static_triggers(session_id, trigger_type):
-    session = ExperimentSession.objects.get(id=session_id)
-
-    trigger_ids = StaticTrigger.objects.filter(experiment_id=session.experiment_id, type=trigger_type).values_list(
-        "id", flat=True
-    )
+    trigger_ids = _get_static_triggers_to_fire(session_id, trigger_type)
     for trigger_id in trigger_ids:
         fire_static_trigger.delay(trigger_id, session_id)
+
+
+def _get_static_triggers_to_fire(session_id, trigger_type):
+    session = ExperimentSession.objects.get(id=session_id)
+    experiment_version = session.experiment_version
+    trigger_ids = StaticTrigger.objects.filter(experiment=experiment_version, type=trigger_type).values_list(
+        "id", flat=True
+    )
+    return trigger_ids
 
 
 @shared_task(ignore_result=True)
@@ -29,7 +34,7 @@ def fire_static_trigger(trigger_id, session_id):
 
 @shared_task(ignore_result=True)
 def enqueue_timed_out_events():
-    active_triggers = TimeoutTrigger.objects.all()
+    active_triggers = TimeoutTrigger.objects.published_versions().all()
     for trigger in active_triggers:
         for session in trigger.timed_out_sessions():
             if session.is_stale():

@@ -1,0 +1,67 @@
+site_name: Open Chat Studio Developer Documentation
+site_url: https://dev.openchatstudio.com
+repo_url: https://github.com/dimagi/open-chat-studio
+theme:
+  name: material
+  logo: assets/logo.png
+  favicon: assets/favicon.ico
+  features:
+    - header.autohide
+    - navigation.expand
+    - navigation.footer
+    - navigation.indexes
+    - navigation.instant
+    - navigation.prune
+    - navigation.sections
+    - navigation.tabs
+    - navigation.tabs.sticky
+    - navigation.tracking
+    - navigation.top
+    - search.highlight
+    - search.share
+    - search.suggest
+    - toc.follow
+  palette:
+    - media: "(prefers-color-scheme: light)"
+      scheme: default
+      toggle:
+        icon: material/brightness-7
+        name: Switch to dark mode
+    - media: "(prefers-color-scheme: dark)"
+      scheme: slate
+      toggle:
+        icon: material/brightness-4
+        name: Switch to light mode
+copyright: Copyright &copy; 2024 Dimagi
+
+markdown_extensions:
+  - admonition
+  - attr_list
+  - def_list
+  - md_in_html
+  - pymdownx.blocks.caption
+  - pymdownx.details
+  - pymdownx.superfences:
+      custom_fences:
+        - name: mermaid
+          class: mermaid
+          format: !!python/name:pymdownx.superfences.fence_code_format
+  - pymdownx.emoji:
+      emoji_index: !!python/name:material.extensions.emoji.twemoji
+      emoji_generator: !!python/name:material.extensions.emoji.to_svg
+
+plugins:
+- search
+
+extra_css:
+  - assets/css/extra.css
+
+nav:
+  - Home: index.md
+  - Contributing:
+    - Guidelines: contributing/index.md
+    - Pull Requests: contributing/pull_requests.md
+  - Getting Started: 
+    - Overview: getting-started/index.md
+  - Architecture:
+    - Overview: architecture/index.md

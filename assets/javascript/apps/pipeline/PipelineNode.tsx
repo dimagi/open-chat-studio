@@ -74,7 +74,7 @@ export function PipelineNode(nodeProps: NodeProps<NodeData>) {
         </div>
       </NodeToolbar>
       <div className={nodeBorderClass(hasErrors, selected)}>
-        <NodeHeader nodeSchema={nodeSchema} nodeName={concatenate(data.params["name"])} />
+        <NodeHeader nodeId={id} nodeSchema={nodeSchema} nodeName={concatenate(data.params["name"])} />
 
         <NodeInput />
         <div className="px-4">
@@ -94,16 +94,22 @@ export function PipelineNode(nodeProps: NodeProps<NodeData>) {
   );
 }
 
-function NodeHeader({nodeSchema, nodeName}: {nodeSchema: JsonSchema, nodeName: string}) {
+function NodeHeader({nodeId, nodeSchema, nodeName}: {nodeId: string, nodeSchema: JsonSchema, nodeName: string}) {
   const defaultNodeNameRegex = /^[A-Za-z]+-[a-zA-Z0-9]{5}$/;
   const hasCustomName = !defaultNodeNameRegex.test(nodeName);
   const header = hasCustomName ? nodeName : nodeSchema["ui:label"];
-  const subheader = hasCustomName ? nodeSchema["ui:label"] : "";
+  const icon = nodeSchema["ui:icon"];
   return (
-    <div className="m-1 text-lg font-bold text-center">
-      <DeprecationNotice nodeSchema={nodeSchema} />
-      {header}
-      {subheader && <div className="text-sm">{subheader}</div>}
+      <div>
+        {icon &&
+          <div className="text-primary/70 absolute ml-2 mt-1 top-4 left-2 tooltip tooltip-top" data-tip={nodeSchema["ui:label"]}>
+            <i className={icon}></i>
+          </div>}
+        <div className="m-1 text-lg font-bold text-center align-middle">
+          <DeprecationNotice nodeSchema={nodeSchema}/>
+          {header}
+          <p className="text-xs font-light text-gray-500 dark:text-gray-700">{nodeId}</p>
+        </div>
     </div>
   );
 }

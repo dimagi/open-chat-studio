@@ -52,7 +52,7 @@ class PipelineStartForm(forms.Form):
     def __init__(self, *args, **kwargs):
         team_id = kwargs.pop("team_id")
         super().__init__(*args, **kwargs)
-        self.fields["pipeline_id"].queryset = Pipeline.objects.filter(team_id=team_id)
+        self.fields["pipeline_id"].queryset = Pipeline.objects.filter(team_id=team_id, working_version_id__isnull=True)
 
     def clean_pipeline_id(self):
         return self.cleaned_data["pipeline_id"].id

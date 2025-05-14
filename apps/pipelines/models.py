@@ -7,6 +7,7 @@ from functools import cached_property
 from uuid import uuid4
 
 import pydantic
+from django.core.exceptions import ObjectDoesNotExist
 from django.core.serializers.json import DjangoJSONEncoder
 from django.db import models, transaction
 from django.urls import reverse
@@ -17,11 +18,12 @@ from apps.annotations.models import TagCategories
 from apps.chat.models import ChatMessage, ChatMessageType
 from apps.custom_actions.form_utils import set_custom_actions
 from apps.custom_actions.mixins import CustomActionOperationMixin
-from apps.experiments.models import Experiment, ExperimentSession
+from apps.experiments.models import Experiment, ExperimentSession, SourceMaterial
 from apps.experiments.versioning import VersionDetails, VersionField, VersionsMixin, VersionsObjectManagerMixin
 from apps.pipelines.exceptions import PipelineBuildError
 from apps.pipelines.executor import patch_executor
 from apps.pipelines.flow import Flow, FlowNode, FlowNodeData
+from apps.pipelines.helper import duplicate_pipeline_with_new_ids
 from apps.pipelines.logging import PipelineLoggingCallbackHandler
 from apps.pipelines.nodes.base import PipelineState
 from apps.pipelines.nodes.helpers import temporary_session
@@ -288,7 +290,7 @@ class Pipeline(BaseTeamModel, VersionsMixin):
 
         with temporary_session(self.team, user_id) as session:
             runnable = PipelineGraph.build_runnable_from_pipeline(self)
-            input = PipelineState(messages=[input], experiment_session=session, pipeline_version=self.version_number)
+            input = PipelineState(messages=[input], experiment_session=session)
             with patch_executor():
                 output = runnable.invoke(input, config={"max_concurrency": 1})
             output = PipelineState(**output).json_safe()
@@ -379,17 +381,20 @@ class Pipeline(BaseTeamModel, VersionsMixin):
         return chat_message
 
     @transaction.atomic()
-    def create_new_version(self):
-        version_number = self.version_number
-        self.version_number = version_number + 1
-        self.save(update_fields=["version_number"])
-
-        pipeline_version = super().create_new_version(save=False)
+    def create_new_version(self, is_copy: bool = False):
+        version_number = 1 if is_copy else self.version_number
+        if not is_copy:
+            self.version_number = self.version_number + 1
+            self.save(update_fields=["version_number"])
+        pipeline_version = super().create_new_version(save=False, is_copy=is_copy)
         pipeline_version.version_number = version_number
+        id_mapping = {}
+        if is_copy:
+            data, id_mapping = duplicate_pipeline_with_new_ids(self.data)
+            pipeline_version.data = data
         pipeline_version.save()
-
         for node in self.node_set.all():
-            node_version = node.create_new_version()
+            node_version = node.create_new_version(is_copy=is_copy, new_flow_id=id_mapping.get(node.flow_id))
             node_version.pipeline = pipeline_version
             node_version.save(update_fields=["pipeline"])
 
@@ -478,7 +483,7 @@ class Node(BaseModel, VersionsMixin, CustomActionOperationMixin):
     def __str__(self):
         return self.flow_id
 
-    def create_new_version(self):
+    def create_new_version(self, is_copy=False, new_flow_id=None):
         """
         Create a new version of the node and if the node is an assistant node, create a new version of the assistant
         and update the `assistant_id` in the node params to the new assistant version id.
@@ -487,27 +492,41 @@ class Node(BaseModel, VersionsMixin, CustomActionOperationMixin):
         from apps.documents.models import Collection
         from apps.pipelines.nodes.nodes import AssistantNode, LLMResponseWithPrompt
 
-        new_version = super().create_new_version(save=False)
+        new_version = super().create_new_version(save=False, is_copy=is_copy)
+        if is_copy and new_flow_id:
+            old_flow_id = new_version.flow_id
+            new_version.flow_id = new_flow_id
+            if new_version.type not in ("StartNode", "EndNode") and new_version.params["name"] == old_flow_id:
+                new_version.params["name"] = new_flow_id
 
-        if self.type == AssistantNode.__name__ and new_version.params.get("assistant_id"):
+        if not is_copy and self.type == AssistantNode.__name__ and new_version.params.get("assistant_id"):
             assistant = OpenAiAssistant.objects.get(id=new_version.params.get("assistant_id"))
             if not assistant.is_a_version:
                 assistant_version = assistant.create_new_version()
                 # convert to string to be consistent with values from the UI
                 new_version.params["assistant_id"] = str(assistant_version.id)
 
-        if self.type == LLMResponseWithPrompt.__name__:
-            if collection_id := self.params.get("collection_id"):
+        if not is_copy and self.type == LLMResponseWithPrompt.__name__:
+            if collection_id := new_version.params.get("collection_id"):
                 collection = Collection.objects.get(id=collection_id)
 
-                if collection.has_versions is False or collection.compare_with_latest():
+                if not collection.has_versions or collection.compare_with_latest():
                     collection_version = collection.create_new_version()
                     new_version.params["collection_id"] = str(collection_version.id)
                 else:
                     new_version.params["collection_id"] = self.latest_version.params.get("collection_id")
 
+            if source_material_id := new_version.params.get("source_material_id"):
+                source_material = SourceMaterial.objects.filter(id=source_material_id).first()
+                if not source_material:
+                    new_version.params["source_material_id"] = None
+                else:
+                    if not source_material.has_versions or source_material.compare_with_latest():
+                        source_material = source_material.create_new_version()
+                        new_version.params["source_material_id"] = str(source_material.id)
+
         new_version.save()
-        self._copy_custom_action_operations_to_new_version(new_node=new_version)
+        self._copy_custom_action_operations_to_new_version(new_node=new_version, is_copy=is_copy)
 
         return new_version
 
@@ -565,6 +584,10 @@ class Node(BaseModel, VersionsMixin, CustomActionOperationMixin):
                     name = "media"
                     if value:
                         value = Collection.objects.filter(id=value).first()
+                case "source_material_id":
+                    name = "source_material"
+                    if value:
+                        value = SourceMaterial.objects.filter(id=value).first()
 
             param_versions.append(
                 VersionField(group_name=node_name, name=name, raw_value=value, to_display=display_formatter),
@@ -610,7 +633,7 @@ class Node(BaseModel, VersionsMixin, CustomActionOperationMixin):
                 try:
                     obj = spec.get_object(instance_id)
                     obj.archive()
-                except self.model_cls.DoesNotExist:
+                except ObjectDoesNotExist:
                     versioning_logger.exception(
                         f"Failed to archive {spec.param_name} with id {instance_id}, since it could not be found"
                     )

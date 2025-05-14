@@ -69,10 +69,16 @@
               </div>
             </div>
             <div class="tooltip" data-tip="Edit">
-              <a class="btn btn-primary join-item btn-sm rounded-r-full"
+              <a class="btn btn-primary join-item btn-sm"
                  href="{% url 'chatbots:edit' team.slug experiment.id %}">
                 <i class="fa-solid fa-pencil"></i>
               </a>
+            </div>
+            <div class="tooltip" data-tip="Copy">
+              <button class="btn btn-primary join-item btn-sm rounded-r-full copy-button"
+                      onclick="chatbot_copy_modal.showModal()">
+                <i class="fa-solid fa-copy"></i>
+              </button>
             </div>
           {% else %}
             <div class="tooltip" data-tip="View">
@@ -112,6 +118,7 @@
             {% endif %}
           </ul>
         </div>
+        {% include "chatbots/chatbot_copy_dialog.html" with chatbot_id=experiment.id team_slug=request.team.slug name=experiment.name %}
         {% if experiment.is_public %}
           {% include "experiments/share/dialog.html" with origin="chatbots" %}
         {% endif %}
