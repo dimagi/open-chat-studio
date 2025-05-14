@@ -116,6 +116,7 @@
   "ui:deprecated": false,
   "ui:documentation_link": "/concepts/pipelines/nodes/#llm-router",
   "ui:flow_node_type": "pipelineNode",
+  "ui:icon": "fa-solid fa-arrows-split-up-and-left",
   "ui:label": "LLM Router",
   "ui:order": [
     "llm_provider_id",
