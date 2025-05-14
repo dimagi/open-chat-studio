@@ -199,7 +199,7 @@ class AzureLlmService(LlmService):
         return TokenCountingCallbackHandler(OpenAITokenCounter(model))
 
     def attach_built_in_tools(self, built_in_tools: list[str]) -> list:
-        pass
+        return []
 
 
 class AnthropicLlmService(LlmService):
@@ -218,7 +218,7 @@ class AnthropicLlmService(LlmService):
         return TokenCountingCallbackHandler(AnthropicTokenCounter())
 
     def attach_built_in_tools(self, built_in_tools: list[str]) -> list:
-        pass
+        return []
 
 
 class DeepSeekLlmService(LlmService):
@@ -237,7 +237,7 @@ class DeepSeekLlmService(LlmService):
         return TokenCountingCallbackHandler(OpenAITokenCounter(model))
 
     def attach_built_in_tools(self, built_in_tools: list[str]) -> list:
-        pass
+        return []
 
 
 class GoogleLlmService(LlmService):
@@ -254,7 +254,7 @@ class GoogleLlmService(LlmService):
         return TokenCountingCallbackHandler(GeminiTokenCounter(model, self.google_api_key))
 
     def attach_built_in_tools(self, built_in_tools: list[str]) -> list:
-        pass
+        return []
         # Commenting it for now until we fix it
         # otherwise gemini would not work if code execution or web search is selected in the node
         # tools = []
