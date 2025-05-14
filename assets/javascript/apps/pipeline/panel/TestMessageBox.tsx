@@ -65,8 +65,8 @@ export default function TestMessageBox({
             setErrorMessage(result.error);
           } else {
             setResponseMessage(result.messages[result.messages.length - 1]);
-            for (const [nodeOutput] of Object.entries(result.outputs)) {
-                setEdgeLabel(nodeOutput.node_id, nodeOutput.output_handle, nodeOutput.output);
+            for (const nodeOutput of Object.values(result.outputs)) {
+                setEdgeLabel(nodeOutput.node_id, nodeOutput.output_handle, nodeOutput.message);
             }
           }
           setLoading(false);

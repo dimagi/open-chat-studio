@@ -101,60 +101,35 @@ class PipelineState(dict):
 
     @classmethod
     def from_node_output(cls, node_name: str, node_id: str, output: Any = None, **kwargs) -> Self:
-        kwargs["outputs"] = {node_id: {"message": output}}
+        kwargs["outputs"] = {node_name: {"message": output, "node_id": node_id}}
         kwargs["temp_state"] = {"outputs": {node_name: output}}
         if output is not None:
             kwargs["messages"] = [output]
 
         return cls(**kwargs)
 
-    def _get_node_mappings(self):
-        """
-        Helper method to get node ID to name mappings.
-        Returns a tuple of (node_id_to_name, name_to_node_id) dictionaries.
-        """
-        from apps.pipelines.models import Node
-
-        pipeline_version = self.get("pipeline_version")
-        nodes = Node.objects.filter(pipeline__version_number=pipeline_version)
-
-        node_id_to_name = {node.flow_id: node.params.get("name") for node in nodes}
-        name_to_node_id = {node.params.get("name"): node.flow_id for node in nodes}
-
-        return node_id_to_name, name_to_node_id
-
     def get_node_id(self, node_name: str):
         """
         Helper method to get a node ID from a node name.
         """
-        _, name_to_node_id = self._get_node_mappings()
-        return name_to_node_id.get(node_name, node_name)
+        return self.get("outputs", {}).get(node_name, {}).get("node_id")
 
     def get_node_name(self, node_id: str):
         """
         Helper method to get a node name from a node ID.
         """
-        node_id_to_name, _ = self._get_node_mappings()
-        return node_id_to_name.get(node_id, node_id)
+        for name, output in self.get("outputs", {}).items():
+            if output.get("node_id") == node_id:
+                return name
+        return None
 
     def get_selected_route(self, node_name: str) -> str | None:
         """
         Gets the route selected by a specific router node.
         """
         outputs = self.get("outputs", {})
-        node_id_to_name, name_to_node_id = self._get_node_mappings()
-
         if node_name in outputs and "route" in outputs[node_name]:
             return outputs[node_name].get("route")
-
-        node_id = name_to_node_id.get(node_name)
-
-        if node_id and node_id in outputs and "route" in outputs[node_id]:
-            return outputs[node_id].get("route")
-
-        for node_identifier, data in outputs.items():
-            if node_id_to_name.get(node_identifier) == node_name and "route" in data:
-                return data.get("route")
 
         return None
 
@@ -167,29 +142,21 @@ class PipelineState(dict):
             only the specified node name.
         """
         path = []
-        outputs = self.get("outputs", {})
-        node_id_to_name, name_to_node_id = self._get_node_mappings()
-        current_node_id = name_to_node_id.get(node_name, node_name)
-
-        while current_node_id:
-            current_name = node_id_to_name.get(current_node_id, current_node_id)
+        current_name = node_name
+        while current_name:
             path.insert(0, current_name)
+            current_node_id = self.get_node_id(current_name)
+            if not current_node_id:
+                break
 
-            parent_node_id = None
             for _, current, targets in self.get("path", []):
-                if current_node_id in targets or current_node_id == targets[0]:
-                    parent_node_id = current
+                if current_node_id in targets:
+                    current_name = self.get_node_name(current)
                     break
+            else:
+                break
 
-            if not parent_node_id:
-                for node, data in outputs.items():
-                    if "route" in data and data["route"] == current_node_id:
-                        parent_node_id = node
-                        break
-
-            current_node_id = parent_node_id
-
-        return path if path else None
+        return path
 
     def get_all_routes(self) -> dict:
         """
@@ -197,11 +164,8 @@ class PipelineState(dict):
         """
         routes_dict = {}
         outputs = self.get("outputs", {})
-        node_id_to_name, _ = self._get_node_mappings()
-
-        for node_id, node_data in outputs.items():
+        for node_name, node_data in outputs.items():
             if "route" in node_data:
-                node_name = node_id_to_name.get(node_id, node_id)
                 routes_dict[node_name] = node_data["route"]
 
         return routes_dict
@@ -216,7 +180,7 @@ class PipelineState(dict):
                     "node_id": node_id,
                     "output_handle": output_handle,
                     "route": conditional_branch,
-                    "output": output,
+                    "message": output,
                 },
             },
             temp_state={"outputs": {node_name: output}},
@@ -237,6 +201,12 @@ class BasePipelineNode(BaseModel, ABC):
         """
         from apps.channels.datamodels import Attachment
 
+        def _get_output(node_id):
+            for output in state["outputs"].values():
+                if output.get("node_id") == node_id:
+                    return output["message"]
+            raise Exception(f"unable to determine output for {node_id}")
+
         if not incoming_edges:
             # This is the first node in the graph
             state["node_input"] = state["messages"][-1]
@@ -249,13 +219,7 @@ class BasePipelineNode(BaseModel, ABC):
             ]
         elif len(incoming_edges) == 1:
             incoming_edge = incoming_edges[0]
-            try:
-                state["node_input"] = state["outputs"][incoming_edge]["message"]
-            except KeyError:
-                for node_data in state["outputs"].values():
-                    if "node_id" in node_data and node_data["node_id"] == incoming_edge:
-                        state["node_input"] = node_data["output"]
-                        break
+            state["node_input"] = _get_output(incoming_edge)
             state["node_source"] = incoming_edge
         else:
             # state.path is a list of tuples (previous, current, next)
@@ -264,7 +228,7 @@ class BasePipelineNode(BaseModel, ABC):
                 for candidate_node_id in candidate_node_ids:
                     if candidate_node_id == node_id:
                         previous_node_id = path[1]
-                        state["node_input"] = state["outputs"][previous_node_id]["message"]
+                        state["node_input"] = _get_output(previous_node_id)
                         state["node_source"] = previous_node_id
                         break
                 else:
@@ -275,8 +239,7 @@ class BasePipelineNode(BaseModel, ABC):
                 logger.warning(f"Cannot determine which input to use for node {node_id}. Switching to fallback.")
                 for incoming_edge in reversed(incoming_edges):
                     if incoming_edge in state["outputs"]:
-                        node_input = state["outputs"][incoming_edge]["message"]
-                        state["node_input"] = node_input
+                        state["node_input"] = _get_output(incoming_edge)
                         state["node_source"] = incoming_edge
                         break
                 else:
