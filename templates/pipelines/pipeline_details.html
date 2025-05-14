@@ -35,11 +35,5 @@
         </div>
       </div>
     </div>
-    <div class="app-card">
-      <h2 class="font-semibold">Runs</h2>
-      <div hx-get="{% url "pipelines:runs_table" request.team.slug pipeline.pk %}" hx-trigger="load" hx-swap="outerHTML">
-        <span class="loading loading-spinner loading-lg"></span>
-      </div>
-    </div>
   </div>
 {% endblock %}

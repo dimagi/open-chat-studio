@@ -6,12 +6,10 @@ import pytest
 from django.core import mail
 from django.test import override_settings
 from langchain_core.messages import AIMessage, ToolCall
-from langchain_core.runnables import RunnableConfig
 
 from apps.channels.datamodels import Attachment
 from apps.experiments.models import ParticipantData
 from apps.pipelines.exceptions import PipelineBuildError, PipelineNodeBuildError
-from apps.pipelines.logging import LoggingCallbackHandler
 from apps.pipelines.nodes.base import PipelineState, merge_dicts
 from apps.pipelines.nodes.nodes import EndNode, Passthrough, RouterNode, StartNode, StaticRouterNode
 from apps.pipelines.tests.utils import (
@@ -533,7 +531,8 @@ def test_attachments_in_code_node(pipeline, experiment_session):
     code_set = """
 def main(input, **kwargs):
     attachments = get_temp_state_key("attachments")
-    kwargs["logger"].info([att.model_dump() for att in attachments])
+    # TODO: tracing
+    # kwargs["logger"].info([att.model_dump() for att in attachments])
     return ",".join([att.name for att in attachments])
 """
     start = start_node()
@@ -541,7 +540,6 @@ def main(input, **kwargs):
     end = end_node()
     nodes = [start, code, end]
     runnable = create_runnable(pipeline, nodes)
-    callback = LoggingCallbackHandler()
     attachments = [
         Attachment(file_id=123, type="code_interpreter", name="test.py", size=10),
         Attachment(file_id=456, type="file_search", name="blog.md", size=20),
@@ -551,11 +549,8 @@ def main(input, **kwargs):
         PipelineState(
             messages=["log attachments"], experiment_session=experiment_session, attachments=serialized_attachments
         ),
-        config=RunnableConfig(callbacks=[callback]),
     )
     assert output["messages"][-1] == "test.py,blog.md"
-    log_entry = [e for e in callback.log_entries if e.level == "INFO"][0]
-    assert log_entry.message == str(serialized_attachments)
 
 
 @contextmanager
