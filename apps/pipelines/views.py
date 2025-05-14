@@ -11,7 +11,6 @@ from django.db.models import QuerySet, Subquery
 from django.http import HttpResponse, JsonResponse
 from django.shortcuts import get_object_or_404, redirect
 from django.template.loader import render_to_string
-from django.template.response import TemplateResponse
 from django.urls import reverse
 from django.views import View
 from django.views.decorators.csrf import csrf_exempt
@@ -280,23 +279,6 @@ def pipeline_data(request, team_slug: str, pk: int):
                 "errors": pipeline.validate(),
             }
         }
-    )
-
-
-@login_and_team_required
-@permission_required("pipelines.view_pipeline")
-def pipeline_details(request, team_slug: str, pk: int):
-    pipeline = get_object_or_404(Pipeline, id=pk, team=request.team)
-    return TemplateResponse(
-        request,
-        "pipelines/pipeline_details.html",
-        {
-            "pipeline": pipeline,
-            "edit_button": {
-                "tooltip_text": "View" if pipeline.is_a_version else "Edit",
-                "icon": "fa-eye" if pipeline.is_a_version else "fa-pencil",
-            },
-        },
     )
 
 

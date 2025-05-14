@@ -184,7 +184,7 @@ class Pipeline(BaseTeamModel, VersionsMixin):
         return new_pipeline
 
     def get_absolute_url(self):
-        return reverse("pipelines:details", args=[self.team.slug, self.id])
+        return reverse("pipelines:edit", args=[self.team.slug, self.id])
 
     def update_nodes_from_data(self) -> None:
         """Set the nodes on the pipeline from data coming from the frontend"""
