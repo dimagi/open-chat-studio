@@ -208,11 +208,12 @@ def extract_structured_data_node(provider_id: str, provider_model_id: str, data_
 def code_node(code: str | None = None):
     if code is None:
         code = "return f'Hello, {input}!'"
+    node_id = str(uuid4())
     return {
-        "id": str(uuid4()),
+        "id": node_id,
         "type": nodes.CodeNode.__name__,
         "params": {
-            "name": "code node",
+            "name": "code node" + node_id[-4:],
             "code": code,
         },
     }
