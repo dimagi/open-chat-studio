@@ -48,7 +48,6 @@ class TestCollection:
         # Vector store ID should be None for non-indexed collections
         assert new_version.openai_vector_store_id == ""
 
-    @pytest.mark.django_db()
     @mock.patch("apps.documents.tasks.index_collection_files")
     def test_create_new_version_of_a_collection_index(self, index_collection_files):
         """Ensure that a new vector store is created for the new version when one is created"""
@@ -84,3 +83,48 @@ class TestCollection:
                 name=f"{new_version.index_name} v{new_version.version_number}"
             )
             index_collection_files.assert_called_once_with(new_version.id, all_files=True)
+
+    @pytest.mark.parametrize("is_index", [True, False])
+    def test_archive_collection(self, is_index, index_manager_mock):
+        """Test that a collection can be archived"""
+        provider = LlmProviderFactory() if is_index else None
+        collection = CollectionFactory(is_index=is_index, openai_vector_store_id="vs-123", llm_provider=provider)
+        file = FileFactory(external_id="remote-file-123")
+        collection.files.add(file)
+
+        # Archive the collection
+        collection.archive()
+
+        # Check that the collection and files are archived and files cleared
+        file.refresh_from_db()
+        assert collection.is_archived
+
+        assert collection.openai_vector_store_id == "" if is_index else "vs-123"
+
+        for file in collection.files.all():
+            assert file.is_archived
+            assert file.external_id == "" if is_index else "remote-file-123"
+
+        if is_index:
+            index_manager_mock.delete_vector_store.assert_called_once_with("vs-123", fail_silently=True)
+            index_manager_mock.delete_files.assert_called_once()
+        else:
+            index_manager_mock.delete_vector_store.assert_not_called()
+            index_manager_mock.delete_files.assert_not_called()
+
+    def test_remove_index(self, index_manager_mock):
+        """Test that the index can be removed"""
+        collection = CollectionFactory(
+            is_index=True, openai_vector_store_id="vs-123", llm_provider=LlmProviderFactory()
+        )
+        file = FileFactory(external_id="remote-file-123")
+        collection.files.add(file)
+
+        # Invoke the remove_index method
+        collection.remove_index()
+
+        # Check that the vector store ID is cleared and the index is removed
+        assert collection.openai_vector_store_id == ""
+        file.refresh_from_db()
+        index_manager_mock.delete_vector_store.assert_called_once_with("vs-123", fail_silently=True)
+        index_manager_mock.delete_files.assert_called_once()

@@ -159,15 +159,21 @@ class Collection(BaseTeamModel, VersionsMixin):
 
     @transaction.atomic()
     def archive(self):
-        """Archive the collection and remove the index at the remote service if it has one"""
+        """
+        Archive the collection with its files and remove the index and the files at the remote service, if it has one
+        """
         response = super().archive()
         if self.is_index and self.openai_vector_store_id:
             self.remove_index()
+
+        self.files.update(is_archived=True)
         return response
 
     def remove_index(self):
         """Remove the index backend"""
-        # TODO: Swaperino
         manager = self.llm_provider.get_index_manager()
         manager.delete_vector_store(self.openai_vector_store_id, fail_silently=True)
         manager.delete_files(self.files.all())
+
+        self.openai_vector_store_id = ""
+        self.save(update_fields=["openai_vector_store_id"])

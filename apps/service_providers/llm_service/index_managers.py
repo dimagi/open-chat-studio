@@ -66,3 +66,6 @@ class OpenAIVectorStoreManager:
         for file in files:
             with contextlib.suppress(openai.NotFoundError):
                 self.client.files.delete(file.external_id)
+
+            file.external_id = ""
+        File.objects.bulk_update(files, fields=["external_id"])

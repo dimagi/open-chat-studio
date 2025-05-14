@@ -225,7 +225,7 @@ class DeleteCollection(LoginAndTeamRequiredMixin, View):
             )
             return HttpResponse(response, headers={"HX-Reswap": "none"}, status=400)
         else:
-            if collection.versions.filter(is_archived=False).exists():
+            if collection.versions.filter().exists():
                 try:
                     collection.archive()
                     messages.success(request, "Collection archived")
@@ -234,6 +234,9 @@ class DeleteCollection(LoginAndTeamRequiredMixin, View):
                     messages.error(self.request, "Could not delete the vector store. Please try again later")
                     return HttpResponse()
             else:
-                collection.remove_index()
+                if collection.is_index:
+                    collection.remove_index()
+                collection.files.all().delete()
                 collection.delete()
+                messages.success(request, "Collection deleted")
             return HttpResponse()
