@@ -10,6 +10,7 @@ from langchain_core.runnables import RunnableConfig
 from langgraph.types import Command
 from pydantic import BaseModel, ConfigDict, Field, model_validator
 from pydantic.config import JsonDict
+from pydantic.json_schema import SkipJsonSchema
 from typing_extensions import TypedDict
 
 from apps.experiments.models import ExperimentSession
@@ -122,8 +123,8 @@ class BasePipelineNode(BaseModel, ABC):
 
     _config: RunnableConfig | None = None
 
-    node_id: str = Field(exclude=True)
-    django_node: Any = Field(exclude=True)
+    node_id: SkipJsonSchema[str] = Field(exclude=True)
+    django_node: SkipJsonSchema[Any] = Field(exclude=True)
 
     name: str = Field(title="Node Name", json_schema_extra={"ui:widget": "node_name"})
 
