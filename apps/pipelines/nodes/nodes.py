@@ -991,7 +991,7 @@ class CodeNode(PipelineNode):
         )
 
         custom_locals = {}
-        custom_globals = self._get_custom_globals(node_id, state)
+        custom_globals = self._get_custom_globals(self.node_id, state)
         kwargs = {"logger": self.logger}
         try:
             exec(byte_code, custom_globals, custom_locals)

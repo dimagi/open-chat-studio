@@ -1229,7 +1229,10 @@ def test_router_node(get_llm_service, provider, provider_model, pipeline, experi
 def test_router_node_output_structure(provider, provider_model, pipeline, experiment_session):
     service = build_fake_llm_echo_service()
     with mock.patch("apps.service_providers.models.LlmProvider.get_llm_service", return_value=service):
+        node_id = "123"
         node = RouterNode(
+            node_id=node_id,
+            django_node=None,
             name="test_router",
             prompt="PD: {participant_data}",
             keywords=["A"],
@@ -1244,10 +1247,9 @@ def test_router_node_output_structure(provider, provider_model, pipeline, experi
             path=[],
         )
         with mock.patch.object(node, "_process_conditional", return_value="A"):
-            node_id = "123"
             edge_map = {"A": "next_node_a", "B": "next_node_b"}
             incoming_edges = ["123"]
-            router_func = node.build_router_function(node_id, edge_map, incoming_edges)
+            router_func = node.build_router_function(edge_map, incoming_edges)
             command = router_func(state, {"metadata": {"langgraph_triggers": []}})
 
             output_state = command.update
