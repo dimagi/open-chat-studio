@@ -1250,7 +1250,7 @@ def test_router_node_output_structure(provider, provider_model, pipeline, experi
             edge_map = {"A": "next_node_a", "B": "next_node_b"}
             incoming_edges = ["123"]
             router_func = node.build_router_function(edge_map, incoming_edges)
-            command = router_func(state, {"metadata": {"langgraph_triggers": []}})
+            command = router_func(state, {})
 
             output_state = command.update
 
@@ -1260,3 +1260,77 @@ def test_router_node_output_structure(provider, provider_model, pipeline, experi
             assert output_state["outputs"][node.name]["route"] == "A"
             assert output_state["outputs"][node.name]["message"] == state["node_input"]
             assert command.goto == "next_node_a"
+
+
+def test_get_selected_route():
+    pipeline_state_json = {
+        "outputs": {
+            "router_1": {"message": "hello", "node_id": "node1", "route": "path_a"},
+            "router_2": {"message": "world", "node_id": "node2", "route": "path_b"},
+            "normal_node": {"message": "test", "node_id": "node3"},
+        },
+        "messages": ["hello world"],
+        "temp_state": {"user_input": "hello world", "outputs": {}},
+        "path": [],
+    }
+
+    state = PipelineState(**pipeline_state_json)
+
+    assert state.get_selected_route("router_1") == "path_a"
+    assert state.get_selected_route("router_2") == "path_b"
+    assert state.get_selected_route("normal_node") is None
+    assert state.get_selected_route("non_existent_node") is None
+
+
+def test_get_all_routes():
+    pipeline_state_json = {
+        "outputs": {
+            "router_1": {"message": "hello", "node_id": "node1", "route": "path_a"},
+            "router_2": {"message": "world", "node_id": "node2", "route": "path_b"},
+            "router_3": {"message": "test", "node_id": "node3", "route": "path_c"},
+            "normal_node": {"message": "test", "node_id": "node4"},
+        },
+        "messages": ["hello world"],
+        "temp_state": {"user_input": "hello world", "outputs": {}},
+        "path": [],
+    }
+    state = PipelineState(**pipeline_state_json)
+    expected_routes = {"router_1": "path_a", "router_2": "path_b", "router_3": "path_c"}
+    assert state.get_all_routes() == expected_routes
+
+    # no router node case
+    pipeline_state_json = {
+        "outputs": {"normal_node": {"message": "test", "node_id": "node4"}},
+        "messages": ["hello world"],
+        "temp_state": {"user_input": "hello world", "outputs": {}},
+        "path": [],
+    }
+    state = PipelineState(**pipeline_state_json)
+    assert state.get_all_routes() == {}
+
+
+def test_get_node_path():
+    pipeline_state_json = {
+        "outputs": {
+            "start": {"message": "start", "node_id": "id_start"},
+            "router": {"message": "route", "node_id": "id_router", "route": "branch_a"},
+            "branch_a": {"message": "a", "node_id": "id_branch_a"},
+            "branch_b": {"message": "b", "node_id": "id_branch_b"},
+            "end": {"message": "end", "node_id": "id_end"},
+        },
+        "messages": ["test message"],
+        "temp_state": {"user_input": "test message", "outputs": {}},
+        "path": [
+            (None, "id_start", ["id_router"]),
+            ("id_start", "id_router", ["id_branch_a", "id_branch_b"]),
+            ("id_router", "id_branch_a", ["id_end"]),
+            ("id_branch_a", "id_end", []),
+        ],
+    }
+    state = PipelineState(**pipeline_state_json)
+
+    assert state.get_node_path("start") == ["start"]
+    assert state.get_node_path("branch_a") == ["start", "router", "branch_a"]
+    assert state.get_node_path("branch_b") == ["start", "router", "branch_b"]
+    assert state.get_node_path("end") == ["start", "router", "branch_a", "end"]
+    assert state.get_node_path("nonexistent_node") == ["nonexistent_node"]
