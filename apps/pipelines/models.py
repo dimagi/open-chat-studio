@@ -231,7 +231,7 @@ class Pipeline(BaseTeamModel, VersionsMixin):
         for node in nodes:
             node_class = getattr(pipeline_nodes, node.type)
             try:
-                node_class.model_validate(node.params)
+                node_class.model_validate({**node.params, "node_id": node.flow_id, "django_node": node})
             except pydantic.ValidationError as e:
                 for error in e.errors():
                     field = error["loc"][0] if error["loc"] else error["ctx"]["field"]
