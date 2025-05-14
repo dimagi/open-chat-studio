@@ -9,7 +9,14 @@ from apps.documents.models import Collection
 from apps.events.models import EventActionType
 from apps.experiments.models import Experiment, ExperimentSession, Participant
 from apps.pipelines.nodes.nodes import AssistantNode, LLMResponseWithPrompt
-from apps.pipelines.tests.utils import create_runnable, end_node, llm_response_with_prompt_node, start_node
+from apps.pipelines.tests.utils import (
+    boolean_node,
+    create_runnable,
+    end_node,
+    llm_response_with_prompt_node,
+    render_template_node,
+    start_node,
+)
 from apps.utils.factories.assistants import OpenAiAssistantFactory
 from apps.utils.factories.documents import CollectionFactory
 from apps.utils.factories.events import EventActionFactory, ExperimentFactory, StaticTriggerFactory
@@ -236,3 +243,47 @@ class TestPipeline:
         # Double check that the node didn't archive the assistant
         assistant.refresh_from_db()
         assert assistant.is_archived is False
+
+
+@pytest.mark.django_db()
+class TestPipelineValidation:
+    def test_validate_basic(self):
+        start = start_node()
+        router = boolean_node()
+        template = render_template_node("T: {{ input }}")
+        end = end_node()
+        nodes = [start, router, template, end]
+
+        edges = [
+            {
+                "id": "start -> router",
+                "source": start["id"],
+                "target": router["id"],
+            },
+            {
+                "id": "router -> template",
+                "source": router["id"],
+                "target": template["id"],
+                "sourceHandle": "output_1",
+            },
+            {
+                "id": "template -> end",
+                "source": template["id"],
+                "target": end["id"],
+            },
+            {
+                "id": "router -> end",
+                "source": router["id"],
+                "target": end["id"],
+                "sourceHandle": "output_0",
+            },
+        ]
+        flow_nodes = []
+        for node in nodes:
+            flow_nodes.append({"id": node["id"], "data": node})
+
+        pipeline = PipelineFactory()
+        pipeline.data = {"edges": edges, "nodes": flow_nodes}
+        pipeline.update_nodes_from_data()
+        errors = pipeline.validate()
+        assert not errors
