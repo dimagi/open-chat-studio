@@ -521,8 +521,8 @@ class VoiceResponseBehaviours(models.TextChoices):
 
 
 class BuiltInTools(models.TextChoices):
-    RECURRING_REMINDER = "web-search", gettext("Web Search")
-    ONE_OFF_REMINDER = "code-execution", gettext("Code Execution")
+    WEB_SEARCH = "web-search", gettext("Web Search")
+    CODE_EXECUTION = "code-execution", gettext("Code Execution")
 
     @staticmethod
     def built_in_tools() -> list["BuiltInTools"]:

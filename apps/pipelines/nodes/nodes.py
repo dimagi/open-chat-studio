@@ -342,8 +342,7 @@ class LLMResponseWithPrompt(LLMResponse, HistoryMixin):
         node = Node.objects.get(flow_id=node_id, pipeline__version_number=pipeline_version)
         tools = get_node_tools(node, session, attachment_callback=history_manager.attach_file_id)
         built_in_tools = self.built_in_tools
-        llm_service = self.get_llm_service()
-        if llm_service:
+        if llm_service := self.get_llm_service():
             llm_service.attach_built_in_tools(built_in_tools, tools)
         if self.collection_index_id:
             collection = Collection.objects.get(id=self.collection_index_id)
