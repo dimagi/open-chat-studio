@@ -3,8 +3,10 @@ from unittest import mock
 import pytest
 from django.urls import reverse
 
-from apps.documents.models import CollectionFile, FileStatus
+from apps.documents.models import Collection, CollectionFile, FileStatus
 from apps.utils.factories.documents import CollectionFactory
+from apps.utils.factories.files import FileFactory
+from apps.utils.factories.pipelines import NodeFactory, PipelineFactory
 from apps.utils.factories.service_provider_factories import LlmProviderFactory
 from apps.utils.factories.team import TeamWithUsersFactory
 
@@ -72,3 +74,62 @@ class TestEditCollection:
         collection.refresh_from_db()
         assert collection.name == new_name
         migrate_vector_stores_task.assert_not_called()
+
+
+@pytest.mark.django_db()
+class TestDeleteCollection:
+    @pytest.fixture()
+    def collection(self):
+        team = TeamWithUsersFactory()
+        file = FileFactory(team=team)
+        collection = CollectionFactory(
+            name="Tester",
+            team=team,
+            is_index=True,
+            llm_provider=LlmProviderFactory(team=team),
+            openai_vector_store_id="store-123",
+        )
+        collection.files.add(file)
+        return collection
+
+    @mock.patch("apps.documents.models.Collection.remove_index")
+    def test_index_and_files_removed_on_delete(self, remove_index, collection, client):
+        client.force_login(collection.team.members.first())
+        url = reverse("documents:collection_delete", args=[collection.team.slug, collection.id])
+
+        response = client.delete(url)
+
+        assert response.status_code == 200
+        with pytest.raises(Collection.DoesNotExist):
+            collection.refresh_from_db()
+
+        remove_index.assert_called()
+
+    def test_user_cannot_delete_a_collection_in_use(self, collection, client):
+        client.force_login(collection.team.members.first())
+        url = reverse("documents:collection_delete", args=[collection.team.slug, collection.id])
+
+        NodeFactory(pipeline=PipelineFactory(), type="LlmNode", params={"collection_index_id": collection.id})
+
+        response = client.delete(url)
+        assert response.status_code == 400
+        collection.refresh_from_db()
+        assert collection.name == "Tester"  # Collection should not be deleted
+
+    @mock.patch("apps.documents.models.Collection.remove_index")
+    def test_versioned_collection_is_archived(self, remove_index, collection, client):
+        """A versioned collection should be archived and its index and files removed from the provider"""
+        client.force_login(collection.team.members.first())
+
+        # Create a version of the collection
+        version = CollectionFactory(working_version=collection, openai_vector_store_id="new-id")
+
+        url = reverse("documents:collection_delete", args=[collection.team.slug, collection.id])
+        response = client.delete(url)
+
+        assert response.status_code == 200
+        collection.refresh_from_db()
+        assert collection.is_archived  # Collection should be archived, not deleted
+        version.refresh_from_db()  # Version should still exist
+
+        remove_index.assert_called_once()

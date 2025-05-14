@@ -157,3 +157,18 @@ class Collection(BaseTeamModel, VersionsMixin):
 
     def get_absolute_url(self):
         return reverse("documents:single_collection_home", args=[self.team.slug, self.id])
+
+    @transaction.atomic()
+    def archive(self):
+        """Archive the collection and remove the index at the remote service if it has one"""
+        response = super().archive()
+        if self.is_index and self.openai_vector_store_id:
+            self.remove_index()
+        return response
+
+    def remove_index(self):
+        """Remove the index backend"""
+        # TODO: Swaperino
+        manager = OpenAIVectorStoreManager.from_llm_provider(self.llm_provider)
+        manager.delete_vector_store(self.openai_vector_store_id, fail_silently=True)
+        manager.delete_files(self.files.all())

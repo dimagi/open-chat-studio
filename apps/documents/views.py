@@ -1,6 +1,5 @@
 import logging
 
-import openai
 from django.conf import settings
 from django.contrib import messages
 from django.contrib.auth.decorators import permission_required
@@ -205,7 +204,15 @@ class EditCollection(LoginAndTeamRequiredMixin, CollectionFormMixin, UpdateView)
 
 class DeleteCollection(LoginAndTeamRequiredMixin, View):
     def delete(self, request, team_slug: str, pk: int):
+        # TODO: Put general strategy for removing versioned objects in docs
+        """
+        - If working version is being used, prevent the user from deleting it
+        - If a version of it is being used, but not the working version, we should archive the collection and the files.
+            We can remove everything from REMOTE though, since each versions has its own version at REMOTE
+        - If working version has no versions and is not being used, remove everything everywhere
+        """
         collection = get_object_or_404(Collection, team__slug=team_slug, id=pk)
+
         if nodes := collection.get_node_references():
             response = render_to_string(
                 "assistants/partials/referenced_objects.html",
@@ -218,19 +225,15 @@ class DeleteCollection(LoginAndTeamRequiredMixin, View):
             )
             return HttpResponse(response, headers={"HX-Reswap": "none"}, status=400)
         else:
-            if collection.is_index and collection.openai_vector_store_id:
+            if collection.versions.filter(is_archived=False).exists():
                 try:
-                    manager = OpenAIVectorStoreManager.from_llm_provider(collection.llm_provider)
-                    manager.delete_vector_store(collection.openai_vector_store_id)
-                    messages.success(request, "Collection deleted")
-                except openai.NotFoundError:
-                    messages.warning(
-                        self.request, "Could not find the vector store at OpenAI. It may have been deleted already"
-                    )
+                    collection.archive()
+                    messages.success(request, "Collection archived")
                 except Exception as e:
                     logger.exception(f"Could not delete vector store for collection {collection.id}. {e}")
-                    messages.error(self.request, "Could not delete the vector store at OpenAI. Please try again later")
+                    messages.error(self.request, "Could not delete the vector store. Please try again later")
                     return HttpResponse()
-
-            collection.archive()
+            else:
+                collection.remove_index()
+                collection.delete()
             return HttpResponse()

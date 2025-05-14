@@ -583,6 +583,7 @@ class OpenAIVectorStoreManager:
                 raise e
 
     def delete_file(self, vector_store_id: str, file_id: str):
+        """Disassociates the file with the vector store"""
         try:
             self.client.vector_stores.files.delete(vector_store_id=vector_store_id, file_id=file_id)
         except openai.NotFoundError:
@@ -611,3 +612,9 @@ class OpenAIVectorStoreManager:
                 extra={"vector_store_id": vector_store_id, "chunking_strategy": chunking_strategy},
             )
             raise OpenAiUnableToLinkFileError("Failed to link files to OpenAI vector store") from e
+
+    def delete_files(self, files: list[File]):
+        """A convenience method to delete files from the remote service"""
+        for file in files:
+            with contextlib.suppress(openai.NotFoundError):
+                self.client.files.delete(file.external_id)
