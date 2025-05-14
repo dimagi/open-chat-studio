@@ -225,22 +225,22 @@ class PipelineNode(BasePipelineNode, ABC):
     """
 
     def process(
-        self, node_id: str, incoming_edges: list, outgoing_edges: list, state: PipelineState, config: RunnableConfig
+        self, incoming_edges: list, outgoing_edges: list, state: PipelineState, config: RunnableConfig
     ) -> PipelineState:
         self._config = config
-        state = self._prepare_state(node_id, incoming_edges, state)
-        output = self._process(input=state["node_input"], state=state, node_id=node_id)
-        output["path"] = [(state["node_source"], node_id, outgoing_edges)]
+        state = self._prepare_state(self.node_id, incoming_edges, state)
+        output = self._process(input=state["node_input"], state=state)
+        output["path"] = [(state["node_source"], self.node_id, outgoing_edges)]
         return output
 
-    def _process(self, input: str, state: PipelineState, node_id: str) -> PipelineState:
+    def _process(self, input: str, state: PipelineState) -> PipelineState:
         """The method that executes node specific functionality"""
         raise NotImplementedError
 
 
 class PipelineRouterNode(BasePipelineNode):
     def build_router_function(
-        self, node_id: str, edge_map: dict, incoming_edges: list
+        self, edge_map: dict, incoming_edges: list
     ) -> Callable[[PipelineState, RunnableConfig], Command]:
         output_map = self.get_output_map()
         ReturnType = Command[Literal[tuple(edge_map.values())]]  # noqa
@@ -248,15 +248,15 @@ class PipelineRouterNode(BasePipelineNode):
         def router(state: PipelineState, config: RunnableConfig) -> ReturnType:
             self._config = config
 
-            state = self._prepare_state(node_id, incoming_edges, state)
+            state = self._prepare_state(self.node_id, incoming_edges, state)
 
-            conditional_branch = self._process_conditional(state, node_id)
+            conditional_branch = self._process_conditional(state)
             output_handle = next((k for k, v in output_map.items() if v == conditional_branch), None)
             tags = self.get_output_tags(conditional_branch)
             target_node_id = edge_map[conditional_branch]
-            route_path = (state["node_source"], node_id, [target_node_id])
+            route_path = (state["node_source"], self.node_id, [target_node_id])
             output = PipelineState.from_router_output(
-                node_id, self.name, state["node_input"], output_handle, tags, route_path
+                self.node_id, self.name, state["node_input"], output_handle, tags, route_path
             )
             return Command(
                 update=output,
@@ -271,7 +271,7 @@ class PipelineRouterNode(BasePipelineNode):
     def get_output_tags(self, selected_route) -> list[str]:
         raise NotImplementedError()
 
-    def _process_conditional(self, state: PipelineState, node_id: str):
+    def _process_conditional(self, state: PipelineState):
         raise NotImplementedError()
 
 

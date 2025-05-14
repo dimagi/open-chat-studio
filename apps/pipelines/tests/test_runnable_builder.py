@@ -319,7 +319,6 @@ def test_router_node_prompt(get_llm_service, provider, provider_model, pipeline,
             messages=["a"],
             experiment_session=experiment_session,
         ),
-        node_id="123",
     )
 
     assert len(service.llm.get_call_messages()[0]) == 2
@@ -1124,7 +1123,7 @@ def test_input_with_format_strings():
         experiment_session=ExperimentSessionFactory.build(),
         temp_state={},
     )
-    resp = Passthrough(name="test").process("node_id", [], [], state, {})
+    resp = Passthrough(name="test").process([], [], state, {})
 
     assert resp["messages"] == ["Is this it {the thing}"]
 

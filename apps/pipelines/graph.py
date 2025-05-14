@@ -196,13 +196,11 @@ class PipelineGraph(pydantic.BaseModel):
                 incoming_edges = [edge.source for edge in self.edges if edge.target == node.id]
                 if isinstance(node_instance, PipelineRouterNode):
                     edge_map = self.conditional_edge_map[node.id]
-                    router_function = node_instance.build_router_function(node.id, edge_map, incoming_edges)
+                    router_function = node_instance.build_router_function(edge_map, incoming_edges)
                     state_graph.add_node(node.id, router_function)
                 else:
                     outgoing_edges = [edge.target for edge in self.edges if edge.source == node.id]
-                    state_graph.add_node(
-                        node.id, partial(node_instance.process, node.id, incoming_edges, outgoing_edges)
-                    )
+                    state_graph.add_node(node.id, partial(node_instance.process, incoming_edges, outgoing_edges))
             except ValidationError as ex:
                 raise PipelineNodeBuildError(ex) from ex
 
