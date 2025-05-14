@@ -134,6 +134,18 @@
       "type": "array",
       "ui:optionsSource": "built_in_tools",
       "ui:widget": "multiselect"
+    },
+    "allowed_domains": {
+      "default": "Enter domains without https that you want to allow in web search. eg google.com",
+      "title": "Allowed Domains",
+      "type": "string",
+      "ui:widget": "expandable_text"
+    },
+    "blocked_domains": {
+      "default": "Enter domains without https from which you don't want results to be shown in web search",
+      "title": "Blocked Domains",
+      "type": "string",
+      "ui:widget": "expandable_text"
     }
   },
   "required": [
