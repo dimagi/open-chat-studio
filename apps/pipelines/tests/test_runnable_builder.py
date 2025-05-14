@@ -307,6 +307,8 @@ def test_router_node_prompt(get_llm_service, provider, provider_model, pipeline,
     get_llm_service.return_value = service
 
     node = RouterNode(
+        node_id="test",
+        django_node=None,
         name="test router",
         prompt="PD: {participant_data}",
         keywords=["A"],
@@ -1123,7 +1125,7 @@ def test_input_with_format_strings():
         experiment_session=ExperimentSessionFactory.build(),
         temp_state={},
     )
-    resp = Passthrough(name="test").process([], [], state, {})
+    resp = Passthrough(node_id="test", django_node=None, name="test").process([], [], state, {})
 
     assert resp["messages"] == ["Is this it {the thing}"]
 
