@@ -115,7 +115,7 @@ class LlmService(pydantic.BaseModel):
     def get_callback_handler(self, model: str) -> BaseCallbackHandler:
         raise NotImplementedError
 
-    def attach_built_in_tools(self, built_in_tools: list[str]) -> list:
+    def attach_built_in_tools(self, built_in_tools: list[str], config: dict = None) -> list:
         raise NotImplementedError
 
 
@@ -171,7 +171,7 @@ class OpenAILlmService(OpenAIGenericService):
         )
         return transcript.text
 
-    def attach_built_in_tools(self, built_in_tools: list[str]) -> list:
+    def attach_built_in_tools(self, built_in_tools: list[str], config: dict = None) -> list:
         tools = []
         for tool_name in built_in_tools:
             if tool_name == "web-search":
@@ -198,7 +198,7 @@ class AzureLlmService(LlmService):
     def get_callback_handler(self, model: str) -> BaseCallbackHandler:
         return TokenCountingCallbackHandler(OpenAITokenCounter(model))
 
-    def attach_built_in_tools(self, built_in_tools: list[str]) -> list:
+    def attach_built_in_tools(self, built_in_tools: list[str], config: dict = None) -> list:
         pass
 
 
@@ -217,17 +217,25 @@ class AnthropicLlmService(LlmService):
     def get_callback_handler(self, model: str) -> BaseCallbackHandler:
         return TokenCountingCallbackHandler(AnthropicTokenCounter())
 
-    def attach_built_in_tools(self, built_in_tools: list[str]) -> list:
+    def attach_built_in_tools(self, built_in_tools: list[str], config: dict = None) -> list:
         tools = []
         for tool_name in built_in_tools:
             if tool_name == "web-search":
-                tools.append({"type": "web_search_20250305", "name": "web_search", "max_uses": 5})
+                tool = {
+                    "type": "web_search_20250305",
+                    "name": "web_search",
+                    "max_uses": 5,
+                }
+                allowed = config.get("allowed_domains", "").strip()
+                if allowed:
+                    tool["allowed_domains"] = allowed.split()
+                blocked = config.get("blocked_domains", "").strip()
+                if blocked:
+                    tool["blocked_domains"] = blocked.split()
+                tools.append(tool)
             else:
                 raise ValueError(f"Unsupported built-in tool for anthropic: '{tool_name}'")
         return tools
-
-    def attach_built_in_tools(self, built_in_tools: list[str]) -> list:
-        pass
 
 
 class DeepSeekLlmService(LlmService):
@@ -245,7 +253,7 @@ class DeepSeekLlmService(LlmService):
     def get_callback_handler(self, model: str) -> BaseCallbackHandler:
         return TokenCountingCallbackHandler(OpenAITokenCounter(model))
 
-    def attach_built_in_tools(self, built_in_tools: list[str]) -> list:
+    def attach_built_in_tools(self, built_in_tools: list[str], config: dict = None) -> list:
         pass
 
 
@@ -262,7 +270,7 @@ class GoogleLlmService(LlmService):
     def get_callback_handler(self, model: str) -> BaseCallbackHandler:
         return TokenCountingCallbackHandler(GeminiTokenCounter(model, self.google_api_key))
 
-    def attach_built_in_tools(self, built_in_tools: list[str]) -> list:
+    def attach_built_in_tools(self, built_in_tools: list[str], config: dict = None) -> list:
         pass
         # Commenting it for now until we fix it
         # otherwise gemini would not work if code execution or web search is selected in the node

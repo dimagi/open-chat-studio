@@ -285,11 +285,18 @@ class LLMResponseWithPrompt(LLMResponse, HistoryMixin):
         description="Custom actions to enable for the bot",
         json_schema_extra=UiSchema(widget=Widgets.multiselect, options_source=OptionsSource.custom_actions),
     )
-
     built_in_tools: list[str] = Field(
         default_factory=list,
         description="Built in tools provided by the LLM model",
         json_schema_extra=UiSchema(widget=Widgets.multiselect, options_source=OptionsSource.built_in_tools),
+    )
+    allowed_domains: str = Field(
+        default="Enter domains without https that you want to allow in web search. eg google.com",
+        json_schema_extra=UiSchema(widget=Widgets.expandable_text),
+    )
+    blocked_domains: str = Field(
+        default="Enter domains without https from which you don't want results to be shown in web search",
+        json_schema_extra=UiSchema(widget=Widgets.expandable_text),
     )
 
     @model_validator(mode="after")
@@ -330,6 +337,23 @@ class LLMResponseWithPrompt(LLMResponse, HistoryMixin):
             )
         return value
 
+    @model_validator(mode="after")
+    def validate_domains(self):
+        if "web-search" not in self.built_in_tools or self.get_llm_provider_model().type != "anthropic":
+            if self.allowed_domains and self.allowed_domains.strip():
+                raise PydanticCustomError(
+                    "invalid_allowed_domain",
+                    "Allowed domains must be empty unless 'web-search' is selected and LLM provider is 'anthropic'",
+                    {"field": "allowed_domains"},
+                )
+            if self.blocked_domains and self.blocked_domains.strip():
+                raise PydanticCustomError(
+                    "invalid_blocked_domain",
+                    "Blocked domains must be empty unless 'web-search' is selected and LLM provider is 'anthropic'",
+                    {"field": "blocked_domains"},
+                )
+        return self
+
     def _process(self, input, state: PipelineState, node_id: str) -> PipelineState:
         session: ExperimentSession | None = state.get("experiment_session")
         pipeline_version = state.get("pipeline_version")
@@ -348,8 +372,9 @@ class LLMResponseWithPrompt(LLMResponse, HistoryMixin):
         node = Node.objects.get(flow_id=node_id, pipeline__version_number=pipeline_version)
         tools = get_node_tools(node, session, attachment_callback=history_manager.attach_file_id)
         built_in_tools = self.built_in_tools
+        config = {"allowed_domains": self.allowed_domains, "blocked_domains": self.blocked_domains}
         if llm_service := self.get_llm_service():
-            tools.extend(llm_service.attach_built_in_tools(built_in_tools))
+            tools.extend(llm_service.attach_built_in_tools(built_in_tools, config))
         if self.collection_index_id:
             collection = Collection.objects.get(id=self.collection_index_id)
             builtin_tools = {"type": "file_search", "vector_store_ids": [collection.openai_vector_store_id]}
