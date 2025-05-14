@@ -5,7 +5,6 @@ from django.utils.translation import gettext_lazy as _
 from field_audit import audit_fields
 from field_audit.models import AuditingManager
 
-from apps.assistants.sync import OpenAIVectorStoreManager
 from apps.experiments.versioning import VersionDetails, VersionField, VersionsMixin, VersionsObjectManagerMixin
 from apps.teams.models import BaseTeamModel
 from apps.utils.conversions import bytes_to_megabytes
@@ -145,7 +144,7 @@ class Collection(BaseTeamModel, VersionsMixin):
             # Create vector store at llm service
             # Optimization suggestion: Only when the file set changed, should we create a new vector store at the
             # provider
-            manager = OpenAIVectorStoreManager.from_llm_provider(new_version.llm_provider)
+            manager = new_version.llm_provider.get_index_manager()
             version_name = f"{new_version.index_name} v{new_version.version_number}"
             new_version.openai_vector_store_id = manager.create_vector_store(name=version_name)
             new_version.save(update_fields=["openai_vector_store_id"])
@@ -169,6 +168,6 @@ class Collection(BaseTeamModel, VersionsMixin):
     def remove_index(self):
         """Remove the index backend"""
         # TODO: Swaperino
-        manager = OpenAIVectorStoreManager.from_llm_provider(self.llm_provider)
+        manager = self.llm_provider.get_index_manager()
         manager.delete_vector_store(self.openai_vector_store_id, fail_silently=True)
         manager.delete_files(self.files.all())

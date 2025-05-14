@@ -2,9 +2,9 @@ from unittest import mock
 
 import pytest
 
-from apps.documents.models import OpenAIVectorStoreManager
 from apps.utils.factories.documents import CollectionFactory
 from apps.utils.factories.files import FileFactory
+from apps.utils.factories.service_provider_factories import LlmProviderFactory
 
 
 @pytest.mark.django_db()
@@ -50,17 +50,18 @@ class TestCollection:
 
     @pytest.mark.django_db()
     @mock.patch("apps.documents.tasks.index_collection_files")
-    def test_create_new_version_with_vector_store(self, index_collection_files):
-        """Test version creation with vector store for indexed collections"""
-        mock_manager = mock.Mock()
-        mock_manager.create_vector_store.return_value = "new-vs-123"
-        with mock.patch.object(OpenAIVectorStoreManager, "from_llm_provider") as from_llm_provider:
-            from_llm_provider.return_value = mock_manager
+    def test_create_new_version_of_a_collection_index(self, index_collection_files):
+        """Ensure that a new vector store is created for the new version when one is created"""
+        index_manager_mock = mock.Mock()
+        index_manager_mock.create_vector_store.return_value = "new-vs-123"
 
+        with mock.patch("apps.service_providers.models.LlmProvider.get_index_manager") as get_index_manager:
+            get_index_manager.return_value = index_manager_mock
             collection = CollectionFactory(
                 name="Test Collection",
                 is_index=True,
                 openai_vector_store_id="old-vs-123",
+                llm_provider=LlmProviderFactory(),
             )
             file = FileFactory()
             collection.files.add(file)
@@ -79,7 +80,7 @@ class TestCollection:
             assert collection.openai_vector_store_id == "old-vs-123"
 
             # Verify vector store was created and files were indexed
-            mock_manager.create_vector_store.assert_called_once_with(
+            index_manager_mock.create_vector_store.assert_called_once_with(
                 name=f"{new_version.index_name} v{new_version.version_number}"
             )
             index_collection_files.assert_called_once_with(new_version.id, all_files=True)

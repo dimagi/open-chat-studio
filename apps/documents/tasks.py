@@ -6,7 +6,7 @@ import openai
 from celery.app import shared_task
 from taskbadger.celery import Task as TaskbadgerTask
 
-from apps.assistants.sync import OpenAiSyncError, OpenAIVectorStoreManager, create_files_remote
+from apps.assistants.sync import OpenAiSyncError, create_files_remote
 from apps.documents.models import Collection, CollectionFile, FileStatus
 from apps.service_providers.models import LlmProvider
 
@@ -76,7 +76,7 @@ def _upload_files_to_vector_store(
     """Upload files to OpenAI and link them to the vector store"""
     file_ids = []
     collection_files_to_update = []
-    vector_store_manager = OpenAIVectorStoreManager(client)
+    vector_store_manager = collection.llm_provider.get_index_manager()
 
     for collection_file in collection_files:
         try:
@@ -122,7 +122,8 @@ def _upload_files_to_vector_store(
 
 
 def _cleanup_old_vector_store(llm_provider_id: int, vector_store_id: str, file_ids: list[str]):
-    old_manager = OpenAIVectorStoreManager.from_llm_provider(LlmProvider.objects.get(id=llm_provider_id))
+    llm_provider = LlmProvider.objects.get(id=llm_provider_id)
+    old_manager = llm_provider.get_index_manager()
     old_manager.delete_vector_store(vector_store_id)
 
     for file_id in file_ids:

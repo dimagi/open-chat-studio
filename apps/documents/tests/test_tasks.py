@@ -17,10 +17,10 @@ from apps.utils.factories.service_provider_factories import LlmProviderFactory
 
 @pytest.fixture()
 def mock_vector_store_manager():
-    with patch("apps.documents.tasks.OpenAIVectorStoreManager") as cls_mock:
+    with patch("apps.service_providers.models.LlmProvider.get_index_manager") as get_index_manager:
         manager_instance = Mock()
         manager_instance.client = Mock()
-        cls_mock.return_value = manager_instance
+        get_index_manager.return_value = manager_instance
         yield manager_instance
 
 

@@ -115,6 +115,9 @@ class LlmService(pydantic.BaseModel):
     def get_callback_handler(self, model: str) -> BaseCallbackHandler:
         raise NotImplementedError
 
+    def get_index_manager(self):
+        raise NotImplementedError
+
 
 class OpenAIGenericService(LlmService):
     openai_api_key: str
@@ -167,6 +170,11 @@ class OpenAILlmService(OpenAIGenericService):
             file=audio,
         )
         return transcript.text
+
+    def get_index_manager(self):
+        from apps.service_providers.llm_service.index_managers import OpenAIVectorStoreManager
+
+        return OpenAIVectorStoreManager(self.get_raw_client())
 
 
 class AzureLlmService(LlmService):

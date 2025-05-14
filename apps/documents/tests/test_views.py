@@ -18,15 +18,15 @@ class TestEditCollection:
         team = TeamWithUsersFactory()
         return CollectionFactory(name="Tester", team=team, is_index=True, llm_provider=LlmProviderFactory(team=team))
 
-    @mock.patch("apps.documents.views.OpenAIVectorStoreManager")
+    @mock.patch("apps.service_providers.models.LlmProvider.get_index_manager")
     @mock.patch("apps.documents.tasks.migrate_vector_stores.delay")
-    def test_update_collection_with_llm_provider_change(self, migrate_mock, manager_mock, collection, client):
+    def test_update_collection_with_llm_provider_change(self, migrate_mock, get_index_manager, collection, client):
         new_llm_provider = LlmProviderFactory(team=collection.team)
         new_vector_store_id = "new-store-123"
 
         manager_instance = mock.Mock()
         manager_instance.create_vector_store.return_value = new_vector_store_id
-        manager_mock.from_llm_provider.return_value = manager_instance
+        get_index_manager.return_value = manager_instance
 
         client.force_login(collection.team.members.first())
         url = reverse("documents:collection_edit", args=[collection.team.slug, collection.id])
