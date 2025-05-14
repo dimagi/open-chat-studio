@@ -135,7 +135,7 @@ def code_completion(user_query, current_code, error=None, iteration_count=0) -> 
     from apps.pipelines.nodes.nodes import CodeNode
 
     try:
-        CodeNode.model_validate({"code": response_code})
+        CodeNode.model_validate({"code": response_code, "name": "code", "node_id": "code", "django_node": None})
     except pydantic.ValidationError as e:
         error = str(e)
         return code_completion(user_query, response_code, error, iteration_count=iteration_count + 1)
