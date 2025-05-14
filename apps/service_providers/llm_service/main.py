@@ -115,6 +115,9 @@ class LlmService(pydantic.BaseModel):
     def get_callback_handler(self, model: str) -> BaseCallbackHandler:
         raise NotImplementedError
 
+    def attach_built_in_tools(self, built_in_tools: list[str]) -> list:
+        raise NotImplementedError
+
 
 class OpenAIGenericService(LlmService):
     openai_api_key: str
@@ -168,6 +171,15 @@ class OpenAILlmService(OpenAIGenericService):
         )
         return transcript.text
 
+    def attach_built_in_tools(self, built_in_tools: list[str]) -> list:
+        tools = []
+        for tool_name in built_in_tools:
+            if tool_name == "web-search":
+                tools.append({"type": "web_search_preview"})
+            else:
+                raise ValueError(f"Unsupported built-in tool for openai: '{tool_name}'")
+        return tools
+
 
 class AzureLlmService(LlmService):
     openai_api_key: str
@@ -185,6 +197,9 @@ class AzureLlmService(LlmService):
 
     def get_callback_handler(self, model: str) -> BaseCallbackHandler:
         return TokenCountingCallbackHandler(OpenAITokenCounter(model))
+
+    def attach_built_in_tools(self, built_in_tools: list[str]) -> list:
+        pass
 
 
 class AnthropicLlmService(LlmService):
@@ -211,6 +226,9 @@ class AnthropicLlmService(LlmService):
                 raise ValueError(f"Unsupported built-in tool for anthropic: '{tool_name}'")
         return tools
 
+    def attach_built_in_tools(self, built_in_tools: list[str]) -> list:
+        pass
+
 
 class DeepSeekLlmService(LlmService):
     deepseek_api_key: str
@@ -227,6 +245,9 @@ class DeepSeekLlmService(LlmService):
     def get_callback_handler(self, model: str) -> BaseCallbackHandler:
         return TokenCountingCallbackHandler(OpenAITokenCounter(model))
 
+    def attach_built_in_tools(self, built_in_tools: list[str]) -> list:
+        pass
+
 
 class GoogleLlmService(LlmService):
     google_api_key: str
@@ -240,3 +261,17 @@ class GoogleLlmService(LlmService):
 
     def get_callback_handler(self, model: str) -> BaseCallbackHandler:
         return TokenCountingCallbackHandler(GeminiTokenCounter(model, self.google_api_key))
+
+    def attach_built_in_tools(self, built_in_tools: list[str]) -> list:
+        pass
+        # Commenting it for now until we fix it
+        # otherwise gemini would not work if code execution or web search is selected in the node
+        # tools = []
+        # for tool_name in built_in_tools:
+        #     if tool_name == "web-search":
+        #         tools.append(GenAITool(google_search={}))
+        #     elif tool_name == "code-execution":
+        #         tools.append(GenAITool(code_execution={}))
+        #     else:
+        #         raise ValueError(f"Unsupported built-in tool for gemini: '{tool_name}'")
+        # return tools

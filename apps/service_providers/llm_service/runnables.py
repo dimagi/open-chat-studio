@@ -5,6 +5,7 @@ from typing import TYPE_CHECKING, Any, Literal
 
 import openai
 from django.db import transaction
+from google.ai.generativelanguage_v1beta.types import Tool as GenAITool
 from langchain.agents import AgentExecutor, create_tool_calling_agent
 from langchain.agents.openai_assistant.base import OpenAIAssistantFinish
 from langchain.agents.output_parsers import tools as lc_tools_parser
@@ -244,7 +245,6 @@ class AgentLLMChat(LLMChat):
             lc_tools_parser.parse_ai_message_to_tool_action = claude_compatible_parse_ai_message
         tools = self.adapter.get_allowed_tools()
         agent = create_tool_calling_agent(llm=self.adapter.get_chat_model(), tools=tools, prompt=self.prompt)
-
         tools = self._filter_for_ocs_tools(tools)
         return AgentExecutor.from_agent_and_tools(
             agent=agent,
@@ -256,7 +256,7 @@ class AgentLLMChat(LLMChat):
         """Filter out tools that are not OCS tools. `AgentExecutor` expects a list of runnable tools, so we need to
         remove all tools that are run by the LLM provider
         """
-        return [t for t in tools if not isinstance(t, dict)]
+        return [t for t in tools if not isinstance(t, (dict | GenAITool))]
 
     @property
     def prompt(self):
