@@ -2,7 +2,7 @@ import dataclasses
 
 import google.generativeai as genai
 import tiktoken
-from anthropic._tokenizers import sync_get_tokenizer
+from anthropic import Anthropic
 from google.generativeai import GenerativeModel
 from langchain_core.messages import get_buffer_string
 from langchain_core.outputs import LLMResult
@@ -62,13 +62,12 @@ class AnthropicTokenCounter(TokenCounter):
         token_usage = response.llm_output["usage"]
         output_tokens = token_usage.get("output_tokens", 0)
         input_tokens = token_usage.get("input_tokens", 0)
-
         return input_tokens, output_tokens
 
     def get_tokens_from_text(self, text) -> int:
-        tokenizer = sync_get_tokenizer()
-        encoded_text = tokenizer.encode(text)
-        return len(encoded_text.ids)
+        client = Anthropic()
+        token_count = client.count_tokens(text)
+        return token_count
 
 
 @dataclasses.dataclass

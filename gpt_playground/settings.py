@@ -183,19 +183,19 @@ FORMS_URLFIELD_ASSUME_HTTPS = True
 # Database
 # https://docs.djangoproject.com/en/3.2/ref/settings/#databases
 
-if "DATABASE_URL" in env:
-    DATABASES = {"default": env.db()}
-else:
-    DATABASES = {
-        "default": {
-            "ENGINE": "django.db.backends.postgresql_psycopg2",
-            "NAME": env("DJANGO_DATABASE_NAME", default="gpt_playground"),
-            "USER": env("DJANGO_DATABASE_USER", default="postgres"),
-            "PASSWORD": env("DJANGO_DATABASE_PASSWORD", default="***"),
-            "HOST": env("DJANGO_DATABASE_HOST", default="localhost"),
-            "PORT": env("DJANGO_DATABASE_PORT", default="5432"),
-        }
+# if "DATABASE_URL" in env:
+#     DATABASES = {"default": env.db()}
+# else:
+DATABASES = {
+    "default": {
+        "ENGINE": "django.db.backends.postgresql_psycopg2",
+        "NAME": env("DJANGO_DATABASE_NAME", default="gpt_playground"),
+        "USER": env("DJANGO_DATABASE_USER", default="postgres"),
+        "PASSWORD": env("DJANGO_DATABASE_PASSWORD", default="root"),
+        "HOST": env("DJANGO_DATABASE_HOST", default="localhost"),
+        "PORT": env("DJANGO_DATABASE_PORT", default="5432"),
     }
+}
 
 # Auth / login stuff
 
