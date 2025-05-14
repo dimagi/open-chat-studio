@@ -1,3 +1,4 @@
+import copy
 import datetime
 import inspect
 import json
@@ -950,7 +951,7 @@ class CodeNode(PipelineNode):
         )
 
         custom_locals = {}
-        custom_globals = self._get_custom_globals(state)
+        custom_globals = self._get_custom_globals(node_id, state)
         kwargs = {"logger": self.logger}
         try:
             exec(byte_code, custom_globals, custom_locals)
@@ -959,7 +960,7 @@ class CodeNode(PipelineNode):
             raise PipelineNodeRunError(exc) from exc
         return PipelineState.from_node_output(node_name=self.name, node_id=node_id, output=result)
 
-    def _get_custom_globals(self, state: PipelineState):
+    def _get_custom_globals(self, node_id, state: PipelineState):
         from RestrictedPython.Eval import (
             default_guarded_getitem,
             default_guarded_getiter,
@@ -968,7 +969,9 @@ class CodeNode(PipelineNode):
         custom_globals = safe_globals.copy()
 
         participant_data_proxy = self.get_participant_data_proxy(state)
-        pipeline_state = PipelineState(state)
+        pipeline_state = PipelineState(copy.deepcopy(state))
+        # add this node into the state so that we can trace the path
+        pipeline_state["outputs"][self.name] = {"node_id": node_id}
         custom_globals.update(
             {
                 "__builtins__": self._get_custom_builtins(),
