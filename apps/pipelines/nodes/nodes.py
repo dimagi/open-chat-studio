@@ -29,7 +29,7 @@ from apps.chat.conversation import compress_chat_history, compress_pipeline_chat
 from apps.documents.models import Collection
 from apps.experiments.models import ExperimentSession, ParticipantData
 from apps.pipelines.exceptions import PipelineNodeBuildError, PipelineNodeRunError
-from apps.pipelines.models import Node, PipelineChatHistory, PipelineChatHistoryModes, PipelineChatHistoryTypes
+from apps.pipelines.models import PipelineChatHistory, PipelineChatHistoryModes, PipelineChatHistoryTypes
 from apps.pipelines.nodes.base import (
     NodeSchema,
     OptionsSource,
@@ -326,7 +326,6 @@ class LLMResponseWithPrompt(LLMResponse, HistoryMixin):
 
     def _process(self, input, state: PipelineState, node_id: str) -> PipelineState:
         session: ExperimentSession | None = state.get("experiment_session")
-        pipeline_version = state.get("pipeline_version")
         # Get runnable
         provider_model = self.get_llm_provider_model()
         chat_model = self.get_chat_model()
@@ -339,8 +338,7 @@ class LLMResponseWithPrompt(LLMResponse, HistoryMixin):
             chat_model=chat_model,
         )
 
-        node = Node.objects.get(flow_id=node_id, pipeline__version_number=pipeline_version)
-        tools = get_node_tools(node, session, attachment_callback=history_manager.attach_file_id)
+        tools = get_node_tools(self._django_node, session, attachment_callback=history_manager.attach_file_id)
         if self.collection_index_id:
             collection = Collection.objects.get(id=self.collection_index_id)
             builtin_tools = {"type": "file_search", "vector_store_ids": [collection.openai_vector_store_id]}

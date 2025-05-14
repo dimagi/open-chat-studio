@@ -122,6 +122,10 @@ class BasePipelineNode(BaseModel, ABC):
     model_config = ConfigDict(arbitrary_types_allowed=True)
 
     _config: RunnableConfig | None = None
+
+    _node_id: str
+    _django_node: Any
+
     name: str = Field(title="Node Name", json_schema_extra={"ui:widget": "node_name"})
 
     def _prepare_state(self, node_id: str, incoming_edges: list, state: PipelineState):

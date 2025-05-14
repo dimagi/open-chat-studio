@@ -1,6 +1,6 @@
 from collections import Counter, defaultdict
 from functools import cached_property, partial
-from typing import Self
+from typing import Any, Self
 
 import pydantic
 from langgraph.graph import StateGraph
@@ -20,6 +20,7 @@ class Node(pydantic.BaseModel):
     label: str
     type: str
     params: dict = {}
+    django_node: Any = None
 
     @property
     def pipeline_node_class(self):
@@ -27,9 +28,9 @@ class Node(pydantic.BaseModel):
 
         return getattr(nodes, self.type)
 
-    @property
+    @cached_property
     def pipeline_node_instance(self):
-        return self.pipeline_node_class(**self.params)
+        return self.pipeline_node_class(_node_id=self.id, _django_node=self.django_node, **self.params)
 
 
 class Edge(pydantic.BaseModel):
@@ -94,7 +95,7 @@ class PipelineGraph(pydantic.BaseModel):
     @classmethod
     def build_from_pipeline(cls, pipeline: Pipeline) -> Self:
         node_data = [
-            Node(id=node.flow_id, label=node.label, type=node.type, params=node.params)
+            Node(id=node.flow_id, label=node.label, type=node.type, params=node.params, django_node=node)
             for node in pipeline.node_set.all()
         ]
         edge_data = [Edge(**edge) for edge in pipeline.data["edges"]]
