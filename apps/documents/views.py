@@ -204,7 +204,6 @@ class EditCollection(LoginAndTeamRequiredMixin, CollectionFormMixin, UpdateView)
 
 class DeleteCollection(LoginAndTeamRequiredMixin, View):
     def delete(self, request, team_slug: str, pk: int):
-        # TODO: Put general strategy for removing versioned objects in docs
         """
         - If working version is being used, prevent the user from deleting it
         - If a version of it is being used, but not the working version, we should archive the collection and the files.
