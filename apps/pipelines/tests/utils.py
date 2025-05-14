@@ -69,8 +69,9 @@ def llm_response_with_prompt_node(
     if prompt is None:
         prompt = "You are a helpful assistant"
 
+    node_id = str(uuid4())
     params = {
-        "name": "llm response with prompt",
+        "name": kwargs.get("name", "llm response with prompt" + node_id[-4:]),
         "llm_provider_id": provider_id,
         "llm_provider_model_id": provider_model_id,
         "prompt": prompt,
@@ -85,7 +86,7 @@ def llm_response_with_prompt_node(
         params["history_name"] = history_name
 
     return {
-        "id": str(uuid4()),
+        "id": node_id,
         "type": "LLMResponseWithPrompt",
         "params": params | kwargs,
     }
@@ -106,11 +107,12 @@ def llm_response_node(provider_id: str, provider_model_id: str):
 def render_template_node(template_string: str | None = None):
     if template_string is None:
         template_string = "<b>{{ summary }}</b>"
+    id = str(uuid4())
     return {
         "id": str(uuid4()),
         "type": nodes.RenderTemplate.__name__,
         "params": {
-            "name": "render template",
+            "name": "render template" + id[-4:],
             "template_string": template_string,
         },
     }

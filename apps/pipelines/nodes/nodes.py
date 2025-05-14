@@ -1,4 +1,3 @@
-import copy
 import datetime
 import inspect
 import json
@@ -969,9 +968,9 @@ class CodeNode(PipelineNode):
         custom_globals = safe_globals.copy()
 
         participant_data_proxy = self.get_participant_data_proxy(state)
-        pipeline_state = PipelineState(copy.deepcopy(state))
+        pipeline_state = PipelineState(state.copy())
         # add this node into the state so that we can trace the path
-        pipeline_state["outputs"][self.name] = {"node_id": node_id}
+        pipeline_state["outputs"] = {**state["outputs"], self.name: {"node_id": node_id}}
         custom_globals.update(
             {
                 "__builtins__": self._get_custom_builtins(),

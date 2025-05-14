@@ -61,8 +61,8 @@ def test_end_conversation_runs_pipeline(session, pipeline):
                 output_message,  # input to pipeline
             ],
             "outputs": {
-                "start": {"message": f"human: {input}"},
-                "end": {"message": f"human: {input}"},
+                "start": {"message": f"human: {input}", "node_id": "start"},
+                "end": {"message": f"human: {input}", "node_id": "end"},
             },
             "experiment_session": session.id,
             "pipeline_version": pipeline.version_number,

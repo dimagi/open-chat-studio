@@ -153,12 +153,14 @@ def test_llm_with_prompt_response(
             str(provider_model.id),
             source_material_id=str(source_material.id),
             prompt="Node 1: Use this {source_material} to answer questions about {participant_data}.",
+            name="llm1",
         ),
         llm_response_with_prompt_node(
             str(provider.id),
             str(provider_model.id),
             source_material_id=str(source_material.id),
             prompt="Node 2: {source_material}",
+            name="llm2",
         ),
         end_node(),
     ]
@@ -232,11 +234,14 @@ def test_branching_pipeline(pipeline, experiment_session):
         PipelineState(messages=[user_input], experiment_session=experiment_session)
     )["outputs"]
     expected_output = {
-        start["id"]: {"message": user_input},
-        template_a["id"]: {"message": f"A ({user_input})"},
-        template_b["id"]: {"message": f"B ({user_input})"},
-        template_c["id"]: {"message": f"C (B ({user_input}))"},
-        end["id"]: [{"message": f"A ({user_input})"}, {"message": f"C (B ({user_input}))"}],
+        "start": {"message": user_input, "node_id": start["id"]},
+        template_a["params"]["name"]: {"message": f"A ({user_input})", "node_id": template_a["id"]},
+        template_b["params"]["name"]: {"message": f"B ({user_input})", "node_id": template_b["id"]},
+        template_c["params"]["name"]: {"message": f"C (B ({user_input}))", "node_id": template_c["id"]},
+        "end": [
+            {"message": f"A ({user_input})", "node_id": end["id"]},
+            {"message": f"C (B ({user_input}))", "node_id": end["id"]},
+        ],
     }
     assert output == expected_output
 
@@ -285,21 +290,19 @@ def test_conditional_node(pipeline, experiment_session):
     output = runnable.invoke(PipelineState(messages=["hello"], experiment_session=experiment_session))
     assert output["messages"][-1] == "said hello"
     assert output["outputs"] == {
-        start["id"]: {"message": "hello"},
-        boolean["id"]: {"message": "hello", "output_handle": "output_0"},
-        "boolean": {"route": "true", "output": "hello"},
-        template_true["id"]: {"message": "said hello"},
-        end["id"]: {"message": "said hello"},
+        "start": {"message": "hello", "node_id": start["id"]},
+        "boolean": {"route": "true", "message": "hello", "output_handle": "output_0", "node_id": boolean["id"]},
+        template_true["params"]["name"]: {"message": "said hello", "node_id": template_true["id"]},
+        "end": {"message": "said hello", "node_id": end["id"]},
     }
 
     output = runnable.invoke(PipelineState(messages=["bad"], experiment_session=experiment_session))
     assert output["messages"][-1] == "didn't say hello, said bad"
     assert output["outputs"] == {
-        start["id"]: {"message": "bad"},
-        boolean["id"]: {"message": "bad", "output_handle": "output_1"},
-        "boolean": {"output": "bad", "route": "false"},
-        template_false["id"]: {"message": "didn't say hello, said bad"},
-        end["id"]: {"message": "didn't say hello, said bad"},
+        "start": {"message": "bad", "node_id": start["id"]},
+        "boolean": {"route": "false", "message": "bad", "output_handle": "output_1", "node_id": boolean["id"]},
+        template_false["params"]["name"]: {"message": "didn't say hello, said bad", "node_id": template_false["id"]},
+        "end": {"message": "didn't say hello, said bad", "node_id": end["id"]},
     }
 
 
@@ -1236,7 +1239,7 @@ def test_router_node_output_structure(provider, provider_model, pipeline, experi
             llm_provider_model_id=provider_model.id,
         )
         state = PipelineState(
-            outputs={"123": {"message": "hello world"}},
+            outputs={"test_router": {"message": "hello world", "node_id": "123"}},
             messages=["hello world"],
             experiment_session=experiment_session,
             temp_state={"user_input": "hello world", "outputs": {}},
@@ -1253,7 +1256,7 @@ def test_router_node_output_structure(provider, provider_model, pipeline, experi
 
             assert node.name in output_state["outputs"]
             assert "route" in output_state["outputs"][node.name]
-            assert "output" in output_state["outputs"][node.name]
+            assert "message" in output_state["outputs"][node.name]
             assert output_state["outputs"][node.name]["route"] == "A"
-            assert output_state["outputs"][node.name]["output"] == state["node_input"]
+            assert output_state["outputs"][node.name]["message"] == state["node_input"]
             assert command.goto == "next_node_a"

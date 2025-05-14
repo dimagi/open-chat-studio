@@ -63,8 +63,8 @@ def test_running_pipeline_creates_run(pipeline: Pipeline, session: ExperimentSes
             input,  # the output of the end node
         ],
         outputs={
-            pipeline.node_ids[0]: {"message": "foo"},
-            pipeline.node_ids[1]: {"message": "foo"},
+            pipeline.node_ids[0]: {"message": "foo", "node_id": "start"},
+            pipeline.node_ids[1]: {"message": "foo", "node_id": "end"},
         },
         temp_state={
             "outputs": {"end": "foo", "start": "foo"},
