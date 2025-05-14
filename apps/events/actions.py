@@ -7,6 +7,7 @@ from apps.chat.models import ChatMessageType
 from apps.experiments.models import ExperimentSession
 from apps.pipelines.models import PipelineEventInputs
 from apps.pipelines.nodes.base import PipelineState
+from apps.service_providers.tracing import TraceInfo, TracingService
 from apps.utils.django_db import MakeInterval
 
 
@@ -21,11 +22,9 @@ class EventActionHandlerBase:
             Callback for whenever the associated action is updated.
     """
 
-    def invoke(self, session, *args, **kwargs):
-        ...
+    def invoke(self, session, action): ...
 
-    def event_action_updated(self, action):
-        ...
+    def event_action_updated(self, action): ...
 
 
 class LogAction(EventActionHandlerBase):
@@ -104,7 +103,8 @@ class SendMessageToBotAction(EventActionHandlerBase):
         except KeyError:
             message = "The user hasn't responded, please prompt them again."
 
-        session.ad_hoc_bot_message(instruction_prompt=message)
+        trace_info = TraceInfo(name="event", metadata={"action_type": action.action_type, "action_id": action.id})
+        session.ad_hoc_bot_message(message, trace_info)
 
         last_message = session.chat.messages.last()
         if last_message:
@@ -118,13 +118,13 @@ class PipelineStartAction(EventActionHandlerBase):
         try:
             pipeline: Pipeline = Pipeline.objects.get(id=action.params["pipeline_id"])
         except KeyError:
-            raise ValueError("The action is missing the pipeline id")
+            raise ValueError("The action is missing the pipeline id") from None
         except Pipeline.DoesNotExist:
-            raise ValueError("The selected pipeline does not exist, maybe it was deleted?")
+            raise ValueError("The selected pipeline does not exist, maybe it was deleted?") from None
         try:
             input_type = action.params["input_type"]
         except KeyError:
-            raise ValueError("The action is missing the input type")
+            raise ValueError("The action is missing the input type") from None
         if input_type == PipelineEventInputs.FULL_HISTORY:
             messages = session.chat.get_langchain_messages()
         elif input_type == PipelineEventInputs.HISTORY_LAST_SUMMARY:
@@ -133,7 +133,17 @@ class PipelineStartAction(EventActionHandlerBase):
             messages = [session.chat.messages.last().to_langchain_message()]
 
         input = "\n".join(f"{message.type}: {message.content}" for message in messages)
-        output = pipeline.invoke(
-            PipelineState(messages=[input], experiment_session=session), session, save_run_to_history=False
-        )
+        state = PipelineState(messages=[input], experiment_session=session, pipeline_version=pipeline.version_number)
+        trace_service = TracingService.create_for_experiment(session.experiment)
+        with trace_service.trace(
+            trace_name=f"{session.experiment.name} - event pipeline execution",
+            session_id=session.id,
+            user_id=session.participant.identifier,
+            inputs={"input": input},
+            metadata={"action_type": action.action_type, "action_id": action.id, "params": action.params},
+        ):
+            output = pipeline.invoke(
+                state, session, session.experiment_version, trace_service, save_run_to_history=False
+            )
+            trace_service.set_current_span_outputs({"response": output.content})
         return output.content

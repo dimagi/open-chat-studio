@@ -39,8 +39,8 @@ def trim_spec(openapi_spec: dict) -> dict:
             del openapi_spec[key]
 
     operation_keys = ["parameters", "requestBody", "tags", "summary", "description", "operationId"]
-    for path, methods in openapi_spec["paths"].items():
-        for method, details in methods.items():
+    for _path, methods in openapi_spec["paths"].items():
+        for _method, details in methods.items():
             for key in list(details.keys()):
                 if key not in operation_keys:
                     del details[key]

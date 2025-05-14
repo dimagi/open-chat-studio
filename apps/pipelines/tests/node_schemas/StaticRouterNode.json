@@ -1,0 +1,68 @@
+{
+  "description": "Routes the input to a linked node using the temp state of the pipeline or participant data",
+  "properties": {
+    "name": {
+      "title": "Node Name",
+      "type": "string",
+      "ui:widget": "node_name"
+    },
+    "keywords": {
+      "items": {
+        "type": "string"
+      },
+      "title": "Keywords",
+      "type": "array",
+      "ui:widget": "keywords"
+    },
+    "default_keyword_index": {
+      "default": 0,
+      "title": "Default Keyword Index",
+      "type": "integer"
+    },
+    "tag_output_message": {
+      "default": false,
+      "description": "Tag the output message with the selected route",
+      "title": "Tag Output Message",
+      "type": "boolean",
+      "ui:widget": "toggle"
+    },
+    "data_source": {
+      "enum": [
+        "participant_data",
+        "temp_state",
+        "session_state"
+      ],
+      "title": "DataSource",
+      "type": "string",
+      "default": "participant_data",
+      "description": "The source of the data to use for routing",
+      "ui:enumLabels": [
+        "Participant Data",
+        "Temporary State",
+        "Session State"
+      ]
+    },
+    "route_key": {
+      "description": "The key in the data to use for routing",
+      "title": "Route Key",
+      "type": "string"
+    }
+  },
+  "required": [
+    "name",
+    "route_key"
+  ],
+  "title": "StaticRouterNode",
+  "type": "object",
+  "ui:can_add": true,
+  "ui:can_delete": true,
+  "ui:deprecated": false,
+  "ui:documentation_link": "/concepts/pipelines/nodes/#static-router",
+  "ui:flow_node_type": "pipelineNode",
+  "ui:label": "Static Router",
+  "ui:order": [
+    "data_source",
+    "route_key",
+    "keywords"
+  ]
+}

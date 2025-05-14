@@ -8,6 +8,7 @@ from django.shortcuts import get_object_or_404
 from django.urls import reverse
 
 from apps.experiments.models import Experiment, ExperimentSession, SessionStatus
+from apps.teams.decorators import TeamAccessDenied
 
 MAX_AGE = 180 * 24 * 60 * 60  # 6 months
 
@@ -37,7 +38,7 @@ def experiment_session_view(allowed_states=None):
                     team=request.team,
                 )
             except ExperimentSession.DoesNotExist:
-                raise Http404()
+                raise Http404() from None
 
             if allowed_states and request.experiment_session.status not in allowed_states:
                 return _redirect_for_state(request, team_slug)
@@ -70,7 +71,7 @@ def get_chat_session_access_cookie_data(request, fail_silently=False):
         )
     except Exception as e:
         if fail_silently:
-            return
+            return None
         raise e
 
 
@@ -87,18 +88,18 @@ def verify_session_access_cookie(view):
     @wraps(view)
     def _inner(request, *args, **kwargs):
         if request.user.is_authenticated:
-            if request.experiment_session.participant.user_id == request.user.id:
-                return view(request, *args, **kwargs)
-            elif request.team_membership and request.user.has_perm("chat.view_chat"):
+            if request.experiment_session.participant.user_id == request.user.id or (
+                request.team_membership and request.user.has_perm("chat.view_chat")
+            ):
                 return view(request, *args, **kwargs)
 
         try:
             access_value = get_chat_session_access_cookie_data(request)
         except (signing.BadSignature, KeyError):
-            raise Http404()
+            raise (TeamAccessDenied() if request.user.is_superuser else Http404()) from None
 
         if not _validate_access_cookie_data(request.experiment, request.experiment_session, access_value):
-            raise Http404()
+            raise TeamAccessDenied() if request.user.is_superuser else Http404()
 
         return view(request, *args, **kwargs)
 
@@ -134,6 +135,6 @@ def _redirect_for_state(request, team_slug):
         case _:
             messages.info(
                 request,
-                "Session was in an unknown/unexpected state." " It may be old, or something may have gone wrong.",
+                "Session was in an unknown/unexpected state. It may be old, or something may have gone wrong.",
             )
             return HttpResponseRedirect(reverse("experiments:experiment_session_view", args=view_args))

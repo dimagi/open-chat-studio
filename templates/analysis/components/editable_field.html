@@ -1,0 +1,20 @@
+{% load chat_tags %}
+<div class="flex flex-col" id="{{ field_name }}-field">
+  <div class="py-2">
+    {% if field_type == "textarea" %}
+      <div class="prose">{{ value|default:"---"|render_markdown }}</div>
+    {% else %}
+      <p>{{ value|default:"---" }}</p>
+    {% endif %}
+    <button
+      type="button"
+      class="text-blue-500 hover:text-blue-700"
+      hx-get="{% url 'analysis:update_field' request.team.slug object.id %}"
+      hx-vals='{"field_name": "{{ field_name }}", "field_type": "{{ field_type }}"}'
+      hx-target="#{{ field_name }}-field"
+      hx-swap="outerHTML"
+    >
+      <i class="fa-solid fa-pen-to-square"></i> Edit
+    </button>
+  </div>
+</div>

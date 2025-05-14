@@ -287,6 +287,7 @@ def test_conditional_node(pipeline, experiment_session):
     assert output["outputs"] == {
         start["id"]: {"message": "hello"},
         boolean["id"]: {"message": "hello", "output_handle": "output_0"},
+        "boolean": {"route": "true", "output": "hello"},
         template_true["id"]: {"message": "said hello"},
         end["id"]: {"message": "said hello"},
     }
@@ -296,6 +297,7 @@ def test_conditional_node(pipeline, experiment_session):
     assert output["outputs"] == {
         start["id"]: {"message": "bad"},
         boolean["id"]: {"message": "bad", "output_handle": "output_1"},
+        "boolean": {"output": "bad", "route": "false"},
         template_false["id"]: {"message": "didn't say hello, said bad"},
         end["id"]: {"message": "didn't say hello, said bad"},
     }
@@ -314,7 +316,7 @@ def test_router_node_prompt(get_llm_service, provider, provider_model, pipeline,
         llm_provider_id=provider.id,
         llm_provider_model_id=provider_model.id,
     )
-    node.process_conditional(
+    node._process_conditional(
         PipelineState(
             outputs={"123": {"message": "a"}},
             messages=["a"],
@@ -860,7 +862,7 @@ def test_single_node_unreachable(pipeline):
     nodes = [start_node(), passthrough_node(), end_node(), passthrough_node()]
     edges = [
         {
-            "id": f"{node['id']}->{nodes[i+1]['id']}",
+            "id": f"{node['id']}->{nodes[i + 1]['id']}",
             "source": node["id"],
             "target": nodes[i + 1]["id"],
         }
@@ -881,7 +883,7 @@ def test_subgraph_unreachable_should_build(pipeline):
     # Start -> Passthrough -> End
     reachable_edges = [
         {
-            "id": f"{node['id']}->{nodes[i+1]['id']}",
+            "id": f"{node['id']}->{nodes[i + 1]['id']}",
             "source": node["id"],
             "target": nodes[i + 1]["id"],
         }
@@ -890,7 +892,7 @@ def test_subgraph_unreachable_should_build(pipeline):
     # Passthrough 2 -> Passthrough 3 -> Passthrough 4
     unreachable_edges = [
         {
-            "id": f"{node['id']}->{nodes[i+1]['id']}",
+            "id": f"{node['id']}->{nodes[i + 1]['id']}",
             "source": node["id"],
             "target": nodes[i + 1]["id"],
         }
@@ -1127,7 +1129,7 @@ def test_input_with_format_strings():
         pipeline_version=1,
         temp_state={},
     )
-    resp = Passthrough(name="test").process("node_id", [], state, {})
+    resp = Passthrough(name="test").process("node_id", [], [], state, {})
 
     assert resp["messages"] == ["Is this it {the thing}"]
 
@@ -1233,19 +1235,25 @@ def test_router_node_output_structure(provider, provider_model, pipeline, experi
             llm_provider_id=provider.id,
             llm_provider_model_id=provider_model.id,
         )
-
         state = PipelineState(
             outputs={"123": {"message": "hello world"}},
             messages=["hello world"],
             experiment_session=experiment_session,
+            temp_state={"user_input": "hello world", "outputs": {}},
+            path=[],
         )
-        conditional_branch = node.process_conditional(state, node_id="123")
+        with mock.patch.object(node, "_process_conditional", return_value="A"):
+            node_id = "123"
+            edge_map = {"A": "next_node_a", "B": "next_node_b"}
+            incoming_edges = ["123"]
+            router_func = node.build_router_function(node_id, edge_map, incoming_edges)
+            command = router_func(state, {"metadata": {"langgraph_triggers": []}})
 
-        assert "123" in state["outputs"]
-        assert "output_handle" in state["outputs"]["123"]
-        assert node.name in state["outputs"]
-        assert "route" in state["outputs"][node.name]
-        assert "output" in state["outputs"][node.name]
+            output_state = command.update
 
-        assert state["outputs"][node.name]["route"] == conditional_branch
-        assert state["outputs"][node.name]["output"] == "hello world"
+            assert node.name in output_state["outputs"]
+            assert "route" in output_state["outputs"][node.name]
+            assert "output" in output_state["outputs"][node.name]
+            assert output_state["outputs"][node.name]["route"] == "A"
+            assert output_state["outputs"][node.name]["output"] == state["node_input"]
+            assert command.goto == "next_node_a"

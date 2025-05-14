@@ -11,14 +11,13 @@ from django.core.serializers.json import DjangoJSONEncoder
 from django.db import models, transaction
 from django.urls import reverse
 from langchain_core.messages import AIMessage, BaseMessage, HumanMessage, SystemMessage
-from langchain_core.runnables import RunnableConfig
 from pydantic import ConfigDict
 
 from apps.annotations.models import TagCategories
 from apps.chat.models import ChatMessage, ChatMessageType
 from apps.custom_actions.form_utils import set_custom_actions
 from apps.custom_actions.mixins import CustomActionOperationMixin
-from apps.experiments.models import ExperimentSession
+from apps.experiments.models import Experiment, ExperimentSession
 from apps.experiments.versioning import VersionDetails, VersionField, VersionsMixin, VersionsObjectManagerMixin
 from apps.pipelines.exceptions import PipelineBuildError
 from apps.pipelines.executor import patch_executor
@@ -240,7 +239,7 @@ class Pipeline(BaseTeamModel, VersionsMixin):
         for node in nodes:
             name_to_flow_id[node.params.get("name")].append(node.flow_id)
 
-        for name, flow_ids in name_to_flow_id.items():
+        for _name, flow_ids in name_to_flow_id.items():
             if len(flow_ids) > 1:
                 for flow_id in flow_ids:
                     errors[flow_id].update({"name": "All node names must be unique"})
@@ -299,39 +298,28 @@ class Pipeline(BaseTeamModel, VersionsMixin):
         self,
         input: PipelineState,
         session: ExperimentSession,
+        experiment: Experiment,
+        trace_service,
         save_run_to_history=True,
         save_input_to_history=True,
         disable_reminder_tools=False,
-    ) -> dict:
+    ) -> ChatMessage:
         from apps.experiments.models import AgentTools
         from apps.pipelines.graph import PipelineGraph
 
         runnable = PipelineGraph.build_runnable_from_pipeline(self)
         pipeline_run = self._create_pipeline_run(input, session)
         logging_callback = PipelineLoggingCallbackHandler(pipeline_run)
-
         logging_callback.logger.debug("Starting pipeline run", input=input["messages"][-1])
-        pipeline_output = None
         try:
-            callbacks = [logging_callback]
-            trace_service = session.experiment.trace_service
-            if trace_service:
-                trace_service_callback = trace_service.get_callback(
-                    trace_name=session.experiment.name,
-                    participant_id=str(session.participant.identifier),
-                    session_id=str(session.external_id),
-                )
-                callbacks.append(trace_service_callback)
-
-            config = RunnableConfig(
-                run_name=session.experiment.name,
-                callbacks=callbacks,
+            config = trace_service.get_langchain_config(
+                callbacks=[logging_callback],
                 configurable={
                     "disabled_tools": AgentTools.reminder_tools() if disable_reminder_tools else [],
                 },
             )
-            output = runnable.invoke(input, config=config)
-            output = PipelineState(**output).json_safe()
+            raw_output = runnable.invoke(input, config=config)
+            output = PipelineState(**raw_output).json_safe()
             pipeline_run.output = output
             if save_run_to_history and session is not None:
                 input_metadata = output.get("input_message_metadata", {})
@@ -352,19 +340,19 @@ class Pipeline(BaseTeamModel, VersionsMixin):
                     metadata=output_metadata,
                     tags=output.get("output_message_tags"),
                 )
-                pipeline_output = ai_message
+                ai_message.add_version_tag(
+                    version_number=experiment.version_number, is_a_version=experiment.is_a_version
+                )
+                return ai_message
             else:
-                pipeline_output = ChatMessage(content=output)
+                return ChatMessage(content=output)
         finally:
-            if trace_service:
-                trace_service.end()
             if pipeline_run.status == PipelineRunStatus.ERROR:
                 logging_callback.logger.debug("Pipeline run failed", input=input["messages"][-1])
             else:
                 pipeline_run.status = PipelineRunStatus.SUCCESS
                 logging_callback.logger.debug("Pipeline run finished", output=output["messages"][-1])
             pipeline_run.save()
-        return pipeline_output
 
     def _create_pipeline_run(self, input: PipelineState, session: ExperimentSession) -> "PipelineRun":
         # Django doesn't auto-serialize objects for JSON fields, so we need to copy the input and save the ID of
@@ -385,20 +373,18 @@ class Pipeline(BaseTeamModel, VersionsMixin):
             chat=session.chat, message_type=type_.value, content=message, metadata=metadata
         )
 
-        if type_ == ChatMessageType.AI:
-            chat_message.add_version_tag(version_number=self.version_number, is_a_version=self.is_a_version)
-            if tags:
-                for tag in tags:
-                    chat_message.add_system_tag(tag, TagCategories.BOT_RESPONSE)
+        if tags:
+            for tag in tags:
+                chat_message.add_system_tag(tag, TagCategories.BOT_RESPONSE)
         return chat_message
 
     @transaction.atomic()
-    def create_new_version(self, *args, **kwargs):
+    def create_new_version(self):
         version_number = self.version_number
         self.version_number = version_number + 1
         self.save(update_fields=["version_number"])
 
-        pipeline_version = super().create_new_version(save=False, *args, **kwargs)
+        pipeline_version = super().create_new_version(save=False)
         pipeline_version.version_number = version_number
         pipeline_version.save()
 

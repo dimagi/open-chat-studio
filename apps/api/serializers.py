@@ -124,10 +124,11 @@ class ExperimentSessionCreateSerializer(serializers.ModelSerializer):
         required=False, label="Participant identifier", help_text="Channel specific participant identifier"
     )
     messages = MessageSerializer(many=True, required=False)
+    state = serializers.JSONField(required=False)
 
     class Meta:
         model = ExperimentSession
-        fields = ["url", "experiment", "participant", "messages"]
+        fields = ["url", "experiment", "participant", "messages", "state"]
 
     @transaction.atomic
     def create(self, validated_data):

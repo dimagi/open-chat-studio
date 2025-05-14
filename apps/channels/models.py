@@ -74,21 +74,23 @@ class ChannelPlatform(models.TextChoices):
     def extra_form(self, *args, **kwargs):
         from apps.channels import forms
 
-        channel = kwargs.pop("channel", None)
-
         match self:
             case self.TELEGRAM:
+                kwargs.pop("channel", None)
                 return forms.TelegramChannelForm(*args, **kwargs)
             case self.WHATSAPP:
-                return forms.WhatsappChannelForm(channel=channel, *args, **kwargs)
+                return forms.WhatsappChannelForm(*args, **kwargs)
             case self.FACEBOOK:
-                return forms.FacebookChannelForm(channel=channel, *args, **kwargs)
+                return forms.FacebookChannelForm(*args, **kwargs)
             case self.SUREADHERE:
-                return forms.SureAdhereChannelForm(channel=channel, *args, **kwargs)
+                return forms.SureAdhereChannelForm(*args, **kwargs)
             case self.SLACK:
+                kwargs.pop("channel", None)
                 return forms.SlackChannelForm(*args, **kwargs)
             case self.COMMCARE_CONNECT:
+                kwargs.pop("channel", None)
                 return forms.CommCareConnectChannelForm(*args, **kwargs)
+        return None
 
     @property
     def channel_identifier_key(self) -> str:
@@ -107,10 +109,19 @@ class ChannelPlatform(models.TextChoices):
                 # The bot_name will be shown to the user, which is how they'll know which bot it is. We use the bot name
                 # here to prevent other bots from using the same name in order to mitigate confusion.
                 return "commcare_connect_bot_name"
+        return None
 
     @staticmethod
     def as_list(exclude: list["ChannelPlatform"]) -> list["ChannelPlatform"]:
         return [ChannelPlatform(value) for value in ChannelPlatform.values if value not in exclude]
+
+    @classmethod
+    def for_filter(cls, team) -> list[str]:
+        platforms = cls.for_dropdown([], team).keys()
+        platforms_with_labels = [platform.label for platform in platforms]
+        platforms_with_labels.append(cls.API.label)
+        platforms_with_labels.append(cls.WEB.label)
+        return sorted(platforms_with_labels)
 
 
 class ExperimentChannelObjectManager(AuditingManager):
@@ -177,10 +188,14 @@ class ExperimentChannel(BaseTeamModel):
     def form(self, *args, **kwargs):
         from apps.channels.forms import ChannelForm
 
-        return ChannelForm(instance=self, experiment=self.experiment, *args, **kwargs)
+        kwargs["instance"] = self
+        kwargs["experiment"] = self.experiment
+        return ChannelForm(*args, **kwargs)
 
     def extra_form(self, *args, **kwargs):
-        return self.platform_enum.extra_form(initial=self.extra_data, channel=self, *args, **kwargs)
+        kwargs["initial"] = self.extra_data
+        kwargs["channel"] = self
+        return self.platform_enum.extra_form(*args, **kwargs)
 
     @staticmethod
     def check_usage_by_another_experiment(platform: ChannelPlatform, identifier: str, new_experiment: Experiment):

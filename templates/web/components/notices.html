@@ -1,5 +1,5 @@
 {% if temporary_superuser_access %}
-  <div class="alert bg-red-300 dark:bg-red-800 shadow-md !rounded-none text-warning-content">
+  <div class="alert bg-red-300 dark:bg-red-800 shadow-md rounded-none! text-warning-content">
     You are operating with escalated privileges. Release access:
     <div>
       {% for slug, expires in temporary_superuser_access.items %}
@@ -13,8 +13,8 @@
 {% endif %}
 {% if notices %}
   {% for notice in notices %}
-    <div class="notification flex w-full shadow-md !rounded-none alert m-1">
-      <div class="prose !max-w-none">{{ notice|safe }}</div>
+    <div class="notification flex w-full shadow-md rounded-none! alert m-1">
+      <div class="prose max-w-none!">{{ notice|safe }}</div>
     </div>
   {% endfor %}
 {% endif %}

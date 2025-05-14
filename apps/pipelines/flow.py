@@ -1,5 +1,4 @@
-"""Datamodels to hold state from react-flow for the front-end
-"""
+"""Datamodels to hold state from react-flow for the front-end"""
 
 from typing import Literal
 

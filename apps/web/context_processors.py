@@ -29,6 +29,7 @@ def project_meta(request):
         "docs_links": settings.DOCUMENTATION_LINKS,
         "dark_mode": request.COOKIES.get("theme", "") == "dark",
         "login_url_name": settings.LOGIN_URL,
+        "debug": settings.DEBUG,
     }
 
 

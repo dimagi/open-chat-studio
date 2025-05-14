@@ -13,7 +13,7 @@ def _make_edges(nodes) -> list[dict]:
 
     return [
         {
-            "id": f"{node['id']}->{nodes[i+1]['id']}",
+            "id": f"{node['id']}->{nodes[i + 1]['id']}",
             "source": node["id"],
             "target": nodes[i + 1]["id"],
         }

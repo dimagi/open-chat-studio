@@ -11,7 +11,8 @@ from apps.experiments.models import ExperimentSession
 from apps.pipelines.models import LogEntry, Pipeline, PipelineRunStatus
 from apps.pipelines.nodes.base import PipelineNode, PipelineState
 from apps.pipelines.nodes.nodes import StartNode
-from apps.service_providers.models import TraceProvider
+from apps.service_providers.tests.mock_tracer import MockTracer
+from apps.service_providers.tracing import TracingService
 from apps.utils.factories.experiment import ExperimentSessionFactory
 from apps.utils.factories.pipelines import PipelineFactory
 from apps.utils.pytest import django_db_transactional
@@ -34,7 +35,12 @@ def test_running_pipeline_creates_run(pipeline: Pipeline, session: ExperimentSes
         Attachment(file_id=123, type="code_interpreter", name="test.py", size=10),
     ]
     serialized_attachments = [att.model_dump() for att in attachments]
-    pipeline.invoke(PipelineState(messages=[input], attachments=serialized_attachments), session)
+    pipeline.invoke(
+        PipelineState(messages=[input], attachments=serialized_attachments),
+        session,
+        session.experiment,
+        TracingService.empty(),
+    )
     assert pipeline.runs.count() == 1
     run = pipeline.runs.first()
     assert run.status == PipelineRunStatus.SUCCESS
@@ -68,6 +74,7 @@ def test_running_pipeline_creates_run(pipeline: Pipeline, session: ExperimentSes
         input_message_metadata={},
         output_message_metadata={},
         output_message_tags=[],
+        path=[[None, "start", ["end"]], ["start", "end", []]],
     )
 
     assert len(run.log["entries"]) == 8
@@ -136,7 +143,7 @@ def test_running_failed_pipeline_logs_error(pipeline: Pipeline, session: Experim
 
     with patch.object(nodes, StartNode.__name__, FailingNode):
         with pytest.raises(Exception, match=error_message):
-            pipeline.invoke(PipelineState(messages=[input]), session)
+            pipeline.invoke(PipelineState(messages=[input]), session, session.experiment, TracingService.empty())
 
     assert pipeline.runs.count() == 1
     run = pipeline.runs.first()
@@ -162,7 +169,7 @@ def test_running_failed_pipeline_logs_error(pipeline: Pipeline, session: Experim
 @django_db_transactional()
 def test_running_pipeline_stores_session(pipeline: Pipeline, session: ExperimentSession):
     input = "foo"
-    pipeline.invoke(PipelineState(messages=[input]), session)
+    pipeline.invoke(PipelineState(messages=[input]), session, session.experiment, TracingService.empty())
     assert pipeline.runs.count() == 1
     assert pipeline.runs.first().session_id == session.id
 
@@ -171,7 +178,13 @@ def test_running_pipeline_stores_session(pipeline: Pipeline, session: Experiment
 @pytest.mark.parametrize("save_input_to_history", [True, False])
 def test_save_input_to_history(save_input_to_history, pipeline: Pipeline, session: ExperimentSession):
     input = "Hi"
-    pipeline.invoke(PipelineState(messages=[input]), session, save_input_to_history=save_input_to_history)
+    pipeline.invoke(
+        PipelineState(messages=[input]),
+        session,
+        session.experiment,
+        TracingService.empty(),
+        save_input_to_history=save_input_to_history,
+    )
     assert (
         session.chat.messages.filter(content="Hi", message_type=ChatMessageType.HUMAN).exists() == save_input_to_history
     )
@@ -179,9 +192,9 @@ def test_save_input_to_history(save_input_to_history, pipeline: Pipeline, sessio
 
 @django_db_transactional()
 def test_save_trace_metadata(pipeline: Pipeline, session: ExperimentSession):
-    provider = TraceProvider(type="langfuse", config={})
-    session.experiment.trace_provider = provider
-    pipeline.invoke(PipelineState(messages=["Hi"]), session)
+    trace_service = TracingService([MockTracer()])
+    with trace_service.trace("test", "123", "bob"):
+        pipeline.invoke(PipelineState(messages=["Hi"]), session, session.experiment, trace_service)
     human_message = session.chat.messages.filter(message_type=ChatMessageType.HUMAN).first()
     assert "trace_info" in human_message.metadata
     ai_message = session.chat.messages.filter(message_type=ChatMessageType.AI).first()
@@ -194,7 +207,7 @@ def test_save_metadata_and_tagging(pipeline: Pipeline, session: ExperimentSessio
     pipeline_state = PipelineState(messages=["Hi"], output_message_tags=output_message_tags)
 
     with mock.patch.object(ChatMessage, "add_system_tag") as mock_add_system_tag:
-        pipeline.invoke(pipeline_state, session)
+        pipeline.invoke(pipeline_state, session, session.experiment, TracingService.empty())
         for tag in output_message_tags:
             mock_add_system_tag.assert_any_call(tag, TagCategories.BOT_RESPONSE)
 

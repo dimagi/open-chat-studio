@@ -1,0 +1,13 @@
+<div class="flex justify-end space-x-2">
+    <a href="{% url 'analysis:detail' record.team.slug record.id %}" class="btn btn-primary btn-xs">
+        <i class="fas fa-eye"></i>
+    </a>
+    {% if record.is_complete %}
+        <a href="{% url 'analysis:download' record.team.slug record.id %}" class="btn btn-success btn-xs">
+            <i class="fas fa-download"></i>
+        </a>
+    {% endif %}
+    <a href="{% url 'analysis:delete' record.team.slug record.id %}" class="btn btn-danger btn-xs">
+        <i class="fas fa-trash"></i>
+    </a>
+</div>

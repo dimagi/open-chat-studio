@@ -86,7 +86,7 @@ class FileDetails(BaseDetailsView):
     def get_context_data(self, *args, **kwargs):
         context = super().get_context_data(*args, **kwargs)
         file = self.get_object()
-        collections = file.collection_set.filter(is_version=False).all()
+        collections = file.collections.filter(is_version=False).all()
         context["current_collection_ids"] = [col.id for col in collections]
         context["current_collection_names"] = [col.name for col in collections]
         context["max_summary_length"] = settings.MAX_SUMMARY_LENGTH
@@ -164,7 +164,7 @@ def _update_collection_membership(file: File, collection_ids: list[str]):
     """Handles updating the collections a file belongs to"""
     collections = file.team.collection_set.filter(id__in=collection_ids, is_version=False).values_list("id", flat=True)
 
-    existing_collections = set(file.collection_set.values_list("id", flat=True))
+    existing_collections = set(file.collections.values_list("id", flat=True))
     new_collections = set(collections) - existing_collections
     collections_to_remove_files_from = existing_collections - set(collections)
 

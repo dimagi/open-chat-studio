@@ -35,10 +35,10 @@ class ExperimentHistoryManager(BaseHistoryManager):
     def __init__(
         self,
         session: ExperimentSession,
-        experiment: Experiment | None = None,
+        experiment: Experiment,
+        trace_service,
         max_token_limit: int | None = None,
         chat_model: BaseChatModel | None = None,
-        trace_service=None,
         history_mode: str | None = None,
     ):
         self.session = session
@@ -57,19 +57,19 @@ class ExperimentHistoryManager(BaseHistoryManager):
         cls,
         session: ExperimentSession,
         experiment: Experiment,
-        trace_service=None,
+        trace_service,
     ) -> Self:
         return cls(
             session=session,
             experiment=experiment,
+            trace_service=trace_service,
             max_token_limit=experiment.max_token_limit,
             chat_model=experiment.get_chat_model(),
-            trace_service=trace_service or experiment.trace_service,
         )
 
     @classmethod
-    def for_assistant(cls, session: ExperimentSession, experiment: Experiment) -> Self:
-        return cls(session=session, experiment=experiment)
+    def for_assistant(cls, session: ExperimentSession, experiment: Experiment, trace_service) -> Self:
+        return cls(session=session, experiment=experiment, trace_service=trace_service)
 
     def get_chat_history(self, input_messages: list):
         return compress_chat_history(
@@ -140,9 +140,7 @@ class ExperimentHistoryManager(BaseHistoryManager):
         return chat_message
 
     def get_trace_metadata(self) -> dict:
-        if self.trace_service:
-            return self.trace_service.get_trace_metadata()
-        return {}
+        return self.trace_service.get_trace_metadata()
 
 
 class PipelineHistoryManager(BaseHistoryManager):

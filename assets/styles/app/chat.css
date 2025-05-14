@@ -1,43 +1,56 @@
-@layer components {
-  .chat-pane {
-    @apply overflow-y-auto flex flex-col flex-grow p-4 space-y-4 bg-gray-50;
-  }
-  .chat-message {
-    @apply px-3 py-2 rounded-lg;
-  }
-  .message-contents {
-    @apply prose max-w-none lg:prose-lg;
-  }
-  .message-contents p {
+@utility chat-pane {
+  @apply overflow-y-auto flex flex-col grow p-4 space-y-4 bg-base-300;
+}
+
+@utility chat-message {
+  @apply px-3 py-2 rounded-lg;
+}
+
+@utility message-contents {
+  @apply prose max-w-none lg:prose-lg;
+  & p {
     @apply my-0;
   }
-  .message-contents pre {
-    @apply whitespace-pre-wrap
+  & pre {
+    @apply whitespace-pre-wrap;
   }
-  .message-contents hr {
+  & hr {
     @apply my-0 border-t border-gray-200;
   }
 
-  .chat-message-system {
-    @apply chat-message bg-blue-100;
-  }
-
-  .chat-message-user {
-    @apply chat-message bg-indigo-500 text-white;
-  }
-
-  .chat-message-user .message-contents {
+  .chat-message-user & {
     @apply text-white;
   }
 
-  .chat-message-system .message-contents {
+  .chat-message-system & {
     @apply text-slate-600;
   }
+}
 
-  .loading-dots:after {
+@utility chat-message-system {
+  @apply chat-message bg-blue-100;
+
+  & .message-contents {
+    @apply text-slate-600;
+  }
+}
+
+@utility chat-message-user {
+  @apply chat-message bg-indigo-500 text-white;
+
+  & .message-contents {
+    @apply text-white;
+  }
+}
+
+@utility loading-dots {
+  &:after {
     content: ' .';
     animation: dots 1s steps(5, end) infinite;
   }
+}
+
+@layer components {
 
   @keyframes dots {
     0%, 20% {

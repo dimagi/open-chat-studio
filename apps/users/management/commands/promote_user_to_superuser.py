@@ -13,7 +13,7 @@ class Command(BaseCommand):
         try:
             user = CustomUser.objects.get(username=username)
         except CustomUser.DoesNotExist:
-            raise CommandError(f"No user with username/email {username} found!")
+            raise CommandError(f"No user with username/email {username} found!") from None
         user.is_superuser = True
         user.is_staff = True
         user.save()

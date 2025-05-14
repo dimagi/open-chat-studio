@@ -43,6 +43,7 @@
   {{ node_schemas|json_script:"node-schemas" }}
   {{ flags_enabled|json_script:"flags-enabled" }}
   {{ origin|json_script:"pipeline-request-origin" }}
+  {{ read_only|json_script:"read-only" }}
   <script src="{% static 'js/pipeline-bundle.js' %}"></script>
   <script type="module">
     window.DOCUMENTATION_BASE_URL = '{{ docs_base_url }}';

@@ -18,11 +18,11 @@ def test_create_for_user():
         email=email,
     )
     team = create_default_team_for_user(user)
-    assert "Alice" == team.name
-    assert "alice" == team.slug
+    assert team.name == "Alice"
+    assert team.slug == "alice"
     membership = team.membership_set.filter(user=user).first()
     assert membership.is_team_admin()
-    assert [SUPER_ADMIN_GROUP] == [group.name for group in membership.groups.all()]
+    assert [group.name for group in membership.groups.all()] == [SUPER_ADMIN_GROUP]
 
 
 @pytest.mark.django_db()

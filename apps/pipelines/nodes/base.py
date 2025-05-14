@@ -1,12 +1,13 @@
 import logging
 import operator
 from abc import ABC
-from collections.abc import Sequence
+from collections.abc import Callable, Sequence
 from enum import StrEnum
 from functools import cached_property
 from typing import Annotated, Any, Literal, Self
 
 from langchain_core.runnables import RunnableConfig
+from langgraph.types import Command
 from pydantic import BaseModel, ConfigDict, Field, model_validator
 from pydantic.config import JsonDict
 from typing_extensions import TypedDict
@@ -81,8 +82,15 @@ class PipelineState(dict):
     attachments: list = Field(default=[])
     output_message_tags: Annotated[list[str], operator.add]
 
+    # List of (previous, current, next) tuples used for aiding in routing decisions.
+    path: Annotated[Sequence[tuple[str | None, str, list[str]]], operator.add]
+    # input to the current node
+    node_input: str
+    # source node for the current node
+    node_source: str
+
     def json_safe(self):
-        # We need to make a copy of `self` so as to not change the actual value of `experiment_session` forever
+        # We need to make a copy of `self` to not change the actual value of `experiment_session` forever
         copy = self.copy()
         if "experiment_session" in copy:
             copy["experiment_session"] = copy["experiment_session"].id
@@ -100,37 +108,87 @@ class PipelineState(dict):
 
         return cls(**kwargs)
 
-    def get_route(self, node_name: str) -> str | None:
+    def _get_node_mappings(self):
+        """
+        Helper method to get node ID to name mappings.
+        Returns a tuple of (node_id_to_name, name_to_node_id) dictionaries.
+        """
+        from apps.pipelines.models import Node
+
+        pipeline_version = self.get("pipeline_version")
+        nodes = Node.objects.filter(pipeline__version_number=pipeline_version)
+
+        node_id_to_name = {node.flow_id: node.params.get("name") for node in nodes}
+        name_to_node_id = {node.params.get("name"): node.flow_id for node in nodes}
+
+        return node_id_to_name, name_to_node_id
+
+    def get_node_id(self, node_name: str):
+        """
+        Helper method to get a node ID from a node name.
+        """
+        _, name_to_node_id = self._get_node_mappings()
+        return name_to_node_id.get(node_name, node_name)
+
+    def get_node_name(self, node_id: str):
+        """
+        Helper method to get a node name from a node ID.
+        """
+        node_id_to_name, _ = self._get_node_mappings()
+        return node_id_to_name.get(node_id, node_id)
+
+    def get_selected_route(self, node_name: str) -> str | None:
         """
         Gets the route selected by a specific router node.
         """
-        node_output = self.get("outputs", {}).get(node_name)
-        if node_output:
-            return node_output.get("route")
+        outputs = self.get("outputs", {})
+        node_id_to_name, name_to_node_id = self._get_node_mappings()
+
+        if node_name in outputs and "route" in outputs[node_name]:
+            return outputs[node_name].get("route")
+
+        node_id = name_to_node_id.get(node_name)
+
+        if node_id and node_id in outputs and "route" in outputs[node_id]:
+            return outputs[node_id].get("route")
+
+        for node_identifier, data in outputs.items():
+            if node_id_to_name.get(node_identifier) == node_name and "route" in data:
+                return data.get("route")
+
         return None
 
     def get_node_path(self, node_name: str) -> list | None:
         """
         Gets the path (list of node names) leading to the specified node.
-
         Returns:
-            A list containing the sequence of nodes leading to the target node,
-            or None if the node is not found
+            A list containing the sequence of nodes leading to the target node.
+            If the node is not found in the pipeline path, returns a list containing
+            only the specified node name.
         """
         path = []
         outputs = self.get("outputs", {})
-        current_node = node_name
+        node_id_to_name, name_to_node_id = self._get_node_mappings()
+        current_node_id = name_to_node_id.get(node_name, node_name)
 
-        while current_node:
-            path.insert(0, current_node)
+        while current_node_id:
+            current_name = node_id_to_name.get(current_node_id, current_node_id)
+            path.insert(0, current_name)
 
-            # Find which node routed to the current node
-            parent_node = None
-            for node, data in outputs.items():
-                if "route" in data and data["route"] == current_node:
-                    parent_node = node
+            parent_node_id = None
+            for _, current, targets in self.get("path", []):
+                if current_node_id in targets or current_node_id == targets[0]:
+                    parent_node_id = current
                     break
-            current_node = parent_node
+
+            if not parent_node_id:
+                for node, data in outputs.items():
+                    if "route" in data and data["route"] == current_node_id:
+                        parent_node_id = node
+                        break
+
+            current_node_id = parent_node_id
+
         return path if path else None
 
     def get_all_routes(self) -> dict:
@@ -139,15 +197,120 @@ class PipelineState(dict):
         """
         routes_dict = {}
         outputs = self.get("outputs", {})
+        node_id_to_name, _ = self._get_node_mappings()
 
-        for node_name, node_data in outputs.items():
+        for node_id, node_data in outputs.items():
             if "route" in node_data:
+                node_name = node_id_to_name.get(node_id, node_id)
                 routes_dict[node_name] = node_data["route"]
 
         return routes_dict
 
+    @classmethod
+    def from_router_output(
+        cls, node_id, node_name, output, output_handle, tags, route_path, conditional_branch
+    ) -> Self:
+        return cls(
+            outputs={
+                node_name: {
+                    "node_id": node_id,
+                    "output_handle": output_handle,
+                    "route": conditional_branch,
+                    "output": output,
+                },
+            },
+            temp_state={"outputs": {node_name: output}},
+            output_message_tags=tags,
+            path=[route_path],
+        )
 
-class PipelineNode(BaseModel, ABC):
+
+class BasePipelineNode(BaseModel, ABC):
+    model_config = ConfigDict(arbitrary_types_allowed=True)
+
+    _config: RunnableConfig | None = None
+    name: str = Field(title="Node Name", json_schema_extra={"ui:widget": "node_name"})
+
+    def _prepare_state(self, node_id: str, incoming_edges: list, state: PipelineState):
+        """This function initializes the state before executing the node function. This is primarily
+        determining which output to select from the state as this node's input.
+        """
+        from apps.channels.datamodels import Attachment
+
+        if not incoming_edges:
+            # This is the first node in the graph
+            state["node_input"] = state["messages"][-1]
+            state["node_source"] = None
+
+            # init temp state here to avoid having to do it in each place the pipeline is invoked
+            state["temp_state"]["user_input"] = state["node_input"]
+            state["temp_state"]["attachments"] = [
+                Attachment.model_validate(att) for att in state.get("attachments", [])
+            ]
+        elif len(incoming_edges) == 1:
+            incoming_edge = incoming_edges[0]
+            try:
+                state["node_input"] = state["outputs"][incoming_edge]["message"]
+            except KeyError:
+                for node_data in state["outputs"].values():
+                    if "node_id" in node_data and node_data["node_id"] == incoming_edge:
+                        state["node_input"] = node_data["output"]
+                        break
+            state["node_source"] = incoming_edge
+        else:
+            # state.path is a list of tuples (previous, current, next)
+            for path in reversed(state["path"]):
+                candidate_node_ids = path[2]
+                for candidate_node_id in candidate_node_ids:
+                    if candidate_node_id == node_id:
+                        previous_node_id = path[1]
+                        state["node_input"] = state["outputs"][previous_node_id]["message"]
+                        state["node_source"] = previous_node_id
+                        break
+                else:
+                    continue
+                break
+            else:
+                # This shouldn't happen, but keeping it here for now to avoid breaking
+                logger.warning(f"Cannot determine which input to use for node {node_id}. Switching to fallback.")
+                for incoming_edge in reversed(incoming_edges):
+                    if incoming_edge in state["outputs"]:
+                        node_input = state["outputs"][incoming_edge]["message"]
+                        state["node_input"] = node_input
+                        state["node_source"] = incoming_edge
+                        break
+                else:
+                    raise PipelineNodeRunError(
+                        f"Cannot determine which input to use for node {node_id}",
+                        {
+                            "node_id": node_id,
+                            "edge_ids": incoming_edges,
+                            "state_outputs": state["outputs"],
+                        },
+                    )
+        return state
+
+    def get_participant_data_proxy(self, state: PipelineState) -> "ParticipantDataProxy":
+        return ParticipantDataProxy.from_state(state)
+
+    @cached_property
+    def logger(self):
+        if not self._config or not self._config.get("callbacks"):
+            return noop_logger()[0]
+
+        for handler in self._config["callbacks"].handlers:
+            if isinstance(handler, LoggingCallbackHandler):
+                return handler.logger
+        return noop_logger()[0]
+
+    @property
+    def disabled_tools(self) -> set[str] | None:
+        if disabled := self._config.get("configurable", {}).get("disabled_tools"):
+            return set(disabled)
+        return None
+
+
+class PipelineNode(BasePipelineNode, ABC):
     """Pipeline node that implements the `_process` method and returns a new state. Define required parameters as
     typed fields.
 
@@ -170,106 +333,55 @@ class PipelineNode(BaseModel, ABC):
 
     """
 
-    model_config = ConfigDict(arbitrary_types_allowed=True)
-
-    _config: RunnableConfig | None = None
-    name: str = Field(title="Node Name", json_schema_extra={"ui:widget": "node_name"})
-
     def process(
-        self, node_id: str, incoming_edges: list, state: PipelineState, config: RunnableConfig
+        self, node_id: str, incoming_edges: list, outgoing_edges: list, state: PipelineState, config: RunnableConfig
     ) -> PipelineState:
-        from apps.channels.datamodels import Attachment
-
         self._config = config
-
-        if not incoming_edges:
-            # This is the first node in the graph
-            node_input = state["messages"][-1]
-
-            # init temp state here to avoid having to do it in each place the pipeline is invoked
-            state["temp_state"]["user_input"] = node_input
-            state["temp_state"]["attachments"] = [
-                Attachment.model_validate(att) for att in state.get("attachments", [])
-            ]
-        elif len(incoming_edges) == 1:
-            incoming_edge = incoming_edges[0]
-            node_input = state["outputs"][incoming_edge]["message"]
-        else:
-            # Here we use some internal langgraph state to determine which input to use
-            # The 'langgraph_triggers' key is set in the metadata of the pipeline by langgraph. Some examples:
-            #   - start:xyz
-            #   - xyz
-            #   - branch:xyz:condition:abc
-            #   - join:abc+def:xyz
-            node_triggers = config["metadata"]["langgraph_triggers"]
-            for incoming_edge in incoming_edges:
-                if any(incoming_edge in trigger for trigger in node_triggers):
-                    node_input = state["outputs"][incoming_edge]["message"]
-                    break
-            else:
-                # This shouldn't happen, but keeping it here for now to avoid breaking
-                logger.warning(f"Cannot determine which input to use for node {node_id}. Switching to fallback.")
-                for incoming_edge in reversed(incoming_edges):
-                    if incoming_edge in state["outputs"]:
-                        node_input = state["outputs"][incoming_edge]["message"]
-                        break
-                else:
-                    raise PipelineNodeRunError(
-                        f"Cannot determine which input to use for node {node_id}",
-                        {
-                            "node_id": node_id,
-                            "edge_ids": incoming_edges,
-                            "state_outputs": state["outputs"],
-                        },
-                    )
-        return self._process(input=node_input, state=state, node_id=node_id)
-
-    def process_conditional(self, state: PipelineState, node_id: str | None = None) -> str:
-        conditional_branch = self._process_conditional(state, node_id)
-        output_map = self.get_output_map()
-        output_handle = next((k for k, v in output_map.items() if v == conditional_branch), None)
-        state["outputs"][node_id]["output_handle"] = output_handle
-
-        state["outputs"][self.name] = {
-            "route": conditional_branch,
-            "output": state["outputs"][node_id]["message"],
-        }
-
-        if self.tag_output_message:
-            state.setdefault("output_message_tags", [])
-            state["output_message_tags"].append(f"{self.name}:{conditional_branch}")
-
-        return conditional_branch
+        state = self._prepare_state(node_id, incoming_edges, state)
+        output = self._process(input=state["node_input"], state=state, node_id=node_id)
+        output["path"] = [(state["node_source"], node_id, outgoing_edges)]
+        return output
 
     def _process(self, input: str, state: PipelineState, node_id: str) -> PipelineState:
         """The method that executes node specific functionality"""
         raise NotImplementedError
 
-    def _process_conditional(self, state: PipelineState, node_id: str | None = None):
-        """The method that selects which branch of a conditional node to go down."""
-        raise NotImplementedError
 
-    def get_output_map(self) -> dict:
-        """A mapping from the output handles on the frontend to the return values of _process_conditional"""
-        raise NotImplementedError
+class PipelineRouterNode(BasePipelineNode):
+    def build_router_function(
+        self, node_id: str, edge_map: dict, incoming_edges: list
+    ) -> Callable[[PipelineState, RunnableConfig], Command]:
+        output_map = self.get_output_map()
+        ReturnType = Command[Literal[tuple(edge_map.values())]]  # noqa
 
-    def get_participant_data_proxy(self, state: PipelineState) -> "ParticipantDataProxy":
-        return ParticipantDataProxy.from_state(state)
+        def router(state: PipelineState, config: RunnableConfig) -> ReturnType:
+            self._config = config
 
-    @cached_property
-    def logger(self):
-        if not self._config or not self._config.get("callbacks"):
-            return noop_logger()[0]
+            state = self._prepare_state(node_id, incoming_edges, state)
 
-        for handler in self._config["callbacks"].handlers:
-            if isinstance(handler, LoggingCallbackHandler):
-                return handler.logger
-        return noop_logger()[0]
+            conditional_branch = self._process_conditional(state, node_id)
+            output_handle = next((k for k, v in output_map.items() if v == conditional_branch), None)
+            tags = self.get_output_tags(conditional_branch)
+            target_node_id = edge_map[conditional_branch]
+            route_path = (state["node_source"], node_id, [target_node_id])
+            output = PipelineState.from_router_output(
+                node_id, self.name, state["node_input"], output_handle, tags, route_path, conditional_branch
+            )
+            return Command(
+                update=output,
+                goto=target_node_id,
+            )
 
-    @property
-    def disabled_tools(self) -> set[str] | None:
-        if disabled := self._config.get("configurable", {}).get("disabled_tools"):
-            return set(disabled)
+        return router
+
+    def get_output_map(self) -> dict[str, str]:
+        raise NotImplementedError()
+
+    def get_output_tags(self, selected_route) -> list[str]:
+        raise NotImplementedError()
+
+    def _process_conditional(self, state: PipelineState, node_id: str):
+        raise NotImplementedError()
 
 
 class Widgets(StrEnum):

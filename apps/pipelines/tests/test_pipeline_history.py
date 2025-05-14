@@ -5,6 +5,7 @@ import pytest
 from apps.pipelines.models import PipelineChatHistory
 from apps.pipelines.nodes.base import PipelineState
 from apps.pipelines.tests.utils import create_runnable, end_node, llm_response_with_prompt_node, start_node
+from apps.service_providers.tracing import TracingService
 from apps.utils.factories.experiment import (
     ExperimentSessionFactory,
 )
@@ -215,17 +216,23 @@ def test_global_history(get_llm_service, provider, pipeline, experiment_session)
     output_1 = experiment.pipeline.invoke(
         PipelineState(messages=[user_input], experiment_session=experiment_session, pipeline_version=1),
         experiment_session,
+        experiment,
+        TracingService.empty(),
     )
     user_input_2 = "Saying more stuff"
     output_2 = experiment.pipeline.invoke(
         PipelineState(messages=[user_input_2], experiment_session=experiment_session, pipeline_version=1),
         experiment_session,
+        experiment,
+        TracingService.empty(),
     )
 
     user_input_3 = "Tell me something interesting"
     experiment.pipeline.invoke(
         PipelineState(messages=[user_input_3], experiment_session=experiment_session, pipeline_version=1),
         experiment_session,
+        experiment,
+        TracingService.empty(),
     )
 
     expected_call_messages = [

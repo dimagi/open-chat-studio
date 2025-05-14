@@ -91,10 +91,10 @@ class OpenAPIOperationExecutor:
                 return self.auth_service.call_with_retries(self._make_request, client, url, method, **kwargs)
             except httpx.HTTPStatusError as e:
                 if e.response and e.response.status_code == 400:
-                    raise ToolException(f"Bad request: {e.response.text}")
-                raise ToolException(f"Error making request: {str(e)}")
+                    raise ToolException(f"Bad request: {e.response.text}") from None
+                raise ToolException(f"Error making request: {str(e)}") from None
             except httpx.HTTPError as e:
-                raise ToolException(f"Error making request: {str(e)}")
+                raise ToolException(f"Error making request: {str(e)}") from None
 
     def _make_request(
         self, http_client: httpx.Client, url: str, method: str, **kwargs
@@ -151,7 +151,7 @@ class OpenAPIOperationExecutor:
         try:
             validate_user_input_url(url, strict=not settings.DEBUG)
         except InvalidURL as e:
-            raise ToolException(str(e))
+            raise ToolException(str(e)) from None
 
         return url
 

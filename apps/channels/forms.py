@@ -126,10 +126,10 @@ class TelegramChannelForm(ExtraFormBase):
             bot.get_me()
         except apihelper.ApiTelegramException as ex:
             if ex.error_code == 404:
-                raise forms.ValidationError(f"Invalid token: {bot_token}")
+                raise forms.ValidationError(f"Invalid token: {bot_token}") from None
             else:
                 logger.exception(ex)
-                raise forms.ValidationError("Could not verify the bot token")
+                raise forms.ValidationError("Could not verify the bot token") from None
         return bot_token
 
 
@@ -154,7 +154,7 @@ class WhatsappChannelForm(WebhookUrlFormBase):
                 )
             return number
         except phonenumbers.NumberParseException:
-            raise forms.ValidationError("Enter a valid phone number (e.g. +12125552368).")
+            raise forms.ValidationError("Enter a valid phone number (e.g. +12125552368).") from None
 
 
 class SureAdhereChannelForm(WebhookUrlFormBase):
@@ -187,7 +187,7 @@ class SlackChannelForm(ExtraFormBase):
             initial["channel_mode"] = "all"
         else:
             initial["channel_mode"] = "channel"
-        self.form_attrs = {"x-data": '{"channelMode": "%s"}' % initial["channel_mode"]}
+        self.form_attrs = {"x-data": '{{"channelMode": "{}"}}'.format(initial["channel_mode"])}
         super().__init__(*args, **kwargs)
 
     def clean_slack_channel_name(self):

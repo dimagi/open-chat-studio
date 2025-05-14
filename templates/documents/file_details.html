@@ -1,7 +1,7 @@
 {% extends 'documents/shared/details_base.html' %}
 
 {% block detail_content %}
-    <input x-cloak x-show="editing" name="name" class="input input-bordered" value="{{ object.name }}"></input>
+    <input x-cloak x-show="editing" name="name" class="input" value="{{ object.name }}"></input>
     <h1 x-show="!editing" class="pg-title">{{ object.name }}</h1>
 
     <dl class="grid grid-cols-2 gap-1">
@@ -42,7 +42,7 @@
         <div class="py-3 col-span-2">
             <dt class="text-sm font-medium">Summary</dt>
             <dd class="text-sm">
-                <textarea name="summary" x-cloak x-show="editing" rows="2" cols="40" class="input input-bordered" maxlength="{{ max_summary_length }}">{{ object.summary }}</textarea>
+                <textarea name="summary" x-cloak x-show="editing" rows="2" cols="40" class="input" maxlength="{{ max_summary_length }}">{{ object.summary }}</textarea>
                 <span x-show="!editing">{{ object.summary }}</span>
             </dd>
         </div>

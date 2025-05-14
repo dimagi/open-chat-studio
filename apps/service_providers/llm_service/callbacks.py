@@ -21,7 +21,7 @@ class TokenCountingCallbackHandler(BaseCallbackHandler):
         self.prompts_by_run = {}
 
     def __repr__(self) -> str:
-        return f"Prompt Tokens: {self.prompt_tokens}\n" f"Completion Tokens: {self.completion_tokens}\n"
+        return f"Prompt Tokens: {self.prompt_tokens}\nCompletion Tokens: {self.completion_tokens}\n"
 
     def on_llm_start(self, serialized: dict[str, Any], prompts: list[str], *, run_id: UUID, **kwargs) -> Any:
         self.prompts_by_run[run_id] = " ".join(prompts)
@@ -34,8 +34,8 @@ class TokenCountingCallbackHandler(BaseCallbackHandler):
             input_tokens = self.token_counter.get_tokens_from_text(prompt)
 
             messages = []
-            for i, generations in enumerate(response.generations):
-                for j, generation in enumerate(generations):
+            for _i, generations in enumerate(response.generations):
+                for _j, generation in enumerate(generations):
                     messages.append(generation.message)
 
             output_tokens = self.token_counter.get_tokens_from_messages(messages)
@@ -53,7 +53,7 @@ class TokenCountingCallbackHandler(BaseCallbackHandler):
         **kwargs: Any,
     ) -> Any:
         """Run when LLM errors and collect token usage."""
-        response = kwargs.get("response", None)
+        response = kwargs.get("response")
         if not response:
             return
         self.on_llm_end(response, run_id=run_id)
