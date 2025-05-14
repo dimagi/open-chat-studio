@@ -305,12 +305,15 @@ class Pipeline(BaseTeamModel, VersionsMixin):
         from apps.experiments.models import AgentTools
         from apps.pipelines.graph import PipelineGraph
 
-        runnable = PipelineGraph.build_runnable_from_pipeline(self)
+        graph = PipelineGraph.build_from_pipeline(self)
         config = trace_service.get_langchain_config(
             configurable={
                 "disabled_tools": AgentTools.reminder_tools() if disable_reminder_tools else [],
             },
+            run_name_map=graph.node_id_to_name_mapping,
+            filter_patterns=graph.filter_patterns,
         )
+        runnable = graph.build_runnable()
         raw_output = runnable.invoke(input, config=config)
         output = PipelineState(**raw_output).json_safe()
         if save_run_to_history and session is not None:

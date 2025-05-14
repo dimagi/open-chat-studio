@@ -12,7 +12,6 @@ from langfuse.client import StatefulSpanClient, StatefulTraceClient
 
 from . import Tracer
 from .base import ServiceNotInitializedException, ServiceReentryException
-from .callback import wrap_callback
 from .const import SpanLevel
 
 if TYPE_CHECKING:
@@ -117,8 +116,7 @@ class LangFuseTracer(Tracer):
         if not self.ready:
             raise ServiceReentryException("Service does not support reentrant use.")
 
-        callback = self._get_current_span().get_langchain_handler(update_parent=False)
-        return wrap_callback(callback)
+        return self._get_current_span().get_langchain_handler(update_parent=False)
 
     def get_trace_metadata(self) -> dict[str, str]:
         if not self.ready:
