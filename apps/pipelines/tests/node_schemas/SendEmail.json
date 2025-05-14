@@ -28,5 +28,6 @@
   "ui:deprecated": false,
   "ui:documentation_link": "/concepts/pipelines/nodes/#email",
   "ui:flow_node_type": "pipelineNode",
+  "ui:icon": "fa-solid fa-envelope",
   "ui:label": "Send an email"
 }
