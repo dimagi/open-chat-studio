@@ -1,5 +1,4 @@
 import json
-from unittest import mock
 
 import pytest
 
@@ -42,7 +41,6 @@ def main(input, **kwargs):
 
 
 @django_db_with_data(available_apps=("apps.service_providers",))
-@mock.patch("apps.pipelines.nodes.base.PipelineNode.logger", mock.Mock())
 @pytest.mark.parametrize(
     ("code", "input", "output"),
     [
@@ -76,7 +74,6 @@ def main(input, **kwargs):
 
 
 @django_db_with_data(available_apps=("apps.service_providers",))
-@mock.patch("apps.pipelines.nodes.base.PipelineNode.logger", mock.Mock())
 @pytest.mark.parametrize(
     ("code", "input", "error"),
     [
@@ -114,7 +111,6 @@ def test_code_node_build_errors(pipeline, code, input, error):
 
 
 @django_db_with_data(available_apps=("apps.service_providers",))
-@mock.patch("apps.pipelines.nodes.base.PipelineNode.logger", mock.Mock())
 @pytest.mark.parametrize(
     ("code", "input", "error"),
     [
@@ -139,7 +135,6 @@ def test_code_node_runtime_errors(pipeline, experiment_session, code, input, err
 
 
 @django_db_with_data(available_apps=("apps.service_providers",))
-@mock.patch("apps.pipelines.nodes.base.PipelineNode.logger", mock.Mock())
 def test_get_participant_data(pipeline, experiment_session):
     ParticipantData.objects.create(
         team=experiment_session.team,
@@ -166,7 +161,6 @@ def main(input, **kwargs):
 
 
 @django_db_with_data(available_apps=("apps.service_providers",))
-@mock.patch("apps.pipelines.nodes.base.PipelineNode.logger", mock.Mock())
 def test_update_participant_data(pipeline, experiment_session):
     output = "moody"
     participant_data = ParticipantData.objects.create(
@@ -199,7 +193,6 @@ def main(input, **kwargs):
 
 
 @django_db_with_data(available_apps=("apps.service_providers",))
-@mock.patch("apps.pipelines.nodes.base.PipelineNode.logger", mock.Mock())
 def test_temp_state(pipeline, experiment_session):
     output = "['fun loving', 'likes puppies']"
     code_set = f"""
@@ -225,7 +218,6 @@ def main(input, **kwargs):
 
 
 @django_db_with_data(available_apps=("apps.service_providers",))
-@mock.patch("apps.pipelines.nodes.base.PipelineNode.logger", mock.Mock())
 def test_temp_state_get_outputs(pipeline, experiment_session):
     # Temp state contains the outputs of the previous nodes
 
@@ -253,7 +245,6 @@ def main(input, **kwargs):
 
 
 @django_db_with_data(available_apps=("apps.service_providers",))
-@mock.patch("apps.pipelines.nodes.base.PipelineNode.logger", mock.Mock())
 def test_temp_state_set_outputs(pipeline, experiment_session):
     input = "hello"
     code_set = """
@@ -273,7 +264,6 @@ def main(input, **kwargs):
 
 
 @django_db_with_data(available_apps=("apps.service_providers",))
-@mock.patch("apps.pipelines.nodes.base.PipelineNode.logger", mock.Mock())
 def test_temp_state_user_input(pipeline, experiment_session):
     # Temp state contains the user input
 
@@ -318,7 +308,6 @@ def main(input, **kwargs):
 
 
 @django_db_with_data(available_apps=("apps.service_providers",))
-@mock.patch("apps.pipelines.nodes.base.PipelineNode.logger", mock.Mock())
 def test_participant_data_proxy_get_includes_global_data(pipeline, experiment_session):
     """
     Test that the get method of ParticipantDataProxy returns a merged dictionary
@@ -352,7 +341,6 @@ def main(input, **kwargs):
 
 
 @django_db_with_data(available_apps=("apps.service_providers",))
-@mock.patch("apps.pipelines.nodes.base.PipelineNode.logger", mock.Mock())
 def test_participant_data_proxy_set_updates_global_data(pipeline, experiment_session):
     experiment_session.participant.name = "Original Boring Name"
     experiment_session.participant.save()
@@ -386,7 +374,6 @@ def main(input, **kwargs):
 
 
 @django_db_with_data(available_apps=("apps.service_providers",))
-@mock.patch("apps.pipelines.nodes.base.PipelineNode.logger", mock.Mock())
 def test_render_template_with_context_keys(pipeline, experiment_session):
     participant = Participant.objects.create(
         identifier="participant_123",
@@ -427,7 +414,6 @@ def test_render_template_with_context_keys(pipeline, experiment_session):
 
 
 @django_db_with_data(available_apps=("apps.service_providers",))
-@mock.patch("apps.pipelines.nodes.base.PipelineNode.logger", mock.Mock())
 def test_get_participant_schedules(pipeline, experiment_session):
     """
     Test that the get_participant_schedules function correctly retrieves
@@ -479,7 +465,6 @@ def main(input, **kwargs):
 
 
 @django_db_with_data(available_apps=("apps.service_providers",))
-@mock.patch("apps.pipelines.nodes.base.PipelineNode.logger", mock.Mock())
 def test_get_participant_schedules_empty(pipeline, experiment_session):
     """
     Test that the get_participant_schedules function returns an empty list
@@ -506,7 +491,6 @@ def main(input, **kwargs):
 
 
 @django_db_with_data(available_apps=("apps.service_providers",))
-@mock.patch("apps.pipelines.nodes.base.PipelineNode.logger", mock.Mock())
 def test_get_and_set_session_state(pipeline, experiment_session):
     assert experiment_session.state.get("message_count") is None
     input = "hello"

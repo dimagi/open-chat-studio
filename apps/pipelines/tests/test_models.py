@@ -174,7 +174,6 @@ class TestPipeline:
 
     @django_db_with_data(available_apps=("apps.service_providers", "apps.users"))
     @mock.patch("apps.service_providers.models.LlmProvider.get_llm_service")
-    @mock.patch("apps.pipelines.nodes.base.PipelineNode.logger", mock.Mock())
     def test_simple_invoke_with_pipeline(self, get_llm_service):
         """Test simple invoke with a pipeline that has an LLM node"""
         provider = LlmProviderFactory()
