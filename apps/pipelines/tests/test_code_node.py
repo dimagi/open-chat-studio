@@ -226,10 +226,11 @@ def test_temp_state_get_outputs(pipeline, experiment_session):
 def main(input, **kwargs):
     return str(get_temp_state_key("outputs"))
 """
+    template_node = render_template_node("<b>The input is: {{ input }}</b>")
     nodes = [
         start_node(),
         passthrough_node(),
-        render_template_node("<b>The input is: {{ input }}</b>"),
+        template_node,
         code_node(code_get),
         end_node(),
     ]
@@ -239,7 +240,7 @@ def main(input, **kwargs):
         {
             "start": input,
             "passthrough": input,
-            "render template": f"<b>The input is: {input}</b>",
+            template_node["params"]["name"]: f"<b>The input is: {input}</b>",
         }
     )
 
@@ -392,7 +393,6 @@ def test_render_template_with_context_keys(pipeline, experiment_session):
         experiment_session=experiment_session,
         messages=["Cycling"],
         temp_state={"my_key": "example_key"},
-        pipeline_version=1,
         outputs={},
     )
     nodes = [

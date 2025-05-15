@@ -30,7 +30,9 @@ class TestSendEmailInputValidation:
         ],
     )
     def test_valid_recipient_list(self, recipient_list):
-        model = SendEmail(name="email", recipient_list=recipient_list, subject="Test Subject")
+        model = SendEmail(
+            node_id="test", django_node=None, name="email", recipient_list=recipient_list, subject="Test Subject"
+        )
         assert model.recipient_list == recipient_list
 
     @pytest.mark.parametrize(

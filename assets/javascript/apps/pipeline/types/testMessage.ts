@@ -11,8 +11,10 @@ type TaskResult = {
 
 type Outputs = {
   [key: string]: {
+    node_id: string;
     message: string;
     output_handle?: string;
+    route?: string;
   };
 };
 

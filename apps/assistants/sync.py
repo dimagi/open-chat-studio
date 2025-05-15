@@ -83,6 +83,10 @@ class OpenAiSyncError(Exception):
     pass
 
 
+class OpenAiUnableToLinkFileError(Exception):
+    pass
+
+
 def wrap_openai_errors(fn):
     @wraps(fn)
     def _inner(*args, **kwargs):
@@ -395,7 +399,7 @@ def _sync_tool_resource_files_from_openai(file_ids, ocs_resource):
         File.objects.filter(id__in=unused_files).delete()
 
 
-def _sync_vector_store_files_to_openai(client, vector_store_id, files_ids: list[str]):
+def _get_files_missing_from_vector_store(client, vector_store_id, file_ids: list[str]):
     kwargs = {}
     to_delete_remote = []
 
@@ -407,7 +411,7 @@ def _sync_vector_store_files_to_openai(client, vector_store_id, files_ids: list[
         )
         for v_file in vector_store_files.data:
             try:
-                files_ids.remove(v_file.id)
+                file_ids.remove(v_file.id)
             except ValueError:
                 to_delete_remote.append(v_file.id)
 
@@ -419,8 +423,7 @@ def _sync_vector_store_files_to_openai(client, vector_store_id, files_ids: list[
     for file_id in to_delete_remote:
         vector_store_manager.delete_file(vector_store_id=vector_store_id, file_id=file_id)
 
-    if files_ids:
-        vector_store_manager.link_files_to_vector_store(vector_store_id=vector_store_id, file_ids=files_ids)
+    return file_ids
 
 
 def _ocs_assistant_to_openai_kwargs(assistant: OpenAiAssistant) -> dict:
@@ -477,11 +480,15 @@ def _update_or_create_vector_store(assistant, name, vector_store_id, file_ids) -
             vector_store_id = openai_assistant.tool_resources.file_search.vector_store_ids[0]
 
     if vector_store_id:
-        _sync_vector_store_files_to_openai(client, vector_store_id, file_ids)
-        return vector_store_id
+        file_ids = _get_files_missing_from_vector_store(client, vector_store_id, file_ids)
+    else:
+        vector_store_id = vector_store_manager.create_vector_store(name=name, file_ids=file_ids[:100])
+        file_ids = file_ids[100:]
 
-    vector_store_id = vector_store_manager.create_vector_store(name=name, file_ids=file_ids[:100])
-    vector_store_manager.link_files_to_vector_store(vector_store_id, file_ids[100:])
+    with contextlib.suppress(OpenAiUnableToLinkFileError):
+        # This will show an out-of-sync status on the assistant where the user can handle the error appropriately
+        vector_store_manager.link_files_to_vector_store(vector_store_id, file_ids)
+
     return vector_store_id
 
 
@@ -592,8 +599,15 @@ class OpenAIVectorStoreManager:
                 "static": {"max_chunk_size_tokens": chunk_size, "chunk_overlap_tokens": chunk_overlap},
             }
 
-        for chunk in chunk_list(file_ids, 500):
-            self.client.vector_stores.file_batches.create(
-                vector_store_id=vector_store_id, file_ids=chunk, chunking_strategy=chunking_strategy
+        try:
+            for chunk in chunk_list(file_ids, 500):
+                self.client.vector_stores.file_batches.create(
+                    vector_store_id=vector_store_id, file_ids=chunk, chunking_strategy=chunking_strategy
+                )
+            return vector_store_id
+        except Exception as e:
+            logger.warning(
+                "Failed to link files to OpenAI vector store",
+                extra={"vector_store_id": vector_store_id, "chunking_strategy": chunking_strategy},
             )
-        return vector_store_id
+            raise OpenAiUnableToLinkFileError("Failed to link files to OpenAI vector store") from e

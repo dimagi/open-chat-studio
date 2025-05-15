@@ -284,7 +284,6 @@ class PipelineBot:
                 messages=[user_input],
                 experiment_session=self.session,
                 attachments=serializable_attachments,
-                pipeline_version=self.experiment.pipeline.version_number,
             ),
             self.session,
             self.experiment,

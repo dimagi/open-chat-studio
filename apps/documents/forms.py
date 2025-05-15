@@ -23,8 +23,6 @@ class CollectionForm(forms.ModelForm):
         self.fields["is_index"].widget.attrs = {"x-model": "isIndex"}
         if self.instance.id:
             self.fields["is_index"].widget.attrs["disabled"] = True
-            # Temporary: Disable the llm_provider field for now
-            self.fields["llm_provider"].widget.attrs["disabled"] = True
 
         if self.instance.is_index:
             self.fields["llm_provider"].widget.is_required = True
