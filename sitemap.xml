@@ -1,0 +1,23 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">
+    <url>
+         <loc>https://dev.openchatstudio.com/</loc>
+         <lastmod>2025-05-15</lastmod>
+    </url>
+    <url>
+         <loc>https://dev.openchatstudio.com/architecture/</loc>
+         <lastmod>2025-05-15</lastmod>
+    </url>
+    <url>
+         <loc>https://dev.openchatstudio.com/contributing/</loc>
+         <lastmod>2025-05-15</lastmod>
+    </url>
+    <url>
+         <loc>https://dev.openchatstudio.com/contributing/pull_requests/</loc>
+         <lastmod>2025-05-15</lastmod>
+    </url>
+    <url>
+         <loc>https://dev.openchatstudio.com/getting-started/</loc>
+         <lastmod>2025-05-15</lastmod>
+    </url>
+</urlset>
