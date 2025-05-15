@@ -23,7 +23,7 @@ def claude_compatible_parse_ai_message(message):
                         import json
 
                         args = json.loads(function.get("arguments", "{}"))
-                    except:
+                    except json.JSONDecodeError:
                         args = {}
 
                     fixed_actions.append(
@@ -58,7 +58,7 @@ def parse_output_for_anthropic(output):
     if isinstance(output, list):
         result = []
         for item in output:
-            if not isinstance(item, (dict, str)):
+            if not isinstance(item, (dict | str)):
                 continue
 
             if isinstance(item, dict) and item.get("type") == "text":
