@@ -290,12 +290,15 @@ class LLMResponseWithPrompt(LLMResponse, HistoryMixin):
         description="Built in tools provided by the LLM model",
         json_schema_extra=UiSchema(widget=Widgets.multiselect, options_source=OptionsSource.built_in_tools),
     )
-    allowed_domains: str = Field(
-        default="Enter domains without https that you want to allow in web search. eg google.com",
+    allowed_domains: str | None = Field(
+        default=None,
+        description="",
         json_schema_extra=UiSchema(widget=Widgets.expandable_text),
     )
-    blocked_domains: str = Field(
-        default="Enter domains without https from which you don't want results to be shown in web search",
+
+    blocked_domains: str | None = Field(
+        default=None,
+        description="",
         json_schema_extra=UiSchema(widget=Widgets.expandable_text),
     )
 

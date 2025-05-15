@@ -2,7 +2,6 @@ import dataclasses
 
 import tiktoken
 from anthropic import Anthropic
-from google.generativeai import GenerativeModel
 from langchain_core.messages import get_buffer_string
 from langchain_core.outputs import LLMResult
 
