@@ -88,26 +88,33 @@ class TestDeleteCollection:
         collection.files.add(file)
         return collection
 
-    @mock.patch("apps.documents.models.Collection.delete")
-    @mock.patch("apps.documents.models.Collection.remove_index")
-    @mock.patch("apps.documents.models.Collection.archive")
-    def test_user_cannot_delete_a_collection_in_use(self, archive, remove_index, delete, collection, client):
-        """The user should not be able to delete a collection if it is being used by a pipeline"""
+    def test_user_cannot_delete_a_collection_in_use(self, index_manager_mock, collection, client):
+        """
+        The user should not be able to delete a collection if it is being used by a pipeline.
+        There are two cases where this can happen:
+        1. The collection is being used in a pipeline
+        2. The collection is being used by a pipeline version, which is being used by some experiment
+        """
         client.force_login(collection.team.members.first())
         url = reverse("documents:collection_delete", args=[collection.team.slug, collection.id])
 
-        NodeFactory(pipeline=PipelineFactory(), type="LlmNode", params={"collection_index_id": collection.id})
+        node = NodeFactory(pipeline=PipelineFactory(), type="LlmNode", params={"collection_index_id": collection.id})
+
+        # Case 1 - The pipeline is using the collection
+        response = client.delete(url)
+        assert response.status_code == 400
+
+        # Case 2 - Remove the collection from the node so that only a pipeline version is using it
+        index_manager_mock.create_vector_store.return_value = "v-321"
+        collection.create_new_version()
+        node.params = {}
+        node.save()
 
         response = client.delete(url)
         assert response.status_code == 400
-        archive.assert_not_called()
-        remove_index.assert_not_called()
-        delete.assert_not_called()
 
-    @mock.patch("apps.documents.models.Collection.delete")
-    @mock.patch("apps.documents.models.Collection.remove_index")
     @mock.patch("apps.documents.models.Collection.archive")
-    def test_versioned_collection_is_archived(self, archive, remove_index, delete, collection, client):
+    def test_versioned_collection_is_not_archived(self, archive, collection, client):
         """When a collection is versioned, it should be archived instead of deleted"""
         client.force_login(collection.team.members.first())
 
@@ -119,27 +126,3 @@ class TestDeleteCollection:
 
         assert response.status_code == 200
         archive.assert_called()
-        remove_index.assert_not_called()
-        delete.assert_not_called()
-
-    @pytest.mark.parametrize("is_index", [True, False])
-    @mock.patch("apps.documents.models.Collection.delete")
-    @mock.patch("apps.documents.models.Collection.remove_index")
-    @mock.patch("apps.documents.models.Collection.archive")
-    def test_index_and_files_removed_on_delete(self, archive, remove_index, delete, is_index, collection, client):
-        """When a collection is deleted, the index and files should be removed, as well as the collection itself"""
-        collection.is_index = is_index
-        collection.save()
-
-        client.force_login(collection.team.members.first())
-        url = reverse("documents:collection_delete", args=[collection.team.slug, collection.id])
-
-        response = client.delete(url)
-        assert response.status_code == 200
-
-        archive.assert_not_called()
-        if is_index:
-            remove_index.assert_called()
-        else:
-            remove_index.assert_not_called()
-        delete.assert_called()

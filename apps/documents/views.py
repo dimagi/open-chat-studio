@@ -214,6 +214,7 @@ class DeleteCollection(LoginAndTeamRequiredMixin, View):
 
         if collection.archive():
             messages.success(request, "Collection deleted")
+            return HttpResponse()
         else:
             # Find and show references.
             # For working versions, the Pipelines.
