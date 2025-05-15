@@ -76,19 +76,21 @@ class TestVersioningNodes:
             assert original_node_assistant_id == str(assistant.id)
             assert node_version_assistant_id == str(assistant_version.id)
 
-    def test_version_llm_with_prompt_node_with_collection(self):
+    @pytest.mark.parametrize("is_index", [True, False])
+    def test_version_llm_with_prompt_node_with_collection(self, is_index):
         node_type = LLMResponseWithPrompt.__name__
-        collection = CollectionFactory()
+        collection = CollectionFactory(is_index=is_index)
         pipeline = PipelineFactory()
-        node = NodeFactory(type=node_type, pipeline=pipeline, params={"collection_id": str(collection.id)})
+        param_name = "collection_index_id" if is_index else "collection_id"
+        node = NodeFactory(type=node_type, pipeline=pipeline, params={param_name: str(collection.id)})
 
         # Versioning it should version the collection as well
         pipeline.create_new_version()
 
         # Versioning it without changes to the collection should not version the collection
         pipeline.create_new_version()
-        assert node.versions.first().params["collection_id"] == str(collection.versions.first().id)
-        assert node.versions.last().params["collection_id"] == str(collection.versions.first().id)
+        assert node.versions.first().params[param_name] == str(collection.versions.first().id)
+        assert node.versions.last().params[param_name] == str(collection.versions.first().id)
 
     def test_version_llm_with_prompt_node_with_source_material(self):
         node_type = LLMResponseWithPrompt.__name__
