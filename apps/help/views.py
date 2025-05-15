@@ -41,7 +41,7 @@ def code_completion(user_query, current_code, error=None, iteration_count=0) -> 
         """
         You are an expert python coder. You will be asked to generate or update code to be used as part of a
         chatbot flow. The code will be executed in a sandboxed environment using the restricted python library.
-        The code must define a main function, which takes input as a string and always return a string.         
+        The code must define a main function, which takes input as a string and always return a string.
 
         def main(input: str, **kwargs) -> str:
             return input
@@ -89,11 +89,24 @@ def code_completion(user_query, current_code, error=None, iteration_count=0) -> 
         def set_session_state_key(key_name: str, data: Any) -> None:
             Sets the value of the session state's key with the given name to the provided data.
             This will override any existing data.
+
+        def get_selected_route(router_node_name: str) -> str | None:
+            Returns the route selected by a specific router node with the given name.
+            If the node does not exist or has no route defined, it returns `None`.
+
+        def get_node_path(node_name: str) -> list | None:
+            Returns a list containing the sequence of nodes leading to the target node.
+            If the node is not found in the pipeline path, returns a list containing
+            only the specified node name.
+
+        def get_all_routes() -> dict:
+            Returns a dictionary containing all routing decisions in the pipeline.
+            The keys are the node names and the values are the routes chosen by each node.
         ```
-        
+
         Return only the Python code and nothing else. Do not enclose it in triple quotes or have any other
         explanations in the response.
-        
+
         {current_code}
         {error}
     """
@@ -122,7 +135,7 @@ def code_completion(user_query, current_code, error=None, iteration_count=0) -> 
     from apps.pipelines.nodes.nodes import CodeNode
 
     try:
-        CodeNode.model_validate({"code": response_code})
+        CodeNode.model_validate({"code": response_code, "name": "code", "node_id": "code", "django_node": None})
     except pydantic.ValidationError as e:
         error = str(e)
         return code_completion(user_query, response_code, error, iteration_count=iteration_count + 1)

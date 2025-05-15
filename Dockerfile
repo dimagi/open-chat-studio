@@ -29,7 +29,8 @@ RUN --mount=type=cache,target=/root/.cache \
     uv sync \
       --frozen \
       --no-group dev \
-      --group prod
+      --group prod \
+      --compile-bytecode
 
 FROM node:22 AS build-node
 RUN nodejs -v && npm -v
@@ -54,7 +55,7 @@ RUN --mount=target=/var/lib/apt/lists,type=cache,sharing=locked \
     apt-get update \
     && apt-get install -y \
     # psycopg2 dependencies
-    libpq-dev \
+    libpq5 \
     # Translations dependencies
     gettext \
     # audio/video dependencies

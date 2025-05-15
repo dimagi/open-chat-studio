@@ -7,6 +7,7 @@ from apps.annotations.models import TagCategories
 from apps.chat.bots import TopicBot
 from apps.chat.models import ChatMessage, ChatMessageType
 from apps.experiments.models import ExperimentRoute, ExperimentRouteType, ExperimentSession, SafetyLayer
+from apps.service_providers.llm_service.runnables import LlmChatResponse
 from apps.service_providers.models import TraceProvider
 from apps.service_providers.tracing import TracingService
 from apps.utils.factories.experiment import ExperimentFactory, ExperimentSessionFactory
@@ -38,7 +39,10 @@ def test_safety_response(is_safe_mock):
 @pytest.mark.django_db()
 @patch("apps.service_providers.llm_service.runnables.SimpleLLMChat._get_output_check_cancellation")
 def test_bot_with_terminal_bot(get_output_check_cancellation):
-    get_output_check_cancellation.side_effect = ["let's barbecue!", "kom ons braai!"]
+    get_output_check_cancellation.side_effect = [
+        LlmChatResponse(text="let's barbecue!", cited_files=[]),
+        LlmChatResponse(text="kom ons braai!", cited_files=[]),
+    ]
     session = ExperimentSessionFactory()
     experiment = session.experiment
     ExperimentRoute.objects.create(

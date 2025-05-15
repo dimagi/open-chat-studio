@@ -44,5 +44,6 @@
   "ui:deprecated": false,
   "ui:documentation_link": "/concepts/pipelines/nodes/#extract-structured-data",
   "ui:flow_node_type": "pipelineNode",
+  "ui:icon": "fa-solid fa-database",
   "ui:label": "Extract Structured Data"
 }

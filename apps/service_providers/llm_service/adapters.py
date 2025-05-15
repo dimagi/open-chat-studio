@@ -51,7 +51,8 @@ class BaseAdapter:
 
     def get_allowed_tools(self):
         if self.disabled_tools:
-            return [tool for tool in self.tools if tool.name not in self.disabled_tools]
+            # Model builtin tools doesn't have a name attribute and are dicts
+            return [tool for tool in self.tools if hasattr(tool, "name") and tool.name not in self.disabled_tools]
         return self.tools
 
 
@@ -140,6 +141,14 @@ class ChatAdapter(BaseAdapter):
         # temporary mechanism to cancel the chat
         # TODO: change this to something specific to the current chat message
         return self.session.chat.metadata.get("cancelled", False)
+
+    def get_output_message_metadata(self, cited_files: list[File]) -> dict:
+        """`cited_files` is a list of files that are cited in the response."""
+        if not cited_files:
+            return {}
+
+        self.session.chat.attach_files(attachment_type="file_citation", files=cited_files)
+        return {"cited_files": [file.id for file in cited_files]}
 
 
 class AssistantAdapter(BaseAdapter):

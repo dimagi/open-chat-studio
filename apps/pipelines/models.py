@@ -231,7 +231,7 @@ class Pipeline(BaseTeamModel, VersionsMixin):
         for node in nodes:
             node_class = getattr(pipeline_nodes, node.type)
             try:
-                node_class.model_validate(node.params)
+                node_class.model_validate({**node.params, "node_id": node.flow_id, "django_node": node})
             except pydantic.ValidationError as e:
                 for error in e.errors():
                     field = error["loc"][0] if error["loc"] else error["ctx"]["field"]
@@ -290,7 +290,7 @@ class Pipeline(BaseTeamModel, VersionsMixin):
 
         with temporary_session(self.team, user_id) as session:
             runnable = PipelineGraph.build_runnable_from_pipeline(self)
-            input = PipelineState(messages=[input], experiment_session=session, pipeline_version=self.version_number)
+            input = PipelineState(messages=[input], experiment_session=session)
             with patch_executor():
                 output = runnable.invoke(input, config={"max_concurrency": 1})
             output = PipelineState(**output).json_safe()
@@ -492,6 +492,18 @@ class Node(BaseModel, VersionsMixin, CustomActionOperationMixin):
         from apps.documents.models import Collection
         from apps.pipelines.nodes.nodes import AssistantNode, LLMResponseWithPrompt
 
+        def _get_collection_version(param_name: str):
+            if not new_version.params.get(param_name):
+                return
+
+            collection = Collection.objects.get(id=new_version.params.get(param_name))
+
+            if not collection.has_versions or collection.compare_with_latest():
+                collection_version = collection.create_new_version()
+                return str(collection_version.id)
+            else:
+                return self.latest_version.params.get(param_name)
+
         new_version = super().create_new_version(save=False, is_copy=is_copy)
         if is_copy and new_flow_id:
             old_flow_id = new_version.flow_id
@@ -507,14 +519,8 @@ class Node(BaseModel, VersionsMixin, CustomActionOperationMixin):
                 new_version.params["assistant_id"] = str(assistant_version.id)
 
         if not is_copy and self.type == LLMResponseWithPrompt.__name__:
-            if collection_id := new_version.params.get("collection_id"):
-                collection = Collection.objects.get(id=collection_id)
-
-                if not collection.has_versions or collection.compare_with_latest():
-                    collection_version = collection.create_new_version()
-                    new_version.params["collection_id"] = str(collection_version.id)
-                else:
-                    new_version.params["collection_id"] = self.latest_version.params.get("collection_id")
+            new_version.params["collection_id"] = _get_collection_version(param_name="collection_id")
+            new_version.params["collection_index_id"] = _get_collection_version(param_name="collection_index_id")
 
             if source_material_id := new_version.params.get("source_material_id"):
                 source_material = SourceMaterial.objects.filter(id=source_material_id).first()
@@ -582,6 +588,10 @@ class Node(BaseModel, VersionsMixin, CustomActionOperationMixin):
                         value = OpenAiAssistant.objects.filter(id=value).first()
                 case "collection_id":
                     name = "media"
+                    if value:
+                        value = Collection.objects.filter(id=value).first()
+                case "collection_index_id":
+                    name = "Collection Index"
                     if value:
                         value = Collection.objects.filter(id=value).first()
                 case "source_material_id":
