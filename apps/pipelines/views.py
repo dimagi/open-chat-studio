@@ -203,7 +203,7 @@ def _pipeline_node_parameter_values(team, llm_providers, llm_provider_models):
         ),
         OptionsSource.agent_tools: [_option(value, label) for value, label in AgentTools.user_tool_choices()],
         OptionsSource.custom_actions: [_option(val, display_val) for val, display_val in custom_action_operations],
-        OptionsSource.built_in_tools: [_option(value, label) for value, label in BuiltInTools.built_in_tools()],
+        OptionsSource.built_in_tools: [_option(value, label) for value, label in BuiltInTools.choices],
     }
 
 
