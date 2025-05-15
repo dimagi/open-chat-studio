@@ -802,7 +802,7 @@ export function LlmWidget(props: WidgetParams) {
   };
 
   type ProviderModelsByType = { [type: string]: TypedOption[] };
-  const providerModelsByType = parameterValues.LlmProviderModelId.reduce((acc, provModel) => {
+    const providerModelsByType = parameterValues.LlmProviderModelId.reduce((acc, provModel) => {
     if (!acc[provModel.type]) {
       acc[provModel.type] = [];
     }
@@ -828,7 +828,7 @@ export function LlmWidget(props: WidgetParams) {
           providerModelsByType[provider.type] &&
           providerModelsByType[provider.type].map((providerModel) => (
             <option key={provider.value + providerModel.value} value={makeValue(provider.value, providerModel.value)}>
-              {providerModel.label}
+              {providerModel.label} ({provider.label})
             </option>
           ))
         ))}
