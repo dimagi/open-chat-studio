@@ -16,7 +16,7 @@ export type PipelineNode = Node<NodeData>;
 const NODE_COLORS = [
   { value: "bg-base-100", label: "Default"},
   { value: "bg-red-100 dark:bg-red-950", label: "Red"},
-  { value: "bg-amber-100 dark:bg-amber-950", label: "Amber"},
+  { value: "bg-yellow-100 dark:bg-yellow-950", label: "Yellow"},
   { value: "bg-green-100 dark:bg-green-950", label: "Green"},
   { value: "bg-blue-100 dark:bg-blue-950", label: "Blue"},
   { value: "bg-purple-100 dark:bg-purple-950", label: "Purple"},
@@ -56,7 +56,6 @@ export function PipelineNode(nodeProps: NodeProps<NodeData>) {
   const changeNodeColor = (color: string | undefined) => {
     setNode(id, produce((next) => {
       next.data.params["color"] = color;
-      console.log(color)
     }));
   };
 
