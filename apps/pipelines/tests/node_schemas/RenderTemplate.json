@@ -24,5 +24,6 @@
   "ui:deprecated": false,
   "ui:documentation_link": "/concepts/pipelines/nodes/#template",
   "ui:flow_node_type": "pipelineNode",
+  "ui:icon": "fa-solid fa-robot",
   "ui:label": "Render a template"
 }

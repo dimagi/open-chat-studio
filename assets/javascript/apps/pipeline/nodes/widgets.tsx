@@ -536,6 +536,26 @@ function CodeNodeEditor(
       detail: "Sets the given key in the session's state. Overwrites the current value",
       boost: 1
     }),
+    get_selected_route: snip("get_selected_route(\"${router_node_name}\")", {
+      label: "get_selected_route",
+      type: "keyword",
+      detail: "Gets the route selected by a specific router node",
+      boost: 1
+    }),
+
+    get_node_path: snip("get_node_path(\"${node_name}\")", {
+      label: "get_node_path",
+      type: "keyword",
+      detail: "Gets the path (list of node names) leading to the specified node",
+      boost: 1
+    }),
+
+    get_all_routes: snip("get_all_routes()", {
+      label: "get_all_routes",
+      type: "keyword",
+      detail: "Gets all routing decisions in the pipeline",
+      boost: 1
+    }),
   }
 
   function pythonCompletions(context: CompletionContext) {

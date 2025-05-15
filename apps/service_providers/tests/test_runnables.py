@@ -5,7 +5,7 @@ from unittest import mock
 from unittest.mock import patch
 
 import pytest
-from langchain_core.messages import BaseMessage, HumanMessage, SystemMessage
+from langchain_core.messages import AIMessageChunk, BaseMessage, HumanMessage, SystemMessage
 
 from apps.annotations.models import TagCategories
 from apps.chat.models import Chat, ChatMessage, ChatMessageType
@@ -22,6 +22,7 @@ from apps.service_providers.llm_service.runnables import (
 from apps.service_providers.tracing import TracingService
 from apps.utils.factories.channels import ChannelPlatform, ExperimentChannelFactory
 from apps.utils.factories.experiment import ExperimentSessionFactory
+from apps.utils.factories.files import FileFactory
 from apps.utils.langchain import build_fake_llm_service
 from apps.utils.time import pretty_date
 
@@ -340,3 +341,36 @@ def test_input_message_is_saved_on_chain_error(populate_memory, runnable, sessio
         chain.invoke("hi")
     assert ChatMessage.objects.filter(chat__experiment_session=session).count() == 1
     assert ChatMessage.objects.filter(chat__experiment_session=session, message_type=ChatMessageType.HUMAN).count() == 1
+
+
+@pytest.mark.django_db()
+def test_cited_files_are_saved_in_metadata(session):
+    file = FileFactory(external_id="file-id-123", name="test.txt", team=session.team)
+
+    response = AIMessageChunk(
+        content=[
+            {
+                "type": "text",
+                "text": "this is a test",
+                "annotations": [{"file_id": "file-id-123", "type": "file_citation", "filename": "test.txt"}],
+            }
+        ]
+    )
+    llm_service = build_fake_llm_service(responses=[response], token_counts=[])
+    session.experiment.get_llm_service = lambda: llm_service
+
+    history_manager = _get_history_manager(session)
+    runnable = RunnableFixture(AgentLLMChat, expect_tools=True).build(
+        adapter=ChatAdapter.for_experiment(session.experiment, session), history_manager=history_manager
+    )
+    result = runnable.invoke("Hi")
+    assert result.output == "this is a test"
+
+    # Assert file citation attachment is created and the file is linked to it
+    assert session.chat.attachments.filter(tool_type="file_citation").exists() is True
+    attachment = session.chat.attachments.get(tool_type="file_citation")
+    assert list(attachment.files.all()) == [file]
+
+    # Assert that the file id is saved as a citation in the metadata of the AI message
+    ai_message = session.chat.messages.get(message_type=ChatMessageType.AI)
+    assert ai_message.metadata == {"cited_files": [file.id]}
