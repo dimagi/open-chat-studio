@@ -117,10 +117,7 @@ class TestVersioningNodes:
 class TestArchivingNodes:
     @patch("apps.pipelines.models.Node._archive_related_params")
     def test_archive_related_objects_conditionally(self, archive_related_params):
-        """
-        Related objects should only be archived when the node is a version, since it it possible that they are
-        used by other pipelines
-        """
+        """Related objects should only be archived when the node is a version"""
         pipeline = PipelineFactory()
         node = NodeFactory(pipeline=pipeline)
         node_version = NodeFactory(pipeline=pipeline, working_version=node)
