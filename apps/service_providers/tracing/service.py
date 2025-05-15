@@ -138,7 +138,9 @@ class TracingService:
         span_id, _ = self._get_current_span_info()
         self.outputs[span_id] |= outputs or {}
 
-    def get_langchain_callbacks(self) -> list["BaseCallbackHandler"]:
+    def get_langchain_callbacks(
+        self, run_name_map: dict[str, str] = None, filter_patterns: list[str] = None
+    ) -> list["BaseCallbackHandler"]:
         if not self.activated:
             return []
 
@@ -146,13 +148,36 @@ class TracingService:
         for tracer in self._active_tracers:
             callback = tracer.get_langchain_callback()
             if callback:
-                callbacks.append(wrap_callback(callback))
+                callbacks.append(wrap_callback(callback, run_name_map, filter_patterns))
 
         return callbacks
 
-    def get_langchain_config(self, *, callbacks: list = None, configurable: dict = None) -> RunnableConfig:
+    def get_langchain_config(
+        self,
+        *,
+        callbacks: list = None,
+        configurable: dict = None,
+        run_name_map: dict[str, str] = None,
+        filter_patterns: list[str] = None,
+    ) -> RunnableConfig:
+        """
+        Generates a RunnableConfig object with specific attributes and callbacks.
+
+        Args:
+            callbacks (list): Additional callbacks to be included in the runnable
+                configuration. Defaults to None.
+            configurable (dict): Key-value pairs to include as a configurable metadata
+                in the configuration. Defaults to None.
+            run_name_map (dict[str, str]): A map of run names for specific contexts.
+                Used internally to map run names to more usable values.
+            filter_patterns (list[str]): A list of patterns to filter spans by name.
+
+        Returns:
+            RunnableConfig: A configuration object with the combined callbacks,
+            metadata, and run-specific details.
+        """
         extra_callbacks = callbacks or []
-        tracer_callbacks = self.get_langchain_callbacks()
+        tracer_callbacks = self.get_langchain_callbacks(run_name_map, filter_patterns)
         _, span_name = self._get_current_span_info()
         metadata = {}
         if self.user_id:
