@@ -6,7 +6,7 @@ import uuid
 
 class Migration(migrations.Migration):
     dependencies = [
-        ("channels", "0001_initial"),
+        ("ocs_channels", "0001_initial"),
     ]
 
     operations = [

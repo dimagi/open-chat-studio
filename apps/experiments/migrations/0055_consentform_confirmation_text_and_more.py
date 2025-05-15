@@ -22,7 +22,7 @@ class Migration(migrations.Migration):
             name="conversational_consent_enabled",
             field=models.BooleanField(
                 default=False,
-                help_text="If enabled, the consent form will be sent at the start of a conversation for external channels. Note: This requires the experiment to have a seed message.",
+                help_text="If enabled, the consent form will be sent at the start of a conversation for external ocs_channels. Note: This requires the experiment to have a seed message.",
             ),
         ),
     ]
