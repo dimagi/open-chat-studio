@@ -58,9 +58,7 @@ def test_llm_with_node_history(get_llm_service, provider, pipeline, experiment_s
     runnable = create_runnable(pipeline, nodes)
 
     user_input = "The User Input"
-    runnable.invoke(PipelineState(messages=[user_input], experiment_session=experiment_session, pipeline_version=1))[
-        "messages"
-    ]
+    runnable.invoke(PipelineState(messages=[user_input], experiment_session=experiment_session))["messages"]
     expected_call_messages = [
         [("system", "Node 1:"), ("human", user_input)],
         [("system", "Node 2:"), ("human", f"Node 1: {user_input}")],
@@ -77,9 +75,9 @@ def test_llm_with_node_history(get_llm_service, provider, pipeline, experiment_s
     assert not PipelineChatHistory.objects.filter(session=experiment_session.id, name=llm_2["id"]).exists()
 
     user_input_2 = "Saying more stuff"
-    output_2 = runnable.invoke(
-        PipelineState(messages=[user_input_2], experiment_session=experiment_session, pipeline_version=1)
-    )["messages"][-1]
+    output_2 = runnable.invoke(PipelineState(messages=[user_input_2], experiment_session=experiment_session))[
+        "messages"
+    ][-1]
 
     expected_output = f"Node 2: Node 1: {user_input_2}"
     assert output_2 == expected_output
@@ -130,9 +128,9 @@ def test_llm_with_multiple_node_histories(get_llm_service, provider, pipeline, e
     runnable = create_runnable(pipeline, nodes)
 
     user_input = "The User Input"
-    output_1 = runnable.invoke(
-        PipelineState(messages=[user_input], experiment_session=experiment_session, pipeline_version=1)
-    )["messages"][-1]
+    output_1 = runnable.invoke(PipelineState(messages=[user_input], experiment_session=experiment_session))["messages"][
+        -1
+    ]
     expected_output = f"Node 2: Node 1: {user_input}"
     assert output_1 == expected_output
 
@@ -150,9 +148,9 @@ def test_llm_with_multiple_node_histories(get_llm_service, provider, pipeline, e
     ]
 
     user_input_2 = "Saying more stuff"
-    output_2 = runnable.invoke(
-        PipelineState(messages=[user_input_2], experiment_session=experiment_session, pipeline_version=1)
-    )["messages"][-1]
+    output_2 = runnable.invoke(PipelineState(messages=[user_input_2], experiment_session=experiment_session))[
+        "messages"
+    ][-1]
     expected_output = f"Node 2: Node 1: {user_input_2}"
     assert output_2 == expected_output
 
@@ -214,14 +212,14 @@ def test_global_history(get_llm_service, provider, pipeline, experiment_session)
 
     user_input = "The User Input"
     output_1 = experiment.pipeline.invoke(
-        PipelineState(messages=[user_input], experiment_session=experiment_session, pipeline_version=1),
+        PipelineState(messages=[user_input], experiment_session=experiment_session),
         experiment_session,
         experiment,
         TracingService.empty(),
     )
     user_input_2 = "Saying more stuff"
     output_2 = experiment.pipeline.invoke(
-        PipelineState(messages=[user_input_2], experiment_session=experiment_session, pipeline_version=1),
+        PipelineState(messages=[user_input_2], experiment_session=experiment_session),
         experiment_session,
         experiment,
         TracingService.empty(),
@@ -229,7 +227,7 @@ def test_global_history(get_llm_service, provider, pipeline, experiment_session)
 
     user_input_3 = "Tell me something interesting"
     experiment.pipeline.invoke(
-        PipelineState(messages=[user_input_3], experiment_session=experiment_session, pipeline_version=1),
+        PipelineState(messages=[user_input_3], experiment_session=experiment_session),
         experiment_session,
         experiment,
         TracingService.empty(),
@@ -307,9 +305,9 @@ def test_llm_with_named_history(get_llm_service, provider, pipeline, experiment_
     runnable = create_runnable(pipeline, nodes)
 
     user_input = "The User Input"
-    runnable.invoke(PipelineState(messages=[user_input], experiment_session=experiment_session, pipeline_version=1))
+    runnable.invoke(PipelineState(messages=[user_input], experiment_session=experiment_session))
     user_input_2 = "Second User Input"
-    runnable.invoke(PipelineState(messages=[user_input_2], experiment_session=experiment_session, pipeline_version=1))
+    runnable.invoke(PipelineState(messages=[user_input_2], experiment_session=experiment_session))
 
     expected_call_messages = [
         # First call to Node 1
@@ -372,9 +370,9 @@ def test_llm_with_no_history(get_llm_service, provider, pipeline, experiment_ses
     runnable = create_runnable(pipeline, nodes)
 
     user_input = "The User Input"
-    runnable.invoke(PipelineState(messages=[user_input], experiment_session=experiment_session, pipeline_version=1))
+    runnable.invoke(PipelineState(messages=[user_input], experiment_session=experiment_session))
     user_input_2 = "Second User Input"
-    runnable.invoke(PipelineState(messages=[user_input_2], experiment_session=experiment_session, pipeline_version=1))
+    runnable.invoke(PipelineState(messages=[user_input_2], experiment_session=experiment_session))
 
     expected_call_messages = [
         # First call to Node 1
