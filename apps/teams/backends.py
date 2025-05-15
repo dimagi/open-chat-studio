@@ -67,7 +67,7 @@ CONTENT_TYPES = {
         "syntheticvoice",
     ],
     "files": ["file"],
-    "pipelines": ["pipeline", "pipelinechathistory", "pipelinechatmessages", "pipelinerun", "node"],
+    "pipelines": ["pipeline", "pipelinechathistory", "pipelinechatmessages", "node"],
     "service_providers": [
         "authprovider",
         "llmprovider",

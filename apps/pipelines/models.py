@@ -2,17 +2,14 @@ import logging
 from collections import defaultdict
 from collections.abc import Iterator
 from dataclasses import dataclass
-from datetime import datetime
 from functools import cached_property
 from uuid import uuid4
 
 import pydantic
 from django.core.exceptions import ObjectDoesNotExist
-from django.core.serializers.json import DjangoJSONEncoder
 from django.db import models, transaction
 from django.urls import reverse
 from langchain_core.messages import AIMessage, BaseMessage, HumanMessage, SystemMessage
-from pydantic import ConfigDict
 
 from apps.annotations.models import TagCategories
 from apps.chat.models import ChatMessage, ChatMessageType
@@ -24,7 +21,6 @@ from apps.pipelines.exceptions import PipelineBuildError
 from apps.pipelines.executor import patch_executor
 from apps.pipelines.flow import Flow, FlowNode, FlowNodeData
 from apps.pipelines.helper import duplicate_pipeline_with_new_ids
-from apps.pipelines.logging import PipelineLoggingCallbackHandler
 from apps.pipelines.nodes.base import PipelineState
 from apps.pipelines.nodes.helpers import temporary_session
 from apps.teams.models import BaseTeamModel
@@ -188,7 +184,7 @@ class Pipeline(BaseTeamModel, VersionsMixin):
         return new_pipeline
 
     def get_absolute_url(self):
-        return reverse("pipelines:details", args=[self.team.slug, self.id])
+        return reverse("pipelines:edit", args=[self.team.slug, self.id])
 
     def update_nodes_from_data(self) -> None:
         """Set the nodes on the pipeline from data coming from the frontend"""
@@ -310,63 +306,36 @@ class Pipeline(BaseTeamModel, VersionsMixin):
         from apps.pipelines.graph import PipelineGraph
 
         runnable = PipelineGraph.build_runnable_from_pipeline(self)
-        pipeline_run = self._create_pipeline_run(input, session)
-        logging_callback = PipelineLoggingCallbackHandler(pipeline_run)
-        logging_callback.logger.debug("Starting pipeline run", input=input["messages"][-1])
-        try:
-            config = trace_service.get_langchain_config(
-                callbacks=[logging_callback],
-                configurable={
-                    "disabled_tools": AgentTools.reminder_tools() if disable_reminder_tools else [],
-                },
-            )
-            raw_output = runnable.invoke(input, config=config)
-            output = PipelineState(**raw_output).json_safe()
-            pipeline_run.output = output
-            if save_run_to_history and session is not None:
-                input_metadata = output.get("input_message_metadata", {})
-                output_metadata = output.get("output_message_metadata", {})
-                trace_metadata = trace_service.get_trace_metadata() if trace_service else None
-                if trace_metadata:
-                    input_metadata.update(trace_metadata)
-                    output_metadata.update(trace_metadata)
-
-                if save_input_to_history:
-                    self._save_message_to_history(
-                        session, input["messages"][-1], ChatMessageType.HUMAN, metadata=input_metadata
-                    )
-                ai_message = self._save_message_to_history(
-                    session,
-                    output["messages"][-1],
-                    ChatMessageType.AI,
-                    metadata=output_metadata,
-                    tags=output.get("output_message_tags"),
-                )
-                ai_message.add_version_tag(
-                    version_number=experiment.version_number, is_a_version=experiment.is_a_version
-                )
-                return ai_message
-            else:
-                return ChatMessage(content=output)
-        finally:
-            if pipeline_run.status == PipelineRunStatus.ERROR:
-                logging_callback.logger.debug("Pipeline run failed", input=input["messages"][-1])
-            else:
-                pipeline_run.status = PipelineRunStatus.SUCCESS
-                logging_callback.logger.debug("Pipeline run finished", output=output["messages"][-1])
-            pipeline_run.save()
-
-    def _create_pipeline_run(self, input: PipelineState, session: ExperimentSession) -> "PipelineRun":
-        # Django doesn't auto-serialize objects for JSON fields, so we need to copy the input and save the ID of
-        # the session instead of the session object.
-
-        return PipelineRun.objects.create(
-            pipeline=self,
-            input=input.json_safe(),
-            status=PipelineRunStatus.RUNNING,
-            log={"entries": []},
-            session=session,
+        config = trace_service.get_langchain_config(
+            configurable={
+                "disabled_tools": AgentTools.reminder_tools() if disable_reminder_tools else [],
+            },
         )
+        raw_output = runnable.invoke(input, config=config)
+        output = PipelineState(**raw_output).json_safe()
+        if save_run_to_history and session is not None:
+            input_metadata = output.get("input_message_metadata", {})
+            output_metadata = output.get("output_message_metadata", {})
+            trace_metadata = trace_service.get_trace_metadata() if trace_service else None
+            if trace_metadata:
+                input_metadata.update(trace_metadata)
+                output_metadata.update(trace_metadata)
+
+            if save_input_to_history:
+                self._save_message_to_history(
+                    session, input["messages"][-1], ChatMessageType.HUMAN, metadata=input_metadata
+                )
+            ai_message = self._save_message_to_history(
+                session,
+                output["messages"][-1],
+                ChatMessageType.AI,
+                metadata=output_metadata,
+                tags=output.get("output_message_tags"),
+            )
+            ai_message.add_version_tag(version_number=experiment.version_number, is_a_version=experiment.is_a_version)
+            return ai_message
+        else:
+            return ChatMessage(content=output)
 
     def _save_message_to_history(
         self, session: ExperimentSession, message: str, type_: ChatMessageType, metadata: dict, tags: list[str] = None
@@ -649,34 +618,6 @@ class Node(BaseModel, VersionsMixin, CustomActionOperationMixin):
                     versioning_logger.exception(
                         f"Failed to archive {spec.param_name} with id {instance_id}, since it could not be found"
                     )
-
-
-class PipelineRunStatus(models.TextChoices):
-    RUNNING = "running", "Running"
-    SUCCESS = "success", "Success"
-    ERROR = "error", "Error"
-
-
-class PipelineRun(BaseModel):
-    pipeline = models.ForeignKey(Pipeline, on_delete=models.CASCADE, related_name="runs")
-    status = models.CharField(max_length=128, choices=PipelineRunStatus.choices)
-    input = models.JSONField(blank=True, null=True, encoder=DjangoJSONEncoder)
-    output = models.JSONField(blank=True, null=True, encoder=DjangoJSONEncoder)
-    log = models.JSONField(default=dict, blank=True, encoder=DjangoJSONEncoder)
-    session = models.ForeignKey(ExperimentSession, on_delete=models.SET_NULL, related_name="pipeline_runs", null=True)
-
-    def get_absolute_url(self):
-        return reverse("pipelines:run_details", args=[self.pipeline.team.slug, self.pipeline_id, self.id])
-
-
-class LogEntry(pydantic.BaseModel):
-    model_config = ConfigDict(json_encoders={datetime: lambda v: v.strftime("%Y-%m-%d %H:%M:%S.%f")})
-
-    time: datetime
-    level: str
-    message: str
-    output: str | None = None
-    input: str | None = None
 
 
 class PipelineEventInputs(models.TextChoices):
