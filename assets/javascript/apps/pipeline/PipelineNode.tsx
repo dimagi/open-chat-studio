@@ -105,7 +105,7 @@ function NodeHeader({nodeId, nodeSchema, nodeName}: {nodeId: string, nodeSchema:
           <div className="text-primary/70 absolute ml-2 mt-1 top-4 left-2 tooltip tooltip-top" data-tip={nodeSchema["ui:label"]}>
             <i className={icon}></i>
           </div>}
-        <div className="m-1 text-lg font-bold text-center align-middle">
+        <div className="px-10 m-1 text-lg font-bold text-center align-middle">
           <DeprecationNotice nodeSchema={nodeSchema}/>
           {header}
           <p className="text-xs font-light text-gray-500 dark:text-gray-700">{nodeId}</p>
