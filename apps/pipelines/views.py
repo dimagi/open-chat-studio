@@ -7,11 +7,10 @@ from django.contrib import messages
 from django.contrib.auth.decorators import permission_required
 from django.contrib.auth.mixins import PermissionRequiredMixin
 from django.db import transaction
-from django.db.models import Count, QuerySet, Subquery
-from django.http import Http404, HttpResponse, JsonResponse
-from django.shortcuts import get_object_or_404, redirect, render
+from django.db.models import QuerySet, Subquery
+from django.http import HttpResponse, JsonResponse
+from django.shortcuts import get_object_or_404, redirect
 from django.template.loader import render_to_string
-from django.template.response import TemplateResponse
 from django.urls import reverse
 from django.views import View
 from django.views.decorators.csrf import csrf_exempt
@@ -24,9 +23,9 @@ from apps.custom_actions.form_utils import get_custom_action_operation_choices
 from apps.documents.models import Collection
 from apps.experiments.models import AgentTools, BuiltInTools, Experiment, SourceMaterial
 from apps.pipelines.flow import FlowPipelineData
-from apps.pipelines.models import Pipeline, PipelineRun
+from apps.pipelines.models import Pipeline
 from apps.pipelines.nodes.base import OptionsSource
-from apps.pipelines.tables import PipelineRunTable, PipelineTable
+from apps.pipelines.tables import PipelineTable
 from apps.pipelines.tasks import get_response_for_pipeline_test_message
 from apps.service_providers.models import LlmProvider, LlmProviderModel
 from apps.teams.decorators import login_and_team_required
@@ -62,11 +61,7 @@ class PipelineTableView(SingleTableView, PermissionRequiredMixin):
     template_name = "table/single_table.html"
 
     def get_queryset(self):
-        return (
-            Pipeline.objects.filter(team=self.request.team, is_version=False, is_archived=False)
-            .annotate(run_count=Count("runs"))
-            .order_by("name")
-        )
+        return Pipeline.objects.filter(team=self.request.team, is_version=False, is_archived=False).order_by("name")
 
 
 class CreatePipeline(LoginAndTeamRequiredMixin, TemplateView, PermissionRequiredMixin):
@@ -203,7 +198,7 @@ def _pipeline_node_parameter_values(team, llm_providers, llm_provider_models):
         ),
         OptionsSource.agent_tools: [_option(value, label) for value, label in AgentTools.user_tool_choices()],
         OptionsSource.custom_actions: [_option(val, display_val) for val, display_val in custom_action_operations],
-        OptionsSource.built_in_tools: [_option(value, label) for value, label in BuiltInTools.built_in_tools()],
+        OptionsSource.built_in_tools: [_option(value, label) for value, label in BuiltInTools.choices],
     }
 
 
@@ -285,47 +280,6 @@ def pipeline_data(request, team_slug: str, pk: int):
                 "errors": pipeline.validate(),
             }
         }
-    )
-
-
-@login_and_team_required
-@permission_required("pipelines.view_pipeline")
-def pipeline_details(request, team_slug: str, pk: int):
-    pipeline = get_object_or_404(Pipeline, id=pk, team=request.team)
-    return TemplateResponse(
-        request,
-        "pipelines/pipeline_details.html",
-        {
-            "pipeline": pipeline,
-            "edit_button": {
-                "tooltip_text": "View" if pipeline.is_a_version else "Edit",
-                "icon": "fa-eye" if pipeline.is_a_version else "fa-pencil",
-            },
-        },
-    )
-
-
-class PipelineRunsTableView(SingleTableView, PermissionRequiredMixin):
-    permission_required = "pipelines.view_pipelinerun"
-    model = PipelineRun
-    paginate_by = 25
-    table_class = PipelineRunTable
-    template_name = "table/single_table.html"
-
-    def get_queryset(self):
-        return PipelineRun.objects.filter(pipeline=self.kwargs["pk"]).order_by("-created_at")
-
-
-@login_and_team_required
-@permission_required("pipelines.view_pipelinerun")
-def run_details(request, team_slug: str, run_pk: int, pipeline_pk: int):
-    pipeline_run = get_object_or_404(PipelineRun, id=run_pk, pipeline__id=pipeline_pk)
-    if pipeline_run.pipeline.team.slug != team_slug:
-        raise Http404()
-    return render(
-        request,
-        "pipelines/pipeline_run_details.html",
-        {"pipeline_run": pipeline_run},
     )
 
 
