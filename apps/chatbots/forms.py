@@ -38,3 +38,62 @@ class ChatbotForm(forms.ModelForm):
             experiment.save()
             self.save_m2m()
         return experiment
+
+
+class ChatbotSettingsForm(forms.ModelForm):
+    description = forms.CharField(widget=forms.Textarea(attrs={"rows": 2}), required=False)
+    seed_message = forms.CharField(widget=forms.Textarea(attrs={"rows": 2}), required=False)
+
+    class Meta:
+        model = Experiment
+        fields = [
+            "description",
+            "voice_provider",
+            "synthetic_voice",
+            "voice_response_behaviour",
+            "echo_transcript",
+            "use_processor_bot_voice",
+            "trace_provider",
+            "debug_mode_enabled",
+            "conversational_consent_enabled",
+            "pre_survey",
+            "post_survey",
+            "participant_allowlist",
+            "seed_message",
+        ]
+        labels = {"participant_allowlist": "Participant allowlist"}
+        help_texts = {
+            "use_processor_bot_voice": (
+                "In a multi-bot setup, use the configured voice of the bot that generated the output. If it doesn't "
+                "have one, the router bot's voice will be used."
+            ),
+            "participant_allowlist": (
+                "Separate identifiers with a comma. Phone numbers should be in E164 format e.g. +27123456789"
+            ),
+            "debug_mode_enabled": (
+                "Enabling this tags each AI message in the web UI with the bot responsible for generating it. "
+                "This is applicable only for router bots."
+            ),
+        }
+
+    def __init__(self, request, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        self.request = request
+
+    def clean_participant_allowlist(self):
+        raw_text = self.cleaned_data["participant_allowlist"]
+        identifiers = [line.strip() for line in raw_text.split("\n") if line.strip()]
+        cleaned_identifiers = []
+        for identifier in identifiers:
+            cleaned_identifiers.append(identifier.replace(" ", ""))
+        print(cleaned_identifiers)
+        return cleaned_identifiers
+
+    @transaction.atomic()
+    def save(self, commit=True):
+        experiment = super().save(commit=False)
+
+        if commit:
+            experiment.save()
+            self.save_m2m()
+        return experiment
