@@ -81,7 +81,7 @@ def cancel_edit_mode(request, team_slug, experiment_id):
 @require_POST
 def save_all_settings(request, team_slug, experiment_id):
     experiment = get_object_or_404(Experiment, id=experiment_id, team=request.team)
-    form = ChatbotSettingsForm(request=request, instance=experiment)
+    form = ChatbotSettingsForm(request=request, data=request.POST, instance=experiment)
 
     context = {
         "experiment": experiment,
@@ -89,6 +89,10 @@ def save_all_settings(request, team_slug, experiment_id):
         "edit_mode": False,
         "form": form,
     }
+    if form.is_valid():
+        form.save()
+    else:
+        context["edit_mode"] = True
     return HttpResponse(render_to_string("chatbots/settings_content.html", context, request=request))
 
 

@@ -140,6 +140,7 @@
           <textarea name="participant_allowlist" rows="5" class="textarea textarea-bordered w-full" placeholder="Enter one identifier per line">{% for participant in experiment.participant_allowlist %}{{ participant }}
           {% endfor %}</textarea>
           <div class="text-xs text-gray-500 mt-1 mb-2">
+            Separate identifiers with a comma. Phone numbers should be in E164 format e.g. +27123456789.
             To limit the set of participants that can chat with this bot, simply add their identifiers in this list.
             When the list is empty, the bot will accessible via its public link.
           </div>

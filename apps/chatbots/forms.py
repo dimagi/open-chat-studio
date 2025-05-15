@@ -67,9 +67,6 @@ class ChatbotSettingsForm(forms.ModelForm):
                 "In a multi-bot setup, use the configured voice of the bot that generated the output. If it doesn't "
                 "have one, the router bot's voice will be used."
             ),
-            "participant_allowlist": (
-                "Separate identifiers with a comma. Phone numbers should be in E164 format e.g. +27123456789"
-            ),
             "debug_mode_enabled": (
                 "Enabling this tags each AI message in the web UI with the bot responsible for generating it. "
                 "This is applicable only for router bots."
@@ -81,12 +78,9 @@ class ChatbotSettingsForm(forms.ModelForm):
         self.request = request
 
     def clean_participant_allowlist(self):
-        raw_text = self.cleaned_data["participant_allowlist"]
-        identifiers = [line.strip() for line in raw_text.split("\n") if line.strip()]
         cleaned_identifiers = []
-        for identifier in identifiers:
+        for identifier in self.cleaned_data["participant_allowlist"]:
             cleaned_identifiers.append(identifier.replace(" ", ""))
-        print(cleaned_identifiers)
         return cleaned_identifiers
 
     @transaction.atomic()
