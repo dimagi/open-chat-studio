@@ -249,7 +249,7 @@ class DeleteFile(LoginAndTeamRequiredMixin, View):
 
         if collections := file.get_collection_references():
             response = render_to_string(
-                "assistants/partials/referenced_objects.html",
+                "generic/referenced_objects.html",
                 context={
                     "object_name": "file",
                     "pipeline_nodes": [Chip(label=col.name, url=col.get_absolute_url()) for col in collections],

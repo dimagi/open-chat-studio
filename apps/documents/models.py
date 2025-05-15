@@ -162,7 +162,10 @@ class Collection(BaseTeamModel, VersionsMixin):
         """
         Get all experiments that reference this collection through a pipeline
         """
-        return Experiment.objects.filter(pipeline__node__params__collection_index_id=str(self.id)).distinct()
+        return Experiment.objects.filter(
+            models.Q(pipeline__node__params__collection_index_id=str(self.id))
+            | models.Q(pipeline__node__params__collection_id=str(self.id))
+        ).distinct()
 
     @transaction.atomic()
     def archive(self):
@@ -173,16 +176,15 @@ class Collection(BaseTeamModel, VersionsMixin):
             return False
 
         if self.is_working_version:
-            for version in self.versions.all():
-                if version.get_related_experiments_queryset().exists():
-                    return False
+            if self.versions.exists():
+                return False
 
-        response = super().archive()
+        super().archive()
         if self.is_index and self.openai_vector_store_id:
             self.remove_index()
 
         self.files.update(is_archived=True)
-        return response
+        return True
 
     def remove_index(self):
         """Remove the index backend"""

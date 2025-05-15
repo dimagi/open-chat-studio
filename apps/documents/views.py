@@ -227,22 +227,27 @@ class DeleteCollection(LoginAndTeamRequiredMixin, View):
                 )
                 for node in collection.get_related_nodes_queryset()
             ]
-            experiment_chips = [
-                Chip(
-                    label=(
-                        f"{experiment.name} [{experiment.get_version_name()}]"
-                        if experiment.is_working_version
-                        else f"{experiment.name} {experiment.get_version_name()} [published]"
-                    ),
-                    url=experiment.get_absolute_url(),
-                )
-                for experiment in collection.get_related_experiments_queryset()
-            ]
+            experiment_chips = []
+            for version in collection.versions.all():
+                if experiments := version.get_related_experiments_queryset():
+                    experiment_chips.extend(
+                        [
+                            Chip(
+                                label=(
+                                    f"{experiment.name} [{experiment.get_version_name()}]"
+                                    if experiment.is_working_version
+                                    else f"{experiment.name} {experiment.get_version_name()} [published]"
+                                ),
+                                url=experiment.get_absolute_url(),
+                            )
+                            for experiment in experiments
+                        ]
+                    )
 
             response = render_to_string(
-                "assistants/partials/referenced_objects.html",
+                "generic/referenced_objects.html",
                 context={
-                    "object_name": "assistant",
+                    "object_name": "collection",
                     "pipeline_nodes": pipeline_node_chips,
                     "experiments_with_pipeline_nodes": experiment_chips,
                 },

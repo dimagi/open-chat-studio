@@ -3,7 +3,7 @@ from unittest import mock
 import pytest
 from django.urls import reverse
 
-from apps.documents.models import CollectionFile, FileStatus
+from apps.documents.models import Collection, CollectionFile, FileStatus
 from apps.utils.factories.documents import CollectionFactory
 from apps.utils.factories.files import FileFactory
 from apps.utils.factories.pipelines import NodeFactory, PipelineFactory
@@ -74,27 +74,28 @@ class TestEditCollection:
 
 @pytest.mark.django_db()
 class TestDeleteCollection:
-    @pytest.fixture()
-    def collection(self):
+    def setup_collection(self, is_index: bool) -> Collection:
         team = TeamWithUsersFactory()
         file = FileFactory(team=team, external_id="remote-file-123")
         collection = CollectionFactory(
             name="Tester",
             team=team,
-            is_index=True,
+            is_index=is_index,
             llm_provider=LlmProviderFactory(team=team),
             openai_vector_store_id="store-123",
         )
         collection.files.add(file)
         return collection
 
-    def test_user_cannot_delete_a_collection_in_use(self, index_manager_mock, collection, client):
+    @pytest.mark.parametrize("is_index", [False])
+    def test_user_cannot_delete_a_collection_in_use(self, is_index, index_manager_mock, client):
         """
         The user should not be able to delete a collection if it is being used by a pipeline.
         There are two cases where this can happen:
         1. The collection is being used in a pipeline
         2. The collection is being used by a pipeline version, which is being used by some experiment
         """
+        collection = self.setup_collection(is_index=is_index)
         client.force_login(collection.team.members.first())
         url = reverse("documents:collection_delete", args=[collection.team.slug, collection.id])
 
@@ -113,16 +114,15 @@ class TestDeleteCollection:
         response = client.delete(url)
         assert response.status_code == 400
 
-    @mock.patch("apps.documents.models.Collection.archive")
-    def test_versioned_collection_is_not_archived(self, archive, collection, client):
-        """When a collection is versioned, it should be archived instead of deleted"""
+    @pytest.mark.usefixtures("index_manager_mock")
+    @pytest.mark.parametrize("is_index", [True, False])
+    def test_collection_is_archived(self, is_index, client):
+        collection = self.setup_collection(is_index=is_index)
         client.force_login(collection.team.members.first())
-
-        # Create a version of the collection
-        CollectionFactory(working_version=collection, openai_vector_store_id="new-id")
 
         url = reverse("documents:collection_delete", args=[collection.team.slug, collection.id])
         response = client.delete(url)
 
         assert response.status_code == 200
-        archive.assert_called()
+        collection.refresh_from_db()
+        assert collection.is_archived
