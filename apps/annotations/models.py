@@ -22,6 +22,20 @@ class TagCategories(models.TextChoices):
     RESPONSE_RATING = "response_rating", _("Response Rating")
     ERROR = "error", _("Error")
 
+    def badge_text(self, name):
+        match self:
+            case TagCategories.BOT_RESPONSE:
+                return _("Routed to {}").format(name)
+            case TagCategories.SAFETY_LAYER_RESPONSE:
+                return _("Safety Layer '{}' Triggered").format(name)
+        return name
+
+    @property
+    def badge_status(self):
+        if self == TagCategories.SAFETY_LAYER_RESPONSE:
+            return "error"
+        return ""
+
 
 @audit_fields(
     "name",
@@ -43,6 +57,14 @@ class Tag(TagBase, BaseTeamModel):
 
     def get_absolute_url(self):
         return reverse("annotations:tag_edit", args=[self.team.slug, self.id])
+
+    @property
+    def category_enum(self):
+        return TagCategories(self.category)
+
+    @property
+    def badge_text(self):
+        return self.category_enum.badge_text(self.name)
 
 
 @audit_fields(

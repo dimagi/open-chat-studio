@@ -39,40 +39,53 @@
     {% include 'experiments/chat/end_experiment_modal.html' %}
   {% endif %}
 </div>
-<script>
-  let refreshTimer = null;
-  const pollInterval = 30000;
-
-  function scrollToBottom() {
-    const chatUI = document.getElementById('message-list');
-    chatUI.scrollTop = chatUI.scrollHeight;
-    cancelPolling();
-    refreshTimer = setTimeout(pollBackend, pollInterval);
-  }
-
-  function pollBackend() {
-    const messageListDiv = document.getElementById('message-list');
-    const url = messageListDiv.getAttribute('data-url');
-    const lastMessage = messageListDiv.lastElementChild
-    const lastDateTime = lastMessage.getAttribute('data-last-message-datetime')
-    if (!lastDateTime) {
-      console.log("No last message datetime found, skipping poll.", lastMessage);
-      return;
+{% if streaming %}
+  <script>
+    function scrollToBottom() {
+      const chatUI = document.getElementById('message-list');
+      chatUI.scrollTop = chatUI.scrollHeight;
     }
-    const params = new URLSearchParams([['since', lastDateTime]])
-    htmx.ajax('GET', `${url}?${params}`, {target: '#message-list', swap: 'beforeend'})
-  }
-
-  function cancelPolling() {
-    if (refreshTimer) {
-      clearTimeout(refreshTimer);
-    }
-  }
 
   // Scroll to the bottom of the chat after initial load
-  window.addEventListener('load', scrollToBottom);
+    window.addEventListener('load', scrollToBottom);
+    document.body.addEventListener('htmx:wsAfterMessage', scrollToBottom);
+  </script>
+{% else %}
+  <script>
+    let refreshTimer = null;
+    const pollInterval = 30000;
+
+    function scrollToBottom() {
+      const chatUI = document.getElementById('message-list');
+      chatUI.scrollTop = chatUI.scrollHeight;
+      cancelPolling();
+      refreshTimer = setTimeout(pollBackend, pollInterval);
+    }
+
+    function pollBackend() {
+      const messageListDiv = document.getElementById('message-list');
+      const url = messageListDiv.getAttribute('data-url');
+      const lastMessage = messageListDiv.lastElementChild
+      const lastDateTime = lastMessage.getAttribute('data-last-message-datetime')
+      if (!lastDateTime) {
+        console.log("No last message datetime found, skipping poll.", lastMessage);
+        return;
+      }
+      const params = new URLSearchParams([['since', lastDateTime]])
+      htmx.ajax('GET', `${url}?${params}`, {target: '#message-list', swap: 'beforeend'})
+    }
+
+    function cancelPolling() {
+      if (refreshTimer) {
+        clearTimeout(refreshTimer);
+      }
+    }
+
+  // Scroll to the bottom of the chat after initial load
+    window.addEventListener('load', scrollToBottom);
 
   // Scroll to the bottom of the chat after every htmx request
-  document.body.addEventListener('htmx:afterOnLoad', scrollToBottom);
-  document.body.addEventListener('htmx:beforeRequest', cancelPolling);
-</script>
+    document.body.addEventListener('htmx:afterOnLoad', scrollToBottom);
+    document.body.addEventListener('htmx:beforeRequest', cancelPolling);
+  </script>
+{% endif %}

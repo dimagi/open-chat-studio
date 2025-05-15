@@ -1,11 +1,14 @@
-import asyncio
 import json
 import logging
 import uuid
 
+from asgiref.sync import sync_to_async
 from channels.generic.websocket import AsyncWebsocketConsumer
 from django.template.loader import render_to_string
 
+from apps.annotations.models import TagCategories
+from apps.channels.datamodels import BaseMessage
+from apps.chat.channels import WebChannel
 from apps.experiments.helpers import get_real_user_or_none
 from apps.experiments.models import Experiment, ExperimentSession
 from apps.teams.models import Team
@@ -72,7 +75,9 @@ class ChatbotConsumer(AsyncWebsocketConsumer):
         self.user = get_real_user_or_none(self.scope["user"])
         # TODO: redirect for session state
         try:
-            self.session = await ExperimentSession.objects.select_related("participant", "chat").aget(
+            self.session = await ExperimentSession.objects.select_related(
+                "experiment_channel", "participant", "chat"
+            ).aget(
                 experiment=self.experiment,
                 external_id=session_id,
                 team=self.team,
@@ -95,8 +100,17 @@ class ChatbotConsumer(AsyncWebsocketConsumer):
         await self.send(text_data=self._render_user_message(message_text))
         contents_div_id = f"message-response-{str(uuid.uuid4())}"
         await self.send(text_data=self._render_pending_response_message(contents_div_id))
-        await asyncio.sleep(2)
-        await self.send(text_data=self._render_bot_response(contents_div_id, "Bot response here"))
+
+        # TODO: error handling
+        # TODO: send message to channel from events
+        #   https://channels.readthedocs.io/en/latest/topics/channel_layers.html
+        #   Probably use WebChannel.send_text_to_user
+        chat_message = await sync_to_async(run_bot)(
+            self.experiment,
+            self.session,
+            message_text,
+        )
+        await self.send(text_data=await self._render_bot_response(contents_div_id, chat_message))
 
     def _render_user_message(self, message_text):
         return render_to_string(
@@ -110,11 +124,31 @@ class ChatbotConsumer(AsyncWebsocketConsumer):
             self._get_context(contents_div_id=contents_div_id, loading=True),
         )
 
-    def _render_bot_response(self, contents_div_id, content):
+    async def _render_bot_response(self, contents_div_id, message):
+        kwargs = {"tags": []}
+        if self.experiment.debug_mode_enabled:
+            async for tag in message.tags.exclude(category=None).all():
+                if tag.category == TagCategories.RESPONSE_RATING:
+                    kwargs["message_rating"] = tag.value
+                elif tag.category in (TagCategories.BOT_RESPONSE, TagCategories.SAFETY_LAYER_RESPONSE):
+                    kwargs["tags"].append({"text": tag.badge_text, "status": tag.category_enum.badge_status})
         return render_to_string(
             "chatbots/websocket_components/final_system_message.html",
-            self._get_context(message_text=content, contents_div_id=contents_div_id),
+            self._get_context(message=message, contents_div_id=contents_div_id, **kwargs),
         )
 
     def _get_context(self, **kwargs):
         return {"experiment": self.experiment, "session": self.session, **kwargs}
+
+
+def run_bot(experiment, session, message_text):
+    web_channel = WebChannel(
+        experiment,
+        session.experiment_channel,
+        experiment_session=session,
+    )
+    message = BaseMessage(
+        participant_id=session.participant.identifier,
+        message_text=message_text,
+    )
+    return web_channel.new_user_message(message)

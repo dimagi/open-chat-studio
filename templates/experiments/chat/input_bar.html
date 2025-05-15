@@ -22,7 +22,8 @@
   {% csrf_token %}
   <div class="flex flex-col">
     <div class="flex items-center w-full">
-      {% if assistant %}
+      {% if assistant and not streaming %}
+        {# streaming doesn't support files for now #}
         {% if assistant.supports_code_interpreter_attachments and assistant.supports_file_search_attachments %}
           <div class="flex flex-row gap-2">
             <div class="dropdown dropdown-top">

@@ -19,5 +19,6 @@ def rate_message(request, team_slug: str, message_id: int, rating: str):
         context={
             "team_slug": team_slug,
             "message": message,
+            "message_rating": message.rating,
         },
     )

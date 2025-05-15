@@ -239,21 +239,23 @@ class ChatMessage(BaseModel, TaggedModelMixin, UserCommentsMixin):
         )
         self.add_tag(tag, team=self.chat.team, added_by=None)
 
+    @property
     def rating(self) -> str | None:
-        if rating := self.tags.filter(category=TagCategories.RESPONSE_RATING).values_list("name", flat=True).first():
-            return rating
+        return self._get_tag_name(TagCategories.RESPONSE_RATING)
 
     def get_processor_bot_tag_name(self) -> str | None:
         """Returns the tag of the bot that generated this message"""
         if self.message_type != ChatMessageType.AI:
-            return
-        if tag := self.tags.filter(category=TagCategories.BOT_RESPONSE).first():
-            return tag.name
+            return None
+        return self._get_tag_name(TagCategories.BOT_RESPONSE)
 
     def get_safety_layer_tag_name(self) -> str | None:
         """Returns the name of the safety layer tag, if there is one"""
-        if tag := self.tags.filter(category=TagCategories.SAFETY_LAYER_RESPONSE).first():
-            return tag.name
+        return self._get_tag_name(TagCategories.SAFETY_LAYER_RESPONSE)
+
+    def _get_tag_name(self, tag_category: TagCategories) -> str | None:
+        """Returns the tag name of the given category"""
+        return self.tags.filter(category=tag_category).values_list("name", flat=True).first()
 
 
 class ChatAttachment(BaseModel):
