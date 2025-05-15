@@ -555,6 +555,7 @@ class Node(BaseModel, VersionsMixin, CustomActionOperationMixin):
         """
         super().archive()
         if not self.is_a_version:
+            # We don't want to archive related objects for working versions, since they can be used in other pipelines
             return
 
         self._archive_related_params()
@@ -633,7 +634,8 @@ class Node(BaseModel, VersionsMixin, CustomActionOperationMixin):
         model_param_specs = {
             nodes.AssistantNode.__name__: [ModelParamSpec(param_name="assistant_id", model_cls=OpenAiAssistant)],
             nodes.LLMResponseWithPrompt.__name__: [
-                ModelParamSpec(param_name="collection_id", model_cls=Collection)
+                ModelParamSpec(param_name="collection_id", model_cls=Collection),
+                ModelParamSpec(param_name="collection_index_id", model_cls=Collection),
                 # TODO: Custom actions needed
             ],
         }

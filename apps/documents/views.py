@@ -224,6 +224,7 @@ class DeleteCollection(LoginAndTeamRequiredMixin, View):
             )
             return HttpResponse(response, headers={"HX-Reswap": "none"}, status=400)
         else:
+            # TODO: Update: When a collection version is being used, we should tell the user this and not archive
             if collection.versions.filter().exists():
                 try:
                     collection.archive()
