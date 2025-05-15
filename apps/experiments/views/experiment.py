@@ -874,7 +874,7 @@ def _poll_messages(request):
     if messages:
         return TemplateResponse(
             request,
-            "experiments/chat/system_message.html",
+            "experiments/chat/system_messages.html",
             {
                 "messages": [message.content for message in messages],
                 "last_message_datetime": messages[0].created_at,

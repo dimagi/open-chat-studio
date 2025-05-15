@@ -72,6 +72,8 @@ dependencies = [
     "urllib3>=2.3.0",
     "pycryptodome",
     "python-docx",
+    "channels>=4.2.2",
+    "channels-redis>=4.2.1",
 ]
 
 [project.urls]
@@ -134,6 +136,7 @@ dev = [
     "pytest-httpx",
     "pytest-cov",
     "pytest-xdist",
+    "channels[daphne]>=4.2.2",
 ]
 docs = [
     "mkdocs-material>=9.6.12",
