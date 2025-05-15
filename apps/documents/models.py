@@ -1,5 +1,6 @@
 from django.db import models, transaction
 from django.urls import reverse
+from django.utils.text import slugify
 from django.utils.translation import gettext_lazy as _
 from field_audit import audit_fields
 from field_audit.models import AuditingManager
@@ -82,6 +83,10 @@ class Collection(BaseTeamModel, VersionsMixin):
 
     def __str__(self) -> str:
         return self.name
+
+    @property
+    def index_name(self) -> str:
+        return f"collection-{self.team.slug}-{slugify(self.name)}-{self.id}"
 
     @property
     def size(self) -> float:
