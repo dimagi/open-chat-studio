@@ -215,7 +215,7 @@ class AnthropicLlmService(LlmService):
         )
 
     def get_callback_handler(self, model: str) -> BaseCallbackHandler:
-        return TokenCountingCallbackHandler(AnthropicTokenCounter())
+        return TokenCountingCallbackHandler(AnthropicTokenCounter(model, self.anthropic_api_key))
 
     def attach_built_in_tools(self, built_in_tools: list[str], config: dict = None) -> list:
         tools = []

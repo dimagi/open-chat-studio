@@ -53,6 +53,10 @@ class OpenAITokenCounter(TokenCounter):
 
 
 class AnthropicTokenCounter(TokenCounter):
+    def __init__(self, model: str, api_key: str):
+        self.model = model
+        self.api_key = api_key
+
     def get_tokens_from_response(self, response: LLMResult) -> None | tuple[int, int]:
         if response.llm_output is None:
             return None
@@ -66,9 +70,11 @@ class AnthropicTokenCounter(TokenCounter):
         return input_tokens, output_tokens
 
     def get_tokens_from_text(self, text) -> int:
-        client = Anthropic()
-        token_count = client.count_tokens(text)
-        return token_count
+        client = Anthropic(api_key=self.api_key)
+        token_count_response = client.messages.count_tokens(
+            model=self.model, messages=[{"role": "user", "content": text}]
+        )
+        return token_count_response.input_tokens
 
 
 @dataclasses.dataclass
