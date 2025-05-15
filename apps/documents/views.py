@@ -204,12 +204,6 @@ class EditCollection(LoginAndTeamRequiredMixin, CollectionFormMixin, UpdateView)
 
 class DeleteCollection(LoginAndTeamRequiredMixin, View):
     def delete(self, request, team_slug: str, pk: int):
-        """
-        - If working version is being used, prevent the user from deleting it
-        - If a version of it is being used, but not the working version, we should archive the collection and the files.
-            We can remove everything from REMOTE though, since each versions has its own version at REMOTE
-        - If working version has no versions and is not being used, remove everything everywhere
-        """
         collection = get_object_or_404(Collection, team__slug=team_slug, id=pk)
 
         if collection.archive():
