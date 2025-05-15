@@ -319,7 +319,6 @@ class LLMResponseWithPrompt(LLMResponse, HistoryMixin):
 
         collection = Collection.objects.get(id=value)
         if collection.llm_provider_id != info.data.get("llm_provider_id"):
-            info.data.get("llm_provider_id")
             raise PydanticCustomError(
                 "invalid_collection_index",
                 f"The collection index and node must use the same LLM provider ({collection.llm_provider.name})",
