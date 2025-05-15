@@ -991,7 +991,7 @@ class CodeNode(PipelineNode):
         )
 
         custom_locals = {}
-        custom_globals = self._get_custom_globals(state)
+        custom_globals = self._get_custom_globals(self.node_id, state)
         kwargs = {"logger": self.logger}
         try:
             exec(byte_code, custom_globals, custom_locals)
@@ -1000,7 +1000,7 @@ class CodeNode(PipelineNode):
             raise PipelineNodeRunError(exc) from exc
         return PipelineState.from_node_output(node_name=self.name, node_id=self.node_id, output=result)
 
-    def _get_custom_globals(self, state: PipelineState):
+    def _get_custom_globals(self, node_id, state: PipelineState):
         from RestrictedPython.Eval import (
             default_guarded_getitem,
             default_guarded_getiter,
@@ -1009,6 +1009,9 @@ class CodeNode(PipelineNode):
         custom_globals = safe_globals.copy()
 
         participant_data_proxy = self.get_participant_data_proxy(state)
+        pipeline_state = PipelineState(state.copy())
+        # add this node into the state so that we can trace the path
+        pipeline_state["outputs"] = {**state["outputs"], self.name: {"node_id": node_id}}
         custom_globals.update(
             {
                 "__builtins__": self._get_custom_builtins(),
@@ -1025,6 +1028,9 @@ class CodeNode(PipelineNode):
                 "set_temp_state_key": self._set_temp_state_key(state),
                 "get_session_state_key": self._get_session_state_key(state["experiment_session"]),
                 "set_session_state_key": self._set_session_state_key(state["experiment_session"]),
+                "get_selected_route": pipeline_state.get_selected_route,
+                "get_node_path": pipeline_state.get_node_path,
+                "get_all_routes": pipeline_state.get_all_routes,
             }
         )
         return custom_globals

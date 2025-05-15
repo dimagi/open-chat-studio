@@ -290,6 +290,7 @@ def test_llm_with_named_history(get_llm_service, provider, pipeline, experiment_
         prompt="Node 1:",
         history_type="named",
         history_name="history1",
+        name="llm1",
     )
     llm_2 = llm_response_with_prompt_node(
         str(provider.id),
@@ -297,6 +298,7 @@ def test_llm_with_named_history(get_llm_service, provider, pipeline, experiment_
         prompt="Node 2:",
         history_type="named",
         history_name="history1",
+        name="llm2",
     )
     llm_3 = llm_response_with_prompt_node(
         str(provider.id), str(experiment_session.experiment.llm_provider_model.id), prompt="Node 3:", history_type=None
