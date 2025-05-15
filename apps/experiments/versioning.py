@@ -331,11 +331,11 @@ class VersionsMixin:
     @property
     def is_a_version(self):
         """Return whether or not this experiment is a version of an experiment"""
-        return self.working_version is not None
+        return self.working_version_id is not None
 
     @property
     def is_working_version(self):
-        return self.working_version is None
+        return self.working_version_id is None
 
     @property
     def latest_version(self):

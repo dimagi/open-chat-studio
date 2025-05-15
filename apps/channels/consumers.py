@@ -6,24 +6,24 @@ import uuid
 from channels.generic.websocket import AsyncWebsocketConsumer
 from django.template.loader import render_to_string
 
+from apps.experiments.helpers import get_real_user_or_none
 from apps.experiments.models import Experiment, ExperimentSession
 from apps.teams.models import Team
 
 logger = logging.getLogger(__name__)
 
 
-class BotAccessException(Exception):
-    pass
-
-
-class BotChatConsumer(AsyncWebsocketConsumer):
+class ChatbotConsumer(AsyncWebsocketConsumer):
     async def connect(self):
         url_kwargs = self.scope["url_route"]["kwargs"]
         team_slug = url_kwargs["team_slug"]
         chatbot_id = url_kwargs.get("chatbot_id", None)
         session_id = url_kwargs.get("session_id", None)
+        experiment_version = url_kwargs.get("experiment_version", None)
 
-        user = self.scope["user"]
+        if not (team_slug and chatbot_id and session_id):
+            await self.close(code=400)
+            return
 
         try:
             self.team = await Team.objects.aget(slug=team_slug)
@@ -37,27 +37,49 @@ class BotChatConsumer(AsyncWebsocketConsumer):
             await self.close(code=404)
             return
 
-        # self.experiment_version = Experiment.objects.get_default_or_working(self)
-        # if not self.experiment_version.is_public:
-        #     await self.close(code=404)
-        #     return
+        if self.experiment.is_archived:
+            await self.close(code=404)
+            return
 
-        if session_id:
-            self.user = None if user.is_anonymous else user
+        if not self.experiment.is_working_version:
+            await self.close(code=404)
+            return
 
-            # TODO: redirect for session state
+        if experiment_version and experiment_version != Experiment.DEFAULT_VERSION_NUMBER:
             try:
-                self.session = await ExperimentSession.objects.select_related("participant", "chat").aget(
-                    experiment=self.experiment,
-                    external_id=session_id,
-                    team=self.team,
+                if self.experiment.version_number == experiment_version:
+                    self.experiment_version = self.experiment
+                self.experiment_version = await Experiment.objects.aget(
+                    working_version=self.experiment, version_number=experiment_version
                 )
-            except ExperimentSession.DoesNotExist:
+            except Experiment.DoesNotExist:
                 await self.close(code=404)
                 return
+        elif self.experiment.is_default_version:
+            self.experiment_version = self.experiment
         else:
-            # TODO: additional checks
-            self.session = None
+            version = await Experiment.objects.filter(working_version=self.experiment, is_default_version=True).afirst()
+            self.experiment_version = version if version else self.experiment
+
+        if self.experiment_version.is_archived:
+            await self.close(code=404)
+            return
+
+        if not self.experiment_version.is_public:
+            await self.close(code=404)
+            return
+
+        self.user = get_real_user_or_none(self.scope["user"])
+        # TODO: redirect for session state
+        try:
+            self.session = await ExperimentSession.objects.select_related("participant", "chat").aget(
+                experiment=self.experiment,
+                external_id=session_id,
+                team=self.team,
+            )
+        except ExperimentSession.DoesNotExist:
+            await self.close(code=404)
+            return
         await self.accept()
 
     async def disconnect(self, close_code):
