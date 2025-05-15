@@ -181,12 +181,12 @@ class Collection(BaseTeamModel, VersionsMixin):
 
         super().archive()
         if self.is_index and self.openai_vector_store_id:
-            self.remove_index()
+            self._remove_index()
 
         self.files.update(is_archived=True)
         return True
 
-    def remove_index(self):
+    def _remove_index(self):
         """Remove the index backend"""
         manager = self.llm_provider.get_index_manager()
         manager.delete_vector_store(self.openai_vector_store_id, fail_silently=True)

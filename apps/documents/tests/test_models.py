@@ -121,7 +121,7 @@ class TestCollection:
         collection.files.add(file)
 
         # Invoke the remove_index method
-        collection.remove_index()
+        collection._remove_index()
 
         # Check that the vector store ID is cleared and the index is removed
         assert collection.openai_vector_store_id == ""
