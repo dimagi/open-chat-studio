@@ -6,12 +6,10 @@ import pytest
 from django.core import mail
 from django.test import override_settings
 from langchain_core.messages import AIMessage, ToolCall
-from langchain_core.runnables import RunnableConfig
 
 from apps.channels.datamodels import Attachment
 from apps.experiments.models import ParticipantData
 from apps.pipelines.exceptions import PipelineBuildError, PipelineNodeBuildError
-from apps.pipelines.logging import LoggingCallbackHandler
 from apps.pipelines.nodes.base import PipelineState, merge_dicts
 from apps.pipelines.nodes.nodes import EndNode, Passthrough, RouterNode, StartNode, StaticRouterNode
 from apps.pipelines.tests.utils import (
@@ -77,7 +75,6 @@ def experiment_session():
 @override_settings(CELERY_TASK_ALWAYS_EAGER=True)
 @django_db_with_data(available_apps=("apps.service_providers",))
 @mock.patch("apps.service_providers.models.LlmProvider.get_llm_service")
-@mock.patch("apps.pipelines.nodes.base.PipelineNode.logger", mock.Mock())
 def test_full_email_sending_pipeline(get_llm_service, provider, provider_model, pipeline):
     service = build_fake_llm_service(responses=['{"summary": "Ice is cold"}'], token_counts=[0])
     get_llm_service.return_value = service
@@ -102,7 +99,6 @@ def test_full_email_sending_pipeline(get_llm_service, provider, provider_model, 
 
 @override_settings(CELERY_TASK_ALWAYS_EAGER=True)
 @django_db_with_data(available_apps=("apps.service_providers",))
-@mock.patch("apps.pipelines.nodes.base.PipelineNode.logger", mock.Mock())
 def test_send_email(pipeline):
     nodes = [start_node(), email_node(), end_node()]
     create_runnable(pipeline, nodes).invoke(PipelineState(messages=["A cool message"]))
@@ -114,7 +110,6 @@ def test_send_email(pipeline):
 
 @django_db_with_data(available_apps=("apps.service_providers",))
 @mock.patch("apps.service_providers.models.LlmProvider.get_llm_service")
-@mock.patch("apps.pipelines.nodes.base.PipelineNode.logger", mock.Mock())
 def test_llm_response(get_llm_service, provider, provider_model, pipeline):
     service = build_fake_llm_service(responses=["123"], token_counts=[0])
     get_llm_service.return_value = service
@@ -131,7 +126,6 @@ def test_llm_response(get_llm_service, provider, provider_model, pipeline):
 
 @django_db_with_data(available_apps=("apps.service_providers",))
 @mock.patch("apps.service_providers.models.LlmProvider.get_llm_service")
-@mock.patch("apps.pipelines.nodes.base.PipelineNode.logger", mock.Mock())
 def test_llm_with_prompt_response(
     get_llm_service, provider, provider_model, pipeline, source_material, experiment_session
 ):
@@ -174,7 +168,6 @@ def test_llm_with_prompt_response(
 
 
 @django_db_with_data(available_apps=("apps.service_providers",))
-@mock.patch("apps.pipelines.nodes.base.PipelineNode.logger", mock.Mock())
 def test_render_template(pipeline):
     nodes = [
         start_node(),
@@ -187,7 +180,6 @@ def test_render_template(pipeline):
 
 
 @django_db_with_data(available_apps=("apps.service_providers",))
-@mock.patch("apps.pipelines.nodes.base.PipelineNode.logger", mock.Mock())
 def test_branching_pipeline(pipeline, experiment_session):
     start = start_node()
     template_a = render_template_node("A ({{input }})")
@@ -246,7 +238,6 @@ def test_branching_pipeline(pipeline, experiment_session):
 
 
 @django_db_with_data(available_apps=("apps.service_providers",))
-@mock.patch("apps.pipelines.nodes.base.PipelineNode.logger", mock.Mock())
 def test_conditional_node(pipeline, experiment_session):
     start = start_node()
     boolean = boolean_node()
@@ -334,7 +325,6 @@ def test_router_node_prompt(get_llm_service, provider, provider_model, pipeline,
 
 
 @django_db_with_data(available_apps=("apps.service_providers",))
-@mock.patch("apps.pipelines.nodes.base.PipelineNode.logger", mock.Mock())
 def test_static_router_temp_state(pipeline, experiment_session):
     # The static router will switch based on a state key, and pass its input through
 
@@ -384,7 +374,6 @@ def main(input, **kwargs):
 
 
 @django_db_with_data(available_apps=("apps.service_providers",))
-@mock.patch("apps.pipelines.nodes.base.PipelineNode.logger", mock.Mock())
 def test_static_router_case_sensitive(pipeline, experiment_session):
     start = start_node()
     router = state_key_router_node(
@@ -480,7 +469,6 @@ def test_router_sets_tags_correctly(pipeline, experiment_session):
 @pytest.mark.parametrize(
     "data_source", [StaticRouterNode.DataSource.participant_data, StaticRouterNode.DataSource.session_state]
 )
-@mock.patch("apps.pipelines.nodes.base.PipelineNode.logger", mock.Mock())
 def test_static_router_participant_data(data_source, pipeline, experiment_session):
     def _update_participant_data(session, data):
         ParticipantDataProxy(session).set(data)
@@ -538,7 +526,8 @@ def test_attachments_in_code_node(pipeline, experiment_session):
     code_set = """
 def main(input, **kwargs):
     attachments = get_temp_state_key("attachments")
-    kwargs["logger"].info([att.model_dump() for att in attachments])
+    # TODO: tracing
+    # kwargs["logger"].info([att.model_dump() for att in attachments])
     return ",".join([att.name for att in attachments])
 """
     start = start_node()
@@ -546,7 +535,6 @@ def main(input, **kwargs):
     end = end_node()
     nodes = [start, code, end]
     runnable = create_runnable(pipeline, nodes)
-    callback = LoggingCallbackHandler()
     attachments = [
         Attachment(file_id=123, type="code_interpreter", name="test.py", size=10),
         Attachment(file_id=456, type="file_search", name="blog.md", size=20),
@@ -556,11 +544,8 @@ def main(input, **kwargs):
         PipelineState(
             messages=["log attachments"], experiment_session=experiment_session, attachments=serialized_attachments
         ),
-        config=RunnableConfig(callbacks=[callback]),
     )
     assert output["messages"][-1] == "test.py,blog.md"
-    log_entry = [e for e in callback.log_entries if e.level == "INFO"][0]
-    assert log_entry.message == str(serialized_attachments)
 
 
 @contextmanager
@@ -584,7 +569,6 @@ def extract_structured_data_pipeline(provider, provider_model, pipeline, llm=Non
 
 
 @django_db_with_data(available_apps=("apps.service_providers", "apps.experiments"))
-@mock.patch("apps.pipelines.nodes.base.PipelineNode.logger", mock.Mock())
 def test_extract_structured_data_no_chunking(provider, provider_model, pipeline):
     session = ExperimentSessionFactory()
 
@@ -597,7 +581,6 @@ def test_extract_structured_data_no_chunking(provider, provider_model, pipeline)
 
 
 @django_db_with_data(available_apps=("apps.service_providers", "apps.experiments"))
-@mock.patch("apps.pipelines.nodes.base.PipelineNode.logger", mock.Mock())
 def test_extract_structured_data_with_chunking(provider, provider_model, pipeline):
     session = ExperimentSessionFactory()
     ParticipantData.objects.create(
@@ -664,7 +647,6 @@ def test_extract_structured_data_with_chunking(provider, provider_model, pipelin
 
 
 @django_db_with_data(available_apps=("apps.service_providers", "apps.experiments"))
-@mock.patch("apps.pipelines.nodes.base.PipelineNode.logger", mock.Mock())
 def test_extract_participant_data(provider, pipeline):
     """Test the pipeline to extract and update participant data. First we run it when no data is linked to the
     participant to make sure it creates data. Then we run it again a few times to test that it updates the data
@@ -1062,7 +1044,6 @@ def test_multiple_valid_inputs(pipeline):
 
 @pytest.mark.django_db()
 @patch("apps.service_providers.models.LlmProvider.get_llm_service")
-@patch("apps.pipelines.nodes.base.PipelineNode.logger", mock.Mock())
 def test_assistant_node_empty_metadata_handling(get_llm_service, pipeline):
     history_manager_mock = Mock()
     history_manager_mock.input_message_metadata = None
@@ -1091,7 +1072,6 @@ def test_assistant_node_empty_metadata_handling(get_llm_service, pipeline):
 
 @pytest.mark.django_db()
 @patch("apps.service_providers.models.LlmProvider.get_llm_service")
-@patch("apps.pipelines.nodes.base.PipelineNode.logger", mock.Mock())
 def test_pipeline_history_manager_metadata_storage(get_llm_service, pipeline):
     history_manager = PipelineHistoryManager.for_assistant()
     input_metadata = {"test": "metatdata", "timestamp": "2025-03-06"}
@@ -1137,7 +1117,6 @@ def test_input_with_format_strings():
 
 @django_db_with_data(available_apps=("apps.service_providers",))
 @mock.patch("apps.service_providers.models.LlmProvider.get_llm_service")
-@mock.patch("apps.pipelines.nodes.base.PipelineNode.logger", mock.Mock())
 def test_router_node(get_llm_service, provider, provider_model, pipeline, experiment_session):
     def _tool_call(route):
         return AIMessage(tool_calls=[ToolCall(name="RouterOutput", args={"route": route}, id="123")], content=route)

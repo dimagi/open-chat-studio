@@ -3,7 +3,6 @@ import operator
 from abc import ABC
 from collections.abc import Callable, Sequence
 from enum import StrEnum
-from functools import cached_property
 from typing import Annotated, Any, Literal, Self
 
 from langchain_core.runnables import RunnableConfig
@@ -15,7 +14,6 @@ from typing_extensions import TypedDict
 
 from apps.experiments.models import ExperimentSession
 from apps.pipelines.exceptions import PipelineNodeRunError
-from apps.pipelines.logging import LoggingCallbackHandler, noop_logger
 from apps.service_providers.llm_service.prompt_context import ParticipantDataProxy
 
 logger = logging.getLogger("ocs.pipelines")
@@ -259,16 +257,6 @@ class BasePipelineNode(BaseModel, ABC):
 
     def get_participant_data_proxy(self, state: PipelineState) -> "ParticipantDataProxy":
         return ParticipantDataProxy.from_state(state)
-
-    @cached_property
-    def logger(self):
-        if not self._config or not self._config.get("callbacks"):
-            return noop_logger()[0]
-
-        for handler in self._config["callbacks"].handlers:
-            if isinstance(handler, LoggingCallbackHandler):
-                return handler.logger
-        return noop_logger()[0]
 
     @property
     def disabled_tools(self) -> set[str] | None:
