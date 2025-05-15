@@ -71,7 +71,7 @@ class BotChatConsumer(AsyncWebsocketConsumer):
             return
 
         await self.send(text_data=self._render_user_message(message_text))
-        contents_div_id = str(uuid.uuid4())
+        contents_div_id = f"message-response-{str(uuid.uuid4())}"
         await self.send(text_data=self._render_pending_response_message(contents_div_id))
         await asyncio.sleep(2)
         await self.send(text_data=self._render_bot_response(contents_div_id, "Bot response here"))
@@ -84,7 +84,8 @@ class BotChatConsumer(AsyncWebsocketConsumer):
 
     def _render_pending_response_message(self, contents_div_id):
         return render_to_string(
-            "chatbots/websocket_components/system_message.html", self._get_context(contents_div_id=contents_div_id)
+            "chatbots/websocket_components/system_message.html",
+            self._get_context(contents_div_id=contents_div_id, loading=True),
         )
 
     def _render_bot_response(self, contents_div_id, content):

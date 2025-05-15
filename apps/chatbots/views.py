@@ -3,7 +3,7 @@ import uuid
 from django.contrib.auth.decorators import permission_required
 from django.contrib.auth.mixins import PermissionRequiredMixin
 from django.http import HttpResponseRedirect
-from django.shortcuts import get_object_or_404, redirect, render
+from django.shortcuts import get_object_or_404, redirect
 from django.urls import reverse
 from django.views.decorators.clickjacking import xframe_options_exempt
 from django.views.decorators.http import require_POST
@@ -20,8 +20,8 @@ from apps.experiments.views import CreateExperiment, ExperimentSessionsTableView
 from apps.experiments.views.experiment import (
     BaseExperimentView,
     CreateExperimentVersion,
+    _experiment_chat_ui,
     base_single_experiment_view,
-    experiment_chat,
     experiment_chat_embed,
     experiment_chat_session,
     experiment_invitations,
@@ -37,7 +37,6 @@ from apps.teams.decorators import login_and_team_required, team_required
 from apps.teams.mixins import LoginAndTeamRequiredMixin
 from apps.teams.models import Flag
 from apps.utils.base_experiment_table_view import BaseExperimentTableView
-from apps.web.meta import websocket_absolute_url, websocket_reverse
 
 
 @login_and_team_required
@@ -211,7 +210,9 @@ def start_chatbot_session_public(request, team_slug: str, experiment_id: uuid.UU
 @experiment_session_view(allowed_states=[SessionStatus.ACTIVE, SessionStatus.SETUP])
 @verify_session_access_cookie
 def chatbot_chat(request, team_slug: str, experiment_id: uuid.UUID, session_id: str):
-    return experiment_chat(request, team_slug, experiment_id, session_id)
+    return _experiment_chat_ui(
+        request, request.experiment, request.experiment.default_version, request.experiment_session
+    )
 
 
 @xframe_options_exempt
@@ -248,16 +249,3 @@ def copy_chatbot(request, team_slug, *args, **kwargs):
     else:
         experiment_id = kwargs["pk"]
         return single_chatbot_home(request, team_slug, experiment_id)
-
-
-@login_and_team_required
-def new_chat_streaming(request, team_slug: str, experiment_id: uuid.UUID):
-    websocket_url = websocket_absolute_url(websocket_reverse("ws_bot_chat_start", args=[team_slug, experiment_id]))
-    return render(
-        request,
-        "chatbots/single_chat_streaming.html",
-        {
-            "active_tab": "chat",
-            "websocket_url": websocket_url,
-        },
-    )

@@ -92,6 +92,7 @@ from apps.service_providers.utils import get_llm_provider_choices
 from apps.teams.decorators import login_and_team_required, team_required
 from apps.teams.mixins import LoginAndTeamRequiredMixin
 from apps.utils.base_experiment_table_view import BaseExperimentTableView
+from apps.web.meta import websocket_absolute_url, websocket_reverse
 
 DEFAULT_ERROR_MESSAGE = (
     "Sorry something went wrong. This was likely an intermittent error related to load."
@@ -689,17 +690,7 @@ def experiment_chat_session(
     except Experiment.DoesNotExist:
         raise Http404() from None
 
-    version_specific_vars = {
-        "assistant": experiment_version.get_assistant(),
-        "experiment_name": experiment_version.name,
-        "experiment_version": experiment_version,
-        "experiment_version_number": experiment_version.version_number,
-    }
-    return TemplateResponse(
-        request,
-        "experiments/experiment_chat.html",
-        {"experiment": experiment, "session": session, "active_tab": active_tab, **version_specific_vars},
-    )
+    return _experiment_chat_ui(request, experiment, experiment_version, session)
 
 
 @experiment_session_view()
@@ -1227,7 +1218,9 @@ def experiment_pre_survey(request, team_slug: str, experiment_id: uuid.UUID, ses
 @experiment_session_view(allowed_states=[SessionStatus.ACTIVE, SessionStatus.SETUP])
 @verify_session_access_cookie
 def experiment_chat(request, team_slug: str, experiment_id: uuid.UUID, session_id: str):
-    return _experiment_chat_ui(request)
+    return _experiment_chat_ui(
+        request, request.experiment, request.experiment.default_version, request.experiment_session
+    )
 
 
 @experiment_session_view(allowed_states=[SessionStatus.ACTIVE, SessionStatus.SETUP])
@@ -1238,27 +1231,40 @@ def experiment_chat_embed(request, team_slug: str, experiment_id: uuid.UUID, ses
     session = request.experiment_session
     if not session.participant.is_anonymous:
         raise Http404
-    return _experiment_chat_ui(request, embedded=True)
+    return _experiment_chat_ui(
+        request, request.experiment, request.experiment.default_version, request.experiment_session, embedded=True
+    )
 
 
-def _experiment_chat_ui(request, embedded=False):
-    experiment_version = request.experiment.default_version
+def _experiment_chat_ui(request, experiment, experiment_version, experiment_session, embedded=False):
+    streaming = flag_is_active(request, "chat_streaming")
     version_specific_vars = {
         "assistant": experiment_version.get_assistant(),
         "experiment_name": experiment_version.name,
         "experiment_version": experiment_version,
         "experiment_version_number": experiment_version.version_number,
     }
+
+    context = {
+        "experiment": experiment,
+        "session": experiment_session,
+        "active_tab": "chatbots" if request.origin == "chatbots" else "experiments",
+        "embedded": embedded,
+        "streaming": streaming,
+        **version_specific_vars,
+    }
+    if streaming:
+        websocket_url = websocket_absolute_url(
+            websocket_reverse(
+                "ws_bot_chat_continue",
+                args=[request.team.slug, experiment.public_id, experiment_session.external_id],
+            )
+        )
+        context["websocket_url"] = websocket_url
     return TemplateResponse(
         request,
         "experiments/experiment_chat.html",
-        {
-            "experiment": request.experiment,
-            "session": request.experiment_session,
-            "active_tab": "chatbots" if request.origin == "chatbots" else "experiments",
-            "embedded": embedded,
-            **version_specific_vars,
-        },
+        context,
     )
 
 

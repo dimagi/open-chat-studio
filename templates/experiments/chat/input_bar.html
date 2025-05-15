@@ -1,17 +1,26 @@
-{% if embedded %}
-  {% url 'experiments:experiment_session_message_embed' team_slug=request.team.slug experiment_id=experiment.public_id session_id=session.external_id version_number=session.get_experiment_version_number as message_url%}
-{% else %}
-  {% url 'experiments:experiment_session_message' team_slug=request.team.slug experiment_id=experiment.public_id session_id=session.external_id version_number=session.get_experiment_version_number as message_url%}
-{% endif %}
 <form class="w-full p-2 bg-base-300"
       autocomplete="off"
-      hx-post="{{ message_url}}"
-      hx-swap="outerHTML"
-      hx-indicator="#message-submit"
+      x-data="fileUploads"
+      x-on:htmx:ws-after-send.camel="clearForm()"
+      {% if streaming %}
+        ws-send
+      {% else %}
+
+        {% if embedded %}
+          {% url 'experiments:experiment_session_message_embed' team_slug=request.team.slug experiment_id=experiment.public_id session_id=session.external_id version_number=session.get_experiment_version_number as message_url%}
+        {% else %}
+          {% url 'experiments:experiment_session_message' team_slug=request.team.slug experiment_id=experiment.public_id session_id=session.external_id version_number=session.get_experiment_version_number as message_url%}
+        {% endif %}
+
+        hx-post="{{ message_url}}"
+        hx-swap="outerHTML"
+        hx-indicator="#message-submit"
+
+      {% endif %}
       {% if assistant %}enctype="multipart/form-data"{% endif %}
 >
   {% csrf_token %}
-  <div class="flex flex-col" x-data="fileUploads">
+  <div class="flex flex-col">
     <div class="flex items-center w-full">
       {% if assistant %}
         {% if assistant.supports_code_interpreter_attachments and assistant.supports_file_search_attachments %}
@@ -126,7 +135,7 @@
         }
         this.$watchMany(fieldsToWatch, (message, cfiles, ffiles) => {
           const submitButton = document.getElementById('message-submit');
-          if (message || cfiles.length || ffiles.length) {
+          if (message || (cfiles && cfiles.length) || (ffiles && ffiles.length)) {
             submitButton.removeAttribute('disabled');
           } else {
             submitButton.setAttribute('disabled', 'disabled');
@@ -140,6 +149,13 @@
             handler(...update);
           });
         });
+      },
+      clearForm() {
+        this.message = "";
+        this.code_interpreter_files = [];
+        this.file_search_files = [];
+        this.total_upload_size_bytes = 0;
+        this.disableCodeInterpreterUpload = false;
       },
       handleFileChange(event, targetArray) {
         const files = Array.from(event.target.files);

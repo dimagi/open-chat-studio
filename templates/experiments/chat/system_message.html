@@ -1,6 +1,10 @@
 <div class="chat-message-system flex" data-last-message-datetime="{{ last_message_datetime|date:"c" }}">
   {% include "experiments/chat/components/system_icon.html" %}
   <div class="message-contents">
-    <p>{{ message_text }}</p>
+    {% if loading %}
+      <span class="loading loading-dots loading-sm"></span>
+    {% else %}
+      <p>{{ message_text }}</p>
+    {% endif %}
   </div>
 </div>

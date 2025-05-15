@@ -66,6 +66,4 @@ urlpatterns = [
         name="chatbot_chat_embed",
     ),
     path("<int:pk>/copy/", views.copy_chatbot, name="copy"),
-    # streaming chat
-    path("<uuid:experiment_id>/chat/", views.new_chat_streaming, name="new_chat_streaming"),
 ]

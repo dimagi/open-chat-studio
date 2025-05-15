@@ -1,4 +1,9 @@
 {% extends "web/app/app_base.html" %}
+{% if streaming %}
+  {% block page_head %}
+    <script src="https://unpkg.com/htmx-ext-ws@2.0.0/ws.js" defer></script>
+  {% endblock %}
+{% endif %}
 {% block body_wrapper %}
   <div class="container flex flex-row">
     {% if not request.user.is_anonymous %}
