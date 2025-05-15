@@ -212,31 +212,38 @@ class DeleteCollection(LoginAndTeamRequiredMixin, View):
         """
         collection = get_object_or_404(Collection, team__slug=team_slug, id=pk)
 
-        if nodes := collection.get_node_references():
+        if collection.archive():
+            messages.success(request, "Collection deleted")
+        else:
+            # Find and show references.
+            # For working versions, the Pipelines.
+            # For versions, the experiments
+
+            pipeline_node_chips = [
+                Chip(
+                    label=node.pipeline.name,
+                    url=node.pipeline.get_absolute_url(),
+                )
+                for node in collection.get_related_nodes_queryset()
+            ]
+            experiment_chips = [
+                Chip(
+                    label=(
+                        f"{experiment.name} [{experiment.get_version_name()}]"
+                        if experiment.is_working_version
+                        else f"{experiment.name} {experiment.get_version_name()} [published]"
+                    ),
+                    url=experiment.get_absolute_url(),
+                )
+                for experiment in collection.get_related_experiments_queryset()
+            ]
+
             response = render_to_string(
                 "assistants/partials/referenced_objects.html",
                 context={
-                    "object_name": "collection",
-                    "pipeline_nodes": [
-                        Chip(label=node.pipeline.name, url=node.pipeline.get_absolute_url()) for node in nodes.all()
-                    ],
+                    "object_name": "assistant",
+                    "pipeline_nodes": pipeline_node_chips,
+                    "experiments_with_pipeline_nodes": experiment_chips,
                 },
             )
             return HttpResponse(response, headers={"HX-Reswap": "none"}, status=400)
-        else:
-            # TODO: Update: When a collection version is being used, we should tell the user this and not archive
-            if collection.versions.filter().exists():
-                try:
-                    collection.archive()
-                    messages.success(request, "Collection archived")
-                except Exception as e:
-                    logger.exception(f"Could not delete vector store for collection {collection.id}. {e}")
-                    messages.error(self.request, "Could not delete the vector store. Please try again later")
-                    return HttpResponse()
-            else:
-                if collection.is_index:
-                    collection.remove_index()
-                collection.files.all().delete()
-                collection.delete()
-                messages.success(request, "Collection deleted")
-            return HttpResponse()

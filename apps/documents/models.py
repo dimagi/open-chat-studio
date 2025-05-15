@@ -5,6 +5,7 @@ from django.utils.translation import gettext_lazy as _
 from field_audit import audit_fields
 from field_audit.models import AuditingManager
 
+from apps.experiments.models import Experiment
 from apps.experiments.versioning import VersionDetails, VersionField, VersionsMixin, VersionsObjectManagerMixin
 from apps.teams.models import BaseTeamModel
 from apps.utils.conversions import bytes_to_megabytes
@@ -98,11 +99,6 @@ class Collection(BaseTeamModel, VersionsMixin):
     def file_names(self) -> list[str]:
         return list(self.files.values_list("name", flat=True))
 
-    def get_node_references(self) -> models.QuerySet:
-        index_references = get_related_pipelines_queryset(self, "collection_index_id").distinct()
-        collection_references = get_related_pipelines_queryset(self, "collection_id").distinct()
-        return index_references | collection_references
-
     @property
     def version_details(self) -> VersionDetails:
         return VersionDetails(
@@ -157,11 +153,30 @@ class Collection(BaseTeamModel, VersionsMixin):
     def get_absolute_url(self):
         return reverse("documents:single_collection_home", args=[self.team.slug, self.id])
 
+    def get_related_nodes_queryset(self) -> models.QuerySet:
+        index_references = get_related_pipelines_queryset(self, "collection_index_id").distinct()
+        collection_references = get_related_pipelines_queryset(self, "collection_id").distinct()
+        return index_references | collection_references
+
+    def get_related_experiments_queryset(self) -> models.QuerySet:
+        """
+        Get all experiments that reference this collection through a pipeline
+        """
+        return Experiment.objects.filter(pipeline__node__params__collection_index_id=str(self.id)).distinct()
+
     @transaction.atomic()
     def archive(self):
         """
         Archive the collection with its files and remove the index and the files at the remote service, if it has one
         """
+        if self.get_related_nodes_queryset().exists():
+            return False
+
+        if self.is_working_version:
+            for version in self.versions.all():
+                if version.get_related_experiments_queryset().exists():
+                    return False
+
         response = super().archive()
         if self.is_index and self.openai_vector_store_id:
             self.remove_index()
