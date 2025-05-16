@@ -1020,7 +1020,6 @@ function BuiltInToolsWidget(props: WidgetParams) {
     }
     setNode(props.nodeId, (old) => getNewNodeData(old, selectedValues));
   }
-
   return (
     <InputField label={props.label} help_text={props.helpText} inputError={props.inputError}>
       {options.map((option) => (
@@ -1037,7 +1036,6 @@ function BuiltInToolsWidget(props: WidgetParams) {
         </div>
       ))}
 
-
       {/* Configs for selected tools */}
       {selectedValues.map((toolKey) => {
         const toolConfigsMap = parameterValues.built_in_tools_config || {};
@@ -1046,7 +1044,7 @@ function BuiltInToolsWidget(props: WidgetParams) {
         if (!widgets || widgets.length === 0) return null;
 
         return (
-          <div className="ml-6 mt-3" key={`${toolKey}-config`}>
+          <div className="mt-3" key={`${toolKey}-config`}>
             <div className="font-medium mb-1 text-sm text-base-content/70">
               {toolKey} configuration
             </div>
@@ -1060,11 +1058,10 @@ function BuiltInToolsWidget(props: WidgetParams) {
                 updateParamValue: props.updateParamValue,
               };
 
-              if (widget.widget_type === "expandable_text") {
+              if (widget.type === "expandable_text") {
                 return <ExpandableTextWidget key={widget.name} {...widgetProps} />;
               }
           // Can add more types of widgets if required
-
               return null;
             })}
           </div>
