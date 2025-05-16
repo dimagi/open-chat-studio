@@ -168,7 +168,6 @@ class ExperimentSessionsTable(tables.Table):
             ),
         ],
         align="right",
-        orderable=False,
     )
 
     def render_tags(self, record, bound_column):

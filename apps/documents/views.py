@@ -1,3 +1,6 @@
+import logging
+
+import openai
 from django.conf import settings
 from django.contrib import messages
 from django.contrib.auth.decorators import permission_required
@@ -11,14 +14,18 @@ from django.views.decorators.http import require_POST
 from django.views.generic import CreateView, TemplateView, UpdateView
 from django_tables2 import SingleTableView
 
+from apps.assistants.sync import OpenAIVectorStoreManager, delete_file_from_openai
 from apps.documents.forms import CollectionForm
 from apps.documents.models import Collection, CollectionFile, FileStatus
 from apps.documents.tables import CollectionsTable
+from apps.documents.tasks import index_collection_files_task, migrate_vector_stores
 from apps.files.models import File
 from apps.generics.chips import Chip
 from apps.teams.decorators import login_and_team_required
 from apps.teams.mixins import LoginAndTeamRequiredMixin
 from apps.utils.search import similarity_search
+
+logger = logging.getLogger("ocs.documents.views")
 
 
 class CollectionHome(LoginAndTeamRequiredMixin, TemplateView):
@@ -46,7 +53,8 @@ def single_collection_home(request, team_slug: str, pk: int):
     context = {
         "collection": collection,
         "collection_files": collection_files,
-        "supported_file_types": settings.MEDIA_SUPPORTED_FILE_TYPES,
+        "collections_supported_file_types": settings.SUPPORTED_FILE_TYPES["collections"],
+        "file_search_supported_file_types": settings.SUPPORTED_FILE_TYPES["file_search"],
         "max_summary_length": settings.MAX_SUMMARY_LENGTH,
     }
     return render(request, "documents/single_collection_home.html", context)
@@ -71,31 +79,43 @@ def add_collection_files(request, team_slug: str, pk: int):
             )
 
         # Create file links
-        status = FileStatus.IN_PROGRESS if collection.is_index else ""
+        status = FileStatus.PENDING if collection.is_index else ""
+        chunking_strategy = {}
         metadata = {}
         if collection.is_index:
-            metadata["chunking_strategy"] = {
-                "size": request.POST.get("chunk_size"),
-                "overlap": request.POST.get("chunk_overlap"),
+            chunking_strategy = {
+                "chunk_size": int(request.POST.get("chunk_size")),
+                "chunk_overlap": int(request.POST.get("chunk_overlap")),
             }
+            metadata["chunking_strategy"] = chunking_strategy
 
         CollectionFile.objects.bulk_create(
             [CollectionFile(collection=collection, file=file, status=status, metadata=metadata) for file in files]
         )
-        # TODO: Call task to upload files to OpenAI
+
+    if collection.is_index:
+        index_collection_files_task.delay(collection.id)
 
     messages.success(request, f"Added {len(files)} files to collection")
     return redirect("documents:single_collection_home", team_slug=team_slug, pk=pk)
 
 
+@require_POST
 @login_and_team_required
 @permission_required("documents.change_collection")
-@require_POST
 @transaction.atomic()
 def delete_collection_file(request, team_slug: str, pk: int, file_id: int):
-    collection_file = get_object_or_404(CollectionFile, collection_id=pk, file_id=file_id)
+    collection_file = get_object_or_404(
+        CollectionFile.objects.select_related("collection", "file"), collection_id=pk, file_id=file_id
+    )
+
     collection_file.file.delete_or_archive()
+    if collection_file.collection.is_index:
+        client = collection_file.collection.llm_provider.get_llm_service().get_raw_client()
+        delete_file_from_openai(client, collection_file.file)
+
     collection_file.delete()
+
     messages.success(request, "File removed from collection")
     return redirect("documents:single_collection_home", team_slug=team_slug, pk=pk)
 
@@ -133,13 +153,16 @@ class CreateCollection(LoginAndTeamRequiredMixin, CollectionFormMixin, CreateVie
     def get_success_url(self):
         return reverse("documents:single_collection_home", args=[self.request.team.slug, self.object.id])
 
+    @transaction.atomic()
     def form_valid(self, form):
         form.instance.team = self.request.team
-        return super().form_valid(form)
+        response = super().form_valid(form)
+        if form.instance.is_index:
+            collection = form.instance
+            manager = OpenAIVectorStoreManager.from_llm_provider(collection.llm_provider)
+            collection.openai_vector_store_id = manager.create_vector_store(name=collection.index_name)
+            collection.save(update_fields=["openai_vector_store_id"])
 
-    def post(self, request, *args, **kwargs):
-        response = super().post(request, *args, **kwargs)
-        messages.success(request, "Collection Created")
         return response
 
 
@@ -157,7 +180,27 @@ class EditCollection(LoginAndTeamRequiredMixin, CollectionFormMixin, UpdateView)
         return Collection.objects.filter(team=self.request.team)
 
     def get_success_url(self):
-        return reverse("documents:collection_home", args=[self.request.team.slug])
+        return reverse("documents:single_collection_home", args=[self.request.team.slug, self.object.id])
+
+    def form_valid(self, form):
+        response = super().form_valid(form)
+
+        collection = form.instance
+        old_vector_store_id = collection.openai_vector_store_id
+
+        if form.instance.is_index and "llm_provider" in form.changed_data:
+            with transaction.atomic():
+                new_manager = OpenAIVectorStoreManager.from_llm_provider(collection.llm_provider)
+                collection.openai_vector_store_id = new_manager.create_vector_store(collection.index_name)
+                collection.save(update_fields=["openai_vector_store_id"])
+
+            CollectionFile.objects.filter(collection_id=collection.id).update(status=FileStatus.PENDING)
+            migrate_vector_stores.delay(
+                collection_id=form.instance.id,
+                from_vector_store_id=old_vector_store_id,
+                from_llm_provider_id=form.initial["llm_provider"],
+            )
+        return response
 
 
 class DeleteCollection(LoginAndTeamRequiredMixin, View):
@@ -175,6 +218,19 @@ class DeleteCollection(LoginAndTeamRequiredMixin, View):
             )
             return HttpResponse(response, headers={"HX-Reswap": "none"}, status=400)
         else:
+            if collection.is_index and collection.openai_vector_store_id:
+                try:
+                    manager = OpenAIVectorStoreManager.from_llm_provider(collection.llm_provider)
+                    manager.delete_vector_store(collection.openai_vector_store_id)
+                    messages.success(request, "Collection deleted")
+                except openai.NotFoundError:
+                    messages.warning(
+                        self.request, "Could not find the vector store at OpenAI. It may have been deleted already"
+                    )
+                except Exception as e:
+                    logger.exception(f"Could not delete vector store for collection {collection.id}. {e}")
+                    messages.error(self.request, "Could not delete the vector store at OpenAI. Please try again later")
+                    return HttpResponse()
+
             collection.archive()
-            messages.success(request, "Collection deleted")
             return HttpResponse()

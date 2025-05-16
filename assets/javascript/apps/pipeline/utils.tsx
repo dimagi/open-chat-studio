@@ -23,7 +23,7 @@ export function nodeBorderClass(nodeErrors : boolean, selected : boolean ): stri
   const defaultBorder = nodeErrors ? "border-error " : ""
   const selectedBorder = nodeErrors ? "border-secondary" : "border-primary"
   const border = selected ? selectedBorder : defaultBorder
-  return classNames(border, "border py-2 shadow-md rounded-xl border-2 bg-base-100")
+  return classNames(border, "border py-2 shadow-md rounded-xl border-2")
 }
 
 const localCache = {

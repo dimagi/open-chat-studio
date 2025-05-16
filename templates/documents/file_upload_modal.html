@@ -14,7 +14,12 @@
                 type="file"
                 multiple
                 class="file-input"
-                accept="{{ supported_file_types }}"/>
+                {% if collection.is_index %}
+                    accept="{{ file_search_supported_file_types }}"
+                {% else %}
+                    accept="{{ collections_supported_file_types }}"
+                {% endif %}
+            />
             {% if collection.is_index %}
                 <div class="fieldset w-full">
                     <legend class="fieldset-legend">Chunking Strategy</legend>

@@ -2,11 +2,13 @@ from unittest.mock import patch
 
 import pytest
 
-from apps.experiments.models import Experiment
+from apps.custom_actions.models import CustomActionOperation
+from apps.experiments.models import Experiment, SafetyLayer
 from apps.experiments.versioning import VersionDetails, VersionField, VersionsMixin, differs
 from apps.pipelines.models import Node
-from apps.utils.factories.events import EventActionFactory, EventActionType, StaticTriggerFactory
-from apps.utils.factories.experiment import ExperimentFactory, ExperimentSessionFactory
+from apps.utils.factories.custom_actions import CustomActionFactory
+from apps.utils.factories.events import EventActionFactory, EventActionType, StaticTriggerFactory, TimeoutTriggerFactory
+from apps.utils.factories.experiment import ExperimentFactory, ExperimentSessionFactory, SourceMaterialFactory
 from apps.utils.factories.pipelines import PipelineFactory
 from apps.utils.factories.service_provider_factories import TraceProviderFactory
 
@@ -275,3 +277,172 @@ class TestVersion:
             compute_character_level_diff.assert_called_once()
         else:
             compute_character_level_diff.assert_not_called()
+
+
+@pytest.mark.django_db()
+class TestCopyExperiment:
+    def test_basic_copy(self):
+        experiment = ExperimentFactory(version_number=3)
+        experiment_copy = experiment.create_new_version(name="test copy", is_copy=True)
+        assert experiment_copy.id != experiment.id
+        assert experiment_copy.public_id != experiment.public_id
+        assert experiment_copy.name == "test copy"
+        assert experiment_copy.version_number == 1
+        assert experiment.version_number == 3
+        assert experiment_copy.working_version_id is None
+
+        assert experiment_copy.consent_form == experiment.consent_form
+        assert experiment_copy.consent_form.is_working_version
+
+        assert experiment_copy.pre_survey == experiment.pre_survey
+        assert experiment_copy.pre_survey.is_working_version
+
+        assert experiment_copy.synthetic_voice_id == experiment.synthetic_voice_id
+        assert experiment_copy.voice_provider_id == experiment.voice_provider_id
+
+    def test_related_models(self, team):
+        source_material = SourceMaterialFactory()
+        experiment = ExperimentFactory(team=team, source_material=source_material)
+
+        static_trigger = StaticTriggerFactory(experiment=experiment)
+        timeout_trigger = TimeoutTriggerFactory(experiment=experiment)
+        safety_layer = SafetyLayer.objects.create(
+            prompt_text="Is this message safe?", team=team, prompt_to_bot="Unsafe reply"
+        )
+        experiment.safety_layers.add(safety_layer)
+
+        experiment_copy = experiment.create_new_version(is_copy=True)
+        assert experiment_copy.source_material == source_material
+
+        assert experiment_copy.safety_layers.count() == 1
+        assert experiment_copy.safety_layers.first() == safety_layer
+
+        assert experiment_copy.static_triggers.count() == 1
+        static_trigger_copy = experiment_copy.static_triggers.first()
+        assert static_trigger_copy != static_trigger
+        assert static_trigger_copy.is_working_version
+        assert static_trigger_copy.action != static_trigger.action
+
+        assert experiment_copy.timeout_triggers.count() == 1
+        timeout_trigger_copy = experiment_copy.timeout_triggers.first()
+        assert timeout_trigger_copy != timeout_trigger
+        assert timeout_trigger_copy.is_working_version
+        assert timeout_trigger_copy.action != timeout_trigger.action
+
+    def test_custom_action_operations(self):
+        experiment = ExperimentFactory()
+        custom_action = CustomActionFactory(team=experiment.team)
+        weather_get = CustomActionOperation.objects.create(
+            custom_action=custom_action, experiment=experiment, operation_id="weather_get"
+        )
+
+        experiment_copy = experiment.create_new_version(is_copy=True)
+        assert experiment_copy.custom_action_operations.count() == 1
+        operation_copy = experiment_copy.custom_action_operations.first()
+        assert operation_copy != weather_get
+        assert operation_copy.is_working_version
+        assert operation_copy.operation_id == weather_get.operation_id
+        assert operation_copy.custom_action == custom_action
+        assert operation_copy._operation_schema == {}
+
+    def test_copy_pipeline(self):
+        pipeline_data = {
+            "edges": [
+                {
+                    "id": "start->render",
+                    "source": "start",
+                    "target": "render",
+                },
+                {
+                    "id": "render->end",
+                    "source": "render",
+                    "target": "end",
+                },
+            ],
+            "nodes": [
+                {
+                    "id": "start",
+                    "data": {
+                        "id": "start",
+                        "type": "StartNode",
+                    },
+                },
+                {
+                    "id": "render",
+                    "data": {
+                        "id": "render",
+                        "type": "RenderTemplate",
+                        "params": {
+                            "name": "render template",
+                            "template_string": "{{input}}",
+                        },
+                    },
+                    "type": "pipelineNode",
+                    "position": {"x": 1086.2033684962435, "y": 91.8445271200375},
+                },
+                {
+                    "id": "end",
+                    "data": {
+                        "id": "end",
+                        "type": "EndNode",
+                    },
+                },
+            ],
+            "errors": {"test": "value"},
+            "viewport": {"x": 235.23538305148782, "y": 365.64304629840245, "zoom": 0.5570968254096753},
+        }
+        pipeline = PipelineFactory(data=pipeline_data)
+        experiment = ExperimentFactory(team=pipeline.team, pipeline=pipeline)
+
+        experiment_copy = experiment.create_new_version(is_copy=True)
+        assert experiment_copy.pipeline != pipeline
+        assert experiment_copy.pipeline.is_working_version
+        assert experiment_copy.pipeline.name == experiment_copy.name
+        assert experiment_copy.pipeline.node_set.count() == 3
+        node_ids = {node.type: node.flow_id for node in experiment_copy.pipeline.node_set.all()}
+        assert experiment_copy.pipeline.data != pipeline_data
+        assert experiment_copy.pipeline.data == {
+            "edges": [
+                {
+                    "id": "start->render",
+                    "source": node_ids["StartNode"],
+                    "target": node_ids["RenderTemplate"],
+                },
+                {
+                    "id": "render->end",
+                    "source": node_ids["RenderTemplate"],
+                    "target": node_ids["EndNode"],
+                },
+            ],
+            "nodes": [
+                {
+                    "id": node_ids["StartNode"],
+                    "data": {
+                        "id": node_ids["StartNode"],
+                        "type": "StartNode",
+                    },
+                },
+                {
+                    "id": node_ids["RenderTemplate"],
+                    "data": {
+                        "id": node_ids["RenderTemplate"],
+                        "type": "RenderTemplate",
+                        "params": {
+                            "name": "render template",
+                            "template_string": "{{input}}",
+                        },
+                    },
+                    "type": "pipelineNode",
+                    "position": {"x": 1086.2033684962435, "y": 91.8445271200375},
+                },
+                {
+                    "id": node_ids["EndNode"],
+                    "data": {
+                        "id": node_ids["EndNode"],
+                        "type": "EndNode",
+                    },
+                },
+            ],
+            "errors": {"test": "value"},
+            "viewport": {"x": 235.23538305148782, "y": 365.64304629840245, "zoom": 0.5570968254096753},
+        }
