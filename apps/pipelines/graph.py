@@ -32,6 +32,14 @@ class Node(pydantic.BaseModel):
     def pipeline_node_instance(self):
         return self.pipeline_node_class(node_id=self.id, django_node=self.django_node, **self.params)
 
+    @property
+    def name(self):
+        if self.type == StartNode.__name__:
+            return "start"
+        if self.type == EndNode.__name__:
+            return "end"
+        return self.params.get("name") or self.id
+
 
 class Edge(pydantic.BaseModel):
     id: str
@@ -47,6 +55,18 @@ class PipelineGraph(pydantic.BaseModel):
     nodes: list[Node]
     edges: list[Edge]
     lenient_validation: bool = Field(default=False, description="Skip some validation checks. Used in tests.")
+
+    @property
+    def node_id_to_name_mapping(self):
+        return {node.id: node.name for node in self.nodes}
+
+    @property
+    def filter_patterns(self):
+        """Run names to exclude from tracing"""
+        return [
+            self.start_node.id,
+            self.end_node.id,
+        ]
 
     @cached_property
     def nodes_by_id(self) -> dict[str, Node]:

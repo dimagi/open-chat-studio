@@ -105,7 +105,6 @@ class RenderTemplate(PipelineNode):
             template = env.from_string(self.template_string)
             output = template.render(content)
         except Exception as e:
-            self.logger.error(f"Template rendering failed: {e}")
             raise PipelineNodeRunError(f"Error rendering template: {e}") from e
 
         return PipelineState.from_node_output(node_name=self.name, node_id=self.node_id, output=output)
@@ -320,7 +319,8 @@ class LLMResponseWithPrompt(LLMResponse, HistoryMixin):
         collection = Collection.objects.get(id=value)
         if collection.llm_provider_id != info.data.get("llm_provider_id"):
             raise PydanticCustomError(
-                "invalid_collection_index", "The collection index must use the same LLM provider as the node"
+                "invalid_collection_index",
+                f"The collection index and node must use the same LLM provider ({collection.llm_provider.name})",
             )
         return value
 
@@ -354,10 +354,11 @@ class LLMResponseWithPrompt(LLMResponse, HistoryMixin):
         )
 
         allowed_tools = chat_adapter.get_allowed_tools()
-        if len(tools) != len(allowed_tools):
-            self.logger.info(
-                "Some tools have been disabled: %s", [tool.name for tool in tools if tool not in allowed_tools]
-            )
+        # TODO: tracing
+        # if len(tools) != len(allowed_tools):
+        # self.logger.info(
+        #     "Some tools have been disabled: %s", [tool.name for tool in tools if tool not in allowed_tools]
+        # )
 
         if allowed_tools:
             chat = AgentLLMChat(adapter=chat_adapter, history_manager=history_manager)
@@ -411,8 +412,6 @@ class Passthrough(PipelineNode):
     model_config = ConfigDict(json_schema_extra=NodeSchema(label="Do Nothing", can_add=False))
 
     def _process(self, input, state: PipelineState) -> PipelineState:
-        if self.logger:
-            self.logger.debug(f"Returning input: '{input}' without modification")
         return PipelineState.from_node_output(node_name=self.name, node_id=self.node_id, output=input)
 
 
@@ -642,15 +641,16 @@ class ExtractStructuredDataNodeMixin:
         message_chunks = self.chunk_messages(input, prompt_token_count=prompt_token_count)
 
         new_reference_data = reference_data
-        for idx, message_chunk in enumerate(message_chunks, start=1):
+        for message_chunk in message_chunks:
             chain = self.extraction_chain(tool_class=ToolClass, reference_data=new_reference_data)
             output = chain.invoke(message_chunk, config=self._config)
             output = output.model_dump()
-            self.logger.info(
-                f"Chunk {idx}",
-                input=f"\nReference data:\n{new_reference_data}\nChunk data:\n{message_chunk}\n\n",
-                output=f"\nExtracted data:\n{output}",
-            )
+            # TOOO: tracing
+            # self.logger.info(
+            #     f"Chunk {idx}",
+            #     input=f"\nReference data:\n{new_reference_data}\nChunk data:\n{message_chunk}\n\n",
+            #     output=f"\nExtracted data:\n{output}",
+            # )
             new_reference_data = self.update_reference_data(output, reference_data)
 
         self.post_extraction_hook(new_reference_data, state)
@@ -689,7 +689,8 @@ class ExtractStructuredDataNodeMixin:
         overlap_percentage = 0.2
         chunk_size_tokens = model_token_limit - prompt_token_count
         overlap_tokens = int(chunk_size_tokens * overlap_percentage)
-        self.logger.debug(f"Chunksize in tokens: {chunk_size_tokens} with {overlap_tokens} tokens overlap")
+        # TODO: tracing
+        # self.logger.debug(f"Chunksize in tokens: {chunk_size_tokens} with {overlap_tokens} tokens overlap")
 
         try:
             encoding = tiktoken.encoding_for_model(llm_provider_model.name)
@@ -907,10 +908,12 @@ class AssistantNode(PipelineNode):
         adapter = AssistantAdapter.for_pipeline(session=session, node=self, disabled_tools=self.disabled_tools)
 
         allowed_tools = adapter.get_allowed_tools()
-        if len(adapter.tools) != len(allowed_tools):
-            self.logger.info(
-                "Some tools have been disabled: %s", [tool.name for tool in adapter.tools if tool not in allowed_tools]
-            )
+        # TODO: tracing
+        # if len(adapter.tools) != len(allowed_tools):
+        #     self.logger.info(
+        #         "Some tools have been disabled: %s",
+        #         [tool.name for tool in adapter.tools if tool not in allowed_tools]
+        #     )
 
         if allowed_tools:
             return AgentAssistantChat(adapter=adapter, history_manager=history_manager)
@@ -992,7 +995,8 @@ class CodeNode(PipelineNode):
 
         custom_locals = {}
         custom_globals = self._get_custom_globals(self.node_id, state)
-        kwargs = {"logger": self.logger}
+        # TODO: tracing {"logger": self.logger}
+        kwargs = {}
         try:
             exec(byte_code, custom_globals, custom_locals)
             result = str(custom_locals[function_name](input, **kwargs))
