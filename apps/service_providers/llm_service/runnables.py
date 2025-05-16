@@ -342,6 +342,7 @@ class AssistantChat(RunnableSerializable[dict, ChainOutput]):
             )
             ai_message, annotation_file_ids = self._get_output_with_annotations(thread_id, run_id)
             ai_message_metadata = self.adapter.get_output_message_metadata(annotation_file_ids)
+            ai_message_metadata["openai_run_id"] = run_id
 
             if not current_thread_id:
                 self.adapter.update_thread_id(thread_id)
