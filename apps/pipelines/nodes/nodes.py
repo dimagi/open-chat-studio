@@ -344,19 +344,21 @@ class LLMResponseWithPrompt(LLMResponse, HistoryMixin):
 
         tools = get_node_tools(self.django_node, session, attachment_callback=history_manager.attach_file_id)
         built_in_tools = self.built_in_tools
-        pipeline_data = session.experiment.pipeline.data
-        llm_node_params = next(
-            (
-                node.get("data", {}).get("params", {})
-                for node in pipeline_data.get("nodes", [])
-                if node.get("data", {}).get("type") == "LLMResponseWithPrompt"
-            ),
-            {},
-        )
-        config = {
-            "allowed_domains": llm_node_params.get("allowed_domains"),
-            "blocked_domains": llm_node_params.get("blocked_domains"),
-        }
+        if pipeline_data := getattr(session.experiment.pipeline, "data", None):
+            llm_node_params = next(
+                (
+                    node.get("data", {}).get("params", {})
+                    for node in pipeline_data.get("nodes", [])
+                    if node.get("data", {}).get("type") == "LLMResponseWithPrompt"
+                ),
+                {},
+            )
+            config = {
+                "allowed_domains": llm_node_params.get("allowed_domains"),
+                "blocked_domains": llm_node_params.get("blocked_domains"),
+            }
+        else:
+            config = {}
         if llm_service := self.get_llm_service():
             tools.extend(llm_service.attach_built_in_tools(built_in_tools, config))
         if self.collection_index_id:
