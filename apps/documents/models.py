@@ -131,6 +131,7 @@ class Collection(BaseTeamModel, VersionsMixin):
         for file in self.files.iterator(chunk_size=15):
             file_version = file.create_new_version(save=False)
             file_version.external_id = ""
+            file_version.external_source = ""
             file_version.save()
             file_versions.append(file_version)
 
