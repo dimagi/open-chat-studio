@@ -164,6 +164,7 @@ class ExperimentChannel(BaseTeamModel):
     )
 
     class Meta:
+        db_table = "channels_experimentchannel"
         ordering = ["name"]
         constraints = [
             models.UniqueConstraint(

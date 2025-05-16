@@ -1501,7 +1501,7 @@ class ExperimentSession(BaseTeamModel):
         max_length=40, blank=True, default="", help_text="System ID of the seed message task, if present."
     )
     experiment_channel = models.ForeignKey(
-        "channels.ExperimentChannel",
+        "ocs_channels.experimentchannel",
         on_delete=models.SET_NULL,
         related_name="experiment_sessions",
         null=True,
