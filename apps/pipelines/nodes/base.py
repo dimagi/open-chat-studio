@@ -354,6 +354,7 @@ class Widgets(StrEnum):
     history = "history"
     keywords = "keywords"
     history_mode = "history_mode"
+    built_in_tools = "built_in_tools"
 
 
 class OptionsSource(StrEnum):
@@ -364,6 +365,7 @@ class OptionsSource(StrEnum):
     collection = "collection"
     built_in_tools = "built_in_tools"
     collection_index = "collection_index"
+    built_in_tools_config = "built_in_tools_config"
 
 
 class UiSchema(BaseModel):

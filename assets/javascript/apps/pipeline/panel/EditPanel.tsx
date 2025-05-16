@@ -17,7 +17,6 @@ export default function EditPanel({nodeId}: { nodeId: string }) {
 
   const nodeSchema = getCachedData().nodeSchemas.get(data.type)!;
   const schemaProperties = Object.getOwnPropertyNames(nodeSchema.properties);
-
   const updateParamValue = (
     event: ChangeEvent<HTMLTextAreaElement | HTMLSelectElement | HTMLInputElement>,
   ) => {

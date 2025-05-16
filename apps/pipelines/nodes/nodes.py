@@ -287,18 +287,19 @@ class LLMResponseWithPrompt(LLMResponse, HistoryMixin):
     built_in_tools: list[str] = Field(
         default_factory=list,
         description="Built in tools provided by the LLM model",
-        json_schema_extra=UiSchema(widget=Widgets.multiselect, options_source=OptionsSource.built_in_tools),
+        json_schema_extra=UiSchema(widget=Widgets.built_in_tools, options_source=OptionsSource.built_in_tools),
     )
     allowed_domains: str | None = Field(
-        default=None,
-        description="",
-        json_schema_extra=UiSchema(widget=Widgets.expandable_text),
+        None,
+        json_schema_extra=UiSchema(
+            widget=Widgets.none,
+        ),
     )
-
     blocked_domains: str | None = Field(
-        default=None,
-        description="",
-        json_schema_extra=UiSchema(widget=Widgets.expandable_text),
+        None,
+        json_schema_extra=UiSchema(
+            widget=Widgets.none,
+        ),
     )
 
     @model_validator(mode="after")
@@ -339,23 +340,6 @@ class LLMResponseWithPrompt(LLMResponse, HistoryMixin):
             )
         return value
 
-    @model_validator(mode="after")
-    def validate_domains(self):
-        if "web-search" not in self.built_in_tools or self.get_llm_provider_model().type != "anthropic":
-            if self.allowed_domains and self.allowed_domains.strip():
-                raise PydanticCustomError(
-                    "invalid_allowed_domain",
-                    "Allowed domains must be empty unless 'web-search' is selected and LLM provider is 'anthropic'",
-                    {"field": "allowed_domains"},
-                )
-            if self.blocked_domains and self.blocked_domains.strip():
-                raise PydanticCustomError(
-                    "invalid_blocked_domain",
-                    "Blocked domains must be empty unless 'web-search' is selected and LLM provider is 'anthropic'",
-                    {"field": "blocked_domains"},
-                )
-        return self
-
     def _process(self, input, state: PipelineState) -> PipelineState:
         session: ExperimentSession | None = state.get("experiment_session")
         # Get runnable
@@ -372,7 +356,10 @@ class LLMResponseWithPrompt(LLMResponse, HistoryMixin):
 
         tools = get_node_tools(self.django_node, session, attachment_callback=history_manager.attach_file_id)
         built_in_tools = self.built_in_tools
-        config = {"allowed_domains": self.allowed_domains, "blocked_domains": self.blocked_domains}
+        config = {
+            "allowed_domains": self.allowed_domains,
+            "blocked_domains": self.blocked_domains,
+        }
         if llm_service := self.get_llm_service():
             tools.extend(llm_service.attach_built_in_tools(built_in_tools, config))
         if self.collection_index_id:
