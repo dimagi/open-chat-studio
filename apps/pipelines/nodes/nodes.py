@@ -289,6 +289,18 @@ class LLMResponseWithPrompt(LLMResponse, HistoryMixin):
         description="Built in tools provided by the LLM model",
         json_schema_extra=UiSchema(widget=Widgets.built_in_tools, options_source=OptionsSource.built_in_tools),
     )
+    allowed_domains: str | None = Field(
+        None,
+        json_schema_extra=UiSchema(
+            widget=Widgets.none,
+        ),
+    )
+    blocked_domains: str | None = Field(
+        None,
+        json_schema_extra=UiSchema(
+            widget=Widgets.none,
+        ),
+    )
 
     @model_validator(mode="after")
     def check_prompt_variables(self) -> Self:
@@ -344,21 +356,10 @@ class LLMResponseWithPrompt(LLMResponse, HistoryMixin):
 
         tools = get_node_tools(self.django_node, session, attachment_callback=history_manager.attach_file_id)
         built_in_tools = self.built_in_tools
-        if pipeline_data := getattr(session.experiment.pipeline, "data", None):
-            llm_node_params = next(
-                (
-                    node.get("data", {}).get("params", {})
-                    for node in pipeline_data.get("nodes", [])
-                    if node.get("data", {}).get("type") == "LLMResponseWithPrompt"
-                ),
-                {},
-            )
-            config = {
-                "allowed_domains": llm_node_params.get("allowed_domains"),
-                "blocked_domains": llm_node_params.get("blocked_domains"),
-            }
-        else:
-            config = {}
+        config = {
+            "allowed_domains": self.allowed_domains,
+            "blocked_domains": self.blocked_domains,
+        }
         if llm_service := self.get_llm_service():
             tools.extend(llm_service.attach_built_in_tools(built_in_tools, config))
         if self.collection_index_id:
