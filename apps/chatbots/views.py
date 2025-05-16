@@ -2,17 +2,19 @@ import uuid
 
 from django.contrib.auth.decorators import permission_required
 from django.contrib.auth.mixins import PermissionRequiredMixin
-from django.http import HttpResponseRedirect
+from django.http import HttpResponse, HttpResponseRedirect
 from django.shortcuts import get_object_or_404, redirect
+from django.template.loader import render_to_string
 from django.urls import reverse
 from django.views.decorators.clickjacking import xframe_options_exempt
-from django.views.decorators.http import require_POST
+from django.views.decorators.http import require_GET, require_POST
 from django.views.generic import TemplateView
 
 from apps.chat.channels import WebChannel
-from apps.chatbots.forms import ChatbotForm, CopyChatbotForm
+from apps.chatbots.forms import ChatbotForm, ChatbotSettingsForm, CopyChatbotForm
 from apps.chatbots.tables import ChatbotSessionsTable, ChatbotTable
 from apps.experiments.decorators import experiment_session_view, verify_session_access_cookie
+from apps.experiments.forms import ExperimentForm
 from apps.experiments.models import Experiment, SessionStatus
 from apps.experiments.tables import ExperimentVersionsTable
 from apps.experiments.tasks import async_create_experiment_version
@@ -37,6 +39,62 @@ from apps.teams.decorators import login_and_team_required, team_required
 from apps.teams.mixins import LoginAndTeamRequiredMixin
 from apps.teams.models import Flag
 from apps.utils.base_experiment_table_view import BaseExperimentTableView
+
+
+@login_and_team_required
+@permission_required("experiments.change_experiment", raise_exception=True)
+@require_GET
+def settings_edit_mode(request, team_slug, experiment_id):
+    if request.team.slug != team_slug:
+        return HttpResponse("Unauthorized", status=403)
+
+    experiment = get_object_or_404(Experiment, id=experiment_id, team=request.team)
+    form = ExperimentForm(request=request, instance=experiment)
+
+    context = {
+        "experiment": experiment,
+        "edit_mode": True,
+        "request": request,
+        "form": form,
+    }
+
+    return HttpResponse(render_to_string("chatbots/settings_content.html", context, request=request))
+
+
+@login_and_team_required
+@permission_required("experiments.change_experiment", raise_exception=True)
+@require_GET
+def cancel_edit_mode(request, team_slug, experiment_id):
+    if request.team.slug != team_slug:
+        return HttpResponse("Unauthorized", status=403)
+
+    experiment = get_object_or_404(Experiment, id=experiment_id, team=request.team)
+    context = {
+        "experiment": experiment,
+        "request": request,
+        "edit_mode": False,
+    }
+    return HttpResponse(render_to_string("chatbots/settings_content.html", context, request=request))
+
+
+@login_and_team_required
+@permission_required("experiments.change_experiment", raise_exception=True)
+@require_POST
+def save_all_settings(request, team_slug, experiment_id):
+    experiment = get_object_or_404(Experiment, id=experiment_id, team=request.team)
+    form = ChatbotSettingsForm(request=request, data=request.POST, instance=experiment)
+
+    context = {
+        "experiment": experiment,
+        "request": request,
+        "edit_mode": False,
+        "form": form,
+    }
+    if form.is_valid():
+        form.save()
+    else:
+        context["edit_mode"] = True
+    return HttpResponse(render_to_string("chatbots/settings_content.html", context, request=request))
 
 
 @login_and_team_required
