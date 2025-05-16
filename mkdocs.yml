@@ -65,3 +65,5 @@ nav:
     - Overview: getting-started/index.md
   - Architecture:
     - Overview: architecture/index.md
+  - Developer Guides:
+    - Versioning: developer_guides/versioning.md
