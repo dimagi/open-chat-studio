@@ -164,6 +164,7 @@ class ExperimentChannel(BaseTeamModel):
     )
 
     class Meta:
+        app_label = "channels"
         ordering = ["name"]
         constraints = [
             models.UniqueConstraint(
