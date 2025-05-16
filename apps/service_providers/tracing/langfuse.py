@@ -8,6 +8,7 @@ from threading import RLock
 from typing import TYPE_CHECKING, Any
 from uuid import UUID
 
+from langfuse.callback import CallbackHandler
 from langfuse.client import StatefulSpanClient, StatefulTraceClient
 
 from . import Tracer
@@ -116,7 +117,7 @@ class LangFuseTracer(Tracer):
         if not self.ready:
             raise ServiceReentryException("Service does not support reentrant use.")
 
-        return self._get_current_span().get_langchain_handler(update_parent=False)
+        return LangfuseCallbackHandler(stateful_client=self._get_current_span(), update_stateful_client=False)
 
     def get_trace_metadata(self) -> dict[str, str]:
         if not self.ready:
@@ -213,3 +214,29 @@ client_manager = ClientManager()
 def _shutdown():
     """Shutdown the client manager when the program exits."""
     client_manager.shutdown()
+
+
+class LangfuseCallbackHandler(CallbackHandler):
+    """Langfuse callback handler for LangChain that supports custom events"""
+
+    def on_custom_event(
+        self,
+        name: str,
+        data: Any,
+        *,
+        run_id: UUID,
+        tags: list[str] | None = None,
+        metadata: dict[str, Any] | None = None,
+        **kwargs: Any,
+    ) -> Any:
+        if self.runs.get(run_id):
+            self.runs[run_id].event(name=name, input=data, metadata=metadata)
+            return
+
+        if self.root_span is not None:
+            self.root_span.event(name=name, input=data, metadata=metadata)
+            return
+
+        if self.trace is not None:
+            self.trace.event(name=name, input=data, metadata=metadata)
+            return
