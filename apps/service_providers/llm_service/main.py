@@ -1,3 +1,4 @@
+import contextlib
 from io import BytesIO
 from time import sleep
 from typing import Any
@@ -72,14 +73,15 @@ class OpenAIAssistantRunnable(BrokenOpenAIAssistantRunnable):
             # framework.
             else:
                 run = self.client.beta.threads.runs.submit_tool_outputs(**input)
-            dispatch_custom_event(
-                "OpenAI Assistant Run Created",
-                {
-                    "assistant_id": run.assistant_id,
-                    "thread_id": run.thread_id,
-                    "run_id": run.id,
-                },
-            )
+            with contextlib.suppress(RuntimeError):
+                dispatch_custom_event(
+                    "OpenAI Assistant Run Created",
+                    {
+                        "assistant_id": run.assistant_id,
+                        "thread_id": run.thread_id,
+                        "run_id": run.id,
+                    },
+                )
             run = self._wait_for_run(run.id, run.thread_id)
         except BaseException as e:
             run_manager.on_chain_error(e)
