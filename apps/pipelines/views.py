@@ -115,7 +115,7 @@ class DeletePipeline(LoginAndTeamRequiredMixin, View, PermissionRequiredMixin):
             ]
 
             response = render_to_string(
-                "assistants/partials/referenced_objects.html",
+                "generic/referenced_objects.html",
                 context={
                     "object_name": "pipeline",
                     "experiments": experiments,

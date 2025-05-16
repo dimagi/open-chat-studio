@@ -138,22 +138,16 @@ class OpenAiAssistant(BaseTeamModel, VersionsMixin, CustomActionOperationMixin):
     def archive(self):
         from apps.assistants.tasks import delete_openai_assistant_task
 
-        if (
-            self.get_related_experiments_queryset().exists()
-            or self.get_related_pipeline_node_queryset().exists()
-            or self.get_related_experiments_with_pipeline_queryset().exists()
-        ):
+        if self._is_actively_used:
             return False
+
         if self.is_working_version:
             for (
                 version
             ) in self.versions.all():  # first perform all checks so assistants are not archived prior to return False
-                if (
-                    version.get_related_experiments_queryset().exists()
-                    or version.get_related_pipeline_node_queryset().exists()
-                    or version.get_related_experiments_with_pipeline_queryset().exists()
-                ):
+                if version._is_actively_used:
                     return False
+
             for version in self.versions.all():
                 delete_openai_assistant_task.delay(version.id)
             self.versions.update(is_archived=True, audit_action=AuditAction.AUDIT)
@@ -201,6 +195,15 @@ class OpenAiAssistant(BaseTeamModel, VersionsMixin, CustomActionOperationMixin):
                 is_archived=False,
             )
         return Experiment.objects.none()
+
+    @property
+    def _is_actively_used(self) -> bool:
+        """Check if the assistant is actively used in any experiments or pipelines"""
+        return (
+            self.get_related_experiments_queryset().exists()
+            or self.get_related_pipeline_node_queryset().exists()
+            or self.get_related_experiments_with_pipeline_queryset().exists()
+        )
 
     @property
     def version_details(self) -> VersionDetails:

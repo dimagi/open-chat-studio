@@ -1,4 +1,4 @@
-from unittest.mock import ANY, Mock, patch
+from unittest.mock import ANY, patch
 
 import pytest
 
@@ -13,15 +13,6 @@ from apps.files.models import File
 from apps.utils.factories.documents import CollectionFactory
 from apps.utils.factories.files import FileFactory
 from apps.utils.factories.service_provider_factories import LlmProviderFactory
-
-
-@pytest.fixture()
-def mock_vector_store_manager():
-    with patch("apps.documents.tasks.OpenAIVectorStoreManager") as cls_mock:
-        manager_instance = Mock()
-        manager_instance.client = Mock()
-        cls_mock.return_value = manager_instance
-        yield manager_instance
 
 
 @pytest.fixture()
@@ -44,10 +35,10 @@ def collection_file(db, collection):
 @pytest.mark.django_db()
 class TestUploadFilesToVectorStore:
     @patch("apps.documents.tasks.create_files_remote")
-    def test_upload_files_task_success(self, create_files_remote, collection_file, mock_vector_store_manager):
+    def test_upload_files_task_success(self, create_files_remote, collection_file, index_manager_mock):
         """Test successful file upload to vector store"""
         create_files_remote.return_value = ["ext-file-id"]
-        mock_vector_store_manager.link_files_to_vector_store.return_value = "vs_123"
+        index_manager_mock.link_files_to_vector_store.return_value = "vs_123"
 
         index_collection_files_task(collection_file.collection_id)
         # Verify file status was updated
@@ -55,12 +46,13 @@ class TestUploadFilesToVectorStore:
         assert collection_file.status == FileStatus.COMPLETED
 
         # Verify vector store interactions
-        mock_vector_store_manager.link_files_to_vector_store.assert_called_once_with(
+        index_manager_mock.link_files_to_vector_store.assert_called_once_with(
             vector_store_id="vs_123", file_ids=["ext-file-id"], chunk_size=1000, chunk_overlap=100
         )
 
+    @pytest.mark.usefixtures("index_manager_mock")
     @patch("apps.documents.tasks.create_files_remote")
-    def test_upload_files_task_failure(self, create_files_remote, collection_file, mock_vector_store_manager):
+    def test_upload_files_task_failure(self, create_files_remote, collection_file):
         """Test handling of upload failures"""
         create_files_remote.side_effect = Exception("Upload failed")
 
@@ -70,9 +62,9 @@ class TestUploadFilesToVectorStore:
         assert collection_file.status == FileStatus.FAILED
 
     @patch("apps.documents.tasks.create_files_remote")
-    def test_upload_files_task_openai_sync_error(self, create_files_remote, collection_file, mock_vector_store_manager):
+    def test_upload_files_task_openai_sync_error(self, create_files_remote, collection_file, index_manager_mock):
         """Test handling of OpenAiSyncError during file upload"""
-        mock_vector_store_manager.link_files_to_vector_store.side_effect = OpenAiSyncError("Failed to sync with OpenAI")
+        index_manager_mock.link_files_to_vector_store.side_effect = OpenAiSyncError("Failed to sync with OpenAI")
 
         index_collection_files_task(collection_file.collection_id)
 
@@ -82,6 +74,7 @@ class TestUploadFilesToVectorStore:
 
 @pytest.mark.django_db()
 class TestMigrateVectorStores:
+    @pytest.mark.usefixtures("index_manager_mock")
     @patch("apps.documents.tasks.create_files_remote")
     @patch("apps.documents.tasks._cleanup_old_vector_store")
     @patch("apps.documents.tasks._upload_files_to_vector_store")
@@ -91,7 +84,6 @@ class TestMigrateVectorStores:
         cleanup_old_vector_store,
         create_files_remote,
         collection,
-        mock_vector_store_manager,
     ):
         """Test successful migration of files between vector stores"""
         # New file ids are returned when uploaded to the new provider
@@ -135,7 +127,7 @@ class TestMigrateVectorStores:
         upload_files_to_vector_store.assert_any_call(ANY, collection, [col_file_1], chunk_size=1000, chunk_overlap=100)
         upload_files_to_vector_store.assert_any_call(ANY, collection, [col_file_2], chunk_size=1000, chunk_overlap=500)
 
-    def test_migration_with_multiple_chunking_strategies(self, collection, mock_vector_store_manager):
+    def test_migration_with_multiple_chunking_strategies(self, collection, index_manager_mock):
         """Test migration handles multiple files with different chunking strategies"""
         # Create files with different chunking strategies
         file1 = File.objects.create(name="test1.txt", team=collection.team)
@@ -161,33 +153,33 @@ class TestMigrateVectorStores:
         )
 
         # Verify that files were processed in separate groups by chunking strategy
-        assert mock_vector_store_manager.link_files_to_vector_store.call_count == 2
+        assert index_manager_mock.link_files_to_vector_store.call_count == 2
 
 
 @pytest.mark.django_db()
 class TestUploadFilesToVectorStoreHelper:
     @patch("apps.documents.tasks.create_files_remote")
-    def test_helper_success(self, create_files_remote, collection, collection_file, mock_vector_store_manager):
+    def test_helper_success(self, create_files_remote, collection, collection_file, index_manager_mock):
         """Test the helper function handles successful uploads"""
         create_files_remote.return_value = ["ext-file-id"]
-        mock_vector_store_manager.link_files_to_vector_store.return_value = "vs_123"
+        index_manager_mock.link_files_to_vector_store.return_value = "vs_123"
 
         _upload_files_to_vector_store(
-            mock_vector_store_manager.client, collection, [collection_file], chunk_size=1000, chunk_overlap=100
+            index_manager_mock.client, collection, [collection_file], chunk_size=1000, chunk_overlap=100
         )
 
         collection_file.refresh_from_db()
         assert collection_file.status == FileStatus.COMPLETED
 
-        mock_vector_store_manager.link_files_to_vector_store.assert_called_once()
+        index_manager_mock.link_files_to_vector_store.assert_called_once()
 
     @patch("apps.documents.tasks.create_files_remote")
-    def test_helper_handles_errors(self, create_files_remote, collection, collection_file, mock_vector_store_manager):
+    def test_helper_handles_errors(self, create_files_remote, collection, collection_file, index_manager_mock):
         """Test the helper function handles upload errors properly"""
         create_files_remote.side_effect = Exception("Upload failed")
 
         _upload_files_to_vector_store(
-            mock_vector_store_manager.client, collection, [collection_file], chunk_size=1000, chunk_overlap=100
+            index_manager_mock.client, collection, [collection_file], chunk_size=1000, chunk_overlap=100
         )
 
         collection_file.refresh_from_db()

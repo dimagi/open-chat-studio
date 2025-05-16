@@ -139,6 +139,9 @@ class LlmProvider(BaseTeamModel, ProviderMixin):
         config = {k: v for k, v in self.config.items() if v}
         return self.type_enum.get_llm_service(config)
 
+    def get_index_manager(self):
+        return self.get_llm_service().get_index_manager()
+
 
 class LlmProviderModelManager(models.Manager):
     def get_or_create_for_team(self, team, name, type, max_token_limit=8192):
