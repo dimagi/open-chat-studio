@@ -15,7 +15,7 @@ class Migration(migrations.Migration):
             name="no_activity_config",
             field=models.ForeignKey(
                 blank=True,
-                help_text="This is an experimental feature and might exhibit undesirable behaviour for external ocs_channels",
+                help_text="This is an experimental feature and might exhibit undesirable behaviour for external channels",
                 null=True,
                 on_delete=django.db.models.deletion.SET_NULL,
                 to="experiments.noactivitymessageconfig",
