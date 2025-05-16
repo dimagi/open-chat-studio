@@ -522,6 +522,43 @@ class VoiceResponseBehaviours(models.TextChoices):
 
 class BuiltInTools(models.TextChoices):
     WEB_SEARCH = "web-search", gettext("Web Search")
+    CODE_EXECUTION = "code-execution", gettext("Code Execution")
+
+    @classmethod
+    def get_provider_specific_tools(cls):
+        return {
+            "openai": [cls.WEB_SEARCH],
+            "anthropic": [cls.WEB_SEARCH],
+            "google": [cls.WEB_SEARCH, cls.CODE_EXECUTION],
+        }
+
+    @classmethod
+    def choices_for_provider(cls, provider_type: str):
+        tools = cls.get_provider_specific_tools().get(provider_type.lower(), [])
+        return [(tool, cls(tool).label) for tool in tools]
+
+    @classmethod
+    def get_tool_configs_by_provider(cls):
+        return {
+            "anthropic": {
+                cls.WEB_SEARCH: [
+                    {
+                        "name": "allowed_domains",
+                        "widget_type": "expandable_text",
+                        "label": "Allowed Domains",
+                        "helpText": "Add domains without https from which you want the search results. "
+                        "Use space to add multiple domains",
+                    },
+                    {
+                        "name": "blocked_domains",
+                        "widget_type": "expandable_text",
+                        "label": "Blocked Domains",
+                        "helpText": "Add domains without https from which you don't want the search results."
+                        " Use space to add multiple domains",
+                    },
+                ],
+            }
+        }
 
 
 class AgentTools(models.TextChoices):

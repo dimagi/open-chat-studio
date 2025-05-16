@@ -133,20 +133,16 @@
       "title": "Built In Tools",
       "type": "array",
       "ui:optionsSource": "built_in_tools",
-      "ui:widget": "multiselect"
+      "ui:widget": "built_in_tools"
     },
     "allowed_domains": {
       "default": null,
-      "description": "",
       "title": "Allowed Domains",
-      "ui:widget": "expandable_text",
       "type": "string"
     },
     "blocked_domains": {
       "default": null,
-      "description": "",
       "title": "Blocked Domains",
-      "ui:widget": "expandable_text",
       "type": "string"
     }
   },
