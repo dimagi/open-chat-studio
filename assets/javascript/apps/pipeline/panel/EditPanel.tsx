@@ -17,13 +17,12 @@ export default function EditPanel({nodeId}: { nodeId: string }) {
 
   const nodeSchema = getCachedData().nodeSchemas.get(data.type)!;
   const schemaProperties = Object.getOwnPropertyNames(nodeSchema.properties);
-
   const updateParamValue = (
     event: ChangeEvent<HTMLTextAreaElement | HTMLSelectElement | HTMLInputElement>,
   ) => {
     const {name, type} = event.target;
     const value = type === 'checkbox' ? (event.target as HTMLInputElement).checked : event.target.value;
-    if (!schemaProperties.includes(name)) {
+    if (!schemaProperties.includes(name)  && name !== "allowed_domains" && name !== "blocked_domains") {
       console.warn(`Unknown parameter: ${name}`);
       return;
     }
