@@ -520,6 +520,10 @@ class VoiceResponseBehaviours(models.TextChoices):
     NEVER = "never", gettext("Never")
 
 
+class BuiltInTools(models.TextChoices):
+    WEB_SEARCH = "web-search", gettext("Web Search")
+
+
 class AgentTools(models.TextChoices):
     RECURRING_REMINDER = "recurring-reminder", gettext("Recurring Reminder")
     ONE_OFF_REMINDER = "one-off-reminder", gettext("One-off Reminder")

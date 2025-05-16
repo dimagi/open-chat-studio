@@ -124,6 +124,30 @@
       "type": "array",
       "ui:optionsSource": "custom_actions",
       "ui:widget": "multiselect"
+    },
+    "built_in_tools": {
+      "description": "Built in tools provided by the LLM model",
+      "items": {
+        "type": "string"
+      },
+      "title": "Built In Tools",
+      "type": "array",
+      "ui:optionsSource": "built_in_tools",
+      "ui:widget": "multiselect"
+    },
+    "allowed_domains": {
+      "default": null,
+      "description": "",
+      "title": "Allowed Domains",
+      "ui:widget": "expandable_text",
+      "type": "string"
+    },
+    "blocked_domains": {
+      "default": null,
+      "description": "",
+      "title": "Blocked Domains",
+      "ui:widget": "expandable_text",
+      "type": "string"
     }
   },
   "required": [

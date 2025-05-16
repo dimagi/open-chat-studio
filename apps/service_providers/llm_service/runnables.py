@@ -6,8 +6,10 @@ from typing import TYPE_CHECKING, Any, Literal
 
 import openai
 from django.db import transaction
+from google.ai.generativelanguage_v1beta.types import Tool as GenAITool
 from langchain.agents import AgentExecutor, create_tool_calling_agent
 from langchain.agents.openai_assistant.base import OpenAIAssistantFinish
+from langchain.agents.output_parsers import tools as lc_tools_parser
 from langchain_core.agents import AgentFinish
 from langchain_core.load import Serializable
 from langchain_core.messages import BaseMessage
@@ -25,7 +27,9 @@ from pydantic import ConfigDict
 from apps.chat.agent.openapi_tool import ToolArtifact
 from apps.experiments.models import Experiment, ExperimentSession
 from apps.files.models import File
+from apps.service_providers.llm_service import AnthropicLlmService
 from apps.service_providers.llm_service.adapters import AssistantAdapter, ChatAdapter
+from apps.service_providers.llm_service.helper import claude_compatible_parse_ai_message, parse_output_for_anthropic
 from apps.service_providers.llm_service.history_managers import ExperimentHistoryManager, PipelineHistoryManager
 from apps.service_providers.llm_service.main import OpenAIAssistantRunnable
 from apps.utils.prompt import OcsPromptTemplate
@@ -247,6 +251,8 @@ class SimpleLLMChat(LLMChat):
 
 class AgentLLMChat(LLMChat):
     def _parse_output(self, output):
+        if isinstance(self.adapter.llm_service, AnthropicLlmService):
+            return parse_output_for_anthropic(output)
         output = output.get("output", "")
         if isinstance(output, list):
             # Responses API responses are lists
@@ -270,9 +276,10 @@ class AgentLLMChat(LLMChat):
         return File.objects.filter(external_id__in=remote_file_ids).all()
 
     def _build_chain(self) -> Runnable[dict[str, Any], dict]:
+        if isinstance(self.adapter.llm_service, AnthropicLlmService):
+            lc_tools_parser.parse_ai_message_to_tool_action = claude_compatible_parse_ai_message
         tools = self.adapter.get_allowed_tools()
         agent = create_tool_calling_agent(llm=self.adapter.get_chat_model(), tools=tools, prompt=self.prompt)
-
         tools = self._filter_for_ocs_tools(tools)
         return AgentExecutor.from_agent_and_tools(
             agent=agent,
@@ -284,7 +291,7 @@ class AgentLLMChat(LLMChat):
         """Filter out tools that are not OCS tools. `AgentExecutor` expects a list of runnable tools, so we need to
         remove all tools that are run by the LLM provider
         """
-        return [t for t in tools if not isinstance(t, dict)]
+        return [t for t in tools if not isinstance(t, (dict | GenAITool))]
 
     @property
     def prompt(self):
