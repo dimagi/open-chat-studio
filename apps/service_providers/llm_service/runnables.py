@@ -9,7 +9,6 @@ from django.db import transaction
 from langchain.agents import AgentExecutor, create_tool_calling_agent
 from langchain.agents.openai_assistant.base import OpenAIAssistantFinish
 from langchain_core.agents import AgentFinish
-from langchain_core.callbacks import dispatch_custom_event
 from langchain_core.load import Serializable
 from langchain_core.messages import BaseMessage
 from langchain_core.messages.tool import ToolMessage, tool_call
@@ -331,15 +330,6 @@ class AssistantChat(RunnableSerializable[dict, ChainOutput]):
                 input_dict["thread_id"] = current_thread_id
             input_dict["instructions"] = self.adapter.get_assistant_instructions()
             thread_id, run_id = self._get_response_with_retries(merged_config, input_dict, current_thread_id)
-            dispatch_custom_event(
-                "OpenAI Assistant Info",
-                {
-                    "name": self.adapter.assistant.name,
-                    "id": self.adapter.assistant.assistant_id,
-                    "thread_id": thread_id,
-                    "run_id": run_id,
-                },
-            )
             ai_message, annotation_file_ids = self._get_output_with_annotations(thread_id, run_id)
             ai_message_metadata = self.adapter.get_output_message_metadata(annotation_file_ids)
             ai_message_metadata["openai_run_id"] = run_id

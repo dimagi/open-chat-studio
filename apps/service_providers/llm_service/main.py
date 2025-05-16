@@ -5,7 +5,7 @@ from typing import Any
 import pydantic
 from langchain.agents.openai_assistant import OpenAIAssistantRunnable as BrokenOpenAIAssistantRunnable
 from langchain_anthropic import ChatAnthropic
-from langchain_core.callbacks import BaseCallbackHandler, CallbackManager
+from langchain_core.callbacks import BaseCallbackHandler, CallbackManager, dispatch_custom_event
 from langchain_core.language_models import BaseChatModel
 from langchain_core.load import dumpd
 from langchain_core.messages import HumanMessage
@@ -72,6 +72,14 @@ class OpenAIAssistantRunnable(BrokenOpenAIAssistantRunnable):
             # framework.
             else:
                 run = self.client.beta.threads.runs.submit_tool_outputs(**input)
+            dispatch_custom_event(
+                "OpenAI Assistant Run Created",
+                {
+                    "assistant_id": run.assistant_id,
+                    "thread_id": run.thread_id,
+                    "run_id": run.id,
+                },
+            )
             run = self._wait_for_run(run.id, run.thread_id)
         except BaseException as e:
             run_manager.on_chain_error(e)
