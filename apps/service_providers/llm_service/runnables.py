@@ -266,7 +266,7 @@ class AgentLLMChat(LLMChat):
             if isinstance(outputs, list):
                 for output in outputs:
                     annotation_entries = output.get("annotations", [])
-                    remote_file_ids.extend([entry["file_id"] for entry in annotation_entries])
+                    remote_file_ids.extend([entry["file_id"] for entry in annotation_entries if "file_id" in entry])
 
         return File.objects.filter(external_id__in=remote_file_ids).all()
 
