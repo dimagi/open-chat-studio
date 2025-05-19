@@ -998,7 +998,7 @@ function BuiltInToolsWidget(props: WidgetParams) {
   const models = parameterValues.LlmProviderModelId as LlmProviderModel[];
   const model = models.find((m) => String(m.value) === String(llmProviderId));
   const providerKey = model?.type?.toLowerCase() || "";
-  const providerToolMap = parameterValues.built_in_tools as Record<string, { value: string; label: string }[]> || {};
+  const providerToolMap = parameterValues.built_in_tools as Record<string, TypedOption[]>
   const options = providerToolMap[providerKey] || [];
 
   if (options.length === 0) return <></>;
@@ -1038,7 +1038,7 @@ function BuiltInToolsWidget(props: WidgetParams) {
 
       {/* Configs for selected tools */}
       {selectedValues.map((toolKey) => {
-        const toolConfigsMap = parameterValues.built_in_tools_config as Record<string, Record<string, WidgetParams[]>> || {};
+        const toolConfigsMap = parameterValues.built_in_tools_config as Record<string, BuiltInToolsConfig[]>;
         const providerToolConfigs = toolConfigsMap[providerKey] || {};
         const widgets = providerToolConfigs[toolKey];
         if (!widgets || widgets.length === 0) return null;
@@ -1048,7 +1048,7 @@ function BuiltInToolsWidget(props: WidgetParams) {
             <div className="font-medium mb-1 text-sm text-base-content/70">
               {toolKey} configuration
             </div>
-            {widgets.map((widget: WidgetParams) => {
+            {widgets.map((widget: BuiltInToolsConfig) => {
               const widgetProps: WidgetParams = {
                 ...props,
                 name: widget.name,
