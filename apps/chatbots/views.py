@@ -41,13 +41,10 @@ from apps.teams.models import Flag
 from apps.utils.base_experiment_table_view import BaseExperimentTableView
 
 
+@require_GET
 @login_and_team_required
 @permission_required("experiments.change_experiment", raise_exception=True)
-@require_GET
 def settings_edit_mode(request, team_slug, experiment_id):
-    if request.team.slug != team_slug:
-        return HttpResponse("Unauthorized", status=403)
-
     experiment = get_object_or_404(Experiment, id=experiment_id, team=request.team)
     form = ExperimentForm(request=request, instance=experiment)
 
@@ -61,13 +58,10 @@ def settings_edit_mode(request, team_slug, experiment_id):
     return HttpResponse(render_to_string("chatbots/settings_content.html", context, request=request))
 
 
+@require_GET
 @login_and_team_required
 @permission_required("experiments.change_experiment", raise_exception=True)
-@require_GET
 def cancel_edit_mode(request, team_slug, experiment_id):
-    if request.team.slug != team_slug:
-        return HttpResponse("Unauthorized", status=403)
-
     experiment = get_object_or_404(Experiment, id=experiment_id, team=request.team)
     context = {
         "experiment": experiment,
@@ -77,9 +71,9 @@ def cancel_edit_mode(request, team_slug, experiment_id):
     return HttpResponse(render_to_string("chatbots/settings_content.html", context, request=request))
 
 
+@require_GET
 @login_and_team_required
 @permission_required("experiments.change_experiment", raise_exception=True)
-@require_POST
 def save_all_settings(request, team_slug, experiment_id):
     experiment = get_object_or_404(Experiment, id=experiment_id, team=request.team)
     form = ChatbotSettingsForm(request=request, data=request.POST, instance=experiment)
