@@ -190,35 +190,60 @@
 </div>
 
 {% if edit_mode %}
-  <script>
-    (function() {
-      if (window.tomSelectInstance) {
-        try {
-          window.tomSelectInstance.destroy();
-        } catch (e) {
+  {% block page_js %}
+    {{ voice_providers_types|json_script:"voiceProviderTypes" }}
+    {{ synthetic_voice_options|json_script:"voiceOptions" }}
+    <script>
+      (function() {
+        if (window.tomSelectInstance) {
+          try {
+            window.tomSelectInstance.destroy();
+          } catch (e) {
         //first instance
-        }
-        window.tomSelectInstance = null;
-      }
-      let element = document.getElementById('allowlist-multiselect');
-      let hiddenInput = document.getElementById('id_participant_allowlist');
-
-      if (element && hiddenInput) {
-        window.tomSelectInstance = new TomSelect(element, {
-          plugins: ["remove_button", "caret_position", "input_autogrow"],
-          maxItems: null,
-          create: true,
-          plugins: {
-            'checkbox_options': {
-              'checkedClassNames':   ['ts-checked'],
-              'uncheckedClassNames': ['ts-unchecked'],
-            }
-          },
-          onChange: function(values) {
-            hiddenInput.value = values.join(',');
           }
-        });
-      }
-    })();
-  </script>
+          window.tomSelectInstance = null;
+        }
+        let element = document.getElementById('allowlist-multiselect');
+        let hiddenInput = document.getElementById('id_participant_allowlist');
+
+        if (element && hiddenInput) {
+          window.tomSelectInstance = new TomSelect(element, {
+            plugins: ["remove_button", "caret_position", "input_autogrow"],
+            maxItems: null,
+            create: true,
+            plugins: {
+              'checkbox_options': {
+                'checkedClassNames':   ['ts-checked'],
+                'uncheckedClassNames': ['ts-unchecked'],
+              }
+            },
+            onChange: function(values) {
+              hiddenInput.value = values.join(',');
+            }
+          });
+        }
+      })();
+      const voiceProviderTypes = JSON.parse(document.getElementById("voiceProviderTypes").textContent);
+      const voiceOptions = JSON.parse(document.getElementById("voiceOptions").textContent);
+      document.addEventListener('alpine:init', () => {
+        Alpine.data('experiment', () => ({
+          type: '{{ experiment_type }}',
+
+          voiceProvider: null,
+          synthetic_voice: {{experiment.synthetic_voice_id|default:'null'}},
+          synthetic_voice_options: [],
+
+          init() {
+
+            this.$watch('voiceProvider', () => {
+              const providerType = voiceProviderTypes[this.voiceProvider];
+              this.synthetic_voice_options = voiceOptions.filter(option => {
+                return option.type === providerType && (!option.provider_id || option.provider_id == this.voiceProvider);
+              });
+            });
+          }
+        }));
+      });
+    </script>
+  {% endblock page_js %}
 {% endif %}

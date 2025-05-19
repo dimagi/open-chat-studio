@@ -9,12 +9,13 @@ from django.urls import reverse
 from django.views.decorators.clickjacking import xframe_options_exempt
 from django.views.decorators.http import require_GET, require_POST
 from django.views.generic import TemplateView
+from waffle import flag_is_active
 
 from apps.chat.channels import WebChannel
 from apps.chatbots.forms import ChatbotForm, ChatbotSettingsForm, CopyChatbotForm
 from apps.chatbots.tables import ChatbotSessionsTable, ChatbotTable
 from apps.experiments.decorators import experiment_session_view, verify_session_access_cookie
-from apps.experiments.models import Experiment, SessionStatus
+from apps.experiments.models import Experiment, SessionStatus, SyntheticVoice
 from apps.experiments.tables import ExperimentVersionsTable
 from apps.experiments.tasks import async_create_experiment_version
 from apps.experiments.views import CreateExperiment, ExperimentSessionsTableView, ExperimentVersionsTableView
@@ -40,6 +41,34 @@ from apps.teams.models import Flag
 from apps.utils.base_experiment_table_view import BaseExperimentTableView
 
 
+def _get_voice_provider_alpine_context(request, experiment=None):
+    """Add context required by the experiments/experiment_form.html template."""
+    exclude_services = [SyntheticVoice.OpenAIVoiceEngine]
+    if flag_is_active(request, "open_ai_voice_engine"):
+        exclude_services = []
+
+    form_attrs = {"enctype": "multipart/form-data"}
+    if request.origin == "experiments":
+        form_attrs["x-data"] = "experiment"
+
+    return {
+        "form_attrs": form_attrs,
+        "voice_providers_types": dict(request.team.voiceprovider_set.values_list("id", "type")),
+        "synthetic_voice_options": sorted(
+            [
+                {
+                    "value": voice.id,
+                    "text": str(voice),
+                    "type": voice.service.lower(),
+                    "provider_id": voice.voice_provider_id,
+                }
+                for voice in SyntheticVoice.get_for_team(request.team, exclude_services=exclude_services)
+            ],
+            key=lambda v: v["text"],
+        ),
+    }
+
+
 @login_and_team_required
 @permission_required("experiments.change_experiment", raise_exception=True)
 def chatbots_settings(request, team_slug, experiment_id):
@@ -50,6 +79,7 @@ def chatbots_settings(request, team_slug, experiment_id):
     )
     team_participant_identifiers.extend(experiment.participant_allowlist)
     team_participant_identifiers = list(set(team_participant_identifiers))
+    alpine_context = _get_voice_provider_alpine_context(request, experiment)
 
     if request.method == "POST":
         form = ChatbotSettingsForm(request=request, data=request.POST, instance=experiment)
@@ -60,6 +90,9 @@ def chatbots_settings(request, team_slug, experiment_id):
             "form": form,
             "updated": True,
             "team_participant_identifiers": team_participant_identifiers,
+            "voice_providers_types": alpine_context["voice_providers_types"],
+            "synthetic_voice_options": alpine_context["synthetic_voice_options"],
+            "form_attrs": alpine_context["form_attrs"],
         }
         if form.is_valid():
             form.save()
@@ -74,6 +107,9 @@ def chatbots_settings(request, team_slug, experiment_id):
             "request": request,
             "form": form,
             "team_participant_identifiers": team_participant_identifiers,
+            "voice_providers_types": alpine_context["voice_providers_types"],
+            "synthetic_voice_options": alpine_context["synthetic_voice_options"],
+            "form_attrs": alpine_context["form_attrs"],
         }
 
     return HttpResponse(render_to_string("chatbots/settings_content.html", context, request=request))
