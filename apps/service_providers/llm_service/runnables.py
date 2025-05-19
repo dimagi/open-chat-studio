@@ -27,9 +27,8 @@ from pydantic import ConfigDict
 from apps.chat.agent.openapi_tool import ToolArtifact
 from apps.experiments.models import Experiment, ExperimentSession
 from apps.files.models import File
-from apps.service_providers.llm_service import AnthropicLlmService
 from apps.service_providers.llm_service.adapters import AssistantAdapter, ChatAdapter
-from apps.service_providers.llm_service.helper import custom_parse_ai_message, parse_output_for_anthropic
+from apps.service_providers.llm_service.helper import custom_parse_ai_message
 from apps.service_providers.llm_service.history_managers import ExperimentHistoryManager, PipelineHistoryManager
 from apps.service_providers.llm_service.main import OpenAIAssistantRunnable
 from apps.utils.prompt import OcsPromptTemplate
@@ -251,8 +250,7 @@ class SimpleLLMChat(LLMChat):
 
 class AgentLLMChat(LLMChat):
     def _parse_output(self, output):
-        if isinstance(self.adapter.llm_service, AnthropicLlmService):
-            return parse_output_for_anthropic(output)
+        self.adapter.get_llm_service().get_output_parser()
         output = output.get("output", "")
         if isinstance(output, list):
             # Responses API responses are lists

@@ -3,7 +3,7 @@ import CodeMirror from '@uiw/react-codemirror';
 import {python} from "@codemirror/lang-python";
 import {githubDark, githubLight} from "@uiw/codemirror-theme-github";
 import {CompletionContext, snippetCompletion as snip} from '@codemirror/autocomplete'
-import {TypedOption, LlmProviderModel, BuiltInToolsConfig} from "../types/nodeParameterValues";
+import {TypedOption, LlmProviderModel} from "../types/nodeParameterValues";
 import usePipelineStore from "../stores/pipelineStore";
 import {classNames, concatenate, getCachedData, getDocumentationLink, getSelectOptions} from "../utils";
 import {JsonSchema, NodeParams, PropertySchema} from "../types/nodeParams";
@@ -1002,10 +1002,12 @@ function BuiltInToolsWidget(props: WidgetParams) {
   const providerKey = model?.type?.toLowerCase() || "";
   const providerToolMap = parameterValues.built_in_tools as unknown as Record<string, TypedOption[]>
   const options = providerToolMap[providerKey] || [];
+  const toolConfigsMap = parameterValues.built_in_tools_config as unknown as Record<string, Record<string, PropertySchema[]>>;
+  const providerToolConfigs = toolConfigsMap[providerKey] || {};
 
   if (options.length === 0) return <></>;
 
-  let selectedValues = Array.isArray(props.paramValue) ? [...props.paramValue] : [];
+  const [selectedValues, setSelectedValue] = useState(Array.isArray(props.paramValue) ? [...props.paramValue] : []);
   const setNode = usePipelineStore((state) => state.setNode);
 
   function getNewNodeData(old: Node, updatedList: string[]) {
@@ -1016,9 +1018,9 @@ function BuiltInToolsWidget(props: WidgetParams) {
 
   function onUpdate(event: ChangeEvent<HTMLInputElement>) {
     if (event.target.checked) {
-      selectedValues.push(event.target.name);
+      setSelectedValue([...selectedValues, event.target.name])
     } else {
-      selectedValues = selectedValues.filter((tool) => tool !== event.target.name);
+      setSelectedValue(selectedValues.filter((tool) => tool !== event.target.name));
     }
     setNode(props.nodeId, (old) => getNewNodeData(old, selectedValues));
   }
@@ -1037,11 +1039,8 @@ function BuiltInToolsWidget(props: WidgetParams) {
           <span className="ml-2">{option.label}</span>
         </div>
       ))}
-
       {/* Configs for selected tools */}
       {selectedValues.map((toolKey) => {
-        const toolConfigsMap = parameterValues.built_in_tools_config as unknown as Record<string, Record<string, BuiltInToolsConfig[]>>;
-        const providerToolConfigs = toolConfigsMap[providerKey] || {};
         const widgets = providerToolConfigs[toolKey] || [];
         if (!widgets || widgets.length === 0) return null;
 
@@ -1050,7 +1049,7 @@ function BuiltInToolsWidget(props: WidgetParams) {
             <div className="font-medium mb-1 text-sm text-base-content/70">
               {toolKey} configuration
             </div>
-            {widgets.map((widget: BuiltInToolsConfig) => {
+            {widgets.map((widget: PropertySchema) => {
               const widgetProps: WidgetParams = {
                 ...props,
                 name: widget.name,
@@ -1059,12 +1058,8 @@ function BuiltInToolsWidget(props: WidgetParams) {
                 paramValue: props.nodeParams?.[widget.name] ?? "",
                 updateParamValue: props.updateParamValue,
               };
-
-              if (widget.type === "expandable_text") {
-                return <ExpandableTextWidget key={widget.name} {...widgetProps} />;
-              }
-          // Can add more types of widgets if required
-              return null;
+            const WidgetComponent = getWidget(widget.type, widget);
+            return <WidgetComponent key={widget.name} {...widgetProps} />;
             })}
           </div>
         );

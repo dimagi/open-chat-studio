@@ -128,6 +128,15 @@ class LlmService(pydantic.BaseModel):
     def attach_built_in_tools(self, built_in_tools: list[str], config: dict = None) -> list:
         raise NotImplementedError
 
+    def get_output_parser(self):
+        return self._default_parser
+
+    def _default_parser(self, output):
+        output = output.get("output", "")
+        if isinstance(output, list):
+            return "\n".join([o["text"] for o in output])
+        return output or ""
+
 
 class OpenAIGenericService(LlmService):
     openai_api_key: str
@@ -246,6 +255,39 @@ class AnthropicLlmService(LlmService):
             else:
                 raise ValueError(f"Unsupported built-in tool for anthropic: '{tool_name}'")
         return tools
+
+    def get_output_parser(self):
+        return self._parse_output_for_anthropic
+
+    def _parse_output_for_anthropic(self, output):
+        if output is None or isinstance(output, str):
+            return output or ""
+
+        if isinstance(output, dict):
+            if "output" in output:
+                return self._parse_output_for_anthropic(output["output"])
+            elif "text" in output:
+                return output.get("text", "")
+            else:
+                return str(output)
+
+        if isinstance(output, list):
+            result = []
+            for item in output:
+                if not isinstance(item, (dict | str)):
+                    continue
+
+                if isinstance(item, dict) and item.get("type") == "text":
+                    text = item.get("text", "")
+                    for citation in item.get("citations", []):
+                        if citation.get("title") and citation.get("url"):
+                            text += f" [{citation['title']}]({citation['url']})"
+                    result.append(text)
+                elif isinstance(item, str):
+                    result.append(item)
+            return "".join(result)
+
+        return str(output)
 
 
 class DeepSeekLlmService(LlmService):

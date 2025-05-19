@@ -27,7 +27,7 @@ from apps.assistants.models import OpenAiAssistant
 from apps.chat.agent.tools import get_node_tools
 from apps.chat.conversation import compress_chat_history, compress_pipeline_chat_history
 from apps.documents.models import Collection
-from apps.experiments.models import ExperimentSession, ParticipantData
+from apps.experiments.models import BuiltInTools, ExperimentSession, ParticipantData
 from apps.pipelines.exceptions import PipelineNodeBuildError, PipelineNodeRunError
 from apps.pipelines.models import PipelineChatHistory, PipelineChatHistoryModes, PipelineChatHistoryTypes
 from apps.pipelines.nodes.base import (
@@ -284,7 +284,7 @@ class LLMResponseWithPrompt(LLMResponse, HistoryMixin):
         description="Custom actions to enable for the bot",
         json_schema_extra=UiSchema(widget=Widgets.multiselect, options_source=OptionsSource.custom_actions),
     )
-    built_in_tools: list[str] = Field(
+    built_in_tools: list[BuiltInTools] = Field(
         default_factory=list,
         description="Built in tools provided by the LLM model",
         json_schema_extra=UiSchema(widget=Widgets.built_in_tools, options_source=OptionsSource.built_in_tools),

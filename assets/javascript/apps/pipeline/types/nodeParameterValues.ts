@@ -20,10 +20,3 @@
    export type LlmProviderModel = TypedOption & {
     max_token_limit: number
    };
-
-  export type BuiltInToolsConfig = TypedOption & {
-    name: string;
-    label?: string;
-    helpText?: string;
-    type: string;
-    };
