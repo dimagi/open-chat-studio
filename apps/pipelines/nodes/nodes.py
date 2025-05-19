@@ -285,6 +285,12 @@ class LLMResponseWithPrompt(LLMResponse, HistoryMixin):
         json_schema_extra=UiSchema(widget=Widgets.multiselect, options_source=OptionsSource.custom_actions),
     )
 
+    built_in_tools: list[str] = Field(
+        default_factory=list,
+        description="Built in tools provided by the LLM model",
+        json_schema_extra=UiSchema(widget=Widgets.multiselect, options_source=OptionsSource.built_in_tools),
+    )
+
     @model_validator(mode="after")
     def check_prompt_variables(self) -> Self:
         context = {
@@ -301,7 +307,7 @@ class LLMResponseWithPrompt(LLMResponse, HistoryMixin):
                 "invalid_prompt", e.error_dict["prompt"][0].message, {"field": "prompt"}
             ) from None
 
-    @field_validator("tools", mode="before")
+    @field_validator("tools", "built_in_tools", mode="before")
     def ensure_value(cls, value: str):
         return value or []
 
@@ -339,6 +345,9 @@ class LLMResponseWithPrompt(LLMResponse, HistoryMixin):
         )
 
         tools = get_node_tools(self.django_node, session, attachment_callback=history_manager.attach_file_id)
+        if llm_service := self.get_llm_service():
+            tools.extend(llm_service.attach_built_in_tools(self.built_in_tools))
+
         if self.collection_index_id:
             collection = Collection.objects.get(id=self.collection_index_id)
             builtin_tools = {"type": "file_search", "vector_store_ids": [collection.openai_vector_store_id]}
@@ -352,7 +361,6 @@ class LLMResponseWithPrompt(LLMResponse, HistoryMixin):
             tools=tools,
             disabled_tools=self.disabled_tools,
         )
-
         allowed_tools = chat_adapter.get_allowed_tools()
         # TODO: tracing
         # if len(tools) != len(allowed_tools):
