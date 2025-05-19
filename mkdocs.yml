@@ -67,3 +67,4 @@ nav:
     - Overview: architecture/index.md
   - Developer Guides:
     - Versioning: developer_guides/versioning.md
+    - Changelog: developer_guides/changelog.md
