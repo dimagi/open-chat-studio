@@ -28,7 +28,7 @@ RUN --mount=type=cache,target=/root/.cache \
     cd /_lock && \
     uv sync \
       --frozen \
-      --no-group dev \
+      --no-default-groups \
       --group prod \
       --compile-bytecode
 
