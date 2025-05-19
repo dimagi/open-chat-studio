@@ -16,7 +16,7 @@ from langchain_core.messages import BaseMessage
 from langchain_core.prompts import MessagesPlaceholder, PromptTemplate
 from langchain_core.runnables import RunnableLambda, RunnablePassthrough
 from langchain_text_splitters import RecursiveCharacterTextSplitter
-from pydantic import BaseModel, BeforeValidator, Field, create_model, field_validator, model_validator
+from pydantic import BaseModel, BeforeValidator, Field, create_model, field_validator, model_validator, root_validator
 from pydantic import ValidationError as PydanticValidationError
 from pydantic.config import ConfigDict
 from pydantic_core import PydanticCustomError
@@ -242,6 +242,21 @@ class LLMResponse(PipelineNode, LLMResponseMixin):
         return PipelineState.from_node_output(node_name=self.name, node_id=self.node_id, output=output.content)
 
 
+class ToolConfigModel(BaseModel):
+    allowed_domains: str | None = Field(
+        None,
+        json_schema_extra=UiSchema(
+            widget=Widgets.none,
+        ),
+    )
+    blocked_domains: str | None = Field(
+        None,
+        json_schema_extra=UiSchema(
+            widget=Widgets.none,
+        ),
+    )
+
+
 class LLMResponseWithPrompt(LLMResponse, HistoryMixin):
     """Uses and LLM to respond to the input."""
 
@@ -289,17 +304,10 @@ class LLMResponseWithPrompt(LLMResponse, HistoryMixin):
         description="Built in tools provided by the LLM model",
         json_schema_extra=UiSchema(widget=Widgets.built_in_tools, options_source=OptionsSource.built_in_tools),
     )
-    allowed_domains: str | None = Field(
-        None,
-        json_schema_extra=UiSchema(
-            widget=Widgets.none,
-        ),
-    )
-    blocked_domains: str | None = Field(
-        None,
-        json_schema_extra=UiSchema(
-            widget=Widgets.none,
-        ),
+    tool_config: ToolConfigModel | None = Field(
+        default_factory=dict,
+        description="Configuration for builtin tools",
+        json_schema_extra=UiSchema(widget=Widgets.none),
     )
 
     @model_validator(mode="after")
@@ -341,6 +349,21 @@ class LLMResponseWithPrompt(LLMResponse, HistoryMixin):
             )
         return value
 
+    @root_validator(pre=True)
+    def nest_tool_config(cls, values):
+        tool_config_data = {}
+        keys_to_remove = []
+        for key in list(values.keys()):
+            if key.startswith("tool_config."):
+                sub_key = key[len("tool_config.") :]
+                tool_config_data[sub_key] = values[key]
+                keys_to_remove.append(key)
+        for key in keys_to_remove:
+            values.pop(key)
+        if tool_config_data:
+            values["tool_config"] = tool_config_data
+        return values
+
     def _process(self, input, state: PipelineState) -> PipelineState:
         session: ExperimentSession | None = state.get("experiment_session")
         # Get runnable
@@ -358,8 +381,8 @@ class LLMResponseWithPrompt(LLMResponse, HistoryMixin):
         tools = get_node_tools(self.django_node, session, attachment_callback=history_manager.attach_file_id)
         built_in_tools = self.built_in_tools
         config = {
-            "allowed_domains": self.allowed_domains,
-            "blocked_domains": self.blocked_domains,
+            "allowed_domains": self.tool_config.allowed_domains,
+            "blocked_domains": self.tool_config.blocked_domains,
         }
         if llm_service := self.get_llm_service():
             tools.extend(llm_service.attach_built_in_tools(built_in_tools, config))

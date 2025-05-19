@@ -128,6 +128,11 @@
     "built_in_tools": {
       "description": "Built in tools provided by the LLM model",
       "items": {
+        "enum": [
+          "web-search",
+          "code-execution"
+        ],
+        "title": "BuiltInTools",
         "type": "string"
       },
       "title": "Built In Tools",
@@ -135,17 +140,10 @@
       "ui:optionsSource": "built_in_tools",
       "ui:widget": "built_in_tools"
     },
-    "allowed_domains": {
-      "default": null,
-      "title": "Allowed Domains",
+    "tool_config": {
+      "description": "Configuration for builtin tools",
       "ui:widget": "none",
-      "type": "string"
-    },
-    "blocked_domains": {
-      "default": null,
-      "title": "Blocked Domains",
-      "ui:widget": "none",
-      "type": "string"
+      "type": "object"
     }
   },
   "required": [
