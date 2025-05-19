@@ -2,27 +2,25 @@ import logging
 from collections import defaultdict
 from collections.abc import Iterator
 from dataclasses import dataclass
-from datetime import datetime
 from functools import cached_property
 from uuid import uuid4
 
 import pydantic
-from django.core.serializers.json import DjangoJSONEncoder
+from django.core.exceptions import ObjectDoesNotExist
 from django.db import models, transaction
 from django.urls import reverse
 from langchain_core.messages import AIMessage, BaseMessage, HumanMessage, SystemMessage
-from pydantic import ConfigDict
 
 from apps.annotations.models import TagCategories
 from apps.chat.models import ChatMessage, ChatMessageType
 from apps.custom_actions.form_utils import set_custom_actions
 from apps.custom_actions.mixins import CustomActionOperationMixin
-from apps.experiments.models import Experiment, ExperimentSession
+from apps.experiments.models import Experiment, ExperimentSession, SourceMaterial
 from apps.experiments.versioning import VersionDetails, VersionField, VersionsMixin, VersionsObjectManagerMixin
 from apps.pipelines.exceptions import PipelineBuildError
 from apps.pipelines.executor import patch_executor
 from apps.pipelines.flow import Flow, FlowNode, FlowNodeData
-from apps.pipelines.logging import PipelineLoggingCallbackHandler
+from apps.pipelines.helper import duplicate_pipeline_with_new_ids
 from apps.pipelines.nodes.base import PipelineState
 from apps.pipelines.nodes.helpers import temporary_session
 from apps.teams.models import BaseTeamModel
@@ -186,7 +184,7 @@ class Pipeline(BaseTeamModel, VersionsMixin):
         return new_pipeline
 
     def get_absolute_url(self):
-        return reverse("pipelines:details", args=[self.team.slug, self.id])
+        return reverse("pipelines:edit", args=[self.team.slug, self.id])
 
     def update_nodes_from_data(self) -> None:
         """Set the nodes on the pipeline from data coming from the frontend"""
@@ -229,7 +227,7 @@ class Pipeline(BaseTeamModel, VersionsMixin):
         for node in nodes:
             node_class = getattr(pipeline_nodes, node.type)
             try:
-                node_class.model_validate(node.params)
+                node_class.model_validate({**node.params, "node_id": node.flow_id, "django_node": node})
             except pydantic.ValidationError as e:
                 for error in e.errors():
                     field = error["loc"][0] if error["loc"] else error["ctx"]["field"]
@@ -288,7 +286,7 @@ class Pipeline(BaseTeamModel, VersionsMixin):
 
         with temporary_session(self.team, user_id) as session:
             runnable = PipelineGraph.build_runnable_from_pipeline(self)
-            input = PipelineState(messages=[input], experiment_session=session, pipeline_version=self.version_number)
+            input = PipelineState(messages=[input], experiment_session=session)
             with patch_executor():
                 output = runnable.invoke(input, config={"max_concurrency": 1})
             output = PipelineState(**output).json_safe()
@@ -307,64 +305,40 @@ class Pipeline(BaseTeamModel, VersionsMixin):
         from apps.experiments.models import AgentTools
         from apps.pipelines.graph import PipelineGraph
 
-        runnable = PipelineGraph.build_runnable_from_pipeline(self)
-        pipeline_run = self._create_pipeline_run(input, session)
-        logging_callback = PipelineLoggingCallbackHandler(pipeline_run)
-        logging_callback.logger.debug("Starting pipeline run", input=input["messages"][-1])
-        try:
-            config = trace_service.get_langchain_config(
-                callbacks=[logging_callback],
-                configurable={
-                    "disabled_tools": AgentTools.reminder_tools() if disable_reminder_tools else [],
-                },
-            )
-            raw_output = runnable.invoke(input, config=config)
-            output = PipelineState(**raw_output).json_safe()
-            pipeline_run.output = output
-            if save_run_to_history and session is not None:
-                input_metadata = output.get("input_message_metadata", {})
-                output_metadata = output.get("output_message_metadata", {})
-                trace_metadata = trace_service.get_trace_metadata() if trace_service else None
-                if trace_metadata:
-                    input_metadata.update(trace_metadata)
-                    output_metadata.update(trace_metadata)
-
-                if save_input_to_history:
-                    self._save_message_to_history(
-                        session, input["messages"][-1], ChatMessageType.HUMAN, metadata=input_metadata
-                    )
-                ai_message = self._save_message_to_history(
-                    session,
-                    output["messages"][-1],
-                    ChatMessageType.AI,
-                    metadata=output_metadata,
-                    tags=output.get("output_message_tags"),
-                )
-                ai_message.add_version_tag(
-                    version_number=experiment.version_number, is_a_version=experiment.is_a_version
-                )
-                return ai_message
-            else:
-                return ChatMessage(content=output)
-        finally:
-            if pipeline_run.status == PipelineRunStatus.ERROR:
-                logging_callback.logger.debug("Pipeline run failed", input=input["messages"][-1])
-            else:
-                pipeline_run.status = PipelineRunStatus.SUCCESS
-                logging_callback.logger.debug("Pipeline run finished", output=output["messages"][-1])
-            pipeline_run.save()
-
-    def _create_pipeline_run(self, input: PipelineState, session: ExperimentSession) -> "PipelineRun":
-        # Django doesn't auto-serialize objects for JSON fields, so we need to copy the input and save the ID of
-        # the session instead of the session object.
-
-        return PipelineRun.objects.create(
-            pipeline=self,
-            input=input.json_safe(),
-            status=PipelineRunStatus.RUNNING,
-            log={"entries": []},
-            session=session,
+        graph = PipelineGraph.build_from_pipeline(self)
+        config = trace_service.get_langchain_config(
+            configurable={
+                "disabled_tools": AgentTools.reminder_tools() if disable_reminder_tools else [],
+            },
+            run_name_map=graph.node_id_to_name_mapping,
+            filter_patterns=graph.filter_patterns,
         )
+        runnable = graph.build_runnable()
+        raw_output = runnable.invoke(input, config=config)
+        output = PipelineState(**raw_output).json_safe()
+        if save_run_to_history and session is not None:
+            input_metadata = output.get("input_message_metadata", {})
+            output_metadata = output.get("output_message_metadata", {})
+            trace_metadata = trace_service.get_trace_metadata() if trace_service else None
+            if trace_metadata:
+                input_metadata.update(trace_metadata)
+                output_metadata.update(trace_metadata)
+
+            if save_input_to_history:
+                self._save_message_to_history(
+                    session, input["messages"][-1], ChatMessageType.HUMAN, metadata=input_metadata
+                )
+            ai_message = self._save_message_to_history(
+                session,
+                output["messages"][-1],
+                ChatMessageType.AI,
+                metadata=output_metadata,
+                tags=output.get("output_message_tags"),
+            )
+            ai_message.add_version_tag(version_number=experiment.version_number, is_a_version=experiment.is_a_version)
+            return ai_message
+        else:
+            return ChatMessage(content=output)
 
     def _save_message_to_history(
         self, session: ExperimentSession, message: str, type_: ChatMessageType, metadata: dict, tags: list[str] = None
@@ -379,17 +353,20 @@ class Pipeline(BaseTeamModel, VersionsMixin):
         return chat_message
 
     @transaction.atomic()
-    def create_new_version(self):
-        version_number = self.version_number
-        self.version_number = version_number + 1
-        self.save(update_fields=["version_number"])
-
-        pipeline_version = super().create_new_version(save=False)
+    def create_new_version(self, is_copy: bool = False):
+        version_number = 1 if is_copy else self.version_number
+        if not is_copy:
+            self.version_number = self.version_number + 1
+            self.save(update_fields=["version_number"])
+        pipeline_version = super().create_new_version(save=False, is_copy=is_copy)
         pipeline_version.version_number = version_number
+        id_mapping = {}
+        if is_copy:
+            data, id_mapping = duplicate_pipeline_with_new_ids(self.data)
+            pipeline_version.data = data
         pipeline_version.save()
-
         for node in self.node_set.all():
-            node_version = node.create_new_version()
+            node_version = node.create_new_version(is_copy=is_copy, new_flow_id=id_mapping.get(node.flow_id))
             node_version.pipeline = pipeline_version
             node_version.save(update_fields=["pipeline"])
 
@@ -478,7 +455,7 @@ class Node(BaseModel, VersionsMixin, CustomActionOperationMixin):
     def __str__(self):
         return self.flow_id
 
-    def create_new_version(self):
+    def create_new_version(self, is_copy=False, new_flow_id=None):
         """
         Create a new version of the node and if the node is an assistant node, create a new version of the assistant
         and update the `assistant_id` in the node params to the new assistant version id.
@@ -487,27 +464,47 @@ class Node(BaseModel, VersionsMixin, CustomActionOperationMixin):
         from apps.documents.models import Collection
         from apps.pipelines.nodes.nodes import AssistantNode, LLMResponseWithPrompt
 
-        new_version = super().create_new_version(save=False)
+        def _get_collection_version(param_name: str):
+            if not new_version.params.get(param_name):
+                return
 
-        if self.type == AssistantNode.__name__ and new_version.params.get("assistant_id"):
+            collection = Collection.objects.get(id=new_version.params.get(param_name))
+
+            if not collection.has_versions or collection.compare_with_latest():
+                collection_version = collection.create_new_version()
+                return str(collection_version.id)
+            else:
+                return self.latest_version.params.get(param_name)
+
+        new_version = super().create_new_version(save=False, is_copy=is_copy)
+        if is_copy and new_flow_id:
+            old_flow_id = new_version.flow_id
+            new_version.flow_id = new_flow_id
+            if new_version.type not in ("StartNode", "EndNode") and new_version.params["name"] == old_flow_id:
+                new_version.params["name"] = new_flow_id
+
+        if not is_copy and self.type == AssistantNode.__name__ and new_version.params.get("assistant_id"):
             assistant = OpenAiAssistant.objects.get(id=new_version.params.get("assistant_id"))
             if not assistant.is_a_version:
                 assistant_version = assistant.create_new_version()
                 # convert to string to be consistent with values from the UI
                 new_version.params["assistant_id"] = str(assistant_version.id)
 
-        if self.type == LLMResponseWithPrompt.__name__:
-            if collection_id := self.params.get("collection_id"):
-                collection = Collection.objects.get(id=collection_id)
+        if not is_copy and self.type == LLMResponseWithPrompt.__name__:
+            new_version.params["collection_id"] = _get_collection_version(param_name="collection_id")
+            new_version.params["collection_index_id"] = _get_collection_version(param_name="collection_index_id")
 
-                if collection.has_versions is False or collection.compare_with_latest():
-                    collection_version = collection.create_new_version()
-                    new_version.params["collection_id"] = str(collection_version.id)
+            if source_material_id := new_version.params.get("source_material_id"):
+                source_material = SourceMaterial.objects.filter(id=source_material_id).first()
+                if not source_material:
+                    new_version.params["source_material_id"] = None
                 else:
-                    new_version.params["collection_id"] = self.latest_version.params.get("collection_id")
+                    if not source_material.has_versions or source_material.compare_with_latest():
+                        source_material = source_material.create_new_version()
+                        new_version.params["source_material_id"] = str(source_material.id)
 
         new_version.save()
-        self._copy_custom_action_operations_to_new_version(new_node=new_version)
+        self._copy_custom_action_operations_to_new_version(new_node=new_version, is_copy=is_copy)
 
         return new_version
 
@@ -565,6 +562,14 @@ class Node(BaseModel, VersionsMixin, CustomActionOperationMixin):
                     name = "media"
                     if value:
                         value = Collection.objects.filter(id=value).first()
+                case "collection_index_id":
+                    name = "Collection Index"
+                    if value:
+                        value = Collection.objects.filter(id=value).first()
+                case "source_material_id":
+                    name = "source_material"
+                    if value:
+                        value = SourceMaterial.objects.filter(id=value).first()
 
             param_versions.append(
                 VersionField(group_name=node_name, name=name, raw_value=value, to_display=display_formatter),
@@ -610,38 +615,10 @@ class Node(BaseModel, VersionsMixin, CustomActionOperationMixin):
                 try:
                     obj = spec.get_object(instance_id)
                     obj.archive()
-                except self.model_cls.DoesNotExist:
+                except ObjectDoesNotExist:
                     versioning_logger.exception(
                         f"Failed to archive {spec.param_name} with id {instance_id}, since it could not be found"
                     )
-
-
-class PipelineRunStatus(models.TextChoices):
-    RUNNING = "running", "Running"
-    SUCCESS = "success", "Success"
-    ERROR = "error", "Error"
-
-
-class PipelineRun(BaseModel):
-    pipeline = models.ForeignKey(Pipeline, on_delete=models.CASCADE, related_name="runs")
-    status = models.CharField(max_length=128, choices=PipelineRunStatus.choices)
-    input = models.JSONField(blank=True, null=True, encoder=DjangoJSONEncoder)
-    output = models.JSONField(blank=True, null=True, encoder=DjangoJSONEncoder)
-    log = models.JSONField(default=dict, blank=True, encoder=DjangoJSONEncoder)
-    session = models.ForeignKey(ExperimentSession, on_delete=models.SET_NULL, related_name="pipeline_runs", null=True)
-
-    def get_absolute_url(self):
-        return reverse("pipelines:run_details", args=[self.pipeline.team.slug, self.pipeline_id, self.id])
-
-
-class LogEntry(pydantic.BaseModel):
-    model_config = ConfigDict(json_encoders={datetime: lambda v: v.strftime("%Y-%m-%d %H:%M:%S.%f")})
-
-    time: datetime
-    level: str
-    message: str
-    output: str | None = None
-    input: str | None = None
 
 
 class PipelineEventInputs(models.TextChoices):

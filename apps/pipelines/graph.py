@@ -1,6 +1,6 @@
 from collections import Counter, defaultdict
 from functools import cached_property, partial
-from typing import Self
+from typing import Any, Self
 
 import pydantic
 from langgraph.graph import StateGraph
@@ -20,6 +20,7 @@ class Node(pydantic.BaseModel):
     label: str
     type: str
     params: dict = {}
+    django_node: Any = None
 
     @property
     def pipeline_node_class(self):
@@ -27,9 +28,17 @@ class Node(pydantic.BaseModel):
 
         return getattr(nodes, self.type)
 
-    @property
+    @cached_property
     def pipeline_node_instance(self):
-        return self.pipeline_node_class(**self.params)
+        return self.pipeline_node_class(node_id=self.id, django_node=self.django_node, **self.params)
+
+    @property
+    def name(self):
+        if self.type == StartNode.__name__:
+            return "start"
+        if self.type == EndNode.__name__:
+            return "end"
+        return self.params.get("name") or self.id
 
 
 class Edge(pydantic.BaseModel):
@@ -46,6 +55,18 @@ class PipelineGraph(pydantic.BaseModel):
     nodes: list[Node]
     edges: list[Edge]
     lenient_validation: bool = Field(default=False, description="Skip some validation checks. Used in tests.")
+
+    @property
+    def node_id_to_name_mapping(self):
+        return {node.id: node.name for node in self.nodes}
+
+    @property
+    def filter_patterns(self):
+        """Run names to exclude from tracing"""
+        return [
+            self.start_node.id,
+            self.end_node.id,
+        ]
 
     @cached_property
     def nodes_by_id(self) -> dict[str, Node]:
@@ -94,7 +115,7 @@ class PipelineGraph(pydantic.BaseModel):
     @classmethod
     def build_from_pipeline(cls, pipeline: Pipeline) -> Self:
         node_data = [
-            Node(id=node.flow_id, label=node.label, type=node.type, params=node.params)
+            Node(id=node.flow_id, label=node.label, type=node.type, params=node.params, django_node=node)
             for node in pipeline.node_set.all()
         ]
         edge_data = [Edge(**edge) for edge in pipeline.data["edges"]]
@@ -195,13 +216,11 @@ class PipelineGraph(pydantic.BaseModel):
                 incoming_edges = [edge.source for edge in self.edges if edge.target == node.id]
                 if isinstance(node_instance, PipelineRouterNode):
                     edge_map = self.conditional_edge_map[node.id]
-                    router_function = node_instance.build_router_function(node.id, edge_map, incoming_edges)
+                    router_function = node_instance.build_router_function(edge_map, incoming_edges)
                     state_graph.add_node(node.id, router_function)
                 else:
                     outgoing_edges = [edge.target for edge in self.edges if edge.source == node.id]
-                    state_graph.add_node(
-                        node.id, partial(node_instance.process, node.id, incoming_edges, outgoing_edges)
-                    )
+                    state_graph.add_node(node.id, partial(node_instance.process, incoming_edges, outgoing_edges))
             except ValidationError as ex:
                 raise PipelineNodeBuildError(ex) from ex
 

@@ -56,6 +56,10 @@ class Chat(BaseTeamModel, TaggedModelMixin, UserCommentsMixin):
             if with_summaries and message.summary:
                 yield message.get_summary_message()
 
+    def attach_files(self, attachment_type: str, files: list[File]):
+        resource, _created = self.attachments.get_or_create(tool_type=attachment_type)
+        resource.files.add(*files)
+
 
 class ChatMessageType(models.TextChoices):
     #  these must correspond to the langchain values
@@ -123,11 +127,6 @@ class ChatMessage(BaseModel, TaggedModelMixin, UserCommentsMixin):
             metadata={"is_summary": True},
         )
 
-    def save(self, *args, **kwargs):
-        if self.is_summary:
-            raise ValueError("Cannot save a summary message")
-        super().save(*args, **kwargs)
-
     @property
     def trace_info(self) -> list[dict]:
         trace_info = self.metadata.get("trace_info")
@@ -139,11 +138,6 @@ class ChatMessage(BaseModel, TaggedModelMixin, UserCommentsMixin):
             trace_info["trace_provider"] = self.metadata.get("trace_provider")
             return [trace_info]
         return trace_info
-
-    def get_summary_message(self):
-        if not self.summary:
-            raise ValueError("Message does not have a summary")
-        return ChatMessage.make_summary_message(self)
 
     @property
     def is_ai_message(self):
@@ -164,6 +158,16 @@ class ChatMessage(BaseModel, TaggedModelMixin, UserCommentsMixin):
     @property
     def role(self):
         return ChatMessageType(self.message_type).role
+
+    def save(self, *args, **kwargs):
+        if self.is_summary:
+            raise ValueError("Cannot save a summary message")
+        super().save(*args, **kwargs)
+
+    def get_summary_message(self):
+        if not self.summary:
+            raise ValueError("Message does not have a summary")
+        return ChatMessage.make_summary_message(self)
 
     def to_langchain_dict(self) -> dict:
         return self._get_langchain_dict(self.content, self.message_type)
@@ -199,12 +203,12 @@ class ChatMessage(BaseModel, TaggedModelMixin, UserCommentsMixin):
         external_ids = []
         ids = []
 
-        if external_file_ids := self.metadata.get("openai_file_ids", []):
-            external_ids.extend(external_file_ids)
-
-        if file_ids := self.metadata.get("ocs_attachment_file_ids", []):
-            # ocs attachments doesn't have external ids
-            ids.extend(file_ids)
+        metadata_key = ["openai_file_ids", "ocs_attachment_file_ids", "cited_files"]
+        for source in metadata_key:
+            # openai_file_ids is a list of external ids
+            id_list = external_ids if source == "openai_file_ids" else ids
+            if file_ids := self.metadata.get(source, []):
+                id_list.extend(file_ids)
 
         return File.objects.filter(Q(id__in=ids) | Q(external_id__in=external_ids), chatattachment__chat=self.chat)
 

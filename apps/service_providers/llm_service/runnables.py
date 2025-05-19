@@ -1,6 +1,7 @@
 import logging
 import re
 import time
+from dataclasses import dataclass
 from typing import TYPE_CHECKING, Any, Literal
 
 import openai
@@ -33,6 +34,12 @@ if TYPE_CHECKING:
     from apps.channels.datamodels import Attachment
 
 logger = logging.getLogger("ocs.runnables")
+
+
+@dataclass
+class LlmChatResponse:
+    text: str
+    cited_files: list[File]
 
 
 class GenerationError(Exception):
@@ -123,6 +130,7 @@ class LLMChat(RunnableSerializable[str, ChainOutput]):
 
     def invoke(self, input: str, config: RunnableConfig | None = None, *args, **kwargs) -> ChainOutput:
         ai_message = None
+        ai_message_metadata = {}
         callback = self.adapter.callback_handler
         config = ensure_config(config)
         merged_config = merge_configs(ensure_config(config), {"callbacks": [callback]})
@@ -135,7 +143,11 @@ class LLMChat(RunnableSerializable[str, ChainOutput]):
         try:
             if include_conversation_history:
                 self._populate_memory(input)
-            ai_message = self._get_output_check_cancellation(input, merged_config)
+
+            llm_response = self._get_output_check_cancellation(input, merged_config)
+            ai_message = llm_response.text
+            ai_message_metadata = self.adapter.get_output_message_metadata(llm_response.cited_files)
+
             result = ChainOutput(
                 output=ai_message, prompt_tokens=callback.prompt_tokens, completion_tokens=callback.completion_tokens
             )
@@ -149,7 +161,7 @@ class LLMChat(RunnableSerializable[str, ChainOutput]):
                 output=ai_message,
                 save_output_to_history=save_output_to_history,
                 experiment_tag=experiment_tag,
-                output_message_metadata={},
+                output_message_metadata=ai_message_metadata,
             )
 
         return result
@@ -157,19 +169,27 @@ class LLMChat(RunnableSerializable[str, ChainOutput]):
     def _get_input(self, input: str):
         return {self.input_key: self.adapter.format_input(input)}
 
-    def _get_output_check_cancellation(self, input, config):
+    def _get_output_check_cancellation(self, input, config) -> LlmChatResponse:
         chain = self._build_chain().with_config(run_name="get_llm_response")
 
         output = ""
         context = self._get_input_chain_context()
+
+        cited_files = []
         for token in chain.stream({**self._get_input(input), **context}, config):
             output += self._parse_output(token)
+            cited_files.extend(self._get_cited_files(token))
             if self._chat_is_cancelled():
-                return output
-        return output
+                break
+
+        return LlmChatResponse(text=output, cited_files=cited_files)
 
     def _parse_output(self, output):
         return output
+
+    def _get_cited_files(self, token: str | dict) -> list[File]:
+        # Files are referenced by agents only
+        return []
 
     def _chat_is_cancelled(self):
         if self.cancelled:
@@ -227,16 +247,44 @@ class SimpleLLMChat(LLMChat):
 
 class AgentLLMChat(LLMChat):
     def _parse_output(self, output):
-        return output.get("output", "")
+        output = output.get("output", "")
+        if isinstance(output, list):
+            # Responses API responses are lists
+            return "\n".join([o["text"] for o in output])
+
+        return output
+
+    def _get_cited_files(self, token: str | dict) -> list[File]:
+        """
+        Return a list of files that are referenced in the token
+        """
+        remote_file_ids = []
+        if isinstance(token, dict):
+            # is the same structure used when other services cite files?
+            outputs = token.get("output", "")
+            if isinstance(outputs, list):
+                for output in outputs:
+                    annotation_entries = output.get("annotations", [])
+                    remote_file_ids.extend([entry["file_id"] for entry in annotation_entries])
+
+        return File.objects.filter(external_id__in=remote_file_ids).all()
 
     def _build_chain(self) -> Runnable[dict[str, Any], dict]:
         tools = self.adapter.get_allowed_tools()
         agent = create_tool_calling_agent(llm=self.adapter.get_chat_model(), tools=tools, prompt=self.prompt)
+
+        tools = self._filter_for_ocs_tools(tools)
         return AgentExecutor.from_agent_and_tools(
             agent=agent,
             tools=tools,
             max_execution_time=120,
         )
+
+    def _filter_for_ocs_tools(self, tools: list):
+        """Filter out tools that are not OCS tools. `AgentExecutor` expects a list of runnable tools, so we need to
+        remove all tools that are run by the LLM provider
+        """
+        return [t for t in tools if not isinstance(t, dict)]
 
     @property
     def prompt(self):
@@ -349,8 +397,8 @@ class AssistantChat(RunnableSerializable[dict, ChainOutput]):
         assistant_file_ids = self.adapter.get_assistant_file_ids()
 
         file_ids = set()
-        image_file_attachments = []
-        file_path_attachments = []
+        image_file_attachments: list[File] = []
+        file_path_attachments: list[File] = []
         output_message = ""
 
         message = messages_list[0]
@@ -414,12 +462,10 @@ class AssistantChat(RunnableSerializable[dict, ChainOutput]):
 
         # Attach the generated files to the chat object as an annotation
         if file_path_attachments:
-            resource, _created = chat.attachments.get_or_create(tool_type="file_path")
-            resource.files.add(*file_path_attachments)
+            chat.attach_files(attachment_type="file_path", files=file_path_attachments)
 
         if image_file_attachments:
-            resource, _created = chat.attachments.get_or_create(tool_type="image_file")
-            resource.files.add(*image_file_attachments)
+            chat.attach_files(attachment_type="image_file", files=image_file_attachments)
 
         # replace all instance of `[some filename.pdf](https://example.com/download/file-abc)` with
         # just the link text

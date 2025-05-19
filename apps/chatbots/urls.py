@@ -80,4 +80,5 @@ urlpatterns = [
         views.save_all_settings,
         name="save_all_settings",
     ),
+    path("<int:pk>/copy/", views.copy_chatbot, name="copy"),
 ]
