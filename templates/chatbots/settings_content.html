@@ -1,4 +1,7 @@
 {% load form_tags %}
+{% if updated %}
+  <div id="chatbot-description" hx-swap-oob="innerHTML">{{ experiment.description }}</div>
+{% endif %}
 <div id="settings-wrapper">
   <div class="flex justify-end mb-6">
     {% if edit_mode %}

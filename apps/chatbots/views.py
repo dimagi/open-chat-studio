@@ -14,7 +14,6 @@ from apps.chat.channels import WebChannel
 from apps.chatbots.forms import ChatbotForm, ChatbotSettingsForm, CopyChatbotForm
 from apps.chatbots.tables import ChatbotSessionsTable, ChatbotTable
 from apps.experiments.decorators import experiment_session_view, verify_session_access_cookie
-from apps.experiments.forms import ExperimentForm
 from apps.experiments.models import Experiment, SessionStatus
 from apps.experiments.tables import ExperimentVersionsTable
 from apps.experiments.tasks import async_create_experiment_version
@@ -46,7 +45,7 @@ from apps.utils.base_experiment_table_view import BaseExperimentTableView
 @permission_required("experiments.change_experiment", raise_exception=True)
 def settings_edit_mode(request, team_slug, experiment_id):
     experiment = get_object_or_404(Experiment, id=experiment_id, team=request.team)
-    form = ExperimentForm(request=request, instance=experiment)
+    form = ChatbotSettingsForm(request=request, instance=experiment)
 
     context = {
         "experiment": experiment,
@@ -71,7 +70,7 @@ def cancel_edit_mode(request, team_slug, experiment_id):
     return HttpResponse(render_to_string("chatbots/settings_content.html", context, request=request))
 
 
-@require_GET
+@require_POST
 @login_and_team_required
 @permission_required("experiments.change_experiment", raise_exception=True)
 def save_all_settings(request, team_slug, experiment_id):
@@ -83,11 +82,13 @@ def save_all_settings(request, team_slug, experiment_id):
         "request": request,
         "edit_mode": False,
         "form": form,
+        "updated": True,
     }
     if form.is_valid():
         form.save()
     else:
         context["edit_mode"] = True
+        context["updated"] = False
     return HttpResponse(render_to_string("chatbots/settings_content.html", context, request=request))
 
 
