@@ -43,7 +43,7 @@ If you add a model that needs to be versioned, you generally need to do the foll
 3. Implement `version_details`: See the [VersionDetails section](#the-versiondetails-class)
 4. Filter returned objects to the UI: Be sure to only return working versions to users.
 
-If the model can be linked to a Node, be sure to version this object whenever the node is versioned. The same goes for archiving. Whenever this node is archived and it is a versioned node, we need to make sure that all related versioned models are archived as well.
+If the model can be linked to a Pipeline Node, be sure to version this object whenever the node is versioned. The same goes for archiving. Whenever this node is archived and it is a versioned node, we need to make sure that all related versioned models are archived as well.
 
 ## The `VersionDetails` class
 
