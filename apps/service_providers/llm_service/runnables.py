@@ -271,7 +271,7 @@ class AgentLLMChat(LLMChat):
             if isinstance(outputs, list):
                 for output in outputs:
                     annotation_entries = output.get("annotations", [])
-                    remote_file_ids.extend([entry["file_id"] for entry in annotation_entries])
+                    remote_file_ids.extend([entry["file_id"] for entry in annotation_entries if "file_id" in entry])
 
         return File.objects.filter(external_id__in=remote_file_ids).all()
 
@@ -338,10 +338,11 @@ class AssistantChat(RunnableSerializable[dict, ChainOutput]):
             thread_id, run_id = self._get_response_with_retries(merged_config, input_dict, current_thread_id)
             ai_message, annotation_file_ids = self._get_output_with_annotations(thread_id, run_id)
             ai_message_metadata = self.adapter.get_output_message_metadata(annotation_file_ids)
+            ai_message_metadata["openai_run_id"] = run_id
 
             if not current_thread_id:
-                self.adapter.thread_id = thread_id
-
+                self.adapter.update_thread_id(thread_id)
+            return ChainOutput(output=ai_message, prompt_tokens=0, completion_tokens=0)
         finally:
             self.history_manager.add_messages_to_history(
                 input=input,
@@ -352,7 +353,6 @@ class AssistantChat(RunnableSerializable[dict, ChainOutput]):
                 experiment_tag=experiment_tag,
                 output_message_metadata=ai_message_metadata,
             )
-        return ChainOutput(output=ai_message, prompt_tokens=0, completion_tokens=0)
 
     def _sync_messages_to_thread(self, current_thread_id):
         """Sync any messages that need to be sent to the thread. Create a new thread if necessary

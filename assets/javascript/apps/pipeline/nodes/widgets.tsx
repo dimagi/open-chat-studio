@@ -824,7 +824,7 @@ export function LlmWidget(props: WidgetParams) {
   };
 
   type ProviderModelsByType = { [type: string]: TypedOption[] };
-  const providerModelsByType = parameterValues.LlmProviderModelId.reduce((acc, provModel) => {
+    const providerModelsByType = parameterValues.LlmProviderModelId.reduce((acc, provModel) => {
     if (!acc[provModel.type]) {
       acc[provModel.type] = [];
     }
@@ -846,14 +846,16 @@ export function LlmWidget(props: WidgetParams) {
         <option value="" disabled>
           Select a model
         </option>
-        {parameterValues.LlmProviderId.map((provider) => (
-          providerModelsByType[provider.type] &&
-          providerModelsByType[provider.type].map((providerModel) => (
-            <option key={provider.value + providerModel.value} value={makeValue(provider.value, providerModel.value)}>
-              {providerModel.label}
-            </option>
-          ))
-        ))}
+        {parameterValues.LlmProviderId.map((provider) => {
+          const providersWithSameType = parameterValues.LlmProviderId.filter(p => p.type === provider.type).length;
+          
+          return providerModelsByType[provider.type] &&
+            providerModelsByType[provider.type].map((providerModel) => (
+              <option key={provider.value + providerModel.value} value={makeValue(provider.value, providerModel.value)}>
+                {providerModel.label}{providersWithSameType > 1 ? ` (${provider.label})` : ''}
+              </option>
+            ))
+        })}
       </select>
     </InputField>
   );

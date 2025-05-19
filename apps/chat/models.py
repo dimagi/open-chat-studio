@@ -99,6 +99,8 @@ class ChatMessage(BaseModel, TaggedModelMixin, UserCommentsMixin):
 
     # Metadata keys that should be excluded from the API response
     INTERNAL_METADATA_KEYS = {
+        # ID of the thread run
+        "openai_run_id",
         "openai_file_ids",
         # boolean indicating that this message has been synced to the thread
         "openai_thread_checkpoint",
