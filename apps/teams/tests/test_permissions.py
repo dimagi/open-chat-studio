@@ -95,7 +95,7 @@ def test_group_def():
         "dummy",
         [
             AppPermSetDef("chat", ALL),
-            AppPermSetDef("channels", [VIEW]),
+            AppPermSetDef("ocs_channels", [VIEW]),
             ModelPermSetDef("teams", "team", [VIEW, CHANGE]),
         ],
     )
