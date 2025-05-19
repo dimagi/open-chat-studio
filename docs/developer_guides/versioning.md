@@ -38,6 +38,7 @@ If you add a model that needs to be versioned, you generally need to do the foll
 2. Add these fields to your model:
     - `working_version`: A nullable foreign key to itself
     - `is_archived`: A `BooleanField` indicating whether or not this instance is archived
+    - `version_number`: (optional) `IntegerField' used to track the objects version number. This is only really necessary for top level objects.
 
 3. Implement `version_details`: See the [VersionDetails section](#the-versiondetails-class)
 4. Filter returned objects to the UI: Be sure to only return working versions to users.
