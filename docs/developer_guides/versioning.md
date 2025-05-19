@@ -19,7 +19,7 @@ See also the [**User Documentation**][user-docs] on versioning.
 Users are always working on the **latest version** of their chatbot. When they create a new version, it is really only freezing their progress and assigning a version number to it. Any new edits will be made on the next version.
 
 - All versioned objects have a `working_version` field, which is a foreign key to an instance of the same model.
-- Creating a new version means **duplicating** the `working version`. All objects that contributes to the behavior of the chatbot is also versioned and linked to the new version.
+- Creating a new version means **duplicating** the `working version`. All objects that contribute to the behavior of the chatbot are also versioned and linked to the new version. The exception to this is global objects such as LLM providers which are never versioned.
 - The duplicated object’s `working_version` points to the original object.
 - For objects like Experiments and Pipelines which have version numbers, the following applies:
     - The newly created version gets the current version number.
