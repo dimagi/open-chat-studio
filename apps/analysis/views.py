@@ -66,12 +66,7 @@ class TranscriptAnalysisCreateView(LoginAndTeamRequiredMixin, CreateView):
         form.instance.team = self.request.team
         form.instance.created_by = self.request.user
         form.instance.experiment_id = self.kwargs.get("experiment_id")
-        response = super().form_valid(form)
-
-        task = process_transcript_analysis.delay(self.object.id)
-        self.object.job_id = task.id
-        self.object.save(update_fields=["job_id"])
-        return response
+        return super().form_valid(form)
 
     def get_success_url(self):
         return reverse("analysis:detail", args=[self.request.team.slug, self.object.id])
@@ -93,11 +88,12 @@ class TranscriptAnalysisDetailView(LoginAndTeamRequiredMixin, DetailView):
     def get_context_data(self, **kwargs):
         context = super().get_context_data(**kwargs)
         context["active_tab"] = "analysis"
-        context["session_table"] = self.get_table()
-
         if self.object.job_id and not self.object.is_complete and not self.object.is_failed:
             context["celery_job_id"] = self.object.job_id
 
+        if results := self.object.result_file:
+            with results.open("r") as file:
+                context["results_preview"] = "".join(file.readlines()[:10])
         return context
 
     def get_table(self):
@@ -126,9 +122,9 @@ class TranscriptAnalysisDeleteView(LoginAndTeamRequiredMixin, DeleteView):
 def run_analysis(request, team_slug, pk):
     analysis = get_object_or_404(TranscriptAnalysis, id=pk, team__slug=team_slug)
 
-    if analysis.is_complete or analysis.is_processing:
-        messages.error(request, "Analysis has already been completed.")
-        return redirect(analysis.get_absolute_url())
+    if analysis.is_processing:
+        messages.error(request, "Analysis has already been completed or is in progress.")
+        return HttpResponse(headers={"hx-redirect": analysis.get_absolute_url()})
 
     task = process_transcript_analysis.delay(analysis.id)
     analysis.job_id = task.id
@@ -257,10 +253,13 @@ def add_query(request, team_slug, pk):
 @login_and_team_required
 def update_query(request, team_slug, pk, query_id):
     query = get_object_or_404(AnalysisQuery, id=query_id, analysis_id=pk, analysis__team__slug=team_slug)
+    analysis = query.analysis
 
     template = "analysis/components/query_edit.html"
     if request.method == "DELETE":
         query.delete()
+        if not analysis.queries.exists():
+            return HttpResponse(headers={"HX-Refresh": "true"})
         return HttpResponse()
     elif request.method == "POST":
         name = request.POST.get("name", "")

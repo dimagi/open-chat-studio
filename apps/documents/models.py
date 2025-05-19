@@ -1,5 +1,6 @@
 from django.db import models, transaction
 from django.urls import reverse
+from django.utils.text import slugify
 from django.utils.translation import gettext_lazy as _
 from field_audit import audit_fields
 from field_audit.models import AuditingManager
@@ -16,6 +17,7 @@ class CollectionObjectManager(VersionsObjectManagerMixin, AuditingManager):
 
 class FileStatus(models.TextChoices):
     # See https://platform.openai.com/docs/api-reference/vector-stores-files/file-object
+    PENDING = ("pending", _("Pending"))
     IN_PROGRESS = ("in_progress", _("In Progress"))
     COMPLETED = "completed", _("Completed")
     FAILED = "failed", _("Failed")
@@ -25,9 +27,22 @@ class CollectionFile(models.Model):
     file = models.ForeignKey("files.File", on_delete=models.CASCADE)
     collection = models.ForeignKey("documents.Collection", on_delete=models.CASCADE)
     status = models.CharField(max_length=64, choices=FileStatus.choices, blank=True)
+    metadata = models.JSONField(default=dict)
 
     def __str__(self) -> str:
         return f"{self.file.name} in {self.collection.name}"
+
+    @property
+    def file_size_mb(self):
+        return self.file.size_mb
+
+    @property
+    def chunking_strategy(self):
+        return self.metadata.get("chunking_strategy", {})
+
+    @property
+    def status_enum(self):
+        return FileStatus(self.status)
 
 
 @audit_fields(
@@ -70,6 +85,10 @@ class Collection(BaseTeamModel, VersionsMixin):
         return self.name
 
     @property
+    def index_name(self) -> str:
+        return f"collection-{self.team.slug}-{slugify(self.name)}-{self.id}"
+
+    @property
     def size(self) -> float:
         """Returns the size of this collection in megabytes"""
         bytes = self.files.aggregate(bytes=models.Sum("content_size"))["bytes"] or 0
@@ -110,4 +129,4 @@ class Collection(BaseTeamModel, VersionsMixin):
         return new_version
 
     def get_absolute_url(self):
-        return reverse("documents:collections", args=[self.team.slug, "collections"])
+        return reverse("documents:single_collection_home", args=[self.team.slug, self.id])

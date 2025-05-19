@@ -104,7 +104,6 @@ def test_llm_node(simple_invoke, agent_invoke, disabled_tools, provider, provide
     state = PipelineState(
         messages=["Hi there bot"],
         experiment_session=ExperimentSessionFactory(),
-        pipeline_version=pipeline.version_number,
     )
     output_state = runnable.invoke(state, config={"configurable": {"disabled_tools": disabled_tools}})
     assert output_state["messages"][-1] == "hello"

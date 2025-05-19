@@ -2,7 +2,7 @@ from collections import defaultdict
 from dataclasses import dataclass
 from dataclasses import field as data_field
 from difflib import Differ
-from typing import TYPE_CHECKING, Any, Self
+from typing import Any, Self
 
 from django.core.exceptions import FieldDoesNotExist
 from django.db import transaction
@@ -18,9 +18,6 @@ from django.db.models import (
 from django.db.models.functions import Cast, Concat
 
 from apps.utils.models import VersioningMixin
-
-if TYPE_CHECKING:
-    from apps.experiments.models import Experiment
 
 
 def differs(original: Any, new: Any, exclude_model_fields: list[str] | None = None, early_abort=False) -> bool:
@@ -314,7 +311,7 @@ class VersionsMixin:
     DEFAULT_EXCLUDED_KEYS = ["id", "created_at", "updated_at", "working_version", "versions", "version_number"]
 
     @transaction.atomic()
-    def create_new_version(self, save=True):
+    def create_new_version(self, save=True, is_copy=False):
         """
         Creates a new version of this instance and sets the `working_version_id` (if this model supports it) to the
         original instance ID
@@ -324,7 +321,7 @@ class VersionsMixin:
         new_instance.pk = None
         new_instance.id = None
         new_instance._state.adding = True
-        if hasattr(new_instance, "working_version_id"):
+        if hasattr(new_instance, "working_version_id") and not is_copy:
             new_instance.working_version_id = working_version_id
 
         if save:
@@ -344,7 +341,7 @@ class VersionsMixin:
     def latest_version(self):
         return self.versions.order_by("-created_at").first()
 
-    def get_working_version(self) -> "Experiment":
+    def get_working_version(self) -> Self:
         """Returns the working version of this experiment family"""
         if self.is_working_version:
             return self

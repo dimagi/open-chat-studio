@@ -57,15 +57,42 @@
       </div>
     </div>
 
-    {% if not object.is_complete %}
+    {% if celery_job_id %}
+      {% include "analysis/components/progress.html" %}
+    {% elif not object.is_processing %}
       <div class="mb-6">
-        <button class="btn btn-primary"
-                hx-get="{% url 'analysis:run' request.team.slug object.id %}"
-                hx-swap="outerHTML"
-        >
-          <i class="fa-solid fa-play"></i>
-          Run Analysis
-        </button>
+        {% with enabled=object.queries.exists %}
+          <button class="btn btn-primary" id="run-analysis"
+                  hx-get="{% url 'analysis:run' request.team.slug object.id %}"
+                  hx-swap="outerHTML"
+                  {% if not enabled %}disabled=""{% endif %}
+                  {% if object.result_file %}
+                    hx-trigger="confirmed"
+                    onClick="alertify.confirm().setting({
+                             title: 'Confirm',
+                             message: 'This will overwrite the existing results. Do you want to continue?',
+                             transition: 'fade',
+                             onok: function() {
+                             htmx.trigger('#run-analysis', 'confirmed');
+                             },
+                             }).show();
+                            "
+                  {% endif %}
+          >
+            <i class="fa-solid fa-play"></i>
+            Run Analysis
+          </button>
+          {% if not enabled %}<p class="text-sm text-base-content/50">Add queries first</p>{% endif %}
+        {% endwith %}
+      </div>
+    {% endif %}
+
+    {% if results_preview %}
+      <div class="mb-4">
+        <h2 class="text-lg font-semibold mb-2">Result Preview</h2>
+        <div class="text-sm overflow-x-scroll">
+          <pre>{{ results_preview|escape }}</pre>
+        </div>
       </div>
     {% endif %}
 
@@ -77,7 +104,7 @@
     {% endif %}
 
     <div class="mb-6">
-      {% include "analysis/components/editable_queries.html" with queries_json=queries_json %}
+      {% include "analysis/components/editable_queries.html" %}
     </div>
 
     <div class="mb-6">
@@ -88,7 +115,12 @@
           Export Sessions
         </a>
       </div>
-      {% include "table/single_table.html" with table=session_table %}
+      <div hx-get="{% url 'analysis:detail' request.team.slug object.id %}"
+           hx-target="this"
+           hx-swap="outerHTML"
+           hx-trigger="load">
+        <span class="loading loading-spinner"></span>
+      </div>
     </div>
   </div>
 {% endblock %}

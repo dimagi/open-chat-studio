@@ -5,15 +5,24 @@ from django.contrib import messages
 from django.contrib.auth.decorators import permission_required
 from django.contrib.auth.mixins import PermissionRequiredMixin
 from django.db import transaction
+from django.db.models import Exists, OuterRef
 from django.http import FileResponse, Http404, HttpResponse
 from django.shortcuts import get_object_or_404, redirect, render
 from django.template import loader
+from django.template.loader import render_to_string
+from django.urls import reverse
 from django.utils.decorators import method_decorator
 from django.views import View
+from django.views.generic import CreateView, TemplateView, UpdateView
+from django_tables2 import SingleTableView
 
-from apps.files.forms import MultipleFileFieldForm
+from apps.documents.models import CollectionFile
+from apps.files.forms import FileForm, MultipleFileFieldForm
 from apps.files.models import File
+from apps.files.tables import FilesTable
+from apps.generics.chips import Chip
 from apps.teams.mixins import LoginAndTeamRequiredMixin
+from apps.utils.search import similarity_search
 
 logger = logging.getLogger("ocs.files")
 
@@ -151,3 +160,103 @@ class BaseDeleteFileView(LoginAndTeamRequiredMixin, View, PermissionRequiredMixi
     def get_success_response(self, file):
         messages.success(self.request, "File Deleted")
         return HttpResponse()
+
+
+class FileHome(LoginAndTeamRequiredMixin, TemplateView):
+    template_name = "generic/object_home.html"
+
+    def get_context_data(self, team_slug: str, **kwargs):
+        return {
+            "active_tab": "files",
+            "title": "Files",
+            "table_url": reverse("files:file_table", args=[team_slug]),
+            "enable_search": True,
+            "allow_new": False,
+        }
+
+
+class FileTableView(LoginAndTeamRequiredMixin, SingleTableView):
+    model = File
+    paginate_by = 25
+    table_class = FilesTable
+    template_name = "table/single_table.html"
+
+    def get_queryset(self):
+        is_collection_file = Exists(CollectionFile.objects.filter(file_id=OuterRef("id")))
+        queryset = (
+            File.objects.filter(is_collection_file)
+            .filter(team=self.request.team, is_version=False)
+            .order_by("-created_at")
+        )
+
+        if search := self.request.GET.get("search"):
+            queryset = similarity_search(queryset, search_phase=search, columns=["name", "summary"], score=0.1)
+        return queryset
+
+
+# This view is not currently being used
+class CreateFile(LoginAndTeamRequiredMixin, CreateView):
+    template_name = "documents/file_form.html"
+    model = File
+    form_class = FileForm
+    permission_required = "files.add_file"
+    extra_context = {
+        "title": "Upload File",
+        "button_text": "Upload",
+        "active_tab": "files",
+        "form_attrs": {"enctype": "multipart/form-data"},
+    }
+
+    def get_success_url(self):
+        return reverse("files:file_home", args=[self.request.team.slug])
+
+    def form_valid(self, form):
+        form.instance.team = self.request.team
+        response = super().form_valid(form)
+        messages.success(self.request, "File uploaded successfully")
+        return response
+
+
+class EditFile(LoginAndTeamRequiredMixin, UpdateView):
+    template_name = "documents/file_form.html"
+    model = File
+    form_class = FileForm
+    permission_required = "files.change_file"
+    extra_context = {
+        "title": "Edit File",
+        "button_text": "Update",
+        "active_tab": "files",
+        "form_attrs": {"enctype": "multipart/form-data"},
+    }
+
+    def get_queryset(self):
+        return File.objects.filter(team=self.request.team)
+
+    def get_success_url(self):
+        return reverse("files:file_home", args=[self.request.team.slug])
+
+    def post(self, request, *args, **kwargs):
+        response = super().post(request, *args, **kwargs)
+        messages.success(request, "File updated successfully")
+        return response
+
+
+class DeleteFile(LoginAndTeamRequiredMixin, View):
+    permission_required = "files.delete_file"
+
+    def delete(self, request, team_slug: str, pk: int):
+        file = get_object_or_404(File, team__slug=team_slug, id=pk)
+
+        if collections := file.get_collection_references():
+            response = render_to_string(
+                "assistants/partials/referenced_objects.html",
+                context={
+                    "object_name": "file",
+                    "pipeline_nodes": [Chip(label=col.name, url=col.get_absolute_url()) for col in collections],
+                },
+            )
+            return HttpResponse(response, headers={"HX-Reswap": "none"}, status=400)
+        else:
+            file.delete_or_archive()
+            messages.success(request, "File deleted")
+            return HttpResponse()

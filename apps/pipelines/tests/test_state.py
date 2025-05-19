@@ -13,7 +13,6 @@ def test_pipline_state_json_serializable():
         messages=["a", "b", "c"],
         outputs={"a": "a", "b": "b", "c": "c"},
         experiment_session=ExperimentSession(id=1),
-        pipeline_version=1,
         temp_state={
             "user_input": "input",
             "outputs": {"a": "a", "b": "b", "c": "c"},
@@ -22,3 +21,35 @@ def test_pipline_state_json_serializable():
         },
     ).json_safe()
     assert json.dumps(state, cls=DjangoJSONEncoder)
+
+
+def test_route_info():
+    state = PipelineState(
+        messages=["a", "b", "c"],
+        outputs={
+            "node1": {
+                "node_id": "1",
+                "message": "a",
+            },
+            "node2": {"node_id": "2", "output_handle": "output0", "message": "b", "route": "B"},
+            "node3": {
+                "node_id": "3",
+                "message": "c",
+            },
+            "node4": {"node_id": "4", "output_handle": "output1", "message": "d", "route": "A"},
+        },
+        path=[
+            (None, "1", ["2"]),
+            ("1", "2", ["3"]),
+            ("2", "3", ["4"]),
+            ("3", "4", []),
+        ],
+        experiment_session=ExperimentSession(id=1),
+        pipeline_version=1,
+        temp_state={},
+    )
+    assert state.get_all_routes() == {"node2": "B", "node4": "A"}
+
+    assert state.get_selected_route("node4") == "A"
+    assert state.get_selected_route("node3") is None
+    assert state.get_node_path("node4") == ["node1", "node2", "node3", "node4"]
