@@ -1,5 +1,5 @@
 site_name: Open Chat Studio Developer Documentation
-site_url: https://dev.openchatstudio.com
+site_url: https://developers.openchatstudio.com
 repo_url: https://github.com/dimagi/open-chat-studio
 theme:
   name: material
