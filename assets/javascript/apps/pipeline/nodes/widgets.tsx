@@ -38,6 +38,8 @@ export function getWidget(name: string, params: PropertySchema) {
       return KeywordsWidget
     case "node_name":
       return NodeNameWidget
+    case "built_in_tools":
+        return BuiltInToolsWidget
     default:
       if (params.enum) {
         return SelectWidget
@@ -989,3 +991,83 @@ export function InputField({label, help_text, inputError, children}: React.Props
     </>
   );
 }
+
+function BuiltInToolsWidget(props: WidgetParams) {
+  const llmProviderId = concatenate(props.nodeParams["llm_provider_model_id"]);
+  const { parameterValues } = getCachedData();
+  const models = parameterValues.LlmProviderModelId as LlmProviderModel[];
+  const model = models.find((m) => String(m.value) === String(llmProviderId));
+  const providerKey = model?.type?.toLowerCase() || "";
+  const providerToolMap = parameterValues.built_in_tools as Record<string, TypedOption[]>
+  const options = providerToolMap[providerKey] || [];
+
+  if (options.length === 0) return <></>;
+
+  let selectedValues = Array.isArray(props.paramValue) ? [...props.paramValue] : [];
+  const setNode = usePipelineStore((state) => state.setNode);
+
+  function getNewNodeData(old: Node, updatedList: string[]) {
+    return produce(old, (next) => {
+      next.data.params[props.name] = updatedList;
+    });
+  }
+
+  function onUpdate(event: ChangeEvent<HTMLInputElement>) {
+    if (event.target.checked) {
+      selectedValues.push(event.target.name);
+    } else {
+      selectedValues = selectedValues.filter((tool) => tool !== event.target.name);
+    }
+    setNode(props.nodeId, (old) => getNewNodeData(old, selectedValues));
+  }
+  return (
+    <InputField label={props.label} help_text={props.helpText} inputError={props.inputError}>
+      {options.map((option:  { value: string; label: string }) => (
+        <div className="flex items-center mb-1" key={option.value}>
+          <input
+            className="checkbox"
+            name={option.value}
+            onChange={onUpdate}
+            checked={selectedValues.includes(option.value)}
+            id={option.value}
+            type="checkbox"
+          />
+          <span className="ml-2">{option.label}</span>
+        </div>
+      ))}
+
+      {/* Configs for selected tools */}
+      {selectedValues.map((toolKey) => {
+        const toolConfigsMap = parameterValues.built_in_tools_config as Record<string, BuiltInToolsConfig[]>;
+        const providerToolConfigs = toolConfigsMap[providerKey] || {};
+        const widgets = providerToolConfigs[toolKey];
+        if (!widgets || widgets.length === 0) return null;
+
+        return (
+          <div className="mt-3" key={`${toolKey}-config`}>
+            <div className="font-medium mb-1 text-sm text-base-content/70">
+              {toolKey} configuration
+            </div>
+            {widgets.map((widget: BuiltInToolsConfig) => {
+              const widgetProps: WidgetParams = {
+                ...props,
+                name: widget.name,
+                label: widget.label,
+                helpText: widget.helpText,
+                paramValue: props.nodeParams?.[widget.name] ?? "",
+                updateParamValue: props.updateParamValue,
+              };
+
+              if (widget.type === "expandable_text") {
+                return <ExpandableTextWidget key={widget.name} {...widgetProps} />;
+              }
+          // Can add more types of widgets if required
+              return null;
+            })}
+          </div>
+        );
+      })}
+    </InputField>
+  );
+}
+
