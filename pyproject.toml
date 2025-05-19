@@ -143,3 +143,6 @@ prod = [
     "gunicorn",
     "gevent",
 ]
+
+[tool.uv]
+default-groups = ["dev", "docs"]
