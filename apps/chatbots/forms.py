@@ -44,6 +44,7 @@ class ChatbotForm(forms.ModelForm):
 class ChatbotSettingsForm(forms.ModelForm):
     description = forms.CharField(widget=forms.Textarea(attrs={"rows": 2}), required=False)
     seed_message = forms.CharField(widget=forms.Textarea(attrs={"rows": 2}), required=False)
+    participant_allowlist = forms.CharField(widget=forms.HiddenInput(), required=False)
 
     class Meta:
         model = Experiment
@@ -91,7 +92,8 @@ class ChatbotSettingsForm(forms.ModelForm):
 
     def clean_participant_allowlist(self):
         cleaned_identifiers = []
-        for identifier in self.cleaned_data["participant_allowlist"]:
+        identifiers = self.cleaned_data["participant_allowlist"].split(",")
+        for identifier in identifiers:
             cleaned_identifiers.append(identifier.replace(" ", ""))
         return cleaned_identifiers
 

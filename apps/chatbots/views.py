@@ -45,6 +45,12 @@ from apps.utils.base_experiment_table_view import BaseExperimentTableView
 def chatbots_settings(request, team_slug, experiment_id):
     experiment = get_object_or_404(Experiment, id=experiment_id, team=request.team)
 
+    team_participant_identifiers = list(
+        request.team.participant_set.filter(user=None).values_list("identifier", flat=True)
+    )
+    team_participant_identifiers.extend(experiment.participant_allowlist)
+    team_participant_identifiers = list(set(team_participant_identifiers))
+
     if request.method == "POST":
         form = ChatbotSettingsForm(request=request, data=request.POST, instance=experiment)
         context = {
@@ -53,6 +59,7 @@ def chatbots_settings(request, team_slug, experiment_id):
             "edit_mode": False,
             "form": form,
             "updated": True,
+            "team_participant_identifiers": team_participant_identifiers,
         }
         if form.is_valid():
             form.save()
@@ -66,6 +73,7 @@ def chatbots_settings(request, team_slug, experiment_id):
             "edit_mode": True,
             "request": request,
             "form": form,
+            "team_participant_identifiers": team_participant_identifiers,
         }
 
     return HttpResponse(render_to_string("chatbots/settings_content.html", context, request=request))

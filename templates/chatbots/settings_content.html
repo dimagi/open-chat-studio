@@ -137,15 +137,25 @@
 
   <div class="mb-6" id="allowlist-section">
     <h4 class="text-md font-bold mb-2">Participant Allowlist</h4>
-    <div class="p-4 bg-base-200 rounded-md" id="participant_allowlist-{% if edit_mode %}edit{% else %}content{% endif %}">
+    <div class="p-4 bg-base-200 rounded-md">
       {% if edit_mode %}
         <div class="form-control">
-          <textarea name="participant_allowlist" rows="5" class="textarea textarea-bordered w-full" placeholder="Enter one identifier per line">{% for participant in experiment.participant_allowlist %}{{ participant }}
-          {% endfor %}</textarea>
+          <input type="hidden" name="participant_allowlist" id="id_participant_allowlist"
+                 value="{{ experiment.participant_allowlist|join:',' }}">
+          <select id="allowlist-multiselect" multiple placeholder="Add participant identifier..." autocomplete="off">
+            {% for identifier in team_participant_identifiers %}
+              <option value="{{ identifier }}" {% if identifier in experiment.participant_allowlist %}selected{% endif %}>{{ identifier }}</option>
+            {% endfor %}
+            {% for identifier in experiment.participant_allowlist %}
+              {% if identifier not in team_participant_identifiers %}
+                <option value="{{ identifier }}" selected>{{ identifier }}</option>
+              {% endif %}
+            {% endfor %}
+          </select>
+
           <div class="text-xs text-gray-500 mt-1 mb-2">
-            Separate identifiers with a comma. Phone numbers should be in E164 format e.g. +27123456789.
-            To limit the set of participants that can chat with this bot, simply add their identifiers in this list.
-            When the list is empty, the bot will accessible via its public link.
+            Add identifiers to limit access to this bot. Phone numbers should be in E164 format e.g. +27123456789.
+            When the list is empty, the bot will be accessible via its public link.
           </div>
           {% include "generic/copy_chip.html" with copy_element_id="id_participant_allowlist" action_text="Copy participant list" extra_styles="btn-ghost" %}
         </div>
@@ -178,3 +188,23 @@
 
   {% if edit_mode %}</form>{% endif %}
 </div>
+
+{% if edit_mode %}
+  <script>
+    let element = document.getElementById('allowlist-multiselect');
+    let hiddenInput = document.getElementById('id_participant_allowlist');
+    new TomSelect(element, {
+      plugins: ["remove_button", "caret_position", "input_autogrow"],
+      maxItems: null,
+      create: true,
+      plugins: {
+        'checkbox_options': {
+          'checkedClassNames':   ['ts-checked'],
+          'uncheckedClassNames': ['ts-unchecked'],
+        }
+      },onChange: function(values) {
+        hiddenInput.value = values.join(',');
+      }
+    });
+  </script>
+{% endif %}
