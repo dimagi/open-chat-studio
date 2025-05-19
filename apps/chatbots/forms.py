@@ -1,7 +1,8 @@
 from django import forms
 from django.db import transaction
+from waffle import flag_is_active
 
-from apps.experiments.models import Experiment
+from apps.experiments.models import Experiment, SyntheticVoice
 from apps.pipelines.models import Pipeline
 from apps.service_providers.utils import get_first_llm_provider_by_team, get_first_llm_provider_model
 
@@ -76,6 +77,17 @@ class ChatbotSettingsForm(forms.ModelForm):
     def __init__(self, request, *args, **kwargs):
         super().__init__(*args, **kwargs)
         self.request = request
+        team = request.team
+        exclude_services = [SyntheticVoice.OpenAIVoiceEngine]
+        if flag_is_active(request, "open_ai_voice_engine"):
+            exclude_services = []
+        self.fields["voice_provider"].queryset = team.voiceprovider_set.exclude(
+            syntheticvoice__service__in=exclude_services
+        )
+        self.fields["synthetic_voice"].queryset = SyntheticVoice.get_for_team(team, exclude_services)
+        self.fields["trace_provider"].queryset = team.traceprovider_set
+        self.fields["pre_survey"].queryset = team.survey_set.exclude(is_version=True)
+        self.fields["post_survey"].queryset = team.survey_set.exclude(is_version=True)
 
     def clean_participant_allowlist(self):
         cleaned_identifiers = []
