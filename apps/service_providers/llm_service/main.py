@@ -226,10 +226,10 @@ class AnthropicLlmService(LlmService):
                     "name": "web_search",
                     "max_uses": 5,
                 }
-                allowed = config.get("allowed_domains", "").strip()
+                allowed = (config.get("allowed_domains") or "").strip()
                 if allowed:
                     tool["allowed_domains"] = allowed.split()
-                blocked = config.get("blocked_domains", "").strip()
+                blocked = (config.get("blocked_domains") or "").strip()
                 if blocked:
                     tool["blocked_domains"] = blocked.split()
                 tools.append(tool)

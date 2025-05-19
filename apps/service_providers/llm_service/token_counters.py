@@ -1,9 +1,12 @@
 import dataclasses
+import logging
 
 import tiktoken
 from anthropic import Anthropic
 from langchain_core.messages import get_buffer_string
 from langchain_core.outputs import LLMResult
+
+logger = logging.getLogger("ocs.runnables")
 
 
 class TokenCounter:
@@ -71,10 +74,14 @@ class AnthropicTokenCounter(TokenCounter):
 
     def get_tokens_from_text(self, text) -> int:
         client = Anthropic(api_key=self.api_key)
-        token_count_response = client.messages.count_tokens(
-            model=self.model, messages=[{"role": "user", "content": text}]
-        )
-        return token_count_response.input_tokens
+        try:
+            token_count_response = client.messages.count_tokens(
+                model=self.model, messages=[{"role": "user", "content": text}]
+            )
+            return token_count_response.input_tokens
+        except Exception as e:
+            logger.error(f"Error counting tokens: {e}")
+            return 0
 
 
 @dataclasses.dataclass

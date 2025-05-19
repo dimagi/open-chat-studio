@@ -29,7 +29,7 @@ from apps.experiments.models import Experiment, ExperimentSession
 from apps.files.models import File
 from apps.service_providers.llm_service import AnthropicLlmService
 from apps.service_providers.llm_service.adapters import AssistantAdapter, ChatAdapter
-from apps.service_providers.llm_service.helper import claude_compatible_parse_ai_message, parse_output_for_anthropic
+from apps.service_providers.llm_service.helper import custom_parse_ai_message, parse_output_for_anthropic
 from apps.service_providers.llm_service.history_managers import ExperimentHistoryManager, PipelineHistoryManager
 from apps.service_providers.llm_service.main import OpenAIAssistantRunnable
 from apps.utils.prompt import OcsPromptTemplate
@@ -276,8 +276,7 @@ class AgentLLMChat(LLMChat):
         return File.objects.filter(external_id__in=remote_file_ids).all()
 
     def _build_chain(self) -> Runnable[dict[str, Any], dict]:
-        if isinstance(self.adapter.llm_service, AnthropicLlmService):
-            lc_tools_parser.parse_ai_message_to_tool_action = claude_compatible_parse_ai_message
+        lc_tools_parser.parse_ai_message_to_tool_action = custom_parse_ai_message
         tools = self.adapter.get_allowed_tools()
         agent = create_tool_calling_agent(llm=self.adapter.get_chat_model(), tools=tools, prompt=self.prompt)
         tools = self._filter_for_ocs_tools(tools)

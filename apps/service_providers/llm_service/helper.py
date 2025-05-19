@@ -6,7 +6,7 @@ from langchain_core.agents import AgentFinish
 original_parse = parse_ai_message_to_tool_action
 
 
-def claude_compatible_parse_ai_message(message):
+def custom_parse_ai_message(message):
     try:
         return original_parse(message)
 
