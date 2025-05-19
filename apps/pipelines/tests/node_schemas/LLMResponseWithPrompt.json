@@ -134,6 +134,18 @@
       "type": "array",
       "ui:optionsSource": "built_in_tools",
       "ui:widget": "built_in_tools"
+    },
+    "allowed_domains": {
+      "default": null,
+      "title": "Allowed Domains",
+      "ui:widget": "none",
+      "type": "string"
+    },
+    "blocked_domains": {
+      "default": null,
+      "title": "Blocked Domains",
+      "ui:widget": "none",
+      "type": "string"
     }
   },
   "required": [
