@@ -191,20 +191,34 @@
 
 {% if edit_mode %}
   <script>
-    let element = document.getElementById('allowlist-multiselect');
-    let hiddenInput = document.getElementById('id_participant_allowlist');
-    new TomSelect(element, {
-      plugins: ["remove_button", "caret_position", "input_autogrow"],
-      maxItems: null,
-      create: true,
-      plugins: {
-        'checkbox_options': {
-          'checkedClassNames':   ['ts-checked'],
-          'uncheckedClassNames': ['ts-unchecked'],
+    (function() {
+      if (window.tomSelectInstance) {
+        try {
+          window.tomSelectInstance.destroy();
+        } catch (e) {
+        //first instance
         }
-      },onChange: function(values) {
-        hiddenInput.value = values.join(',');
+        window.tomSelectInstance = null;
       }
-    });
+      let element = document.getElementById('allowlist-multiselect');
+      let hiddenInput = document.getElementById('id_participant_allowlist');
+
+      if (element && hiddenInput) {
+        window.tomSelectInstance = new TomSelect(element, {
+          plugins: ["remove_button", "caret_position", "input_autogrow"],
+          maxItems: null,
+          create: true,
+          plugins: {
+            'checkbox_options': {
+              'checkedClassNames':   ['ts-checked'],
+              'uncheckedClassNames': ['ts-unchecked'],
+            }
+          },
+          onChange: function(values) {
+            hiddenInput.value = values.join(',');
+          }
+        });
+      }
+    })();
   </script>
 {% endif %}
