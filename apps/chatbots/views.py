@@ -40,19 +40,33 @@ from apps.teams.models import Flag
 from apps.utils.base_experiment_table_view import BaseExperimentTableView
 
 
-@require_GET
 @login_and_team_required
 @permission_required("experiments.change_experiment", raise_exception=True)
-def settings_edit_mode(request, team_slug, experiment_id):
+def chatbots_settings(request, team_slug, experiment_id):
     experiment = get_object_or_404(Experiment, id=experiment_id, team=request.team)
-    form = ChatbotSettingsForm(request=request, instance=experiment)
 
-    context = {
-        "experiment": experiment,
-        "edit_mode": True,
-        "request": request,
-        "form": form,
-    }
+    if request.method == "POST":
+        form = ChatbotSettingsForm(request=request, data=request.POST, instance=experiment)
+        context = {
+            "experiment": experiment,
+            "request": request,
+            "edit_mode": False,
+            "form": form,
+            "updated": True,
+        }
+        if form.is_valid():
+            form.save()
+        else:
+            context["edit_mode"] = True
+            context["updated"] = False
+    else:
+        form = ChatbotSettingsForm(request=request, instance=experiment)
+        context = {
+            "experiment": experiment,
+            "edit_mode": True,
+            "request": request,
+            "form": form,
+        }
 
     return HttpResponse(render_to_string("chatbots/settings_content.html", context, request=request))
 
@@ -67,28 +81,6 @@ def cancel_edit_mode(request, team_slug, experiment_id):
         "request": request,
         "edit_mode": False,
     }
-    return HttpResponse(render_to_string("chatbots/settings_content.html", context, request=request))
-
-
-@require_POST
-@login_and_team_required
-@permission_required("experiments.change_experiment", raise_exception=True)
-def save_all_settings(request, team_slug, experiment_id):
-    experiment = get_object_or_404(Experiment, id=experiment_id, team=request.team)
-    form = ChatbotSettingsForm(request=request, data=request.POST, instance=experiment)
-
-    context = {
-        "experiment": experiment,
-        "request": request,
-        "edit_mode": False,
-        "form": form,
-        "updated": True,
-    }
-    if form.is_valid():
-        form.save()
-    else:
-        context["edit_mode"] = True
-        context["updated"] = False
     return HttpResponse(render_to_string("chatbots/settings_content.html", context, request=request))
 
 
