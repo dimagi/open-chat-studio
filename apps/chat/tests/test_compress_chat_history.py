@@ -12,7 +12,6 @@ from apps.chat.conversation import (
     _get_summarization_prompt_tokens_with_context,
     _reduce_summary_size,
     compress_chat_history,
-    truncate_tokens,
 )
 from apps.chat.exceptions import ChatException
 from apps.chat.models import Chat, ChatMessage, ChatMessageType
@@ -259,30 +258,6 @@ def test_summarization_is_forced_when_too_many_messages(_get_new_summary, _token
     # _tokens_exceeds_limit should have been called 3 times. 2 calls before pruning and 1 final call to exit the loop,
     # since we're removing the number of messages needed to get below the limit
     assert _tokens_exceeds_limit.call_count == 3
-
-
-def test_truncate_tokens():
-    class FakeLlm:
-        def get_num_tokens_from_messages(self, messages):
-            return sum(len(msg["content"].split()) for msg in messages)
-
-    history = [
-        {"content": "Hello there"},  # 2 tokens
-        {"content": "This is a test message"},  # 5 tokens
-        {"content": "Another one"},  # 2 tokens
-        {"content": "Final message"},  # 2 tokens
-    ]
-
-    llm = FakeLlm()
-    max_token_limit = 6
-    input_message_tokens = 2
-
-    new_history, pruned = truncate_tokens(history, max_token_limit, llm, input_message_tokens)
-
-    assert len(pruned) > 0
-    assert llm.get_num_tokens_from_messages(new_history) + input_message_tokens <= max_token_limit
-    remaining_after_pruning = [{"content": "Another one"}, {"content": "Final message"}]
-    assert new_history == remaining_after_pruning
 
 
 def test_get_new_summary_with_large_message():

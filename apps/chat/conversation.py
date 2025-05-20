@@ -8,7 +8,7 @@ from langchain_anthropic import ChatAnthropic
 from langchain_community.callbacks import get_openai_callback
 from langchain_core.language_models import BaseChatModel
 from langchain_core.memory import BaseMemory
-from langchain_core.messages import BaseMessage, HumanMessage, SystemMessage, get_buffer_string
+from langchain_core.messages import BaseMessage, HumanMessage, SystemMessage, get_buffer_string, trim_messages
 from langchain_core.prompts import (
     HumanMessagePromptTemplate,
     MessagesPlaceholder,
@@ -212,14 +212,19 @@ def _compress_chat_history(
     return history, last_message, summary
 
 
-def truncate_tokens(history, max_token_limit, llm, input_message_tokens):
+def truncate_tokens(history, max_token_limit, llm, input_message_tokens) -> list[BaseMessage]:
     """Removes old messages until the token count is below the max limit."""
-    pruned_memory = []
-    history_tokens = llm.get_num_tokens_from_messages(history)
-    while history and history_tokens + input_message_tokens > max_token_limit:
-        pruned_memory.append(history.pop(0))
-        history_tokens = llm.get_num_tokens_from_messages(history)
-    return history, pruned_memory
+    return trim_messages(
+        history,
+        # Keep the last <= n_count tokens of the messages.
+        strategy="last",
+        token_counter=llm.get_num_tokens_from_messages,
+        max_tokens=max_token_limit - input_message_tokens,
+        start_on="human",
+        end_on=("human", "tool"),
+        include_system=True,
+        allow_partial=False,
+    )
 
 
 def summarize_history(llm, history, max_token_limit, input_message_tokens, summary, input_messages, pruned_memory):
@@ -282,7 +287,8 @@ def compress_chat_history_from_messages(
     if history_mode == PipelineChatHistoryModes.MAX_HISTORY_LENGTH:
         return history, latest_message, summary
     elif history_mode == PipelineChatHistoryModes.TRUNCATE_TOKENS:
-        history, pruned_memory = truncate_tokens(history, max_token_limit, llm, input_message_tokens)
+        history = truncate_tokens(history, max_token_limit, llm, input_message_tokens)
+        return history, None, None
     elif history_mode == PipelineChatHistoryModes.SUMMARIZE or history_mode is None:
         try:
             history, pruned_memory, summary = summarize_history(
