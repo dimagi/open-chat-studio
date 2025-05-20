@@ -3,7 +3,7 @@ from unittest import mock
 import pytest
 from langchain_core.messages import AIMessage, HumanMessage, SystemMessage
 
-from apps.chat.conversation import compress_pipeline_chat_history
+from apps.chat.conversation import SUMMARY_MARKER, compress_pipeline_chat_history
 from apps.pipelines.models import PipelineChatHistoryModes, PipelineChatHistoryTypes, PipelineChatMessages
 from apps.utils.factories.experiment import (
     ExperimentSessionFactory,
@@ -39,6 +39,43 @@ def test_no_summary_returns_all_messages(experiment_session):
         AIMessage(content="I am a robot", additional_kwargs={"id": message1.id, "node_id": ""}),
         HumanMessage(content="sudo, please fetch me a coffee", additional_kwargs={"id": message2.id, "node_id": ""}),
         AIMessage(content="I can't do that", additional_kwargs={"id": message2.id, "node_id": ""}),
+    ]
+    summary_messages = history.get_langchain_messages_until_summary()
+    assert expected_messages == summary_messages
+
+
+@django_db_with_data(available_apps=("apps.service_providers",))
+def test_no_summary_returns_until_summary(experiment_session):
+    history = experiment_session.pipeline_chat_history.create(type=PipelineChatHistoryTypes.NAMED, name="name")
+    history.messages.create(ai_message="I am a robot", human_message="hi, please fetch me a coffee")
+    message2 = history.messages.create(
+        ai_message="I can't do that", human_message="sudo, please fetch me a coffee", summary="argument"
+    )
+    message3 = history.messages.create(ai_message="I am a robot", human_message="how about some tea")
+    expected_messages = [
+        SystemMessage(content="argument", additional_kwargs={"id": message2.id, "node_id": ""}),
+        HumanMessage(content="sudo, please fetch me a coffee", additional_kwargs={"id": message2.id, "node_id": ""}),
+        AIMessage(content="I can't do that", additional_kwargs={"id": message2.id, "node_id": ""}),
+        HumanMessage(content="how about some tea", additional_kwargs={"id": message3.id, "node_id": ""}),
+        AIMessage(content="I am a robot", additional_kwargs={"id": message3.id, "node_id": ""}),
+    ]
+    summary_messages = history.get_langchain_messages_until_summary()
+    assert expected_messages == summary_messages
+
+
+@django_db_with_data(available_apps=("apps.service_providers",))
+def test_no_summary_returns_until_summary_marker(experiment_session):
+    history = experiment_session.pipeline_chat_history.create(type=PipelineChatHistoryTypes.NAMED, name="name")
+    history.messages.create(ai_message="I am a robot", human_message="hi, please fetch me a coffee")
+    message2 = history.messages.create(
+        ai_message="I can't do that", human_message="sudo, please fetch me a coffee", summary=SUMMARY_MARKER
+    )
+    message3 = history.messages.create(ai_message="I am a robot", human_message="how about some tea")
+    expected_messages = [
+        HumanMessage(content="sudo, please fetch me a coffee", additional_kwargs={"id": message2.id, "node_id": ""}),
+        AIMessage(content="I can't do that", additional_kwargs={"id": message2.id, "node_id": ""}),
+        HumanMessage(content="how about some tea", additional_kwargs={"id": message3.id, "node_id": ""}),
+        AIMessage(content="I am a robot", additional_kwargs={"id": message3.id, "node_id": ""}),
     ]
     summary_messages = history.get_langchain_messages_until_summary()
     assert expected_messages == summary_messages

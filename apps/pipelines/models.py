@@ -687,8 +687,10 @@ class PipelineChatMessages(BaseModel):
         return f"Human: {self.human_message}, AI: {self.ai_message}"
 
     def as_tuples(self):
+        from apps.chat.conversation import SUMMARY_MARKER
+
         message_tuples = []
-        if self.summary:
+        if self.summary and self.summary != SUMMARY_MARKER:
             message_tuples.append((ChatMessageType.SYSTEM.value, self.summary))
         message_tuples.extend(
             [
@@ -707,11 +709,13 @@ class PipelineChatMessages(BaseModel):
         The `SystemMessage` represents the conversation summary and will only be
         included if it exists.
         """
+        from apps.chat.conversation import SUMMARY_MARKER
+
         langchain_messages = [
             AIMessage(content=self.ai_message, additional_kwargs={"id": self.id, "node_id": self.node_id}),
             HumanMessage(content=self.human_message, additional_kwargs={"id": self.id, "node_id": self.node_id}),
         ]
-        if with_summary and self.summary:
+        if with_summary and self.summary and self.summary != SUMMARY_MARKER:
             langchain_messages.append(
                 SystemMessage(content=self.summary, additional_kwargs={"id": self.id, "node_id": self.node_id})
             )
