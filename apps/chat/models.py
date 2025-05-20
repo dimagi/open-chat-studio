@@ -45,7 +45,7 @@ class Chat(BaseTeamModel, TaggedModelMixin, UserCommentsMixin):
         messages = []
         for message in self.message_iterator():
             messages.append(message.to_langchain_dict())
-            if message.is_summary:
+            if message.is_summary or message.is_summary_marker:
                 break
 
         return messages_from_dict(list(reversed(messages)))
@@ -152,6 +152,10 @@ class ChatMessage(BaseModel, TaggedModelMixin, UserCommentsMixin):
     @property
     def is_summary(self):
         return self.metadata.get("is_summary", False)
+
+    @property
+    def is_summary_marker(self):
+        return self.metadata.get("summary_marker", False)
 
     @property
     def created_at_datetime(self):

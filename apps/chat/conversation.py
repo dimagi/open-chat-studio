@@ -21,6 +21,8 @@ from apps.chat.models import Chat, ChatMessage, ChatMessageType
 from apps.pipelines.models import PipelineChatHistory, PipelineChatHistoryModes, PipelineChatMessages
 from apps.utils.prompt import OcsPromptTemplate
 
+SUMMARY_MARKER = "__summary_marker__"
+
 SUMMARY_TOO_LARGE_ERROR_MESSAGE = "Unable to compress chat history: existing summary too large"
 MESSAGES_TOO_LARGE_ERROR_MESSAGE = (
     "Unable to compress chat history: Messages are too large for the context window of {tokens} tokens"
@@ -128,8 +130,17 @@ def compress_chat_history(
         )
         if summary is not None:
             if last_message:
-                ChatMessage.objects.filter(id=last_message.additional_kwargs["id"]).update(summary=summary)
-                return [SystemMessage(content=summary)] + history
+                if summary == SUMMARY_MARKER:
+                    try:
+                        message = ChatMessage.objects.get(id=last_message.additional_kwargs["id"])
+                        message.metadata["summary_marker"] = True
+                        message.save(update_fields=["metadata"])
+                    except ChatMessage.DoesNotExist:
+                        pass
+                    return history
+                else:
+                    ChatMessage.objects.filter(id=last_message.additional_kwargs["id"]).update(summary=summary)
+                    return [SystemMessage(content=summary)] + history
             else:
                 logging.exception(f"last_message is unexpectedly None for chat_id={chat.id}")
         return history
@@ -221,7 +232,7 @@ def truncate_tokens(history, max_token_limit, llm, input_message_tokens) -> list
         token_counter=llm.get_num_tokens_from_messages,
         max_tokens=max_token_limit - input_message_tokens,
         start_on="human",
-        end_on=("human", "tool"),
+        end_on="ai",
         include_system=True,
         allow_partial=False,
     )
@@ -288,7 +299,7 @@ def compress_chat_history_from_messages(
         return history, latest_message, summary
     elif history_mode == PipelineChatHistoryModes.TRUNCATE_TOKENS:
         history = truncate_tokens(history, max_token_limit, llm, input_message_tokens)
-        return history, None, None
+        return history, history[0] if history else None, SUMMARY_MARKER
     elif history_mode == PipelineChatHistoryModes.SUMMARIZE or history_mode is None:
         try:
             history, pruned_memory, summary = summarize_history(

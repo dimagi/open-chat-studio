@@ -260,6 +260,40 @@ def test_summarization_is_forced_when_too_many_messages(_get_new_summary, _token
     assert _tokens_exceeds_limit.call_count == 3
 
 
+@pytest.mark.django_db()
+def test_truncate_tokens(chat):
+    class FakeLlm:
+        def get_num_tokens_from_messages(self, messages):
+            return sum(len(msg.content.split()) for msg in messages)
+
+    history = [
+        "Hello there",  # 2 tokens
+        "This is a test message",  # 5 tokens
+        "Another one",  # 2 tokens
+        "Final message",  # 2 tokens
+    ]
+
+    for i, message in enumerate(history):
+        ChatMessage.objects.create(
+            chat=chat,
+            content=message,
+            message_type=ChatMessageType.AI if i % 2 else ChatMessageType.HUMAN,
+        )
+
+    llm = FakeLlm()
+    result = compress_chat_history(
+        chat, llm, 6, input_messages=[], history_mode=PipelineChatHistoryModes.TRUNCATE_TOKENS
+    )
+
+    remaining_after_pruning = ["Another one", "Final message"]
+    assert [r.content for r in result] == remaining_after_pruning
+    summary_message = ChatMessage.objects.get(chat=chat, metadata__summary_marker=True)
+    assert summary_message.content == "Another one"
+
+    # Check that the summary marker is respected
+    assert len(chat.get_langchain_messages_until_summary()) == 2
+
+
 def test_get_new_summary_with_large_message():
     """Test that messages over 1000 words are trimmed and a summary is correctly generated in one pass."""
     llm = FakeLlmSimpleTokenCount(responses=["Summary"])
