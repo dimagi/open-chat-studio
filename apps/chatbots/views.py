@@ -75,32 +75,42 @@ def chatbots_settings(request, team_slug, experiment_id):
     team_participant_identifiers.extend(experiment.participant_allowlist)
     team_participant_identifiers = list(set(team_participant_identifiers))
     alpine_context = _get_alpine_context(request, experiment)
+    context = {
+        "experiment": experiment,
+        "request": request,
+        **alpine_context,
+    }
 
     if request.method == "POST":
         form = ChatbotSettingsForm(request=request, data=request.POST, instance=experiment)
-        context = {
-            "experiment": experiment,
-            "request": request,
-            "edit_mode": False,
-            "form": form,
-            "updated": True,
-            **alpine_context,
-        }
         if form.is_valid():
             form.save()
+            context.update(
+                {
+                    "edit_mode": False,
+                    "form": form,
+                    "updated": True,
+                }
+            )
+
         else:
-            context["edit_mode"] = True
-            context["updated"] = False
+            context.update(
+                {
+                    "edit_mode": True,
+                    "form": form,
+                    "updated": False,
+                    "team_participant_identifiers": team_participant_identifiers,
+                }
+            )
     else:
         form = ChatbotSettingsForm(request=request, instance=experiment)
-        context = {
-            "experiment": experiment,
-            "edit_mode": True,
-            "request": request,
-            "form": form,
-            "team_participant_identifiers": team_participant_identifiers,
-            **alpine_context,
-        }
+        context.update(
+            {
+                "edit_mode": True,
+                "form": form,
+                "team_participant_identifiers": team_participant_identifiers,
+            }
+        )
 
     return HttpResponse(render_to_string("chatbots/settings_content.html", context, request=request))
 
