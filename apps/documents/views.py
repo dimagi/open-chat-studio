@@ -14,10 +14,10 @@ from django.views.generic import CreateView, TemplateView, UpdateView
 from django_tables2 import SingleTableView
 
 from apps.assistants.sync import delete_file_from_openai
+from apps.documents import tasks
 from apps.documents.forms import CollectionForm
 from apps.documents.models import Collection, CollectionFile, FileStatus
 from apps.documents.tables import CollectionsTable
-from apps.documents.tasks import index_collection_files_task, migrate_vector_stores
 from apps.files.models import File
 from apps.generics.chips import Chip
 from apps.teams.decorators import login_and_team_required
@@ -93,7 +93,7 @@ def add_collection_files(request, team_slug: str, pk: int):
         )
 
     if collection.is_index:
-        index_collection_files_task.delay(collection.id)
+        tasks.index_collection_files_task.delay(collection.id)
 
     messages.success(request, f"Added {len(files)} files to collection")
     return redirect("documents:single_collection_home", team_slug=team_slug, pk=pk)
@@ -194,7 +194,7 @@ class EditCollection(LoginAndTeamRequiredMixin, CollectionFormMixin, UpdateView)
                 collection.save(update_fields=["openai_vector_store_id"])
 
             CollectionFile.objects.filter(collection_id=collection.id).update(status=FileStatus.PENDING)
-            migrate_vector_stores.delay(
+            tasks.migrate_vector_stores.delay(
                 collection_id=form.instance.id,
                 from_vector_store_id=old_vector_store_id,
                 from_llm_provider_id=form.initial["llm_provider"],
