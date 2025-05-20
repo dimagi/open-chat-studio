@@ -1,3 +1,4 @@
+import contextlib
 from io import BytesIO
 from time import sleep
 from typing import Any
@@ -5,7 +6,7 @@ from typing import Any
 import pydantic
 from langchain.agents.openai_assistant import OpenAIAssistantRunnable as BrokenOpenAIAssistantRunnable
 from langchain_anthropic import ChatAnthropic
-from langchain_core.callbacks import BaseCallbackHandler, CallbackManager
+from langchain_core.callbacks import BaseCallbackHandler, CallbackManager, dispatch_custom_event
 from langchain_core.language_models import BaseChatModel
 from langchain_core.load import dumpd
 from langchain_core.messages import HumanMessage
@@ -72,6 +73,15 @@ class OpenAIAssistantRunnable(BrokenOpenAIAssistantRunnable):
             # framework.
             else:
                 run = self.client.beta.threads.runs.submit_tool_outputs(**input)
+            with contextlib.suppress(RuntimeError):
+                dispatch_custom_event(
+                    "OpenAI Assistant Run Created",
+                    {
+                        "assistant_id": run.assistant_id,
+                        "thread_id": run.thread_id,
+                        "run_id": run.id,
+                    },
+                )
             run = self._wait_for_run(run.id, run.thread_id)
         except BaseException as e:
             run_manager.on_chain_error(e)
@@ -113,6 +123,9 @@ class LlmService(pydantic.BaseModel):
         raise NotImplementedError
 
     def get_callback_handler(self, model: str) -> BaseCallbackHandler:
+        raise NotImplementedError
+
+    def attach_built_in_tools(self, built_in_tools: list[str]) -> list:
         raise NotImplementedError
 
     def get_index_manager(self):
@@ -171,6 +184,15 @@ class OpenAILlmService(OpenAIGenericService):
         )
         return transcript.text
 
+    def attach_built_in_tools(self, built_in_tools: list[str]) -> list:
+        tools = []
+        for tool_name in built_in_tools:
+            if tool_name == "web-search":
+                tools.append({"type": "web_search_preview"})
+            else:
+                raise ValueError(f"Unsupported built-in tool for openai: '{tool_name}'")
+        return tools
+
     def get_index_manager(self):
         from apps.service_providers.llm_service.index_managers import OpenAIVectorStoreManager
 
@@ -194,6 +216,9 @@ class AzureLlmService(LlmService):
     def get_callback_handler(self, model: str) -> BaseCallbackHandler:
         return TokenCountingCallbackHandler(OpenAITokenCounter(model))
 
+    def attach_built_in_tools(self, built_in_tools: list[str]) -> list:
+        return []
+
 
 class AnthropicLlmService(LlmService):
     anthropic_api_key: str
@@ -209,6 +234,9 @@ class AnthropicLlmService(LlmService):
 
     def get_callback_handler(self, model: str) -> BaseCallbackHandler:
         return TokenCountingCallbackHandler(AnthropicTokenCounter())
+
+    def attach_built_in_tools(self, built_in_tools: list[str]) -> list:
+        return []
 
 
 class DeepSeekLlmService(LlmService):
@@ -226,6 +254,9 @@ class DeepSeekLlmService(LlmService):
     def get_callback_handler(self, model: str) -> BaseCallbackHandler:
         return TokenCountingCallbackHandler(OpenAITokenCounter(model))
 
+    def attach_built_in_tools(self, built_in_tools: list[str]) -> list:
+        return []
+
 
 class GoogleLlmService(LlmService):
     google_api_key: str
@@ -239,3 +270,17 @@ class GoogleLlmService(LlmService):
 
     def get_callback_handler(self, model: str) -> BaseCallbackHandler:
         return TokenCountingCallbackHandler(GeminiTokenCounter(model, self.google_api_key))
+
+    def attach_built_in_tools(self, built_in_tools: list[str]) -> list:
+        return []
+        # Commenting it for now until we fix it
+        # otherwise gemini would not work if code execution or web search is selected in the node
+        # tools = []
+        # for tool_name in built_in_tools:
+        #     if tool_name == "web-search":
+        #         tools.append(GenAITool(google_search={}))
+        #     elif tool_name == "code-execution":
+        #         tools.append(GenAITool(code_execution={}))
+        #     else:
+        #         raise ValueError(f"Unsupported built-in tool for gemini: '{tool_name}'")
+        # return tools

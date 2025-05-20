@@ -15,7 +15,7 @@ ENV UV_LINK_MODE=copy \
     UV_PYTHON_DOWNLOADS=never \
     UV_PROJECT_ENVIRONMENT=/code/.venv
 
-COPY --from=ghcr.io/astral-sh/uv:0.5.2 /uv /uvx /bin/
+COPY --from=ghcr.io/astral-sh/uv:0.7 /uv /uvx /bin/
 
 # Since there's no point in shipping lock files, we move them
 # into a directory that is NOT copied into the runtime image.
@@ -28,7 +28,7 @@ RUN --mount=type=cache,target=/root/.cache \
     cd /_lock && \
     uv sync \
       --frozen \
-      --no-group dev \
+      --no-default-groups \
       --group prod \
       --compile-bytecode
 
