@@ -250,13 +250,8 @@ class SimpleLLMChat(LLMChat):
 
 class AgentLLMChat(LLMChat):
     def _parse_output(self, output):
-        self.adapter.get_llm_service().get_output_parser()
-        output = output.get("output", "")
-        if isinstance(output, list):
-            # Responses API responses are lists
-            return "\n".join([o["text"] for o in output])
-
-        return output
+        output_parser = self.adapter.get_llm_service().get_output_parser()
+        return output_parser(output)
 
     def _get_cited_files(self, token: str | dict) -> list[File]:
         """

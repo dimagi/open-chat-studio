@@ -380,10 +380,7 @@ class LLMResponseWithPrompt(LLMResponse, HistoryMixin):
 
         tools = get_node_tools(self.django_node, session, attachment_callback=history_manager.attach_file_id)
         built_in_tools = self.built_in_tools
-        config = {
-            "allowed_domains": getattr(self.tool_config, "allowed_domains", "") if self.tool_config else "",
-            "blocked_domains": getattr(self.tool_config, "blocked_domains", "") if self.tool_config else "",
-        }
+        config = BuiltInTools.build_tool_config(provider_model.type, built_in_tools, self.tool_config)
         if llm_service := self.get_llm_service():
             tools.extend(llm_service.attach_built_in_tools(built_in_tools, config))
         if self.collection_index_id:
