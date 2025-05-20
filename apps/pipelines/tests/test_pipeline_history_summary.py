@@ -3,7 +3,7 @@ from unittest import mock
 import pytest
 from langchain_core.messages import AIMessage, HumanMessage, SystemMessage
 
-from apps.chat.conversation import SUMMARY_MARKER, compress_pipeline_chat_history
+from apps.chat.conversation import COMPRESSION_MARKER, compress_pipeline_chat_history
 from apps.pipelines.models import PipelineChatHistoryModes, PipelineChatHistoryTypes, PipelineChatMessages
 from apps.utils.factories.experiment import (
     ExperimentSessionFactory,
@@ -68,7 +68,7 @@ def test_no_summary_returns_until_summary_marker(experiment_session):
     history = experiment_session.pipeline_chat_history.create(type=PipelineChatHistoryTypes.NAMED, name="name")
     history.messages.create(ai_message="I am a robot", human_message="hi, please fetch me a coffee")
     message2 = history.messages.create(
-        ai_message="I can't do that", human_message="sudo, please fetch me a coffee", summary=SUMMARY_MARKER
+        ai_message="I can't do that", human_message="sudo, please fetch me a coffee", summary=COMPRESSION_MARKER
     )
     message3 = history.messages.create(ai_message="I am a robot", human_message="how about some tea")
     expected_messages = [

@@ -21,7 +21,7 @@ from apps.chat.models import Chat, ChatMessage, ChatMessageType
 from apps.pipelines.models import PipelineChatHistory, PipelineChatHistoryModes, PipelineChatMessages
 from apps.utils.prompt import OcsPromptTemplate
 
-SUMMARY_MARKER = "__summary_marker__"
+COMPRESSION_MARKER = "__compression_marker__"
 
 SUMMARY_TOO_LARGE_ERROR_MESSAGE = "Unable to compress chat history: existing summary too large"
 MESSAGES_TOO_LARGE_ERROR_MESSAGE = (
@@ -137,7 +137,7 @@ def compress_chat_history(
         )
         if summary is not None:
             if last_message:
-                if summary == SUMMARY_MARKER:
+                if summary == COMPRESSION_MARKER:
                     try:
                         message = ChatMessage.objects.get(id=last_message.additional_kwargs["id"])
                         message.metadata["summary_marker"] = True
@@ -311,7 +311,7 @@ def compress_chat_history_from_messages(
     input_message_tokens = llm.get_num_tokens_from_messages(input_messages)
     if history_mode == PipelineChatHistoryModes.TRUNCATE_TOKENS:
         history = truncate_tokens(history, max_token_limit, llm, input_message_tokens)
-        return history, history[0] if history else None, SUMMARY_MARKER
+        return history, history[0] if history else None, COMPRESSION_MARKER
 
     history, pruned_memory = history[-keep_history_len:], history[:-keep_history_len]
     latest_message = history[-1] if history else None
