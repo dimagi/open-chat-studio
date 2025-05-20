@@ -135,6 +135,7 @@ class RenderTemplate(PipelineNode, OutputMessageTagMixin):
 
 
 class LLMResponseMixin(BaseModel):
+    llm_provider_type: str = Field(..., json_schema_extra=UiSchema(widget=Widgets.none))
     llm_provider_id: int = Field(..., title="LLM Model", json_schema_extra=UiSchema(widget=Widgets.llm_provider_model))
     llm_provider_model_id: int = Field(..., json_schema_extra=UiSchema(widget=Widgets.none))
     llm_temperature: float = Field(
@@ -342,7 +343,12 @@ class LLMResponseWithPrompt(LLMResponse, HistoryMixin, OutputMessageTagMixin):
     built_in_tools: list[BuiltInTools] = Field(
         default_factory=list,
         description="Built in tools provided by the LLM model",
-        json_schema_extra=UiSchema(widget=Widgets.built_in_tools, options_source=OptionsSource.built_in_tools),
+        json_schema_extra=UiSchema(
+            widget=Widgets.multiselect,
+            enum_labels=BuiltInTools.labels,
+            discriminatorField="llm_provider_type",
+            enum_discriminator_values=["openai", "anthropic"],
+        ),
     )
     tool_config: dict[str, ToolConfigModel] | None = Field(
         default_factory=dict,

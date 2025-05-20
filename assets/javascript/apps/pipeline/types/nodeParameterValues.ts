@@ -2,6 +2,7 @@
       value: string;
       label: string;
       edit_url?: string | undefined;
+      discriminatorValue?: string | undefined;
     }
 
     export type TypedOption = {

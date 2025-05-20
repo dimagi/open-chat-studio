@@ -90,10 +90,19 @@ export function getSelectOptions(schema: PropertySchema): Option[] {
     return parameterValues[schema["ui:optionsSource"]];
   }
 
-  const enums = schema.enum || [];
   const enumLabels = schema["ui:enumLabels"];
+  const discriminatorValues = schema["ui:enumDiscriminatorValues"] || [];
+  let enums = [];
+  if (schema.enum) {
+    enums = schema.enum;
+  } else if (schema.type === 'array') {
+    enums = schema.items.enum;
+  }
   return enums.map((value: string, index: number) => {
-    const label = enumLabels ? enumLabels[index] : value;
-    return {value: value, label: label};
+    return {
+      value: value,
+      label: enumLabels ? enumLabels[index] : value,
+      discriminatorValue: discriminatorValues ? discriminatorValues[index] : undefined,
+    };
   });
 }

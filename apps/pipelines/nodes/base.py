@@ -379,6 +379,9 @@ class UiSchema(BaseModel):
     # Use this with Enum fields to provide label text
     enum_labels: list[str] = None
 
+    discriminatorField: str = None
+    enum_discriminator_values: list = None
+
     # Use this with 'select' type fields to indicate where the options should come from
     # See `apps.pipelines.views._pipeline_node_parameter_values`
     options_source: OptionsSource = None
@@ -393,6 +396,10 @@ class UiSchema(BaseModel):
             schema["ui:optionsSource"] = self.options_source
         if self.flag_required:
             schema["ui:flagRequired"] = self.flag_required
+        if self.discriminatorField:
+            schema["ui:discriminatorField"] = self.discriminatorField
+        if self.enum_discriminator_values:
+            schema["ui:enumDiscriminatorValues"] = self.enum_discriminator_values
 
 
 class NodeSchema(BaseModel):
