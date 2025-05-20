@@ -90,3 +90,28 @@ def test_create_summary_token_limit_reached(mock_get_new_summary, pipeline_chat_
     assert isinstance(summary_messages[0], SystemMessage)
     assert isinstance(summary_messages[1], HumanMessage)
     assert isinstance(summary_messages[2], AIMessage)
+
+
+@pytest.mark.django_db()
+def test_max_history_length_compression(pipeline_chat_history):
+    for i in range(4):
+        pipeline_chat_history.messages.create(human_message=f"Hello {i}", ai_message=f"Hi {i}")
+
+    llm = FakeLlmSimpleTokenCount(responses=["Summary"])
+    result = compress_pipeline_chat_history(
+        pipeline_chat_history,
+        llm,
+        max_token_limit=20,
+        input_messages=[],
+        keep_history_len=5,
+        history_mode=PipelineChatHistoryModes.MAX_HISTORY_LENGTH,
+    )
+
+    assert len(result) == 5
+    assert [message.content for message in result] == [
+        "Hello 1",
+        "Hi 1",
+        "Hello 2",
+        "Hi 2",
+        "Hello 3",
+    ]

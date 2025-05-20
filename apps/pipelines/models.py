@@ -698,7 +698,7 @@ class PipelineChatMessages(BaseModel):
         )
         return message_tuples
 
-    def as_langchain_messages(self) -> list[BaseMessage]:
+    def as_langchain_messages(self, with_summary=True) -> list[BaseMessage]:
         """
         Converts this message instance into a list of Langchain `BaseMessage` objects.
         The message order is the reverse of the typical order because of where this
@@ -711,7 +711,7 @@ class PipelineChatMessages(BaseModel):
             AIMessage(content=self.ai_message, additional_kwargs={"id": self.id, "node_id": self.node_id}),
             HumanMessage(content=self.human_message, additional_kwargs={"id": self.id, "node_id": self.node_id}),
         ]
-        if self.summary:
+        if with_summary and self.summary:
             langchain_messages.append(
                 SystemMessage(content=self.summary, additional_kwargs={"id": self.id, "node_id": self.node_id})
             )

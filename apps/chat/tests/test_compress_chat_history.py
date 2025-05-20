@@ -367,3 +367,22 @@ def test_reduce_summary_size_succeeds_early():
 
     assert result == "Short enough"
     assert len(llm.get_calls()) == 1  # Should only make one call since first response was short enough
+
+
+@pytest.mark.django_db()
+def test_max_history_length_compression(chat):
+    for i in range(8):
+        ChatMessage.objects.create(chat=chat, content=f"Hello {i}", message_type=ChatMessageType.HUMAN)
+
+    llm = FakeLlmSimpleTokenCount(responses=["Summary"])
+    result = compress_chat_history(
+        chat,
+        llm,
+        max_token_limit=20,
+        input_messages=[],
+        keep_history_len=5,
+        history_mode=PipelineChatHistoryModes.MAX_HISTORY_LENGTH,
+    )
+
+    assert len(result) == 5
+    assert [message.content for message in result] == [f"Hello {i}" for i in range(3, 8)]

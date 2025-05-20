@@ -118,6 +118,13 @@ def compress_chat_history(
     keep_history_len: int = 10,
     history_mode: str = PipelineChatHistoryModes.SUMMARIZE,
 ) -> list[BaseMessage]:
+    if history_mode == PipelineChatHistoryModes.MAX_HISTORY_LENGTH:
+        return list(
+            reversed(
+                [message.to_langchain_message() for message in chat.messages.order_by("-created_at")[:keep_history_len]]
+            )
+        )
+
     history_messages = chat.get_langchain_messages_until_summary()
     try:
         history, last_message, summary = _compress_chat_history(
@@ -158,6 +165,14 @@ def compress_pipeline_chat_history(
     keep_history_len: int = 10,
     history_mode: str = None,
 ) -> list[BaseMessage]:
+    if history_mode == PipelineChatHistoryModes.MAX_HISTORY_LENGTH:
+        limit = keep_history_len // 2 + 1  # each pipeline history message is a pair
+        messages = pipeline_chat_history.messages.order_by("-created_at")[:limit]
+        langchain_messages = [
+            message for message_pair in messages for message in message_pair.as_langchain_messages(with_summary=False)
+        ]
+        return list(reversed(langchain_messages))[:keep_history_len]
+
     history_messages = pipeline_chat_history.get_langchain_messages_until_summary()
     try:
         history, last_message, summary = _compress_chat_history(
@@ -193,6 +208,9 @@ def _compress_chat_history(
     """Compresses the chat history to be less than max_token_limit tokens long. This will summarize the history
     if necessary and save the summary to the DB.
     """
+    if history_mode == PipelineChatHistoryModes.MAX_HISTORY_LENGTH:
+        raise ValueError("History mode cannot be MAX_HISTORY_LENGTH for this function")
+
     if max_token_limit <= 0 or not history:
         log.info("Skipping chat history compression")
         return history, None, None
@@ -204,17 +222,12 @@ def _compress_chat_history(
         if current_token_count <= max_token_limit and len(total_messages) <= MAX_UNCOMPRESSED_MESSAGES:
             log.info("Skipping chat history compression: %s <= %s", current_token_count, max_token_limit)
             return history, None, None
-    elif history_mode == PipelineChatHistoryModes.MAX_HISTORY_LENGTH:
-        if keep_history_len is not None and len(total_messages) <= keep_history_len:
-            log.info("Skipping chat history compression: %d <= %d", len(total_messages), keep_history_len)
-            return history, None, None
 
     log.debug(
-        "Compressing chat history with mode %s: %s/%s(max) tokens and %d/%d(max) messages",
+        "Compressing chat history with mode %s: %s/%s(max) tokens",
         history_mode,
         current_token_count,
         max_token_limit,
-        len(total_messages),
         keep_history_len,
     )
     history, last_message, summary = compress_chat_history_from_messages(
@@ -291,34 +304,35 @@ def compress_chat_history_from_messages(
     - "Truncate Tokens": Deletes old messages when exceeding token limit.
     - "Max History Length": Always keeps the last `keep_history_len` messages.
     """
-    summary = history.pop(0).content if history and history[0].type == ChatMessageType.SYSTEM else None
-    history, pruned_memory = history[-keep_history_len:], history[:-keep_history_len]
-    latest_message = history[-1] if history else None
-    input_message_tokens = llm.get_num_tokens_from_messages(input_messages)
     if history_mode == PipelineChatHistoryModes.MAX_HISTORY_LENGTH:
-        return history, latest_message, summary
-    elif history_mode == PipelineChatHistoryModes.TRUNCATE_TOKENS:
+        raise ValueError("History mode cannot be MAX_HISTORY_LENGTH for this function")
+
+    summary = history.pop(0).content if history and history[0].type == ChatMessageType.SYSTEM else None
+    input_message_tokens = llm.get_num_tokens_from_messages(input_messages)
+    if history_mode == PipelineChatHistoryModes.TRUNCATE_TOKENS:
         history = truncate_tokens(history, max_token_limit, llm, input_message_tokens)
         return history, history[0] if history else None, SUMMARY_MARKER
-    elif history_mode == PipelineChatHistoryModes.SUMMARIZE or history_mode is None:
-        try:
-            history, pruned_memory, summary = summarize_history(
-                llm, history, max_token_limit, input_message_tokens, summary, input_messages, pruned_memory
-            )
-            log.info(
-                "Compressed chat history to %s tokens (%s prompt + %s summary + %s history)",
-                input_message_tokens
-                + llm.get_num_tokens_from_messages(history)
-                + llm.get_num_tokens_from_messages([SystemMessage(content=summary)]),
-                input_message_tokens,
-                llm.get_num_tokens_from_messages([SystemMessage(content=summary)]),
-                llm.get_num_tokens_from_messages(history),
-            )
-        except ChatException as e:
-            log.exception("Error while compressing chat history: %s", e)
-            pruned_memory = history[:]
-            history = []
-            summary = ""
+
+    history, pruned_memory = history[-keep_history_len:], history[:-keep_history_len]
+    latest_message = history[-1] if history else None
+    try:
+        history, pruned_memory, summary = summarize_history(
+            llm, history, max_token_limit, input_message_tokens, summary, input_messages, pruned_memory
+        )
+        log.info(
+            "Compressed chat history to %s tokens (%s prompt + %s summary + %s history)",
+            input_message_tokens
+            + llm.get_num_tokens_from_messages(history)
+            + llm.get_num_tokens_from_messages([SystemMessage(content=summary)]),
+            input_message_tokens,
+            llm.get_num_tokens_from_messages([SystemMessage(content=summary)]),
+            llm.get_num_tokens_from_messages(history),
+        )
+    except ChatException as e:
+        log.exception("Error while compressing chat history: %s", e)
+        pruned_memory = history[:]
+        history = []
+        summary = ""
 
     if history:
         last_message = history[0]
