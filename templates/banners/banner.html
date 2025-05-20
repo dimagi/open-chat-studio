@@ -7,9 +7,22 @@
                 {% endif %}
                 {{ banner.message }}
                 <div>
-                    <button class="btn btn-sm" data-bs-dismiss="alert" aria-label="Close">Okay</button>
+                    <button class="btn btn-sm" data-bs-dismiss="alert" aria-label="Close">Close</button>
                 </div>
             </div>
         {% endfor %}
     </div>
+    <script>
+        document.addEventListener('DOMContentLoaded', function() {
+            const closeButtons = document.querySelectorAll('[data-bs-dismiss="alert"]');
+            closeButtons.forEach(function(button) {
+                button.addEventListener('click', function() {
+                    const alert = this.closest('.alert');
+                    if (alert) {
+                        alert.remove();
+                    }
+                });
+            });
+        });
+    </script>
 {% endif %}
