@@ -41,18 +41,13 @@ from apps.teams.models import Flag
 from apps.utils.base_experiment_table_view import BaseExperimentTableView
 
 
-def _get_voice_provider_alpine_context(request, experiment=None):
-    """Add context required by the experiments/experiment_form.html template."""
+def _get_alpine_context(request, experiment=None):
+    """Add context required by the experiments/settings_content.html template."""
     exclude_services = [SyntheticVoice.OpenAIVoiceEngine]
     if flag_is_active(request, "open_ai_voice_engine"):
         exclude_services = []
 
-    form_attrs = {"enctype": "multipart/form-data"}
-    if request.origin == "experiments":
-        form_attrs["x-data"] = "experiment"
-
     return {
-        "form_attrs": form_attrs,
         "voice_providers_types": dict(request.team.voiceprovider_set.values_list("id", "type")),
         "synthetic_voice_options": sorted(
             [
@@ -79,7 +74,7 @@ def chatbots_settings(request, team_slug, experiment_id):
     )
     team_participant_identifiers.extend(experiment.participant_allowlist)
     team_participant_identifiers = list(set(team_participant_identifiers))
-    alpine_context = _get_voice_provider_alpine_context(request, experiment)
+    alpine_context = _get_alpine_context(request, experiment)
 
     if request.method == "POST":
         form = ChatbotSettingsForm(request=request, data=request.POST, instance=experiment)
@@ -89,10 +84,7 @@ def chatbots_settings(request, team_slug, experiment_id):
             "edit_mode": False,
             "form": form,
             "updated": True,
-            "team_participant_identifiers": team_participant_identifiers,
-            "voice_providers_types": alpine_context["voice_providers_types"],
-            "synthetic_voice_options": alpine_context["synthetic_voice_options"],
-            "form_attrs": alpine_context["form_attrs"],
+            **alpine_context,
         }
         if form.is_valid():
             form.save()
@@ -107,9 +99,7 @@ def chatbots_settings(request, team_slug, experiment_id):
             "request": request,
             "form": form,
             "team_participant_identifiers": team_participant_identifiers,
-            "voice_providers_types": alpine_context["voice_providers_types"],
-            "synthetic_voice_options": alpine_context["synthetic_voice_options"],
-            "form_attrs": alpine_context["form_attrs"],
+            **alpine_context,
         }
 
     return HttpResponse(render_to_string("chatbots/settings_content.html", context, request=request))
