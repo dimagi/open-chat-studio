@@ -1047,22 +1047,35 @@ function BuiltInToolsWidget(props: WidgetParams) {
               {toolKey} configuration
             </div>
             {widgets.map((widget: PropertySchema) => {
-              const widgetProps: WidgetParams = {
-                ...props,
-                name: widget.name,
-                label: widget.label,
-                helpText: widget.helpText ?? "",
-                paramValue: widget.type === "toggle"
-                ? props.nodeParams?.[widget.name] === true || props.nodeParams?.[widget.name] === "true"
-                : props.nodeParams?.[widget.name] ?? "",
-                updateParamValue: props.updateParamValue,
-              };
-            const WidgetComponent = getWidget(widget.type, widget);
+                if (widget.type === "toggle") {
+                const widgetProps: ToggleWidgetParams = {
+                  ...props,
+                  name: widget.name,
+                  label: widget.label,
+                  helpText: widget.helpText ?? "",
+                  paramValue:
+                    props.nodeParams?.[widget.name] === true ||
+                    props.nodeParams?.[widget.name] === "true",
+                  updateParamValue: props.updateParamValue,
+               };
+           const ToggleComponent = getWidget(widget.type, widget) as React.ComponentType<ToggleWidgetParams>;
+        return <ToggleComponent key={widget.name} {...widgetProps} />;
+        } else {
+            const widgetProps: WidgetParams = {
+              ...props,
+              name: widget.name,
+              label: widget.label,
+              helpText: widget.helpText ?? "",
+              paramValue: props.nodeParams?.[widget.name] ?? "",
+              updateParamValue: props.updateParamValue,
+            };
+            const WidgetComponent = getWidget(widget.type, widget) as React.ComponentType<WidgetParams>;
             return <WidgetComponent key={widget.name} {...widgetProps} />;
-            })}
-          </div>
-        );
-      })}
+            }
+        })}
+    </div>
+    );
+    })}
     </InputField>
   );
 }
