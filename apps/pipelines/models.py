@@ -472,9 +472,9 @@ class Node(BaseModel, VersionsMixin, CustomActionOperationMixin):
 
             if not collection.has_versions or collection.compare_with_latest():
                 collection_version = collection.create_new_version()
-                return str(collection_version.id)
+                return collection_version.id
             else:
-                return self.latest_version.params.get(param_name)
+                return collection.latest_version.id
 
         new_version = super().create_new_version(save=False, is_copy=is_copy)
         if is_copy and new_flow_id:

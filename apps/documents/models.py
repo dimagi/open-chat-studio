@@ -5,11 +5,10 @@ from django.utils.translation import gettext_lazy as _
 from field_audit import audit_fields
 from field_audit.models import AuditingManager
 
-from apps.experiments.models import Experiment
 from apps.experiments.versioning import VersionDetails, VersionField, VersionsMixin, VersionsObjectManagerMixin
 from apps.teams.models import BaseTeamModel
 from apps.utils.conversions import bytes_to_megabytes
-from apps.utils.deletion import get_related_pipelines_queryset
+from apps.utils.deletion import get_related_pipeline_experiments_queryset, get_related_pipelines_queryset
 
 
 class CollectionObjectManager(VersionsObjectManagerMixin, AuditingManager):
@@ -163,10 +162,14 @@ class Collection(BaseTeamModel, VersionsMixin):
         """
         Get all experiments that reference this collection through a pipeline
         """
-        return Experiment.objects.filter(
-            models.Q(pipeline__node__params__collection_index_id=str(self.id))
-            | models.Q(pipeline__node__params__collection_id=str(self.id))
-        ).distinct()
+        # TODO: Update assistant archive code to use get_related_pipeline_experiments_queryset
+        index_references = get_related_pipeline_experiments_queryset(self, "collection_index_id").filter(
+            is_default_version=True
+        )
+        collection_references = get_related_pipeline_experiments_queryset(self, "collection_id").filter(
+            is_default_version=True
+        )
+        return index_references | collection_references
 
     @transaction.atomic()
     def archive(self):
@@ -177,8 +180,9 @@ class Collection(BaseTeamModel, VersionsMixin):
             return False
 
         if self.is_working_version:
-            if self.versions.exists():
-                return False
+            for version in self.versions.all():
+                if version.get_related_experiments_queryset().exists():
+                    return False
 
         super().archive()
         if self.is_index and self.openai_vector_store_id:

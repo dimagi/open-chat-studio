@@ -88,19 +88,22 @@ class TestDeleteCollection:
         return collection
 
     @pytest.mark.parametrize("is_index", [False])
-    def test_user_cannot_delete_a_collection_in_use(self, is_index, index_manager_mock, client):
+    def test_user_cannot_delete_a_collection_in_use(self, is_index, index_manager_mock, client, experiment):
         """
         The user should not be able to delete a collection if it is being used by a pipeline.
         There are two cases where this can happen:
         1. The collection is being used in a pipeline
         2. The collection is being used by a pipeline version, which is being used by some experiment
         """
+        experiment.pipeline = PipelineFactory()
+        experiment.save()
+
         collection = self.setup_collection(is_index=is_index)
         client.force_login(collection.team.members.first())
+        node = NodeFactory(pipeline=experiment.pipeline, type="LlmNode", params={"collection_index_id": collection.id})
+        experiment.create_new_version()
+
         url = reverse("documents:collection_delete", args=[collection.team.slug, collection.id])
-
-        node = NodeFactory(pipeline=PipelineFactory(), type="LlmNode", params={"collection_index_id": collection.id})
-
         # Case 1 - The pipeline is using the collection
         response = client.delete(url)
         assert response.status_code == 400

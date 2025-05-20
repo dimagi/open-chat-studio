@@ -224,6 +224,15 @@ def get_related_pipelines_queryset(instance, pipeline_param_key: str = None):
     return pipelines
 
 
+def get_related_pipeline_experiments_queryset(instance, pipeline_param_key: str):
+    from apps.experiments.models import Experiment
+
+    return Experiment.objects.filter(
+        Q(**{f"pipeline__node__params__{pipeline_param_key}": instance.id})
+        | Q(**{f"pipeline__node__params__{pipeline_param_key}": str(instance.id)})
+    ).distinct()
+
+
 def get_admin_emails_with_delete_permission(team):
     from apps.teams.models import Membership
 
