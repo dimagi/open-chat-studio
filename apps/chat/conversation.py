@@ -228,7 +228,6 @@ def _compress_chat_history(
         history_mode,
         current_token_count,
         max_token_limit,
-        keep_history_len,
     )
     history, last_message, summary = compress_chat_history_from_messages(
         llm, history, keep_history_len, max_token_limit, input_messages, history_mode

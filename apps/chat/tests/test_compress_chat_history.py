@@ -287,7 +287,7 @@ def test_truncate_tokens(chat):
 
     remaining_after_pruning = ["Another one", "Final message"]
     assert [r.content for r in result] == remaining_after_pruning
-    summary_message = ChatMessage.objects.get(chat=chat, metadata__summary_marker=True)
+    summary_message = ChatMessage.objects.get(chat=chat, metadata__compression_marker=True)
     assert summary_message.content == "Another one"
 
     # Check that the summary marker is respected
