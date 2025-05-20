@@ -166,11 +166,16 @@ def test_compression_exhausts_history(_reduce_summary_size, mock_get_new_summary
 @mock.patch("apps.chat.conversation._get_new_summary")
 @mock.patch("apps.chat.conversation._reduce_summary_size")
 def test_compression_exhausts_history_and_pruned_memory(_reduce_summary_size, _get_new_summary, chat):
+    token_counts = [
+        80,  # initial history token count
+        50,  # 'input_messages' token count
+    ]
+
     class Llm(FakeLlmSimpleTokenCount):
         def get_num_tokens_from_messages(*args, **kwargs):
             # Force the while loop inside compress_chat_history_from_messages to run until the `history` array
             # is empty
-            return 80
+            return token_counts.pop(0) if token_counts else 70
 
     def _clear_pruned_memory(llm, pruned_memory, summary, model_token_limit):
         # Simulate the while loop running until the pruned memory is cleared
@@ -184,7 +189,7 @@ def test_compression_exhausts_history_and_pruned_memory(_reduce_summary_size, _g
     llm = Llm(responses=[])
     _get_new_summary.side_effect = _clear_pruned_memory
     _reduce_summary_size.return_value = "Summary", 0
-    result = compress_chat_history(chat, llm, 20, input_messages=[])
+    result = compress_chat_history(chat, llm, 70, input_messages=[])
     assert len(result) == 1
     last_message = ChatMessage.objects.order_by("created_at").last()
     assert last_message.summary == "Summary"
@@ -336,9 +341,9 @@ def test_reduce_summary_size_gives_up_after_three_attempts():
     initial_summary = "This is a very long summary " * 10
     summary_token_limit = 3  # Impossible to meet this limit
 
-    result, _ = _reduce_summary_size(llm, initial_summary, summary_token_limit)
+    with pytest.raises(ChatException):
+        _reduce_summary_size(llm, initial_summary, summary_token_limit)
 
-    assert result == ""  # Should return empty string after failing to reduce enough
     assert len(llm.get_calls()) == 3  # Should still make exactly 3 attempts
 
 
