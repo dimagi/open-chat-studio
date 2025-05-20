@@ -7,6 +7,7 @@ from celery.app import shared_task
 from taskbadger.celery import Task as TaskbadgerTask
 
 from apps.assistants.sync import OpenAiSyncError, create_files_remote
+from apps.documents.exceptions import FileUploadError
 from apps.documents.models import Collection, CollectionFile, FileStatus
 from apps.service_providers.models import LlmProvider
 
@@ -88,39 +89,29 @@ def _upload_files_to_vector_store(
     re_upload_all: bool = False,
 ):
     """Upload files to OpenAI and link them to the vector store"""
-    file_ids = []
-    collection_files_to_link = []
+    unlinked_collection_files = []
     vector_store_manager = collection.llm_provider.get_index_manager()
 
     for collection_file in collection_files:
         try:
-            file = collection_file.file
-            if re_upload_all or not file.external_id:
-                file.external_id = None
-                create_files_remote(client, files=[file])
-
-            file_ids.append(file.external_id)
-            collection_files_to_link.append(collection_file)
-        except Exception:
-            logger.exception(
-                "Failed to upload file to OpenAI",
-                extra={
-                    "file_id": collection_file.file.id,
-                    "team": collection_file.collection.team.slug,
-                    "collection_id": collection_file.collection.id,
-                },
-            )
+            _ensure_remote_file_exists(client, collection_file=collection_file, re_upload_all=re_upload_all)
+            unlinked_collection_files.append(collection_file)
+        except FileUploadError:
             collection_file.status = FileStatus.FAILED
             collection_file.save(update_fields=["status"])
 
     try:
+        file_ids = []
+        for collection_file in unlinked_collection_files:
+            file_ids.append(collection_file.file.external_id)
+
         vector_store_manager.link_files_to_vector_store(
             vector_store_id=collection.openai_vector_store_id,
             file_ids=file_ids,
             chunk_size=chunk_size,
             chunk_overlap=chunk_overlap,
         )
-        for collection_file in collection_files_to_link:
+        for collection_file in unlinked_collection_files:
             collection_file.status = FileStatus.COMPLETED
 
     except OpenAiSyncError:
@@ -132,10 +123,10 @@ def _upload_files_to_vector_store(
                 "collection_id": collection.id,
             },
         )
-        for collection_file in collection_files_to_link:
+        for collection_file in unlinked_collection_files:
             collection_file.status = FileStatus.FAILED
 
-    CollectionFile.objects.bulk_update(collection_files_to_link, ["status"])
+    CollectionFile.objects.bulk_update(unlinked_collection_files, ["status"])
 
 
 def _cleanup_old_vector_store(llm_provider_id: int, vector_store_id: str, file_ids: list[str]):
@@ -146,3 +137,21 @@ def _cleanup_old_vector_store(llm_provider_id: int, vector_store_id: str, file_i
     for file_id in file_ids:
         with contextlib.suppress(openai.NotFoundError):
             old_manager.client.files.delete(file_id)
+
+
+def _ensure_remote_file_exists(client, collection_file: CollectionFile, re_upload_all: bool):
+    try:
+        file = collection_file.file
+        if re_upload_all or not file.external_id:
+            file.external_id = None
+            create_files_remote(client, files=[file])
+    except Exception:
+        logger.exception(
+            "Failed to upload file to OpenAI",
+            extra={
+                "file_id": collection_file.file.id,
+                "team": collection_file.collection.team.slug,
+                "collection_id": collection_file.collection.id,
+            },
+        )
+        raise FileUploadError() from None

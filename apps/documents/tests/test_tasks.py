@@ -175,20 +175,18 @@ class TestMigrateVectorStores:
             ANY, collection, [col_file_2], chunk_size=1000, chunk_overlap=500, re_upload_all=True
         )
 
-    def test_migration_with_multiple_chunking_strategies(self, collection, index_manager_mock):
+    @patch("apps.documents.tasks.create_files_remote")
+    def test_migration_with_multiple_chunking_strategies(self, create_files_remote, collection, index_manager_mock):
         """Test migration handles multiple files with different chunking strategies"""
         # Create files with different chunking strategies
-        file1 = File.objects.create(name="test1.txt", team=collection.team)
-        file2 = File.objects.create(name="test2.txt", team=collection.team)
-
         CollectionFile.objects.create(
-            file=file1,
+            file=File.objects.create(name="test1.txt", team=collection.team),
             collection=collection,
             status=FileStatus.PENDING,
             metadata={"chunking_strategy": {"chunk_size": 1000, "chunk_overlap": 100}},
         )
         CollectionFile.objects.create(
-            file=file2,
+            file=File.objects.create(name="test2.txt", team=collection.team),
             collection=collection,
             status=FileStatus.PENDING,
             metadata={"chunking_strategy": {"chunk_size": 2000, "chunk_overlap": 200}},
