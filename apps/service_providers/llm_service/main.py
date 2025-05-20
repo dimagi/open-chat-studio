@@ -15,6 +15,7 @@ from langchain_google_genai import ChatGoogleGenerativeAI
 from langchain_openai.chat_models import AzureChatOpenAI, ChatOpenAI
 from openai import OpenAI
 from openai._base_client import SyncAPIClient
+from pydantic import BaseModel
 
 from apps.service_providers.llm_service.callbacks import TokenCountingCallbackHandler
 from apps.service_providers.llm_service.token_counters import (
@@ -125,7 +126,7 @@ class LlmService(pydantic.BaseModel):
     def get_callback_handler(self, model: str) -> BaseCallbackHandler:
         raise NotImplementedError
 
-    def attach_built_in_tools(self, built_in_tools: list[str], config: dict = None) -> list:
+    def attach_built_in_tools(self, built_in_tools: list[str], config: dict[str, BaseModel] = None) -> list:
         raise NotImplementedError
 
     def get_output_parser(self):
@@ -190,7 +191,7 @@ class OpenAILlmService(OpenAIGenericService):
         )
         return transcript.text
 
-    def attach_built_in_tools(self, built_in_tools: list[str], config: dict = None) -> list:
+    def attach_built_in_tools(self, built_in_tools: list[str], config: dict[str, BaseModel] = None) -> list:
         tools = []
         for tool_name in built_in_tools:
             if tool_name == "web-search":
@@ -217,7 +218,7 @@ class AzureLlmService(LlmService):
     def get_callback_handler(self, model: str) -> BaseCallbackHandler:
         return TokenCountingCallbackHandler(OpenAITokenCounter(model))
 
-    def attach_built_in_tools(self, built_in_tools: list[str]) -> list:
+    def attach_built_in_tools(self, built_in_tools: list[str], config: dict[str, BaseModel] = None) -> list:
         return []
 
 
@@ -236,7 +237,8 @@ class AnthropicLlmService(LlmService):
     def get_callback_handler(self, model: str) -> BaseCallbackHandler:
         return TokenCountingCallbackHandler(AnthropicTokenCounter(model, self.anthropic_api_key))
 
-    def attach_built_in_tools(self, built_in_tools: list[str], config: dict = None) -> list:
+    def attach_built_in_tools(self, built_in_tools: list[str], config: dict[str, BaseModel] = None) -> list:
+        config = config or {}
         tools = []
         for tool_name in built_in_tools:
             if tool_name == "web-search":
@@ -245,12 +247,8 @@ class AnthropicLlmService(LlmService):
                     "name": "web_search",
                     "max_uses": 5,
                 }
-                allowed = (config.get("allowed_domains") or "").strip()
-                if allowed:
-                    tool["allowed_domains"] = allowed.split()
-                blocked = (config.get("blocked_domains") or "").strip()
-                if blocked:
-                    tool["blocked_domains"] = blocked.split()
+                if tool_config := config.get(tool_name):
+                    tool.update(tool_config.model_dump())
                 tools.append(tool)
             else:
                 raise ValueError(f"Unsupported built-in tool for anthropic: '{tool_name}'")
@@ -305,7 +303,7 @@ class DeepSeekLlmService(LlmService):
     def get_callback_handler(self, model: str) -> BaseCallbackHandler:
         return TokenCountingCallbackHandler(OpenAITokenCounter(model))
 
-    def attach_built_in_tools(self, built_in_tools: list[str], config: dict = None) -> list:
+    def attach_built_in_tools(self, built_in_tools: list[str], config: dict[str, BaseModel] = None) -> list:
         return []
 
 
@@ -322,7 +320,7 @@ class GoogleLlmService(LlmService):
     def get_callback_handler(self, model: str) -> BaseCallbackHandler:
         return TokenCountingCallbackHandler(GeminiTokenCounter(model, self.google_api_key))
 
-    def attach_built_in_tools(self, built_in_tools: list[str], config: dict = None) -> list:
+    def attach_built_in_tools(self, built_in_tools: list[str], config: dict[str, BaseModel] = None) -> list:
         return []
         # Commenting it for now until we fix it
         # otherwise gemini would not work if code execution or web search is selected in the node

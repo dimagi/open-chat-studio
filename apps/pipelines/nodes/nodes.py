@@ -8,6 +8,7 @@ from typing import Annotated, Literal, Self
 
 import tiktoken
 from django.conf import settings
+from django.core import validators
 from django.core.exceptions import ValidationError
 from django.core.validators import validate_email
 from django.db.models import TextChoices
@@ -16,7 +17,15 @@ from langchain_core.messages import BaseMessage
 from langchain_core.prompts import MessagesPlaceholder, PromptTemplate
 from langchain_core.runnables import RunnableLambda, RunnablePassthrough
 from langchain_text_splitters import RecursiveCharacterTextSplitter
-from pydantic import BaseModel, BeforeValidator, Field, create_model, field_validator, model_validator, root_validator
+from pydantic import (
+    BaseModel,
+    BeforeValidator,
+    Field,
+    create_model,
+    field_serializer,
+    field_validator,
+    model_validator,
+)
 from pydantic import ValidationError as PydanticValidationError
 from pydantic.config import ConfigDict
 from pydantic_core import PydanticCustomError
@@ -243,18 +252,34 @@ class LLMResponse(PipelineNode, LLMResponseMixin):
 
 
 class ToolConfigModel(BaseModel):
-    allowed_domains: str | None = Field(
-        None,
+    allowed_domains: list[str] = Field(
+        default_factory=list,
         json_schema_extra=UiSchema(
             widget=Widgets.none,
         ),
     )
-    blocked_domains: str | None = Field(
-        None,
+    blocked_domains: list[str] = Field(
+        default_factory=list,
         json_schema_extra=UiSchema(
             widget=Widgets.none,
         ),
     )
+
+    @field_validator("allowed_domains", "blocked_domains", mode="after")
+    @classmethod
+    def capitalize(cls, value: list[str]) -> list[str]:
+        values = list(map(str.strip, filter(None, value)))
+        for value in values:
+            try:
+                validators.validate_domain_name(value)
+            except ValidationError:
+                raise ValueError(f"Invalid domain name: {value}") from None
+        return values
+
+    @field_serializer("allowed_domains", "blocked_domains")
+    def serialize_lists(self, values: list[str]) -> list[str] | None:
+        # return None instead of empty list
+        return values if values else None
 
 
 class LLMResponseWithPrompt(LLMResponse, HistoryMixin):
@@ -349,20 +374,6 @@ class LLMResponseWithPrompt(LLMResponse, HistoryMixin):
             )
         return value
 
-    @root_validator(pre=True)
-    def nest_tool_config(cls, values):
-        tool_config_data = {}
-        for key in list(values.keys()):
-            if key.startswith("tool_config."):
-                parts = key.split(".")
-                if len(parts) == 3:
-                    _, tool_key, param_key = parts
-                    tool_config_data.setdefault(tool_key, {})[param_key] = values[key]
-                    values.pop(key)
-        if tool_config_data:
-            values["tool_config"] = tool_config_data
-        return values
-
     def _process(self, input, state: PipelineState) -> PipelineState:
         session: ExperimentSession | None = state.get("experiment_session")
         # Get runnable
@@ -378,9 +389,8 @@ class LLMResponseWithPrompt(LLMResponse, HistoryMixin):
         )
         tools = get_node_tools(self.django_node, session, attachment_callback=history_manager.attach_file_id)
         built_in_tools = self.built_in_tools
-        config = BuiltInTools.build_tool_config(provider_model.type, built_in_tools, self.tool_config)
         if llm_service := self.get_llm_service():
-            tools.extend(llm_service.attach_built_in_tools(built_in_tools, config))
+            tools.extend(llm_service.attach_built_in_tools(built_in_tools, self.tool_config))
         if self.collection_index_id:
             collection = Collection.objects.get(id=self.collection_index_id)
             builtin_tools = {"type": "file_search", "vector_store_ids": [collection.openai_vector_store_id]}

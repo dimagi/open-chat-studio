@@ -560,22 +560,6 @@ class BuiltInTools(models.TextChoices):
             }
         }
 
-    @classmethod
-    def build_tool_config(cls, provider: str, selected_tools: list[str], tool_config_instance) -> dict:
-        """
-        Builds a config dictionary based on the selected provider and tools using a tool config object.
-        """
-        config = {}
-        provider_configs = cls.get_tool_configs_by_provider().get(provider.lower(), {})
-
-        for tool in selected_tools:
-            tool_config_fields = provider_configs.get(tool, [])
-            for field in tool_config_fields:
-                field_key = field["name"].split(".")[-1]
-                value = getattr(tool_config_instance, field_key, "") if tool_config_instance else ""
-                config[field_key] = value
-        return config
-
 
 class AgentTools(models.TextChoices):
     RECURRING_REMINDER = "recurring-reminder", gettext("Recurring Reminder")
