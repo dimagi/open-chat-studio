@@ -49,6 +49,7 @@ class ChatbotSettingsForm(forms.ModelForm):
     class Meta:
         model = Experiment
         fields = [
+            "name",
             "description",
             "voice_provider",
             "synthetic_voice",

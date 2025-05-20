@@ -1,5 +1,6 @@
 {% load form_tags %}
 {% if updated %}
+  <div id="chatbot-name" hx-swap-oob="innerHTML">{{ experiment.name }}</div>
   <div id="chatbot-description" hx-swap-oob="innerHTML">{{ experiment.description }}</div>
 {% endif %}
 <div id="settings-wrapper">
@@ -54,6 +55,16 @@
                                                     });
                                                     }
                                                     }">{% endif %}
+  <div class="mb-6" id="name-section">
+    <h4 class="text-md font-bold mb-2">Name</h4>
+    <div class="p-4 bg-base-200 rounded-md" id="name-{% if edit_mode %}edit{% else %}content{% endif %}">
+      {% if edit_mode %}
+        {% render_form_fields form "name" %}
+      {% else %}
+        <p>{{ experiment.name }}</p>
+      {% endif %}
+    </div>
+  </div>
   <div class="mb-6" id="description-section">
     <h4 class="text-md font-bold mb-2">Description</h4>
     <div class="p-4 bg-base-200 rounded-md" id="description-{% if edit_mode %}edit{% else %}content{% endif %}">
