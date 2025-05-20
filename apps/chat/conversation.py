@@ -140,7 +140,7 @@ def compress_chat_history(
                 if summary == COMPRESSION_MARKER:
                     try:
                         message = ChatMessage.objects.get(id=last_message.additional_kwargs["id"])
-                        message.metadata["summary_marker"] = True
+                        message.metadata["compression_marker"] = True
                         message.save(update_fields=["metadata"])
                     except ChatMessage.DoesNotExist:
                         pass

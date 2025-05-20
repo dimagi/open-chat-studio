@@ -105,6 +105,7 @@ class ChatMessage(BaseModel, TaggedModelMixin, UserCommentsMixin):
         # boolean indicating that this message has been synced to the thread
         "openai_thread_checkpoint",
         "trace_info",
+        "compression_marker",
     }
 
     chat = models.ForeignKey(Chat, on_delete=models.CASCADE, related_name="messages")
@@ -155,7 +156,7 @@ class ChatMessage(BaseModel, TaggedModelMixin, UserCommentsMixin):
 
     @property
     def is_summary_marker(self):
-        return self.metadata.get("summary_marker", False)
+        return self.metadata.get("compression_marker", False)
 
     @property
     def created_at_datetime(self):
