@@ -1017,12 +1017,9 @@ function BuiltInToolsWidget(props: WidgetParams) {
   }
 
   function onUpdate(event: ChangeEvent<HTMLInputElement>) {
-    if (event.target.checked) {
-      setSelectedValue([...selectedValues, event.target.name])
-    } else {
-      setSelectedValue(selectedValues.filter((tool) => tool !== event.target.name));
-    }
-    setNode(props.nodeId, (old) => getNewNodeData(old, selectedValues));
+    const updatedList = event.target.checked ? [...selectedValues, event.target.name] : selectedValues.filter((tool) => tool !== event.target.name);
+    setSelectedValue(updatedList);
+    setNode(props.nodeId, (old) => getNewNodeData(old, updatedList));
   }
   return (
     <InputField label={props.label} help_text={props.helpText} inputError={props.inputError}>
@@ -1055,7 +1052,9 @@ function BuiltInToolsWidget(props: WidgetParams) {
                 name: widget.name,
                 label: widget.label,
                 helpText: widget.helpText ?? "",
-                paramValue: props.nodeParams?.[widget.name] ?? "",
+                paramValue: widget.type === "toggle"
+                ? props.nodeParams?.[widget.name] === true || props.nodeParams?.[widget.name] === "true"
+                : props.nodeParams?.[widget.name] ?? "",
                 updateParamValue: props.updateParamValue,
               };
             const WidgetComponent = getWidget(widget.type, widget);
