@@ -1,6 +1,11 @@
 {
   "description": "Extract structured data from the input",
   "properties": {
+    "llm_provider_type": {
+      "title": "Llm Provider Type",
+      "type": "string",
+      "ui:widget": "none"
+    },
     "llm_provider_id": {
       "title": "LLM Model",
       "type": "integer",
@@ -33,6 +38,7 @@
     }
   },
   "required": [
+    "llm_provider_type",
     "llm_provider_id",
     "llm_provider_model_id",
     "name"

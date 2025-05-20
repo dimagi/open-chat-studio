@@ -11,7 +11,9 @@ export type PropertySchema = {
   enum?: string[] | undefined;
   "ui:optionsSource"?: string | undefined;
   "ui:widget"?: string | undefined;
-  "ui:enumLabels"?: string | undefined;
+  "ui:enumLabels"?: string[] | undefined;
+  "ui:enumDiscriminatorValues"?: string[] | undefined;
+  "ui:discriminatorField"?: string | undefined;
   "ui:flagRequired"?: string | undefined;
   [k: string]: any;
 }

@@ -3,7 +3,7 @@ import CodeMirror from '@uiw/react-codemirror';
 import {python} from "@codemirror/lang-python";
 import {githubDark, githubLight} from "@uiw/codemirror-theme-github";
 import {CompletionContext, snippetCompletion as snip} from '@codemirror/autocomplete'
-import {TypedOption, LlmProviderModel} from "../types/nodeParameterValues";
+import {TypedOption, LlmProviderModel, Option} from "../types/nodeParameterValues";
 import usePipelineStore from "../stores/pipelineStore";
 import {classNames, concatenate, getCachedData, getDocumentationLink, getSelectOptions} from "../utils";
 import {JsonSchema, NodeParams, PropertySchema} from "../types/nodeParams";
@@ -174,6 +174,26 @@ function ToggleWidget(props: ToggleWidgetParams) {
   );
 }
 
+function useDiscriminator(schema: PropertySchema, nodeParams: NodeParams, allOptions: Option[]): Option[] {
+  const [options, setOptions] = useState(allOptions);
+
+  useEffect(() => {
+    const discriminatorField = schema["ui:discriminatorField"];
+    if (!discriminatorField) {
+      return;
+    }
+
+    const discriminatorValue = nodeParams[discriminatorField!];
+    if (!discriminatorValue) {
+      setOptions([]);
+      return;
+    }
+
+    setOptions(allOptions.filter(option => option.discriminatorValue === discriminatorValue));
+  }, [nodeParams]);
+  return options;
+}
+
 function SelectWidget(props: WidgetParams) {
   const options = getSelectOptions(props.schema);
   const selectedOption = options.find((option) => option.value.toString() === props.paramValue);
@@ -214,10 +234,10 @@ function SelectWidget(props: WidgetParams) {
 
 
 function MultiSelectWidget(props: WidgetParams) {
-  const options = getSelectOptions(props.schema);
-  if (options.length == 0) {
-    return <></>
-  }
+  const allOptions = getSelectOptions(props.schema);
+  const options = useDiscriminator(props.schema, props.nodeParams, allOptions);
+  console.log(props.name, allOptions, options)
+
   // props.paramValue is made immutable when produce is used to update the node, so we have to copy props.paramValue
   // in order to push to it
   let selectedValues = Array.isArray(props.paramValue) ? [...props.paramValue] : [];
@@ -241,6 +261,10 @@ function MultiSelectWidget(props: WidgetParams) {
     }
     );
   };
+
+  if (options.length == 0) {
+    return <></>
+  }
 
   return (
     <InputField label={props.label} help_text={props.helpText} inputError={props.inputError}>
@@ -812,8 +836,10 @@ export function LlmWidget(props: WidgetParams) {
   const updateParamValue = (event: ChangeEvent<HTMLSelectElement>) => {
     const {value} = event.target;
     const [providerId, providerModelId] = value.split('|:|');
+    const providerType = parameterValues.LlmProviderId.filter(p => `${p.value}` === providerId)[0].type;
     setNode(props.nodeId, (old) =>
       produce(old, (next) => {
+        next.data.params.llm_provider_type = providerType;
         next.data.params.llm_provider_id = providerId;
         next.data.params.llm_provider_model_id = providerModelId;
       })

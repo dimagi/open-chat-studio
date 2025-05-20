@@ -1,6 +1,11 @@
 {
   "description": "Uses and LLM to respond to the input.",
   "properties": {
+    "llm_provider_type": {
+      "title": "Llm Provider Type",
+      "type": "string",
+      "ui:widget": "none"
+    },
     "llm_provider_id": {
       "title": "LLM Model",
       "type": "integer",
@@ -137,36 +142,34 @@
       },
       "title": "Built In Tools",
       "type": "array",
-      "ui:optionsSource": "built_in_tools",
-      "ui:widget": "built_in_tools"
+      "ui:discriminatorField": "llm_provider_type",
+      "ui:enumDiscriminatorValues": [
+        "openai",
+        "anthropic"
+      ],
+      "ui:enumLabels": [
+        "Web Search",
+        "Code Execution"
+      ],
+      "ui:widget": "multiselect"
     },
     "tool_config": {
       "additionalProperties": {
         "properties": {
           "allowed_domains": {
-            "anyOf": [
-              {
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "default": null,
+            "items": {
+              "type": "string"
+            },
             "title": "Allowed Domains",
+            "type": "array",
             "ui:widget": "none"
           },
           "blocked_domains": {
-            "anyOf": [
-              {
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "default": null,
+            "items": {
+              "type": "string"
+            },
             "title": "Blocked Domains",
+            "type": "array",
             "ui:widget": "none"
           }
         },
@@ -180,6 +183,7 @@
     }
   },
   "required": [
+    "llm_provider_type",
     "llm_provider_id",
     "llm_provider_model_id",
     "name",
