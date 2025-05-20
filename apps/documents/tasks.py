@@ -11,7 +11,7 @@ from apps.documents.exceptions import FileUploadError
 from apps.documents.models import Collection, CollectionFile, FileStatus
 from apps.service_providers.models import LlmProvider
 
-logger = logging.getLogger("ocs.documents.tasks.upload_files_to_openai")
+logger = logging.getLogger("ocs.documents.tasks.link_files_to_index")
 
 DEFAULT_CHUNKING_STRATEGY = {"chunk_size": 800, "chunk_overlap": 400}
 
@@ -87,7 +87,7 @@ def _upload_files_to_vector_store(
     chunk_overlap: int,
     re_upload_all: bool = False,
 ):
-    """Upload files to OpenAI and link them to the vector store"""
+    """Upload files to the remote index"""
     unlinked_collection_files = []
     vector_store_manager = collection.llm_provider.get_index_manager()
 
@@ -146,7 +146,7 @@ def _ensure_remote_file_exists(client, collection_file: CollectionFile, re_uploa
             create_files_remote(client, files=[file])
     except Exception:
         logger.exception(
-            "Failed to upload file to OpenAI",
+            "Failed to upload file to the remote index",
             extra={
                 "file_id": collection_file.file.id,
                 "team": collection_file.collection.team.slug,
