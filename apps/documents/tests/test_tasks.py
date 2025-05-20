@@ -32,12 +32,20 @@ def collection_file(db, collection):
     )
 
 
+def _create_files_remote_side_effect(new_external_id):
+    def _side_effect(client, files):
+        for file in files:
+            file.external_id = new_external_id
+            file.save()
+
+    return _side_effect
+
+
 @pytest.mark.django_db()
 class TestUploadFilesToVectorStore:
-    @patch("apps.documents.tasks.create_files_remote")
+    @patch("apps.documents.tasks.create_files_remote", side_effect=_create_files_remote_side_effect("ext-file-id"))
     def test_upload_files_task_success(self, create_files_remote, collection_file, index_manager_mock):
         """Test successful file upload to vector store"""
-        create_files_remote.return_value = ["ext-file-id"]
         index_manager_mock.link_files_to_vector_store.return_value = "vs_123"
 
         index_collection_files_task(collection_file.collection_id)
@@ -51,17 +59,15 @@ class TestUploadFilesToVectorStore:
         )
 
     @pytest.mark.usefixtures("index_manager_mock")
-    @patch("apps.documents.tasks.create_files_remote")
+    @patch("apps.documents.tasks.create_files_remote", side_effect=Exception("Upload failed"))
     def test_upload_files_task_failure(self, create_files_remote, collection_file):
         """Test handling of upload failures"""
-        create_files_remote.side_effect = Exception("Upload failed")
-
         index_collection_files_task(collection_file.collection_id)
 
         collection_file.refresh_from_db()
         assert collection_file.status == FileStatus.FAILED
 
-    @patch("apps.documents.tasks.create_files_remote")
+    @patch("apps.documents.tasks.create_files_remote", side_effect=_create_files_remote_side_effect("ext-file-id"))
     def test_upload_files_task_openai_sync_error(self, create_files_remote, collection_file, index_manager_mock):
         """Test handling of OpenAiSyncError during file upload"""
         index_manager_mock.link_files_to_vector_store.side_effect = OpenAiSyncError("Failed to sync with OpenAI")
@@ -70,6 +76,41 @@ class TestUploadFilesToVectorStore:
 
         collection_file.refresh_from_db()
         assert collection_file.status == FileStatus.FAILED
+
+    @patch("apps.documents.tasks.create_files_remote", side_effect=_create_files_remote_side_effect("ext-file-id"))
+    def test_retry_failed_uploads(self, create_files_remote, collection, index_manager_mock):
+        """Test that only failed uploads are retried"""
+        completed_file = FileFactory(external_id="completed-123", team=collection.team)
+        failed_file = FileFactory(external_id="failed-123", team=collection.team)
+        pending_file = FileFactory(external_id="failed-123", team=collection.team)
+        # Setup two files with different statuses
+        CollectionFile.objects.create(
+            file=completed_file,
+            collection=collection,
+            status=FileStatus.COMPLETED,
+        )
+        CollectionFile.objects.create(
+            file=failed_file,
+            collection=collection,
+            status=FileStatus.FAILED,
+        )
+        CollectionFile.objects.create(
+            file=pending_file,
+            collection=collection,
+            status=FileStatus.PENDING,
+        )
+
+        index_collection_files_task(collection.id, retry_failed=True)
+
+        # Since the file has an external id, the upload worked and we don't need to re-upload it
+        create_files_remote.assert_not_called()
+        # We expect only the failed file to be retried
+        index_manager_mock.link_files_to_vector_store.assert_called_once_with(
+            vector_store_id=collection.openai_vector_store_id,
+            file_ids=["failed-123"],
+            chunk_size=800,
+            chunk_overlap=400,
+        )
 
 
 @pytest.mark.django_db()
@@ -87,7 +128,10 @@ class TestMigrateVectorStores:
     ):
         """Test successful migration of files between vector stores"""
         # New file ids are returned when uploaded to the new provider
-        create_files_remote.side_effect = ["new-file-id1", "new-file-id2"]
+        create_files_remote.side_effect = [
+            _create_files_remote_side_effect("new-file-id1"),
+            _create_files_remote_side_effect("new-file-id2"),
+        ]
 
         old_vector_store_id = "old_vs_123"
         new_vector_store_id = "new_vs_123"
@@ -124,8 +168,12 @@ class TestMigrateVectorStores:
         )
 
         # Verify file uploads to new vector store
-        upload_files_to_vector_store.assert_any_call(ANY, collection, [col_file_1], chunk_size=1000, chunk_overlap=100)
-        upload_files_to_vector_store.assert_any_call(ANY, collection, [col_file_2], chunk_size=1000, chunk_overlap=500)
+        upload_files_to_vector_store.assert_any_call(
+            ANY, collection, [col_file_1], chunk_size=1000, chunk_overlap=100, re_upload_all=True
+        )
+        upload_files_to_vector_store.assert_any_call(
+            ANY, collection, [col_file_2], chunk_size=1000, chunk_overlap=500, re_upload_all=True
+        )
 
     def test_migration_with_multiple_chunking_strategies(self, collection, index_manager_mock):
         """Test migration handles multiple files with different chunking strategies"""
