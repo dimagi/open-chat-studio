@@ -43,12 +43,11 @@ def index_collection_files(collection_id: int, re_upload_all: bool, retry_failed
         The function sets file status to IN_PROGRESS while uploading,
         COMPLETED when done, and FAILED if the upload fails.
     """
-    # TODO: Preload collection files
     collection = Collection.objects.prefetch_related("llm_provider").get(id=collection_id)
     client = collection.llm_provider.get_llm_service().get_raw_client()
     previous_remote_file_ids = []
 
-    queryset = CollectionFile.objects.filter(collection=collection)
+    queryset = CollectionFile.objects.filter(collection=collection).prefetch_related("file")
     if not re_upload_all:
         scope_status = FileStatus.FAILED if retry_failed else FileStatus.PENDING
         queryset = queryset.filter(status=scope_status)
