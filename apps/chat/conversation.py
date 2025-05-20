@@ -313,6 +313,7 @@ def compress_chat_history_from_messages(
         history = truncate_tokens(history, max_token_limit, llm, input_message_tokens)
         return history, history[0] if history else None, COMPRESSION_MARKER
 
+    # Default mode: PipelineChatHistoryModes.SUMMARIZE
     history, pruned_memory = history[-keep_history_len:], history[:-keep_history_len]
     latest_message = history[-1] if history else None
     try:
