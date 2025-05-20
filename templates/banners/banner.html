@@ -1,12 +1,14 @@
 {% if banners %}
     <div class="banners-container">
         {% for banner in banners %}
-            <div class="alert alert-{{ banner.type }} alert-dismissible fade show" role="alert" data-banner-id="{{ banner.id }}">
+            <div class="alert alert-{{ banner.type }} alert-vertical sm:alert-horizontal" role="alert" data-banner-id="{{ banner.id }}">
                 {% if banner.title %}
                     <strong>{{ banner.title }}</strong>:
                 {% endif %}
                 {{ banner.message }}
-                <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Close"></button>
+                <div>
+                    <button class="btn btn-sm" data-bs-dismiss="alert" aria-label="Close">Okay</button>
+                </div>
             </div>
         {% endfor %}
     </div>
