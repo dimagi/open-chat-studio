@@ -147,7 +147,7 @@ class Collection(BaseTeamModel, VersionsMixin):
             new_version.save(update_fields=["openai_vector_store_id"])
 
             # Upload files to vector store
-            index_collection_files(new_version.id, all_files=True)
+            index_collection_files(new_version.id, re_upload_all=True)
 
         return new_version
 
@@ -186,6 +186,15 @@ class Collection(BaseTeamModel, VersionsMixin):
 
         self.files.update(is_archived=True)
         return True
+
+    def has_failed_index_uploads(self) -> bool:
+        """
+        Check if any of the files in this collection failed to upload to an index
+        """
+        return CollectionFile.objects.filter(
+            collection=self,
+            status=FileStatus.FAILED,
+        ).exists()
 
     def _remove_index(self):
         """Remove the index backend"""

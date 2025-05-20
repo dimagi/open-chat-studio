@@ -254,3 +254,11 @@ class DeleteCollection(LoginAndTeamRequiredMixin, View, PermissionRequiredMixin)
                 },
             )
             return HttpResponse(response, headers={"HX-Reswap": "none"}, status=400)
+
+
+@require_POST
+@login_and_team_required
+@permission_required("documents.change_collection", raise_exception=True)
+def retry_failed_uploads(request, team_slug: str, pk: int):
+    tasks.index_collection_files_task.delay(pk, retry_failed=True)
+    return redirect("documents:single_collection_home", team_slug=team_slug, pk=pk)
