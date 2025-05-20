@@ -304,8 +304,8 @@ class LLMResponseWithPrompt(LLMResponse, HistoryMixin):
         description="Built in tools provided by the LLM model",
         json_schema_extra=UiSchema(widget=Widgets.built_in_tools, options_source=OptionsSource.built_in_tools),
     )
-    tool_config: ToolConfigModel | None = Field(
-        default_factory=dict,
+    tool_config: dict[str, ToolConfigModel] = Field(
+        default_factory=None,
         description="Configuration for builtin tools",
         json_schema_extra=UiSchema(widget=Widgets.none),
     )
@@ -352,14 +352,13 @@ class LLMResponseWithPrompt(LLMResponse, HistoryMixin):
     @root_validator(pre=True)
     def nest_tool_config(cls, values):
         tool_config_data = {}
-        keys_to_remove = []
         for key in list(values.keys()):
             if key.startswith("tool_config."):
-                sub_key = key[len("tool_config.") :]
-                tool_config_data[sub_key] = values[key]
-                keys_to_remove.append(key)
-        for key in keys_to_remove:
-            values.pop(key)
+                parts = key.split(".")
+                if len(parts) == 3:
+                    _, tool_key, param_key = parts
+                    tool_config_data.setdefault(tool_key, {})[param_key] = values[key]
+                    values.pop(key)
         if tool_config_data:
             values["tool_config"] = tool_config_data
         return values
@@ -377,7 +376,6 @@ class LLMResponseWithPrompt(LLMResponse, HistoryMixin):
             max_token_limit=provider_model.max_token_limit,
             chat_model=chat_model,
         )
-
         tools = get_node_tools(self.django_node, session, attachment_callback=history_manager.attach_file_id)
         built_in_tools = self.built_in_tools
         config = BuiltInTools.build_tool_config(provider_model.type, built_in_tools, self.tool_config)
