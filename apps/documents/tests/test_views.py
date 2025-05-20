@@ -93,7 +93,7 @@ class TestDeleteCollection:
         The user should not be able to delete a collection if it is being used by a pipeline.
         There are two cases where this can happen:
         1. The collection is being used in a pipeline
-        2. The collection is being used by a pipeline version, which is being used by some experiment
+        2. The collection is being used by a pipeline version, which is being used by some published experiment
         """
         experiment.pipeline = PipelineFactory()
         experiment.save()

@@ -227,11 +227,7 @@ class DeleteCollection(LoginAndTeamRequiredMixin, View):
                     experiment_chips.extend(
                         [
                             Chip(
-                                label=(
-                                    f"{experiment.name} [{experiment.get_version_name()}]"
-                                    if experiment.is_working_version
-                                    else f"{experiment.name} {experiment.get_version_name()} [published]"
-                                ),
+                                label=f"{experiment.name} {experiment.get_version_name()} [published]",
                                 url=experiment.get_absolute_url(),
                             )
                             for experiment in experiments
