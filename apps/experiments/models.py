@@ -543,14 +543,14 @@ class BuiltInTools(models.TextChoices):
             "anthropic": {
                 cls.WEB_SEARCH: [
                     {
-                        "name": "tool_config.web-search.allowed_domains",
+                        "name": "allowed_domains",
                         "type": "expandable_text",
                         "label": "Allowed Domains",
                         "helpText": "Add domains without https from which you want the search results. "
                         "Use space to add multiple domains",
                     },
                     {
-                        "name": "tool_config.web-search.blocked_domains",
+                        "name": "blocked_domains",
                         "type": "expandable_text",
                         "label": "Blocked Domains",
                         "helpText": "Add domains without https from which you don't want the search results."

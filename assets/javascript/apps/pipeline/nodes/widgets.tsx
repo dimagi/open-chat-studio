@@ -1002,11 +1002,13 @@ function BuiltInToolsWidget(props: WidgetParams) {
   const providerKey = model?.type?.toLowerCase() || "";
   const providerToolMap = parameterValues.built_in_tools as unknown as Record<string, TypedOption[]>
   const options = providerToolMap[providerKey] || [];
-  const toolConfigsMap = parameterValues.built_in_tools_config as unknown as Record<string, Record<string, PropertySchema[]>>;
-  const providerToolConfigs = toolConfigsMap[providerKey] || {};
 
   if (options.length === 0) return <></>;
 
+  const toolConfigsMap = parameterValues.built_in_tools_config as unknown as Record<string, Record<string, PropertySchema[]>>;
+  const providerToolConfigs = toolConfigsMap[providerKey] || {};
+
+  const toolConfig = props.nodeParams.tool_config || {};
   const [selectedValues, setSelectedValue] = useState(Array.isArray(props.paramValue) ? [...props.paramValue] : []);
   const setNode = usePipelineStore((state) => state.setNode);
 
@@ -1020,6 +1022,19 @@ function BuiltInToolsWidget(props: WidgetParams) {
     const updatedList = event.target.checked ? [...selectedValues, event.target.name] : selectedValues.filter((tool) => tool !== event.target.name);
     setSelectedValue(updatedList);
     setNode(props.nodeId, (old) => getNewNodeData(old, updatedList));
+  }
+
+  function onConfigUpdate(toolName: string, event: React.ChangeEvent<HTMLTextAreaElement | HTMLSelectElement | HTMLInputElement>) {
+    const {name, value} = event.target;
+    setNode(props.nodeId, (old) => produce(old, (next) => {
+      if (!('tool_config' in next.data.params)) {
+        next.data.params.tool_config = {};
+      }
+      if (!(toolName in next.data.params.tool_config)) {
+        next.data.params.tool_config[toolName] = {};
+      }
+      next.data.params.tool_config[toolName][name] = value.split(" ").map(value => value.trim());
+    }))
   }
   return (
     <InputField label={props.label} help_text={props.helpText} inputError={props.inputError}>
@@ -1047,36 +1062,21 @@ function BuiltInToolsWidget(props: WidgetParams) {
               {toolKey} configuration
             </div>
             {widgets.map((widget: PropertySchema) => {
-                if (widget.type === "toggle") {
-                const widgetProps: ToggleWidgetParams = {
-                  ...props,
-                  name: widget.name,
-                  label: widget.label,
-                  helpText: widget.helpText ?? "",
-                  paramValue:
-                    props.nodeParams?.[widget.name] === true ||
-                    props.nodeParams?.[widget.name] === "true",
-                  updateParamValue: props.updateParamValue,
-               };
-           const ToggleComponent = getWidget(widget.type, widget) as React.ComponentType<ToggleWidgetParams>;
-        return <ToggleComponent key={widget.name} {...widgetProps} />;
-        } else {
-            const widgetProps: WidgetParams = {
-              ...props,
-              name: widget.name,
-              label: widget.label,
-              helpText: widget.helpText ?? "",
-              paramValue: props.nodeParams?.[widget.name] ?? "",
-              updateParamValue: props.updateParamValue,
-            };
-            const WidgetComponent = getWidget(widget.type, widget) as React.ComponentType<WidgetParams>;
-            return <WidgetComponent key={widget.name} {...widgetProps} />;
-            }
-        })}
+              const value = toolConfig[toolKey][widget.name];
+              const widgetProps: WidgetParams = {
+                ...props,
+                name: widget.name,
+                label: widget.label,
+                helpText: widget.helpText ?? "",
+                paramValue: Array.isArray(value) ? value.join(" ") : value,
+                updateParamValue: (event) => onConfigUpdate(toolKey, event),
+              };
+              const WidgetComponent = getWidget(widget.type, widget) as React.ComponentType<WidgetParams>;
+              return <WidgetComponent key={widget.name} {...widgetProps} />;
+            })}
     </div>
     );
     })}
     </InputField>
   );
 }
-
