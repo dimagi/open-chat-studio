@@ -76,13 +76,14 @@ class EvaluationMessage(BaseModel):
         )[0]
 
 
+class DatasetMessageTypeChoices(models.TextChoices):
+    HUMAN = "human", "Human Only"
+    AI = "ai", "AI Only"
+    ALL = "all", "All"
+
+
 class EvaluationDataset(BaseTeamModel):
-    MESSAGE_TYPE_CHOICES = [
-        ("USER_ONLY", "User Only"),
-        ("BOT_ONLY", "Bot Only"),
-        ("ALL", "All"),
-    ]
-    message_type = models.CharField(max_length=32, choices=MESSAGE_TYPE_CHOICES)
+    message_type = models.CharField(max_length=10, choices=DatasetMessageTypeChoices)
 
     name = models.CharField(max_length=255)
     messages = models.ManyToManyField(EvaluationMessage)
@@ -91,8 +92,10 @@ class EvaluationDataset(BaseTeamModel):
         return f"{self.name} ({self.messages.count()} messages)"
 
     def iter_messages(self):
-        # TODO: pass in the correct messages based on dataset.message_types
-        return (message for message in self.messages.all())
+        if self.message_type == DatasetMessageTypeChoices.ALL:
+            return self.messages.all()
+
+        return self.messages.filter(message_type=self.message_type)
 
 
 class EvaluationConfig(BaseTeamModel):
