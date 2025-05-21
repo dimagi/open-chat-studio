@@ -5,19 +5,22 @@
   {% render_form_fields form %}
   <div x-data="messageBuilder()" x-init="init()">
     <input type="hidden" name="messages_json" x-model="jsonString">
-
     <div class="flex items-center justify-between mt-2">
       <h2 class="font-bold text-lg">Messages</h2>
       <div class="tooltip" data-tip="Add message to the dataset">
-        <button class="btn btn-primary btn-xs" type="button" onclick="new_message.showModal()">
+        <button class="btn btn-primary btn-xs" type="button" onclick="new_message_modal.showModal()">
           <i class="fa-solid fa-plus"></i> Add Message
         </button>
       </div>
     </div>
-
-
     <div class="w-full mt-4" x-show="messages.length === 0">
-      TODO: Clone session here
+      <h3 class="text-md font-bold mb-2">Clone messages from a previous session</h3>
+      <div id="sessions-table"
+           hx-get="{% url 'evaluations:dataset_sessions_list' request.team.slug %}"
+           hx-trigger="load"
+           hx-target="this"
+           hx-swap="innerHTML">
+      </div>
     </div>
     <table class="table w-full mt-4" x-show="messages.length > 0">
       <thead>
@@ -39,8 +42,18 @@
         </template>
       </tbody>
     </table>
-
-    <dialog id="new_message" class="modal">
+    <dialog id="session_message_modal" class="modal">
+      <div class="modal-box max-w-5xl w-full">
+        <div class="flex items-center justify-between mt-2">
+          <h3 class="text-lg font-bold">Messages</h3>
+          <div class="modal-action">
+            <button type="button" class="btn" @click="session_message_modal.close()">Close</button>
+          </div>
+        </div>
+        <div id="session_message_modal_content"></div>
+      </div>
+    </dialog>
+    <dialog id="new_message_modal" class="modal">
       <div class="modal-box">
         <h3 class="text-lg font-bold">Add Message</h3>
         <div id="new_message_form" class="form">
@@ -56,15 +69,13 @@
           </div>
           <div class="fieldset w-full">
             <label class="label mt-2">{{ new_message_form.content.label }}</label>
-            <textarea required x-model="newMessage.content" class="w-full textarea textarea-bordered" rows="3"></textarea>
+            <textarea x-model="newMessage.content" class="w-full textarea textarea-bordered" rows="3"></textarea>
           </div>
         </div>
 
         <div class="modal-action">
-          <div class="modal-action">
-            <button type="button" class="btn" @click="resetNewMessage(); new_message.close()">Cancel</button>
-            <button type="button" class="btn btn-primary" @click="addMessage(); new_message.close()" :disabled="!(newMessage.content.trim() && newMessage.message_type)">Add</button>
-          </div>
+          <button type="button" class="btn" @click="resetNewMessage(); new_message_modal.close()">Cancel</button>
+          <button type="button" class="btn btn-primary" @click="addMessage(); new_message_modal.close()" :disabled="!(newMessage.content.trim() && newMessage.message_type)">Add</button>
         </div>
       </div>
     </dialog>
@@ -101,6 +112,29 @@
 
         updateJson() {
           this.jsonString = JSON.stringify(this.messages);
+        },
+
+        cloneMessagesFromSessionUrl(sessionId) {
+          if (this.messages.length > 0 && !confirm("Replace existing messages?")) return;
+          const urlTemplate = "{% url 'evaluations:session_messages_json' request.team.slug 'SESSION_ID' %}";
+          const url = urlTemplate.replace('SESSION_ID', sessionId);
+          fetch(url)
+            .then(response => {
+              if (!response.ok) throw new Error("Failed to fetch messages.");
+              return response.json();
+            })
+            .then(data => {
+              if (!Array.isArray(data)) return;
+              this.messages = data.map(m => ({
+                message_type: m.message_type,
+                content: m.content,
+              }));
+              this.updateJson();
+            })
+            .catch(error => {
+              alert("Unable to load session messages.");
+              console.error(error);
+            });
         }
       }
     }

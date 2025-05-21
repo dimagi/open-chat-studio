@@ -1,0 +1,16 @@
+<button
+  class="btn btn-xs"
+  onclick="session_message_modal.showModal();"
+  hx-get="{% url 'experiments:experiment_session_messages_view' request.team.slug record.experiment.public_id record.external_id %}"
+  hx-target="#session_message_modal_content"
+  hx-swap="innerHTML"
+>
+  View Messages
+</button>
+<button
+  type="button"
+  class="btn btn-primary"
+  @click="cloneMessagesFromSessionUrl('{{ record.external_id }}');"
+>
+  Clone Messages
+</button>
