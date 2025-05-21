@@ -161,13 +161,16 @@ class Collection(BaseTeamModel, VersionsMixin):
     def get_related_experiments_queryset(self) -> models.QuerySet:
         """
         Get all experiments that reference this collection through a pipeline. This includes both published and working
-        experiments
+        experiments. When check_versions is True, it will return all experiments that reference any version of this
+        collection.
         """
         # TODO: Update assistant archive code to use get_related_pipeline_experiments_queryset
-        index_references = get_related_pipeline_experiments_queryset(self, "collection_index_id").filter(
+        ids = list(self.versions.values_list("id", flat=True)) + [self.id]
+
+        index_references = get_related_pipeline_experiments_queryset(ids, "collection_index_id").filter(
             models.Q(is_default_version=True) | models.Q(working_version__id__isnull=True),
         )
-        collection_references = get_related_pipeline_experiments_queryset(self, "collection_id").filter(
+        collection_references = get_related_pipeline_experiments_queryset(ids, "collection_id").filter(
             models.Q(is_default_version=True) | models.Q(working_version__id__isnull=True),
         )
         return index_references | collection_references
@@ -180,10 +183,8 @@ class Collection(BaseTeamModel, VersionsMixin):
         if self.get_related_nodes_queryset().exists():
             return False
 
-        if self.is_working_version:
-            for version in self.versions.all():
-                if version.get_related_experiments_queryset().exists():
-                    return False
+        if self.is_working_version and self.get_related_experiments_queryset().exists():
+            return False
 
         super().archive()
         if self.is_index and self.openai_vector_store_id:
