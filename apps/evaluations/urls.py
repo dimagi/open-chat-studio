@@ -32,6 +32,12 @@ urlpatterns = [
         evalutation_config_views.EvaluationResultTableView.as_view(),
         name="evaluation_results_table",
     ),
+    path(
+        "sessions_table",
+        dataset_views.DatasetSessionsTableView.as_view(),
+        name="dataset_sessions_list",
+    ),
+    path("session/<str:session_id>/messages_json/", dataset_views.session_messages_json, name="session_messages_json"),
 ]
 
 urlpatterns.extend(make_crud_urls(evalutation_config_views, "Evaluation", delete=False))

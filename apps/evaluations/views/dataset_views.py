@@ -1,11 +1,15 @@
 from django.contrib.auth.mixins import PermissionRequiredMixin
+from django.http import JsonResponse
+from django.shortcuts import get_object_or_404
 from django.urls import reverse
 from django.views.generic import CreateView, TemplateView, UpdateView
 from django_tables2 import SingleTableView
 
 from apps.evaluations.forms import EvaluationDatasetForm, EvaluationMessageForm
 from apps.evaluations.models import EvaluationDataset
-from apps.evaluations.tables import EvaluationDatasetTable
+from apps.evaluations.tables import EvaluationDatasetTable, EvaluationSessionsTable
+from apps.experiments.filters import apply_dynamic_filters
+from apps.experiments.models import ExperimentSession
 from apps.teams.mixins import LoginAndTeamRequiredMixin
 
 
@@ -82,3 +86,28 @@ class EditDataset(UpdateView):
 
     def get_success_url(self):
         return reverse("evaluations:dataset_home", args=[self.request.team.slug])
+
+
+class DatasetSessionsTableView(LoginAndTeamRequiredMixin, SingleTableView, PermissionRequiredMixin):
+    model = ExperimentSession
+    paginate_by = 20
+    table_class = EvaluationSessionsTable
+    template_name = "table/single_table.html"
+    permission_required = "experiments.view_experimentsession"
+
+    def get_queryset(self):
+        query_set = (
+            ExperimentSession.objects.with_last_message_created_at()
+            .filter(team=self.request.team)
+            .select_related("participant__user")
+            .order_by("experiment__name")
+        )
+        query_set = apply_dynamic_filters(query_set, self.request)
+        return query_set
+
+
+# TODO Permissions
+def session_messages_json(request, team_slug: str, session_id: str):
+    session = get_object_or_404(ExperimentSession, team__slug=team_slug, external_id=session_id)
+    messages = session.chat.messages.values("id", "message_type", "content").order_by("id")
+    return JsonResponse(list(messages), safe=False)
