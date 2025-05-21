@@ -1,6 +1,12 @@
 {
   "description": "Calls an OpenAI assistant",
   "properties": {
+    "tag": {
+      "default": "The tag that the output message should be tagged with",
+      "title": "Tag",
+      "type": "string",
+      "ui:widget": "expandable_text"
+    },
     "name": {
       "title": "Node Name",
       "type": "string",

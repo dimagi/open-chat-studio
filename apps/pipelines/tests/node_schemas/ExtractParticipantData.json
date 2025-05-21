@@ -1,6 +1,12 @@
 {
   "description": "Extract structured data and saves it as participant data",
   "properties": {
+    "tag": {
+      "default": "The tag that the output message should be tagged with",
+      "title": "Tag",
+      "type": "string",
+      "ui:widget": "expandable_text"
+    },
     "llm_provider_id": {
       "title": "LLM Model",
       "type": "integer",
