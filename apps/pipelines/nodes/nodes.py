@@ -329,8 +329,8 @@ class LLMResponseWithPrompt(LLMResponse, HistoryMixin):
         description="Built in tools provided by the LLM model",
         json_schema_extra=UiSchema(widget=Widgets.built_in_tools, options_source=OptionsSource.built_in_tools),
     )
-    tool_config: dict[str, ToolConfigModel] = Field(
-        default_factory=None,
+    tool_config: dict[str, ToolConfigModel] | None = Field(
+        default_factory=dict,
         description="Configuration for builtin tools",
         json_schema_extra=UiSchema(widget=Widgets.none),
     )

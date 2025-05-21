@@ -1027,10 +1027,10 @@ function BuiltInToolsWidget(props: WidgetParams) {
   function onConfigUpdate(toolName: string, event: React.ChangeEvent<HTMLTextAreaElement | HTMLSelectElement | HTMLInputElement>) {
     const {name, value} = event.target;
     setNode(props.nodeId, (old) => produce(old, (next) => {
-      if (!('tool_config' in next.data.params)) {
+      if (!next.data.params.tool_config) {
         next.data.params.tool_config = {};
       }
-      if (!(toolName in next.data.params.tool_config)) {
+      if (!next.data.params.tool_config[toolName]) {
         next.data.params.tool_config[toolName] = {};
       }
       next.data.params.tool_config[toolName][name] = value.split(" ").map(value => value.trim());
@@ -1062,7 +1062,7 @@ function BuiltInToolsWidget(props: WidgetParams) {
               {toolKey} configuration
             </div>
             {widgets.map((widget: PropertySchema) => {
-              const value = toolConfig[toolKey][widget.name];
+              const value = toolConfig[toolKey]?.[widget.name] ?? [];
               const widgetProps: WidgetParams = {
                 ...props,
                 name: widget.name,
