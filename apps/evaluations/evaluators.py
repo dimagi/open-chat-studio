@@ -11,7 +11,7 @@ from apps.utils.langchain import dict_to_json_schema
 
 class EvaluatorResult(BaseModel):
     # TODO: What to do?
-    result: dict
+    result: dict | None
 
 
 class BaseEvaluator:
@@ -50,10 +50,11 @@ class LlmEvaluator(LLMResponseMixin, BaseEvaluator):
     prompt: str
     output_schema: dict
 
-    def run(self, messages: list[BaseMessage]) -> EvaluatorResult:
-        input = "\n".join(f"{message.type}: {message.content}" for message in messages)
+    def run(self, message: BaseMessage) -> EvaluatorResult:
+        input = f"{message.type}: {message.content}"
         output_schema = dict_to_json_schema(self.output_schema)
-        chat_model = self.get_chat_model().with_structured_output(output_schema)
+        llm = self.get_chat_model().with_structured_output(output_schema)
         prompt = PromptTemplate.from_template(self.prompt)
-        chain = prompt | chat_model
-        return EvaluatorResult(result=chain.invoke({"input": input}))
+        chain = prompt | llm
+        result = chain.invoke({"input": input})
+        return EvaluatorResult(result=result)

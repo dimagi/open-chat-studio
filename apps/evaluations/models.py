@@ -6,11 +6,12 @@ from django.conf import settings
 from django.db import models
 from django.urls import reverse
 from django.utils import timezone
-from langchain_core.messages import BaseMessage
+from langchain_core.messages import BaseMessage, messages_from_dict
 
+from apps.chat.models import ChatMessage
 from apps.evaluations import evaluators
-from apps.experiments.models import ExperimentSession
 from apps.teams.models import BaseTeamModel
+from apps.utils.models import BaseModel
 
 
 class Evaluator(BaseTeamModel):
@@ -23,15 +24,56 @@ class Evaluator(BaseTeamModel):
     def __str__(self):
         return f"{self.name} ({self.type})"
 
-    def run(self, messages: list[BaseMessage]) -> evaluators.EvaluatorResult:
+    def run(self, message: BaseMessage) -> evaluators.EvaluatorResult:
         try:
             evaluator = getattr(evaluators, self.type)
-            return evaluator(**self.params).run(messages)
+            return evaluator(**self.params).run(message)
         except:
             raise  # TODO
 
     def get_absolute_url(self):
         return reverse("evaluations:evaluator_edit", args=[self.team.slug, self.id])
+
+
+class EvaluationMessageType(models.TextChoices):
+    HUMAN = "human", "Human"
+    AI = "ai", "AI"
+
+
+class EvaluationMessage(BaseModel):
+    chat_message = models.ForeignKey(ChatMessage, on_delete=models.SET_NULL, null=True, blank=True)
+    # This is null when it is generated manually
+
+    message_type = models.CharField(max_length=10, choices=EvaluationMessageType.choices)
+    content = models.TextField()
+    metadata = models.JSONField(default=dict)
+
+    def __str__(self):
+        return f"{self.get_message_type_display()}: {self.content}"
+
+    @staticmethod
+    def from_chat_message(chat_message: ChatMessage) -> "EvaluationMessage":
+        return EvaluationMessage.objects.create(
+            chat_message=chat_message,
+            message_type=chat_message.message_type,
+            content=chat_message.content,
+            metadata=chat_message.metadata,
+        )
+
+    def to_langchain_message(self) -> BaseMessage:
+        return messages_from_dict(
+            [
+                {
+                    "type": self.message_type,
+                    "data": {
+                        "content": self.content,
+                        "additional_kwargs": {
+                            "id": self.id,
+                        },
+                    },
+                }
+            ]
+        )[0]
 
 
 class EvaluationDataset(BaseTeamModel):
@@ -43,12 +85,14 @@ class EvaluationDataset(BaseTeamModel):
     message_type = models.CharField(max_length=32, choices=MESSAGE_TYPE_CHOICES)
 
     name = models.CharField(max_length=255)
-    # version = models.ForeignKey(Experiment, on_delete=models.SET_NULL, null=True, blank=True)
-    # If this is null, this should target the latest working version.
-    sessions = models.ManyToManyField(ExperimentSession)
+    messages = models.ManyToManyField(EvaluationMessage)
 
     def __str__(self):
-        return f"{self.name} ({self.sessions.count()} sessions)"
+        return f"{self.name} ({self.messages.count()} messages)"
+
+    def iter_messages(self):
+        # TODO: pass in the correct messages based on dataset.message_types
+        return (message for message in self.messages.all())
 
 
 class EvaluationConfig(BaseTeamModel):
@@ -71,13 +115,11 @@ class EvaluationConfig(BaseTeamModel):
         results = []
         # TODO: Run in parallel with langgraph
         for evaluator in cast(Iterable[Evaluator], self.evaluators.all()):
-            # TODO: Filter sessions
-            for session in self.dataset.sessions.all():
-                # TODO: pass in the correct messages based on dataset.message_types
-                result = evaluator.run(session.chat.get_langchain_messages())
+            for message in self.dataset.messages.all():
+                result = evaluator.run(message.to_langchain_message())
                 results.append(
                     EvaluationResult.objects.create(
-                        session=session, run=run, evaluator=evaluator, output=result.model_dump(), team=self.team
+                        message=message, run=run, evaluator=evaluator, output=result.model_dump(), team=self.team
                     )
                 )
         run.finished_at = timezone.now()
@@ -101,23 +143,23 @@ class EvaluationRun(BaseTeamModel):
 
     def get_table_data(self):
         results = self.results.all()
-        table_by_session = defaultdict(dict)
+        table_by_message = defaultdict(dict)
         for result in results:
-            table_by_session[result.session.id].update(
+            table_by_message[result.message.id].update(
                 {
-                    "session": result.session.id,
+                    "message": result.message.content,
                     **{
                         f"{key} ({result.evaluator.name})": value
                         for key, value in result.output.get("result", {}).items()
                     },
                 }
             )
-        return table_by_session.values()
+        return table_by_message.values()
 
 
 class EvaluationResult(BaseTeamModel):
     evaluator = models.ForeignKey(Evaluator, on_delete=models.CASCADE)
-    session = models.ForeignKey(ExperimentSession, null=True, on_delete=models.SET_NULL)
+    message = models.ForeignKey(EvaluationMessage, on_delete=models.CASCADE)
     run = models.ForeignKey(EvaluationRun, on_delete=models.CASCADE, related_name="results")
     output = models.JSONField()
     # TODO: track input with a generic FK relationship / normalized inputs
