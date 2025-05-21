@@ -1,9 +1,7 @@
 import dataclasses
 
-import google.generativeai as genai
 import tiktoken
 from anthropic._tokenizers import sync_get_tokenizer
-from google.generativeai import GenerativeModel
 from langchain_core.messages import get_buffer_string
 from langchain_core.outputs import LLMResult
 
@@ -16,7 +14,10 @@ class TokenCounter:
         raise NotImplementedError()
 
     def get_tokens_from_messages(self, messages) -> int:
-        return sum([self.get_tokens_from_text(get_buffer_string([m])) for m in messages])
+        try:
+            return sum([message.usage_metadata["output_tokens"] for message in messages])
+        except Exception:  # noqa
+            return sum([self.get_tokens_from_text(get_buffer_string([m])) for m in messages])
 
 
 @dataclasses.dataclass
@@ -76,13 +77,6 @@ class GeminiTokenCounter(TokenCounter):
     model: str
     google_api_key: str
 
-    def __post_init__(self):
-        if not self.google_api_key:
-            raise ValueError("KEY not found!")
-
-        self.client = genai.Client(api_key=self.google_api_key)
-        self.model = GenerativeModel(self.model)
-
     def get_tokens_from_response(self, response: LLMResult) -> None | tuple[int, int]:
         if response.llm_output is None:
             return None
@@ -96,19 +90,5 @@ class GeminiTokenCounter(TokenCounter):
         return input_tokens, output_tokens
 
     def get_tokens_from_text(self, text: str) -> int:
-        if not text:
-            return 0
-
-        response = self.client.count_tokens(model=self.model, contents=text)
-        return response.total_tokens
-
-    def get_tokens_from_messages(self, messages) -> int:
-        total_tokens = 0
-        for message in messages:
-            if isinstance(message, dict) and "content" in message:
-                total_tokens += self.get_tokens_from_text(message["content"])
-            elif isinstance(message, str):
-                total_tokens += self.get_tokens_from_text(message)
-            else:
-                print("Warning: Unsupported message format.")
-        return total_tokens
+        # not implemented for now until we're on the new python-genai library
+        return 0
