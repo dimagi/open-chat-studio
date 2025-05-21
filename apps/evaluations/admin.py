@@ -3,6 +3,7 @@ from django.contrib import admin
 from .models import (
     EvaluationConfig,
     EvaluationDataset,
+    EvaluationMessage,
     EvaluationResult,
     EvaluationRun,
     Evaluator,
@@ -20,8 +21,7 @@ class EvaluatorAdmin(admin.ModelAdmin):
 class EvaluationDatasetAdmin(admin.ModelAdmin):
     list_display = ("id", "message_type", "team")
     list_filter = ("message_type", "team")
-    filter_horizontal = ("sessions",)
-    search_fields = ("version__version_number",)
+    search_fields = ("messages__content",)
 
 
 @admin.register(EvaluationConfig)
@@ -52,3 +52,13 @@ class EvaluationResultAdmin(admin.ModelAdmin):
     list_filter = ("evaluator", "team")
     readonly_fields = ("output",)
     search_fields = ("output",)
+
+
+@admin.register(EvaluationMessage)
+class EvaluationMessageAdmin(admin.ModelAdmin):
+    list_display = ("id", "chat_message", "message_type", "content", "metadata")
+    list_filter = ("chat_message", "message_type")
+    search_fields = (
+        "id",
+        "content",
+    )

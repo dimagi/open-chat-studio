@@ -4,10 +4,11 @@ from factory.django import DjangoModelFactory
 from apps.evaluations.models import (
     EvaluationConfig,
     EvaluationDataset,
+    EvaluationMessage,
     EvaluationRun,
     Evaluator,
 )
-from apps.utils.factories.experiment import ExperimentFactory, ExperimentSessionFactory
+from apps.utils.factories.experiment import ChatMessageFactory
 from apps.utils.factories.team import TeamFactory
 
 
@@ -23,23 +24,29 @@ class EvaluatorFactory(DjangoModelFactory):
     }
 
 
+class EvaluationMessageFactory(DjangoModelFactory):
+    class Meta:
+        model = EvaluationMessage
+
+    team = factory.SubFactory(TeamFactory)
+
+
 class EvaluationDatasetFactory(DjangoModelFactory):
     class Meta:
         model = EvaluationDataset
 
     team = factory.SubFactory(TeamFactory)
     message_type = "ALL"
-    version = factory.SubFactory(ExperimentFactory)
 
     @factory.post_generation
-    def sessions(self, create, extracted, **kwargs):
+    def messages(self, create, extracted, **kwargs):
         if not create:
             return
         if extracted:
-            for session in extracted:
-                self.sessions.add(session)
+            for message in extracted:
+                self.messages.add(message)
         else:
-            self.sessions.add(ExperimentSessionFactory())
+            self.messages.add(ChatMessageFactory())
 
 
 class EvaluationConfigFactory(DjangoModelFactory):
@@ -48,7 +55,6 @@ class EvaluationConfigFactory(DjangoModelFactory):
 
     team = factory.SubFactory(TeamFactory)
     dataset = factory.SubFactory(EvaluationDatasetFactory)
-    experiment = factory.SubFactory(ExperimentFactory)
 
     @factory.post_generation
     def evaluators(self, create, extracted, **kwargs):
