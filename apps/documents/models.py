@@ -160,14 +160,15 @@ class Collection(BaseTeamModel, VersionsMixin):
 
     def get_related_experiments_queryset(self) -> models.QuerySet:
         """
-        Get all experiments that reference this collection through a pipeline
+        Get all experiments that reference this collection through a pipeline. This includes both published and working
+        experiments
         """
         # TODO: Update assistant archive code to use get_related_pipeline_experiments_queryset
         index_references = get_related_pipeline_experiments_queryset(self, "collection_index_id").filter(
             is_default_version=True
         )
         collection_references = get_related_pipeline_experiments_queryset(self, "collection_id").filter(
-            is_default_version=True
+            models.Q(is_default_version=True) | models.Q(working_version__id__isnull=True),
         )
         return index_references | collection_references
 
