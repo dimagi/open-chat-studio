@@ -296,6 +296,11 @@ class PipelineNode(BasePipelineNode, ABC):
         state = self._prepare_state(self.node_id, incoming_edges, state)
         output = self._process(input=state["node_input"], state=state)
         output["path"] = [(state["node_source"], self.node_id, outgoing_edges)]
+        get_output_tags_fn = getattr(self, "get_output_tags", None)
+        if callable(get_output_tags_fn):
+            output["output_message_tags"] = get_output_tags_fn()
+        else:
+            output["output_message_tags"] = []
         return output
 
     def _process(self, input: str, state: PipelineState) -> PipelineState:
@@ -318,11 +323,10 @@ class PipelineRouterNode(BasePipelineNode):
             conditional_branch = self._process_conditional(state)
             output_handle = next((k for k, v in output_map.items() if v == conditional_branch), None)
             tags = self.get_output_tags(conditional_branch)
-            tag = self.get_output_tag()
             target_node_id = edge_map[conditional_branch]
             route_path = (state["node_source"], self.node_id, [target_node_id])
             output = PipelineState.from_router_output(
-                self.node_id, self.name, state["node_input"], output_handle, tags, route_path, conditional_branch, tag
+                self.node_id, self.name, state["node_input"], output_handle, tags, route_path, conditional_branch
             )
             return Command(
                 update=output,
