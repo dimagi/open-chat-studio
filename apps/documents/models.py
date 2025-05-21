@@ -165,7 +165,7 @@ class Collection(BaseTeamModel, VersionsMixin):
         """
         # TODO: Update assistant archive code to use get_related_pipeline_experiments_queryset
         index_references = get_related_pipeline_experiments_queryset(self, "collection_index_id").filter(
-            is_default_version=True
+            models.Q(is_default_version=True) | models.Q(working_version__id__isnull=True),
         )
         collection_references = get_related_pipeline_experiments_queryset(self, "collection_id").filter(
             models.Q(is_default_version=True) | models.Q(working_version__id__isnull=True),
