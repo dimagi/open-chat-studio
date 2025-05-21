@@ -170,11 +170,14 @@ def compress_pipeline_chat_history(
         limit = keep_history_len // 2 + 1  # each pipeline history message is a pair
         messages = pipeline_chat_history.messages.order_by("-created_at")[:limit]
         langchain_messages = [
-            message for message_pair in messages for message in message_pair.as_langchain_messages(with_summary=False)
+            message
+            for message_pair in messages
+            for message in message_pair.as_langchain_messages(include_summary=False)
         ]
         return list(reversed(langchain_messages))[:keep_history_len]
 
-    history_messages = pipeline_chat_history.get_langchain_messages_until_marker()
+    history_mode = history_mode or PipelineChatHistoryModes.SUMMARIZE
+    history_messages = pipeline_chat_history.get_langchain_messages_until_marker(history_mode)
     try:
         history, last_message, summary = _compress_chat_history(
             history=history_messages,
@@ -186,8 +189,15 @@ def compress_pipeline_chat_history(
         )
         if summary is not None:
             if last_message:
-                PipelineChatMessages.objects.filter(id=last_message.additional_kwargs["id"]).update(summary=summary)
-                return [SystemMessage(content=summary)] + history
+                updates = {"compression_marker": history_mode}
+                if summary != COMPRESSION_MARKER:
+                    updates["summary"] = summary
+                PipelineChatMessages.objects.filter(id=last_message.additional_kwargs["id"]).update(**updates)
+                return (
+                    [SystemMessage(content=summary)] + history
+                    if history_mode == PipelineChatHistoryModes.SUMMARIZE
+                    else history
+                )
             else:
                 logging.exception(f"last_message is unexpectedly None for chat_id={pipeline_chat_history.id}")
         return history

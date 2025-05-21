@@ -3,7 +3,7 @@ from unittest import mock
 import pytest
 from langchain_core.messages import AIMessage, HumanMessage, SystemMessage
 
-from apps.chat.conversation import COMPRESSION_MARKER, compress_pipeline_chat_history
+from apps.chat.conversation import compress_pipeline_chat_history
 from apps.pipelines.models import PipelineChatHistoryModes, PipelineChatHistoryTypes, PipelineChatMessages
 from apps.utils.factories.experiment import (
     ExperimentSessionFactory,
@@ -40,45 +40,39 @@ def test_no_summary_returns_all_messages(experiment_session):
         HumanMessage(content="sudo, please fetch me a coffee", additional_kwargs={"id": message2.id, "node_id": ""}),
         AIMessage(content="I can't do that", additional_kwargs={"id": message2.id, "node_id": ""}),
     ]
-    summary_messages = history.get_langchain_messages_until_marker()
+    summary_messages = history.get_langchain_messages_until_marker(PipelineChatHistoryModes.SUMMARIZE)
     assert expected_messages == summary_messages
 
 
 @django_db_with_data(available_apps=("apps.service_providers",))
-def test_no_summary_returns_until_summary(experiment_session):
+def test_get_messages_returns_until_marker(experiment_session):
     history = experiment_session.pipeline_chat_history.create(type=PipelineChatHistoryTypes.NAMED, name="name")
     history.messages.create(ai_message="I am a robot", human_message="hi, please fetch me a coffee")
     message2 = history.messages.create(
-        ai_message="I can't do that", human_message="sudo, please fetch me a coffee", summary="argument"
+        ai_message="I can't do that",
+        human_message="sudo, please fetch me a coffee",
+        summary="argument",
+        compression_marker=PipelineChatHistoryModes.SUMMARIZE,
     )
-    message3 = history.messages.create(ai_message="I am a robot", human_message="how about some tea")
-    expected_messages = [
+    message3 = history.messages.create(
+        ai_message="I am a robot",
+        human_message="how about some tea",
+        compression_marker=PipelineChatHistoryModes.TRUNCATE_TOKENS,
+    )
+    summary_messages = history.get_langchain_messages_until_marker(PipelineChatHistoryModes.SUMMARIZE)
+    assert summary_messages == [
         SystemMessage(content="argument", additional_kwargs={"id": message2.id, "node_id": ""}),
         HumanMessage(content="sudo, please fetch me a coffee", additional_kwargs={"id": message2.id, "node_id": ""}),
         AIMessage(content="I can't do that", additional_kwargs={"id": message2.id, "node_id": ""}),
         HumanMessage(content="how about some tea", additional_kwargs={"id": message3.id, "node_id": ""}),
         AIMessage(content="I am a robot", additional_kwargs={"id": message3.id, "node_id": ""}),
     ]
-    summary_messages = history.get_langchain_messages_until_marker()
-    assert expected_messages == summary_messages
 
-
-@django_db_with_data(available_apps=("apps.service_providers",))
-def test_no_summary_returns_until_summary_marker(experiment_session):
-    history = experiment_session.pipeline_chat_history.create(type=PipelineChatHistoryTypes.NAMED, name="name")
-    history.messages.create(ai_message="I am a robot", human_message="hi, please fetch me a coffee")
-    message2 = history.messages.create(
-        ai_message="I can't do that", human_message="sudo, please fetch me a coffee", summary=COMPRESSION_MARKER
-    )
-    message3 = history.messages.create(ai_message="I am a robot", human_message="how about some tea")
-    expected_messages = [
-        HumanMessage(content="sudo, please fetch me a coffee", additional_kwargs={"id": message2.id, "node_id": ""}),
-        AIMessage(content="I can't do that", additional_kwargs={"id": message2.id, "node_id": ""}),
+    truncate_messages = history.get_langchain_messages_until_marker(PipelineChatHistoryModes.TRUNCATE_TOKENS)
+    assert truncate_messages == [
         HumanMessage(content="how about some tea", additional_kwargs={"id": message3.id, "node_id": ""}),
         AIMessage(content="I am a robot", additional_kwargs={"id": message3.id, "node_id": ""}),
     ]
-    summary_messages = history.get_langchain_messages_until_marker()
-    assert expected_messages == summary_messages
 
 
 @django_db_with_data(available_apps=("apps.service_providers",))
@@ -96,7 +90,7 @@ def test_compress_history_no_need_for_compression(pipeline_chat_history):
         input_messages=[],
         history_mode=PipelineChatHistoryModes.SUMMARIZE,
     )
-    messages = pipeline_chat_history.get_langchain_messages_until_marker()
+    messages = pipeline_chat_history.get_langchain_messages_until_marker(PipelineChatHistoryModes.SUMMARIZE)
     # No summary messages
     assert not any(isinstance(message, SystemMessage) for message in messages)
 
@@ -123,7 +117,7 @@ def test_create_summary_token_limit_reached(mock_get_new_summary, pipeline_chat_
     assert compressed_history[0].content == summary_message
     assert PipelineChatMessages.objects.get(id=compressed_history[1].additional_kwargs["id"]).summary == "Summary"
 
-    summary_messages = pipeline_chat_history.get_langchain_messages_until_marker()
+    summary_messages = pipeline_chat_history.get_langchain_messages_until_marker(PipelineChatHistoryModes.SUMMARIZE)
     assert isinstance(summary_messages[0], SystemMessage)
     assert isinstance(summary_messages[1], HumanMessage)
     assert isinstance(summary_messages[2], AIMessage)
