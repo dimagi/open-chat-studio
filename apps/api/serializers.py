@@ -57,10 +57,7 @@ class MessageSerializer(TaggitSerializer, serializers.ModelSerializer):
         help_text=textwrap.dedent(
             """
             Metadata for the message. Currently documented keys:
-              * `is_summary`: boolean, whether this message is a summary of the conversation to date. When this
-                is true, the message will not be displayed in the chat interface but it will be used when
-                generating the chat history for the LLM. The history will include all messages up to the last
-                summary message (starting from the most recent message).
+              * `compression_marker`: Slug that marks this message as a checkpoint for session history compression
             """
         ),
     )
