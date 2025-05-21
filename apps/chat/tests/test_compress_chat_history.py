@@ -291,7 +291,7 @@ def test_truncate_tokens(chat):
     assert summary_message.content == "Another one"
 
     # Check that the summary marker is respected
-    assert len(chat.get_langchain_messages_until_summary()) == 2
+    assert len(chat.get_langchain_messages_until_marker()) == 2
 
 
 def test_get_new_summary_with_large_message():

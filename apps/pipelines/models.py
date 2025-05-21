@@ -666,7 +666,7 @@ class PipelineChatHistory(BaseModel):
                 break
         return messages
 
-    def get_langchain_messages_until_summary(self):
+    def get_langchain_messages_until_marker(self):
         messages = self.get_messages_until_summary()
         langchain_messages_to_last_summary = [
             message for message_pair in messages for message in message_pair.as_langchain_messages()

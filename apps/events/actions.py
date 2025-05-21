@@ -46,7 +46,7 @@ class SummarizeConversationAction(EventActionHandlerBase):
             prompt_text = action.params["prompt"]
         except KeyError:
             prompt_text = SUMMARY_PROMPT
-        history = session.chat.get_langchain_messages_until_summary()
+        history = session.chat.get_langchain_messages_until_marker()
         current_summary = history.pop(0).content if history[0].type == ChatMessageType.SYSTEM else ""
         messages = session.chat.get_langchain_messages()
         prompt = PromptTemplate(template=prompt_text, input_variables=["summary", "new_lines"])
@@ -129,7 +129,7 @@ class PipelineStartAction(EventActionHandlerBase):
         if input_type == PipelineEventInputs.FULL_HISTORY:
             messages = session.chat.get_langchain_messages()
         elif input_type == PipelineEventInputs.HISTORY_LAST_SUMMARY:
-            messages = session.chat.get_langchain_messages_until_summary()
+            messages = session.chat.get_langchain_messages_until_marker()
         elif input_type == PipelineEventInputs.LAST_MESSAGE:
             messages = [session.chat.messages.last().to_langchain_message()]
 

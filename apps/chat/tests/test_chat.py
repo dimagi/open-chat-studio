@@ -12,18 +12,18 @@ def chat(team_with_users):
 
 def test_chat_get_langchain_messages_with_messages(chat):
     assert len(chat.get_langchain_messages()) == 1
-    assert len(chat.get_langchain_messages_until_summary()) == 1
+    assert len(chat.get_langchain_messages_until_marker()) == 1
 
 
-def test_chat_get_langchain_messages_until_summary_with_summary(chat):
+def test_chat_get_langchain_messages_until_marker_with_summary(chat):
     ChatMessage.objects.create(chat=chat, content="Hi", message_type=ChatMessageType.AI)
     ChatMessage.objects.create(
         chat=chat, content="What's up?", message_type=ChatMessageType.HUMAN, summary="Cordial greetings"
     )
     ChatMessage.objects.create(chat=chat, content="Nothin, what's up with you?", message_type=ChatMessageType.AI)
     assert len(chat.get_langchain_messages()) == 4
-    assert len(chat.get_langchain_messages_until_summary()) == 3
-    assert [(m.type, m.content) for m in chat.get_langchain_messages_until_summary()] == [
+    assert len(chat.get_langchain_messages_until_marker()) == 3
+    assert [(m.type, m.content) for m in chat.get_langchain_messages_until_marker()] == [
         ("system", "Cordial greetings"),
         ("human", "What's up?"),
         ("ai", "Nothin, what's up with you?"),

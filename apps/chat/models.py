@@ -41,7 +41,7 @@ class Chat(BaseTeamModel, TaggedModelMixin, UserCommentsMixin):
     def get_langchain_messages(self) -> list[BaseMessage]:
         return messages_from_dict([m.to_langchain_dict() for m in self.messages.all()])
 
-    def get_langchain_messages_until_summary(self) -> list[BaseMessage]:
+    def get_langchain_messages_until_marker(self) -> list[BaseMessage]:
         messages = []
         for message in self.message_iterator():
             messages.append(message.to_langchain_dict())

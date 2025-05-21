@@ -125,7 +125,8 @@ def compress_chat_history(
             )
         )
 
-    history_messages = chat.get_langchain_messages_until_summary()
+    history_mode = history_mode or PipelineChatHistoryModes.SUMMARIZE
+    history_messages = chat.get_langchain_messages_until_marker()
     try:
         history, last_message, summary = _compress_chat_history(
             history=history_messages,
@@ -173,7 +174,7 @@ def compress_pipeline_chat_history(
         ]
         return list(reversed(langchain_messages))[:keep_history_len]
 
-    history_messages = pipeline_chat_history.get_langchain_messages_until_summary()
+    history_messages = pipeline_chat_history.get_langchain_messages_until_marker()
     try:
         history, last_message, summary = _compress_chat_history(
             history=history_messages,

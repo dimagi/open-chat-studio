@@ -40,7 +40,7 @@ def test_no_summary_returns_all_messages(experiment_session):
         HumanMessage(content="sudo, please fetch me a coffee", additional_kwargs={"id": message2.id, "node_id": ""}),
         AIMessage(content="I can't do that", additional_kwargs={"id": message2.id, "node_id": ""}),
     ]
-    summary_messages = history.get_langchain_messages_until_summary()
+    summary_messages = history.get_langchain_messages_until_marker()
     assert expected_messages == summary_messages
 
 
@@ -59,7 +59,7 @@ def test_no_summary_returns_until_summary(experiment_session):
         HumanMessage(content="how about some tea", additional_kwargs={"id": message3.id, "node_id": ""}),
         AIMessage(content="I am a robot", additional_kwargs={"id": message3.id, "node_id": ""}),
     ]
-    summary_messages = history.get_langchain_messages_until_summary()
+    summary_messages = history.get_langchain_messages_until_marker()
     assert expected_messages == summary_messages
 
 
@@ -77,7 +77,7 @@ def test_no_summary_returns_until_summary_marker(experiment_session):
         HumanMessage(content="how about some tea", additional_kwargs={"id": message3.id, "node_id": ""}),
         AIMessage(content="I am a robot", additional_kwargs={"id": message3.id, "node_id": ""}),
     ]
-    summary_messages = history.get_langchain_messages_until_summary()
+    summary_messages = history.get_langchain_messages_until_marker()
     assert expected_messages == summary_messages
 
 
@@ -96,7 +96,7 @@ def test_compress_history_no_need_for_compression(pipeline_chat_history):
         input_messages=[],
         history_mode=PipelineChatHistoryModes.SUMMARIZE,
     )
-    messages = pipeline_chat_history.get_langchain_messages_until_summary()
+    messages = pipeline_chat_history.get_langchain_messages_until_marker()
     # No summary messages
     assert not any(isinstance(message, SystemMessage) for message in messages)
 
@@ -123,7 +123,7 @@ def test_create_summary_token_limit_reached(mock_get_new_summary, pipeline_chat_
     assert compressed_history[0].content == summary_message
     assert PipelineChatMessages.objects.get(id=compressed_history[1].additional_kwargs["id"]).summary == "Summary"
 
-    summary_messages = pipeline_chat_history.get_langchain_messages_until_summary()
+    summary_messages = pipeline_chat_history.get_langchain_messages_until_marker()
     assert isinstance(summary_messages[0], SystemMessage)
     assert isinstance(summary_messages[1], HumanMessage)
     assert isinstance(summary_messages[2], AIMessage)
