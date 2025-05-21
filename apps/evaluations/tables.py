@@ -1,8 +1,9 @@
 from django.conf import settings
 from django.urls import reverse
-from django_tables2 import columns, tables
+from django_tables2 import TemplateColumn, columns, tables
 
 from apps.evaluations.models import EvaluationConfig, EvaluationDataset, EvaluationRun, Evaluator
+from apps.experiments.models import ExperimentSession
 from apps.generics import actions
 
 
@@ -137,3 +138,23 @@ class EvaluationDatasetTable(tables.Table):
         row_attrs = settings.DJANGO_TABLES2_ROW_ATTRS
         orderable = False
         empty_text = "No datasets found."
+
+
+class EvaluationSessionsTable(tables.Table):
+    experiment = columns.Column(accessor="experiment", verbose_name="Experiment", order_by="experiment__name")
+    participant = columns.Column(accessor="participant", verbose_name="Participant", order_by="participant__identifier")
+    last_message = columns.Column(accessor="last_message_created_at", verbose_name="Last Message", orderable=True)
+    versions = columns.Column(verbose_name="Versions", accessor="experiment_version_for_display", orderable=False)
+    clone = TemplateColumn(
+        template_name="evaluations/show_messages_modal_action.html", verbose_name="", orderable=False
+    )
+
+    class Meta:
+        model = ExperimentSession
+        fields = []
+        row_attrs = {
+            **settings.DJANGO_TABLES2_ROW_ATTRS,
+            "data-redirect-url": None,
+        }
+        orderable = False
+        empty_text = "No sessions yet!"
