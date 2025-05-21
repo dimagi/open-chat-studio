@@ -141,49 +141,16 @@
       "ui:widget": "built_in_tools"
     },
     "tool_config": {
-      "additionalProperties": {
-        "properties": {
-          "allowed_domains": {
-            "anyOf": [
-              {
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "default": null,
-            "title": "Allowed Domains",
-            "ui:widget": "none"
-          },
-          "blocked_domains": {
-            "anyOf": [
-              {
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "default": null,
-            "title": "Blocked Domains",
-            "ui:widget": "none"
-          }
-        },
-        "title": "ToolConfigModel",
-        "type": "object"
-      },
       "description": "Configuration for builtin tools",
       "title": "Tool Config",
-      "type": "object",
-      "ui:widget": "none"
+      "ui:widget": "none",
+      "type": "object"
     }
   },
   "required": [
     "llm_provider_id",
     "llm_provider_model_id",
-    "name",
-    "tool_config"
+    "name"
   ],
   "title": "LLMResponseWithPrompt",
   "type": "object",

@@ -17,15 +17,7 @@ from langchain_core.messages import BaseMessage
 from langchain_core.prompts import MessagesPlaceholder, PromptTemplate
 from langchain_core.runnables import RunnableLambda, RunnablePassthrough
 from langchain_text_splitters import RecursiveCharacterTextSplitter
-from pydantic import (
-    BaseModel,
-    BeforeValidator,
-    Field,
-    create_model,
-    field_serializer,
-    field_validator,
-    model_validator,
-)
+from pydantic import BaseModel, BeforeValidator, Field, create_model, field_serializer, field_validator, model_validator
 from pydantic import ValidationError as PydanticValidationError
 from pydantic.config import ConfigDict
 from pydantic_core import PydanticCustomError
@@ -267,13 +259,13 @@ class ToolConfigModel(BaseModel):
 
     @field_validator("allowed_domains", "blocked_domains", mode="after")
     @classmethod
-    def capitalize(cls, value: list[str]) -> list[str]:
+    def capitalize(cls, value: list[str], info) -> list[str]:
         values = list(map(str.strip, filter(None, value)))
         for value in values:
             try:
                 validators.validate_domain_name(value)
             except ValidationError:
-                raise ValueError(f"Invalid domain name: {value}") from None
+                raise ValueError(f"Invalid domain name '{value}' in field '{info.field_name}'")
         return values
 
     @field_serializer("allowed_domains", "blocked_domains")

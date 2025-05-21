@@ -1063,6 +1063,8 @@ function BuiltInToolsWidget(props: WidgetParams) {
             </div>
             {widgets.map((widget: PropertySchema) => {
               const value = toolConfig[toolKey]?.[widget.name] ?? [];
+              const rawError = props.getNodeFieldError(props.nodeId, "tool_config");
+              const error = rawError?.includes(`field '${widget.name}'`) ? rawError : "";
               const widgetProps: WidgetParams = {
                 ...props,
                 name: widget.name,
@@ -1070,6 +1072,7 @@ function BuiltInToolsWidget(props: WidgetParams) {
                 helpText: widget.helpText ?? "",
                 paramValue: Array.isArray(value) ? value.join(" ") : value,
                 updateParamValue: (event) => onConfigUpdate(toolKey, event),
+                inputError: error,
               };
               const WidgetComponent = getWidget(widget.type, widget) as React.ComponentType<WidgetParams>;
               return <WidgetComponent key={widget.name} {...widgetProps} />;
