@@ -265,7 +265,7 @@ class ToolConfigModel(BaseModel):
             try:
                 validators.validate_domain_name(value)
             except ValidationError:
-                raise ValueError(f"Invalid domain name '{value}' in field '{info.field_name}'")
+                raise ValueError(f"Invalid domain name '{value}' in field '{info.field_name}'") from None
         return values
 
     @field_serializer("allowed_domains", "blocked_domains")
