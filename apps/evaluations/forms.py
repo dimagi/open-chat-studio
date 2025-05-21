@@ -1,3 +1,5 @@
+import json
+
 from django import forms
 
 from apps.evaluations.models import EvaluationConfig, EvaluationDataset, EvaluationMessage, Evaluator
@@ -44,23 +46,51 @@ class EvaluationDatasetForm(forms.ModelForm):
             f"{session.experiment.name} – {session.created_at.strftime('%Y-%m-%d %H:%M')} ({session.participant})"
         )
 
+    def clean(self):
+        super().clean()
+
+        raw_json = self.data.get("messages_json")
+        if raw_json:
+            try:
+                messages = json.loads(raw_json)
+            except json.JSONDecodeError as err:
+                raise forms.ValidationError("Messages data is invalid JSON.") from err
+
+            for msg in messages:
+                if not msg.get("content") or not msg.get("message_type"):
+                    raise forms.ValidationError("Each message must have type and content.")
+
     def save(self, commit=True):
+        dataset = super().save(commit=False)
+
         dataset = super().save(commit=False)
 
         if commit:
             dataset.save()
 
-        session = self.cleaned_data["session"]
+            raw_json = self.data.get("messages_json")
+            if raw_json:
+                try:
+                    message_dicts = json.loads(raw_json)
+                except json.JSONDecodeError as err:
+                    raise forms.ValidationError("Could not parse messages.") from err
 
-        messages = []
-        for message in session.chat.messages.all():
-            evaluation_message = EvaluationMessage.objects.create(
-                chat_message=message,
-                message_type=message.message_type,
-                content=message.content,
-            )
-            messages.append(evaluation_message)
-
-        dataset.messages.set(messages)
+                # Optional: validate content + message_type per message_dict here
+                instances = [
+                    EvaluationMessage(
+                        content=m["content"].strip(),
+                        message_type=m["message_type"],
+                    )
+                    for m in message_dicts
+                    if m.get("content") and m.get("message_type")
+                ]
+                EvaluationMessage.objects.bulk_create(instances)
+                dataset.messages.set(instances)
 
         return dataset
+
+
+class EvaluationMessageForm(forms.ModelForm):
+    class Meta:
+        model = EvaluationMessage
+        fields = ("message_type", "content")
