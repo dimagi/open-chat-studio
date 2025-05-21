@@ -58,9 +58,8 @@ def test_save_metadata_and_tagging(pipeline: Pipeline, session: ExperimentSessio
 
     with mock.patch.object(ChatMessage, "add_system_tag") as mock_add_system_tag:
         pipeline.invoke(pipeline_state, session, session.experiment, TracingService.empty())
-
         for tag_value, category in output_message_tags:
             mock_add_system_tag.assert_any_call(tag_value, category or "")
 
-        # One additional tag might be added separately (e.g., version tag)
+        # add version tag also calls add system tag
         assert mock_add_system_tag.call_count == len(output_message_tags) + 1
