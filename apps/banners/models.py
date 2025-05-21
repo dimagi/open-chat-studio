@@ -11,12 +11,15 @@ class Banner(models.Model):
         ("danger", "Danger"),
         ("success", "Success"),
     )
-    # Pre-defined locations that match those in the middleware
+    # Pre-defined locations must match those in the middleware.py
     LOCATIONS = (
         ("global", "Global (All Pages)"),
         ("experiments_home", "Experiments Home Page"),
+        ("experiments_new", "New Experiments Page"),
         ("pipelines", "Pipelines Home Page"),
+        ("pipelines_new", "New Pipelines Page"),
         ("chatbots_home", "Chatbots Home Page"),
+        ("chatbots_new", "New Chatbot Page"),
         ("team_settings", "Team Settings Page"),
     )
 
@@ -29,7 +32,7 @@ class Banner(models.Model):
     end_date = models.DateTimeField(help_text="When this banner should stop being displayed")
     is_active = models.BooleanField(default=True, help_text="Manually enable/disable this banner")
     location = models.CharField(
-        max_length=100, choices=LOCATIONS, default="global", help_text="Location of banenr on site"
+        max_length=100, choices=LOCATIONS, default="global", help_text="Location of banner on site"
     )
 
     class Meta:

@@ -1,23 +1,25 @@
-import re
-
-
 class BannerLocationMiddleware:
     def __init__(self, get_response):
         self.get_response = get_response
-        self.location_patterns = [
-            (r"^/experiments/", "experiments_home"),
-            (r"^/pipelines/", "pipelines_home"),
-            (r"^/chatbots/", "chatbots_home"),
-            (r"^/team/", "team_settings"),
-        ]
-        self.compiled_patterns = [(re.compile(pattern), location) for pattern, location in self.location_patterns]
+        self.view_name_mapping = {
+            "experiments:experiments_home": "experiments_home",
+            "experiments:new": "experiments_new",
+            "pipelines:pipelines_home": "pipelines",
+            "pipelines:new": "pipelines_new",
+            "chatbots:chatbots_home": "chatbots_home",
+            "chatbots:new": "chatbots_new",
+            "team:manage_team": "team_settings",
+        }
 
     def __call__(self, request):
         request.banner_location = None
-        path = request.path
-        for pattern, location in self.compiled_patterns:
-            if pattern.match(path):
-                request.banner_location = location
-                break
         response = self.get_response(request)
         return response
+
+    def process_view(self, request, view_func, view_args, view_kwargs):
+        if hasattr(request, "resolver_match") and request.resolver_match:
+            view_name = request.resolver_match.view_name
+            banner_location = self.view_name_mapping.get(view_name)
+            if banner_location:
+                request.banner_location = banner_location
+        return None
