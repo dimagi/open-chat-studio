@@ -2,10 +2,10 @@
   "description": "Extract structured data from the input",
   "properties": {
     "tag": {
-      "default": "The tag that the output message should be tagged with",
-      "title": "Tag",
-      "type": "string",
-      "ui:widget": "expandable_text"
+      "default": "",
+      "description": "The tag that the output message should be tagged with",
+      "title": "Message Tag",
+      "type": "string"
     },
     "llm_provider_id": {
       "title": "LLM Model",

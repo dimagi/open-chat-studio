@@ -61,8 +61,9 @@ DEFAULT_TAG = "The tag that the output message should be tagged with"
 
 class TagMixin(BaseModel):
     tag: str = Field(
-        default=DEFAULT_TAG,
-        json_schema_extra=UiSchema(widget=Widgets.expandable_text),
+        default="",
+        title="Message Tag",
+        description="The tag that the output message should be tagged with",
     )
 
     def get_output_tags(self) -> list[tuple[str, str | None]]:
@@ -297,10 +298,6 @@ class LLMResponseWithPrompt(LLMResponse, HistoryMixin, TagMixin):
         default_factory=list,
         description="Custom actions to enable for the bot",
         json_schema_extra=UiSchema(widget=Widgets.multiselect, options_source=OptionsSource.custom_actions),
-    )
-    tag: str = Field(
-        default="Tag to add to output message",
-        json_schema_extra=UiSchema(widget=Widgets.expandable_text),
     )
 
     built_in_tools: list[str] = Field(
