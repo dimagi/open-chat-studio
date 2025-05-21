@@ -287,11 +287,13 @@ def test_truncate_tokens(chat):
 
     remaining_after_pruning = ["Another one", "Final message"]
     assert [r.content for r in result] == remaining_after_pruning
-    summary_message = ChatMessage.objects.get(chat=chat, metadata__compression_marker=True)
+    summary_message = ChatMessage.objects.get(
+        chat=chat, metadata__compression_marker=PipelineChatHistoryModes.TRUNCATE_TOKENS
+    )
     assert summary_message.content == "Another one"
 
-    # Check that the summary marker is respected
-    assert len(chat.get_langchain_messages_until_marker()) == 2
+    # Check that the compression marker is respected
+    assert len(chat.get_langchain_messages_until_marker(marker=PipelineChatHistoryModes.TRUNCATE_TOKENS)) == 2
 
 
 def test_get_new_summary_with_large_message():

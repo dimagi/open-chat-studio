@@ -126,7 +126,7 @@ def compress_chat_history(
         )
 
     history_mode = history_mode or PipelineChatHistoryModes.SUMMARIZE
-    history_messages = chat.get_langchain_messages_until_marker()
+    history_messages = chat.get_langchain_messages_until_marker(marker=history_mode)
     try:
         history, last_message, summary = _compress_chat_history(
             history=history_messages,
@@ -141,7 +141,7 @@ def compress_chat_history(
                 if summary == COMPRESSION_MARKER:
                     try:
                         message = ChatMessage.objects.get(id=last_message.additional_kwargs["id"])
-                        message.metadata["compression_marker"] = True
+                        message.metadata["compression_marker"] = history_mode
                         message.save(update_fields=["metadata"])
                     except ChatMessage.DoesNotExist:
                         pass

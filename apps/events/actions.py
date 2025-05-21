@@ -5,7 +5,7 @@ from langchain.prompts import PromptTemplate
 
 from apps.chat.models import ChatMessageType
 from apps.experiments.models import ExperimentSession
-from apps.pipelines.models import PipelineEventInputs
+from apps.pipelines.models import PipelineChatHistoryModes, PipelineEventInputs
 from apps.pipelines.nodes.base import PipelineState
 from apps.service_providers.tracing import TraceInfo, TracingService
 from apps.utils.django_db import MakeInterval
@@ -46,7 +46,7 @@ class SummarizeConversationAction(EventActionHandlerBase):
             prompt_text = action.params["prompt"]
         except KeyError:
             prompt_text = SUMMARY_PROMPT
-        history = session.chat.get_langchain_messages_until_marker()
+        history = session.chat.get_langchain_messages_until_marker(marker=PipelineChatHistoryModes.SUMMARIZE)
         current_summary = history.pop(0).content if history[0].type == ChatMessageType.SYSTEM else ""
         messages = session.chat.get_langchain_messages()
         prompt = PromptTemplate(template=prompt_text, input_variables=["summary", "new_lines"])
@@ -114,7 +114,7 @@ class SendMessageToBotAction(EventActionHandlerBase):
 
 class PipelineStartAction(EventActionHandlerBase):
     def invoke(self, session: ExperimentSession, action) -> str:
-        from apps.pipelines.models import Pipeline
+        from apps.pipelines.models import Pipeline, PipelineChatHistoryModes
 
         try:
             pipeline: Pipeline = Pipeline.objects.get(id=action.params["pipeline_id"])
@@ -129,7 +129,7 @@ class PipelineStartAction(EventActionHandlerBase):
         if input_type == PipelineEventInputs.FULL_HISTORY:
             messages = session.chat.get_langchain_messages()
         elif input_type == PipelineEventInputs.HISTORY_LAST_SUMMARY:
-            messages = session.chat.get_langchain_messages_until_marker()
+            messages = session.chat.get_langchain_messages_until_marker(marker=PipelineChatHistoryModes.SUMMARIZE)
         elif input_type == PipelineEventInputs.LAST_MESSAGE:
             messages = [session.chat.messages.last().to_langchain_message()]
 

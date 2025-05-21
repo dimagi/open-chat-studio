@@ -41,11 +41,17 @@ class Chat(BaseTeamModel, TaggedModelMixin, UserCommentsMixin):
     def get_langchain_messages(self) -> list[BaseMessage]:
         return messages_from_dict([m.to_langchain_dict() for m in self.messages.all()])
 
-    def get_langchain_messages_until_marker(self) -> list[BaseMessage]:
+    def get_langchain_messages_until_marker(self, marker: str) -> list[BaseMessage]:
+        """Fetch messages from the database until a marker is found. The marker must be one of the
+        PipelineChatHistoryModes values.
+        """
+        from apps.pipelines.models import PipelineChatHistoryModes
+
         messages = []
-        for message in self.message_iterator():
+        include_summaries = marker == PipelineChatHistoryModes.SUMMARIZE
+        for message in self.message_iterator(include_summaries):
             messages.append(message.to_langchain_dict())
-            if message.is_summary or message.is_summary_marker:
+            if message.compression_marker and (not marker or marker == message.compression_marker):
                 break
 
         return messages_from_dict(list(reversed(messages)))
@@ -123,11 +129,13 @@ class ChatMessage(BaseModel, TaggedModelMixin, UserCommentsMixin):
     def make_summary_message(cls, message):
         """A 'summary message' is a special message only ever exists in memory. It is
         not saved to the database. It is used to represent the summary of a chat up to a certain point."""
+        from apps.pipelines.models import PipelineChatHistoryModes
+
         return ChatMessage(
             created_at=message.created_at,
             message_type=ChatMessageType.SYSTEM,
             content=message.summary,
-            metadata={"is_summary": True},
+            metadata={"compression_marker": PipelineChatHistoryModes.SUMMARIZE},
         )
 
     @property
@@ -152,11 +160,13 @@ class ChatMessage(BaseModel, TaggedModelMixin, UserCommentsMixin):
 
     @property
     def is_summary(self):
-        return self.metadata.get("is_summary", False)
+        from apps.pipelines.models import PipelineChatHistoryModes
+
+        return self.metadata.get("compression_marker") == PipelineChatHistoryModes.SUMMARIZE
 
     @property
-    def is_summary_marker(self):
-        return self.metadata.get("compression_marker", False)
+    def compression_marker(self):
+        return self.metadata.get("compression_marker")
 
     @property
     def created_at_datetime(self):
