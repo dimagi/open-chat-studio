@@ -1,0 +1,108 @@
+{% extends 'generic/object_form.html' %}
+{% load form_tags %}
+{% block form %}
+  {{ form.non_field_errors }}
+  {% render_form_fields form %}
+  <div x-data="messageBuilder()" x-init="init()">
+    <input type="hidden" name="messages_json" x-model="jsonString">
+
+    <div class="flex items-center justify-between mt-2">
+      <h2 class="font-bold text-lg">Messages</h2>
+      <div class="tooltip" data-tip="Add message to the dataset">
+        <button class="btn btn-primary btn-xs" type="button" onclick="new_message.showModal()">
+          <i class="fa-solid fa-plus"></i> Add Message
+        </button>
+      </div>
+    </div>
+
+
+    <div class="w-full mt-4" x-show="messages.length === 0">
+      TODO: Clone session here
+    </div>
+    <table class="table w-full mt-4" x-show="messages.length > 0">
+      <thead>
+        <tr>
+          <th>Type</th>
+          <th>Content</th>
+          <th></th>
+        </tr>
+      </thead>
+      <tbody>
+        <template x-for="(msg, index) in messages" :key="index">
+          <tr>
+            <td x-text="msg.message_type"></td>
+            <td x-text="msg.content"></td>
+            <td>
+              <button class="btn btn-ghost" type="button" @click="removeMessage(index)"><i class="fa-solid fa-trash"></i></button>
+            </td>
+          </tr>
+        </template>
+      </tbody>
+    </table>
+
+    <dialog id="new_message" class="modal">
+      <div class="modal-box">
+        <h3 class="text-lg font-bold">Add Message</h3>
+        <div id="new_message_form" class="form">
+          <div class="fieldset w-full">
+            <label class="label mt-2">
+              {{ new_message_form.message_type.label }}
+            </label>
+            <select x-model="newMessage.message_type" class="select w-full">
+              {% for val, label in new_message_form.fields.message_type.choices %}
+                <option value="{{ val }}">{{ label }}</option>
+              {% endfor %}
+            </select>
+          </div>
+          <div class="fieldset w-full">
+            <label class="label mt-2">{{ new_message_form.content.label }}</label>
+            <textarea required x-model="newMessage.content" class="w-full textarea textarea-bordered" rows="3"></textarea>
+          </div>
+        </div>
+
+        <div class="modal-action">
+          <div class="modal-action">
+            <button type="button" class="btn" @click="resetNewMessage(); new_message.close()">Cancel</button>
+            <button type="button" class="btn btn-primary" @click="addMessage(); new_message.close()" :disabled="!(newMessage.content.trim() && newMessage.message_type)">Add</button>
+          </div>
+        </div>
+      </div>
+    </dialog>
+  </div>
+{% endblock %}
+
+{% block page_js %}
+  <script>
+    function messageBuilder() {
+      return {
+        messages: [],
+        newMessage: { message_type: null, content: "" },
+        jsonString: "[]",
+
+        init() {
+          this.updateJson();
+        },
+
+        addMessage() {
+          if (!this.newMessage.content.trim()) return;
+          this.messages.push({ ...this.newMessage });
+          this.resetNewMessage();
+          this.updateJson();
+        },
+
+        resetNewMessage() {
+          this.newMessage = { message_type: "HUMAN", content: "" };
+        },
+
+        removeMessage(index) {
+          this.messages.splice(index, 1);
+          this.updateJson();
+        },
+
+        updateJson() {
+          this.jsonString = JSON.stringify(this.messages);
+        }
+      }
+    }
+  </script>
+{% endblock %}

@@ -3,7 +3,7 @@ from django.urls import reverse
 from django.views.generic import CreateView, TemplateView, UpdateView
 from django_tables2 import SingleTableView
 
-from apps.evaluations.forms import EvaluationDatasetForm
+from apps.evaluations.forms import EvaluationDatasetForm, EvaluationMessageForm
 from apps.evaluations.models import EvaluationDataset
 from apps.evaluations.tables import EvaluationDatasetTable
 from apps.teams.mixins import LoginAndTeamRequiredMixin
@@ -42,13 +42,14 @@ class DatasetTableView(SingleTableView, PermissionRequiredMixin):
 
 class CreateDataset(LoginAndTeamRequiredMixin, CreateView, PermissionRequiredMixin):
     # permission_required = "pipelines.add_pipeline"
-    template_name = "generic/object_form.html"
+    template_name = "evaluations/dataset_form.html"
     model = EvaluationDataset
     form_class = EvaluationDatasetForm
     extra_context = {
         "title": "Create Dataset",
         "button_text": "Create",
         "active_tab": "evaluation_datasets",
+        "new_message_form": EvaluationMessageForm(),
     }
 
     def get_form_kwargs(self):
