@@ -132,7 +132,7 @@ class EvaluationDatasetTable(tables.Table):
         fields = (
             "name",
             "message_type",
-            "sessions",
+            "messages",
         )
         row_attrs = settings.DJANGO_TABLES2_ROW_ATTRS
         orderable = False
