@@ -91,6 +91,9 @@ class ChatbotSettingsForm(forms.ModelForm):
         self.fields["pre_survey"].queryset = team.survey_set.exclude(is_version=True)
         self.fields["post_survey"].queryset = team.survey_set.exclude(is_version=True)
         self.fields["synthetic_voice"].widget.template_name = "django/forms/widgets/select_dynamic.html"
+        self.fields["voice_provider"].widget.attrs = {
+            "x-model.fill": "voiceProvider",
+        }
 
     def clean_participant_allowlist(self):
         cleaned_identifiers = []

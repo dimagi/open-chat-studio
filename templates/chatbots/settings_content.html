@@ -38,23 +38,32 @@
     {% endif %}
   </div>
 
-  {% if edit_mode %}<form id="settings-form"x-data="{
-                                                    type: '{{ experiment_type }}',
+  {% if edit_mode %}
+    <div style="display: none;">
+      <div id="voiceProviderTypes">{{ voice_providers_types|safe }}</div>
+      <div id="voiceOptions">{{ synthetic_voice_options|safe }}</div>
+    </div>
 
-                                                    voiceProvider: null,
-                                                    synthetic_voice: {{experiment.synthetic_voice_id|default:'null'}},
-                                                    synthetic_voice_options: [],
+    <form id="settings-form" x-data="{
+                                     type: '{{ experiment_type }}',
+                                     voiceProvider: null,
+                                     synthetic_voice: {{experiment.synthetic_voice_id|default:'null'}},
+                                     synthetic_voice_options: [],
+                                     init() {
+                                     const voiceProviderTypes = JSON.parse(document.getElementById('voiceProviderTypes').textContent);
+                                     const voiceOptions = JSON.parse(document.getElementById('voiceOptions').textContent);
+                                     this.$watch('voiceProvider', () => {
+                                     const providerType = voiceProviderTypes[this.voiceProvider];
 
-                                                    init() {
-
-                                                    this.$watch('voiceProvider', () => {
-                                                    const providerType = voiceProviderTypes[this.voiceProvider];
-                                                    this.synthetic_voice_options = voiceOptions.filter(option => {
-                                                    return option.type === providerType && (!option.provider_id || option.provider_id == this.voiceProvider);
-                                                    });
-                                                    });
-                                                    }
-                                                    }">{% endif %}
+                                     this.synthetic_voice_options = voiceOptions.filter(option => {
+                                     const match = option.type === providerType &&
+                                     (!option.provider_id || option.provider_id == this.voiceProvider);
+                                     return match;
+                                     });
+                                     });
+                                     }
+                                     }">
+  {% endif %}
   <div class="mb-6" id="name-section">
     <h4 class="text-md font-bold mb-2">Name</h4>
     <div class="p-4 bg-base-200 rounded-md" id="name-{% if edit_mode %}edit{% else %}content{% endif %}">
