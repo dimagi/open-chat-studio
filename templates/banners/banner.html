@@ -1,3 +1,4 @@
+{% load chat_tags %}
 {% if banners %}
     <div class="banners-container">
         {% for banner in banners %}
@@ -5,7 +6,7 @@
                 {% if banner.title %}
                     <strong>{{ banner.title }}</strong>:
                 {% endif %}
-                {{ banner.message }}
+                {{ banner.message|render_markdown }}
                 <div>
                     <button class="btn btn-sm" data-bs-dismiss="alert" aria-label="Close">Close</button>
                 </div>

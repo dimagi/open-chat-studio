@@ -21,7 +21,7 @@ class Banner(models.Model):
     )
 
     title = models.CharField(max_length=100, blank=True, help_text="Optional title for the banner")
-    message = models.TextField(help_text="Display message")
+    message = models.TextField(help_text="Display message rendered as markdown")
     banner_type = models.CharField(
         max_length=20, choices=BANNER_TYPES, default="info", help_text="Visual style of the banner"
     )
