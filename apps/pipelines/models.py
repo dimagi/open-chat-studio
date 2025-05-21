@@ -658,18 +658,19 @@ class PipelineChatHistory(BaseModel):
     def message_iterator(self) -> Iterator["PipelineChatMessages"]:
         yield from self.messages.order_by("-created_at").iterator(100)
 
-    def get_messages_until_summary(self):
+    def get_messages_until_marker(self, marker: PipelineChatHistoryModes):
         messages = []
         for message in self.message_iterator():
             messages.append(message)
-            if message.summary:
+            if message.compression_marker == marker:
                 break
         return messages
 
-    def get_langchain_messages_until_summary(self):
-        messages = self.get_messages_until_summary()
+    def get_langchain_messages_until_marker(self, marker: PipelineChatHistoryModes):
+        messages = self.get_messages_until_marker(marker)
+        include_summary = marker == PipelineChatHistoryModes.SUMMARIZE
         langchain_messages_to_last_summary = [
-            message for message_pair in messages for message in message_pair.as_langchain_messages()
+            message for message_pair in messages for message in message_pair.as_langchain_messages(include_summary)
         ]
         return list(reversed(langchain_messages_to_last_summary))
 
@@ -680,15 +681,16 @@ class PipelineChatMessages(BaseModel):
     human_message = models.TextField()
     ai_message = models.TextField()
     summary = models.TextField(null=True)  # noqa: DJ001
+    compression_marker = models.CharField(max_length=32, choices=PipelineChatHistoryModes.choices, blank=True)
 
     def __str__(self):
         if self.summary:
             return f"Human: {self.human_message}, AI: {self.ai_message}, System: {self.summary}"
         return f"Human: {self.human_message}, AI: {self.ai_message}"
 
-    def as_tuples(self):
+    def as_tuples(self, include_summaries=True) -> list[tuple]:
         message_tuples = []
-        if self.summary:
+        if include_summaries and self.summary:
             message_tuples.append((ChatMessageType.SYSTEM.value, self.summary))
         message_tuples.extend(
             [
@@ -698,7 +700,7 @@ class PipelineChatMessages(BaseModel):
         )
         return message_tuples
 
-    def as_langchain_messages(self) -> list[BaseMessage]:
+    def as_langchain_messages(self, include_summary=True) -> list[BaseMessage]:
         """
         Converts this message instance into a list of Langchain `BaseMessage` objects.
         The message order is the reverse of the typical order because of where this
@@ -711,7 +713,7 @@ class PipelineChatMessages(BaseModel):
             AIMessage(content=self.ai_message, additional_kwargs={"id": self.id, "node_id": self.node_id}),
             HumanMessage(content=self.human_message, additional_kwargs={"id": self.id, "node_id": self.node_id}),
         ]
-        if self.summary:
+        if include_summary and self.summary:
             langchain_messages.append(
                 SystemMessage(content=self.summary, additional_kwargs={"id": self.id, "node_id": self.node_id})
             )
