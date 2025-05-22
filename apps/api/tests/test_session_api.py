@@ -162,7 +162,7 @@ def test_retrieve_session(session):
                 "created_at": "fake date",
                 "role": "system",
                 "content": "Abracadabra",
-                "metadata": {"is_summary": True},
+                "metadata": {"compression_marker": "summarize"},
                 "tags": [],
                 "attachments": [],
             },

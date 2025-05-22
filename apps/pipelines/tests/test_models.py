@@ -112,6 +112,44 @@ class TestVersioningNodes:
         node_version = pipeline_version.node_set.filter(type=node_type).first()
         assert node_version.params["source_material_id"] == str(source_material_version.id)
 
+    def test_version_llm_with_prompt_node_with_multiple_dependencies(self):
+        """Test that LLMResponseWithPrompt node properly handles versioning of multiple dependent resources"""
+        node_type = LLMResponseWithPrompt.__name__
+        collection = CollectionFactory()
+        collection_index = CollectionFactory(is_index=True)
+        source_material = SourceMaterialFactory()
+
+        # Create pipeline with node that has all three dependencies
+        pipeline = PipelineFactory()
+        NodeFactory(
+            type=node_type,
+            pipeline=pipeline,
+            params={
+                "collection_id": str(collection.id),
+                "collection_index_id": str(collection_index.id),
+                "source_material_id": str(source_material.id),
+            },
+        )
+
+        # First versioning - should create versions of all dependencies
+        pipeline_version = pipeline.create_new_version()
+        collection_version = collection.latest_version
+        collection_index_version = collection_index.latest_version
+        source_material_version = source_material.latest_version
+
+        node_version = pipeline_version.node_set.get(type=node_type)
+        assert node_version.params["collection_id"] == str(collection_version.id)
+        assert node_version.params["collection_index_id"] == str(collection_index_version.id)
+        assert node_version.params["source_material_id"] == str(source_material_version.id)
+
+        # Second versioning without changes - should reuse existing dependency versions
+        pipeline_version_2 = pipeline.create_new_version()
+
+        node_version_2 = pipeline_version_2.node_set.get(type=node_type)
+        assert node_version_2.params["collection_id"] == str(collection_version.id)
+        assert node_version_2.params["collection_index_id"] == str(collection_index_version.id)
+        assert node_version_2.params["source_material_id"] == str(source_material_version.id)
+
 
 @pytest.mark.django_db()
 class TestArchivingNodes:
