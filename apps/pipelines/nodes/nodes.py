@@ -264,14 +264,14 @@ class LLMResponseWithPrompt(LLMResponse, HistoryMixin):
         None,
         title="Media",
         json_schema_extra=UiSchema(
-            widget=Widgets.select, options_source=OptionsSource.collection, flag_required="document_management"
+            widget=Widgets.select, options_source=OptionsSource.collection, flag_required="pipelines-v2"
         ),
     )
     collection_index_id: OptionalInt = Field(
         None,
         title="Collection Index",
         json_schema_extra=UiSchema(
-            widget=Widgets.select, options_source=OptionsSource.collection_index, flag_required="document_management"
+            widget=Widgets.select, options_source=OptionsSource.collection_index, flag_required="pipelines-v2"
         ),
     )
     tools: list[str] = Field(
