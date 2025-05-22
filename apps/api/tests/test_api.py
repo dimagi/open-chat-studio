@@ -32,6 +32,8 @@ def experiment(db):
 @pytest.mark.django_db()
 def test_list_experiments(experiment):
     user = experiment.team.members.first()
+    version1 = experiment.create_new_version()
+    version2 = experiment.create_new_version()
     client = ApiTestClient(user, experiment.team)
     response = client.get(reverse("api:experiment-list"))
     assert response.status_code == 200
@@ -41,7 +43,16 @@ def test_list_experiments(experiment):
                 "name": experiment.name,
                 "id": experiment.public_id,
                 "url": f"http://testserver/api/experiments/{experiment.public_id}/",
-                "version_number": 1,
+                "version_number": 3,
+                "versions": [
+                    {"name": version1.name, "version_number": 1, "is_default_version": True, "version_description": ""},
+                    {
+                        "name": version2.name,
+                        "version_number": 2,
+                        "is_default_version": False,
+                        "version_description": "",
+                    },
+                ],
             }
         ],
         "next": None,
@@ -61,6 +72,7 @@ def test_retrieve_experiments(experiment):
         "name": experiment.name,
         "url": f"http://testserver/api/experiments/{experiment.public_id}/",
         "version_number": 1,
+        "versions": [],
     }
 
 
