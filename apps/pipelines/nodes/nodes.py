@@ -381,8 +381,7 @@ class LLMResponseWithPrompt(LLMResponse, HistoryMixin):
         )
         tools = get_node_tools(self.django_node, session, attachment_callback=history_manager.attach_file_id)
         built_in_tools = self.built_in_tools
-        if llm_service := self.get_llm_service():
-            tools.extend(llm_service.attach_built_in_tools(built_in_tools, self.tool_config))
+        tools.extend(self.get_llm_service().attach_built_in_tools(built_in_tools, self.tool_config))
         if self.collection_index_id:
             collection = Collection.objects.get(id=self.collection_index_id)
             builtin_tools = {"type": "file_search", "vector_store_ids": [collection.openai_vector_store_id]}
