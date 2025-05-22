@@ -61,15 +61,17 @@ class AnthropicTokenCounter(TokenCounter):
         self.api_key = api_key
 
     def get_tokens_from_response(self, response: LLMResult) -> None | tuple[int, int]:
-        if response.llm_output is None:
+        if not response.generations:
             return None
 
-        if "usage" not in response.llm_output:
-            return None
+        input_tokens = 0
+        output_tokens = 0
+        for generations in response.generations:
+            for generation in generations:
+                if usage := getattr(generation.message, "usage_metadata", None):
+                    input_tokens += usage.get("input_tokens") or 0
+                    output_tokens += usage.get("output_tokens") or 0
 
-        token_usage = response.llm_output["usage"]
-        output_tokens = token_usage.get("output_tokens", 0)
-        input_tokens = token_usage.get("input_tokens", 0)
         return input_tokens, output_tokens
 
     def get_tokens_from_text(self, text) -> int:
