@@ -16,8 +16,6 @@ logger = logging.getLogger("ocs.documents.tasks.link_files_to_index")
 
 DEFAULT_CHUNKING_STRATEGY = {"chunk_size": 800, "chunk_overlap": 400}
 
-# TODO: Prevent user from switching provider when files are not either completed or failed
-
 
 @shared_task(base=TaskbadgerTask, ignore_result=True)
 def index_collection_files_task(collection_file_ids: list[int]):

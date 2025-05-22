@@ -258,7 +258,7 @@ class DeleteCollection(LoginAndTeamRequiredMixin, View, PermissionRequiredMixin)
 @permission_required("documents.change_collection", raise_exception=True)
 def retry_failed_uploads(request, team_slug: str, pk: int):
     queryset = CollectionFile.objects.filter(collection_id=pk, status=FileStatus.FAILED)
-    collection_file_ids = queryset.values_list("id", flat=True)
+    collection_file_ids = list(queryset.values_list("id", flat=True))
     queryset.update(status=FileStatus.PENDING)
     tasks.index_collection_files_task.delay(collection_file_ids)
     return redirect("documents:single_collection_home", team_slug=team_slug, pk=pk)

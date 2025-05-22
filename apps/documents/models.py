@@ -202,6 +202,15 @@ class Collection(BaseTeamModel, VersionsMixin):
             status=FileStatus.FAILED,
         ).exists()
 
+    def has_pending_index_uploads(self) -> bool:
+        """
+        Check if any of the files in this collection are not yet uploaded to an index
+        """
+        return CollectionFile.objects.filter(
+            collection=self,
+            status__in=[FileStatus.PENDING, FileStatus.IN_PROGRESS],
+        ).exists()
+
     def _remove_index(self):
         """Remove the index backend"""
         manager = self.llm_provider.get_index_manager()
