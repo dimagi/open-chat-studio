@@ -34,7 +34,7 @@ dependencies = [
     "djangorestframework-api-key",
     "drf-spectacular",
     "fbmessenger",
-    "ffmpeg",  # Audio transcription
+    "ffmpeg", # Audio transcription
     "httpx",
     "jinja2",
     "langchain>=0.3,<0.4",
@@ -53,7 +53,7 @@ dependencies = [
     "psycopg[binary]",
     "pyTelegramBotAPI==4.12.0",
     "pydantic",
-    "pydub",  # Audio transcription
+    "pydub", # Audio transcription
     "pypdf",
     "RestrictedPython",
     "sentry-sdk",
@@ -61,7 +61,7 @@ dependencies = [
     "taskbadger",
     "tenacity",
     "tiktoken",
-    "transformers>=4.48.0",  # this is required by the tokenizer that langchain uses
+    "transformers>=4.48.0", # this is required by the tokenizer that langchain uses
     "turn-python>=0.2.0",
     "twilio",
     "whitenoise[brotli]",
@@ -72,6 +72,7 @@ dependencies = [
     "urllib3>=2.3.0",
     "pycryptodome",
     "python-docx",
+    "django-vite>=3.1.0",
 ]
 
 [project.urls]

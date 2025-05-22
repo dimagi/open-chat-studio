@@ -78,6 +78,7 @@ THIRD_PARTY_APPS = [
     "health_check.contrib.celery",
     "health_check.contrib.redis",
     "template_partials",
+    "django_vite",
 ]
 
 PROJECT_APPS = [
@@ -310,6 +311,13 @@ STORAGES = {
 
 MEDIA_ROOT = BASE_DIR / "media"
 MEDIA_URL = "/media/"
+
+DJANGO_VITE = {
+    "default": {
+        "dev_mode": env.bool("DJANGO_VITE_DEV_MODE", default=DEBUG),
+        "manifest_path": BASE_DIR / "static" / ".vite" / "manifest.json",
+    }
+}
 
 AWS_ACCESS_KEY_ID = env("AWS_ACCESS_KEY_ID", default=None)
 AWS_SECRET_ACCESS_KEY = env("AWS_SECRET_ACCESS_KEY", default=None)
