@@ -2,8 +2,13 @@ import json
 
 from django import forms
 
-from apps.evaluations.models import EvaluationConfig, EvaluationDataset, EvaluationMessage, Evaluator
-from apps.experiments.models import ExperimentSession
+from apps.evaluations.models import (
+    DatasetMessageTypeChoices,
+    EvaluationConfig,
+    EvaluationDataset,
+    EvaluationMessage,
+    Evaluator,
+)
 
 
 class EvaluationConfigForm(forms.ModelForm):
@@ -29,22 +34,13 @@ class EvaluatorForm(forms.ModelForm):
 
 
 class EvaluationDatasetForm(forms.ModelForm):
-    session = forms.ModelChoiceField(queryset=None, required=True, help_text="Choose a session to copy messages from")
-
     class Meta:
         model = EvaluationDataset
-        fields = ("name", "message_type", "session")
+        fields = ("name", "message_type")
 
     def __init__(self, team, *args, **kwargs):
         super().__init__(*args, **kwargs)
         self.team = team
-
-        self.fields["session"].queryset = ExperimentSession.objects.filter(team=team).order_by(
-            "experiment__name", "-created_at"
-        )
-        self.fields["session"].label_from_instance = lambda session: (
-            f"{session.experiment.name} – {session.created_at.strftime('%Y-%m-%d %H:%M')} ({session.participant})"
-        )
 
     def clean(self):
         super().clean()
@@ -59,30 +55,29 @@ class EvaluationDatasetForm(forms.ModelForm):
             for msg in messages:
                 if not msg.get("content") or not msg.get("message_type"):
                     raise forms.ValidationError("Each message must have type and content.")
+                if msg.get("message_type") not in DatasetMessageTypeChoices:
+                    raise forms.ValidationError(f"Message type for {msg.get('content')} is incorrect")
 
     def save(self, commit=True):
-        dataset = super().save(commit=False)
-
         dataset = super().save(commit=False)
 
         if commit:
             dataset.save()
 
-            raw_json = self.data.get("messages_json")
-            if raw_json:
+            dataset_messages = self.data.get("messages_json")
+            if dataset_messages:
                 try:
-                    message_dicts = json.loads(raw_json)
+                    message_dicts = json.loads(dataset_messages)
                 except json.JSONDecodeError as err:
                     raise forms.ValidationError("Could not parse messages.") from err
 
-                # Optional: validate content + message_type per message_dict here
                 instances = [
                     EvaluationMessage(
-                        content=m["content"].strip(),
-                        message_type=m["message_type"],
+                        id=m.get("id"),
+                        content=m.get("content", "").strip(),
+                        message_type=m.get("message_type"),
                     )
                     for m in message_dicts
-                    if m.get("content") and m.get("message_type")
                 ]
                 EvaluationMessage.objects.bulk_create(instances)
                 dataset.messages.set(instances)

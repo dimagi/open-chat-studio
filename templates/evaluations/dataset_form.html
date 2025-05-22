@@ -5,21 +5,34 @@
   {% render_form_fields form %}
   <div x-data="messageBuilder()" x-init="init()">
     <input type="hidden" name="messages_json" x-model="jsonString">
+    <div class="w-full mt-4" x-show="messages.length === 0">
+      <div x-data="{ showClone: false }" class="border rounded-lg p-4 bg-base-100">
+        <button
+          type="button"
+          class="flex justify-between items-center w-full text-left"
+          @click="showClone = !showClone"
+        >
+          <h3 class="text-md font-bold">Clone messages from a previous session</h3>
+          <i :class="showClone ? 'fa fa-chevron-up' : 'fa fa-chevron-down'" class="mr-2 float-right" aria-hidden="true"></i>
+        </button>
+
+        <div x-show="showClone">
+          <div id="sessions-table"
+               hx-get="{% url 'evaluations:dataset_sessions_list' request.team.slug %}"
+               hx-trigger="load"
+               hx-target="this"
+               hx-swap="innerHTML">
+          </div>
+        </div>
+      </div>
+    </div>
+
     <div class="flex items-center justify-between mt-2">
       <h2 class="font-bold text-lg">Messages</h2>
       <div class="tooltip" data-tip="Add message to the dataset">
         <button class="btn btn-primary btn-xs" type="button" onclick="new_message_modal.showModal()">
           <i class="fa-solid fa-plus"></i> Add Message
         </button>
-      </div>
-    </div>
-    <div class="w-full mt-4" x-show="messages.length === 0">
-      <h3 class="text-md font-bold mb-2">Clone messages from a previous session</h3>
-      <div id="sessions-table"
-           hx-get="{% url 'evaluations:dataset_sessions_list' request.team.slug %}"
-           hx-trigger="load"
-           hx-target="this"
-           hx-swap="innerHTML">
       </div>
     </div>
     <table class="table w-full mt-4" x-show="messages.length > 0">
@@ -87,7 +100,7 @@
     function messageBuilder() {
       return {
         messages: [],
-        newMessage: { message_type: null, content: "" },
+        newMessage: { id: null, message_type: null, content: "" },
         jsonString: "[]",
 
         init() {
@@ -102,7 +115,7 @@
         },
 
         resetNewMessage() {
-          this.newMessage = { message_type: "HUMAN", content: "" };
+          this.newMessage = { id: null, message_type: null, content: "" };
         },
 
         removeMessage(index) {
@@ -126,13 +139,14 @@
             .then(data => {
               if (!Array.isArray(data)) return;
               this.messages = data.map(m => ({
+                id: m.id,
                 message_type: m.message_type,
                 content: m.content,
               }));
               this.updateJson();
             })
             .catch(error => {
-              alert("Unable to load session messages.");
+              alertify.error(`There was an error: "${error}"`);
               console.error(error);
             });
         }
