@@ -9,6 +9,7 @@ gpt_playground/localsettings.py
 gpt_playground/local.py
 static_root/
 node_modules/
+.vite/
 openapitools.json
 media/
 docs/_build

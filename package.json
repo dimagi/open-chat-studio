@@ -55,6 +55,7 @@
     "@tailwindcss/postcss": "^4.1.5",
     "@uiw/codemirror-theme-github": "^4.23.11",
     "@uiw/react-codemirror": "^4.23.7",
+    "@vitejs/plugin-react": "^4.4.1",
     "alertifyjs": "^1.14.0",
     "alpinejs": "^3.14.3",
     "axios": "^1.9.0",
@@ -73,6 +74,7 @@
     "short-unique-id": "^5.2.2",
     "tailwindcss": "^4.1.4",
     "tom-select": "^2.3.1",
+    "vite": "^6.3.5",
     "zustand": "^5.0.3"
   }
 }

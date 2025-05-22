@@ -2,5 +2,5 @@
 
 
 @use "app/base";
-@use '~tom-select/dist/scss/tom-select';
-@import '~alertifyjs/build/css/alertify.min.css';
+@import 'tom-select/dist/css/tom-select.default.css';
+@import 'alertifyjs/build/css/alertify.min.css';
