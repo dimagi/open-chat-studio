@@ -24,6 +24,7 @@ from pydantic_core import PydanticCustomError
 from pydantic_core.core_schema import FieldValidationInfo
 from RestrictedPython import compile_restricted, safe_builtins, safe_globals
 
+from apps.annotations.models import TagCategories
 from apps.assistants.models import OpenAiAssistant
 from apps.chat.agent.tools import get_node_tools
 from apps.chat.conversation import compress_chat_history, compress_pipeline_chat_history
@@ -514,9 +515,9 @@ class RouterMixin(BaseModel):
         """
         return {f"output_{output_num}": keyword for output_num, keyword in enumerate(self.keywords)}
 
-    def get_output_tags(self, selected_route) -> list[str]:
+    def get_output_tags(self, selected_route) -> list[tuple[str, str]]:
         if self.tag_output_message:
-            return [f"{self.name}:{selected_route}"]
+            return [(f"{self.name}:{selected_route}", TagCategories.BOT_RESPONSE)]
         return []
 
 
