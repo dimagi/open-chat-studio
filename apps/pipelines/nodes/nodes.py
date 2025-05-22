@@ -259,7 +259,7 @@ class ToolConfigModel(BaseModel):
 
     @field_validator("allowed_domains", "blocked_domains", mode="after")
     @classmethod
-    def capitalize(cls, value: list[str], info) -> list[str]:
+    def validate_domains(cls, value: list[str], info) -> list[str]:
         values = list(map(str.strip, filter(None, value)))
         for value in values:
             try:
