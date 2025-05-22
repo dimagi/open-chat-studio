@@ -33,6 +33,7 @@ from apps.service_providers.llm_service.history_managers import ExperimentHistor
 from apps.service_providers.llm_service.main import OpenAIAssistantRunnable
 from apps.utils.prompt import OcsPromptTemplate
 
+lc_tools_parser.parse_ai_message_to_tool_action = custom_parse_ai_message
 if TYPE_CHECKING:
     from apps.channels.datamodels import Attachment
 
@@ -258,7 +259,6 @@ class AgentLLMChat(LLMChat):
         return cited_files_parser(token)
 
     def _build_chain(self) -> Runnable[dict[str, Any], dict]:
-        lc_tools_parser.parse_ai_message_to_tool_action = custom_parse_ai_message
         tools = self.adapter.get_allowed_tools()
         agent = create_tool_calling_agent(llm=self.adapter.get_chat_model(), tools=tools, prompt=self.prompt)
         tools = self._filter_for_ocs_tools(tools)

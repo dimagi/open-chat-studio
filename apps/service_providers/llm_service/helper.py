@@ -41,36 +41,3 @@ def custom_parse_ai_message(message):
             return AgentFinish(return_values={"output": message.content}, log=str(message.content))
         else:
             raise
-
-
-def parse_output_for_anthropic(output):
-    if output is None or isinstance(output, str):
-        return output or ""
-
-    if isinstance(output, dict):
-        if "output" in output:
-            return parse_output_for_anthropic(output["output"])
-        elif "text" in output:
-            return output.get("text", "")
-        else:
-            return str(output)
-
-    if isinstance(output, list):
-        result = []
-        for item in output:
-            if not isinstance(item, (dict | str)):
-                continue
-
-            if isinstance(item, dict) and item.get("type") == "text":
-                text = item.get("text", "")
-
-                for citation in item.get("citations", []):
-                    if citation.get("title") and citation.get("url"):
-                        text += f" [{citation['title']}]({citation['url']})"
-                result.append(text)
-            elif isinstance(item, str):
-                result.append(item)
-        combined_text = "".join(result)
-        return combined_text
-
-    return str(output)

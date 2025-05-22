@@ -22,7 +22,7 @@ export default function EditPanel({nodeId}: { nodeId: string }) {
   ) => {
     const {name, type} = event.target;
     const value = type === 'checkbox' ? (event.target as HTMLInputElement).checked : event.target.value;
-    if (!schemaProperties.includes(name) && !name.startsWith("tool_config")) {
+    if (!schemaProperties.includes(name)) {
       console.warn(`Unknown parameter: ${name}`);
       return;
     }
