@@ -55,8 +55,7 @@ from apps.service_providers.llm_service.runnables import (
 from apps.service_providers.models import LlmProviderModel
 from apps.utils.prompt import OcsPromptTemplate, PromptVars, validate_prompt_variables
 
-OptionalInt = Annotated[int | None, BeforeValidator(lambda x: None if x == "" else x)]
-DEFAULT_TAG = "The tag that the output message should be tagged with"
+OptionalInt = Annotated[int | None, BeforeValidator(lambda x: None if isinstance(x, str) and len(x) == 0 else x)]
 
 
 class TagMixin(BaseModel):
@@ -68,7 +67,7 @@ class TagMixin(BaseModel):
 
     def get_output_tags(self) -> list[tuple[str, str | None]]:
         tags: list[tuple[str, str | None]] = []
-        if self.tag and self.tag != DEFAULT_TAG:
+        if self.tag
             tags.append((self.tag, None))
         return tags
 

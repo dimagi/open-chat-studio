@@ -128,6 +128,9 @@ class LlmService(pydantic.BaseModel):
     def attach_built_in_tools(self, built_in_tools: list[str]) -> list:
         raise NotImplementedError
 
+    def get_index_manager(self):
+        raise NotImplementedError
+
 
 class OpenAIGenericService(LlmService):
     openai_api_key: str
@@ -189,6 +192,11 @@ class OpenAILlmService(OpenAIGenericService):
             else:
                 raise ValueError(f"Unsupported built-in tool for openai: '{tool_name}'")
         return tools
+
+    def get_index_manager(self):
+        from apps.service_providers.llm_service.index_managers import OpenAIVectorStoreManager
+
+        return OpenAIVectorStoreManager(self.get_raw_client())
 
 
 class AzureLlmService(LlmService):
