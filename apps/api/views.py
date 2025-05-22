@@ -65,7 +65,8 @@ class ExperimentViewSet(mixins.ListModelMixin, mixins.RetrieveModelMixin, Generi
     lookup_url_kwarg = "id"
 
     def get_queryset(self):
-        return Experiment.objects.filter(team__slug=self.request.team.slug).all()
+        # Only return working experiments
+        return Experiment.objects.filter(team__slug=self.request.team.slug).filter(working_version__isnull=True)
 
 
 @extend_schema(

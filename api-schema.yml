@@ -625,10 +625,15 @@ components:
           type: integer
           maximum: 2147483647
           minimum: 0
+        versions:
+          type: array
+          items:
+            $ref: '#/components/schemas/ExperimentVersion'
       required:
       - id
       - name
       - url
+      - versions
     ExperimentSession:
       type: object
       properties:
@@ -736,6 +741,22 @@ components:
       - team
       - updated_at
       - url
+    ExperimentVersion:
+      type: object
+      properties:
+        name:
+          type: string
+          maxLength: 128
+        version_number:
+          type: integer
+          maximum: 2147483647
+          minimum: 0
+        is_default_version:
+          type: boolean
+        version_description:
+          type: string
+      required:
+      - name
     File:
       type: object
       properties:
