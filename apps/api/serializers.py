@@ -13,15 +13,22 @@ from apps.files.models import File
 from apps.teams.models import Team
 
 
+class ExperimentVersionSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = Experiment
+        fields = ["name", "version_number", "is_default_version", "version_description"]
+
+
 class ExperimentSerializer(serializers.ModelSerializer):
     url = serializers.HyperlinkedIdentityField(
         view_name="api:experiment-detail", lookup_field="public_id", lookup_url_kwarg="id", label="API URL"
     )
     id = serializers.UUIDField(source="public_id")
+    versions = ExperimentVersionSerializer(many=True)
 
     class Meta:
         model = Experiment
-        fields = ["id", "name", "url", "version_number"]
+        fields = ["id", "name", "url", "version_number", "versions"]
 
 
 class ParticipantSerializer(serializers.ModelSerializer):
