@@ -47,7 +47,7 @@
       {% endif %}
     </ul>
   </li>
-  {% flag "document_management" %}
+  {% flag "pipelines-v2" %}
     {% if perms.documents.view_collection %}
       <li>
         <a href="{% url 'documents:collection_home' request.team.slug %}"
