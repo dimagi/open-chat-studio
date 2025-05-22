@@ -234,7 +234,7 @@ class ChatMessage(BaseModel, TaggedModelMixin, UserCommentsMixin):
         tag, _ = Tag.objects.get_or_create(
             name=tag,
             team=self.chat.team,
-            is_system_tag=True if tag_category else False,
+            is_system_tag=bool(tag_category),
             category=tag_category,
         )
         self.add_tag(tag, team=self.chat.team, added_by=None)
