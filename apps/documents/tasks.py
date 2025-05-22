@@ -4,6 +4,7 @@ from collections import defaultdict
 
 import openai
 from celery.app import shared_task
+from django.db.models import QuerySet
 from taskbadger.celery import Task as TaskbadgerTask
 
 from apps.assistants.sync import OpenAiSyncError, create_files_remote
@@ -15,27 +16,29 @@ logger = logging.getLogger("ocs.documents.tasks.link_files_to_index")
 
 DEFAULT_CHUNKING_STRATEGY = {"chunk_size": 800, "chunk_overlap": 400}
 
+# TODO: Prevent user from switching provider when files are not either completed or failed
+
 
 @shared_task(base=TaskbadgerTask, ignore_result=True)
-def index_collection_files_task(collection_id: int, retry_failed: bool = False):
-    index_collection_files(collection_id, re_upload_all=False, retry_failed=retry_failed)
+def index_collection_files_task(collection_file_ids: list[int]):
+    collection_files = CollectionFile.objects.filter(id__in=collection_file_ids)
+    index_collection_files(collection_files_queryset=collection_files)
 
 
 @shared_task(base=TaskbadgerTask, ignore_result=True)
 def migrate_vector_stores(collection_id: int, from_vector_store_id: str, from_llm_provider_id: int):
     """Migrate vector stores from one provider to another"""
-    previous_remote_ids = index_collection_files(collection_id, re_upload_all=True)
+    collection_files = CollectionFile.objects.filter(collection_id=collection_id)
+    previous_remote_ids = index_collection_files(collection_files_queryset=collection_files, re_upload=True)
     _cleanup_old_vector_store(from_llm_provider_id, from_vector_store_id, previous_remote_ids)
 
 
-def index_collection_files(collection_id: int, re_upload_all: bool, retry_failed: bool = False) -> list[str]:
+def index_collection_files(collection_files_queryset: QuerySet[CollectionFile], re_upload: bool = False) -> list[str]:
     """Uploads files to the remote index.
 
     Args:
-        collection_id: ID of the collection containing files to upload.
-        re_upload_all: If True, uploads all files. If False, only uploads files with Pending status.
-        retry_failed: If True and re_upload_all is False, only retries failed files.
-
+        collection_files: The list of collection files to upload and link to the vector store
+        re_upload: If True, the files will be re-uploaded to the index
     Returns:
         list[str]: List of file IDs that were previously linked to the files.
 
@@ -43,27 +46,22 @@ def index_collection_files(collection_id: int, re_upload_all: bool, retry_failed
         The function sets file status to IN_PROGRESS while uploading,
         COMPLETED when done, and FAILED if the upload fails.
     """
-    collection = Collection.objects.prefetch_related("llm_provider").get(id=collection_id)
+    collection = collection_files_queryset.first().collection
     client = collection.llm_provider.get_llm_service().get_raw_client()
     previous_remote_file_ids = []
-
-    queryset = CollectionFile.objects.filter(collection=collection).prefetch_related("file")
-    if not re_upload_all:
-        scope_status = FileStatus.FAILED if retry_failed else FileStatus.PENDING
-        queryset = queryset.filter(status=scope_status)
 
     # Link files to the new vector store
     # 1. Sort by chunking strategy
     strategy_file_map = defaultdict(list)
 
-    for collection_file in queryset.select_related("file").iterator(100):
+    for collection_file in collection_files_queryset.select_related("file").iterator(100):
         strategy = collection_file.metadata.get("chunking_strategy", DEFAULT_CHUNKING_STRATEGY)
         strategy_file_map[(strategy["chunk_size"], strategy["chunk_overlap"])].append(collection_file)
 
         if collection_file.file.external_id:
             previous_remote_file_ids.append(collection_file.file.external_id)
 
-    queryset.update(status=FileStatus.IN_PROGRESS)
+    collection_files_queryset.update(status=FileStatus.IN_PROGRESS)
 
     # 2. For each chunking strategy, upload files to the vector store
     for strategy_tuple, collection_files in strategy_file_map.items():
@@ -74,7 +72,7 @@ def index_collection_files(collection_id: int, re_upload_all: bool, retry_failed
             collection_files,
             chunk_size=chunk_size,
             chunk_overlap=chunk_overlap,
-            re_upload_all=re_upload_all,
+            re_upload=re_upload,
         )
     return previous_remote_file_ids
 
@@ -85,7 +83,7 @@ def _upload_files_to_vector_store(
     collection_files: list[CollectionFile],
     chunk_size: int,
     chunk_overlap: int,
-    re_upload_all: bool = False,
+    re_upload: bool = False,
 ):
     """Upload files to the remote index"""
     unlinked_collection_files = []
@@ -93,7 +91,7 @@ def _upload_files_to_vector_store(
 
     for collection_file in collection_files:
         try:
-            _ensure_remote_file_exists(client, collection_file=collection_file, re_upload_all=re_upload_all)
+            _ensure_remote_file_exists(client, collection_file=collection_file, re_upload=re_upload)
             unlinked_collection_files.append(collection_file)
         except FileUploadError:
             collection_file.status = FileStatus.FAILED
@@ -138,10 +136,10 @@ def _cleanup_old_vector_store(llm_provider_id: int, vector_store_id: str, file_i
             old_manager.client.files.delete(file_id)
 
 
-def _ensure_remote_file_exists(client, collection_file: CollectionFile, re_upload_all: bool):
+def _ensure_remote_file_exists(client, collection_file: CollectionFile, re_upload: bool):
     try:
         file = collection_file.file
-        if re_upload_all or not file.external_id:
+        if re_upload or not file.external_id:
             file.external_id = None
             create_files_remote(client, files=[file])
     except Exception:

@@ -90,12 +90,12 @@ def add_collection_files(request, team_slug: str, pk: int):
             }
             metadata["chunking_strategy"] = chunking_strategy
 
-        CollectionFile.objects.bulk_create(
+        collection_files = CollectionFile.objects.bulk_create(
             [CollectionFile(collection=collection, file=file, status=status, metadata=metadata) for file in files]
         )
 
     if collection.is_index:
-        tasks.index_collection_files_task.delay(collection.id)
+        tasks.index_collection_files_task.delay([cf.id for cf in collection_files])
 
     messages.success(request, f"Added {len(files)} files to collection")
     return redirect("documents:single_collection_home", team_slug=team_slug, pk=pk)
@@ -256,5 +256,8 @@ class DeleteCollection(LoginAndTeamRequiredMixin, View, PermissionRequiredMixin)
 @login_and_team_required
 @permission_required("documents.change_collection", raise_exception=True)
 def retry_failed_uploads(request, team_slug: str, pk: int):
-    tasks.index_collection_files_task.delay(pk, retry_failed=True)
+    queryset = CollectionFile.objects.filter(collection_id=pk, status=FileStatus.FAILED)
+    collection_file_ids = queryset.values_list("id", flat=True)
+    queryset.update(status=FileStatus.PENDING)
+    tasks.index_collection_files_task.delay(collection_file_ids)
     return redirect("documents:single_collection_home", team_slug=team_slug, pk=pk)
