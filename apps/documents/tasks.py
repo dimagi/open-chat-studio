@@ -44,7 +44,11 @@ def index_collection_files(collection_files_queryset: QuerySet[CollectionFile], 
         The function sets file status to IN_PROGRESS while uploading,
         COMPLETED when done, and FAILED if the upload fails.
     """
-    collection = collection_files_queryset.first().collection
+    collection_file = collection_files_queryset.first()
+    if not collection_file:
+        return []
+
+    collection = collection_file.collection
     client = collection.llm_provider.get_llm_service().get_raw_client()
     previous_remote_file_ids = []
 

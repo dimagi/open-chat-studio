@@ -146,10 +146,8 @@ class Collection(BaseTeamModel, VersionsMixin):
             new_version.save(update_fields=["openai_vector_store_id"])
 
             # Upload files to vector store
-            files_to_index = list(
-                CollectionFile.objects.filter(collection_id=new_version.id).values_list("id", flat=True)
-            )
-            index_collection_files(files_to_index)
+            if collection_files := CollectionFile.objects.filter(collection_id=new_version.id):
+                index_collection_files(collection_files)
 
         return new_version
 
