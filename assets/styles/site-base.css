@@ -4,7 +4,6 @@
 @import 'alertifyjs/build/css/alertify.css';
 
 /* Import all base CSS files */
-@import './app/navbar.css';
 @import './app/profile.css';
 @import './app/progress.css';
 @import './app/utilities.css';

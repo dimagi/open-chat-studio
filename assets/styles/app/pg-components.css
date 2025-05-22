@@ -7,36 +7,8 @@
   @apply text-xl mb-1;
 }
 
-@utility pg-text-centered {
-  @apply text-center;
-}
-
-@utility pg-text-left {
-  @apply text-left;
-}
-
-@utility pg-text-right {
-  @apply text-right;
-}
-
 @utility pg-help {
   @apply text-gray-600 text-sm;
-}
-
-@utility pg-text-primary {
-  @apply text-primary;
-}
-
-@utility pg-text-success {
-  @apply text-success;
-}
-
-@utility pg-text-info {
-  @apply text-info;
-}
-
-@utility pg-text-danger {
-  @apply text-error;
 }
 
 @utility pg-text-muted {
@@ -51,26 +23,6 @@
   @apply prose max-w-none lg:prose-lg;
 }
 
-@utility pg-button-primary {
-  /*
-
-  .pg-hidden-mobile-inline
-    @extend .is-hidden-mobile
-
-  */
-
-  /*buttons*/
-  @apply btn btn-primary;
-}
-
-@utility pg-button-secondary {
-  @apply btn btn-outline;
-}
-
-@utility pg-button-light {
-  @apply btn btn-ghost;
-}
-
 @utility pg-button-danger {
   @apply btn btn-outline text-red-500 border-red-500 hover:bg-red-500 hover:border-red-700;
 }
@@ -79,37 +31,12 @@
   @apply flex space-x-1;
 }
 
-@utility pg-justify-content-end {
-  @apply justify-end;
-}
-
 @utility pg-icon {
   @apply w-6 h-6 inline-flex justify-center items-center;
 }
 
-@utility pg-input-group {
-  /*
-  .pg-is-loading
-    @extend .is-loading
-
-  */
-
-  /* forms */
-  @apply mb-3;
-}
-
 @utility pg-label {
   @apply block font-bold;
-}
-
-@utility pg-control {
-  @apply input w-full;
-}
-
-@utility pg-select {
-  & select {
-    @apply select w-full;
-  }
 }
 
 @utility pg-columns {
@@ -173,28 +100,4 @@
 
 @utility pg-breadcrumb-active {
   color: #7a7a7a;
-}
-
-@utility pg-card {
-  /* cards */
-  @apply card bg-base-100 shadow-xl;
-}
-
-@utility pg-card-body {
-  /*.pg-card-image*/
-  /*  @extend .card-image*/
-  @apply card-body pt-0;
-}
-
-@utility pg-ratio-3x2 {
-  @apply aspect-3/2;
-}
-
-@utility pg-badge-default {
-  /* badges */
-  @apply badge;
-}
-
-@utility pg-badge-success {
-  @apply badge badge-success;
 }
