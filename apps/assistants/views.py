@@ -245,7 +245,7 @@ class LocalDeleteOpenAiAssistant(LoginAndTeamRequiredMixin, View, PermissionRequ
                 for experiment in assistant.get_related_experiments_with_pipeline_queryset(assistant_ids=version_query)
             ]
             response = render_to_string(
-                "assistants/partials/referenced_objects.html",
+                "generic/referenced_objects.html",
                 context={
                     "object_name": "assistant",
                     "experiments": experiments,

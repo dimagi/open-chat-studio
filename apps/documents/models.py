@@ -8,7 +8,7 @@ from field_audit.models import AuditingManager
 from apps.experiments.versioning import VersionDetails, VersionField, VersionsMixin, VersionsObjectManagerMixin
 from apps.teams.models import BaseTeamModel
 from apps.utils.conversions import bytes_to_megabytes
-from apps.utils.deletion import get_related_pipelines_queryset
+from apps.utils.deletion import get_related_pipeline_experiments_queryset, get_related_pipelines_queryset
 
 
 class CollectionObjectManager(VersionsObjectManagerMixin, AuditingManager):
@@ -98,9 +98,6 @@ class Collection(BaseTeamModel, VersionsMixin):
     def file_names(self) -> list[str]:
         return list(self.files.values_list("name", flat=True))
 
-    def get_node_references(self) -> models.QuerySet:
-        return get_related_pipelines_queryset(self, "collection_id").distinct()
-
     @property
     def version_details(self) -> VersionDetails:
         return VersionDetails(
@@ -113,20 +110,94 @@ class Collection(BaseTeamModel, VersionsMixin):
 
     @transaction.atomic()
     def create_new_version(self, save=True):
+        """
+        When a collection is indexed, we need to create a new vector store when we create a new version of it
+        and upload the file versions to it.
+        """
+        from apps.documents.tasks import index_collection_files
+
         version_number = self.version_number
         self.version_number = version_number + 1
         self.save(update_fields=["version_number"])
 
         new_version = super().create_new_version(save=False)
         new_version.version_number = version_number
+        vector_store_present = bool(new_version.openai_vector_store_id)
+        new_version.openai_vector_store_id = ""
         new_version.save()
 
         file_versions = []
         for file in self.files.iterator(chunk_size=15):
-            file_versions.append(file.create_new_version())
+            file_version = file.create_new_version(save=False)
+            file_version.external_id = ""
+            file_version.external_source = ""
+            file_version.save()
+            file_versions.append(file_version)
 
         new_version.files.add(*file_versions)
+
+        if self.is_index and vector_store_present:
+            # Create vector store at llm service
+            # Optimization suggestion: Only when the file set changed, should we create a new vector store at the
+            # provider
+            manager = new_version.llm_provider.get_index_manager()
+            version_name = f"{new_version.index_name} v{new_version.version_number}"
+            new_version.openai_vector_store_id = manager.create_vector_store(name=version_name)
+            new_version.save(update_fields=["openai_vector_store_id"])
+
+            # Upload files to vector store
+            index_collection_files(new_version.id, all_files=True)
+
         return new_version
 
     def get_absolute_url(self):
         return reverse("documents:single_collection_home", args=[self.team.slug, self.id])
+
+    def get_related_nodes_queryset(self) -> models.QuerySet:
+        index_references = get_related_pipelines_queryset(self, "collection_index_id").distinct()
+        collection_references = get_related_pipelines_queryset(self, "collection_id").distinct()
+        return index_references | collection_references
+
+    def get_related_experiments_queryset(self) -> models.QuerySet:
+        """
+        Get all experiments that reference this collection through a pipeline. This includes both published and working
+        experiments. When check_versions is True, it will return all experiments that reference any version of this
+        collection.
+        """
+        # TODO: Update assistant archive code to use get_related_pipeline_experiments_queryset
+        ids = list(self.versions.values_list("id", flat=True)) + [self.id]
+
+        index_references = get_related_pipeline_experiments_queryset(ids, "collection_index_id").filter(
+            models.Q(is_default_version=True) | models.Q(working_version__id__isnull=True),
+        )
+        collection_references = get_related_pipeline_experiments_queryset(ids, "collection_id").filter(
+            models.Q(is_default_version=True) | models.Q(working_version__id__isnull=True),
+        )
+        return index_references | collection_references
+
+    @transaction.atomic()
+    def archive(self):
+        """
+        Archive the collection with its files and remove the index and the files at the remote service, if it has one
+        """
+        if self.get_related_nodes_queryset().exists():
+            return False
+
+        if self.is_working_version and self.get_related_experiments_queryset().exists():
+            return False
+
+        super().archive()
+        if self.is_index and self.openai_vector_store_id:
+            self._remove_index()
+
+        self.files.update(is_archived=True)
+        return True
+
+    def _remove_index(self):
+        """Remove the index backend"""
+        manager = self.llm_provider.get_index_manager()
+        manager.delete_vector_store(self.openai_vector_store_id, fail_silently=True)
+        manager.delete_files(self.files.all())
+
+        self.openai_vector_store_id = ""
+        self.save(update_fields=["openai_vector_store_id"])

@@ -81,7 +81,7 @@ def delete_service_provider(request, team_slug: str, provider_type: str, pk: int
             for assistant in [obj for obj in filtered_objects if isinstance(obj, OpenAiAssistant)]
         ]
         response = render_to_string(
-            "assistants/partials/referenced_objects.html",
+            "generic/referenced_objects.html",
             context={
                 "object_name": "service provider",
                 "experiments": related_experiments,

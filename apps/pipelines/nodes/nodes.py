@@ -56,7 +56,7 @@ from apps.service_providers.llm_service.runnables import (
 from apps.service_providers.models import LlmProviderModel
 from apps.utils.prompt import OcsPromptTemplate, PromptVars, validate_prompt_variables
 
-OptionalInt = Annotated[int | None, BeforeValidator(lambda x: None if x == "" else x)]
+OptionalInt = Annotated[int | None, BeforeValidator(lambda x: None if isinstance(x, str) and len(x) == 0 else x)]
 
 
 class RenderTemplate(PipelineNode):

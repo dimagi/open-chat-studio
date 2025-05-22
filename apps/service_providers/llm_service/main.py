@@ -152,6 +152,9 @@ class LlmService(pydantic.BaseModel):
                     remote_file_ids.extend([entry["file_id"] for entry in annotation_entries if "file_id" in entry])
         return File.objects.filter(external_id__in=remote_file_ids).all()
 
+    def get_index_manager(self):
+        raise NotImplementedError
+
 
 class OpenAIGenericService(LlmService):
     openai_api_key: str
@@ -213,6 +216,11 @@ class OpenAILlmService(OpenAIGenericService):
             else:
                 raise ValueError(f"Unsupported built-in tool for openai: '{tool_name}'")
         return tools
+
+    def get_index_manager(self):
+        from apps.service_providers.llm_service.index_managers import OpenAIVectorStoreManager
+
+        return OpenAIVectorStoreManager(self.get_raw_client())
 
 
 class AzureLlmService(LlmService):

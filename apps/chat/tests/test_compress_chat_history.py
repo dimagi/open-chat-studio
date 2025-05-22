@@ -12,7 +12,6 @@ from apps.chat.conversation import (
     _get_summarization_prompt_tokens_with_context,
     _reduce_summary_size,
     compress_chat_history,
-    truncate_tokens,
 )
 from apps.chat.exceptions import ChatException
 from apps.chat.models import Chat, ChatMessage, ChatMessageType
@@ -166,11 +165,16 @@ def test_compression_exhausts_history(_reduce_summary_size, mock_get_new_summary
 @mock.patch("apps.chat.conversation._get_new_summary")
 @mock.patch("apps.chat.conversation._reduce_summary_size")
 def test_compression_exhausts_history_and_pruned_memory(_reduce_summary_size, _get_new_summary, chat):
+    token_counts = [
+        80,  # initial history token count
+        50,  # 'input_messages' token count
+    ]
+
     class Llm(FakeLlmSimpleTokenCount):
         def get_num_tokens_from_messages(*args, **kwargs):
             # Force the while loop inside compress_chat_history_from_messages to run until the `history` array
             # is empty
-            return 80
+            return token_counts.pop(0) if token_counts else 70
 
     def _clear_pruned_memory(llm, pruned_memory, summary, model_token_limit):
         # Simulate the while loop running until the pruned memory is cleared
@@ -184,7 +188,7 @@ def test_compression_exhausts_history_and_pruned_memory(_reduce_summary_size, _g
     llm = Llm(responses=[])
     _get_new_summary.side_effect = _clear_pruned_memory
     _reduce_summary_size.return_value = "Summary", 0
-    result = compress_chat_history(chat, llm, 20, input_messages=[])
+    result = compress_chat_history(chat, llm, 70, input_messages=[])
     assert len(result) == 1
     last_message = ChatMessage.objects.order_by("created_at").last()
     assert last_message.summary == "Summary"
@@ -256,28 +260,40 @@ def test_summarization_is_forced_when_too_many_messages(_get_new_summary, _token
     assert _tokens_exceeds_limit.call_count == 3
 
 
-def test_truncate_tokens():
+@pytest.mark.django_db()
+def test_truncate_tokens(chat):
     class FakeLlm:
         def get_num_tokens_from_messages(self, messages):
-            return sum(len(msg["content"].split()) for msg in messages)
+            return sum(len(msg.content.split()) for msg in messages)
 
     history = [
-        {"content": "Hello there"},  # 2 tokens
-        {"content": "This is a test message"},  # 5 tokens
-        {"content": "Another one"},  # 2 tokens
-        {"content": "Final message"},  # 2 tokens
+        "Hello there",  # 2 tokens
+        "This is a test message",  # 5 tokens
+        "Another one",  # 2 tokens
+        "Final message",  # 2 tokens
     ]
 
+    for i, message in enumerate(history):
+        ChatMessage.objects.create(
+            chat=chat,
+            content=message,
+            message_type=ChatMessageType.AI if i % 2 else ChatMessageType.HUMAN,
+        )
+
     llm = FakeLlm()
-    max_token_limit = 6
-    input_message_tokens = 2
+    result = compress_chat_history(
+        chat, llm, 6, input_messages=[], history_mode=PipelineChatHistoryModes.TRUNCATE_TOKENS
+    )
 
-    new_history, pruned = truncate_tokens(history, max_token_limit, llm, input_message_tokens)
+    remaining_after_pruning = ["Another one", "Final message"]
+    assert [r.content for r in result] == remaining_after_pruning
+    summary_message = ChatMessage.objects.get(
+        chat=chat, metadata__compression_marker=PipelineChatHistoryModes.TRUNCATE_TOKENS
+    )
+    assert summary_message.content == "Another one"
 
-    assert len(pruned) > 0
-    assert llm.get_num_tokens_from_messages(new_history) + input_message_tokens <= max_token_limit
-    remaining_after_pruning = [{"content": "Another one"}, {"content": "Final message"}]
-    assert new_history == remaining_after_pruning
+    # Check that the compression marker is respected
+    assert len(chat.get_langchain_messages_until_marker(marker=PipelineChatHistoryModes.TRUNCATE_TOKENS)) == 2
 
 
 def test_get_new_summary_with_large_message():
@@ -336,9 +352,9 @@ def test_reduce_summary_size_gives_up_after_three_attempts():
     initial_summary = "This is a very long summary " * 10
     summary_token_limit = 3  # Impossible to meet this limit
 
-    result, _ = _reduce_summary_size(llm, initial_summary, summary_token_limit)
+    with pytest.raises(ChatException):
+        _reduce_summary_size(llm, initial_summary, summary_token_limit)
 
-    assert result == ""  # Should return empty string after failing to reduce enough
     assert len(llm.get_calls()) == 3  # Should still make exactly 3 attempts
 
 
@@ -353,3 +369,22 @@ def test_reduce_summary_size_succeeds_early():
 
     assert result == "Short enough"
     assert len(llm.get_calls()) == 1  # Should only make one call since first response was short enough
+
+
+@pytest.mark.django_db()
+def test_max_history_length_compression(chat):
+    for i in range(8):
+        ChatMessage.objects.create(chat=chat, content=f"Hello {i}", message_type=ChatMessageType.HUMAN)
+
+    llm = FakeLlmSimpleTokenCount(responses=["Summary"])
+    result = compress_chat_history(
+        chat,
+        llm,
+        max_token_limit=20,
+        input_messages=[],
+        keep_history_len=5,
+        history_mode=PipelineChatHistoryModes.MAX_HISTORY_LENGTH,
+    )
+
+    assert len(result) == 5
+    assert [message.content for message in result] == [f"Hello {i}" for i in range(3, 8)]
