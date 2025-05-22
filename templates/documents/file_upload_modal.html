@@ -81,28 +81,36 @@
                     </div>
                 </template>
             </div>
-            <div class="modal-action">
+            <div class="modal-action flex flex-row gap-2">
+                <span x-cloak x-show="filesTooMany > 0" class="text-error">
+                    Uploading <span x-text="uploaded_files.length"></span> files exceeds the limit of {{ max_files_per_collection }} files per collection. Please remove <span x-text="filesTooMany"></span> files
+                </span>
                 <button class="btn btn-primary mt-2" :disabled="!canSubmit()">Submit</button>
             </div>
         </form>
     </div>
 </dialog>
 
+{{ max_files_per_collection|json_script:"maxFilesPerCollection" }}
+{{ collection_files.count|json_script:"collectionFileCount" }}
 <script>
     document.addEventListener('alpine:init', () => {
         Alpine.data('modalData', () => ({
-            message: "",
+            maxFilesPerCollection: JSON.parse(document.getElementById("maxFilesPerCollection").textContent),
+            collectionFileCount: JSON.parse(document.getElementById("collectionFileCount").textContent),
             uploaded_files: [],
             chunk_size: 800,
             chunk_overlap: 400,
             selected_collection: null,
+            filesTooMany: 0,
             handleFileChange(event) {
                 const files = Array.from(event.target.files);
                 this.uploaded_files.push(...files);
 
                 const dataTransfer = new DataTransfer();
-                this.uploaded_files.forEach(file => dataTransfer.items.add(file));
+                this.uploaded_files.forEach(file =>                     dataTransfer.items.add(file));
                 event.target.files = dataTransfer.files;
+                this.calculateFileCount();
             },
             removeFile(index) {
                 this.uploaded_files.splice(index, 1);
@@ -112,12 +120,16 @@
                     dataTransfer.items.add(file)
                 });
                 this.$refs.fileUpload.files = dataTransfer.files;
+                this.calculateFileCount();
             },
             canSubmit() {
-                return this.uploaded_files.length > 0 && this.isValidChunkingStrategy();
+                return this.uploaded_files.length > 0 && this.isValidChunkingStrategy() && this.filesTooMany <= 0;
             },
             isValidChunkingStrategy() {
                 return this.chunk_overlap <= (this.chunk_size / 2);
+            },
+            calculateFileCount() {
+                this.filesTooMany = this.uploaded_files.length + this.collectionFileCount - this.maxFilesPerCollection;
             },
         }))
     })

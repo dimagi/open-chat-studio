@@ -26,7 +26,9 @@
             {% endif %}
           </div>
           <div class="text-sm text-base-content/60 mt-1">
-            {{ collection.files.count }} files • {{ collection.size }} MB total
+            <span>
+              <i class="fa fa-file-o" aria-hidden="true"></i> <span class="font-bold">{{ collection_files.count }}</span> uploaded, <span class="font-bold">{{ files_remaining }}</span> remaining
+            </span>
           </div>
         </div>
         <div class="join flex items-center">
