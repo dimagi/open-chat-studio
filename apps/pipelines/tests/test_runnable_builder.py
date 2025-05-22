@@ -7,6 +7,7 @@ from django.core import mail
 from django.test import override_settings
 from langchain_core.messages import AIMessage, ToolCall
 
+from apps.annotations.models import TagCategories
 from apps.channels.datamodels import Attachment
 from apps.experiments.models import ParticipantData
 from apps.pipelines.exceptions import PipelineBuildError, PipelineNodeBuildError
@@ -459,7 +460,7 @@ def test_router_sets_tags_correctly(pipeline, experiment_session):
                 messages=["Test message"], experiment_session=experiment_session, temp_state={"route_to": route_to}
             )
         )
-        assert output["output_message_tags"] == [f"static router:{expected_tag}"]
+        assert output["output_message_tags"] == [(f"static router:{expected_tag}", TagCategories.BOT_RESPONSE)]
 
     _check_routing_and_tags("first", "first")
     _check_routing_and_tags("second", "second")
