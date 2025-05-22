@@ -79,7 +79,6 @@ class PipelineState(dict):
     output_message_metadata: Annotated[dict, merge_dicts]
     attachments: list = Field(default=[])
     output_message_tags: Annotated[list[str], operator.add]
-    tag: str
 
     # List of (previous, current, next) tuples used for aiding in routing decisions.
     path: Annotated[Sequence[tuple[str | None, str, list[str]]], operator.add]
@@ -339,9 +338,6 @@ class PipelineRouterNode(BasePipelineNode):
         raise NotImplementedError()
 
     def get_output_tags(self, selected_route) -> list[str]:
-        raise NotImplementedError()
-
-    def get_output_tag(self) -> str:
         raise NotImplementedError()
 
     def _process_conditional(self, state: PipelineState):

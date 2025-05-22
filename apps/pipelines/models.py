@@ -345,7 +345,7 @@ class Pipeline(BaseTeamModel, VersionsMixin):
         message: str,
         type_: ChatMessageType,
         metadata: dict,
-        tags: list[str] = None,
+        tags: list[tuple] = None,
     ) -> ChatMessage:
         chat_message = ChatMessage.objects.create(
             chat=session.chat, message_type=type_.value, content=message, metadata=metadata
