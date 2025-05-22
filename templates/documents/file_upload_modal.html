@@ -35,7 +35,7 @@
                                         class="form-text text-muted">{% include "generic/help.html" with help_content=chuck_size_help %}</small>
                                 </div>
                             </label>
-                            <input name="chunk_size" type="number" class="input" value="800" required/>
+                            <input name="chunk_size" type="number" class="input" x-model="chunk_size" required/>
                         </div>
                         <div>
                             <label class="label font-bold" for="chunk_overlap">
@@ -48,7 +48,12 @@
                                         class="form-text text-muted">{% include "generic/help.html" with help_content=chunk_overlap_help %}</small>
                                 </div>
                             </label>
-                            <input name="chunk_overlap" type="number" class="input" value="400" required/>
+                            <div class="flex flex-col gap-2">
+                                <input name="chunk_overlap" type="number" class="input" x-model="chunk_overlap" required/>
+                                <span x-cloak x-show="!isValidChunkingStrategy()" class="text-error">
+                                    Chunk overlap must be less than or equal to <span x-text="chunk_size/2"></span>
+                                </span>
+                            </div>
                         </div>
                     </div>
                 </div>
@@ -77,7 +82,7 @@
                 </template>
             </div>
             <div class="modal-action">
-                <button class="btn btn-primary mt-2" :disabled="uploaded_files.length === 0">Submit</button>
+                <button class="btn btn-primary mt-2" :disabled="!canSubmit()">Submit</button>
             </div>
         </form>
     </div>
@@ -88,6 +93,8 @@
         Alpine.data('modalData', () => ({
             message: "",
             uploaded_files: [],
+            chunk_size: 800,
+            chunk_overlap: 400,
             selected_collection: null,
             handleFileChange(event) {
                 const files = Array.from(event.target.files);
@@ -105,7 +112,13 @@
                     dataTransfer.items.add(file)
                 });
                 this.$refs.fileUpload.files = dataTransfer.files;
-            }
+            },
+            canSubmit() {
+                return this.uploaded_files.length > 0 && this.isValidChunkingStrategy();
+            },
+            isValidChunkingStrategy() {
+                return this.chunk_overlap <= (this.chunk_size / 2);
+            },
         }))
     })
 </script>
