@@ -17,6 +17,7 @@ from openai import OpenAI
 from openai._base_client import SyncAPIClient
 from pydantic import BaseModel
 
+from apps.files.models import File
 from apps.service_providers.llm_service.callbacks import TokenCountingCallbackHandler
 from apps.service_providers.llm_service.token_counters import (
     AnthropicTokenCounter,
@@ -137,6 +138,19 @@ class LlmService(pydantic.BaseModel):
         if isinstance(output, list):
             return "\n".join([o["text"] for o in output])
         return output or ""
+
+    def get_cited_files_parser(self):
+        return self._default_cited_files_parser
+
+    def _default_cited_files_parser(self, token: str | dict) -> list[File]:
+        remote_file_ids = []
+        if isinstance(token, dict):
+            outputs = token.get("output", "")
+            if isinstance(outputs, list):
+                for output in outputs:
+                    annotation_entries = output.get("annotations", [])
+                    remote_file_ids.extend([entry["file_id"] for entry in annotation_entries if "file_id" in entry])
+        return File.objects.filter(external_id__in=remote_file_ids).all()
 
 
 class OpenAIGenericService(LlmService):

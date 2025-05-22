@@ -254,19 +254,8 @@ class AgentLLMChat(LLMChat):
         return output_parser(output)
 
     def _get_cited_files(self, token: str | dict) -> list[File]:
-        """
-        Return a list of files that are referenced in the token
-        """
-        remote_file_ids = []
-        if isinstance(token, dict):
-            # is the same structure used when other services cite files?
-            outputs = token.get("output", "")
-            if isinstance(outputs, list):
-                for output in outputs:
-                    annotation_entries = output.get("annotations", [])
-                    remote_file_ids.extend([entry["file_id"] for entry in annotation_entries if "file_id" in entry])
-
-        return File.objects.filter(external_id__in=remote_file_ids).all()
+        cited_files_parser = self.adapter.get_llm_service().get_cited_files_parser()
+        return cited_files_parser(token)
 
     def _build_chain(self) -> Runnable[dict[str, Any], dict]:
         lc_tools_parser.parse_ai_message_to_tool_action = custom_parse_ai_message
