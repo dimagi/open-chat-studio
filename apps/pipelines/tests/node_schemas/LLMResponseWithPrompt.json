@@ -1,6 +1,12 @@
 {
   "description": "Uses and LLM to respond to the input.",
   "properties": {
+    "tag": {
+      "default": "",
+      "description": "The tag that the output message should be tagged with",
+      "title": "Message Tag",
+      "type": "string"
+    },
     "llm_provider_id": {
       "title": "LLM Model",
       "type": "integer",
