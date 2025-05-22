@@ -4,6 +4,7 @@ import json
 import logging
 import random
 import time
+import unicodedata
 from typing import Annotated, Literal, Self
 
 import tiktoken
@@ -64,6 +65,11 @@ class OutputMessageTagMixin(BaseModel):
         title="Message Tag",
         description="The tag that the output message should be tagged with",
     )
+
+    @field_validator("tag", mode="after")
+    @classmethod
+    def normalize_tag(cls, value: str) -> str:
+        return unicodedata.normalize("NFC", value)
 
     def get_output_tags(self) -> list[tuple[str, None]]:
         tags: list[tuple[str, None]] = []
