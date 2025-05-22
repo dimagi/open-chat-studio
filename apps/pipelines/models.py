@@ -3,6 +3,7 @@ from collections import defaultdict
 from collections.abc import Iterator
 from dataclasses import dataclass
 from functools import cached_property
+from typing import Self
 from uuid import uuid4
 
 import pydantic
@@ -38,6 +39,24 @@ class ModelParamSpec:
 
     def get_object(self, id: int):
         return self.model_cls.objects.get(id=id)
+
+
+def _set_versioned_param_value(node_version: Self, param_name: str, param_cls):
+    """
+    Handles parameters referencing versioned models with the following logic:
+    - If the referenced model has changes compared to its latest version, a new version is created, and the
+        parameter is updated to point to this new version.
+    - If the referenced model matches the latest version, the parameter is simply updated to point to the existing
+        latest version.
+    """
+
+    if param_instance_id := node_version.params.get(param_name):
+        if param_instance := param_cls.objects.filter(id=param_instance_id).first():
+            if not param_instance.has_versions or param_instance.compare_with_latest():
+                new_instance_version = param_instance.create_new_version()
+                node_version.params[param_name] = str(new_instance_version.id)
+            else:
+                node_version.params[param_name] = str(param_instance.latest_version.id)
 
 
 class PipelineManager(VersionsObjectManagerMixin, models.Manager):
@@ -464,18 +483,6 @@ class Node(BaseModel, VersionsMixin, CustomActionOperationMixin):
         from apps.documents.models import Collection
         from apps.pipelines.nodes.nodes import AssistantNode, LLMResponseWithPrompt
 
-        def _get_collection_version(param_name: str):
-            if not new_version.params.get(param_name):
-                return
-
-            collection = Collection.objects.get(id=new_version.params.get(param_name))
-
-            if not collection.has_versions or collection.compare_with_latest():
-                collection_version = collection.create_new_version()
-                return str(collection_version.id)
-            else:
-                return self.latest_version.params.get(param_name)
-
         new_version = super().create_new_version(save=False, is_copy=is_copy)
         if is_copy and new_flow_id:
             old_flow_id = new_version.flow_id
@@ -491,17 +498,9 @@ class Node(BaseModel, VersionsMixin, CustomActionOperationMixin):
                 new_version.params["assistant_id"] = str(assistant_version.id)
 
         if not is_copy and self.type == LLMResponseWithPrompt.__name__:
-            new_version.params["collection_id"] = _get_collection_version(param_name="collection_id")
-            new_version.params["collection_index_id"] = _get_collection_version(param_name="collection_index_id")
-
-            if source_material_id := new_version.params.get("source_material_id"):
-                source_material = SourceMaterial.objects.filter(id=source_material_id).first()
-                if not source_material:
-                    new_version.params["source_material_id"] = None
-                else:
-                    if not source_material.has_versions or source_material.compare_with_latest():
-                        source_material = source_material.create_new_version()
-                        new_version.params["source_material_id"] = str(source_material.id)
+            _set_versioned_param_value(new_version, "source_material_id", SourceMaterial)
+            _set_versioned_param_value(new_version, "collection_id", Collection)
+            _set_versioned_param_value(new_version, "collection_index_id", Collection)
 
         new_version.save()
         self._copy_custom_action_operations_to_new_version(new_node=new_version, is_copy=is_copy)
@@ -527,6 +526,7 @@ class Node(BaseModel, VersionsMixin, CustomActionOperationMixin):
         """
         super().archive()
         if not self.is_a_version:
+            # We don't want to archive related objects for working versions, since they can be used in other pipelines
             return
 
         self._archive_related_params()
@@ -605,8 +605,10 @@ class Node(BaseModel, VersionsMixin, CustomActionOperationMixin):
         model_param_specs = {
             nodes.AssistantNode.__name__: [ModelParamSpec(param_name="assistant_id", model_cls=OpenAiAssistant)],
             nodes.LLMResponseWithPrompt.__name__: [
-                ModelParamSpec(param_name="collection_id", model_cls=Collection)
+                ModelParamSpec(param_name="collection_id", model_cls=Collection),
+                ModelParamSpec(param_name="collection_index_id", model_cls=Collection),
                 # TODO: Custom actions needed
+                # TODO: Source material needed
             ],
         }
 

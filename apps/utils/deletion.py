@@ -224,6 +224,23 @@ def get_related_pipelines_queryset(instance, pipeline_param_key: str = None):
     return pipelines
 
 
+def get_related_pipeline_experiments_queryset(instance_ids, pipeline_param_key: str):
+    """Get all experiments that reference any id in `instance_ids`, located at the `pipeline_param_key` parameter"""
+
+    from apps.experiments.models import Experiment
+
+    instance_ids_str = [str(instance_id) for instance_id in instance_ids]
+    instance_ids_int = [int(instance_id) for instance_id in instance_ids]
+    return (
+        Experiment.objects.exclude(pipeline=None)
+        .filter(
+            Q(**{f"pipeline__node__params__{pipeline_param_key}__in": instance_ids_int})
+            | Q(**{f"pipeline__node__params__{pipeline_param_key}__in": instance_ids_str})
+        )
+        .distinct()
+    )
+
+
 def get_admin_emails_with_delete_permission(team):
     from apps.teams.models import Membership
 

@@ -72,11 +72,11 @@ class VersionField:
 
     @property
     def current_value(self):
-        return self.raw_value
+        return self.raw_value if self.raw_value else None
 
     @property
     def previous_value(self):
-        return self.previous_field_version.raw_value
+        return self.previous_field_version.raw_value if self.previous_field_version.raw_value else None
 
     @property
     def is_a_version(self):
