@@ -1,4 +1,3 @@
-import json
 import uuid
 
 from django.contrib.auth.decorators import permission_required
@@ -47,24 +46,20 @@ def _get_alpine_context(request, experiment=None):
     exclude_services = [SyntheticVoice.OpenAIVoiceEngine]
     if flag_is_active(request, "open_ai_voice_engine"):
         exclude_services = []
-
-    voice_provider_dict = dict(request.team.voiceprovider_set.values_list("id", "type"))
-
-    synthetic_voices = sorted(
-        [
-            {
-                "value": voice.id,
-                "text": str(voice),
-                "type": voice.service.lower(),
-                "provider_id": voice.voice_provider_id,
-            }
-            for voice in SyntheticVoice.get_for_team(request.team, exclude_services=exclude_services)
-        ],
-        key=lambda v: v["text"],
-    )
     return {
-        "voice_providers_types": json.dumps(voice_provider_dict),
-        "synthetic_voice_options": json.dumps(synthetic_voices),
+        "voice_providers_types": dict(request.team.voiceprovider_set.values_list("id", "type")),
+        "synthetic_voice_options": sorted(
+            [
+                {
+                    "value": voice.id,
+                    "text": str(voice),
+                    "type": voice.service.lower(),
+                    "provider_id": voice.voice_provider_id,
+                }
+                for voice in SyntheticVoice.get_for_team(request.team, exclude_services=exclude_services)
+            ],
+            key=lambda v: v["text"],
+        ),
     }
 
 

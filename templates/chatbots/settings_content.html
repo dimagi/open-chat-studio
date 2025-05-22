@@ -39,10 +39,8 @@
   </div>
 
   {% if edit_mode %}
-    <div style="display: none;">
-      <div id="voiceProviderTypes">{{ voice_providers_types|safe }}</div>
-      <div id="voiceOptions">{{ synthetic_voice_options|safe }}</div>
-    </div>
+    {{ voice_providers_types|json_script:"voice-provider-types" }}
+    {{ synthetic_voice_options|json_script:"voice-options" }}
 
     <form id="settings-form" x-data="{
                                      type: '{{ experiment_type }}',
@@ -50,11 +48,10 @@
                                      synthetic_voice: {{experiment.synthetic_voice_id|default:'null'}},
                                      synthetic_voice_options: [],
                                      init() {
-                                     const voiceProviderTypes = JSON.parse(document.getElementById('voiceProviderTypes').textContent);
-                                     const voiceOptions = JSON.parse(document.getElementById('voiceOptions').textContent);
+                                     const voiceProviderTypes = JSON.parse(document.getElementById('voice-provider-types').textContent);
+                                     const voiceOptions = JSON.parse(document.getElementById('voice-options').textContent);
                                      this.$watch('voiceProvider', () => {
                                      const providerType = voiceProviderTypes[this.voiceProvider];
-
                                      this.synthetic_voice_options = voiceOptions.filter(option => {
                                      const match = option.type === providerType &&
                                      (!option.provider_id || option.provider_id == this.voiceProvider);
