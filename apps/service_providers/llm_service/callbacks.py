@@ -38,7 +38,7 @@ class TokenCountingCallbackHandler(BaseCallbackHandler):
                 for _j, generation in enumerate(generations):
                     messages.append(generation.message)
 
-            output_tokens = self.token_counter.get_tokens_from_messages(messages)
+            output_tokens = self.token_counter.get_tokens_from_messages(messages) if messages else 0
 
         with self._lock:
             self.prompt_tokens += input_tokens
