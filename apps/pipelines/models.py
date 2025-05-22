@@ -372,7 +372,7 @@ class Pipeline(BaseTeamModel, VersionsMixin):
 
         if tags:
             for tag_value, category in tags:
-                chat_message.add_system_tag(tag_value, category or "")
+                chat_message.create_and_add_tag(tag_value, category or "")
         return chat_message
 
     @transaction.atomic()

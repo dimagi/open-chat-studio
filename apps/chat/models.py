@@ -230,11 +230,11 @@ class ChatMessage(BaseModel, TaggedModelMixin, UserCommentsMixin):
     def get_metadata(self, key: str):
         return self.metadata.get(key, None)
 
-    def add_system_tag(self, tag: str, tag_category: TagCategories):
+    def create_and_add_tag(self, tag: str, tag_category: TagCategories):
         tag, _ = Tag.objects.get_or_create(
             name=tag,
             team=self.chat.team,
-            is_system_tag=True,
+            is_system_tag=True if tag_category else False,
             category=tag_category,
         )
         self.add_tag(tag, team=self.chat.team, added_by=None)
@@ -243,7 +243,7 @@ class ChatMessage(BaseModel, TaggedModelMixin, UserCommentsMixin):
         tag = f"v{version_number}"
         if not is_a_version:
             tag = f"{tag}-unreleased"
-        self.add_system_tag(tag=tag, tag_category=TagCategories.EXPERIMENT_VERSION)
+        self.create_and_add_tag(tag=tag, tag_category=TagCategories.EXPERIMENT_VERSION)
 
     def add_rating(self, tag: str):
         tag, _ = Tag.objects.get_or_create(

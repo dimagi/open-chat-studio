@@ -58,21 +58,21 @@ from apps.utils.prompt import OcsPromptTemplate, PromptVars, validate_prompt_var
 OptionalInt = Annotated[int | None, BeforeValidator(lambda x: None if isinstance(x, str) and len(x) == 0 else x)]
 
 
-class TagMixin(BaseModel):
+class OutputMessageTagMixin(BaseModel):
     tag: str = Field(
         default="",
         title="Message Tag",
         description="The tag that the output message should be tagged with",
     )
 
-    def get_output_tags(self) -> list[tuple[str, str | None]]:
-        tags: list[tuple[str, str | None]] = []
-        if self.tag
+    def get_output_tags(self) -> list[tuple[str, None]]:
+        tags: list[tuple[str, None]] = []
+        if self.tag:
             tags.append((self.tag, None))
         return tags
 
 
-class RenderTemplate(PipelineNode, TagMixin):
+class RenderTemplate(PipelineNode, OutputMessageTagMixin):
     """Renders a Jinja template"""
 
     model_config = ConfigDict(
@@ -256,7 +256,7 @@ class LLMResponse(PipelineNode, LLMResponseMixin):
         return PipelineState.from_node_output(node_name=self.name, node_id=self.node_id, output=output.content)
 
 
-class LLMResponseWithPrompt(LLMResponse, HistoryMixin, TagMixin):
+class LLMResponseWithPrompt(LLMResponse, HistoryMixin, OutputMessageTagMixin):
     """Uses and LLM to respond to the input."""
 
     model_config = ConfigDict(
@@ -397,7 +397,7 @@ class LLMResponseWithPrompt(LLMResponse, HistoryMixin, TagMixin):
         )
 
 
-class SendEmail(PipelineNode, TagMixin):
+class SendEmail(PipelineNode, OutputMessageTagMixin):
     """Send the input to the node to the list of addresses provided"""
 
     model_config = ConfigDict(
@@ -772,7 +772,9 @@ class StructuredDataSchemaValidatorMixin:
         return value
 
 
-class ExtractStructuredData(ExtractStructuredDataNodeMixin, LLMResponse, StructuredDataSchemaValidatorMixin, TagMixin):
+class ExtractStructuredData(
+    ExtractStructuredDataNodeMixin, LLMResponse, StructuredDataSchemaValidatorMixin, OutputMessageTagMixin
+):
     """Extract structured data from the input"""
 
     model_config = ConfigDict(
@@ -794,7 +796,9 @@ class ExtractStructuredData(ExtractStructuredDataNodeMixin, LLMResponse, Structu
         return False
 
 
-class ExtractParticipantData(ExtractStructuredDataNodeMixin, LLMResponse, StructuredDataSchemaValidatorMixin, TagMixin):
+class ExtractParticipantData(
+    ExtractStructuredDataNodeMixin, LLMResponse, StructuredDataSchemaValidatorMixin, OutputMessageTagMixin
+):
     """Extract structured data and saves it as participant data"""
 
     model_config = ConfigDict(
@@ -867,7 +871,7 @@ class ExtractParticipantData(ExtractStructuredDataNodeMixin, LLMResponse, Struct
             )
 
 
-class AssistantNode(PipelineNode, TagMixin):
+class AssistantNode(PipelineNode, OutputMessageTagMixin):
     """Calls an OpenAI assistant"""
 
     model_config = ConfigDict(
@@ -956,7 +960,7 @@ def main(input: str, **kwargs) -> str:
 """
 
 
-class CodeNode(PipelineNode, TagMixin):
+class CodeNode(PipelineNode, OutputMessageTagMixin):
     """Runs python"""
 
     model_config = ConfigDict(
