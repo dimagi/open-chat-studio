@@ -105,6 +105,7 @@ PROJECT_APPS = [
     "apps.sso",
     "apps.participants",
     "apps.chatbots",
+    "apps.banners",
 ]
 
 SPECIAL_APPS = [
@@ -134,6 +135,7 @@ MIDDLEWARE = [
     "apps.web.htmx_middleware.HtmxMessageMiddleware",
     "tz_detect.middleware.TimezoneMiddleware",
     "apps.generics.middleware.OriginDetectionMiddleware",
+    "apps.banners.middleware.BannerLocationMiddleware",
 ]
 
 ROOT_URLCONF = "gpt_playground.urls"
@@ -165,6 +167,7 @@ TEMPLATES = [
                 "apps.users.context_processors.user_teams",
                 # this line can be removed if not using google analytics
                 "apps.web.context_processors.google_analytics_id",
+                "apps.banners.context_processors.banner_context",
             ],
             "loaders": _DEFAULT_LOADERS if DEBUG else _CACHED_LOADERS,
             "builtins": [
