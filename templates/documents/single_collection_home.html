@@ -44,9 +44,19 @@
     <div class="flex flex-col gap-4">
       <div class="flex justify-between items-center">
         <h2 class="text-lg font-semibold">Files</h2>
-        <button class="btn btn-sm btn-primary" onclick="chooseFilesModal.showModal()">
-          <i class="fa-solid fa-plus"></i> Add Files
-        </button>
+        <div class="join">
+          {% if collection.has_failed_index_uploads %}
+            <form class="join-item" action="{% url 'documents:retry_failed_uploads' team.slug collection.id %}" method="POST">
+              {% csrf_token %}
+              <button class="btn btn-sm btn-primary">
+                <i class="fa-solid fa-repeat"></i> Retry Failed Uploads
+              </button>
+            </form>
+          {% endif %}
+          <button class="join-item btn btn-sm btn-primary" onclick="chooseFilesModal.showModal()">
+            <i class="fa-solid fa-plus"></i> Add Files
+          </button>
+        </div>
       </div>
 
       {% include 'documents/file_upload_modal.html' %}
