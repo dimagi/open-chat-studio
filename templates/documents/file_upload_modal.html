@@ -5,6 +5,7 @@
         <form method="dialog">
             <button class="btn btn-sm btn-circle btn-ghost absolute right-2 top-2">✕</button>
         </form>
+        <span><span class="font-bold text-lg mb-4" x-text="filesRemaining"></span> files remaining</span>
         <form class="mt-2 flex flex-col" action="{% url 'documents:add_collection_files' team.slug collection.id %}" method="POST" enctype="multipart/form-data">
             {% csrf_token %}
             <input
@@ -35,7 +36,7 @@
                                         class="form-text text-muted">{% include "generic/help.html" with help_content=chuck_size_help %}</small>
                                 </div>
                             </label>
-                            <input name="chunk_size" type="number" class="input" value="800" required/>
+                            <input name="chunk_size" type="number" class="input" x-model="chunk_size" required/>
                         </div>
                         <div>
                             <label class="label font-bold" for="chunk_overlap">
@@ -48,7 +49,12 @@
                                         class="form-text text-muted">{% include "generic/help.html" with help_content=chunk_overlap_help %}</small>
                                 </div>
                             </label>
-                            <input name="chunk_overlap" type="number" class="input" value="400" required/>
+                            <div class="flex flex-col gap-2">
+                                <input name="chunk_overlap" type="number" class="input" x-model="chunk_overlap" required/>
+                                <span x-cloak x-show="!isValidChunkingStrategy()" class="text-error">
+                                    Chunk overlap must be less than or equal to <span x-text="chunk_size/2"></span>
+                                </span>
+                            </div>
                         </div>
                     </div>
                 </div>
@@ -76,26 +82,55 @@
                     </div>
                 </template>
             </div>
-            <div class="modal-action">
-                <button class="btn btn-primary mt-2" :disabled="uploaded_files.length === 0">Submit</button>
+            <div class="modal-action flex flex-row gap-2">
+                <span x-cloak x-show="filesTooMany > 0" class="text-error">
+                    Uploading <span x-text="uploaded_files.length"></span> files exceeds the limit of {{ max_files_per_collection }} files per collection. Please remove <span x-text="filesTooMany"></span> files
+                </span>
+                <button class="btn btn-primary mt-2" :disabled="!canSubmit()">Submit</button>
             </div>
         </form>
     </div>
 </dialog>
 
 <script>
+    function convertMbToBytesBase10(valueMb) {
+        return 1000000 * valueMb; // Convert MB to bytes, using base 10
+    }
+
     document.addEventListener('alpine:init', () => {
         Alpine.data('modalData', () => ({
-            message: "",
+            maxFilesPerCollection: {{ max_files_per_collection }},
+            currentCollectionFileCount: {{ collection_files_count }},
+            maxFileSizeMB: {{ max_file_size_mb }},
+            maxFileSizeKB: 0,
             uploaded_files: [],
-            selected_collection: null,
+            chunk_size: 800,
+            chunk_overlap: 400,
+            filesTooMany: 0,
+            filesRemaining: 0,
+            init() {
+                this.calculateFileCount();
+                this.maxFileSizeKB = convertMbToBytesBase10(this.maxFileSizeMB);
+            },
             handleFileChange(event) {
                 const files = Array.from(event.target.files);
-                this.uploaded_files.push(...files);
+                let filesTooLarge = [];
+                files.forEach(file => {
+                    if (file.size > this.maxFileSizeKB) {
+                        filesTooLarge.push(file.name);
+                    } else {
+                        this.uploaded_files.push(file);
+                    }
+                });
+                if (filesTooLarge.length > 0) {
+                    alert(`The following files are larger than ${this.maxFileSizeMB}MB and cannot be uploaded:\n\n${filesTooLarge.join('\n')}`);
+                }
 
                 const dataTransfer = new DataTransfer();
                 this.uploaded_files.forEach(file => dataTransfer.items.add(file));
+
                 event.target.files = dataTransfer.files;
+                this.calculateFileCount();
             },
             removeFile(index) {
                 this.uploaded_files.splice(index, 1);
@@ -105,7 +140,18 @@
                     dataTransfer.items.add(file)
                 });
                 this.$refs.fileUpload.files = dataTransfer.files;
-            }
+                this.calculateFileCount();
+            },
+            canSubmit() {
+                return this.uploaded_files.length > 0 && this.isValidChunkingStrategy() && this.filesTooMany <= 0;
+            },
+            isValidChunkingStrategy() {
+                return this.chunk_overlap <= (this.chunk_size / 2);
+            },
+            calculateFileCount() {
+                this.filesTooMany = this.uploaded_files.length + this.currentCollectionFileCount - this.maxFilesPerCollection;
+                this.filesRemaining = -1 * this.filesTooMany;
+            },
         }))
     })
 </script>
