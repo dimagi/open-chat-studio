@@ -1,0 +1,261 @@
+{% load form_tags %}
+{% if updated %}
+  <div id="chatbot-name" hx-swap-oob="innerHTML">{{ experiment.name }}</div>
+  <div id="chatbot-description" hx-swap-oob="innerHTML">{{ experiment.description }}</div>
+{% endif %}
+<div id="settings-wrapper">
+  <div class="flex justify-end mb-6">
+    {% if edit_mode %}
+      <div class="flex gap-2">
+        <button id="save-all-button"
+                class="btn btn-success btn-sm"
+                hx-post="{% url 'chatbots:settings' request.team.slug experiment.id %}"
+                hx-include="#settings-form"
+                hx-target="#settings-wrapper"
+                hx-swap="outerHTML">
+          Save
+        </button>
+        <button id="cancel-edit-button"
+                class="btn btn-danger btn-sm"
+                hx-get="{% url 'chatbots:cancel_edit_mode' request.team.slug experiment.id %}"
+                hx-target="#settings-wrapper"
+                hx-swap="outerHTML">
+          Cancel
+        </button>
+      </div>
+    {% else %}
+      <div id="edit-buttons-container">
+        {% if experiment.is_editable %}
+          <button id="edit-all-button"
+                  class="btn btn-primary btn-sm"
+                  hx-get="{% url 'chatbots:settings' request.team.slug experiment.id %}"
+                  hx-target="#settings-wrapper"
+                  hx-swap="outerHTML">
+            Edit
+          </button>
+        {% endif %}
+      </div>
+    {% endif %}
+  </div>
+
+  {% if edit_mode %}
+    {{ voice_providers_types|json_script:"voice-provider-types" }}
+    {{ synthetic_voice_options|json_script:"voice-options" }}
+
+    <form id="settings-form" x-data="{
+                                     type: '{{ experiment_type }}',
+                                     voiceProvider: null,
+                                     synthetic_voice: {{experiment.synthetic_voice_id|default:'null'}},
+                                     synthetic_voice_options: [],
+                                     init() {
+                                     const voiceProviderTypes = JSON.parse(document.getElementById('voice-provider-types').textContent);
+                                     const voiceOptions = JSON.parse(document.getElementById('voice-options').textContent);
+                                     this.$watch('voiceProvider', () => {
+                                     const providerType = voiceProviderTypes[this.voiceProvider];
+                                     this.synthetic_voice_options = voiceOptions.filter(option => {
+                                     const match = option.type === providerType &&
+                                     (!option.provider_id || option.provider_id == this.voiceProvider);
+                                     return match;
+                                     });
+                                     });
+                                     }
+                                     }">
+  {% endif %}
+  <div class="mb-6" id="name-section">
+    <h4 class="text-md font-bold mb-2">Name</h4>
+    <div class="p-4 bg-base-200 rounded-md" id="name-{% if edit_mode %}edit{% else %}content{% endif %}">
+      {% if edit_mode %}
+        {% render_form_fields form "name" %}
+      {% else %}
+        <p>{{ experiment.name }}</p>
+      {% endif %}
+    </div>
+  </div>
+  <div class="mb-6" id="description-section">
+    <h4 class="text-md font-bold mb-2">Description</h4>
+    <div class="p-4 bg-base-200 rounded-md" id="description-{% if edit_mode %}edit{% else %}content{% endif %}">
+      {% if edit_mode %}
+        {% render_form_fields form "description" %}
+      {% else %}
+        <p>{{ experiment.description|default:"No description provided" }}</p>
+      {% endif %}
+    </div>
+  </div>
+
+  <div class="mb-6" id="voice-section">
+    <h4 class="text-md font-bold mb-2">Voice</h4>
+    <div class="p-4 bg-base-200 rounded-md">
+      <div class="grid grid-cols-2 gap-4">
+        {% if edit_mode %}
+          {% render_form_fields form "voice_provider" "synthetic_voice" "voice_response_behaviour" "echo_transcript" "use_processor_bot_voice" %}
+        {% else %}
+          <div>
+            <span class="font-semibold">Provider:</span>
+            <span id="voice_provider-content">{{ experiment.voice_provider.name|default:"None" }}</span>
+          </div>
+          <div>
+            <span class="font-semibold">Synthetic Voice:</span>
+            <span id="synthetic_voice-content">{{ experiment.synthetic_voice.name|default:"None" }}</span>
+          </div>
+          <div>
+            <span class="font-semibold">Response Type:</span>
+            <span id="voice_response_behaviour-content">{{ experiment.voice_response_behaviour|default:"None" }}</span>
+          </div>
+          <div>
+            <span class="font-semibold">Echo Transcript:</span>
+            <span id="echo_transcript-content">{{ experiment.echo_transcript|yesno:"Yes,No" }}</span>
+          </div>
+          <div>
+            <span class="font-semibold">Use Processor Bot Voice:</span>
+            <span id="use_processor_bot_voice-content">{{ experiment.use_processor_bot_voice|yesno:"Yes,No" }}</span>
+          </div>
+        {% endif %}
+      </div>
+    </div>
+  </div>
+
+  <div class="mb-6" id="tracing-section">
+    <h4 class="text-md font-bold mb-2">Tracing</h4>
+    <div class="p-4 bg-base-200 rounded-md">
+      {% if edit_mode %}
+        {% render_form_fields form "trace_provider" "debug_mode_enabled" %}
+      {% else %}
+        <div>
+          <span class="font-semibold">Trace Provider:</span>
+          <span id="trace_provider-content">{{ experiment.trace_provider.name|default:"None" }}</span>
+        </div>
+        <div>
+          <span class="font-semibold">Debug Mode:</span>
+          <span id="debug_mode_enabled-content">{{ experiment.debug_mode_enabled|yesno:"Enabled,Disabled" }}</span>
+        </div>
+      {% endif %}
+    </div>
+  </div>
+
+  <div class="mb-6" id="consent-section">
+    <h4 class="text-md font-bold mb-2">Consent</h4>
+    <div class="p-4 bg-base-200 rounded-md">
+      {% if edit_mode %}
+        {% render_form_fields form "conversational_consent_enabled"%}
+      {% else %}
+        <div>
+          <span class="font-semibold">Conversational Consent:</span>
+          <span id="conversational_consent_enabled-content">{{ experiment.conversational_consent_enabled|yesno:"Enabled,Disabled" }}</span>
+        </div>
+        <div>
+          <span class="font-semibold">Consent Form:</span>
+          <span id="consent_form-content">{{ experiment.consent_form.name|default:"None" }}</span>
+        </div>
+      {% endif %}
+    </div>
+  </div>
+
+  <div class="mb-6" id="surveys-section">
+    <h4 class="text-md font-bold mb-2">Surveys</h4>
+    <div class="p-4 bg-base-200 rounded-md">
+      {% if edit_mode %}
+        {% render_form_fields form "pre_survey" "post_survey" %}
+      {% else %}
+        <div>
+          <span class="font-semibold">Pre-Survey:</span>
+          <span id="pre_survey-content">{{ experiment.pre_survey.name|default:"None" }}</span>
+        </div>
+        <div>
+          <span class="font-semibold">Post-Survey:</span>
+          <span id="post_survey-content">{{ experiment.post_survey.name|default:"None" }}</span>
+        </div>
+      {% endif %}
+    </div>
+  </div>
+
+  <div class="mb-6" id="allowlist-section">
+    <h4 class="text-md font-bold mb-2">Participant Allowlist</h4>
+    <div class="p-4 bg-base-200 rounded-md">
+      {% if edit_mode %}
+        <div class="form-control">
+          <input type="hidden" name="participant_allowlist" id="id_participant_allowlist"
+                 value="{{ experiment.participant_allowlist|join:',' }}">
+          <select id="allowlist-multiselect" multiple placeholder="Add participant identifier..." autocomplete="off">
+            {% for identifier in team_participant_identifiers %}
+              <option value="{{ identifier }}" {% if identifier in experiment.participant_allowlist %}selected{% endif %}>{{ identifier }}</option>
+            {% endfor %}
+            {% for identifier in experiment.participant_allowlist %}
+              {% if identifier not in team_participant_identifiers %}
+                <option value="{{ identifier }}" selected>{{ identifier }}</option>
+              {% endif %}
+            {% endfor %}
+          </select>
+
+          <div class="text-xs text-gray-500 mt-1 mb-2">
+            Add identifiers to limit access to this bot. Phone numbers should be in E164 format e.g. +27123456789.
+            When the list is empty, the bot will be accessible via its public link.
+          </div>
+          {% include "generic/copy_chip.html" with copy_element_id="id_participant_allowlist" action_text="Copy participant list" extra_styles="btn-ghost" %}
+        </div>
+      {% else %}
+        {% if experiment.participant_allowlist %}
+          <ul class="list-disc list-inside">
+            {% for participant in experiment.participant_allowlist %}
+              <li>{{ participant }}</li>
+            {% empty %}
+              <p>No participants in allowlist. Chatbot is publicly accessible.</p>
+            {% endfor %}
+          </ul>
+        {% else %}
+          <p>No allowlist configured. Chatbot is publicly accessible.</p>
+        {% endif %}
+      {% endif %}
+    </div>
+  </div>
+
+  <div class="mb-6" id="seed-message-section">
+    <h4 class="text-md font-bold mb-2">Seed Message</h4>
+    <div class="p-4 bg-base-200 rounded-md" id="seed_message-{% if edit_mode %}edit{% else %}content{% endif %}">
+      {% if edit_mode %}
+        {% render_form_fields form "seed_message" %}
+      {% else %}
+        <p>{{ experiment.seed_message|default:"No seed message configured" }}</p>
+      {% endif %}
+    </div>
+  </div>
+
+  {% if edit_mode %}</form>{% endif %}
+</div>
+
+{% if edit_mode %}
+  {% block page_js %}
+    <script>
+      (function() {
+        if (window.tomSelectInstance) {
+          try {
+            window.tomSelectInstance.destroy();
+          } catch (e) {
+        //first instance
+          }
+          window.tomSelectInstance = null;
+        }
+        let element = document.getElementById('allowlist-multiselect');
+        let hiddenInput = document.getElementById('id_participant_allowlist');
+
+        if (element && hiddenInput) {
+          window.tomSelectInstance = new TomSelect(element, {
+            maxItems: null,
+            create: true,
+            plugins: {
+              'remove_button': {},
+              'caret_position': {},
+              'input_autogrow': {},
+              'checkbox_options': {
+                'checkedClassNames': ['ts-checked'],
+                'uncheckedClassNames': ['ts-unchecked'],
+              }
+            },
+            onChange: function(values) {
+              hiddenInput.value = values.join(',');
+            }
+          });
+        }
+      })();
+    </script>
+  {% endblock page_js %}
+{% endif %}
