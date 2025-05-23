@@ -60,6 +60,7 @@ def single_collection_home(request, team_slug: str, pk: int):
         "max_summary_length": settings.MAX_SUMMARY_LENGTH,
         "max_files_per_collection": settings.MAX_FILES_PER_COLLECTION,
         "files_remaining": settings.MAX_FILES_PER_COLLECTION - collection_files.count(),
+        "max_file_size": settings.MAX_FILE_SIZE_MB,
     }
     return render(request, "documents/single_collection_home.html", context)
 

@@ -5,6 +5,7 @@
         <form method="dialog">
             <button class="btn btn-sm btn-circle btn-ghost absolute right-2 top-2">✕</button>
         </form>
+        <span><span class="font-bold text-lg mb-4" x-text="-1*filesTooMany"></span> files remaining</span>
         <form class="mt-2 flex flex-col" action="{% url 'documents:add_collection_files' team.slug collection.id %}" method="POST" enctype="multipart/form-data">
             {% csrf_token %}
             <input
@@ -92,23 +93,38 @@
 </dialog>
 
 {{ max_files_per_collection|json_script:"maxFilesPerCollection" }}
-{{ collection_files.count|json_script:"collectionFileCount" }}
+{{ collection_files.count|json_script:"currentCollectionFileCount" }}
+{{ max_file_size|json_script:"maxFileSize" }}
 <script>
     document.addEventListener('alpine:init', () => {
         Alpine.data('modalData', () => ({
             maxFilesPerCollection: JSON.parse(document.getElementById("maxFilesPerCollection").textContent),
-            collectionFileCount: JSON.parse(document.getElementById("collectionFileCount").textContent),
+            currentCollectionFileCount: JSON.parse(document.getElementById("currentCollectionFileCount").textContent),
+            maxFileSize: JSON.parse(document.getElementById("maxFileSize").textContent),
             uploaded_files: [],
             chunk_size: 800,
             chunk_overlap: 400,
-            selected_collection: null,
             filesTooMany: 0,
+            init() {
+                this.calculateFileCount();
+            },
             handleFileChange(event) {
                 const files = Array.from(event.target.files);
-                this.uploaded_files.push(...files);
+                let filesTooLarge = [];
+                files.forEach(file => {
+                    if (file.size > this.maxFileSize) {
+                        filesTooLarge.push(file.name);
+                    } else {
+                        this.uploaded_files.push(file);
+                    }
+                });
+                if (filesTooLarge.length > 0) {
+                    alert(`The following files are too large: \n${filesTooLarge.join('\n')}`);
+                }
 
                 const dataTransfer = new DataTransfer();
-                this.uploaded_files.forEach(file =>                     dataTransfer.items.add(file));
+                this.uploaded_files.forEach(file => dataTransfer.items.add(file));
+
                 event.target.files = dataTransfer.files;
                 this.calculateFileCount();
             },
@@ -129,7 +145,7 @@
                 return this.chunk_overlap <= (this.chunk_size / 2);
             },
             calculateFileCount() {
-                this.filesTooMany = this.uploaded_files.length + this.collectionFileCount - this.maxFilesPerCollection;
+                this.filesTooMany = this.uploaded_files.length + this.currentCollectionFileCount - this.maxFilesPerCollection;
             },
         }))
     })
