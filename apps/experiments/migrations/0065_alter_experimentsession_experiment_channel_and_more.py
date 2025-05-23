@@ -6,7 +6,7 @@ import django.db.models.deletion
 
 class Migration(migrations.Migration):
     dependencies = [
-        ("channels", "0013_alter_experimentchannel_platform"),
+        ("ocs_channels", "0013_alter_experimentchannel_platform"),
         ("experiments", "0064_alter_experiment_llm"),
     ]
 
