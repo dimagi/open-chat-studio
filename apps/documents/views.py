@@ -20,6 +20,7 @@ from apps.documents.tables import CollectionsTable
 from apps.documents.tasks import index_collection_files_task, migrate_vector_stores
 from apps.files.models import File
 from apps.generics.chips import Chip
+from apps.generics.help import render_help_with_link
 from apps.teams.decorators import login_and_team_required
 from apps.teams.mixins import LoginAndTeamRequiredMixin
 from apps.utils.search import similarity_search
@@ -34,7 +35,7 @@ class CollectionHome(LoginAndTeamRequiredMixin, TemplateView):
         return {
             "active_tab": "collections",
             "title": "Collections",
-            # "title_help_content": render_help_with_link("", "survey"),
+            "title_help_content": render_help_with_link("", "collections"),
             "new_object_url": reverse("documents:collection_new", args=[team_slug]),
             "table_url": reverse("documents:collection_table", args=[team_slug]),
             "enable_search": True,

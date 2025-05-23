@@ -1,6 +1,12 @@
 {
   "description": "Send the input to the node to the list of addresses provided",
   "properties": {
+    "tag": {
+      "default": "",
+      "description": "The tag that the output message should be tagged with",
+      "title": "Message Tag",
+      "type": "string"
+    },
     "name": {
       "title": "Node Name",
       "type": "string",

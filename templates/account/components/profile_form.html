@@ -2,11 +2,11 @@
 {% load form_tags %}
 <div class="pg-columns">
   <div id="profile-picture" class="pg-column-one-quarter">
-    <div class="pg-text-centered">
+    <div class="text-center">
       <img class="avatar" src="{{ user.avatar_url }}">
       <div id='profile-upload-holder'>
         <label for="profile-upload" >
-          <a id="profile-upload-label" class="pg-button-light">
+          <a id="profile-upload-label" class="btn btn-ghost">
             {% translate "Change Picture" %}
           </a>
         </label>
@@ -25,7 +25,7 @@
         {% render_select_input form.language %}
       {% endif %}
       <div class="mt-2">
-        <input class="pg-button-primary" type="submit" value="{% translate "Save" %}">
+        <input class="btn btn-primary" type="submit" value="{% translate "Save" %}">
       </div>
     </form>
   </div>

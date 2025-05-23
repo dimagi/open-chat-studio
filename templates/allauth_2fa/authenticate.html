@@ -10,7 +10,7 @@
       {% csrf_token %}
       {{ form.non_field_errors }}
       {% render_text_input form.otp_token %}
-      <button type="submit" class="pg-button-primary mt-3">
+      <button type="submit" class="btn btn-primary mt-3">
         {% translate 'Verify' %}
       </button>
     </form>

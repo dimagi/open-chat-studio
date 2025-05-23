@@ -97,7 +97,7 @@ class BotUser(HttpUser):
         msg_tag = soup.find("div", class_="message-contents")
         if msg_tag:
             para = msg_tag.find_next("p")
-            if "pg-text-danger" in para.get("class", ""):
+            if "text-error" in para.get("class", ""):
                 response.failure(f"Error from bot: '{para.string}'")
             return para.string
 

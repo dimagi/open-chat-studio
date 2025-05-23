@@ -66,7 +66,7 @@ def translations(c: Context):
 
 @task
 def schema(c: Context):
-    c.run("python manage.py spectacular --file api_schema.yaml")
+    c.run("python manage.py spectacular --file api-schema.yml --validate")
 
 
 @task

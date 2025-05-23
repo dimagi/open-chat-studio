@@ -4,6 +4,7 @@ import json
 import logging
 import random
 import time
+import unicodedata
 from typing import Annotated, Literal, Self
 
 import tiktoken
@@ -59,7 +60,26 @@ from apps.utils.prompt import OcsPromptTemplate, PromptVars, validate_prompt_var
 OptionalInt = Annotated[int | None, BeforeValidator(lambda x: None if isinstance(x, str) and len(x) == 0 else x)]
 
 
-class RenderTemplate(PipelineNode):
+class OutputMessageTagMixin(BaseModel):
+    tag: str = Field(
+        default="",
+        title="Message Tag",
+        description="The tag that the output message should be tagged with",
+    )
+
+    @field_validator("tag", mode="after")
+    @classmethod
+    def normalize_tag(cls, value: str) -> str:
+        return unicodedata.normalize("NFC", value)
+
+    def get_output_tags(self) -> list[tuple[str, None]]:
+        tags: list[tuple[str, None]] = []
+        if self.tag:
+            tags.append((self.tag, None))
+        return tags
+
+
+class RenderTemplate(PipelineNode, OutputMessageTagMixin):
     """Renders a Jinja template"""
 
     model_config = ConfigDict(
@@ -274,7 +294,7 @@ class ToolConfigModel(BaseModel):
         return values if values else None
 
 
-class LLMResponseWithPrompt(LLMResponse, HistoryMixin):
+class LLMResponseWithPrompt(LLMResponse, HistoryMixin, OutputMessageTagMixin):
     """Uses and LLM to respond to the input."""
 
     model_config = ConfigDict(
@@ -296,14 +316,14 @@ class LLMResponseWithPrompt(LLMResponse, HistoryMixin):
         None,
         title="Media",
         json_schema_extra=UiSchema(
-            widget=Widgets.select, options_source=OptionsSource.collection, flag_required="document_management"
+            widget=Widgets.select, options_source=OptionsSource.collection, flag_required="pipelines-v2"
         ),
     )
     collection_index_id: OptionalInt = Field(
         None,
         title="Collection Index",
         json_schema_extra=UiSchema(
-            widget=Widgets.select, options_source=OptionsSource.collection_index, flag_required="document_management"
+            widget=Widgets.select, options_source=OptionsSource.collection_index, flag_required="pipelines-v2"
         ),
     )
     tools: list[str] = Field(
@@ -417,7 +437,7 @@ class LLMResponseWithPrompt(LLMResponse, HistoryMixin):
         )
 
 
-class SendEmail(PipelineNode):
+class SendEmail(PipelineNode, OutputMessageTagMixin):
     """Send the input to the node to the list of addresses provided"""
 
     model_config = ConfigDict(
@@ -792,7 +812,9 @@ class StructuredDataSchemaValidatorMixin:
         return value
 
 
-class ExtractStructuredData(ExtractStructuredDataNodeMixin, LLMResponse, StructuredDataSchemaValidatorMixin):
+class ExtractStructuredData(
+    ExtractStructuredDataNodeMixin, LLMResponse, StructuredDataSchemaValidatorMixin, OutputMessageTagMixin
+):
     """Extract structured data from the input"""
 
     model_config = ConfigDict(
@@ -814,7 +836,9 @@ class ExtractStructuredData(ExtractStructuredDataNodeMixin, LLMResponse, Structu
         return False
 
 
-class ExtractParticipantData(ExtractStructuredDataNodeMixin, LLMResponse, StructuredDataSchemaValidatorMixin):
+class ExtractParticipantData(
+    ExtractStructuredDataNodeMixin, LLMResponse, StructuredDataSchemaValidatorMixin, OutputMessageTagMixin
+):
     """Extract structured data and saves it as participant data"""
 
     model_config = ConfigDict(
@@ -887,7 +911,7 @@ class ExtractParticipantData(ExtractStructuredDataNodeMixin, LLMResponse, Struct
             )
 
 
-class AssistantNode(PipelineNode):
+class AssistantNode(PipelineNode, OutputMessageTagMixin):
     """Calls an OpenAI assistant"""
 
     model_config = ConfigDict(
@@ -976,7 +1000,7 @@ def main(input: str, **kwargs) -> str:
 """
 
 
-class CodeNode(PipelineNode):
+class CodeNode(PipelineNode, OutputMessageTagMixin):
     """Runs python"""
 
     model_config = ConfigDict(
