@@ -47,6 +47,11 @@ class CollectionHome(LoginAndTeamRequiredMixin, TemplateView, PermissionRequired
 @login_and_team_required
 @permission_required("documents.view_collection", raise_exception=True)
 def single_collection_home(request, team_slug: str, pk: int):
+    """
+    Renders the detail page for a specific document collection within a team.
+    
+    Displays collection information, associated files, supported file types, and upload limits. Provides context variables for use in the template, including maximum summary length, file count limits, and maximum file size.
+    """
     collection = get_object_or_404(Collection.objects.select_related("team"), id=pk, team__slug=team_slug)
 
     collection_files = CollectionFile.objects.filter(collection=collection)
