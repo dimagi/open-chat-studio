@@ -5,7 +5,7 @@
         <form method="dialog">
             <button class="btn btn-sm btn-circle btn-ghost absolute right-2 top-2">✕</button>
         </form>
-        <span><span class="font-bold text-lg mb-4" x-text="-1*filesTooMany"></span> files remaining</span>
+        <span><span class="font-bold text-lg mb-4" x-text="filesRemaining"></span> files remaining</span>
         <form class="mt-2 flex flex-col" action="{% url 'documents:add_collection_files' team.slug collection.id %}" method="POST" enctype="multipart/form-data">
             {% csrf_token %}
             <input
@@ -110,6 +110,7 @@
             chunk_size: 800,
             chunk_overlap: 400,
             filesTooMany: 0,
+            filesRemaining: 0,
             init() {
                 this.calculateFileCount();
                 this.maxFileSizeKB = convertMbToBytesBase10(this.maxFileSizeMB);
@@ -152,6 +153,7 @@
             },
             calculateFileCount() {
                 this.filesTooMany = this.uploaded_files.length + this.currentCollectionFileCount - this.maxFilesPerCollection;
+                this.filesRemaining = -1 * this.filesTooMany;
             },
         }))
     })
