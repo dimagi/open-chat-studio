@@ -46,6 +46,7 @@ from apps.pipelines.tasks import send_email_from_pipeline
 from apps.service_providers.exceptions import ServiceProviderConfigError
 from apps.service_providers.llm_service.adapters import AssistantAdapter, ChatAdapter
 from apps.service_providers.llm_service.history_managers import PipelineHistoryManager
+from apps.service_providers.llm_service.main import OpenAIBuiltinTool
 from apps.service_providers.llm_service.prompt_context import PromptTemplateContext
 from apps.service_providers.llm_service.runnables import (
     AgentAssistantChat,
@@ -371,7 +372,7 @@ class LLMResponseWithPrompt(LLMResponse, HistoryMixin, OutputMessageTagMixin):
 
         if self.collection_index_id:
             collection = Collection.objects.get(id=self.collection_index_id)
-            builtin_tools = {"type": "file_search", "vector_store_ids": [collection.openai_vector_store_id]}
+            builtin_tools = OpenAIBuiltinTool(type="file_search", vector_store_ids=[collection.openai_vector_store_id])
             tools.append(builtin_tools)
 
         chat_adapter = ChatAdapter.for_pipeline(

@@ -24,6 +24,12 @@ from apps.service_providers.llm_service.token_counters import (
 )
 
 
+class OpenAIBuiltinTool(dict):
+    """A simple wrapper for OpenAI's builtin tools. This is used to easily distinquish OpenAI tools from dicts"""
+
+    pass
+
+
 class OpenAIAssistantRunnable(BrokenOpenAIAssistantRunnable):
     # This is a temporary solution to fix langchain's compatability with the assistants v2 API. This code is
     # copied from:
@@ -188,7 +194,7 @@ class OpenAILlmService(OpenAIGenericService):
         tools = []
         for tool_name in built_in_tools:
             if tool_name == "web-search":
-                tools.append({"type": "web_search_preview"})
+                tools.append(OpenAIBuiltinTool({"type": "web_search_preview"}))
             else:
                 raise ValueError(f"Unsupported built-in tool for openai: '{tool_name}'")
         return tools
