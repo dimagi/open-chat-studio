@@ -6,7 +6,7 @@ import openai
 from celery.app import shared_task
 from taskbadger.celery import Task as TaskbadgerTask
 
-from apps.assistants.sync import OpenAiSyncError, create_files_remote
+from apps.assistants.sync import create_files_remote
 from apps.documents.models import Collection, CollectionFile, FileStatus
 from apps.service_providers.models import LlmProvider
 
@@ -106,7 +106,7 @@ def _upload_files_to_vector_store(
             chunk_overlap=chunk_overlap,
         )
 
-    except OpenAiSyncError:
+    except Exception:
         logger.exception(
             "Failed to link files to vector store",
             extra={
