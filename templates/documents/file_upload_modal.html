@@ -94,32 +94,38 @@
 
 {{ max_files_per_collection|json_script:"maxFilesPerCollection" }}
 {{ collection_files.count|json_script:"currentCollectionFileCount" }}
-{{ max_file_size|json_script:"maxFileSize" }}
+{{ max_file_size_mb|json_script:"maxFileSizeMb" }}
 <script>
+    function convertMbToBytesBase10(valueMb) {
+        return 1000000 * valueMb; // Convert MB to bytes, using base 10
+    }
+
     document.addEventListener('alpine:init', () => {
         Alpine.data('modalData', () => ({
             maxFilesPerCollection: JSON.parse(document.getElementById("maxFilesPerCollection").textContent),
             currentCollectionFileCount: JSON.parse(document.getElementById("currentCollectionFileCount").textContent),
-            maxFileSize: JSON.parse(document.getElementById("maxFileSize").textContent),
+            maxFileSizeMB: JSON.parse(document.getElementById("maxFileSizeMb").textContent),
+            maxFileSizeKB: 0,
             uploaded_files: [],
             chunk_size: 800,
             chunk_overlap: 400,
             filesTooMany: 0,
             init() {
                 this.calculateFileCount();
+                this.maxFileSizeKB = convertMbToBytesBase10(this.maxFileSizeMB);
             },
             handleFileChange(event) {
                 const files = Array.from(event.target.files);
                 let filesTooLarge = [];
                 files.forEach(file => {
-                    if (file.size > this.maxFileSize) {
+                    if (file.size > this.maxFileSizeKB) {
                         filesTooLarge.push(file.name);
                     } else {
                         this.uploaded_files.push(file);
                     }
                 });
                 if (filesTooLarge.length > 0) {
-                    alert(`The following files are too large: \n${filesTooLarge.join('\n')}`);
+                    alert(`The following files are larger than ${this.maxFileSizeMB}MB and cannot be uploaded:\n\n${filesTooLarge.join('\n')}`);
                 }
 
                 const dataTransfer = new DataTransfer();

@@ -55,9 +55,11 @@
               </button>
             </form>
           {% endif %}
-          <button class="join-item btn btn-sm btn-primary" onclick="chooseFilesModal.showModal()">
-            <i class="fa-solid fa-plus"></i> Add Files
-          </button>
+          <div {% if collection_files.count == max_files_per_collection %} class="tooltip"  data-tip="File limit reached" {% endif %}>
+            <button class="join-item btn btn-sm btn-primary" {% if collection_files.count == max_files_per_collection %} disabled {% endif %} onclick="chooseFilesModal.showModal()">
+              <i class="fa-solid fa-plus"></i> Add Files
+            </button>
+          </div>
         </div>
       </div>
 
