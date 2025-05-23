@@ -30,7 +30,7 @@ from apps.files.models import File
 from apps.service_providers.llm_service.adapters import AssistantAdapter, ChatAdapter
 from apps.service_providers.llm_service.helper import custom_parse_ai_message
 from apps.service_providers.llm_service.history_managers import ExperimentHistoryManager, PipelineHistoryManager
-from apps.service_providers.llm_service.main import OpenAIAssistantRunnable, OpenAIBuiltinTool
+from apps.service_providers.llm_service.main import AnthropicBuiltinTool, OpenAIAssistantRunnable, OpenAIBuiltinTool
 from apps.utils.prompt import OcsPromptTemplate
 
 lc_tools_parser.parse_ai_message_to_tool_action = custom_parse_ai_message
@@ -272,7 +272,7 @@ class AgentLLMChat(LLMChat):
         """Filter out tools that are not OCS tools. `AgentExecutor` expects a list of runnable tools, so we need to
         remove all tools that are run by the LLM provider
         """
-        return [t for t in tools if not isinstance(t, (OpenAIBuiltinTool | GenAITool))]
+        return [t for t in tools if not isinstance(t, (OpenAIBuiltinTool | GenAITool | AnthropicBuiltinTool))]
 
     @property
     def prompt(self):
