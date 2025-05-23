@@ -30,7 +30,7 @@ from apps.files.models import File
 from apps.service_providers.llm_service.adapters import AssistantAdapter, ChatAdapter
 from apps.service_providers.llm_service.helper import custom_parse_ai_message
 from apps.service_providers.llm_service.history_managers import ExperimentHistoryManager, PipelineHistoryManager
-from apps.service_providers.llm_service.main import OpenAIAssistantRunnable
+from apps.service_providers.llm_service.main import AnthropicBuiltinTool, OpenAIAssistantRunnable, OpenAIBuiltinTool
 from apps.utils.prompt import OcsPromptTemplate
 
 lc_tools_parser.parse_ai_message_to_tool_action = custom_parse_ai_message
@@ -261,18 +261,18 @@ class AgentLLMChat(LLMChat):
     def _build_chain(self) -> Runnable[dict[str, Any], dict]:
         tools = self.adapter.get_allowed_tools()
         agent = create_tool_calling_agent(llm=self.adapter.get_chat_model(), tools=tools, prompt=self.prompt)
-        tools = self._filter_for_ocs_tools(tools)
+        tools = self._remove_builtin_tools(tools)
         return AgentExecutor.from_agent_and_tools(
             agent=agent,
             tools=tools,
             max_execution_time=120,
         )
 
-    def _filter_for_ocs_tools(self, tools: list):
+    def _remove_builtin_tools(self, tools: list):
         """Filter out tools that are not OCS tools. `AgentExecutor` expects a list of runnable tools, so we need to
         remove all tools that are run by the LLM provider
         """
-        return [t for t in tools if not isinstance(t, (dict | GenAITool))]
+        return [t for t in tools if not isinstance(t, (OpenAIBuiltinTool | GenAITool | AnthropicBuiltinTool))]
 
     @property
     def prompt(self):

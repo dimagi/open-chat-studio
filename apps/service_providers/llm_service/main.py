@@ -26,6 +26,18 @@ from apps.service_providers.llm_service.token_counters import (
 )
 
 
+class OpenAIBuiltinTool(dict):
+    """A simple wrapper for OpenAI's builtin tools. This is used to easily distinquish OpenAI tools from dicts"""
+
+    pass
+
+
+class AnthropicBuiltinTool(dict):
+    """A simple wrapper for Anthorpic's builtin tools. This is used to easily distinquish Anthorpic tools from dicts"""
+
+    pass
+
+
 class OpenAIAssistantRunnable(BrokenOpenAIAssistantRunnable):
     # This is a temporary solution to fix langchain's compatability with the assistants v2 API. This code is
     # copied from:
@@ -212,7 +224,7 @@ class OpenAILlmService(OpenAIGenericService):
         tools = []
         for tool_name in built_in_tools:
             if tool_name == "web-search":
-                tools.append({"type": "web_search_preview"})
+                tools.append(OpenAIBuiltinTool({"type": "web_search_preview"}))
             else:
                 raise ValueError(f"Unsupported built-in tool for openai: '{tool_name}'")
         return tools
@@ -264,11 +276,11 @@ class AnthropicLlmService(LlmService):
         tools = []
         for tool_name in built_in_tools:
             if tool_name == "web-search":
-                tool = {
-                    "type": "web_search_20250305",
-                    "name": "web_search",
-                    "max_uses": 5,
-                }
+                tool = AnthropicBuiltinTool(
+                    type="web_search_20250305",
+                    name="web_search",
+                    max_uses=5,
+                )
                 if tool_config := config.get(tool_name):
                     tool.update(tool_config.model_dump())
                 tools.append(tool)
