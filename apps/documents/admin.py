@@ -1,15 +1,17 @@
 from django.contrib import admin
 
+from apps.utils.admin import ReadonlyAdminMixin
+
 from .models import Collection, CollectionFile
 
 
-class CollectionFileInline(admin.TabularInline):
+class CollectionFileInline(ReadonlyAdminMixin, admin.TabularInline):
     model = CollectionFile
     extra = 0
     exclude = ["team"]
 
 
-class CollectionVersionsInline(admin.TabularInline):
+class CollectionVersionsInline(ReadonlyAdminMixin, admin.TabularInline):
     model = Collection
     extra = 0
     exclude = ["team"]
