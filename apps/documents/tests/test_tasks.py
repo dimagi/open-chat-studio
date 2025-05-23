@@ -52,10 +52,21 @@ class TestUploadFilesToVectorStore:
 
     @pytest.mark.usefixtures("index_manager_mock")
     @patch("apps.documents.tasks.create_files_remote")
-    def test_upload_files_task_failure(self, create_files_remote, collection_file):
+    def test_create_files_fails(self, create_files_remote, collection_file):
         """Test handling of upload failures"""
         create_files_remote.side_effect = Exception("Upload failed")
 
+        index_collection_files_task(collection_file.collection_id)
+
+        collection_file.refresh_from_db()
+        assert collection_file.status == FileStatus.FAILED
+
+    @patch("apps.documents.tasks.create_files_remote")
+    def test_link_files_fails(self, create_files_remote, collection_file, index_manager_mock):
+        """Test handling of upload failures"""
+        create_files_remote.return_value = ["ext-file-id"]
+
+        index_manager_mock.link_files_to_vector_store.side_effect = Exception("Linking failed")
         index_collection_files_task(collection_file.collection_id)
 
         collection_file.refresh_from_db()
