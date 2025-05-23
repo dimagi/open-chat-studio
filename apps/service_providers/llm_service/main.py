@@ -15,7 +15,9 @@ from langchain_google_genai import ChatGoogleGenerativeAI
 from langchain_openai.chat_models import AzureChatOpenAI, ChatOpenAI
 from openai import OpenAI
 from openai._base_client import SyncAPIClient
+from pydantic import BaseModel
 
+from apps.files.models import File
 from apps.service_providers.llm_service.callbacks import TokenCountingCallbackHandler
 from apps.service_providers.llm_service.token_counters import (
     AnthropicTokenCounter,
@@ -125,8 +127,30 @@ class LlmService(pydantic.BaseModel):
     def get_callback_handler(self, model: str) -> BaseCallbackHandler:
         raise NotImplementedError
 
-    def attach_built_in_tools(self, built_in_tools: list[str]) -> list:
+    def attach_built_in_tools(self, built_in_tools: list[str], config: dict[str, BaseModel] = None) -> list:
         raise NotImplementedError
+
+    def get_output_parser(self):
+        return self._default_parser
+
+    def _default_parser(self, output):
+        output = output.get("output", "")
+        if isinstance(output, list):
+            return "\n".join([o["text"] for o in output])
+        return output or ""
+
+    def get_cited_files_parser(self):
+        return self._default_cited_files_parser
+
+    def _default_cited_files_parser(self, token: str | dict) -> list[File]:
+        remote_file_ids = []
+        if isinstance(token, dict):
+            outputs = token.get("output", "")
+            if isinstance(outputs, list):
+                for output in outputs:
+                    annotation_entries = output.get("annotations", [])
+                    remote_file_ids.extend([entry["file_id"] for entry in annotation_entries if "file_id" in entry])
+        return File.objects.filter(external_id__in=remote_file_ids).all()
 
     def get_index_manager(self):
         raise NotImplementedError
@@ -184,7 +208,7 @@ class OpenAILlmService(OpenAIGenericService):
         )
         return transcript.text
 
-    def attach_built_in_tools(self, built_in_tools: list[str]) -> list:
+    def attach_built_in_tools(self, built_in_tools: list[str], config: dict[str, BaseModel] = None) -> list:
         tools = []
         for tool_name in built_in_tools:
             if tool_name == "web-search":
@@ -216,7 +240,7 @@ class AzureLlmService(LlmService):
     def get_callback_handler(self, model: str) -> BaseCallbackHandler:
         return TokenCountingCallbackHandler(OpenAITokenCounter(model))
 
-    def attach_built_in_tools(self, built_in_tools: list[str]) -> list:
+    def attach_built_in_tools(self, built_in_tools: list[str], config: dict[str, BaseModel] = None) -> list:
         return []
 
 
@@ -233,10 +257,57 @@ class AnthropicLlmService(LlmService):
         )
 
     def get_callback_handler(self, model: str) -> BaseCallbackHandler:
-        return TokenCountingCallbackHandler(AnthropicTokenCounter())
+        return TokenCountingCallbackHandler(AnthropicTokenCounter(model, self.anthropic_api_key))
 
-    def attach_built_in_tools(self, built_in_tools: list[str]) -> list:
-        return []
+    def attach_built_in_tools(self, built_in_tools: list[str], config: dict[str, BaseModel] = None) -> list:
+        config = config or {}
+        tools = []
+        for tool_name in built_in_tools:
+            if tool_name == "web-search":
+                tool = {
+                    "type": "web_search_20250305",
+                    "name": "web_search",
+                    "max_uses": 5,
+                }
+                if tool_config := config.get(tool_name):
+                    tool.update(tool_config.model_dump())
+                tools.append(tool)
+            else:
+                raise ValueError(f"Unsupported built-in tool for anthropic: '{tool_name}'")
+        return tools
+
+    def get_output_parser(self):
+        return self._parse_output_for_anthropic
+
+    def _parse_output_for_anthropic(self, output):
+        if output is None or isinstance(output, str):
+            return output or ""
+
+        if isinstance(output, dict):
+            if "output" in output:
+                return self._parse_output_for_anthropic(output["output"])
+            elif "text" in output:
+                return output.get("text", "")
+            else:
+                return str(output)
+
+        if isinstance(output, list):
+            result = []
+            for item in output:
+                if not isinstance(item, (dict | str)):
+                    continue
+
+                if isinstance(item, dict) and item.get("type") == "text":
+                    text = item.get("text", "")
+                    for citation in item.get("citations", []):
+                        if citation.get("title") and citation.get("url"):
+                            text += f" [{citation['title']}]({citation['url']})"
+                    result.append(text)
+                elif isinstance(item, str):
+                    result.append(item)
+            return "".join(result)
+
+        return str(output)
 
 
 class DeepSeekLlmService(LlmService):
@@ -254,7 +325,7 @@ class DeepSeekLlmService(LlmService):
     def get_callback_handler(self, model: str) -> BaseCallbackHandler:
         return TokenCountingCallbackHandler(OpenAITokenCounter(model))
 
-    def attach_built_in_tools(self, built_in_tools: list[str]) -> list:
+    def attach_built_in_tools(self, built_in_tools: list[str], config: dict[str, BaseModel] = None) -> list:
         return []
 
 
@@ -271,7 +342,7 @@ class GoogleLlmService(LlmService):
     def get_callback_handler(self, model: str) -> BaseCallbackHandler:
         return TokenCountingCallbackHandler(GeminiTokenCounter(model, self.google_api_key))
 
-    def attach_built_in_tools(self, built_in_tools: list[str]) -> list:
+    def attach_built_in_tools(self, built_in_tools: list[str], config: dict[str, BaseModel] = None) -> list:
         return []
         # Commenting it for now until we fix it
         # otherwise gemini would not work if code execution or web search is selected in the node

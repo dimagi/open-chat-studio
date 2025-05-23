@@ -5,6 +5,7 @@ from langgraph.graph.state import CompiledStateGraph
 from apps.pipelines.graph import PipelineGraph
 from apps.pipelines.models import Pipeline
 from apps.pipelines.nodes import nodes
+from apps.pipelines.nodes.nodes import ToolConfigModel
 
 
 def _make_edges(nodes) -> list[dict]:
@@ -64,6 +65,7 @@ def llm_response_with_prompt_node(
     prompt: str | None = None,
     history_type: str | None = None,
     history_name: str | None = None,
+    tool_config: dict[str, ToolConfigModel] | None = None,
     **kwargs,
 ):
     if prompt is None:
@@ -84,6 +86,8 @@ def llm_response_with_prompt_node(
 
     if history_name is not None:
         params["history_name"] = history_name
+
+    params["tool_config"] = tool_config or {}
 
     return {
         "id": node_id,

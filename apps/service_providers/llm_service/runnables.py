@@ -9,6 +9,7 @@ from django.db import transaction
 from google.ai.generativelanguage_v1beta.types import Tool as GenAITool
 from langchain.agents import AgentExecutor, create_tool_calling_agent
 from langchain.agents.openai_assistant.base import OpenAIAssistantFinish
+from langchain.agents.output_parsers import tools as lc_tools_parser
 from langchain_core.agents import AgentFinish
 from langchain_core.load import Serializable
 from langchain_core.messages import BaseMessage
@@ -27,10 +28,12 @@ from apps.chat.agent.openapi_tool import ToolArtifact
 from apps.experiments.models import Experiment, ExperimentSession
 from apps.files.models import File
 from apps.service_providers.llm_service.adapters import AssistantAdapter, ChatAdapter
+from apps.service_providers.llm_service.helper import custom_parse_ai_message
 from apps.service_providers.llm_service.history_managers import ExperimentHistoryManager, PipelineHistoryManager
 from apps.service_providers.llm_service.main import OpenAIAssistantRunnable
 from apps.utils.prompt import OcsPromptTemplate
 
+lc_tools_parser.parse_ai_message_to_tool_action = custom_parse_ai_message
 if TYPE_CHECKING:
     from apps.channels.datamodels import Attachment
 
@@ -248,27 +251,12 @@ class SimpleLLMChat(LLMChat):
 
 class AgentLLMChat(LLMChat):
     def _parse_output(self, output):
-        output = output.get("output", "")
-        if isinstance(output, list):
-            # Responses API responses are lists
-            return "\n".join([o["text"] for o in output])
-
-        return output
+        output_parser = self.adapter.get_llm_service().get_output_parser()
+        return output_parser(output)
 
     def _get_cited_files(self, token: str | dict) -> list[File]:
-        """
-        Return a list of files that are referenced in the token
-        """
-        remote_file_ids = []
-        if isinstance(token, dict):
-            # is the same structure used when other services cite files?
-            outputs = token.get("output", "")
-            if isinstance(outputs, list):
-                for output in outputs:
-                    annotation_entries = output.get("annotations", [])
-                    remote_file_ids.extend([entry["file_id"] for entry in annotation_entries if "file_id" in entry])
-
-        return File.objects.filter(external_id__in=remote_file_ids).all()
+        cited_files_parser = self.adapter.get_llm_service().get_cited_files_parser()
+        return cited_files_parser(token)
 
     def _build_chain(self) -> Runnable[dict[str, Any], dict]:
         tools = self.adapter.get_allowed_tools()

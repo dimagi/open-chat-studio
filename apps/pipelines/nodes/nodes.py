@@ -9,6 +9,7 @@ from typing import Annotated, Literal, Self
 
 import tiktoken
 from django.conf import settings
+from django.core import validators
 from django.core.exceptions import ValidationError
 from django.core.validators import validate_email
 from django.db.models import TextChoices
@@ -17,7 +18,7 @@ from langchain_core.messages import BaseMessage
 from langchain_core.prompts import MessagesPlaceholder, PromptTemplate
 from langchain_core.runnables import RunnableLambda, RunnablePassthrough
 from langchain_text_splitters import RecursiveCharacterTextSplitter
-from pydantic import BaseModel, BeforeValidator, Field, create_model, field_validator, model_validator
+from pydantic import BaseModel, BeforeValidator, Field, create_model, field_serializer, field_validator, model_validator
 from pydantic import ValidationError as PydanticValidationError
 from pydantic.config import ConfigDict
 from pydantic_core import PydanticCustomError
@@ -29,7 +30,7 @@ from apps.assistants.models import OpenAiAssistant
 from apps.chat.agent.tools import get_node_tools
 from apps.chat.conversation import compress_chat_history, compress_pipeline_chat_history
 from apps.documents.models import Collection
-from apps.experiments.models import ExperimentSession, ParticipantData
+from apps.experiments.models import BuiltInTools, ExperimentSession, ParticipantData
 from apps.pipelines.exceptions import PipelineNodeBuildError, PipelineNodeRunError
 from apps.pipelines.models import PipelineChatHistory, PipelineChatHistoryModes, PipelineChatHistoryTypes
 from apps.pipelines.nodes.base import (
@@ -263,6 +264,37 @@ class LLMResponse(PipelineNode, LLMResponseMixin):
         return PipelineState.from_node_output(node_name=self.name, node_id=self.node_id, output=output.content)
 
 
+class ToolConfigModel(BaseModel):
+    allowed_domains: list[str] = Field(
+        default_factory=list,
+        json_schema_extra=UiSchema(
+            widget=Widgets.none,
+        ),
+    )
+    blocked_domains: list[str] = Field(
+        default_factory=list,
+        json_schema_extra=UiSchema(
+            widget=Widgets.none,
+        ),
+    )
+
+    @field_validator("allowed_domains", "blocked_domains", mode="after")
+    @classmethod
+    def validate_domains(cls, value: list[str], info) -> list[str]:
+        values = list(map(str.strip, filter(None, value)))
+        for value in values:
+            try:
+                validators.validate_domain_name(value)
+            except ValidationError:
+                raise ValueError(f"Invalid domain name '{value}' in field '{info.field_name}'") from None
+        return values
+
+    @field_serializer("allowed_domains", "blocked_domains")
+    def serialize_lists(self, values: list[str]) -> list[str] | None:
+        # return None instead of empty list
+        return values if values else None
+
+
 class LLMResponseWithPrompt(LLMResponse, HistoryMixin, OutputMessageTagMixin):
     """Uses and LLM to respond to the input."""
 
@@ -305,11 +337,15 @@ class LLMResponseWithPrompt(LLMResponse, HistoryMixin, OutputMessageTagMixin):
         description="Custom actions to enable for the bot",
         json_schema_extra=UiSchema(widget=Widgets.multiselect, options_source=OptionsSource.custom_actions),
     )
-
-    built_in_tools: list[str] = Field(
+    built_in_tools: list[BuiltInTools] = Field(
         default_factory=list,
         description="Built in tools provided by the LLM model",
-        json_schema_extra=UiSchema(widget=Widgets.multiselect, options_source=OptionsSource.built_in_tools),
+        json_schema_extra=UiSchema(widget=Widgets.built_in_tools, options_source=OptionsSource.built_in_tools),
+    )
+    tool_config: dict[str, ToolConfigModel] | None = Field(
+        default_factory=dict,
+        description="Configuration for builtin tools",
+        json_schema_extra=UiSchema(widget=Widgets.none),
     )
 
     @model_validator(mode="after")
@@ -364,11 +400,9 @@ class LLMResponseWithPrompt(LLMResponse, HistoryMixin, OutputMessageTagMixin):
             max_token_limit=provider_model.max_token_limit,
             chat_model=chat_model,
         )
-
         tools = get_node_tools(self.django_node, session, attachment_callback=history_manager.attach_file_id)
-        if llm_service := self.get_llm_service():
-            tools.extend(llm_service.attach_built_in_tools(self.built_in_tools))
-
+        built_in_tools = self.built_in_tools
+        tools.extend(self.get_llm_service().attach_built_in_tools(built_in_tools, self.tool_config))
         if self.collection_index_id:
             collection = Collection.objects.get(id=self.collection_index_id)
             builtin_tools = {"type": "file_search", "vector_store_ids": [collection.openai_vector_store_id]}

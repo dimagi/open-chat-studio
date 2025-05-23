@@ -134,12 +134,23 @@
     "built_in_tools": {
       "description": "Built in tools provided by the LLM model",
       "items": {
+        "enum": [
+          "web-search",
+          "code-execution"
+        ],
+        "title": "BuiltInTools",
         "type": "string"
       },
       "title": "Built In Tools",
       "type": "array",
       "ui:optionsSource": "built_in_tools",
-      "ui:widget": "multiselect"
+      "ui:widget": "built_in_tools"
+    },
+    "tool_config": {
+      "description": "Configuration for builtin tools",
+      "title": "Tool Config",
+      "ui:widget": "none",
+      "type": "object"
     }
   },
   "required": [
