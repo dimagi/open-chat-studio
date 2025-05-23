@@ -102,9 +102,9 @@
 
     document.addEventListener('alpine:init', () => {
         Alpine.data('modalData', () => ({
-            maxFilesPerCollection: JSON.parse(document.getElementById("maxFilesPerCollection").textContent),
-            currentCollectionFileCount: JSON.parse(document.getElementById("currentCollectionFileCount").textContent),
-            maxFileSizeMB: JSON.parse(document.getElementById("maxFileSizeMb").textContent),
+            maxFilesPerCollection: {{ max_files_per_collection }},
+            currentCollectionFileCount: {{ collection_files.count }},
+            maxFileSizeMB: {{ max_file_size_mb }},
             maxFileSizeKB: 0,
             uploaded_files: [],
             chunk_size: 800,
