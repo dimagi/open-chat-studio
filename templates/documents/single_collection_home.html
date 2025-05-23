@@ -27,7 +27,7 @@
           </div>
           <div class="text-sm text-base-content/60 mt-1">
             <span>
-              <i class="fa fa-file-o" aria-hidden="true"></i> <span class="font-bold">{{ collection_files.count }}</span> uploaded, <span class="font-bold">{{ files_remaining }}</span> remaining
+              <i class="fa fa-file-o" aria-hidden="true"></i> <span class="font-bold">{{ collection_files_count }}</span> uploaded, <span class="font-bold">{{ files_remaining }}</span> remaining
             </span>
           </div>
         </div>
@@ -55,8 +55,8 @@
               </button>
             </form>
           {% endif %}
-          <div {% if collection_files.count == max_files_per_collection %} class="tooltip"  data-tip="File limit reached" {% endif %}>
-            <button class="join-item btn btn-sm btn-primary" {% if collection_files.count == max_files_per_collection %} disabled {% endif %} onclick="chooseFilesModal.showModal()">
+          <div {% if collection_files_count == max_files_per_collection %} class="tooltip"  data-tip="File limit reached" {% endif %}>
+            <button class="join-item btn btn-sm btn-primary" {% if collection_files_count == max_files_per_collection %} disabled {% endif %} onclick="chooseFilesModal.showModal()">
               <i class="fa-solid fa-plus"></i> Add Files
             </button>
           </div>

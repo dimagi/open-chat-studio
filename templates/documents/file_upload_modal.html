@@ -92,9 +92,6 @@
     </div>
 </dialog>
 
-{{ max_files_per_collection|json_script:"maxFilesPerCollection" }}
-{{ collection_files.count|json_script:"currentCollectionFileCount" }}
-{{ max_file_size_mb|json_script:"maxFileSizeMb" }}
 <script>
     function convertMbToBytesBase10(valueMb) {
         return 1000000 * valueMb; // Convert MB to bytes, using base 10
@@ -103,7 +100,7 @@
     document.addEventListener('alpine:init', () => {
         Alpine.data('modalData', () => ({
             maxFilesPerCollection: {{ max_files_per_collection }},
-            currentCollectionFileCount: {{ collection_files.count }},
+            currentCollectionFileCount: {{ collection_files_count }},
             maxFileSizeMB: {{ max_file_size_mb }},
             maxFileSizeKB: 0,
             uploaded_files: [],
