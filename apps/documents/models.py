@@ -1,7 +1,9 @@
+import pydantic
 from django.db import models, transaction
 from django.urls import reverse
 from django.utils.text import slugify
 from django.utils.translation import gettext_lazy as _
+from django_pydantic_field import SchemaField
 from field_audit import audit_fields
 from field_audit.models import AuditingManager
 
@@ -9,6 +11,16 @@ from apps.experiments.versioning import VersionDetails, VersionField, VersionsMi
 from apps.teams.models import BaseTeamModel
 from apps.utils.conversions import bytes_to_megabytes
 from apps.utils.deletion import get_related_pipeline_experiments_queryset, get_related_pipelines_queryset
+
+
+class ChunkingStrategy(pydantic.BaseModel):
+    chunk_size: int = pydantic.Field(description="Size of each chunk in tokens")
+    chunk_overlap: int = pydantic.Field(description="Number of overlapping tokens between chunks")
+
+
+class CollectionFileMetadata(pydantic.BaseModel):
+    model_config = pydantic.ConfigDict(arbitrary_types_allowed=True)
+    chunking_strategy: ChunkingStrategy = pydantic.Field(description="Chunking strategy used for the file")
 
 
 class CollectionObjectManager(VersionsObjectManagerMixin, AuditingManager):
@@ -27,7 +39,7 @@ class CollectionFile(models.Model):
     file = models.ForeignKey("files.File", on_delete=models.CASCADE)
     collection = models.ForeignKey("documents.Collection", on_delete=models.CASCADE)
     status = models.CharField(max_length=64, choices=FileStatus.choices, blank=True)
-    metadata = models.JSONField(default=dict)
+    metadata = SchemaField(schema=CollectionFileMetadata, null=True)
 
     def __str__(self) -> str:
         return f"{self.file.name} in {self.collection.name}"
@@ -38,7 +50,7 @@ class CollectionFile(models.Model):
 
     @property
     def chunking_strategy(self):
-        return self.metadata.get("chunking_strategy", {})
+        return self.metadata.chunking_strategy
 
     @property
     def status_enum(self):

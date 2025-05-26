@@ -7,7 +7,7 @@ from celery.app import shared_task
 from taskbadger.celery import Task as TaskbadgerTask
 
 from apps.assistants.sync import create_files_remote
-from apps.documents.models import Collection, CollectionFile, FileStatus
+from apps.documents.models import ChunkingStrategy, Collection, CollectionFile, FileStatus
 from apps.service_providers.models import LlmProvider
 
 logger = logging.getLogger("ocs.documents.tasks.upload_files_to_openai")
@@ -45,11 +45,15 @@ def index_collection_files(collection_id: int, all_files: bool) -> list[str]:
     # Link files to the new vector store
     # First, sort by chunking strategy
     strategy_file_map = defaultdict(list)
-    default_chunking_strategy = {"chunk_size": 800, "chunk_overlap": 400}
+    default_chunking_strategy = ChunkingStrategy(chunk_size=800, chunk_overlap=400)
 
     for collection_file in queryset.select_related("file").iterator(100):
-        strategy = collection_file.metadata.get("chunking_strategy", default_chunking_strategy)
-        strategy_file_map[(strategy["chunk_size"], strategy["chunk_overlap"])].append(collection_file)
+        if metadata := collection_file.metadata:
+            strategy = metadata.chunking_strategy
+        else:
+            strategy = default_chunking_strategy
+
+        strategy_file_map[(strategy.chunk_size, strategy.chunk_overlap)].append(collection_file)
 
         if collection_file.file.external_id:
             previous_remote_file_ids.append(collection_file.file.external_id)
