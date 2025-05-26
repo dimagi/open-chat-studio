@@ -626,7 +626,7 @@ class RouterNode(RouterMixin, PipelineRouterNode, HistoryMixin):
         except OpenAIRefusalError:
             keyword = default_keyword
         if not keyword:
-            keyword = self.keywords[self.default_keyword_index]
+            keyword = default_keyword
 
         if session:
             self._save_history(session, self.node_id, node_input, keyword)
