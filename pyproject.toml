@@ -72,6 +72,7 @@ dependencies = [
     "urllib3>=2.3.0",
     "pycryptodome",
     "python-docx",
+    "django-pydantic-field"
 ]
 
 [project.urls]

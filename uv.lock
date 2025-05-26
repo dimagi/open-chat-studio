@@ -786,6 +786,20 @@ wheels = [
 ]
 
 [[package]]
+name = "django-pydantic-field"
+version = "0.3.12"
+source = { registry = "https://pypi.org/simple" }
+dependencies = [
+    { name = "django" },
+    { name = "pydantic" },
+    { name = "typing-extensions" },
+]
+sdist = { url = "https://files.pythonhosted.org/packages/46/d4/8be5efc5dc2784a5c662744221a8e8ffc1df6d5866237b5e30c8f92e7d0c/django_pydantic_field-0.3.12.tar.gz", hash = "sha256:510af19d2813c32a2529234a70eb6b6bd8e75fcc4f53baee520f797cba3420d0", size = 38316, upload-time = "2025-01-14T19:48:06.276Z" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/82/92/bd13828e0d50dbbec496618471dd07727a645b8464f2431d2cbf2a126952/django_pydantic_field-0.3.12-py3-none-any.whl", hash = "sha256:57aeb055583e7ae82732cfaa36afd01166c7000a67502a9922dca1ce9b3e76a5", size = 42401, upload-time = "2025-01-14T19:48:03.582Z" },
+]
+
+[[package]]
 name = "django-redis"
 version = "5.4.0"
 source = { registry = "https://pypi.org/simple" }
@@ -2156,6 +2170,7 @@ dependencies = [
     { name = "django-environ" },
     { name = "django-field-audit" },
     { name = "django-health-check" },
+    { name = "django-pydantic-field" },
     { name = "django-redis" },
     { name = "django-storages", extra = ["s3"] },
     { name = "django-tables2" },
@@ -2250,6 +2265,7 @@ requires-dist = [
     { name = "django-environ" },
     { name = "django-field-audit", specifier = ">=1.2.7" },
     { name = "django-health-check" },
+    { name = "django-pydantic-field" },
     { name = "django-redis" },
     { name = "django-storages", extras = ["s3"] },
     { name = "django-tables2" },
