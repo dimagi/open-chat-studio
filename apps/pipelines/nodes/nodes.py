@@ -17,6 +17,7 @@ from jinja2.sandbox import SandboxedEnvironment
 from langchain_core.messages import BaseMessage
 from langchain_core.prompts import MessagesPlaceholder, PromptTemplate
 from langchain_core.runnables import RunnableLambda, RunnablePassthrough
+from langchain_openai.chat_models.base import OpenAIRefusalError
 from langchain_text_splitters import RecursiveCharacterTextSplitter
 from pydantic import BaseModel, BeforeValidator, Field, create_model, field_serializer, field_validator, model_validator
 from pydantic import ValidationError as PydanticValidationError
@@ -622,6 +623,8 @@ class RouterNode(RouterMixin, PipelineRouterNode, HistoryMixin):
             keyword = getattr(result, "route", None)
         except PydanticValidationError:
             keyword = None
+        except OpenAIRefusalError:
+            keyword = default_keyword
         if not keyword:
             keyword = self.keywords[self.default_keyword_index]
 
