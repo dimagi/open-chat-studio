@@ -6,6 +6,7 @@ import pytest
 from django.core import mail
 from django.test import override_settings
 from langchain_core.messages import AIMessage, ToolCall
+from langchain_openai.chat_models.base import OpenAIRefusalError
 
 from apps.annotations.models import TagCategories
 from apps.channels.datamodels import Attachment
@@ -41,7 +42,10 @@ from apps.utils.factories.experiment import (
 from apps.utils.factories.pipelines import PipelineFactory
 from apps.utils.factories.service_provider_factories import LlmProviderFactory, LlmProviderModelFactory
 from apps.utils.langchain import (
+    FakeLlmEcho,
+    FakeLlmService,
     FakeLlmSimpleTokenCount,
+    FakeTokenCounter,
     build_fake_llm_echo_service,
     build_fake_llm_service,
 )
@@ -1314,3 +1318,34 @@ def test_get_node_path():
     assert state.get_node_path("branch_b") == ["start", "router", "branch_b"]
     assert state.get_node_path("end") == ["start", "router", "branch_a", "end"]
     assert state.get_node_path("nonexistent_node") == ["nonexistent_node"]
+
+
+class RefusingFakeLlmEcho(FakeLlmEcho):
+    def invoke(self, *args, **kwargs):
+        raise OpenAIRefusalError("Refused by OpenAI")
+
+
+@pytest.mark.django_db()
+@mock.patch("apps.service_providers.models.LlmProvider.get_llm_service")
+def test_router_node_openai_refusal_uses_default_keyword(get_llm_service, provider, provider_model, experiment_session):
+    refusing_llm = RefusingFakeLlmEcho(include_system_message=True)
+    service = FakeLlmService(llm=refusing_llm, token_counter=FakeTokenCounter(token_counts=[0]))
+    get_llm_service.return_value = service
+    node = RouterNode(
+        node_id="test",
+        django_node=None,
+        name="test router",
+        prompt="PD: {participant_data}",
+        keywords=["DEFAULT", "A", "B"],
+        llm_provider_id=provider.id,
+        llm_provider_model_id=provider_model.id,
+    )
+    node.default_keyword_index = 0
+    state = PipelineState(
+        outputs={"123": {"message": "a"}},
+        messages=["a"],
+        experiment_session=experiment_session,
+    )
+
+    keyword = node._process_conditional(state)
+    assert keyword == "DEFAULT"
