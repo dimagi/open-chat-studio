@@ -11,6 +11,17 @@ original_parse = parse_ai_message_to_tool_action
 
 
 def custom_parse_ai_message(message) -> list[AgentAction] | AgentFinish:
+    """Parse an AI message potentially containing tool_calls.
+    This function is adapted from the `parse_ai_message_to_tool_action`
+    function in the langchain library.
+    1. Added a specific condition to skip malformed built in tool calls that
+       originate from Anthropic models (where `call.get("type") == "tool_call"`,
+       `call.get("name") == ""`, and `call.get("id") is None`).
+    2. Ensure that tool_call_id is present in every tool_call as tool_call_id is not returned by anthropic
+    built_in_tools
+    3. Separate processing of custom tools and built in tools as custom tools are present in tool_calls
+    whereas built_in_tools are present in additional kwargs
+    """
     if not isinstance(message, AIMessage):
         raise TypeError(f"Expected AIMessage, got {type(message)}")
     tool_calls = []
@@ -22,7 +33,7 @@ def custom_parse_ai_message(message) -> list[AgentAction] | AgentFinish:
         if isinstance(call, dict):
             name = call.get("name") or call.get("function", {}).get("name", "")
             args = call.get("args") or call.get("function", {}).get("arguments", {})
-            call_id = call.get("id") or f"tool_{uuid.uuid4()}"
+            call_id = call.get("id") or f"tool_{uuid.uuid4()}"  # Pass the generated or existing tool_call_id.
 
             if isinstance(args, str):
                 try:
@@ -75,7 +86,7 @@ def custom_parse_ai_message(message) -> list[AgentAction] | AgentFinish:
                 tool_input=tool_input,
                 log=log,
                 message_log=[message],
-                tool_call_id=call["id"],
+                tool_call_id=call["id"],  # Pass the generated or existing tool_call_id.
             )
         )
     return actions
