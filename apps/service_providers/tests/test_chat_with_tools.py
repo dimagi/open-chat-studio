@@ -2,12 +2,13 @@ from typing import Any
 from unittest.mock import Mock, patch
 
 import pytest
-from langchain_core.messages import AIMessageChunk
+from langchain_core.messages import AIMessage, AIMessageChunk
 from langchain_core.messages.tool import ToolMessage, tool_call_chunk
 from langchain_core.tools import BaseTool, Tool
 
 from apps.chat.agent.openapi_tool import ToolArtifact
 from apps.service_providers.llm_service.adapters import ChatAdapter
+from apps.service_providers.llm_service.helper import custom_parse_ai_message
 from apps.service_providers.llm_service.history_managers import ExperimentHistoryManager
 from apps.service_providers.llm_service.runnables import AgentLLMChat
 from apps.service_providers.tracing import TracingService
@@ -74,3 +75,27 @@ def get_runnable(session, tool):
         adapter = ChatAdapter.for_experiment(session.experiment, session)
         runnable = AgentLLMChat(adapter=adapter, history_manager=history_manager)
     return runnable
+
+
+@pytest.mark.django_db()
+def test_builtin_tool_response(fake_llm_service):
+    message = AIMessage(
+        content="Response after using built-in tool",
+        additional_kwargs={
+            "tool_calls": [
+                {
+                    "id": "builtin_call1",
+                    "function": {
+                        "name": "builtin_tool",
+                        "arguments": '{"param1": "value1"}',
+                    },
+                }
+            ]
+        },
+    )
+    result = custom_parse_ai_message(message)
+    action = result[0]
+    assert action.tool == "builtin_tool"
+    assert action.tool_input == {"param1": "value1"}
+    assert action.tool_call_id == "builtin_call1"
+    assert "Invoking: `builtin_tool`" in action.log
