@@ -17,7 +17,7 @@
   <div class="app-card">
     <div class="flex">
       <div class="flex-1 flex flex-row gap-2">
-        <h1 class="pg-title">{{ experiment.name }}</h1>
+        <h1 class="pg-title" id="chatbot-name">{{ experiment.name }}</h1>
         {% if experiment.is_archived %}
           <div class="badge badge-warning badge-sm">
             Archived
@@ -91,7 +91,7 @@
         </div>
       </div>
     </div>
-    <h2 class="flex-1 pg-subtitle">{{ experiment.description }}</h2>
+    <h2 id="chatbot-description" class="flex-1 pg-subtitle">{{ experiment.description }}</h2>
     {% if experiment.is_editable %}
       <div class="my-4">
         <h3 class="font-bold text-lg inline mr-4">Channels:</h3>
@@ -214,6 +214,7 @@
       {% flag "events" %}
         <input type="radio" name="tab_group" role="tab" class="tab" aria-label="Events" id="tab-events" />
       {% endflag %}
+      <input type="radio" name="tab_group" role="tab" class="tab" aria-label="Settings" id="tab-settings" />
     </div>
 
     {% if perms.chat.view_chat %}
@@ -262,6 +263,12 @@
         </div>
       </div>
     {% endflag %}
+
+    <div role="tabpanel" class="tab-content" id="content-settings">
+      <div class="app-card">
+        {% include "chatbots/settings_content.html" %}
+      </div>
+    </div>
     <script>
       function showTabContent(tabId) {
         const tabContents = document.querySelectorAll('.tab-content');

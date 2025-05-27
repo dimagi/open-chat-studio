@@ -16,7 +16,7 @@
       <div id="profile-picture" class="pg-column-one-quarter">
         <div>
           <img class="avatar" src="{{ membership.user.avatar_url }}">
-          <div class="pg-text-centered">{{ membership.user.get_display_name }}</div>
+          <div class="text-center">{{ membership.user.get_display_name }}</div>
         </div>
       </div>
       <div class="pg-column">
@@ -33,7 +33,7 @@
           {% render_form_fields membership_form %}
           {% if not editing_self %}
             <div class="mt-2">
-              <input type="submit" class="pg-button-secondary" value="{% translate 'Update Role' %}">
+              <input type="submit" class="btn btn-outline" value="{% translate 'Update Role' %}">
             </div>
           {% else %}
             <p class="pg-help">{% translate "You are not allowed to modify your own role." %}</p>

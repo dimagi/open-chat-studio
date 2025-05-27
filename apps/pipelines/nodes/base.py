@@ -295,6 +295,11 @@ class PipelineNode(BasePipelineNode, ABC):
         state = self._prepare_state(self.node_id, incoming_edges, state)
         output = self._process(input=state["node_input"], state=state)
         output["path"] = [(state["node_source"], self.node_id, outgoing_edges)]
+        get_output_tags_fn = getattr(self, "get_output_tags", None)
+        if callable(get_output_tags_fn):
+            output["output_message_tags"] = get_output_tags_fn()
+        else:
+            output["output_message_tags"] = []
         return output
 
     def _process(self, input: str, state: PipelineState) -> PipelineState:
@@ -354,6 +359,7 @@ class Widgets(StrEnum):
     history = "history"
     keywords = "keywords"
     history_mode = "history_mode"
+    built_in_tools = "built_in_tools"
 
 
 class OptionsSource(StrEnum):
@@ -364,6 +370,7 @@ class OptionsSource(StrEnum):
     collection = "collection"
     built_in_tools = "built_in_tools"
     collection_index = "collection_index"
+    built_in_tools_config = "built_in_tools_config"
 
 
 class UiSchema(BaseModel):

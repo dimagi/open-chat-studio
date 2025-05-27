@@ -53,14 +53,13 @@ def test_save_trace_metadata(pipeline: Pipeline, session: ExperimentSession):
 
 @pytest.mark.django_db()
 def test_save_metadata_and_tagging(pipeline: Pipeline, session: ExperimentSession):
-    output_message_tags = ["test_tag_1"]
+    output_message_tags = [("test_tag_1", TagCategories.BOT_RESPONSE)]
     pipeline_state = PipelineState(messages=["Hi"], output_message_tags=output_message_tags)
 
-    with mock.patch.object(ChatMessage, "add_system_tag") as mock_add_system_tag:
+    with mock.patch.object(ChatMessage, "create_and_add_tag") as mock_add_system_tag:
         pipeline.invoke(pipeline_state, session, session.experiment, TracingService.empty())
-        for tag in output_message_tags:
-            mock_add_system_tag.assert_any_call(tag, TagCategories.BOT_RESPONSE)
+        for tag_value, category in output_message_tags:
+            mock_add_system_tag.assert_any_call(tag_value, category or "")
 
-        assert (
-            mock_add_system_tag.call_count == len(output_message_tags) + 1
-        )  # add version tag also calls add system tag
+        # add version tag also calls add system tag
+        assert mock_add_system_tag.call_count == len(output_message_tags) + 1

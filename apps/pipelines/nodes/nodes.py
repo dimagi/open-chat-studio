@@ -4,10 +4,12 @@ import json
 import logging
 import random
 import time
+import unicodedata
 from typing import Annotated, Literal, Self
 
 import tiktoken
 from django.conf import settings
+from django.core import validators
 from django.core.exceptions import ValidationError
 from django.core.validators import validate_email
 from django.db.models import TextChoices
@@ -15,19 +17,21 @@ from jinja2.sandbox import SandboxedEnvironment
 from langchain_core.messages import BaseMessage
 from langchain_core.prompts import MessagesPlaceholder, PromptTemplate
 from langchain_core.runnables import RunnableLambda, RunnablePassthrough
+from langchain_openai.chat_models.base import OpenAIRefusalError
 from langchain_text_splitters import RecursiveCharacterTextSplitter
-from pydantic import BaseModel, BeforeValidator, Field, create_model, field_validator, model_validator
+from pydantic import BaseModel, BeforeValidator, Field, create_model, field_serializer, field_validator, model_validator
 from pydantic import ValidationError as PydanticValidationError
 from pydantic.config import ConfigDict
 from pydantic_core import PydanticCustomError
 from pydantic_core.core_schema import FieldValidationInfo
 from RestrictedPython import compile_restricted, safe_builtins, safe_globals
 
+from apps.annotations.models import TagCategories
 from apps.assistants.models import OpenAiAssistant
 from apps.chat.agent.tools import get_node_tools
 from apps.chat.conversation import compress_chat_history, compress_pipeline_chat_history
 from apps.documents.models import Collection
-from apps.experiments.models import ExperimentSession, ParticipantData
+from apps.experiments.models import BuiltInTools, ExperimentSession, ParticipantData
 from apps.pipelines.exceptions import PipelineNodeBuildError, PipelineNodeRunError
 from apps.pipelines.models import PipelineChatHistory, PipelineChatHistoryModes, PipelineChatHistoryTypes
 from apps.pipelines.nodes.base import (
@@ -44,6 +48,7 @@ from apps.pipelines.tasks import send_email_from_pipeline
 from apps.service_providers.exceptions import ServiceProviderConfigError
 from apps.service_providers.llm_service.adapters import AssistantAdapter, ChatAdapter
 from apps.service_providers.llm_service.history_managers import PipelineHistoryManager
+from apps.service_providers.llm_service.main import OpenAIBuiltinTool
 from apps.service_providers.llm_service.prompt_context import PromptTemplateContext
 from apps.service_providers.llm_service.runnables import (
     AgentAssistantChat,
@@ -55,10 +60,29 @@ from apps.service_providers.llm_service.runnables import (
 from apps.service_providers.models import LlmProviderModel
 from apps.utils.prompt import OcsPromptTemplate, PromptVars, validate_prompt_variables
 
-OptionalInt = Annotated[int | None, BeforeValidator(lambda x: None if x == "" else x)]
+OptionalInt = Annotated[int | None, BeforeValidator(lambda x: None if isinstance(x, str) and len(x) == 0 else x)]
 
 
-class RenderTemplate(PipelineNode):
+class OutputMessageTagMixin(BaseModel):
+    tag: str = Field(
+        default="",
+        title="Message Tag",
+        description="The tag that the output message should be tagged with",
+    )
+
+    @field_validator("tag", mode="after")
+    @classmethod
+    def normalize_tag(cls, value: str) -> str:
+        return unicodedata.normalize("NFC", value)
+
+    def get_output_tags(self) -> list[tuple[str, None]]:
+        tags: list[tuple[str, None]] = []
+        if self.tag:
+            tags.append((self.tag, None))
+        return tags
+
+
+class RenderTemplate(PipelineNode, OutputMessageTagMixin):
     """Renders a Jinja template"""
 
     model_config = ConfigDict(
@@ -242,7 +266,38 @@ class LLMResponse(PipelineNode, LLMResponseMixin):
         return PipelineState.from_node_output(node_name=self.name, node_id=self.node_id, output=output.content)
 
 
-class LLMResponseWithPrompt(LLMResponse, HistoryMixin):
+class ToolConfigModel(BaseModel):
+    allowed_domains: list[str] = Field(
+        default_factory=list,
+        json_schema_extra=UiSchema(
+            widget=Widgets.none,
+        ),
+    )
+    blocked_domains: list[str] = Field(
+        default_factory=list,
+        json_schema_extra=UiSchema(
+            widget=Widgets.none,
+        ),
+    )
+
+    @field_validator("allowed_domains", "blocked_domains", mode="after")
+    @classmethod
+    def validate_domains(cls, value: list[str], info) -> list[str]:
+        values = list(map(str.strip, filter(None, value)))
+        for value in values:
+            try:
+                validators.validate_domain_name(value)
+            except ValidationError:
+                raise ValueError(f"Invalid domain name '{value}' in field '{info.field_name}'") from None
+        return values
+
+    @field_serializer("allowed_domains", "blocked_domains")
+    def serialize_lists(self, values: list[str]) -> list[str] | None:
+        # return None instead of empty list
+        return values if values else None
+
+
+class LLMResponseWithPrompt(LLMResponse, HistoryMixin, OutputMessageTagMixin):
     """Uses and LLM to respond to the input."""
 
     model_config = ConfigDict(
@@ -264,14 +319,14 @@ class LLMResponseWithPrompt(LLMResponse, HistoryMixin):
         None,
         title="Media",
         json_schema_extra=UiSchema(
-            widget=Widgets.select, options_source=OptionsSource.collection, flag_required="document_management"
+            widget=Widgets.select, options_source=OptionsSource.collection, flag_required="pipelines-v2"
         ),
     )
     collection_index_id: OptionalInt = Field(
         None,
         title="Collection Index",
         json_schema_extra=UiSchema(
-            widget=Widgets.select, options_source=OptionsSource.collection_index, flag_required="document_management"
+            widget=Widgets.select, options_source=OptionsSource.collection_index, flag_required="pipelines-v2"
         ),
     )
     tools: list[str] = Field(
@@ -284,11 +339,15 @@ class LLMResponseWithPrompt(LLMResponse, HistoryMixin):
         description="Custom actions to enable for the bot",
         json_schema_extra=UiSchema(widget=Widgets.multiselect, options_source=OptionsSource.custom_actions),
     )
-
-    built_in_tools: list[str] = Field(
+    built_in_tools: list[BuiltInTools] = Field(
         default_factory=list,
         description="Built in tools provided by the LLM model",
-        json_schema_extra=UiSchema(widget=Widgets.multiselect, options_source=OptionsSource.built_in_tools),
+        json_schema_extra=UiSchema(widget=Widgets.built_in_tools, options_source=OptionsSource.built_in_tools),
+    )
+    tool_config: dict[str, ToolConfigModel] | None = Field(
+        default_factory=dict,
+        description="Configuration for builtin tools",
+        json_schema_extra=UiSchema(widget=Widgets.none),
     )
 
     @model_validator(mode="after")
@@ -343,14 +402,12 @@ class LLMResponseWithPrompt(LLMResponse, HistoryMixin):
             max_token_limit=provider_model.max_token_limit,
             chat_model=chat_model,
         )
-
         tools = get_node_tools(self.django_node, session, attachment_callback=history_manager.attach_file_id)
-        if llm_service := self.get_llm_service():
-            tools.extend(llm_service.attach_built_in_tools(self.built_in_tools))
-
+        built_in_tools = self.built_in_tools
+        tools.extend(self.get_llm_service().attach_built_in_tools(built_in_tools, self.tool_config))
         if self.collection_index_id:
             collection = Collection.objects.get(id=self.collection_index_id)
-            builtin_tools = {"type": "file_search", "vector_store_ids": [collection.openai_vector_store_id]}
+            builtin_tools = OpenAIBuiltinTool(type="file_search", vector_store_ids=[collection.openai_vector_store_id])
             tools.append(builtin_tools)
 
         chat_adapter = ChatAdapter.for_pipeline(
@@ -383,7 +440,7 @@ class LLMResponseWithPrompt(LLMResponse, HistoryMixin):
         )
 
 
-class SendEmail(PipelineNode):
+class SendEmail(PipelineNode, OutputMessageTagMixin):
     """Send the input to the node to the list of addresses provided"""
 
     model_config = ConfigDict(
@@ -494,9 +551,9 @@ class RouterMixin(BaseModel):
         """
         return {f"output_{output_num}": keyword for output_num, keyword in enumerate(self.keywords)}
 
-    def get_output_tags(self, selected_route) -> list[str]:
+    def get_output_tags(self, selected_route) -> list[tuple[str, str]]:
         if self.tag_output_message:
-            return [f"{self.name}:{selected_route}"]
+            return [(f"{self.name}:{selected_route}", TagCategories.BOT_RESPONSE)]
         return []
 
 
@@ -566,8 +623,10 @@ class RouterNode(RouterMixin, PipelineRouterNode, HistoryMixin):
             keyword = getattr(result, "route", None)
         except PydanticValidationError:
             keyword = None
+        except OpenAIRefusalError:
+            keyword = default_keyword
         if not keyword:
-            keyword = self.keywords[self.default_keyword_index]
+            keyword = default_keyword
 
         if session:
             self._save_history(session, self.node_id, node_input, keyword)
@@ -758,7 +817,9 @@ class StructuredDataSchemaValidatorMixin:
         return value
 
 
-class ExtractStructuredData(ExtractStructuredDataNodeMixin, LLMResponse, StructuredDataSchemaValidatorMixin):
+class ExtractStructuredData(
+    ExtractStructuredDataNodeMixin, LLMResponse, StructuredDataSchemaValidatorMixin, OutputMessageTagMixin
+):
     """Extract structured data from the input"""
 
     model_config = ConfigDict(
@@ -780,7 +841,9 @@ class ExtractStructuredData(ExtractStructuredDataNodeMixin, LLMResponse, Structu
         return False
 
 
-class ExtractParticipantData(ExtractStructuredDataNodeMixin, LLMResponse, StructuredDataSchemaValidatorMixin):
+class ExtractParticipantData(
+    ExtractStructuredDataNodeMixin, LLMResponse, StructuredDataSchemaValidatorMixin, OutputMessageTagMixin
+):
     """Extract structured data and saves it as participant data"""
 
     model_config = ConfigDict(
@@ -853,7 +916,7 @@ class ExtractParticipantData(ExtractStructuredDataNodeMixin, LLMResponse, Struct
             )
 
 
-class AssistantNode(PipelineNode):
+class AssistantNode(PipelineNode, OutputMessageTagMixin):
     """Calls an OpenAI assistant"""
 
     model_config = ConfigDict(
@@ -942,7 +1005,7 @@ def main(input: str, **kwargs) -> str:
 """
 
 
-class CodeNode(PipelineNode):
+class CodeNode(PipelineNode, OutputMessageTagMixin):
     """Runs python"""
 
     model_config = ConfigDict(

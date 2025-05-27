@@ -115,7 +115,7 @@ class DeletePipeline(LoginAndTeamRequiredMixin, View, PermissionRequiredMixin):
             ]
 
             response = render_to_string(
-                "assistants/partials/referenced_objects.html",
+                "generic/referenced_objects.html",
                 context={
                     "object_name": "pipeline",
                     "experiments": experiments,
@@ -198,7 +198,14 @@ def _pipeline_node_parameter_values(team, llm_providers, llm_provider_models):
         ),
         OptionsSource.agent_tools: [_option(value, label) for value, label in AgentTools.user_tool_choices()],
         OptionsSource.custom_actions: [_option(val, display_val) for val, display_val in custom_action_operations],
-        OptionsSource.built_in_tools: [_option(value, label) for value, label in BuiltInTools.choices],
+        OptionsSource.built_in_tools: {
+            provider["type"].lower(): [
+                _option(value, label) for value, label in BuiltInTools.choices_for_provider(provider["type"].lower())
+            ]
+            for provider in llm_providers
+            if provider.get("type")
+        },
+        OptionsSource.built_in_tools_config: BuiltInTools.get_tool_configs_by_provider(),
     }
 
 

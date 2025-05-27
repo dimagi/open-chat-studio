@@ -13,15 +13,22 @@ from apps.files.models import File
 from apps.teams.models import Team
 
 
+class ExperimentVersionSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = Experiment
+        fields = ["name", "version_number", "is_default_version", "version_description"]
+
+
 class ExperimentSerializer(serializers.ModelSerializer):
     url = serializers.HyperlinkedIdentityField(
         view_name="api:experiment-detail", lookup_field="public_id", lookup_url_kwarg="id", label="API URL"
     )
     id = serializers.UUIDField(source="public_id")
+    versions = ExperimentVersionSerializer(many=True)
 
     class Meta:
         model = Experiment
-        fields = ["id", "name", "url", "version_number"]
+        fields = ["id", "name", "url", "version_number", "versions"]
 
 
 class ParticipantSerializer(serializers.ModelSerializer):
@@ -57,10 +64,7 @@ class MessageSerializer(TaggitSerializer, serializers.ModelSerializer):
         help_text=textwrap.dedent(
             """
             Metadata for the message. Currently documented keys:
-              * `is_summary`: boolean, whether this message is a summary of the conversation to date. When this
-                is true, the message will not be displayed in the chat interface but it will be used when
-                generating the chat history for the LLM. The history will include all messages up to the last
-                summary message (starting from the most recent message).
+              * `compression_marker`: Slug that marks this message as a checkpoint for session history compression
             """
         ),
     )

@@ -11,7 +11,7 @@ def test_schema_filters():
 
 
 def test_schema_is_up_to_date_and_valid(pytestconfig):
-    """If this test fails run `./manage.py spectacular --file api-schema.yml --validate` to update the schema."""
+    """If this test fails run `inv schema` to update the schema."""
     path = f"{pytestconfig.rootdir}/tmp_schema.yml"
     call_command("spectacular", validate=True, file=path)
     with open(path) as f:

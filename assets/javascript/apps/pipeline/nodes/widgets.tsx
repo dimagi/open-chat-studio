@@ -38,6 +38,8 @@ export function getWidget(name: string, params: PropertySchema) {
       return KeywordsWidget
     case "node_name":
       return NodeNameWidget
+    case "built_in_tools":
+        return BuiltInToolsWidget
     default:
       if (params.enum) {
         return SelectWidget
@@ -989,5 +991,95 @@ export function InputField({label, help_text, inputError, children}: React.Props
         <small className="text-muted">{help_text}</small>
       </div>
     </>
+  );
+}
+
+function BuiltInToolsWidget(props: WidgetParams) {
+  const llmProviderId = concatenate(props.nodeParams["llm_provider_model_id"]);
+  const { parameterValues } = getCachedData();
+  const models = parameterValues.LlmProviderModelId as LlmProviderModel[];
+  const model = models.find((m) => String(m.value) === String(llmProviderId));
+  const providerKey = model?.type?.toLowerCase() || "";
+  const providerToolMap = parameterValues.built_in_tools as unknown as Record<string, TypedOption[]>
+  const options = providerToolMap[providerKey] || [];
+
+  if (options.length === 0) return <></>;
+
+  const toolConfigsMap = parameterValues.built_in_tools_config as unknown as Record<string, Record<string, PropertySchema[]>>;
+  const providerToolConfigs = toolConfigsMap[providerKey] || {};
+
+  const toolConfig = props.nodeParams.tool_config || {};
+  const [selectedValues, setSelectedValue] = useState(Array.isArray(props.paramValue) ? [...props.paramValue] : []);
+  const setNode = usePipelineStore((state) => state.setNode);
+
+  function getNewNodeData(old: Node, updatedList: string[]) {
+    return produce(old, (next) => {
+      next.data.params[props.name] = updatedList;
+    });
+  }
+
+  function onUpdate(event: ChangeEvent<HTMLInputElement>) {
+    const updatedList = event.target.checked ? [...selectedValues, event.target.name] : selectedValues.filter((tool) => tool !== event.target.name);
+    setSelectedValue(updatedList);
+    setNode(props.nodeId, (old) => getNewNodeData(old, updatedList));
+  }
+
+  function onConfigUpdate(toolName: string, event: React.ChangeEvent<HTMLTextAreaElement | HTMLSelectElement | HTMLInputElement>) {
+    const {name, value} = event.target;
+    setNode(props.nodeId, (old) => produce(old, (next) => {
+      if (!next.data.params.tool_config) {
+        next.data.params.tool_config = {};
+      }
+      if (!next.data.params.tool_config[toolName]) {
+        next.data.params.tool_config[toolName] = {};
+      }
+      next.data.params.tool_config[toolName][name] = value.split(" ").map(value => value.trim());
+    }))
+  }
+  return (
+    <InputField label={props.label} help_text={props.helpText} inputError={props.inputError}>
+      {options.map((option:  { value: string; label: string }) => (
+        <div className="flex items-center mb-1" key={option.value}>
+          <input
+            className="checkbox"
+            name={option.value}
+            onChange={onUpdate}
+            checked={selectedValues.includes(option.value)}
+            id={option.value}
+            type="checkbox"
+          />
+          <span className="ml-2">{option.label}</span>
+        </div>
+      ))}
+      {/* Configs for selected tools */}
+      {selectedValues.map((toolKey) => {
+        const widgets = providerToolConfigs[toolKey] || [];
+        if (!widgets || widgets.length === 0) return null;
+
+        return (
+          <div className="mt-3" key={`${toolKey}-config`}>
+            <div className="font-medium mb-1 text-sm text-base-content/70">
+              {toolKey} configuration
+            </div>
+            {widgets.map((widget: PropertySchema) => {
+              const value = toolConfig[toolKey]?.[widget.name] ?? [];
+              const rawError = props.getNodeFieldError(props.nodeId, "tool_config");
+              const error = rawError?.includes(`field '${widget.name}'`) ? rawError : "";
+              const widgetProps: WidgetParams = {
+                ...props,
+                name: widget.name,
+                label: widget.label,
+                helpText: widget.helpText ?? "",
+                paramValue: Array.isArray(value) ? value.join(" ") : value,
+                updateParamValue: (event) => onConfigUpdate(toolKey, event),
+                inputError: error,
+              };
+              const WidgetComponent = getWidget(widget.type, widget) as React.ComponentType<WidgetParams>;
+              return <WidgetComponent key={widget.name} {...widgetProps} />;
+            })}
+    </div>
+    );
+    })}
+    </InputField>
   );
 }

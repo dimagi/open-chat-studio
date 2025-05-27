@@ -1,6 +1,5 @@
 import logging
 
-import openai
 from django.conf import settings
 from django.contrib import messages
 from django.contrib.auth.decorators import permission_required
@@ -14,13 +13,14 @@ from django.views.decorators.http import require_POST
 from django.views.generic import CreateView, TemplateView, UpdateView
 from django_tables2 import SingleTableView
 
-from apps.assistants.sync import OpenAIVectorStoreManager, delete_file_from_openai
+from apps.assistants.sync import delete_file_from_openai
 from apps.documents.forms import CollectionForm
 from apps.documents.models import Collection, CollectionFile, FileStatus
 from apps.documents.tables import CollectionsTable
 from apps.documents.tasks import index_collection_files_task, migrate_vector_stores
 from apps.files.models import File
 from apps.generics.chips import Chip
+from apps.generics.help import render_help_with_link
 from apps.teams.decorators import login_and_team_required
 from apps.teams.mixins import LoginAndTeamRequiredMixin
 from apps.utils.search import similarity_search
@@ -35,7 +35,7 @@ class CollectionHome(LoginAndTeamRequiredMixin, TemplateView):
         return {
             "active_tab": "collections",
             "title": "Collections",
-            # "title_help_content": render_help_with_link("", "survey"),
+            "title_help_content": render_help_with_link("", "collections"),
             "new_object_url": reverse("documents:collection_new", args=[team_slug]),
             "table_url": reverse("documents:collection_table", args=[team_slug]),
             "enable_search": True,
@@ -159,7 +159,7 @@ class CreateCollection(LoginAndTeamRequiredMixin, CollectionFormMixin, CreateVie
         response = super().form_valid(form)
         if form.instance.is_index:
             collection = form.instance
-            manager = OpenAIVectorStoreManager.from_llm_provider(collection.llm_provider)
+            manager = collection.llm_provider.get_index_manager()
             collection.openai_vector_store_id = manager.create_vector_store(name=collection.index_name)
             collection.save(update_fields=["openai_vector_store_id"])
 
@@ -190,7 +190,7 @@ class EditCollection(LoginAndTeamRequiredMixin, CollectionFormMixin, UpdateView)
 
         if form.instance.is_index and "llm_provider" in form.changed_data:
             with transaction.atomic():
-                new_manager = OpenAIVectorStoreManager.from_llm_provider(collection.llm_provider)
+                new_manager = collection.llm_provider.get_index_manager()
                 collection.openai_vector_store_id = new_manager.create_vector_store(collection.index_name)
                 collection.save(update_fields=["openai_vector_store_id"])
 
@@ -206,31 +206,41 @@ class EditCollection(LoginAndTeamRequiredMixin, CollectionFormMixin, UpdateView)
 class DeleteCollection(LoginAndTeamRequiredMixin, View):
     def delete(self, request, team_slug: str, pk: int):
         collection = get_object_or_404(Collection, team__slug=team_slug, id=pk)
-        if nodes := collection.get_node_references():
+
+        if collection.archive():
+            messages.success(request, "Collection deleted")
+            return HttpResponse()
+        else:
+            # Find and show references.
+            # For working versions, the Pipelines.
+            # For versions, the experiments
+
+            pipeline_node_chips = [
+                Chip(
+                    label=node.pipeline.name,
+                    url=node.pipeline.get_absolute_url(),
+                )
+                for node in collection.get_related_nodes_queryset()
+            ]
+            experiment_chips = []
+            for version in collection.versions.all():
+                if experiments := version.get_related_experiments_queryset():
+                    experiment_chips.extend(
+                        [
+                            Chip(
+                                label=f"{experiment.name} {experiment.get_version_name()} [published]",
+                                url=experiment.get_absolute_url(),
+                            )
+                            for experiment in experiments
+                        ]
+                    )
+
             response = render_to_string(
-                "assistants/partials/referenced_objects.html",
+                "generic/referenced_objects.html",
                 context={
                     "object_name": "collection",
-                    "pipeline_nodes": [
-                        Chip(label=node.pipeline.name, url=node.pipeline.get_absolute_url()) for node in nodes.all()
-                    ],
+                    "pipeline_nodes": pipeline_node_chips,
+                    "experiments_with_pipeline_nodes": experiment_chips,
                 },
             )
             return HttpResponse(response, headers={"HX-Reswap": "none"}, status=400)
-        else:
-            if collection.is_index and collection.openai_vector_store_id:
-                try:
-                    manager = OpenAIVectorStoreManager.from_llm_provider(collection.llm_provider)
-                    manager.delete_vector_store(collection.openai_vector_store_id)
-                    messages.success(request, "Collection deleted")
-                except openai.NotFoundError:
-                    messages.warning(
-                        self.request, "Could not find the vector store at OpenAI. It may have been deleted already"
-                    )
-                except Exception as e:
-                    logger.exception(f"Could not delete vector store for collection {collection.id}. {e}")
-                    messages.error(self.request, "Could not delete the vector store at OpenAI. Please try again later")
-                    return HttpResponse()
-
-            collection.archive()
-            return HttpResponse()
