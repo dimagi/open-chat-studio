@@ -97,6 +97,10 @@
               <template x-if="filterData.columns[filter.column]?.type === 'timestamp'">
                 <input type="date" x-model="filter.value" @input="triggerFilterChange()" class="w-40 block px-3 border border-base-200 rounded-lg bg-base-100 text-sm" style="height: 2rem;">
               </template>
+
+              <template x-if="filterData.columns[filter.column]?.type === 'datetime'">
+                <input type="datetime-local" x-model="filter.value" @input="triggerFilterChange()" class="w-40 block px-3 border border-base-200 rounded-lg bg-base-100 text-sm" style="height: 2rem;">
+              </template>
             </div>
           </template>
 
@@ -129,7 +133,8 @@
           'last_message': {type: 'timestamp', operators: fieldTypeFilters.timestamp, label: 'Last Message'},
           'tags': {type: 'choice', operators: fieldTypeFilters.choice, options: tags, label: 'Tags' },
           'versions': {type: 'choice', operators: fieldTypeFilters.choice.filter(op => op === 'any of' || op === 'excludes'), options: versionsList, label: 'Versions'},
-          'channels': {type: 'choice', operators: fieldTypeFilters.choice, options: channelsList, label: 'Channels'}
+          'channels': {type: 'choice', operators: fieldTypeFilters.choice, options: channelsList, label: 'Channels'},
+          'date_range': {type: 'datetime', operators: fieldTypeFilters.timestamp, label: 'Date Range'}
         }
       },
 

@@ -1,5 +1,5 @@
 import json
-from datetime import datetime
+from datetime import UTC, datetime
 from enum import StrEnum
 
 from django.contrib.contenttypes.models import ContentType
@@ -36,6 +36,7 @@ FIELD_TYPE_FILTERS = {
     ],
     "timestamp": [Operators.ON, Operators.BEFORE, Operators.AFTER],
     "choice": [Operators.ANY_OF, Operators.ALL_OF, Operators.EXCLUDES],
+    "datetime": [Operators.BEFORE, Operators.AFTER],
 }
 
 
@@ -96,7 +97,7 @@ def build_filter_condition(column, operator, value):
         return None
     if column == "participant":
         return build_participant_filter(operator, value)
-    elif column == "last_message":
+    elif column in ("last_message", "date_range"):
         return build_timestamp_filter(operator, value, "last_message_created_at")
     elif column == "first_message":
         return build_timestamp_filter(operator, value, "first_message_created_at")
@@ -125,17 +126,27 @@ def build_participant_filter(operator, value):
 
 
 def build_timestamp_filter(operator, value, field=None):
-    """Build filter condition for timestamp"""
     try:
-        date_value = datetime.strptime(value, "%Y-%m-%d").date()
+        # Try parsing as full timestamp first
+        date_value = datetime.strptime(value, "%Y-%m-%dT%H:%M:%S").replace(tzinfo=UTC)
         if operator == Operators.ON:
-            return Q(**{f"{field}__date": date_value})
+            return Q(**{f"{field}__date": date_value.date()})
         elif operator == Operators.BEFORE:
-            return Q(**{f"{field}__date__lt": date_value})
+            return Q(**{f"{field}__lt": date_value})
         elif operator == Operators.AFTER:
-            return Q(**{f"{field}__date__gt": date_value})
+            return Q(**{f"{field}__gt": date_value})
     except (ValueError, TypeError):
-        pass
+        try:
+            # Fallback to date-only parsing
+            date_value = datetime.strptime(value, "%Y-%m-%d").date()
+            if operator == Operators.ON:
+                return Q(**{f"{field}__date": date_value})
+            elif operator == Operators.BEFORE:
+                return Q(**{f"{field}__date__lt": date_value})
+            elif operator == Operators.AFTER:
+                return Q(**{f"{field}__date__gt": date_value})
+        except (ValueError, TypeError):
+            pass
     return None
 
 

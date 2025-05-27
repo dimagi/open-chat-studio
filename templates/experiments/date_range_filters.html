@@ -1,0 +1,111 @@
+<div class="dropdown">
+  <div tabindex="0" role="button" class="btn btn-ghost btn-sm normal-case">
+    <i class="fa-regular fa-clock"></i> <span class="dropdown-label">Date Range</span>
+    <i class="fa-solid fa-caret-down ml-1"></i>
+  </div>
+  <ul id="date-range-options" tabindex="0" class="dropdown-content menu p-2 shadow bg-base-100 rounded-box w-52">
+  </ul>
+</div>
+
+<script>
+  document.addEventListener('DOMContentLoaded', function () {
+    const dropdownList = document.getElementById('date-range-options');
+    const dropdownButtonLabel = document.querySelector('.dropdown-label');
+    const options = [
+      { label: 'Last 1 Hour', value: '1h' },
+      { label: 'Last 1 Day', value: '1' },
+      { label: 'Last 7 Days', value: '7' },
+      { label: 'Last 15 Days', value: '15' },
+      { label: 'Last 30 Days', value: '30' },
+    ];
+
+    // Generate dropdown items
+    options.forEach(option => {
+      const li = document.createElement('li');
+      const a = document.createElement('a');
+      a.href = '#';
+      a.textContent = option.label;
+      a.dataset.value = option.value;
+      li.appendChild(a);
+      dropdownList.appendChild(li);
+    });
+
+    const dropdownItems = dropdownList.querySelectorAll('a');
+    const url = new URL(window.location.href);
+    const params = url.searchParams;
+
+    // Handle dropdown click
+    dropdownItems.forEach(item => {
+      item.addEventListener('click', function (e) {
+        e.preventDefault();
+        const value = item.dataset.value;
+        localStorage.setItem('selected_date_range', value); // to maintain the state and show the selected value on UI
+        applyDateFilter(value);
+      });
+    });
+
+    // Function to apply filter
+    window.applyDateFilter = function (daysOrMinutes) {
+      const url = new URL(window.location.href);
+      const params = url.searchParams;
+      const toDelete = [];
+
+      for (const [key, value] of params.entries()) {
+        if (key.includes('_column') && value === 'date_range') {
+          const index = key.match(/filter_(\d+)_column/)[1];
+          toDelete.push(`filter_${index}_column`);
+          toDelete.push(`filter_${index}_operator`);
+          toDelete.push(`filter_${index}_value`);
+        }
+      }
+      toDelete.forEach(k => params.delete(k));
+
+      if (daysOrMinutes) {
+        const now = new Date();
+        let filterDate;
+
+        if (daysOrMinutes.endsWith('m')) {
+          now.setMinutes(now.getMinutes() - parseInt(daysOrMinutes));
+        } else if (daysOrMinutes.endsWith('h')) {
+          now.setHours(now.getHours() - parseInt(daysOrMinutes));
+        } else {
+          now.setDate(now.getDate() - parseInt(daysOrMinutes));
+        }
+
+        filterDate = now;
+        const formattedDateTime = filterDate.toISOString().slice(0, 19);
+        let maxIndex = -1;
+
+        for (const key of params.keys()) {
+          const match = key.match(/^filter_(\d+)_column$/);
+          if (match) maxIndex = Math.max(maxIndex, parseInt(match[1]));
+        }
+
+        const nextIndex = maxIndex + 1;
+        params.set(`filter_${nextIndex}_column`, 'date_range');
+        params.set(`filter_${nextIndex}_operator`, 'after');
+        params.set(`filter_${nextIndex}_value`, formattedDateTime);
+      }
+
+      url.search = params.toString();
+      window.location.href = url.toString();
+    };
+
+    // Restore selected value
+    const hasDateRangeFilter = [...params.entries()].some(([key, val]) => key.includes('_column') && val === 'date_range');
+    if (hasDateRangeFilter) {
+      const stored = localStorage.getItem('selected_date_range');
+      if (stored) {
+        dropdownItems.forEach(item => {
+          if (item.dataset.value === stored) {
+            dropdownButtonLabel.textContent = item.textContent;
+          }
+        });
+      }
+    }
+    // Remove from localstorage if date-range filter is not selected
+    else {
+      localStorage.removeItem('selected_date_range');
+    }
+  });
+</script>
