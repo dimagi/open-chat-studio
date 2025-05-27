@@ -14,13 +14,14 @@ class Banner(models.Model):
     # Pre-defined locations must match those in the middleware.py
     LOCATIONS = (
         ("global", "Global (All Pages)"),
-        ("experiments_home", "Experiments Home Page"),
-        ("experiments_new", "New Experiments Page"),
-        ("pipelines", "Pipelines Home Page"),
-        ("pipelines_new", "New Pipelines Page"),
-        ("chatbots_home", "Chatbots Home Page"),
-        ("chatbots_new", "New Chatbot Page"),
-        ("team_settings", "Team Settings Page"),
+        ("experiments_home", "Experiments Home"),
+        ("experiments_new", "New Experiments"),
+        ("pipelines", "Pipelines Home"),
+        ("pipelines_new", "New Pipelines"),
+        ("chatbots_home", "Chatbots Home"),
+        ("chatbots_new", "New Chatbot"),
+        ("assistants_home", "Assistants Home"),
+        ("team_settings", "Team Settings"),
     )
 
     title = models.CharField(max_length=100, blank=True, help_text="Optional title for the banner")

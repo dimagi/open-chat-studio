@@ -4,10 +4,11 @@ class BannerLocationMiddleware:
         self.view_name_mapping = {
             "experiments:experiments_home": "experiments_home",
             "experiments:new": "experiments_new",
-            "pipelines:pipelines_home": "pipelines",
+            "pipelines:home": "pipelines",
             "pipelines:new": "pipelines_new",
             "chatbots:chatbots_home": "chatbots_home",
             "chatbots:new": "chatbots_new",
+            "assistants:home": "assistants_home",
             "team:manage_team": "team_settings",
         }
 
