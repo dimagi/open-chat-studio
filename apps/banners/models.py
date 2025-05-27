@@ -8,7 +8,7 @@ class Banner(models.Model):
     BANNER_TYPES = (
         ("info", "Information"),
         ("warning", "Warning"),
-        ("danger", "Danger"),
+        ("error", "Error"),
         ("success", "Success"),
     )
     # Pre-defined locations must match those in the middleware.py
