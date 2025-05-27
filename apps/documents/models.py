@@ -19,7 +19,6 @@ class ChunkingStrategy(pydantic.BaseModel):
 
 
 class CollectionFileMetadata(pydantic.BaseModel):
-    model_config = pydantic.ConfigDict(arbitrary_types_allowed=True)
     chunking_strategy: ChunkingStrategy = pydantic.Field(description="Chunking strategy used for the file")
 
 
