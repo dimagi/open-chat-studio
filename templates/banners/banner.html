@@ -8,18 +8,31 @@
                 {% endif %}
                 {{ banner.message|render_markdown }}
                 <div>
-                    <button class="btn btn-sm" data-bs-dismiss="alert" aria-label="Close">Close</button>
+                    <button class="btn btn-sm dismiss-banner"
+                            data-banner-id="{{ banner.id }}"
+                            aria-label="Close">Close</button>
                 </div>
             </div>
         {% endfor %}
     </div>
     <script>
         document.addEventListener('DOMContentLoaded', function() {
-            const closeButtons = document.querySelectorAll('[data-bs-dismiss="alert"]');
-            closeButtons.forEach(function(button) {
+            function updateDismissedBanners(bannerId) {
+                const dismissed = JSON.parse(
+                    document.cookie.match(/dismissed_banners=([^;]*)/)?.[1] || '[]'
+                );
+                if (!dismissed.includes(bannerId)) {
+                    dismissed.push(bannerId);
+                    document.cookie = `dismissed_banners=${JSON.stringify(dismissed)};path=/;max-age=31536000`;
+                }
+            }
+            document.querySelectorAll('.dismiss-banner').forEach(button => {
                 button.addEventListener('click', function() {
+                    const bannerId = this.dataset.bannerId;
                     const alert = this.closest('.alert');
-                    if (alert) {
+
+                    if (alert && bannerId) {
+                        updateDismissedBanners(bannerId);
                         alert.remove();
                     }
                 });
