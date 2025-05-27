@@ -17,7 +17,7 @@ class BannerService:
             dismissed_ids = request.COOKIES.get("dismissed_banners", "[]")
             try:
                 dismissed_list = json.loads(dismissed_ids)
-                if dismissed_list:
+                if isinstance(dismissed_list, list) and all(isinstance(x, int) and x > 0 for x in dismissed_list):
                     query = query.exclude(id__in=dismissed_list)
             except (json.JSONDecodeError, ValueError):
                 pass
