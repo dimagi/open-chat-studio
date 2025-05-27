@@ -97,7 +97,7 @@ class ChatbotSettingsForm(forms.ModelForm):
 
     def clean_participant_allowlist(self):
         cleaned_identifiers = []
-        identifiers = self.cleaned_data["participant_allowlist"].split(",")
+        identifiers = filter(None, self.cleaned_data["participant_allowlist"].split(","))
         for identifier in identifiers:
             cleaned_identifiers.append(identifier.replace(" ", ""))
         return cleaned_identifiers
