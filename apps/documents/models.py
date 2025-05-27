@@ -48,8 +48,9 @@ class CollectionFile(models.Model):
         return self.file.size_mb
 
     @property
-    def chunking_strategy(self):
-        return self.metadata.chunking_strategy
+    def chunking_strategy(self) -> ChunkingStrategy | None:
+        if self.metadata:
+            return self.metadata.chunking_strategy
 
     @property
     def status_enum(self):
