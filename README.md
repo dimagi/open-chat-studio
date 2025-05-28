@@ -1,4 +1,5 @@
 # Open Chat Studio
+[![Ask DeepWiki](https://deepwiki.com/badge.svg)](https://deepwiki.com/dimagi/open-chat-studio)
 
 Open Chat Studio is a platform for building, deploying, and evaluating AI-powered chat applications. It provides tools for working with various LLMs (Language Learning Models), creating chatbots, managing conversations, and integrating with different messaging platforms.
 

@@ -2,18 +2,20 @@ import uuid
 
 from django.contrib.auth.decorators import permission_required
 from django.contrib.auth.mixins import PermissionRequiredMixin
-from django.http import HttpResponseRedirect
+from django.http import HttpResponse, HttpResponseRedirect
 from django.shortcuts import get_object_or_404, redirect
+from django.template.loader import render_to_string
 from django.urls import reverse
 from django.views.decorators.clickjacking import xframe_options_exempt
-from django.views.decorators.http import require_POST
+from django.views.decorators.http import require_GET, require_POST
 from django.views.generic import TemplateView
+from waffle import flag_is_active
 
 from apps.chat.channels import WebChannel
-from apps.chatbots.forms import ChatbotForm, CopyChatbotForm
+from apps.chatbots.forms import ChatbotForm, ChatbotSettingsForm, CopyChatbotForm
 from apps.chatbots.tables import ChatbotSessionsTable, ChatbotTable
 from apps.experiments.decorators import experiment_session_view, verify_session_access_cookie
-from apps.experiments.models import Experiment, SessionStatus
+from apps.experiments.models import Experiment, SessionStatus, SyntheticVoice
 from apps.experiments.tables import ExperimentVersionsTable
 from apps.experiments.tasks import async_create_experiment_version
 from apps.experiments.views import CreateExperiment, ExperimentSessionsTableView, ExperimentVersionsTableView
@@ -37,6 +39,92 @@ from apps.teams.decorators import login_and_team_required, team_required
 from apps.teams.mixins import LoginAndTeamRequiredMixin
 from apps.teams.models import Flag
 from apps.utils.base_experiment_table_view import BaseExperimentTableView
+
+
+def _get_alpine_context(request, experiment=None):
+    """Add context required by the experiments/settings_content.html template."""
+    exclude_services = [SyntheticVoice.OpenAIVoiceEngine]
+    if flag_is_active(request, "open_ai_voice_engine"):
+        exclude_services = []
+    return {
+        "voice_providers_types": dict(request.team.voiceprovider_set.values_list("id", "type")),
+        "synthetic_voice_options": sorted(
+            [
+                {
+                    "value": voice.id,
+                    "text": str(voice),
+                    "type": voice.service.lower(),
+                    "provider_id": voice.voice_provider_id,
+                }
+                for voice in SyntheticVoice.get_for_team(request.team, exclude_services=exclude_services)
+            ],
+            key=lambda v: v["text"],
+        ),
+    }
+
+
+@login_and_team_required
+@permission_required("experiments.change_experiment", raise_exception=True)
+def chatbots_settings(request, team_slug, experiment_id):
+    experiment = get_object_or_404(Experiment, id=experiment_id, team=request.team)
+
+    team_participant_identifiers = list(
+        request.team.participant_set.filter(user=None).values_list("identifier", flat=True)
+    )
+    team_participant_identifiers.extend(experiment.participant_allowlist)
+    team_participant_identifiers = list(set(team_participant_identifiers))
+    alpine_context = _get_alpine_context(request, experiment)
+    context = {
+        "experiment": experiment,
+        "request": request,
+        **alpine_context,
+    }
+
+    if request.method == "POST":
+        form = ChatbotSettingsForm(request=request, data=request.POST, instance=experiment)
+        if form.is_valid():
+            form.save()
+            context.update(
+                {
+                    "edit_mode": False,
+                    "form": form,
+                    "updated": True,
+                }
+            )
+
+        else:
+            context.update(
+                {
+                    "edit_mode": True,
+                    "form": form,
+                    "updated": False,
+                    "team_participant_identifiers": team_participant_identifiers,
+                }
+            )
+    else:
+        form = ChatbotSettingsForm(request=request, instance=experiment)
+        context.update(
+            {
+                "edit_mode": True,
+                "form": form,
+                "team_participant_identifiers": team_participant_identifiers,
+            }
+        )
+
+    return HttpResponse(render_to_string("chatbots/settings_content.html", context, request=request))
+
+
+@require_GET
+@login_and_team_required
+@permission_required("experiments.change_experiment", raise_exception=True)
+def cancel_edit_mode(request, team_slug, experiment_id):
+    experiment = get_object_or_404(Experiment, id=experiment_id, team=request.team)
+    context = {
+        "experiment": experiment,
+        "request": request,
+        "edit_mode": False,
+    }
+    return HttpResponse(render_to_string("chatbots/settings_content.html", context, request=request))
 
 
 @login_and_team_required

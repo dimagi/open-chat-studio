@@ -1,0 +1,9 @@
+@charset "utf-8";
+
+@import 'tom-select/dist/css/tom-select.default.css';
+@import 'alertifyjs/build/css/alertify.css';
+
+/* Import all base CSS files */
+@import './app/profile.css';
+@import './app/progress.css';
+@import './app/utilities.css';
