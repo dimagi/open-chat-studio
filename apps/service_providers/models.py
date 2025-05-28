@@ -494,3 +494,52 @@ class TraceProvider(BaseTeamModel):
 
     def get_service(self) -> tracing.Tracer:
         return self.type_enum.get_service(self.config)
+
+
+class EmbeddingProviderTypes(LlmProviderType, Enum):
+    openai = "openai", _("OpenAI")
+
+    def __str__(self):
+        return str(self.value)
+
+    @classproperty
+    def choices(cls):
+        empty = [(None, cls.__empty__)] if hasattr(cls, "__empty__") else []
+        return empty + [(member.value.slug, member.label) for member in cls]
+
+
+@audit_fields(*model_audit_fields.EMBEDDING_PROVIDER_FIELDS, audit_special_queryset_writes=True)
+class EmbeddingProvider(BaseTeamModel):
+    team = models.ForeignKey("teams.Team", on_delete=models.CASCADE, related_name="embedding_providers")
+    type = models.CharField(max_length=255, choices=EmbeddingProviderTypes.choices)
+    name = models.CharField(max_length=255)
+    config = encrypt(models.JSONField(default=dict))
+
+    objects = AuditingManager()
+
+    class Meta:
+        ordering = ("type", "name")
+
+    def __str__(self):
+        return f"{self.type_enum.label}: {self.name}"
+
+    @property
+    def type_enum(self):
+        return EmbeddingProviderTypes[str(self.type)]
+
+
+class EmbeddingProviderModel(BaseTeamModel):
+    type = models.CharField(max_length=255, choices=EmbeddingProviderTypes.choices)
+    name = models.CharField(max_length=128, help_text="The name of the model. e.g. 'text-embedding-3-small'")
+    team = models.ForeignKey(
+        Team,
+        verbose_name=gettext("Team"),
+        on_delete=models.CASCADE,
+        null=True,
+        blank=True,
+    )
+
+    class Meta:
+        constraints = [
+            models.UniqueConstraint(fields=("team", "name", "type"), name="unique_team_name_type"),
+        ]
