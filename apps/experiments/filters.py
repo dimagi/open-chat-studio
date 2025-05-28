@@ -1,7 +1,8 @@
 import json
-from datetime import UTC, datetime
+from datetime import UTC, datetime, timedelta
 from enum import StrEnum
 
+import pytz
 from django.contrib.contenttypes.models import ContentType
 from django.db.models import Exists, OuterRef, Q, Subquery
 
@@ -24,6 +25,7 @@ class Operators(StrEnum):
     ANY_OF = "any of"
     ALL_OF = "all of"
     EXCLUDES = "excludes"
+    RANGE = "range"
 
 
 FIELD_TYPE_FILTERS = {
@@ -34,13 +36,13 @@ FIELD_TYPE_FILTERS = {
         Operators.STARTS_WITH,
         Operators.ENDS_WITH,
     ],
-    "timestamp": [Operators.ON, Operators.BEFORE, Operators.AFTER],
+    "timestamp": [Operators.ON, Operators.BEFORE, Operators.AFTER, Operators.RANGE],
     "choice": [Operators.ANY_OF, Operators.ALL_OF, Operators.EXCLUDES],
-    "datetime": [Operators.BEFORE, Operators.AFTER],
 }
 
 
 def apply_dynamic_filters(query_set, request, parsed_params=None):
+    timezone = request.session.get("detected_tz", None)
     query_set = _prepare_queryset(query_set)
     param_source = parsed_params if parsed_params is not None else request.GET
     filter_conditions = Q()
@@ -58,7 +60,7 @@ def apply_dynamic_filters(query_set, request, parsed_params=None):
         filter_operator = filter_operator[0] if isinstance(filter_operator, list) else filter_operator
         filter_value = filter_value[0] if isinstance(filter_value, list) else filter_value
 
-        condition = build_filter_condition(filter_column, filter_operator, filter_value)
+        condition = build_filter_condition(filter_column, filter_operator, filter_value, timezone)
         if condition:
             filter_conditions &= condition
             filter_applied = True
@@ -92,15 +94,15 @@ def _prepare_queryset(queryset):
     return queryset
 
 
-def build_filter_condition(column, operator, value):
+def build_filter_condition(column, operator, value, timezone):
     if not value:
         return None
     if column == "participant":
         return build_participant_filter(operator, value)
-    elif column in ("last_message", "date_range"):
-        return build_timestamp_filter(operator, value, "last_message_created_at")
+    elif column == "last_message":
+        return build_timestamp_filter(operator, value, "last_message_created_at", timezone)
     elif column == "first_message":
-        return build_timestamp_filter(operator, value, "first_message_created_at")
+        return build_timestamp_filter(operator, value, "first_message_created_at", timezone)
     elif column == "tags":
         return build_tags_filter(operator, value)
     elif column == "versions":
@@ -125,28 +127,49 @@ def build_participant_filter(operator, value):
     return None
 
 
-def build_timestamp_filter(operator, value, field=None):
+def build_timestamp_filter(operator, value, field=None, timezone=None):
+    """Build filter condition for timestamp, supporting date and relative ranges like '1h', '7d'.
+    For 1d 24h are subtracted i.e sessions in the range of 24h are shown not based on the date"""
+
+    if not value or not field:
+        return None
+
     try:
-        # Try parsing as full timestamp first
-        date_value = datetime.strptime(value, "%Y-%m-%dT%H:%M:%S").replace(tzinfo=UTC)
-        if operator == Operators.ON:
-            return Q(**{f"{field}__date": date_value.date()})
-        elif operator == Operators.BEFORE:
-            return Q(**{f"{field}__lt": date_value})
-        elif operator == Operators.AFTER:
-            return Q(**{f"{field}__gt": date_value})
-    except (ValueError, TypeError):
-        try:
-            # Fallback to date-only parsing
-            date_value = datetime.strptime(value, "%Y-%m-%d").date()
+        client_tz = pytz.timezone(timezone) if timezone else pytz.UTC
+        now_client = datetime.now(client_tz)
+        # Handle 'range' operator with relative time (e.g., '1h', '7d')
+        if operator == Operators.RANGE:
+            if value.endswith(("h", "d", "m")):
+                num = int(value[:-1])
+                unit = value[-1]
+
+                if unit == "h":
+                    delta = timedelta(hours=num)
+                elif unit == "d":
+                    delta = timedelta(days=num)
+                elif unit == "m":
+                    delta = timedelta(minutes=num)
+                else:
+                    return None
+
+                range_starting_client_time = now_client - delta
+                range_starting_utc_time = range_starting_client_time.astimezone(pytz.UTC)
+                return Q(**{f"{field}__gte": range_starting_utc_time})
+
+            else:
+                return None
+        else:
+            # No need to convert the date as we are passing only date and date shown on the UI is in client time only
+            date_value = datetime.strptime(value, "%Y-%m-%d").replace(tzinfo=UTC)
+
             if operator == Operators.ON:
                 return Q(**{f"{field}__date": date_value})
             elif operator == Operators.BEFORE:
                 return Q(**{f"{field}__date__lt": date_value})
             elif operator == Operators.AFTER:
                 return Q(**{f"{field}__date__gt": date_value})
-        except (ValueError, TypeError):
-            pass
+    except (ValueError, TypeError, pytz.UnknownTimeZoneError):
+        pass
     return None
 
 

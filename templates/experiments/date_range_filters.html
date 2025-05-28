@@ -12,11 +12,12 @@
     const dropdownList = document.getElementById('date-range-options');
     const dropdownButtonLabel = document.querySelector('.dropdown-label');
     const options = [
+      { label: 'Last 1 Minute', value: '1m' },
       { label: 'Last 1 Hour', value: '1h' },
-      { label: 'Last 1 Day', value: '1' },
-      { label: 'Last 7 Days', value: '7' },
-      { label: 'Last 15 Days', value: '15' },
-      { label: 'Last 30 Days', value: '30' },
+      { label: 'Last 1 Day', value: '1d' },
+      { label: 'Last 7 Days', value: '7d' },
+      { label: 'Last 15 Days', value: '15d' },
+      { label: 'Last 30 Days', value: '30d' },
     ];
 
     // Generate dropdown items
@@ -39,61 +40,64 @@
       item.addEventListener('click', function (e) {
         e.preventDefault();
         const value = item.dataset.value;
-        localStorage.setItem('selected_date_range', value); // to maintain the state and show the selected value on UI
+        localStorage.setItem('selected_date_range', value);
         applyDateFilter(value);
       });
     });
 
-    // Function to apply filter
-    window.applyDateFilter = function (daysOrMinutes) {
+    // Apply filter for last_message range operator
+    window.applyDateFilter = function (value) {
       const url = new URL(window.location.href);
       const params = url.searchParams;
-      const toDelete = [];
 
-      for (const [key, value] of params.entries()) {
-        if (key.includes('_column') && value === 'date_range') {
-          const index = key.match(/filter_(\d+)_column/)[1];
-          toDelete.push(`filter_${index}_column`);
-          toDelete.push(`filter_${index}_operator`);
-          toDelete.push(`filter_${index}_value`);
+      let matchedIndex = null;
+
+      // Find existing last_message column
+      for (const [key, val] of params.entries()) {
+        if (key.includes('_column') && val === 'last_message') {
+          const match = key.match(/filter_(\d+)_column/);
+          if (match) {
+            matchedIndex = match[1];
+            break;
+          }
         }
       }
-      toDelete.forEach(k => params.delete(k));
 
-      if (daysOrMinutes) {
-        const now = new Date();
-        let filterDate;
-
-        if (daysOrMinutes.endsWith('m')) {
-          now.setMinutes(now.getMinutes() - parseInt(daysOrMinutes));
-        } else if (daysOrMinutes.endsWith('h')) {
-          now.setHours(now.getHours() - parseInt(daysOrMinutes));
+      if (matchedIndex !== null) {
+        // If found, update only if operator is 'range'
+        const operatorKey = `filter_${matchedIndex}_operator`;
+        if (params.get(operatorKey) === 'range') {
+          params.set(`filter_${matchedIndex}_value`, value);
         } else {
-          now.setDate(now.getDate() - parseInt(daysOrMinutes));
+          // Remove the whole filter if operator isn't 'range'
+          params.delete(`filter_${matchedIndex}_column`);
+          params.delete(operatorKey);
+          params.delete(`filter_${matchedIndex}_value`);
         }
+      }
 
-        filterDate = now;
-        const formattedDateTime = filterDate.toISOString().slice(0, 19);
+      // If no existing last_message filter, add one
+      if (matchedIndex === null) {
         let maxIndex = -1;
-
         for (const key of params.keys()) {
           const match = key.match(/^filter_(\d+)_column$/);
           if (match) maxIndex = Math.max(maxIndex, parseInt(match[1]));
         }
 
         const nextIndex = maxIndex + 1;
-        params.set(`filter_${nextIndex}_column`, 'date_range');
-        params.set(`filter_${nextIndex}_operator`, 'after');
-        params.set(`filter_${nextIndex}_value`, formattedDateTime);
+        params.set(`filter_${nextIndex}_column`, 'last_message');
+        params.set(`filter_${nextIndex}_operator`, 'range');
+        params.set(`filter_${nextIndex}_value`, value);
       }
 
+      // Update URL
       url.search = params.toString();
       window.location.href = url.toString();
     };
 
-    // Restore selected value
-    const hasDateRangeFilter = [...params.entries()].some(([key, val]) => key.includes('_column') && val === 'date_range');
-    if (hasDateRangeFilter) {
+    // Restore selected dropdown label from localStorage
+    const hasLastMessageFilter = [...params.entries()].some(([key, val]) => key.includes('_column') && val === 'last_message');
+    if (hasLastMessageFilter) {
       const stored = localStorage.getItem('selected_date_range');
       if (stored) {
         dropdownItems.forEach(item => {
@@ -102,9 +106,7 @@
           }
         });
       }
-    }
-    // Remove from localstorage if date-range filter is not selected
-    else {
+    } else {
       localStorage.removeItem('selected_date_range');
     }
   });
