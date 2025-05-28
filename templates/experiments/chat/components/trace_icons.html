@@ -4,8 +4,6 @@
     <a class="btn btn-sm btn-square btn-ghost" href="{{ trace_info.trace_url }}" target="_blank">
       {% if trace_info.trace_provider == "langfuse" %}
         {% include "svg/langfuse.svg" %}
-      {% elif trace_info.trace_provider == "langsmith" %}
-        {% include "svg/langsmith.svg" %}
       {% else %}
         <i class="fa-regular fa-chart-bar"></i>
       {% endif %}
