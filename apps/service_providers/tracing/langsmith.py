@@ -27,7 +27,7 @@ class LangSmithTracer(Tracer):
     def ready(self) -> bool:
         return bool(self.client)
 
-    def start_trace(
+    def _start_trace_internal(
         self,
         trace_name: str,
         trace_id: UUID,
@@ -40,8 +40,6 @@ class LangSmithTracer(Tracer):
 
         if self.client:
             raise ServiceReentryException("Service does not support reentrant use.")
-
-        super().start_trace(trace_name, trace_id, session_id, user_id, inputs)
 
         self.client = Client(
             api_url=self.config["api_url"],
@@ -70,9 +68,8 @@ class LangSmithTracer(Tracer):
             tags=[f"user:{user_id}", f"session:{session_id}"],
         )
 
-    def end_trace(self, outputs: dict[str, Any] | None = None, error: Exception | None = None) -> None:
+    def _end_trace_internal(self, outputs: dict[str, Any] | None = None, error: Exception | None = None) -> None:
         trace_id = self.trace_id
-        super().end_trace(outputs=outputs, error=error)
         if not self.ready:
             return
 
@@ -84,7 +81,7 @@ class LangSmithTracer(Tracer):
         self.client = None
         self.spans.clear()
 
-    def start_span(
+    def _start_span_internal(
         self,
         span_id: UUID,
         span_name: str,
@@ -97,11 +94,75 @@ class LangSmithTracer(Tracer):
 
         self._start_trace(span_id, name=span_name, inputs=inputs, metadata=metadata or {})
 
-    def end_span(self, span_id: UUID, outputs: dict[str, Any] | None = None, error: Exception | None = None) -> None:
+    def _end_span_internal(
+        self, span_id: UUID, outputs: dict[str, Any] | None = None, error: Exception | None = None
+    ) -> None:
         if not self.ready:
             return
 
         self._end_trace(span_id, outputs, error)
+
+    def _set_span_attribute(self, span_id: UUID, key: str, value: Any) -> None:
+        """Set an attribute on a LangSmith span."""
+        if not self.ready:
+            return
+
+        trace_context = self.spans.get(span_id)
+        if trace_context:
+            _, run_tree = trace_context
+            try:
+                # LangSmith RunTree doesn't have direct attribute setting, but we can add to extra
+                if hasattr(run_tree, "extra") and run_tree.extra is not None:
+                    run_tree.extra[key] = value
+                else:
+                    run_tree.extra = {key: value}
+            except Exception:
+                # If setting fails, ignore silently
+                pass
+
+    def _record_span_exception(self, span_id: UUID, exception: Exception) -> None:
+        """Record an exception on a LangSmith span."""
+        if not self.ready:
+            return
+
+        trace_context = self.spans.get(span_id)
+        if trace_context:
+            _, run_tree = trace_context
+            run_tree.error = str(exception)
+
+    # Backward compatibility methods
+    def start_trace(
+        self,
+        trace_name: str,
+        trace_id: UUID,
+        session_id: str,
+        user_id: str,
+        inputs: dict[str, Any] | None = None,
+        metadata: dict[str, Any] | None = None,
+    ) -> None:
+        """Deprecated: Use trace() context manager instead."""
+        super().start_trace(trace_name, trace_id, session_id, user_id, inputs, metadata)
+        self._start_trace_internal(trace_name, trace_id, session_id, user_id, inputs, metadata)
+
+    def end_trace(self, outputs: dict[str, Any] | None = None, error: Exception | None = None) -> None:
+        """Deprecated: Use trace() context manager instead."""
+        self._end_trace_internal(outputs, error)
+        super().end_trace(outputs, error)
+
+    def start_span(
+        self,
+        span_id: UUID,
+        span_name: str,
+        inputs: dict[str, Any],
+        metadata: dict[str, Any] | None = None,
+        level: SpanLevel = "DEFAULT",
+    ) -> None:
+        """Deprecated: Use span() context manager instead."""
+        self._start_span_internal(span_id, span_name, inputs, metadata, level)
+
+    def end_span(self, span_id: UUID, outputs: dict[str, Any] | None = None, error: Exception | None = None) -> None:
+        """Deprecated: Use span() context manager instead."""
+        self._end_span_internal(span_id, outputs, error)
 
     def get_langchain_callback(self) -> BaseCallbackHandler:
         if not self.ready:

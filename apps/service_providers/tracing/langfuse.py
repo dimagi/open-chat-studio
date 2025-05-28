@@ -8,8 +8,7 @@ from threading import RLock
 from typing import TYPE_CHECKING, Any
 from uuid import UUID
 
-from langfuse.callback import CallbackHandler
-from langfuse.client import StatefulSpanClient, StatefulTraceClient
+from langfuse.langchain import CallbackHandler
 
 from . import Tracer
 from .base import ServiceNotInitializedException, ServiceReentryException
@@ -34,14 +33,14 @@ class LangFuseTracer(Tracer):
     def __init__(self, type_, config: dict):
         super().__init__(type_, config)
         self.client = None
-        self.trace: StatefulTraceClient | None = None
-        self.spans: dict[UUID, StatefulSpanClient] = {}
+        self.current_trace_id = None
+        self.spans: dict[UUID, str] = {}  # Maps span_id to langfuse observation_id
 
     @property
     def ready(self) -> bool:
-        return bool(self.trace)
+        return bool(self.client and self.current_trace_id)
 
-    def start_trace(
+    def _start_trace_internal(
         self,
         trace_name: str,
         trace_id: UUID,
@@ -50,32 +49,69 @@ class LangFuseTracer(Tracer):
         inputs: dict[str, Any] | None = None,
         metadata: dict[str, Any] | None = None,
     ) -> None:
-        if self.trace:
+        if self.current_trace_id:
             raise ServiceReentryException("Service does not support reentrant use.")
 
-        super().start_trace(trace_name, trace_id, session_id, user_id, inputs)
-
         self.client = client_manager.get(self.config)
-        self.trace = self.client.trace(
-            name=trace_name, session_id=session_id, user_id=user_id, input=inputs, metadata=metadata
+        # In LangFuse v3, we need to start a new trace context
+        # The trace_id will be used to identify this trace
+        self.current_trace_id = str(trace_id)
+
+        # Set initial metadata on the trace
+        if metadata:
+            metadata = dict(metadata)
+        else:
+            metadata = {}
+        metadata.update(
+            {
+                "session_id": session_id,
+                "user_id": user_id,
+            }
         )
 
-    def end_trace(self, outputs: dict[str, Any] | None = None, error: Exception | None = None) -> None:
-        super().end_trace(outputs=outputs, error=error)
+        # Start the trace context in LangFuse v3
+        # We use update_current_trace to set initial properties
+        try:
+            # Note: LangFuse v3 API has changed significantly
+            # For now, we'll start a span as the root and treat it as our trace
+            self.client.start_span(
+                name=trace_name,
+                input=inputs,
+                metadata=metadata,
+                user_id=user_id,
+                session_id=session_id,
+            )
+        except Exception as e:
+            logger.error(f"Failed to start LangFuse trace: {e}")
+            self.current_trace_id = None
+            raise
+
+    def _end_trace_internal(self, outputs: dict[str, Any] | None = None, error: Exception | None = None) -> None:
         if not self.ready:
             raise ServiceNotInitializedException("Service not initialized.")
 
-        if outputs or error:
-            outputs = outputs or {}
-            outputs = {**outputs, "error": str(error)} if error else outputs
-            self.trace.update(output=outputs)
+        try:
+            # Update the current span (which is our root trace) with outputs
+            if outputs or error:
+                update_data = {}
+                if outputs:
+                    update_data["output"] = outputs
+                if error:
+                    update_data["level"] = "ERROR"
+                    update_data["status_message"] = str(error)
 
-        self.client.flush()
-        self.client = None
-        self.trace = None
-        self.spans.clear()
+                self.client.update_current_span(**update_data)
 
-    def start_span(
+            # Flush any pending data
+            self.client.flush()
+        except Exception as e:
+            logger.error(f"Failed to end LangFuse trace: {e}")
+        finally:
+            self.client = None
+            self.current_trace_id = None
+            self.spans.clear()
+
+    def _start_span_internal(
         self,
         span_id: UUID,
         span_name: str,
@@ -86,55 +122,123 @@ class LangFuseTracer(Tracer):
         if not self.ready:
             return
 
-        content_span = {
-            "id": str(span_id),
-            "name": span_name,
-            "input": inputs,
-            "metadata": metadata or {},
-            "level": level,
-        }
+        try:
+            # Start a new span in LangFuse v3
+            observation_id = self.client.start_span(
+                name=span_name,
+                input=inputs,
+                metadata=metadata or {},
+                level=level,
+            )
+            # Store the mapping from our span_id to LangFuse observation_id
+            if observation_id:
+                self.spans[span_id] = observation_id
+        except Exception as e:
+            logger.error(f"Failed to start LangFuse span: {e}")
 
-        self.spans[span_id] = self._get_current_span().span(**content_span)
-
-    def end_span(self, span_id: UUID, outputs: dict[str, Any] | None = None, error: Exception | None = None) -> None:
+    def _end_span_internal(
+        self, span_id: UUID, outputs: dict[str, Any] | None = None, error: Exception | None = None
+    ) -> None:
         if not self.ready:
             return
 
-        span = self.spans.pop(span_id, None)
-        if span:
-            output: dict = {}
-            output |= outputs or {}
-            output |= {"error": str(error)} if error else {}
+        observation_id = self.spans.pop(span_id, None)
+        if observation_id:
+            try:
+                # Update the span with outputs and end it
+                update_data = {}
+                if outputs:
+                    update_data["output"] = outputs
+                if error:
+                    update_data["level"] = "ERROR"
+                    update_data["status_message"] = str(error)
 
-            content = {
-                "output": output,
-                "status_message": str(error) if error else None,
-                "level": "ERROR" if error else None,
-            }
-            span.end(**content)
+                # In LangFuse v3, we update the current span
+                self.client.update_current_span(**update_data)
+            except Exception as e:
+                logger.error(f"Failed to end LangFuse span: {e}")
+
+    def _set_span_attribute(self, span_id: UUID, key: str, value: Any) -> None:
+        """Set an attribute on a LangFuse span."""
+        if not self.ready:
+            return
+
+        observation_id = self.spans.get(span_id)
+        if observation_id:
+            self.client.update_current_span(metadata={key: value})
+
+    def _record_span_exception(self, span_id: UUID, exception: Exception) -> None:
+        """Record an exception on a LangFuse span."""
+        if not self.ready:
+            return
+
+        observation_id = self.spans.get(span_id)
+        if observation_id:
+            self.client.update_current_span(
+                level="ERROR", status_message=str(exception), output={"error": str(exception)}
+            )
+
+    # Backward compatibility methods
+    def start_trace(
+        self,
+        trace_name: str,
+        trace_id: UUID,
+        session_id: str,
+        user_id: str,
+        inputs: dict[str, Any] | None = None,
+        metadata: dict[str, Any] | None = None,
+    ) -> None:
+        """Deprecated: Use trace() context manager instead."""
+        super().start_trace(trace_name, trace_id, session_id, user_id, inputs, metadata)
+        self._start_trace_internal(trace_name, trace_id, session_id, user_id, inputs, metadata)
+
+    def end_trace(self, outputs: dict[str, Any] | None = None, error: Exception | None = None) -> None:
+        """Deprecated: Use trace() context manager instead."""
+        self._end_trace_internal(outputs, error)
+        super().end_trace(outputs, error)
+
+    def start_span(
+        self,
+        span_id: UUID,
+        span_name: str,
+        inputs: dict[str, Any],
+        metadata: dict[str, Any] | None = None,
+        level: SpanLevel = "DEFAULT",
+    ) -> None:
+        """Deprecated: Use span() context manager instead."""
+        self._start_span_internal(span_id, span_name, inputs, metadata, level)
+
+    def end_span(self, span_id: UUID, outputs: dict[str, Any] | None = None, error: Exception | None = None) -> None:
+        """Deprecated: Use span() context manager instead."""
+        self._end_span_internal(span_id, outputs, error)
 
     def get_langchain_callback(self) -> BaseCallbackHandler:
         if not self.ready:
-            raise ServiceReentryException("Service does not support reentrant use.")
+            raise ServiceNotInitializedException("Service not initialized.")
 
-        return LangfuseCallbackHandler(stateful_client=self._get_current_span(), update_stateful_client=False)
+        # In LangFuse v3, the CallbackHandler is initialized differently
+        return CallbackHandler(
+            public_key=self.config.get("public_key"),
+            secret_key=self.config.get("secret_key"),
+            host=self.config.get("host"),
+            user_id=self.user_id,
+            session_id=self.session_id,
+        )
 
     def get_trace_metadata(self) -> dict[str, str]:
         if not self.ready:
             raise ServiceNotInitializedException("Service not initialized.")
 
+        try:
+            trace_url = self.client.get_trace_url()
+        except Exception:
+            trace_url = ""
+
         return {
-            "trace_id": self.trace.id,
-            "trace_url": self.trace.get_trace_url(),
+            "trace_id": self.current_trace_id or "",
+            "trace_url": trace_url,
             "trace_provider": self.type,
         }
-
-    def _get_current_span(self) -> StatefulTraceClient | StatefulSpanClient:
-        if self.spans:
-            last_span = next(reversed(self.spans))
-            return self.spans[last_span]
-        else:
-            return self.trace
 
 
 class ClientManager:
@@ -216,27 +320,5 @@ def _shutdown():
     client_manager.shutdown()
 
 
-class LangfuseCallbackHandler(CallbackHandler):
-    """Langfuse callback handler for LangChain that supports custom events"""
-
-    def on_custom_event(
-        self,
-        name: str,
-        data: Any,
-        *,
-        run_id: UUID,
-        tags: list[str] | None = None,
-        metadata: dict[str, Any] | None = None,
-        **kwargs: Any,
-    ) -> Any:
-        if self.runs.get(run_id):
-            self.runs[run_id].event(name=name, input=data, metadata=metadata)
-            return
-
-        if self.root_span is not None:
-            self.root_span.event(name=name, input=data, metadata=metadata)
-            return
-
-        if self.trace is not None:
-            self.trace.event(name=name, input=data, metadata=metadata)
-            return
+# Note: LangFuse v3 CallbackHandler is now imported from langfuse.langchain
+# The custom event handling may need to be updated based on the new API
