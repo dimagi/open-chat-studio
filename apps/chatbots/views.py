@@ -22,8 +22,8 @@ from apps.experiments.views import CreateExperiment, ExperimentSessionsTableView
 from apps.experiments.views.experiment import (
     BaseExperimentView,
     CreateExperimentVersion,
+    _experiment_chat_ui,
     base_single_experiment_view,
-    experiment_chat,
     experiment_chat_embed,
     experiment_chat_session,
     experiment_invitations,
@@ -298,7 +298,9 @@ def start_chatbot_session_public(request, team_slug: str, experiment_id: uuid.UU
 @experiment_session_view(allowed_states=[SessionStatus.ACTIVE, SessionStatus.SETUP])
 @verify_session_access_cookie
 def chatbot_chat(request, team_slug: str, experiment_id: uuid.UUID, session_id: str):
-    return experiment_chat(request, team_slug, experiment_id, session_id)
+    return _experiment_chat_ui(
+        request, request.experiment, request.experiment.default_version, request.experiment_session
+    )
 
 
 @xframe_options_exempt

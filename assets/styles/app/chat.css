@@ -1,3 +1,7 @@
+@utility chat-wrapper {
+  @apply w-full h-dvh flex flex-col;
+}
+
 @utility chat-pane {
   @apply overflow-y-auto flex flex-col grow p-4 space-y-4 bg-base-300;
 }
