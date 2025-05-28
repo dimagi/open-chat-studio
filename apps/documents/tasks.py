@@ -1,13 +1,13 @@
 import contextlib
 import logging
-from collections import defaultdict
+from itertools import groupby
 
 import openai
 from celery.app import shared_task
 from taskbadger.celery import Task as TaskbadgerTask
 
 from apps.assistants.sync import create_files_remote
-from apps.documents.models import Collection, CollectionFile, FileStatus
+from apps.documents.models import ChunkingStrategy, Collection, CollectionFile, FileStatus
 from apps.service_providers.models import LlmProvider
 
 logger = logging.getLogger("ocs.documents.tasks.upload_files_to_openai")
@@ -42,30 +42,27 @@ def index_collection_files(collection_id: int, all_files: bool) -> list[str]:
     if not all_files:
         queryset = queryset.filter(status=FileStatus.PENDING)
 
-    # Link files to the new vector store
-    # First, sort by chunking strategy
-    strategy_file_map = defaultdict(list)
-    default_chunking_strategy = {"chunk_size": 800, "chunk_overlap": 400}
+    default_chunking_strategy = ChunkingStrategy(chunk_size=800, chunk_overlap=400)
+    strategy_groups = groupby(
+        queryset.select_related("file").iterator(100), lambda cf: cf.chunking_strategy or default_chunking_strategy
+    )
 
-    for collection_file in queryset.select_related("file").iterator(100):
-        strategy = collection_file.metadata.get("chunking_strategy", default_chunking_strategy)
-        strategy_file_map[(strategy["chunk_size"], strategy["chunk_overlap"])].append(collection_file)
+    for strategy, collection_files_group in strategy_groups:
+        collection_files = list(collection_files_group)
+        ids = []
+        for collection_file in collection_files:
+            ids.append(collection_file.id)
+            if collection_file.file.external_id:
+                previous_remote_file_ids.append(collection_file.file.external_id)
 
-        if collection_file.file.external_id:
-            previous_remote_file_ids.append(collection_file.file.external_id)
+        CollectionFile.objects.filter(id__in=ids).update(status=FileStatus.IN_PROGRESS)
 
-    # Update the status of all files in queryset to IN_PROGRESS
-    queryset.update(status=FileStatus.IN_PROGRESS)
-
-    # Second, for each chunking strategy, upload files to the vector store
-    for strategy_tuple, collection_files in strategy_file_map.items():
-        chunk_size, chunk_overlap = strategy_tuple
         _upload_files_to_vector_store(
             client,
             collection,
             collection_files,
-            chunk_size=chunk_size,
-            chunk_overlap=chunk_overlap,
+            chunk_size=strategy.chunk_size,
+            chunk_overlap=strategy.chunk_overlap,
         )
     return previous_remote_file_ids
 

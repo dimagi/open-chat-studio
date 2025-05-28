@@ -15,7 +15,7 @@ from django_tables2 import SingleTableView
 
 from apps.assistants.sync import delete_file_from_openai
 from apps.documents.forms import CollectionForm
-from apps.documents.models import Collection, CollectionFile, FileStatus
+from apps.documents.models import ChunkingStrategy, Collection, CollectionFile, CollectionFileMetadata, FileStatus
 from apps.documents.tables import CollectionsTable
 from apps.documents.tasks import index_collection_files_task, migrate_vector_stores
 from apps.files.models import File
@@ -80,14 +80,13 @@ def add_collection_files(request, team_slug: str, pk: int):
 
         # Create file links
         status = FileStatus.PENDING if collection.is_index else ""
-        chunking_strategy = {}
-        metadata = {}
+        metadata = None
         if collection.is_index:
-            chunking_strategy = {
-                "chunk_size": int(request.POST.get("chunk_size")),
-                "chunk_overlap": int(request.POST.get("chunk_overlap")),
-            }
-            metadata["chunking_strategy"] = chunking_strategy
+            metadata = CollectionFileMetadata(
+                chunking_strategy=ChunkingStrategy(
+                    chunk_size=int(request.POST.get("chunk_size")), chunk_overlap=int(request.POST.get("chunk_overlap"))
+                )
+            )
 
         CollectionFile.objects.bulk_create(
             [CollectionFile(collection=collection, file=file, status=status, metadata=metadata) for file in files]
