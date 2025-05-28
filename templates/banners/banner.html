@@ -18,12 +18,13 @@
     <script>
         document.addEventListener('DOMContentLoaded', function() {
             function updateDismissedBanners(bannerId) {
-                const dismissed = JSON.parse(
-                    document.cookie.match(/dismissed_banners=([^;]*)/)?.[1] || '[]'
-                );
+                const dismissed = JSON.parse(SiteJS.app.Cookies.get('dismissed_banners') || '[]');
                 if (!dismissed.includes(bannerId)) {
                     dismissed.push(bannerId);
-                    document.cookie = `dismissed_banners=${JSON.stringify(dismissed)};path=/;max-age=31536000`;
+                    SiteJS.app.Cookies.set('dismissed_banners', JSON.stringify(dismissed), {
+                        path: '/',
+                        maxAge: 31536000
+                    });
                 }
             }
             document.querySelectorAll('.dismiss-banner').forEach(button => {
