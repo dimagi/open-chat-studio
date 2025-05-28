@@ -1,3 +1,5 @@
+from django.db.models import Q
+
 from .services import BannerService
 
 
@@ -8,10 +10,8 @@ def banner_context(request):
     """
     location = getattr(request, "banner_location", None)
     context = {"banners": []}
-    if location:
-        location_banners = BannerService.get_banner_context(request=request, location=location)
-        context["banners"].extend(location_banners.get("banners", []))
-    global_banners = BannerService.get_banner_context(request=request, location="global")
-    context["banners"].extend(global_banners.get("banners", []))
+    location_filter = Q(location=location) | Q(location="global") if location else Q(location="global")
+    banner_context = BannerService.get_banner_context(request, location_filter)
+    context["banners"] = banner_context.get("banners", [])
 
     return context
