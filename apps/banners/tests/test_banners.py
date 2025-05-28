@@ -1,13 +1,12 @@
 import json
 from datetime import timedelta
-from unittest.mock import Mock
 
 from django.test import RequestFactory, TestCase
 from django.utils import timezone
 
 from apps.banners.models import Banner
 from apps.banners.services import BannerService
-from apps.teams.models import Flag
+from apps.teams.models import Flag, Team
 
 
 class BannerServiceTests(TestCase):
@@ -15,14 +14,11 @@ class BannerServiceTests(TestCase):
         self.factory = RequestFactory()
         self.now = timezone.now()
 
-        self.mock_team_with_flag = Mock()
-        self.mock_team_with_flag.pk = 1
-
-        self.mock_team_without_flag = Mock()
-        self.mock_team_without_flag.pk = 2
+        self.team_with_flag = Team.objects.create(id=1, name="Team With Flag")
+        self.team_without_flag = Team.objects.create(id=2, name="Team Without Flag")
 
         self.test_flag = Flag.objects.create(name="test_banner_flag", everyone=False)
-        self.test_flag.teams.create(id=1, name="It's a Feature!!")
+        self.test_flag.teams.add(self.team_with_flag)
 
         self.active_global_banner = Banner.objects.create(
             title="Global Banner",
@@ -86,7 +82,7 @@ class BannerServiceTests(TestCase):
         )
 
     def test_get_active_banners_no_location(self):
-        result = BannerService.get_active_banners("[]", None, self.mock_team_without_flag)
+        result = BannerService.get_active_banners("[]", None, None)
         banner_ids = [banner.id for banner in result]
 
         assert self.active_global_banner.id in banner_ids
@@ -96,7 +92,7 @@ class BannerServiceTests(TestCase):
         assert self.future_banner.id not in banner_ids
 
     def test_get_active_banners_with_location(self):
-        result = BannerService.get_active_banners("[]", "Pipelines", self.mock_team_without_flag)
+        result = BannerService.get_active_banners("[]", "Pipelines", None)
         banner_ids = [banner.id for banner in result]
 
         assert self.active_global_banner.id in banner_ids
@@ -107,33 +103,33 @@ class BannerServiceTests(TestCase):
 
     def test_get_active_banners_with_dismissed_ids(self):
         dismissed_ids = json.dumps([self.active_global_banner.id])
-        result = BannerService.get_active_banners(dismissed_ids, None, self.mock_team_without_flag)
+        result = BannerService.get_active_banners(dismissed_ids, None, None)
         banner_ids = [banner.id for banner in result]
 
         assert self.active_global_banner.id not in banner_ids
 
     def test_get_active_banners_invalid_json(self):
-        result = BannerService.get_active_banners("invalid json", None, self.mock_team_without_flag)
+        result = BannerService.get_active_banners("invalid json", None, None)
         banner_ids = [banner.id for banner in result]
 
         assert self.active_global_banner.id in banner_ids
 
     def test_get_active_banners_empty_string_dismissed_ids(self):
-        result = BannerService.get_active_banners("", None, self.mock_team_without_flag)
+        result = BannerService.get_active_banners("", None, None)
         banner_ids = [banner.id for banner in result]
 
         assert self.active_global_banner.id in banner_ids
 
     def test_get_active_banners_invalid_list_items(self):
         dismissed_ids = json.dumps([1, "invalid", -1, 0])
-        result = BannerService.get_active_banners(dismissed_ids, None, self.mock_team_without_flag)
+        result = BannerService.get_active_banners(dismissed_ids, None, None)
         banner_ids = [banner.id for banner in result]
 
         assert self.active_global_banner.id in banner_ids
 
     def test_get_active_banners_with_team_that_has_flag(self):
         """Test that banners with feature flags show for teams that have the flag enabled."""
-        result = BannerService.get_active_banners("[]", "global", self.mock_team_with_flag)
+        result = BannerService.get_active_banners("[]", "global", self.team_with_flag)
         banner_ids = [banner.id for banner in result]
 
         assert self.active_global_banner.id in banner_ids
@@ -141,14 +137,14 @@ class BannerServiceTests(TestCase):
 
     def test_get_active_banners_with_team_without_flag(self):
         """Test that banners with feature flags don't show for teams without the flag."""
-        result = BannerService.get_active_banners("[]", "global", self.mock_team_without_flag)
+        result = BannerService.get_active_banners("[]", "global", self.team_without_flag)
         banner_ids = [banner.id for banner in result]
 
         assert self.active_global_banner.id in banner_ids
         assert self.flagged_banner.id not in banner_ids
 
     def test_banner_is_visible_for_team_with_flag(self):
-        assert self.flagged_banner.is_visible_for_team(self.mock_team_with_flag) is True
+        assert self.flagged_banner.is_visible_for_team(self.team_with_flag) is True
 
     def test_banner_is_visible_for_team_without_flag(self):
-        assert self.flagged_banner.is_visible_for_team(self.mock_team_without_flag) is False
+        assert self.flagged_banner.is_visible_for_team(self.team_without_flag) is False
