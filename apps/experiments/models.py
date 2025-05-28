@@ -527,9 +527,9 @@ class BuiltInTools(models.TextChoices):
     @classmethod
     def get_provider_specific_tools(cls):
         return {
-            "openai": [cls.WEB_SEARCH],
+            "openai": [cls.WEB_SEARCH, cls.CODE_EXECUTION],
             "anthropic": [cls.WEB_SEARCH],
-            "google": [cls.WEB_SEARCH, cls.CODE_EXECUTION],
+            # "google": [cls.WEB_SEARCH, cls.CODE_EXECUTION], commenting it for now until tools work for gemini
         }
 
     @classmethod
