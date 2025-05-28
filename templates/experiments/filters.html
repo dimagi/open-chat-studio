@@ -134,7 +134,7 @@
           'tags': {type: 'choice', operators: fieldTypeFilters.choice, options: tags, label: 'Tags' },
           'versions': {type: 'choice', operators: fieldTypeFilters.choice.filter(op => op === 'any of' || op === 'excludes'), options: versionsList, label: 'Versions'},
           'channels': {type: 'choice', operators: fieldTypeFilters.choice, options: channelsList, label: 'Channels'},
-          'date_range': {type: 'datetime', operators: fieldTypeFilters.timestamp, label: 'Date Range'}
+          'date_range': {type: 'datetime', operators: fieldTypeFilters.datetime, label: 'Date Range'}
         }
       },
 
