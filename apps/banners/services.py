@@ -7,25 +7,24 @@ from .models import Banner
 
 class BannerService:
     @staticmethod
-    def get_active_banners(request=None, location=None):
+    def get_active_banners(request, location=None):
         now = timezone.now()
         query = Banner.objects.filter(is_active=True, start_date__lte=now, end_date__gt=now)
 
         if location:
             query = query.filter(location=location)
-        if request:
-            dismissed_ids = request.COOKIES.get("dismissed_banners", "[]")
-            try:
-                dismissed_list = json.loads(dismissed_ids)
-                if isinstance(dismissed_list, list) and all(isinstance(x, int) and x > 0 for x in dismissed_list):
-                    query = query.exclude(id__in=dismissed_list)
-            except (json.JSONDecodeError, ValueError):
-                pass
+        dismissed_ids = request.COOKIES.get("dismissed_banners", "[]")
+        try:
+            dismissed_list = json.loads(dismissed_ids)
+            if isinstance(dismissed_list, list) and all(isinstance(x, int) and x > 0 for x in dismissed_list):
+                query = query.exclude(id__in=dismissed_list)
+        except (json.JSONDecodeError, ValueError):
+            pass
 
         return query
 
     @staticmethod
-    def get_banner_context(request=None, location=None):
+    def get_banner_context(request, location=None):
         """
         Return context dictionary for banners.
         """
