@@ -1349,3 +1349,4 @@ def test_router_node_openai_refusal_uses_default_keyword(get_llm_service, provid
 
     keyword, is_default_keyword = node._process_conditional(state)
     assert keyword == "DEFAULT"
+    assert is_default_keyword
