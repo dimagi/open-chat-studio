@@ -551,9 +551,13 @@ class RouterMixin(BaseModel):
         """
         return {f"output_{output_num}": keyword for output_num, keyword in enumerate(self.keywords)}
 
-    def get_output_tags(self, selected_route) -> list[tuple[str, str]]:
+    def get_output_tags(self, selected_route, is_default_keyword: bool) -> list[tuple[str, str]]:
         if self.tag_output_message:
-            return [(f"{self.name}:{selected_route}", TagCategories.BOT_RESPONSE)]
+            tag_name = f"{self.name}:{selected_route}"
+            tag_category = TagCategories.ERROR if is_default_keyword else TagCategories.BOT_RESPONSE
+            if is_default_keyword:
+                tag_name += ":default"
+            return [(tag_name, tag_category)]
         return []
 
 
@@ -618,6 +622,7 @@ class RouterNode(RouterMixin, PipelineRouterNode, HistoryMixin):
         llm = self.get_chat_model()
         router_schema = self._create_router_schema()
         chain = prompt | llm.with_structured_output(router_schema)
+        is_default_keyword = False
         try:
             result = chain.invoke(context, config=self._config)
             keyword = getattr(result, "route", None)
@@ -625,12 +630,14 @@ class RouterNode(RouterMixin, PipelineRouterNode, HistoryMixin):
             keyword = None
         except OpenAIRefusalError:
             keyword = default_keyword
+            is_default_keyword = True
         if not keyword:
             keyword = default_keyword
+            is_default_keyword = True
 
         if session:
             self._save_history(session, self.node_id, node_input, keyword)
-        return keyword
+        return keyword, is_default_keyword
 
 
 class StaticRouterNode(RouterMixin, PipelineRouterNode):
