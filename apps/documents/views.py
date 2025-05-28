@@ -3,6 +3,7 @@ import logging
 from django.conf import settings
 from django.contrib import messages
 from django.contrib.auth.decorators import permission_required
+from django.contrib.auth.mixins import PermissionRequiredMixin
 from django.db import transaction
 from django.http import HttpResponse
 from django.shortcuts import get_object_or_404, redirect, render
@@ -14,10 +15,10 @@ from django.views.generic import CreateView, TemplateView, UpdateView
 from django_tables2 import SingleTableView
 
 from apps.assistants.sync import delete_file_from_openai
+from apps.documents import tasks
 from apps.documents.forms import CollectionForm
 from apps.documents.models import ChunkingStrategy, Collection, CollectionFile, CollectionFileMetadata, FileStatus
 from apps.documents.tables import CollectionsTable
-from apps.documents.tasks import index_collection_files_task, migrate_vector_stores
 from apps.files.models import File
 from apps.generics.chips import Chip
 from apps.generics.help import render_help_with_link
@@ -28,8 +29,9 @@ from apps.utils.search import similarity_search
 logger = logging.getLogger("ocs.documents.views")
 
 
-class CollectionHome(LoginAndTeamRequiredMixin, TemplateView):
+class CollectionHome(LoginAndTeamRequiredMixin, TemplateView, PermissionRequiredMixin):
     template_name = "generic/object_home.html"
+    permission_required = "documents.view_collection"
 
     def get_context_data(self, team_slug: str, **kwargs):
         return {
@@ -88,12 +90,12 @@ def add_collection_files(request, team_slug: str, pk: int):
                 )
             )
 
-        CollectionFile.objects.bulk_create(
+        collection_files = CollectionFile.objects.bulk_create(
             [CollectionFile(collection=collection, file=file, status=status, metadata=metadata) for file in files]
         )
 
     if collection.is_index:
-        index_collection_files_task.delay(collection.id)
+        tasks.index_collection_files_task.delay([cf.id for cf in collection_files])
 
     messages.success(request, f"Added {len(files)} files to collection")
     return redirect("documents:single_collection_home", team_slug=team_slug, pk=pk)
@@ -119,11 +121,12 @@ def delete_collection_file(request, team_slug: str, pk: int, file_id: int):
     return redirect("documents:single_collection_home", team_slug=team_slug, pk=pk)
 
 
-class CollectionTableView(LoginAndTeamRequiredMixin, SingleTableView):
+class CollectionTableView(LoginAndTeamRequiredMixin, SingleTableView, PermissionRequiredMixin):
     model = Collection
     paginate_by = 25
     table_class = CollectionsTable
     template_name = "table/single_table.html"
+    permission_required = "documents.view_collection"
 
     def get_queryset(self):
         queryset = Collection.objects.filter(team=self.request.team, is_version=False).order_by("-created_at")
@@ -139,10 +142,11 @@ class CollectionFormMixin:
         return kwargs
 
 
-class CreateCollection(LoginAndTeamRequiredMixin, CollectionFormMixin, CreateView):
+class CreateCollection(LoginAndTeamRequiredMixin, CollectionFormMixin, CreateView, PermissionRequiredMixin):
     model = Collection
     form_class = CollectionForm
     template_name = "documents/collection_form.html"
+    permission_required = "documents.add_collection"
     extra_context = {
         "title": "Create Collection",
         "button_text": "Create",
@@ -165,10 +169,11 @@ class CreateCollection(LoginAndTeamRequiredMixin, CollectionFormMixin, CreateVie
         return response
 
 
-class EditCollection(LoginAndTeamRequiredMixin, CollectionFormMixin, UpdateView):
+class EditCollection(LoginAndTeamRequiredMixin, CollectionFormMixin, UpdateView, PermissionRequiredMixin):
     model = Collection
     form_class = CollectionForm
     template_name = "documents/collection_form.html"
+    permission_required = "documents.change_collection"
     extra_context = {
         "title": "Update Collection",
         "button_text": "Update",
@@ -194,7 +199,7 @@ class EditCollection(LoginAndTeamRequiredMixin, CollectionFormMixin, UpdateView)
                 collection.save(update_fields=["openai_vector_store_id"])
 
             CollectionFile.objects.filter(collection_id=collection.id).update(status=FileStatus.PENDING)
-            migrate_vector_stores.delay(
+            tasks.migrate_vector_stores.delay(
                 collection_id=form.instance.id,
                 from_vector_store_id=old_vector_store_id,
                 from_llm_provider_id=form.initial["llm_provider"],
@@ -202,7 +207,9 @@ class EditCollection(LoginAndTeamRequiredMixin, CollectionFormMixin, UpdateView)
         return response
 
 
-class DeleteCollection(LoginAndTeamRequiredMixin, View):
+class DeleteCollection(LoginAndTeamRequiredMixin, View, PermissionRequiredMixin):
+    permission_required = "documents.delete_collection"
+
     def delete(self, request, team_slug: str, pk: int):
         collection = get_object_or_404(Collection, team__slug=team_slug, id=pk)
 
@@ -243,3 +250,14 @@ class DeleteCollection(LoginAndTeamRequiredMixin, View):
                 },
             )
             return HttpResponse(response, headers={"HX-Reswap": "none"}, status=400)
+
+
+@require_POST
+@login_and_team_required
+@permission_required("documents.change_collection", raise_exception=True)
+def retry_failed_uploads(request, team_slug: str, pk: int):
+    queryset = CollectionFile.objects.filter(collection_id=pk, status=FileStatus.FAILED)
+    collection_file_ids = list(queryset.values_list("id", flat=True))
+    queryset.update(status=FileStatus.PENDING)
+    tasks.index_collection_files_task.delay(collection_file_ids)
+    return redirect("documents:single_collection_home", team_slug=team_slug, pk=pk)
