@@ -225,6 +225,8 @@ class OpenAILlmService(OpenAIGenericService):
         for tool_name in built_in_tools:
             if tool_name == "web-search":
                 tools.append(OpenAIBuiltinTool({"type": "web_search_preview"}))
+            elif tool_name == "code-execution":
+                tools.append(OpenAIBuiltinTool({"type": "code_interpreter", "container": {"type": "auto"}}))
             else:
                 raise ValueError(f"Unsupported built-in tool for openai: '{tool_name}'")
         return tools
