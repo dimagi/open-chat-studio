@@ -48,10 +48,7 @@ def index_collection_files(collection_id: int, all_files: bool) -> list[str]:
     default_chunking_strategy = ChunkingStrategy(chunk_size=800, chunk_overlap=400)
 
     for collection_file in queryset.select_related("file").iterator(100):
-        if metadata := collection_file.metadata:
-            strategy = metadata.chunking_strategy
-        else:
-            strategy = default_chunking_strategy
+        strategy = collection_file.chunking_strategy or default_chunking_strategy
 
         strategy_file_map[(strategy.chunk_size, strategy.chunk_overlap)].append(collection_file)
 
