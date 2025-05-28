@@ -7,6 +7,7 @@ from django.conf import settings
 from django.core.files.base import ContentFile
 from django.db import models
 from django.urls import reverse
+from pgvector.django import HnswIndex, VectorField
 
 from apps.experiments.versioning import VersionDetails, VersionField, VersionsMixin, VersionsObjectManagerMixin
 from apps.generics.chips import Chip
@@ -157,3 +158,17 @@ class File(BaseTeamModel, VersionsMixin):
             self.archive()
         else:
             self.delete()
+
+
+class FileChunkEmbedding(BaseTeamModel):
+    file = models.ForeignKey(File, on_delete=models.CASCADE)
+    collection = models.ForeignKey("documents.Collection", on_delete=models.CASCADE)
+    chunk_number = models.PositiveIntegerField()
+    text = models.TextField()
+    page_number = models.PositiveIntegerField(blank=True)
+    embedding = VectorField(dimensions=1024)
+
+    class Meta:
+        indexes = [
+            HnswIndex(name="embedding_index", fields=["embedding"], opclasses=["vector_cosine_ops"]),
+        ]
