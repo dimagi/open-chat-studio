@@ -319,9 +319,9 @@ class PipelineRouterNode(BasePipelineNode):
 
             state = self._prepare_state(self.node_id, incoming_edges, state)
 
-            conditional_branch = self._process_conditional(state)
+            conditional_branch, is_default_keyword = self._process_conditional(state)
             output_handle = next((k for k, v in output_map.items() if v == conditional_branch), None)
-            tags = self.get_output_tags(conditional_branch)
+            tags = self.get_output_tags(conditional_branch, is_default_keyword)
             target_node_id = edge_map[conditional_branch]
             route_path = (state["node_source"], self.node_id, [target_node_id])
             output = PipelineState.from_router_output(
@@ -337,7 +337,7 @@ class PipelineRouterNode(BasePipelineNode):
     def get_output_map(self) -> dict[str, str]:
         raise NotImplementedError()
 
-    def get_output_tags(self, selected_route) -> list[str]:
+    def get_output_tags(self, selected_route, is_default_keyword) -> list[str]:
         raise NotImplementedError()
 
     def _process_conditional(self, state: PipelineState):

@@ -507,18 +507,22 @@ class BooleanNode(PipelineRouterNode):
         json_schema_extra=UiSchema(widget=Widgets.toggle),
     )
 
-    def _process_conditional(self, state: PipelineState) -> Literal["true", "false"]:
+    def _process_conditional(self, state: PipelineState) -> tuple[Literal["true", "false"], bool]:
         if self.input_equals == state["messages"][-1]:
-            return "true"
-        return "false"
+            return "true", False
+        return "false", False
 
     def get_output_map(self):
         """A mapping from the output handles on the frontend to the return values of _process_conditional"""
         return {"output_0": "true", "output_1": "false"}
 
-    def get_output_tags(self, selected_route) -> list[str]:
+    def get_output_tags(self, selected_route, is_default_keyword: bool) -> list[tuple[str, str]]:
         if self.tag_output_message:
-            return [f"{self.name}:{selected_route}"]
+            tag_name = f"{self.name}:{selected_route}"
+            tag_category = TagCategories.ERROR if is_default_keyword else TagCategories.BOT_RESPONSE
+            if is_default_keyword:
+                tag_name += ":default"
+            return [(tag_name, tag_category)]
         return []
 
 
@@ -551,9 +555,13 @@ class RouterMixin(BaseModel):
         """
         return {f"output_{output_num}": keyword for output_num, keyword in enumerate(self.keywords)}
 
-    def get_output_tags(self, selected_route) -> list[tuple[str, str]]:
+    def get_output_tags(self, selected_route, is_default_keyword: bool) -> list[tuple[str, str]]:
         if self.tag_output_message:
-            return [(f"{self.name}:{selected_route}", TagCategories.BOT_RESPONSE)]
+            tag_name = f"{self.name}:{selected_route}"
+            tag_category = TagCategories.ERROR if is_default_keyword else TagCategories.BOT_RESPONSE
+            if is_default_keyword:
+                tag_name += ":default"
+            return [(tag_name, tag_category)]
         return []
 
 
@@ -618,6 +626,7 @@ class RouterNode(RouterMixin, PipelineRouterNode, HistoryMixin):
         llm = self.get_chat_model()
         router_schema = self._create_router_schema()
         chain = prompt | llm.with_structured_output(router_schema)
+        is_default_keyword = False
         try:
             result = chain.invoke(context, config=self._config)
             keyword = getattr(result, "route", None)
@@ -625,12 +634,14 @@ class RouterNode(RouterMixin, PipelineRouterNode, HistoryMixin):
             keyword = None
         except OpenAIRefusalError:
             keyword = default_keyword
+            is_default_keyword = True
         if not keyword:
             keyword = default_keyword
+            is_default_keyword = True
 
         if session:
             self._save_history(session, self.node_id, node_input, keyword)
-        return keyword
+        return keyword, is_default_keyword
 
 
 class StaticRouterNode(RouterMixin, PipelineRouterNode):
@@ -677,8 +688,8 @@ class StaticRouterNode(RouterMixin, PipelineRouterNode):
         result_lower = result.lower()
         for keyword in self.keywords:
             if keyword.lower() == result_lower:
-                return keyword
-        return self.keywords[self.default_keyword_index]
+                return keyword, False
+        return self.keywords[self.default_keyword_index], True
 
 
 class ExtractStructuredDataNodeMixin:
