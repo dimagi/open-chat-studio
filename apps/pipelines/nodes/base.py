@@ -295,6 +295,11 @@ class PipelineNode(BasePipelineNode, ABC):
         state = self._prepare_state(self.node_id, incoming_edges, state)
         output = self._process(input=state["node_input"], state=state)
         output["path"] = [(state["node_source"], self.node_id, outgoing_edges)]
+        get_output_tags_fn = getattr(self, "get_output_tags", None)
+        if callable(get_output_tags_fn):
+            output["output_message_tags"] = get_output_tags_fn()
+        else:
+            output["output_message_tags"] = []
         return output
 
     def _process(self, input: str, state: PipelineState) -> PipelineState:
@@ -314,9 +319,9 @@ class PipelineRouterNode(BasePipelineNode):
 
             state = self._prepare_state(self.node_id, incoming_edges, state)
 
-            conditional_branch = self._process_conditional(state)
+            conditional_branch, is_default_keyword = self._process_conditional(state)
             output_handle = next((k for k, v in output_map.items() if v == conditional_branch), None)
-            tags = self.get_output_tags(conditional_branch)
+            tags = self.get_output_tags(conditional_branch, is_default_keyword)
             target_node_id = edge_map[conditional_branch]
             route_path = (state["node_source"], self.node_id, [target_node_id])
             output = PipelineState.from_router_output(
@@ -332,7 +337,7 @@ class PipelineRouterNode(BasePipelineNode):
     def get_output_map(self) -> dict[str, str]:
         raise NotImplementedError()
 
-    def get_output_tags(self, selected_route) -> list[str]:
+    def get_output_tags(self, selected_route, is_default_keyword) -> list[str]:
         raise NotImplementedError()
 
     def _process_conditional(self, state: PipelineState):
@@ -354,6 +359,7 @@ class Widgets(StrEnum):
     history = "history"
     keywords = "keywords"
     history_mode = "history_mode"
+    built_in_tools = "built_in_tools"
 
 
 class OptionsSource(StrEnum):
@@ -364,6 +370,7 @@ class OptionsSource(StrEnum):
     collection = "collection"
     built_in_tools = "built_in_tools"
     collection_index = "collection_index"
+    built_in_tools_config = "built_in_tools_config"
 
 
 class UiSchema(BaseModel):

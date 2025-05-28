@@ -12,7 +12,6 @@ from django.db import models, transaction
 from django.urls import reverse
 from langchain_core.messages import AIMessage, BaseMessage, HumanMessage, SystemMessage
 
-from apps.annotations.models import TagCategories
 from apps.chat.models import ChatMessage, ChatMessageType
 from apps.custom_actions.form_utils import set_custom_actions
 from apps.custom_actions.mixins import CustomActionOperationMixin
@@ -360,15 +359,20 @@ class Pipeline(BaseTeamModel, VersionsMixin):
             return ChatMessage(content=output)
 
     def _save_message_to_history(
-        self, session: ExperimentSession, message: str, type_: ChatMessageType, metadata: dict, tags: list[str] = None
+        self,
+        session: ExperimentSession,
+        message: str,
+        type_: ChatMessageType,
+        metadata: dict,
+        tags: list[tuple] = None,
     ) -> ChatMessage:
         chat_message = ChatMessage.objects.create(
             chat=session.chat, message_type=type_.value, content=message, metadata=metadata
         )
 
         if tags:
-            for tag in tags:
-                chat_message.add_system_tag(tag, TagCategories.BOT_RESPONSE)
+            for tag_value, category in tags:
+                chat_message.create_and_add_tag(tag_value, category or "")
         return chat_message
 
     @transaction.atomic()

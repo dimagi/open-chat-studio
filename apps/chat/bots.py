@@ -223,7 +223,7 @@ class TopicBot:
             self.generator_chain = self.chain
 
         if self.generator_chain and self.generator_chain.history_manager.ai_message:
-            self.generator_chain.history_manager.ai_message.add_system_tag(
+            self.generator_chain.history_manager.ai_message.create_and_add_tag(
                 safety_layer.name, tag_category=TagCategories.SAFETY_LAYER_RESPONSE
             )
         return self.generator_chain.history_manager.ai_message

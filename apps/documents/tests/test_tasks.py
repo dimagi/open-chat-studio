@@ -68,6 +68,17 @@ class TestUploadFilesToVectorStore:
         assert collection_file.status == FileStatus.FAILED
 
     @patch("apps.documents.tasks.create_files_remote", side_effect=_create_files_remote_side_effect("ext-file-id"))
+    def test_link_files_fails(self, create_files_remote, collection_file, index_manager_mock):
+        """Test handling of upload failures"""
+        create_files_remote.return_value = ["ext-file-id"]
+
+        index_manager_mock.link_files_to_vector_store.side_effect = Exception("Linking failed")
+        index_collection_files_task([collection_file.id])
+
+        collection_file.refresh_from_db()
+        assert collection_file.status == FileStatus.FAILED
+
+    @patch("apps.documents.tasks.create_files_remote")
     def test_upload_files_task_openai_sync_error(self, create_files_remote, collection_file, index_manager_mock):
         """Test handling of OpenAiSyncError during file upload"""
         index_manager_mock.link_files_to_vector_store.side_effect = OpenAiSyncError("Failed to sync with OpenAI")

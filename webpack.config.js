@@ -34,14 +34,6 @@ const config = {
         loader: "babel-loader",
       },
       {
-        test: /\.scss$/,
-        use: [
-          MiniCssExtractPlugin.loader,
-          'css-loader',
-          'sass-loader',
-        ],
-      },
-      {
         test: /\.css$/i,
         use: [
           MiniCssExtractPlugin.loader,

@@ -416,7 +416,7 @@ class TestExperimentSession:
             message = ChatMessage.objects.create(
                 message_type=ChatMessageType.AI, content="", chat=experiment_session.chat
             )
-            message.add_system_tag(tag=f"v{version}", tag_category=TagCategories.EXPERIMENT_VERSION)
+            message.create_and_add_tag(tag=f"v{version}", tag_category=TagCategories.EXPERIMENT_VERSION)
 
         assert experiment_session.experiment_version_for_display == expected_display_val
 

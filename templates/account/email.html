@@ -19,18 +19,18 @@
               {{ emailaddress.email }}
               <span class="pg-help">
                 {% if emailaddress.verified %}
-                  <span class="pg-text-success">{% translate "Verified" %}</span>
+                  <span class="text-success">{% translate "Verified" %}</span>
                 {% else %}
                   <span class="pg-text-muted">{% translate "Unverified" %}</span>
                 {% endif %}
-                {% if emailaddress.primary %}<span class="pg-text-info">{% translate "Primary" %}</span>{% endif %}
+                {% if emailaddress.primary %}<span class="text-info">{% translate "Primary" %}</span>{% endif %}
               </span>
             </label>
           </div>
         {% endfor %}
         <div class="mt-2">
-          <button class="pg-button-primary" type="submit" name="action_primary">{% translate 'Make Primary' %}</button>
-          <button class="pg-button-secondary" type="submit" name="action_send">{% translate 'Re-send Verification' %}</button>
+          <button class="btn btn-primary" type="submit" name="action_primary">{% translate 'Make Primary' %}</button>
+          <button class="btn btn-outline" type="submit" name="action_send">{% translate 'Re-send Verification' %}</button>
           <button class="pg-button-danger" type="submit" name="action_remove">{% translate 'Remove' %}</button>
         </div>
       </fieldset>
@@ -47,7 +47,7 @@
       {% csrf_token %}
       {% render_form_fields form %}
       <div class="mt-2">
-        <button class="pg-button-primary" name="action_add" type="submit">{% translate "Add E-mail" %}</button>
+        <button class="btn btn-primary" name="action_add" type="submit">{% translate "Add E-mail" %}</button>
       </div>
     </form>
   {% endif %}

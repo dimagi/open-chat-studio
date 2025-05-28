@@ -65,5 +65,15 @@ urlpatterns = [
         views.chatbot_chat_embed,
         name="chatbot_chat_embed",
     ),
+    path(
+        "<int:experiment_id>/settings/cancel-edit/",
+        views.cancel_edit_mode,
+        name="cancel_edit_mode",
+    ),
+    path(
+        "<int:experiment_id>/settings/save-all/",
+        views.chatbots_settings,
+        name="settings",
+    ),
     path("<int:pk>/copy/", views.copy_chatbot, name="copy"),
 ]

@@ -8,7 +8,7 @@
 {% endblock %}
 {% block app %}
   <div class="app-card">
-    <p class="pg-text-right"><a href="{% url 'users:user_profile' %}">{% translate '← Return to Profile' %}</a></p>
+    <p class="text-right"><a href="{% url 'users:user_profile' %}">{% translate '← Return to Profile' %}</a></p>
     <h1 class="pg-title">{% translate "Account Connections" %}</h1>
     {% if form.accounts %}
       <p>{% blocktranslate %}You can sign in to your account using any of the following third party accounts:{% endblocktranslate %}</p>
