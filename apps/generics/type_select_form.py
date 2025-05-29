@@ -30,7 +30,7 @@ class TypeSelectForm:
     """
 
     primary: forms.BaseModelForm
-    secondary: dict[forms.Form]
+    secondary: dict[str, forms.Form]
     # name of the field in the primary form which determines which secondary form is shown
     secondary_key_field: str
 
