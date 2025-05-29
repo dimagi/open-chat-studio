@@ -81,28 +81,18 @@ def parse_output_for_anthropic(output):
     if output is None or isinstance(output, str):
         return output or ""
 
+    if isinstance(output, list):
+        return "".join(parse_output_for_anthropic(item) for item in output)
+
     if isinstance(output, dict):
         if "output" in output:
             return parse_output_for_anthropic(output["output"])
-        elif "text" in output:
-            return output.get("text", "")
+        elif output.get("type") == "text":
+            text = output.get("text", "")
+            for citation in output.get("citations", []):
+                if citation.get("title") and citation.get("url"):
+                    text += f" [{citation['title']}]({citation['url']})"
+            return text
         else:
-            return str(output)
-
-    if isinstance(output, list):
-        result = []
-        for item in output:
-            if not isinstance(item, (dict | str)):
-                continue
-
-            if isinstance(item, dict) and item.get("type") == "text":
-                text = item.get("text", "")
-                for citation in item.get("citations", []):
-                    if citation.get("title") and citation.get("url"):
-                        text += f" [{citation['title']}]({citation['url']})"
-                result.append(text)
-            elif isinstance(item, str):
-                result.append(item)
-        return "".join(result)
-
-    return str(output)
+            return ""
+    return ""
