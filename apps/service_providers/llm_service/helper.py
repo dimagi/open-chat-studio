@@ -16,6 +16,9 @@ def custom_parse_ai_message(message) -> list[AgentAction] | AgentFinish:
     1. Added a specific condition to skip malformed built in tool calls that
        originate from Anthropic models (where `call.get("type") == "tool_call"`,
        `call.get("name") == ""`, and `call.get("id") is None`).
+
+    This function is almost and exact copy of `langchain.agents.output_parsers.tools.parse_ai_message_to_tool_action`
+    with the exception of the above condition.
     """
     if not isinstance(message, AIMessage):
         raise TypeError(f"Expected an AI message got {type(message)}")
