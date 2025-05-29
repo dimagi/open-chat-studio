@@ -16,10 +16,6 @@ def custom_parse_ai_message(message) -> list[AgentAction] | AgentFinish:
     1. Added a specific condition to skip malformed built in tool calls that
        originate from Anthropic models (where `call.get("type") == "tool_call"`,
        `call.get("name") == ""`, and `call.get("id") is None`).
-    2. Ensure that tool_call_id is present in every tool_call as tool_call_id is not returned by anthropic
-    built_in_tools
-    3. Separate processing of custom tools and built in tools as custom tools are present in tool_calls
-    whereas built_in_tools are present in additional kwargs
     """
     if not isinstance(message, AIMessage):
         raise TypeError(f"Expected an AI message got {type(message)}")
@@ -57,6 +53,10 @@ def custom_parse_ai_message(message) -> list[AgentAction] | AgentFinish:
         else:
             tool_input = _tool_input
 
+        # Skip malformed built-in tool calls that originate from Anthropic models
+        if tool_call.get("type") == "tool_call" and not tool_call.get("name") and tool_call.get("id") is None:
+            continue
+
         content_msg = f"responded: {message.content}\n" if message.content else "\n"
         log = f"\nInvoking: `{function_name}` with `{tool_input}`\n{content_msg}\n"
         actions.append(
@@ -68,4 +68,7 @@ def custom_parse_ai_message(message) -> list[AgentAction] | AgentFinish:
                 tool_call_id=tool_call["id"],
             )
         )
+
+    if not actions:
+        return AgentFinish(return_values={"output": message.content}, log=str(message.content))
     return actions
