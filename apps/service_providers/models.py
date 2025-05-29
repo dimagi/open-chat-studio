@@ -453,7 +453,6 @@ class AuthProvider(BaseTeamModel):
 
 class TraceProviderType(models.TextChoices):
     langfuse = "langfuse", _("Langfuse")
-    langsmith = "langsmith", _("LangSmith")
 
     @property
     def form_cls(self) -> type["ProviderTypeConfigForm"]:
@@ -462,16 +461,12 @@ class TraceProviderType(models.TextChoices):
         match self:
             case TraceProviderType.langfuse:
                 return forms.LangfuseTraceProviderForm
-            case TraceProviderType.langsmith:
-                return forms.LangsmithTraceProviderForm
         raise Exception(f"No config form configured for {self}")
 
     def get_service(self, config: dict) -> tracing.Tracer:
         match self:
             case TraceProviderType.langfuse:
                 return tracing.LangFuseTracer(self, config)
-            case TraceProviderType.langsmith:
-                return tracing.LangSmithTracer(self, config)
         raise Exception(f"No tracing service configured for {self}")
 
 
