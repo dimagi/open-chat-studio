@@ -1,0 +1,73 @@
+{
+  "content": "",
+  "additional_kwargs": {
+    "tool_calls": [
+      {
+        "index": 0,
+        "id": "call_qMftC58uJdrzNzKJvtcfOGFV",
+        "function": {
+          "arguments": "{\"key\": \"name\", \"value\": \"Jack\"}",
+          "name": "update-user-data"
+        },
+        "type": "function"
+      },
+      {
+        "index": 1,
+        "id": "call_YBGUtTpBhe39ipO3PB2yQOc9",
+        "function": {
+          "arguments": "{\"datetime_due\": \"2025-05-29T16:15:59+02:00\", \"message\": \"Make dinner\", \"schedule_name\": \"Dinner Reminder\"}",
+          "name": "one-off-reminder"
+        },
+        "type": "function"
+      }
+    ]
+  },
+  "response_metadata": {
+    "finish_reason": "tool_calls",
+    "model_name": "gpt-4o-2024-08-06",
+    "system_fingerprint": "fp_9bddfca6e2"
+  },
+  "type": "AIMessageChunk",
+  "name": null,
+  "id": "run--d7ed5c4e-0bfa-4965-988d-1a5a59c7cc77",
+  "example": false,
+  "tool_calls": [
+    {
+      "name": "update-user-data",
+      "args": {
+        "key": "name",
+        "value": "Jack"
+      },
+      "id": "call_qMftC58uJdrzNzKJvtcfOGFV",
+      "type": "tool_call"
+    },
+    {
+      "name": "one-off-reminder",
+      "args": {
+        "datetime_due": "2025-05-29T16:15:59+02:00",
+        "message": "Make dinner",
+        "schedule_name": "Dinner Reminder"
+      },
+      "id": "call_YBGUtTpBhe39ipO3PB2yQOc9",
+      "type": "tool_call"
+    }
+  ],
+  "invalid_tool_calls": [],
+  "usage_metadata": null,
+  "tool_call_chunks": [
+    {
+      "name": "update-user-data",
+      "args": "{\"key\": \"name\", \"value\": \"Jack\"}",
+      "id": "call_qMftC58uJdrzNzKJvtcfOGFV",
+      "index": 0,
+      "type": "tool_call_chunk"
+    },
+    {
+      "name": "one-off-reminder",
+      "args": "{\"datetime_due\": \"2025-05-29T16:15:59+02:00\", \"message\": \"Make dinner\", \"schedule_name\": \"Dinner Reminder\"}",
+      "id": "call_YBGUtTpBhe39ipO3PB2yQOc9",
+      "index": 1,
+      "type": "tool_call_chunk"
+    }
+  ]
+}
