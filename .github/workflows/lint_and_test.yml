@@ -67,7 +67,7 @@ jobs:
       PYTHON_VERSION: '3.11'
     services:
       postgres:
-        image: pgvector/pgvector:latest
+        image: pgvector/pgvector:pg16
         env:
           POSTGRES_USER: postgres
           POSTGRES_PASSWORD: postgres_password
