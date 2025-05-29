@@ -67,7 +67,7 @@ CONTENT_TYPES = {
         "survey",
         "syntheticvoice",
     ],
-    "files": ["file"],
+    "files": ["file", "filechunkembedding"],
     "pipelines": ["pipeline", "pipelinechathistory", "pipelinechatmessages", "node"],
     "service_providers": [
         "authprovider",
