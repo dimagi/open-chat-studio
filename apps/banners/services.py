@@ -1,14 +1,16 @@
 import json
 
-from django.db.models import Q
+from django.db.models import Q, QuerySet
 from django.utils import timezone
+
+from apps.teams.models import Team
 
 from .models import Banner
 
 
 class BannerService:
     @staticmethod
-    def get_active_banners(dismissed_ids, location, team):
+    def get_active_banners(dismissed_ids: str, location: str | None, team: Team | None) -> QuerySet:
         now = timezone.now()
         query = Banner.objects.filter(is_active=True, start_date__lte=now, end_date__gt=now)
         location_filter = Q(location=location) | Q(location="global") if location else Q(location="global")
