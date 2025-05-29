@@ -23,8 +23,7 @@
       init() {
         const url = new URL(window.location.href);
         const params = url.searchParams;
-        const matchedIndex = this.getLastMessageRangeFilterIndex(params);
-
+        const matchedIndex = this.getLastMessageFilterIndex(params);
         if (matchedIndex !== null) {
           const filterValue = params.get(`filter_${matchedIndex}_value`);
           const found = this.options.find(opt => opt.value === filterValue);
@@ -46,20 +45,11 @@
       updateUrlParams(value) {
         const url = new URL(window.location.href);
         const params = url.searchParams;
-        const matchedIndex = this.getLastMessageRangeFilterIndex(params);
-
+        const matchedIndex = this.getLastMessageFilterIndex(params);
         if (matchedIndex !== null) {
-          const operatorKey = `filter_${matchedIndex}_operator`;
-
-          if (params.get(operatorKey) === 'range') {
-            params.set(`filter_${matchedIndex}_value`, value);
-          } else {
-            // replace existing non-range filter
-            params.set(`filter_${matchedIndex}_operator`, 'range');
-            params.set(`filter_${matchedIndex}_value`, value);
-          }
+          params.set(`filter_${matchedIndex}_operator`, 'range');
+          params.set(`filter_${matchedIndex}_value`, value);
         } else {
-          // Add new filter
           let maxIndex = -1;
           for (const key of params.keys()) {
             const match = key.match(/^filter_(\d+)_column$/);
@@ -70,22 +60,16 @@
           params.set(`filter_${nextIndex}_operator`, 'range');
           params.set(`filter_${nextIndex}_value`, value);
         }
-
-        // Redirect with updated filter
         url.search = params.toString();
         window.location.href = url.toString();
       },
 
-      getLastMessageRangeFilterIndex(params) {
+      getLastMessageFilterIndex(params) {
         for (const [key, val] of params.entries()) {
           if (key.includes('_column') && val === 'last_message') {
             const match = key.match(/filter_(\d+)_column/);
             if (match) {
-              const index = match[1];
-              const op = params.get(`filter_${index}_operator`);
-              if (op === 'range') {
-                return index;
-              }
+              return match[1];
             }
           }
         }
