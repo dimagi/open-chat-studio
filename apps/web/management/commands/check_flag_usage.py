@@ -90,11 +90,17 @@ class Command(BaseCommand):
         all_usages = {flag_name: defaultdict(list) for flag_name in flag_names}
         project_root = settings.BASE_DIR
 
-        # Create combined patterns for all flags
+        # legacy flag names might not be prefixed with 'flag_'
         escaped_flags = [re.escape(flag_name) for flag_name in flag_names]
         flag_pattern = "|".join(escaped_flags)
 
+        # new style flags should start with 'flag_'
+        flags_with_prefix = "|".join(
+            [re.escape(flag_name) for flag_name in flag_names if flag_name.startswith("flag_")]
+        )
+
         patterns = [
+            rf"['\"]((?:{flags_with_prefix}))['\"]\)",
             # waffle.flag_is_active(request, 'flag_name')
             rf"flag_is_active\s*\([a-zA-Z.]+,\s*['\"]((?:{flag_pattern}))['\"]\)",
             rf"get_waffle_flag\s*\(\s*['\"]((?:{flag_pattern}))['\"]\)",  # custom flag getter
@@ -121,7 +127,6 @@ class Command(BaseCommand):
                         for match in matches:
                             if match in all_usages:
                                 all_usages[match][relative_path].append(match)
-                        break  # Found matches with this pattern, no need to check others
             except (OSError, UnicodeDecodeError):
                 # Skip files that can't be read
                 continue

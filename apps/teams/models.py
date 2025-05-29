@@ -2,6 +2,7 @@ import uuid
 
 from django.conf import settings
 from django.contrib.auth.models import Group, Permission
+from django.core.exceptions import ValidationError
 from django.db import models
 from django.urls import reverse
 from django.utils.translation import gettext
@@ -207,3 +208,11 @@ class Flag(AbstractUserFlag):
         team_ids = set(self.teams.all().values_list("pk", flat=True))
         cache.add(cache_key, team_ids or CACHE_EMPTY)
         return team_ids
+
+    def save(self, *args, **kwargs):
+        if not self.pk:
+            # {revent creating flags with names that do not start with "flag_"
+            # In future this can be moved to the `clean` method
+            if not self.name.startswith("flag_"):
+                raise ValidationError("Flag name must start with 'feature_'")
+        super().save(*args, **kwargs)
