@@ -1,14 +1,6 @@
-import dataclasses
-
 from django.db import transaction
 
 from apps.service_providers.models import EmbeddingProviderType
-
-
-@dataclasses.dataclass
-class Model:
-    name: str
-
 
 DEFAULT_EMBEDDING_PROVIDER_MODELS = {
     EmbeddingProviderType.openai: ["text-embedding-3-small", "text-embedding-3-large", "text-embedding-ada-002"],
