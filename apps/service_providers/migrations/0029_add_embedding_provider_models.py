@@ -18,7 +18,7 @@ def update_embedding_models(apps, schema_editor):
 class Migration(migrations.Migration):
 
     dependencies = [
-        ('service_providers', '0027_embeddingprovider_embeddingprovidermodel'),
+        ('service_providers', '0028_embeddingprovider_embeddingprovidermodel'),
     ]
 
     operations = [

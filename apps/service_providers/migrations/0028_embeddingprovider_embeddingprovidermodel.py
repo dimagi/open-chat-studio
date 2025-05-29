@@ -9,7 +9,7 @@ from django.db import migrations, models
 class Migration(migrations.Migration):
 
     dependencies = [
-        ('service_providers', '0026_add_google_gemini_models'),
+        ('service_providers', '0027_alter_traceprovider_type'),
         ('teams', '0007_create_commcare_connect_flag'),
     ]
 
