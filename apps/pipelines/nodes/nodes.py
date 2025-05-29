@@ -543,6 +543,15 @@ class RouterMixin(BaseModel):
             raise PydanticCustomError("invalid_keywords", "Keywords must be unique")
         return value
 
+    @field_validator("default_keyword_index")
+    def validate_default_keyword_index(cls, value: int, info: FieldValidationInfo) -> int:
+        keywords = info.data.get("keywords", [])
+        if not (0 <= value < len(keywords)):
+            raise ValueError(
+                f"Default keyword index {value} is out of bounds for keywords list of length {len(keywords)}"
+            )
+        return value
+
     def _create_router_schema(self):
         """Create a Pydantic model for structured router output"""
         return create_model(
