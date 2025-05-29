@@ -61,6 +61,8 @@ class Command(BaseCommand):
             self.stdout.write(f"\nFlags found in code ({len(used_flags)}):")
             for flag in used_flags:
                 self.stdout.write(f"  ✓ {flag.name}")
+                for file_path in all_flag_usages[flag.name]:
+                    self.stdout.write(f"    - {file_path}")
 
         if unused_flags:
             self.stdout.write(f"\nFlags not found in code ({len(unused_flags)}):")
@@ -100,6 +102,10 @@ class Command(BaseCommand):
             rf"request,?\s*['\"]((?:{flag_pattern}))['\"]",  # request, 'flag_name' pattern
             # Flag.objects.get(name='flag_name')
             rf"Flag\.objects\.get\s*\(\s*name\s*=\s*['\"]((?:{flag_pattern}))['\"]\)",
+            # Flag.get(name='flag_name') or Flag.get('flag_name')
+            rf"Flag\.get\s*\(\s*(?:name\s*=\s*)?['\"]((?:{flag_pattern}))['\"]\)",
+            # {% flag 'flag_name' %}
+            rf"\{{%\s*flag\s+['\"]((?:{flag_pattern}))['\"]\s*%\}}",
         ]
 
         compiled_patterns = [re.compile(pattern, re.IGNORECASE) for pattern in patterns]
