@@ -250,14 +250,6 @@ class LangfuseTraceProviderForm(ObfuscatingMixin, ProviderTypeConfigForm):
     host = forms.URLField(label=_("Host"))
 
 
-class LangsmithTraceProviderForm(ObfuscatingMixin, ProviderTypeConfigForm):
-    obfuscate_fields = ["api_key"]
-
-    api_key = forms.CharField(label=_("API Key"))
-    api_url = forms.URLField(label=_("API URL"), initial="https://api.smith.langchain.com")
-    project = forms.CharField(label=_("Project Name"))
-
-
 class LlmProviderModelForm(forms.ModelForm):
     class Meta:
         model = LlmProviderModel
