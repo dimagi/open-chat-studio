@@ -49,8 +49,8 @@ DATE_RANGE_OPTIONS = [
 ]
 
 
-def apply_dynamic_filters(query_set, request, parsed_params=None):
-    timezone = request.session.get("detected_tz", None)
+def apply_dynamic_filters(query_set, request, parsed_params=None, timezone=None):
+    timezone = request.session.get("detected_tz", None) if timezone is None else timezone
     query_set = _prepare_queryset(query_set)
     param_source = parsed_params if parsed_params is not None else request.GET
     filter_conditions = Q()
