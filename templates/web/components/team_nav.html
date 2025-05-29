@@ -2,14 +2,6 @@
 {% load i18n %}
 {% load team_tags %}
 {% if request.team %}
-  {% flag "chatbots" %}
-    <li>
-      <a href="{% url 'chatbots:chatbots_home' request.team.slug %}" {% if active_tab == 'chatbots' %}class="menu-active"{% endif %}>
-        <i class="fas fa-comments"></i>
-        {% translate "Chatbots" %}
-      </a>
-    </li>
-  {% endflag %}
   <li>
     <a href="{% url 'experiments:experiments_home' request.team.slug %}"{% if active_tab == 'experiments' %}class="menu-active"{% endif %}>
       <i class="fa fa-flask fa-fw"></i>
@@ -74,6 +66,14 @@
       </ul>
       </li>
     {% endif %}
+  {% endflag %}
+  {% flag "chatbots" %}
+    <li>
+      <a href="{% url 'chatbots:chatbots_home' request.team.slug %}" {% if active_tab == 'chatbots' %}class="menu-active"{% endif %}>
+        <i class="fas fa-comments"></i>
+        {% translate "Chatbots" %}
+      </a>
+    </li>
   {% endflag %}
   {% if perms.experiments.view_participant %}
     <li>
