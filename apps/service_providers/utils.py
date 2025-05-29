@@ -15,6 +15,8 @@ from . import const
 from .models import (
     AuthProvider,
     AuthProviderType,
+    EmbeddingProvider,
+    EmbeddingProviderType,
     LlmProvider,
     LlmProviderModel,
     LlmProviderTypes,
@@ -54,6 +56,7 @@ class ServiceProvider(ServiceProviderType, Enum):
     messaging = const.MESSAGING, "Messaging Provider", MessagingProvider, MessagingProviderType, ["name", "type"]
     auth = const.AUTH, "Authentication Provider", AuthProvider, AuthProviderType, ["name", "type"]
     tracing = const.TRACING, "Tracing Provider", TraceProvider, TraceProviderType, ["name", "type"]
+    embedding = const.EMBEDDING, "Embedding Provider", EmbeddingProvider, EmbeddingProviderType, ["name", "type"]
 
     @property
     def table(self) -> tables.Table:

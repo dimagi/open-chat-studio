@@ -51,6 +51,14 @@
 
     {% translate "Record trace details of bot activity" as trace_subtitle %}
     {% include 'service_providers/service_provider_home.html' with provider_type="tracing" title="Tracing Providers" subtitle=trace_subtitle perm="add_traceprovider" %}
+
+    {% translate "Embedding models for RAG" as embeddings_subtitle %}
+    {% url "service_providers:table" request.team.slug "embedding" as embedding_provider_table_url %}
+    {% url "service_providers:embedding_provider_new" request.team.slug as embedding_provider_object_url %}
+    {% with button_style="btn-outline" title_class="pg-subtitle" %}
+      {% include "generic/object_home_content.html" with new_object_url=embedding_provider_object_url title="Embedding Providers" table_url=embedding_provider_table_url allow_new=True subtitle=embeddings_subtitle %}
+    {% endwith %}
+
     <section class="app-card">
       <h3 class="pg-subtitle">{% translate "Team Members" %}</h3>
       <div class='table-responsive'>

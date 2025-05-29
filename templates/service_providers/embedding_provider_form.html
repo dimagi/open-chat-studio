@@ -1,0 +1,12 @@
+{% extends "generic/type_select_form.html" %}
+{% load form_tags %}
+{% load i18n %}
+{% block pre_secondary_form %}
+  <div class="my-4">
+    <h2 class="font-bold text-lg">Models
+      {% include "generic/help.html" with help_content=help_text %}
+    </h2>
+    {% include "service_providers/components/embedding_models.html" with models_by_type=default_models_by_type %}
+  </div>
+{% endblock pre_secondary_form %}
+

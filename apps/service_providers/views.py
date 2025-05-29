@@ -17,7 +17,12 @@ from apps.assistants.models import OpenAiAssistant
 from apps.experiments.models import Experiment
 from apps.files.views import BaseAddFileHtmxView
 from apps.service_providers.forms import LlmProviderModelForm
-from apps.service_providers.models import LlmProviderModel, MessagingProviderType, VoiceProviderType
+from apps.service_providers.models import (
+    EmbeddingProviderModel,
+    LlmProviderModel,
+    MessagingProviderType,
+    VoiceProviderType,
+)
 from apps.utils.deletion import get_related_objects
 
 from ..generics.chips import Chip
@@ -230,3 +235,20 @@ def delete_llm_provider_model(request, team_slug: str, pk: int):
     except ValidationError as ex:
         return HttpResponseBadRequest(", ".join(ex.messages).encode("utf-8"))
     return HttpResponse()
+
+
+class EmbeddingProviderView(CreateServiceProvider):
+    template = "service_providers/embedding_provider_form.html"
+
+    @property
+    def provider_type(self) -> ServiceProvider:
+        return ServiceProvider.embedding
+
+    @property
+    def extra_context(self):
+        models_by_type = _get_models_by_type(EmbeddingProviderModel.objects.filter(team=None))
+        return {
+            "active_tab": "manage-team",
+            "title": self.provider_type.label,
+            "default_models_by_type": models_by_type,
+        }

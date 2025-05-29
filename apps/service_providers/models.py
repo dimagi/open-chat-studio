@@ -15,7 +15,7 @@ from pydantic import ValidationError
 
 from apps.channels.models import ChannelPlatform
 from apps.experiments.models import SyntheticVoice
-from apps.service_providers import auth_service, const, model_audit_fields, tracing
+from apps.service_providers import auth_service, const, embedding_service, model_audit_fields, tracing
 from apps.teams.models import BaseTeamModel, Team
 from apps.utils.deletion import get_related_objects, has_related_objects
 
@@ -496,7 +496,7 @@ class TraceProvider(BaseTeamModel):
         return self.type_enum.get_service(self.config)
 
 
-class EmbeddingProviderTypes(LlmProviderType, Enum):
+class EmbeddingProviderType(models.TextChoices):
     openai = "openai", _("OpenAI")
 
     def __str__(self):
@@ -507,11 +507,31 @@ class EmbeddingProviderTypes(LlmProviderType, Enum):
         empty = [(None, cls.__empty__)] if hasattr(cls, "__empty__") else []
         return empty + [(member.value.slug, member.label) for member in cls]
 
+    @property
+    def form_cls(self) -> type["ProviderTypeConfigForm"]:
+        from apps.service_providers import forms
+
+        match self:
+            case EmbeddingProviderType.openai:
+                return forms.OpenAIConfigForm
+            case _:
+                raise Exception(f"No config form configured for {self}")
+
+    def get_embedding_service(self, config: dict):
+        try:
+            match self:
+                case EmbeddingProviderType.openai:
+                    return embedding_service.OpenAIEmbeddingService(**config)
+                case _:
+                    raise ServiceProviderConfigError(self.slug, "No embedding model configured")
+        except ValidationError as e:
+            raise ServiceProviderConfigError(self.slug, str(e)) from e
+
 
 @audit_fields(*model_audit_fields.EMBEDDING_PROVIDER_FIELDS, audit_special_queryset_writes=True)
 class EmbeddingProvider(BaseTeamModel):
     team = models.ForeignKey("teams.Team", on_delete=models.CASCADE, related_name="embedding_providers")
-    type = models.CharField(max_length=255, choices=EmbeddingProviderTypes.choices)
+    type = models.CharField(max_length=255, choices=EmbeddingProviderType.choices)
     name = models.CharField(max_length=255)
     config = encrypt(models.JSONField(default=dict))
 
@@ -525,11 +545,15 @@ class EmbeddingProvider(BaseTeamModel):
 
     @property
     def type_enum(self):
-        return EmbeddingProviderTypes[str(self.type)]
+        return EmbeddingProviderType[str(self.type)]
+
+    def get_embedding_service(self):
+        config = {k: v for k, v in self.config.items() if v}
+        return self.type_enum.get_embedding_service(config)
 
 
 class EmbeddingProviderModel(BaseTeamModel):
-    type = models.CharField(max_length=255, choices=EmbeddingProviderTypes.choices)
+    type = models.CharField(max_length=255, choices=EmbeddingProviderType.choices)
     name = models.CharField(max_length=128, help_text="The name of the model. e.g. 'text-embedding-3-small'")
     team = models.ForeignKey(
         Team,
