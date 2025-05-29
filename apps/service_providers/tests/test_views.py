@@ -1,10 +1,18 @@
 import pytest
 from django.urls import reverse
 
-from apps.service_providers.models import AuthProvider, LlmProvider, MessagingProvider, TraceProvider, VoiceProvider
+from apps.service_providers.models import (
+    AuthProvider,
+    EmbeddingProvider,
+    LlmProvider,
+    MessagingProvider,
+    TraceProvider,
+    VoiceProvider,
+)
 from apps.service_providers.utils import ServiceProvider
 from apps.utils.factories.service_provider_factories import (
     AuthProviderFactory,
+    EmbeddingProviderFactory,
     LlmProviderFactory,
     MessagingProviderFactory,
     TraceProviderFactory,
@@ -19,6 +27,7 @@ def factory_for_model(model):
         MessagingProvider: MessagingProviderFactory,
         AuthProvider: AuthProviderFactory,
         TraceProvider: TraceProviderFactory,
+        EmbeddingProvider: EmbeddingProviderFactory,
     }.get(model)
 
     return factory

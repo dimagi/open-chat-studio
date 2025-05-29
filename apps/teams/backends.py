@@ -76,6 +76,7 @@ CONTENT_TYPES = {
         "messagingprovider",
         "traceprovider",
         "embeddingprovider",
+        "embeddingprovidermodel",
     ],
     "teams": ["invitation", "membership", "team"],
     "annotations": ["tag", "customtaggeditem", "usercomment"],

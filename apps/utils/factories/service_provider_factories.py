@@ -3,6 +3,8 @@ import factory
 from apps.service_providers.models import (
     AuthProvider,
     AuthProviderType,
+    EmbeddingProvider,
+    EmbeddingProviderType,
     LlmProvider,
     LlmProviderModel,
     LlmProviderTypes,
@@ -69,3 +71,15 @@ class TraceProviderFactory(factory.django.DjangoModelFactory):
     name = factory.Faker("name")
     type = AuthProviderType.commcare
     config = {"public_key": "123", "secret_key": "***", "host": "https://example.com"}
+
+
+class EmbeddingProviderFactory(factory.django.DjangoModelFactory):
+    class Meta:
+        model = EmbeddingProvider
+
+    team = factory.SubFactory(TeamFactory)
+    name = factory.Faker("name")
+    type = EmbeddingProviderType.openai
+    config = {
+        "openai_api_key": "123",
+    }
