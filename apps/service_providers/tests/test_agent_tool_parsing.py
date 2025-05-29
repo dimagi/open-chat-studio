@@ -7,7 +7,7 @@ from langchain_core.agents import AgentFinish
 from langchain_core.exceptions import OutputParserException
 from langchain_core.messages import AIMessage, AIMessageChunk
 
-from apps.service_providers.llm_service.helper import custom_parse_ai_message
+from apps.service_providers.llm_service.parsers import custom_parse_ai_message
 
 
 # custom_parse_ai_message = parse_ai_message_to_tool_action
