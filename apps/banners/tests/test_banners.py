@@ -142,9 +142,3 @@ class BannerServiceTests(TestCase):
 
         assert self.active_global_banner.id in banner_ids
         assert self.flagged_banner.id not in banner_ids
-
-    def test_banner_is_visible_for_team_with_flag(self):
-        assert self.flagged_banner.is_visible_for_team(self.team_with_flag) is True
-
-    def test_banner_is_visible_for_team_without_flag(self):
-        assert self.flagged_banner.is_visible_for_team(self.team_without_flag) is False

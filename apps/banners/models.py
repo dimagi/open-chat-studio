@@ -65,12 +65,3 @@ class Banner(models.Model):
     def is_visible(self):
         now = timezone.now()
         return self.is_active and self.start_date <= now and self.end_date > now
-
-    def is_visible_for_team(self, team):
-        if not self.is_visible:
-            return False
-
-        if not self.feature_flag:
-            return True
-
-        return self.feature_flag.is_active_for_team(team)
