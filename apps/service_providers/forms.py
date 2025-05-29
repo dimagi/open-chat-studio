@@ -52,9 +52,9 @@ class ObfuscatingMixin:
             return cleaned_data
 
         for field in self.obfuscate_fields:
-            initial = self.initial.get(field)
-            new = obfuscate_value(self.cleaned_data.get(field))
-            if new == initial:
+            initial_masked = self.initial.get(field)
+            if self.cleaned_data.get(field) == initial_masked:
+                # If the cleaned data is the same as the initial masked value, we keep initial unmasked value
                 cleaned_data[field] = self.initial_raw.get(field)
 
         return cleaned_data
@@ -146,7 +146,7 @@ class DeepSeekConfigForm(ObfuscatingMixin, ProviderTypeConfigForm):
 
 def obfuscate_value(value):
     if value and isinstance(value, str):
-        return value[:4] + "*" * (len(value) - 4)
+        return value[:4] + "..." + value[-2:]
     return value
 
 
