@@ -1,32 +1,22 @@
 import os
 import re
+from collections import defaultdict
 from pathlib import Path
 
 from django.conf import settings
 from django.core.management.base import BaseCommand, CommandError
-from django.db import transaction
 
 from apps.teams.models import Flag
 
 
 class Command(BaseCommand):
-    help = "Remove old feature flags from the database after checking for usage in code"
+    help = "List feature flags and their usage status in code"
 
     def add_arguments(self, parser):
         parser.add_argument(
             "--flag-name",
             type=str,
-            help="Name of specific flag to remove. If not provided, will scan for all unused flags.",
-        )
-        parser.add_argument(
-            "--dry-run",
-            action="store_true",
-            help="Show what would be deleted without actually deleting anything",
-        )
-        parser.add_argument(
-            "--force",
-            action="store_true",
-            help="Skip confirmation prompt and delete flags immediately",
+            help="Name of specific flag to check. If not provided, will scan all flags.",
         )
         parser.add_argument(
             "--exclude-dirs",
@@ -36,8 +26,6 @@ class Command(BaseCommand):
         )
 
     def handle(self, *args, **options):
-        self.dry_run = options["dry_run"]
-        self.force = options["force"]
         self.exclude_dirs = set(options["exclude_dirs"])
 
         if options["flag_name"]:
@@ -60,67 +48,44 @@ class Command(BaseCommand):
         # Find usages for all flags at once
         all_flag_usages = self._find_all_flag_usages([flag.name for flag in flags])
 
+        used_flags = []
         unused_flags = []
+
         for flag in flags:
-            if flag.name not in all_flag_usages or not all_flag_usages[flag.name]:
+            if flag.name in all_flag_usages and all_flag_usages[flag.name]:
+                used_flags.append(flag)
+            else:
                 unused_flags.append(flag)
 
-        if not unused_flags:
-            self.stdout.write(self.style.SUCCESS("No unused flags found"))
-            return
+        if used_flags:
+            self.stdout.write(f"\nFlags found in code ({len(used_flags)}):")
+            for flag in used_flags:
+                self.stdout.write(f"  ✓ {flag.name}")
 
-        self.stdout.write(f"\nFound {len(unused_flags)} unused flags:")
-        for flag in unused_flags:
-            self.stdout.write(f"  - {flag.name}")
+        if unused_flags:
+            self.stdout.write(f"\nFlags not found in code ({len(unused_flags)}):")
+            for flag in unused_flags:
+                self.stdout.write(f"  ✗ {flag.name}")
 
-        if self.dry_run:
-            self.stdout.write(self.style.WARNING("\nDry run mode - no flags will be deleted"))
-            return
-
-        if not self.force:
-            confirm = input(f"\nAre you sure you want to delete {len(unused_flags)} unused flags? [y/N]: ")
-            if confirm.lower() != "y":
-                self.stdout.write("Operation cancelled")
-                return
-
-        self._delete_flags(unused_flags)
+        if not used_flags and not unused_flags:
+            self.stdout.write(self.style.SUCCESS("No flags to analyze"))
 
     def _process_single_flag(self, flag):
         usages = self._find_all_flag_usages([flag.name])
 
-        if usages:
-            self.stdout.write(f"Flag '{flag.name}' is still in use:")
-            for file_path, lines in usages.items():
-                self.stdout.write(f"\n  {file_path}:")
-                for line_num, line_content in lines:
-                    self.stdout.write(f"    Line {line_num}: {line_content.strip()}")
-
-            if not self.force:
-                self.stdout.write(
-                    self.style.WARNING(f"\nFlag '{flag.name}' appears to be in use. Use --force to delete anyway.")
-                )
-                return
-            else:
-                self.stdout.write(self.style.WARNING(f"Force deleting flag '{flag.name}' despite usage"))
-
-        if self.dry_run:
-            self.stdout.write(self.style.WARNING(f"Dry run mode - flag '{flag.name}' would be deleted"))
-            return
-
-        if not usages and not self.force:
-            confirm = input(f"Are you sure you want to delete flag '{flag.name}'? [y/N]: ")
-            if confirm.lower() != "y":
-                self.stdout.write("Operation cancelled")
-                return
-
-        self._delete_flags([flag])
+        if usages and flag.name in usages and usages[flag.name]:
+            self.stdout.write(f"✓ Flag '{flag.name}' is used in code:")
+            for file_path in usages[flag.name]:
+                self.stdout.write(f"  - {file_path}")
+        else:
+            self.stdout.write(f"✗ Flag '{flag.name}' not found in code")
 
     def _find_all_flag_usages(self, flag_names):
         """Find usages of all flag names in the codebase using a single pass."""
         if not flag_names:
             return {}
 
-        all_usages = {flag_name: {} for flag_name in flag_names}
+        all_usages = {flag_name: defaultdict(list) for flag_name in flag_names}
         project_root = settings.BASE_DIR
 
         # Create combined patterns for all flags
@@ -147,11 +112,8 @@ class Command(BaseCommand):
                 for pattern in compiled_patterns:
                     matches = pattern.findall(file_content)
                     if matches:
-                        print(relative_path, matches)
                         for match in matches:
                             if match in all_usages:
-                                if relative_path not in all_usages[match]:
-                                    all_usages[match][relative_path] = []
                                 all_usages[match][relative_path].append(match)
                         break  # Found matches with this pattern, no need to check others
             except (OSError, UnicodeDecodeError):
@@ -172,16 +134,3 @@ class Command(BaseCommand):
                 file_path = Path(root) / file
                 if file_path.suffix.lower() in source_extensions:
                     yield file_path
-
-    @transaction.atomic
-    def _delete_flags(self, flags):
-        """Delete the specified flags from the database."""
-        count = len(flags)
-        flag_names = [flag.name for flag in flags]
-
-        # Delete the flags
-        Flag.objects.filter(name__in=flag_names).delete()
-
-        self.stdout.write(
-            self.style.SUCCESS(f"Successfully deleted {count} flag{'s' if count != 1 else ''}: {', '.join(flag_names)}")
-        )
