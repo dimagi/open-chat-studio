@@ -54,7 +54,7 @@ from apps.experiments.decorators import (
 )
 from apps.experiments.email import send_chat_link_email, send_experiment_invitation
 from apps.experiments.exceptions import ChannelAlreadyUtilizedException
-from apps.experiments.filters import FIELD_TYPE_FILTERS, apply_dynamic_filters
+from apps.experiments.filters import DATE_RANGE_OPTIONS, FIELD_TYPE_FILTERS, apply_dynamic_filters
 from apps.experiments.forms import (
     ConsentForm,
     ExperimentForm,
@@ -500,6 +500,7 @@ def base_single_experiment_view(request, team_slug, experiment_id, template_name
         "field_type_filters": FIELD_TYPE_FILTERS,
         "channel_list": channel_list,
         "allow_copy": not experiment.child_links.exists(),
+        "date_range_options": DATE_RANGE_OPTIONS,
         **_get_events_context(experiment, team_slug, request.origin),
     }
     if active_tab != "chatbots":

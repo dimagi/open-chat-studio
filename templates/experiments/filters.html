@@ -95,15 +95,30 @@
               </template>
 
               <template x-if="filterData.columns[filter.column]?.type === 'timestamp'">
-                <input
-                  :type="filter.operator === 'range' ? 'text' : 'date'"
-                  x-model="filter.value"
-                  @input="triggerFilterChange()"
-                  :placeholder="filter.operator === 'range' ? 'e.g. 1d for 1 day, 1h for 1 hour' : ''"
-                  class="w-60 block px-3 border border-base-200 rounded-lg bg-base-100 text-sm"
-                  style="height: 2rem;"
-                >
+                <div>
+                  <select
+                    x-show="filter.operator === 'range'"
+                    x-model="filter.value"
+                    @change="triggerFilterChange()"
+                    class="w-60 block px-3 border border-base-200 rounded-lg bg-base-100 text-sm"
+                    style="height: 2rem;"
+                  >
+                    <template x-for="option in dateRangeOptions" :key="option.value">
+                      <option :value="option.value" x-text="option.label"></option>
+                    </template>
+                  </select>
+
+                  <input
+                    x-show="filter.operator !== 'range'"
+                    type="date"
+                    x-model="filter.value"
+                    @input="triggerFilterChange()"
+                    class="w-60 block px-3 border border-base-200 rounded-lg bg-base-100 text-sm"
+                    style="height: 2rem;"
+                  >
+                </div>
               </template>
+
             </div>
           </template>
 
@@ -119,11 +134,13 @@
 </div>
 
 {{ field_type_filters|json_script:"field-type-filters" }}
+{{ date_range_options|json_script:"date-range-options" }}
 <script>
   const tags = JSON.parse(document.getElementById('available-tags-data').textContent);
   const versionsList = JSON.parse(document.getElementById('experiment-versions-data').textContent);
   const fieldTypeFilters = JSON.parse(document.getElementById('field-type-filters').textContent);
   const channelsList = JSON.parse(document.getElementById('channel-list-data').textContent);
+  const dateRangeOptions = JSON.parse(document.getElementById('date-range-options').textContent);
   document.addEventListener('alpine:init', () => {
     Alpine.data('filterComponent', () => ({
       filterData: {

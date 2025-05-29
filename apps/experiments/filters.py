@@ -1,5 +1,5 @@
 import json
-from datetime import UTC, datetime, timedelta
+from datetime import datetime, timedelta
 from enum import StrEnum
 
 import pytz
@@ -39,6 +39,14 @@ FIELD_TYPE_FILTERS = {
     "timestamp": [Operators.ON, Operators.BEFORE, Operators.AFTER, Operators.RANGE],
     "choice": [Operators.ANY_OF, Operators.ALL_OF, Operators.EXCLUDES],
 }
+
+DATE_RANGE_OPTIONS = [
+    {"label": "Last 1 Hour", "value": "1h"},
+    {"label": "Last 1 Day", "value": "1d"},
+    {"label": "Last 7 Days", "value": "7d"},
+    {"label": "Last 15 Days", "value": "15d"},
+    {"label": "Last 30 Days", "value": "30d"},
+]
 
 
 def apply_dynamic_filters(query_set, request, parsed_params=None):
@@ -139,29 +147,25 @@ def build_timestamp_filter(operator, value, field=None, timezone=None):
         now_client = datetime.now(client_tz)
         # Handle 'range' operator with relative time (e.g., '1h', '7d')
         if operator == Operators.RANGE:
-            if value.endswith(("h", "d", "m")):
-                num = int(value[:-1])
-                unit = value[-1]
-
-                if unit == "h":
-                    delta = timedelta(hours=num)
-                elif unit == "d":
-                    delta = timedelta(days=num)
-                elif unit == "m":
-                    delta = timedelta(minutes=num)
-                else:
-                    return None
-
-                range_starting_client_time = now_client - delta
-                range_starting_utc_time = range_starting_client_time.astimezone(pytz.UTC)
-                return Q(**{f"{field}__gte": range_starting_utc_time})
-
-            else:
+            if not value.endswith(("h", "d", "m")):
                 return None
+            num = int(value[:-1])
+            unit = value[-1]
+
+            if unit == "h":
+                delta = timedelta(hours=num)
+            elif unit == "d":
+                delta = timedelta(days=num)
+            elif unit == "m":
+                delta = timedelta(minutes=num)
+
+            range_starting_client_time = now_client - delta
+            range_starting_utc_time = range_starting_client_time.astimezone(pytz.UTC)
+            return Q(**{f"{field}__gte": range_starting_utc_time})
+
         else:
             # No need to convert the date as we are passing only date and date shown on the UI is in client time only
-            date_value = datetime.strptime(value, "%Y-%m-%d").replace(tzinfo=UTC)
-
+            date_value = datetime.fromisoformat(value)
             if operator == Operators.ON:
                 return Q(**{f"{field}__date": date_value})
             elif operator == Operators.BEFORE:

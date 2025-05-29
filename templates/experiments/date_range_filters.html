@@ -7,103 +7,89 @@
   <ul tabindex="0" class="dropdown-content menu p-2 shadow bg-base-100 rounded-box w-52">
     <template x-for="option in options" :key="option.value">
       <li>
-        <a href="#"
-           x-text="option.label"
-           @click.prevent="selectedLabel = option.label;
-                           localStorage.setItem('selected_date_range', option.value);
-                           applyDateFilter(option.value);">
-        </a>
+        <a href="#" x-text="option.label" @click.prevent="selectOption(option)"></a>
       </li>
     </template>
   </ul>
 </div>
+{{ date_range_options|json_script:"date-range-options" }}
 
 <script>
   document.addEventListener('alpine:init', () => {
     Alpine.data('dateRangeDropdown', () => ({
-      options: [
-        { label: 'Last 1 Hour', value: '1h' },
-        { label: 'Last 1 Day', value: '1d' },
-        { label: 'Last 7 Days', value: '7d' },
-        { label: 'Last 15 Days', value: '15d' },
-        { label: 'Last 30 Days', value: '30d' },
-      ],
+      options: JSON.parse(document.getElementById('date-range-options').textContent),
       selectedLabel: '',
 
       init() {
         const url = new URL(window.location.href);
         const params = url.searchParams;
+        const matchedIndex = this.getLastMessageRangeFilterIndex(params);
 
-        let hasValidFilter = false;
-
-        for (const [key, val] of params.entries()) {
-          if (key.includes('_column') && val === 'last_message') {
-            const match = key.match(/filter_(\d+)_column/);
-            if (match) {
-              const op = params.get(`filter_${match[1]}_operator`);
-              if (op === 'range') {
-                hasValidFilter = true;
-                break;
-              }
-            }
-          }
-        }
-
-        if (hasValidFilter) {
-          const stored = localStorage.getItem('selected_date_range');
-          if (stored) {
-            const found = this.options.find(opt => opt.value === stored);
-            if (found) {
-              this.selectedLabel = found.label;
-            }
+        if (matchedIndex !== null) {
+          const filterValue = params.get(`filter_${matchedIndex}_value`);
+          const found = this.options.find(opt => opt.value === filterValue);
+          if (found) {
+            this.selectedLabel = found.label;
+          } else {
+            this.selectedLabel = '';
           }
         } else {
-          localStorage.removeItem('selected_date_range');
+          this.selectedLabel = '';
         }
       },
 
-      applyDateFilter(value) {
+      selectOption(option) {
+        this.selectedLabel = option.label;
+        this.updateUrlParams(option.value);
+      },
+
+      updateUrlParams(value) {
         const url = new URL(window.location.href);
         const params = url.searchParams;
-        let matchedIndex = null;
-
-        for (const [key, val] of params.entries()) {
-          if (key.includes('_column') && val === 'last_message') {
-            const match = key.match(/filter_(\d+)_column/);
-            if (match) {
-              matchedIndex = match[1];
-              break;
-            }
-          }
-        }
+        const matchedIndex = this.getLastMessageRangeFilterIndex(params);
 
         if (matchedIndex !== null) {
           const operatorKey = `filter_${matchedIndex}_operator`;
+
           if (params.get(operatorKey) === 'range') {
             params.set(`filter_${matchedIndex}_value`, value);
-            localStorage.setItem('selected_date_range', value);
           } else {
-            params.delete(`filter_${matchedIndex}_column`);
-            params.delete(operatorKey);
-            params.delete(`filter_${matchedIndex}_value`);
-            localStorage.removeItem('selected_date_range');
+            // replace existing non-range filter
+            params.set(`filter_${matchedIndex}_operator`, 'range');
+            params.set(`filter_${matchedIndex}_value`, value);
           }
         } else {
+          // Add new filter
           let maxIndex = -1;
           for (const key of params.keys()) {
             const match = key.match(/^filter_(\d+)_column$/);
             if (match) maxIndex = Math.max(maxIndex, parseInt(match[1]));
           }
-
           const nextIndex = maxIndex + 1;
           params.set(`filter_${nextIndex}_column`, 'last_message');
           params.set(`filter_${nextIndex}_operator`, 'range');
           params.set(`filter_${nextIndex}_value`, value);
-          localStorage.setItem('selected_date_range', value);
         }
 
+        // Redirect with updated filter
         url.search = params.toString();
         window.location.href = url.toString();
+      },
+
+      getLastMessageRangeFilterIndex(params) {
+        for (const [key, val] of params.entries()) {
+          if (key.includes('_column') && val === 'last_message') {
+            const match = key.match(/filter_(\d+)_column/);
+            if (match) {
+              const index = match[1];
+              const op = params.get(`filter_${index}_operator`);
+              if (op === 'range') {
+                return index;
+              }
+            }
+          }
+        }
+        return null;
       }
     }));
   });
