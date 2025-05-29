@@ -211,7 +211,7 @@ class Flag(AbstractUserFlag):
 
     def save(self, *args, **kwargs):
         if not self.pk:
-            # {revent creating flags with names that do not start with "flag_"
+            # Prevent creating flags with names that do not start with "flag_"
             # In future this can be moved to the `clean` method
             if not self.name.startswith("flag_"):
                 raise ValidationError("Flag name must start with 'feature_'")
