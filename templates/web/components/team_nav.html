@@ -47,7 +47,7 @@
       {% endif %}
     </ul>
   </li>
-  {% flag "pipelines-v2" %}
+  {% flag "flag_pipelines-v2" %}
     {% if perms.documents.view_collection %}
       <li>
         <a href="{% url 'documents:collection_home' request.team.slug %}"
@@ -98,7 +98,7 @@
       </a>
     {% endif %}
   </li>
-  {% flag "pipelines-v2" %}
+  {% flag "flag_pipelines-v2" %}
     <li>
       {% if perms.pipelines.view_pipeline %}
         <a href="{% url 'pipelines:home' request.team.slug %}" {% if active_tab == 'pipelines' %}class="menu-active"{% endif %}>
