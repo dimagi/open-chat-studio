@@ -148,7 +148,7 @@ def test_chatbot_versions_table_view(team_with_users):
     assert table.data[0] == experiment
 
 
-def attach_middleware_to_request(request):
+def attach_session_middleware_to_request(request):
     session_middleware = SessionMiddleware(lambda req: None)
     session_middleware.process_request(request)
     request.session.save()
@@ -200,7 +200,7 @@ def test_chatbot_session_pagination_view(team_with_users):
     request_next.team_membership = get_team_membership_for_request(request_next)
     request_next.experiment_session = session_1
     request_next.experiment = experiment
-    attach_middleware_to_request(request_next)
+    attach_session_middleware_to_request(request_next)
     response_next = chatbot_session_pagination_view(
         request_next, team_slug=team.slug, experiment_id=experiment.public_id, session_id=session_1.external_id
     )
@@ -221,7 +221,7 @@ def test_chatbot_session_pagination_view(team_with_users):
     request_prev.team_membership = get_team_membership_for_request(request_prev)
     request_prev.experiment_session = session_2
     request_prev.experiment = experiment
-    attach_middleware_to_request(request_prev)
+    attach_session_middleware_to_request(request_prev)
     response_prev = chatbot_session_pagination_view(
         request_prev, team_slug=team.slug, experiment_id=experiment.public_id, session_id=session_2.external_id
     )
@@ -242,7 +242,7 @@ def test_chatbot_session_pagination_view(team_with_users):
     request_no_next.team_membership = get_team_membership_for_request(request_no_next)
     request_no_next.experiment_session = session_3
     request_no_next.experiment = experiment
-    attach_middleware_to_request(request_no_next)
+    attach_session_middleware_to_request(request_no_next)
     response_no_next = chatbot_session_pagination_view(
         request_no_next, team_slug=team.slug, experiment_id=experiment.public_id, session_id=session_3.external_id
     )
@@ -263,7 +263,7 @@ def test_chatbot_session_pagination_view(team_with_users):
     request_no_prev.team_membership = get_team_membership_for_request(request_no_prev)
     request_no_prev.experiment_session = session_1
     request_no_prev.experiment = experiment
-    attach_middleware_to_request(request_no_prev)
+    attach_session_middleware_to_request(request_no_prev)
     response_no_prev = chatbot_session_pagination_view(
         request_no_prev, team_slug=team.slug, experiment_id=experiment.public_id, session_id=session_1.external_id
     )
@@ -293,6 +293,7 @@ def test_chatbot_sessions_table_view(team_with_users):
     request.user = user
     request.team = team
     request.team_membership = get_team_membership_for_request(request)
+    attach_session_middleware_to_request(request)
 
     view = ChatbotSessionsTableView.as_view()
     response = view(request, team_slug=team.slug, experiment_id=experiment.id)
