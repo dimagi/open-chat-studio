@@ -2,6 +2,7 @@ import uuid
 
 from django.conf import settings
 from django.contrib.auth.models import Group, Permission
+from django.core.exceptions import ValidationError
 from django.db import models
 from django.urls import reverse
 from django.utils.translation import gettext
@@ -207,3 +208,12 @@ class Flag(AbstractUserFlag):
         team_ids = set(self.teams.all().values_list("pk", flat=True))
         cache.add(cache_key, team_ids or CACHE_EMPTY)
         return team_ids
+
+    def clean(self):
+        # Custom validation logic to enforce naming convention
+        if not self.name.startswith("flag_"):
+            raise ValidationError(f"Flag name must start with 'flag_': {self.name}")
+
+    def save(self, *args, **kwargs):
+        self.full_clean()
+        super().save(*args, **kwargs)

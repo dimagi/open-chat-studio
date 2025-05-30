@@ -53,7 +53,7 @@ class ChannelPlatform(models.TextChoices):
         if not settings.SLACK_ENABLED:
             platform_availability.pop(cls.SLACK)
 
-        flag = Flag.get("commcare_connect")
+        flag = Flag.get("flag_commcare_connect")
         commcare_connect_flag_enabled = flag.is_active_for_team(team)
         if not commcare_connect_flag_enabled:
             platform_availability.pop(cls.COMMCARE_CONNECT)

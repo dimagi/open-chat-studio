@@ -3,14 +3,6 @@
 from django.db import migrations
 
 
-def create_commcare_connect_flag(apps, schema_editor):
-    Flag = apps.get_model('teams', 'Flag')
-    Flag.objects.create(name='commcare_connect', everyone=False)
-
-def remove_commcare_connect_flag(apps, schema_editor):
-    Flag = apps.get_model('teams', 'Flag')
-    Flag.objects.filter(name='commcare_connect').delete()
-
 class Migration(migrations.Migration):
 
     dependencies = [
@@ -18,5 +10,4 @@ class Migration(migrations.Migration):
     ]
 
     operations = [
-        migrations.RunPython(create_commcare_connect_flag, remove_commcare_connect_flag),
     ]

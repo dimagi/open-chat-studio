@@ -9,7 +9,6 @@ from django.core.exceptions import ValidationError
 from django.http import HttpResponse
 from django.test import RequestFactory, override_settings
 from django.urls import reverse
-from waffle.testutils import override_flag
 
 from apps.chat.channels import WebChannel
 from apps.chat.models import Chat
@@ -103,7 +102,6 @@ def test_create_experiment_creates_first_version(client, team_with_users):
     assert versioned_exp.is_default_version
 
 
-@override_flag("assistants", active=True)
 @pytest.mark.parametrize(
     ("with_assistant", "with_prompt", "with_llm_provider", "with_llm_model", "errors"),
     [

@@ -176,10 +176,10 @@ class ExperimentForm(forms.ModelForm):
         self.request = request
         team = request.team
         exclude_services = [SyntheticVoice.OpenAIVoiceEngine]
-        if flag_is_active(request, "open_ai_voice_engine"):
+        if flag_is_active(request, "flag_open_ai_voice_engine"):
             exclude_services = []
 
-        if flag_is_active(request, "pipelines-v2"):
+        if flag_is_active(request, "flag_pipelines-v2"):
             self.fields["type"].choices += [("pipeline", gettext("Pipeline"))]
 
         # Limit to team's data

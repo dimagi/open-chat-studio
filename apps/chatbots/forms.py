@@ -81,7 +81,7 @@ class ChatbotSettingsForm(forms.ModelForm):
         self.request = request
         team = request.team
         exclude_services = [SyntheticVoice.OpenAIVoiceEngine]
-        if flag_is_active(request, "open_ai_voice_engine"):
+        if flag_is_active(request, "flag_open_ai_voice_engine"):
             exclude_services = []
         self.fields["voice_provider"].queryset = team.voiceprovider_set.exclude(
             syntheticvoice__service__in=exclude_services

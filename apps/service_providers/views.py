@@ -143,7 +143,7 @@ class CreateServiceProvider(
 
     def get_form(self, data=None):
         forms_to_exclude = []
-        if not flag_is_active(self.request, "open_ai_voice_engine"):
+        if not flag_is_active(self.request, "flag_open_ai_voice_engine"):
             forms_to_exclude.append(VoiceProviderType.openai_voice_engine)
 
         if not settings.SLACK_ENABLED:

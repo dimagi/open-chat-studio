@@ -137,7 +137,7 @@ def _build_provider(provider_type: MessagingProviderType, team):
 
 @override_settings(WAFFLE_CREATE_MISSING_FLAGS=True)
 def test_is_active_for_team_creates_missing_flag(experiment):
-    flag = Flag.get("missing_flag_1")
+    flag = Flag.get("flag_missing_flag_1")
     is_active = flag.is_active_for_team(experiment.team)
     assert is_active is False
     assert flag.id is not None
@@ -145,7 +145,7 @@ def test_is_active_for_team_creates_missing_flag(experiment):
 
 @override_settings(WAFFLE_CREATE_MISSING_FLAGS=False)
 def test_is_active_for_team_does_not_create_missing_flag(experiment):
-    flag = Flag.get("missing_flag_2")
+    flag = Flag.get("flag_missing_flag_2")
     is_active = flag.is_active_for_team(experiment.team)
     assert is_active is False
     assert flag.id is None

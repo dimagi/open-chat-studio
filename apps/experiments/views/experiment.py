@@ -232,7 +232,7 @@ class CreateExperiment(BaseExperimentView, CreateView):
         return context
 
     def _get_file_formset(self):
-        if flag_is_active(self.request, "experiment_rag"):
+        if flag_is_active(self.request, "flag_experiment_rag"):
             return get_file_formset(self.request)
 
     def get_initial(self):
@@ -296,7 +296,7 @@ class EditExperiment(BaseExperimentView, UpdateView):
 def _get_voice_provider_alpine_context(request):
     """Add context required by the experiments/experiment_form.html template."""
     exclude_services = [SyntheticVoice.OpenAIVoiceEngine]
-    if flag_is_active(request, "open_ai_voice_engine"):
+    if flag_is_active(request, "flag_open_ai_voice_engine"):
         exclude_services = []
 
     form_attrs = {"enctype": "multipart/form-data"}

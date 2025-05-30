@@ -211,7 +211,7 @@
         <input type="radio" name="tab_group" role="tab" class="tab" aria-label="Sessions" id="tab-allsessions" checked/>
       {% endif %}
       <input type="radio" name="tab_group" role="tab" class="tab" aria-label="Versions" id="tab-versions" />
-      {% flag "events" %}
+      {% flag "flag_events" %}
         <input type="radio" name="tab_group" role="tab" class="tab" aria-label="Events" id="tab-events" />
       {% endflag %}
       <input type="radio" name="tab_group" role="tab" class="tab" aria-label="Settings" id="tab-settings" />
@@ -252,7 +252,7 @@
         </div>
       </div>
     </div>
-    {% flag "events" %}
+    {% flag "flag_events" %}
       <div role="tabpanel" class="tab-content" id="content-events">
         <div class="app-card">
           <a class="btn btn-sm btn-outline btn-primary" href="{% url 'chatbots:events:static_event_new' team.slug experiment.id %}"><i class="fa-regular fa-plus"></i> Create Static Event</a>
