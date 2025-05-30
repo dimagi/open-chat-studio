@@ -100,7 +100,7 @@
                     x-show="filter.operator === 'range'"
                     x-model="filter.value"
                     @change="triggerFilterChange()"
-                    class="w-60 block px-3 border border-base-200 rounded-lg bg-base-100 text-sm"
+                    class="w-40 block px-3 border border-base-200 rounded-lg bg-base-100 text-sm"
                     style="height: 2rem;"
                   >
                     <template x-for="option in filter.options" :key="option.value">
@@ -113,7 +113,7 @@
                     type="date"
                     x-model="filter.value"
                     @input="triggerFilterChange()"
-                    class="w-60 block px-3 border border-base-200 rounded-lg bg-base-100 text-sm"
+                    class="w-40 block px-3 border border-base-200 rounded-lg bg-base-100 text-sm"
                     style="height: 2rem;"
                   >
                 </div>
@@ -413,6 +413,72 @@
         }).finally(() => {
           this.filterData.loading = false;
         });
+      }
+    }));
+  });
+  
+   document.addEventListener('alpine:init', () => {
+    Alpine.data('dateRangeDropdown', () => ({
+      options: JSON.parse(document.getElementById('date-range-options').textContent),
+      selectedLabel: '',
+
+      init() {
+        this.setLabelFromURL();
+        window.addEventListener('popstate', () => {
+          this.setLabelFromURL();
+        });
+      },
+
+      setLabelFromURL() {
+        const url = new URL(window.location.href);
+        const params = url.searchParams;
+        const matchedIndex = this.getLastMessageFilterIndex(params);
+        if (matchedIndex !== null) {
+          const filterValue = params.get(`filter_${matchedIndex}_value`);
+          const found = this.options.find(opt => opt.value === filterValue);
+          this.selectedLabel = found?.label || '';
+        } else {
+          this.selectedLabel = '';
+        }
+      },
+
+      selectOption(option) {
+        this.selectedLabel = option.label;
+        this.updateUrlParams(option.value);
+      },
+
+      updateUrlParams(value) {
+        const url = new URL(window.location.href);
+        const params = url.searchParams;
+        const matchedIndex = this.getLastMessageFilterIndex(params);
+
+        if (matchedIndex !== null) {
+          params.set(`filter_${matchedIndex}_operator`, 'range');
+          params.set(`filter_${matchedIndex}_value`, value);
+        } else {
+          let maxIndex = -1;
+          for (const key of params.keys()) {
+            const match = key.match(/^filter_(\d+)_column$/);
+            if (match) maxIndex = Math.max(maxIndex, parseInt(match[1]));
+          }
+          const nextIndex = maxIndex + 1;
+          params.set(`filter_${nextIndex}_column`, 'last_message');
+          params.set(`filter_${nextIndex}_operator`, 'range');
+          params.set(`filter_${nextIndex}_value`, value);
+        }
+        window.location.href = url.toString();
+      },
+
+      getLastMessageFilterIndex(params) {
+        for (const [key, val] of params.entries()) {
+          if (key.includes('_column') && val === 'last_message') {
+            const match = key.match(/filter_(\d+)_column/);
+            if (match) {
+              return match[1];
+            }
+          }
+        }
+        return null;
       }
     }));
   });
