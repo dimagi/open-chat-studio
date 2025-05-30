@@ -1,0 +1,48 @@
+{
+  "content": [],
+  "additional_kwargs": {
+    "__openai_function_call_ids__": {
+      "call_CHAjPaPFZRPpl23ckUooa75z": "fc_68386a3e97c08198b4c75ff44e34a5a601f3ed8296c64a0b"
+    }
+  },
+  "response_metadata": {
+    "id": "resp_68386a3df20481989aec317b6ce8918501f3ed8296c64a0b",
+    "created_at": 1748527678.0,
+    "metadata": {},
+    "model": "gpt-4o-2024-08-06",
+    "object": "response",
+    "status": "completed",
+    "model_name": "gpt-4o-2024-08-06"
+  },
+  "type": "AIMessageChunk",
+  "name": null,
+  "id": "run--e225401b-ca2a-4c53-89aa-e1d18880fb09",
+  "example": false,
+  "tool_calls": [
+    {
+      "name": "update-user-data",
+      "args": {
+        "key": "name",
+        "value": "Bob"
+      },
+      "id": "call_CHAjPaPFZRPpl23ckUooa75z",
+      "type": "tool_call"
+    }
+  ],
+  "invalid_tool_calls": [],
+  "usage_metadata": {
+    "input_tokens": 719,
+    "output_tokens": 20,
+    "total_tokens": 739,
+    "output_token_details": {}
+  },
+  "tool_call_chunks": [
+    {
+      "name": "update-user-data",
+      "args": "{\"key\":\"name\",\"value\":\"Bob\"}",
+      "id": "call_CHAjPaPFZRPpl23ckUooa75z",
+      "index": 0,
+      "type": "tool_call_chunk"
+    }
+  ]
+}

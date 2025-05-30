@@ -87,7 +87,8 @@
     "default_keyword_index": {
       "default": 0,
       "title": "Default Keyword Index",
-      "type": "integer"
+      "type": "integer",
+      "ui:widget": "none"
     },
     "tag_output_message": {
       "default": false,

@@ -28,9 +28,9 @@ from apps.chat.agent.openapi_tool import ToolArtifact
 from apps.experiments.models import Experiment, ExperimentSession
 from apps.files.models import File
 from apps.service_providers.llm_service.adapters import AssistantAdapter, ChatAdapter
-from apps.service_providers.llm_service.helper import custom_parse_ai_message
 from apps.service_providers.llm_service.history_managers import ExperimentHistoryManager, PipelineHistoryManager
 from apps.service_providers.llm_service.main import AnthropicBuiltinTool, OpenAIAssistantRunnable, OpenAIBuiltinTool
+from apps.service_providers.llm_service.parsers import custom_parse_ai_message
 from apps.utils.prompt import OcsPromptTemplate
 
 lc_tools_parser.parse_ai_message_to_tool_action = custom_parse_ai_message
