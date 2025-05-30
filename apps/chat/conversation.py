@@ -298,6 +298,7 @@ def summarize_history(llm, history, max_token_limit, input_message_tokens, summa
                 summary, summary_token_limit = _reduce_summary_size(llm, summary, summary_token_limit)
         else:
             summary = ""
+            summary_tokens = 0
 
     return history, pruned_memory, summary
 
