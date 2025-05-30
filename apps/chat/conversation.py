@@ -294,7 +294,7 @@ def summarize_history(llm, history, max_token_limit, input_message_tokens, summa
 
         if summary := _get_new_summary(llm, pruned_memory, summary, model_token_limit=max_token_limit):
             summary_tokens = llm.get_num_tokens_from_messages([SystemMessage(content=summary)])
-            if summary and summary_tokens > summary_token_limit:
+            if summary_tokens > summary_token_limit:
                 summary, summary_token_limit = _reduce_summary_size(llm, summary, summary_token_limit)
         else:
             summary = ""
