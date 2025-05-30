@@ -296,7 +296,7 @@ class EditExperiment(BaseExperimentView, UpdateView):
 def _get_voice_provider_alpine_context(request):
     """Add context required by the experiments/experiment_form.html template."""
     exclude_services = [SyntheticVoice.OpenAIVoiceEngine]
-    if flag_is_active(request, "open_ai_voice_engine"):
+    if flag_is_active(request, "flag_open_ai_voice_engine"):
         exclude_services = []
 
     form_attrs = {"enctype": "multipart/form-data"}

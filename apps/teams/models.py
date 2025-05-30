@@ -214,5 +214,5 @@ class Flag(AbstractUserFlag):
             # Prevent creating flags with names that do not start with "flag_"
             # In future this can be moved to the `clean` method
             if not self.name.startswith("flag_"):
-                raise ValidationError("Flag name must start with 'feature_'")
+                raise ValidationError(f"Flag name must start with 'feature_': {self.name}")
         super().save(*args, **kwargs)
