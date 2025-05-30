@@ -18,7 +18,22 @@
       title="Clear all filters" x-cloak>
       x
     </button>
+    <!-- Date Range dropdown filter -->
+    <div x-init="init" class="dropdown">
+      <div tabindex="0" role="button" class="btn btn-ghost btn-sm normal-case">
+        <i class="fa-regular fa-clock"></i>
+        <span x-text="selectedLabel || 'Date Range'" class="dropdown-label"></span>
+        <i class="fa-solid fa-caret-down ml-1"></i>
+      </div>
+      <ul tabindex="0" class="dropdown-content menu p-2 shadow bg-base-100 rounded-box w-52">
+        <template x-for="option in dateRangeOptions" :key="option.value">
+          <li>
+            <a href="#" x-text="option.label" @click.prevent="selectOption(option)"></a>
+          </li>
+        </template>
+    </ul>
   </div>
+</div>
 
   <!-- Filters Panel -->
   <div x-show="filterData.showFilters" class="absolute left-0 mt-2 p-4 bg-base-100 border border-base-200 rounded-lg shadow-lg z-10 w-fit" x-cloak>
@@ -95,30 +110,52 @@
               </template>
 
               <template x-if="filterData.columns[filter.column]?.type === 'timestamp'">
-                <div>
-                  <select
-                    x-show="filter.operator === 'range'"
-                    x-model="filter.value"
-                    @change="triggerFilterChange()"
-                    class="w-40 block px-3 border border-base-200 rounded-lg bg-base-100 text-sm"
-                    style="height: 2rem;"
-                  >
-                    <template x-for="option in filter.options" :key="option.value">
-                      <option :selected="filter.value === option.value" :value="option.value" x-text="option.label"></option>
-                    </template>
-                  </select>
-
-                  <input
-                    x-show="filter.operator !== 'range'"
-                    type="date"
-                    x-model="filter.value"
-                    @input="triggerFilterChange()"
-                    class="w-40 block px-3 border border-base-200 rounded-lg bg-base-100 text-sm"
-                    style="height: 2rem;"
-                  >
-                </div>
-              </template>
-
+                  <div>
+                    <div
+                      x-data="{ showDateRangeOptions: false }"
+                      x-show="filter.operator === 'range'"
+                      class="relative"
+                    >
+                      <div
+                        @click="showDateRangeOptions = !showDateRangeOptions"
+                        class="w-40 px-3 border border-base-200 rounded-lg bg-base-100 text-sm cursor-pointer flex justify-between items-center"
+                        style="height: 2rem;"
+                      >
+                        <span
+                          x-text="dateRangeOptions.find(opt => opt.value === filter.value)?.label || 'Select Date Range'"
+                        ></span>
+                        <i class="fa-solid fa-caret-down fa-sm"></i>
+                      </div>
+                      <div
+                        x-show="showDateRangeOptions"
+                        @click.outside="showDateRangeOptions = false"
+                        class="absolute z-50 mt-1 bg-base-100 rounded-lg max-h-64 overflow-y-auto w-40 border border-base-300"
+                        style="z-index: 9999 !important;"
+                      >
+                        <div class="py-1">
+                          <template x-for="option in dateRangeOptions" :key="option.value">
+                            <div
+                              @click="filter.value = option.value; triggerFilterChange(); syncExternalDropdown(filter.value); showDateRangeOptions = false;"
+                              class="px-4 py-2 hover:bg-base-200 cursor-pointer text-sm"
+                              :class="{ 'bg-base-200': filter.value === option.value }"
+                            >
+                              <span x-text="option.label"></span>
+                            </div>
+                          </template>
+                        </div>
+                      </div>
+                    </div>
+                    <!-- Date input for other operators -->
+                    <input
+                      x-show="filter.operator !== 'range'"
+                      type="date"
+                      x-model="filter.value"
+                      @input="triggerFilterChange()"
+                      class="w-40 block px-3 border border-base-200 rounded-lg bg-base-100 text-sm"
+                      style="height: 2rem;"
+                    >
+                  </div>
+                </template>
             </div>
           </template>
 
@@ -189,6 +226,11 @@
         this.$nextTick(() => {
           this.triggerFilterChange(defaultFilterApplied); // Don't update URL again since we just loaded from it
         });
+        // for date range dropdown
+        this.setLabelFromURL();
+        window.addEventListener('popstate', () => {
+          this.setLabelFromURL();
+        });
       },
 
       toggleFilters() {
@@ -234,6 +276,10 @@
       },
 
       removeFilter(index) {
+        const removedFilter = this.filterData.filters[index];
+        if (removedFilter.column === 'last_message' && removedFilter.operator === 'range') {
+            this.syncExternalDropdown(null);
+        }
         this.filterData.filters.splice(index, 1);
         if (this.filterData.filters.length === 0) {
           this.addFilter();
@@ -249,9 +295,13 @@
         }).length;
       },
       clearAllFilters() {
+        const hadLastMessageRangeFilter = this.filterData.filters.some(f => f.column === 'last_message' && f.operator === 'range');
         this.filterData.filters = [];
         this.addFilter();
         this.filterData.showFilters = false;
+        if (hadLastMessageRangeFilter !== null && typeof this.syncExternalDropdown === 'function') {
+             this.syncExternalDropdown(null);
+        }
         this.triggerFilterChange();
       },
       filterDropdownOptions(index) {
@@ -413,29 +463,15 @@
         }).finally(() => {
           this.filterData.loading = false;
         });
-      }
-    }));
-  });
-  
-   document.addEventListener('alpine:init', () => {
-    Alpine.data('dateRangeDropdown', () => ({
-      options: JSON.parse(document.getElementById('date-range-options').textContent),
-      selectedLabel: '',
-
-      init() {
-        this.setLabelFromURL();
-        window.addEventListener('popstate', () => {
-          this.setLabelFromURL();
-        });
       },
-
+      // Functions for date range dropdown
       setLabelFromURL() {
         const url = new URL(window.location.href);
         const params = url.searchParams;
         const matchedIndex = this.getLastMessageFilterIndex(params);
         if (matchedIndex !== null) {
           const filterValue = params.get(`filter_${matchedIndex}_value`);
-          const found = this.options.find(opt => opt.value === filterValue);
+          const found = this.dateRangeOptions.find(opt => opt.value === filterValue);
           this.selectedLabel = found?.label || '';
         } else {
           this.selectedLabel = '';
@@ -479,7 +515,12 @@
           }
         }
         return null;
-      }
+      },
+
+      syncExternalDropdown(value) {
+        const selected = this.dateRangeOptions.find(opt => opt.value === value);
+        this.selectedLabel = selected ? selected.label : '';
+      },
     }));
   });
 </script>
