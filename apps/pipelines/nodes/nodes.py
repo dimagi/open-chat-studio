@@ -528,7 +528,7 @@ class BooleanNode(PipelineRouterNode):
 
 class RouterMixin(BaseModel):
     keywords: list[str] = Field(default_factory=list, json_schema_extra=UiSchema(widget=Widgets.keywords))
-    default_keyword_index: int = Field(default=0)
+    default_keyword_index: int = Field(default=0, json_schema_extra=UiSchema(widget=Widgets.none))
     tag_output_message: bool = Field(
         default=False,
         description="Tag the output message with the selected route",
@@ -541,16 +541,6 @@ class RouterMixin(BaseModel):
             raise PydanticCustomError("invalid_keywords", "Keywords cannot be empty")
         if len(set(value)) != len(value):
             raise PydanticCustomError("invalid_keywords", "Keywords must be unique")
-        return value
-
-    @field_validator("default_keyword_index")
-    def validate_default_keyword_index(cls, value: int, info: FieldValidationInfo) -> int:
-        keywords = info.data.get("keywords", [])
-        if keywords:
-            if not (0 <= value < len(keywords)):
-                raise ValueError(
-                    f"Default keyword index {value} is out of bounds for keywords list of length {len(keywords)}"
-                )
         return value
 
     def _create_router_schema(self):
