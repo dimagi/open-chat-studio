@@ -103,7 +103,7 @@
                     class="w-60 block px-3 border border-base-200 rounded-lg bg-base-100 text-sm"
                     style="height: 2rem;"
                   >
-                    <template x-for="option in dateRangeOptions" :key="option.value">
+                    <template x-for="option in filter.options" :key="option.value">
                       <option :value="option.value" x-text="option.label"></option>
                     </template>
                   </select>
@@ -143,14 +143,15 @@
   const dateRangeOptions = JSON.parse(document.getElementById('date-range-options').textContent);
   document.addEventListener('alpine:init', () => {
     Alpine.data('filterComponent', () => ({
+        dateRangeOptions,
       filterData: {
         showFilters: false,
         filters: [],
         loading: false,
         columns: {
           'participant': {type: 'string', operators: fieldTypeFilters.string, label: 'Participant'},
-          'first_message': {type: 'timestamp', operators: fieldTypeFilters.timestamp, label: 'First Message'},
-          'last_message': {type: 'timestamp', operators: fieldTypeFilters.timestamp, label: 'Last Message'},
+          'first_message': {type: 'timestamp', operators: fieldTypeFilters.timestamp, label: 'First Message',  options: dateRangeOptions},
+          'last_message': {type: 'timestamp', operators: fieldTypeFilters.timestamp, label: 'Last Message',  options: dateRangeOptions},
           'tags': {type: 'choice', operators: fieldTypeFilters.choice, options: tags, label: 'Tags' },
           'versions': {type: 'choice', operators: fieldTypeFilters.choice.filter(op => op === 'any of' || op === 'excludes'), options: versionsList, label: 'Versions'},
           'channels': {type: 'choice', operators: fieldTypeFilters.choice, options: channelsList, label: 'Channels'},
@@ -303,8 +304,16 @@
             if (this.filterData.columns[columnParam]) {
               filter.availableOperators = this.filterData.columns[columnParam].operators;
               filter.operator = operatorParam;
-
-              if (['any of', 'all of', 'excludes'].includes(operatorParam) && valueParam) {
+              if (operatorParam === 'range' && valueParam) {
+                  filter.options = this.filterData.columns[columnParam].options || this.dateRangeOptions;
+                  const matchedOption = filter.options.find(opt => opt.label === valueParam || opt.value === valueParam);
+                  if (matchedOption) {
+                    filter.value = matchedOption.value.toString();
+                  } else {
+                    filter.value = valueParam;
+                  }
+              }
+              else if (['any of', 'all of', 'excludes'].includes(operatorParam) && valueParam) {
                 try {
                   filter.selectedValues = JSON.parse(valueParam);
                   if (this.filterData.columns[columnParam].options) {
