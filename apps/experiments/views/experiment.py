@@ -232,7 +232,7 @@ class CreateExperiment(BaseExperimentView, CreateView):
         return context
 
     def _get_file_formset(self):
-        if flag_is_active(self.request, "experiment_rag"):
+        if flag_is_active(self.request, "flag_experiment_rag"):
             return get_file_formset(self.request)
 
     def get_initial(self):
