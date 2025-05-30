@@ -87,6 +87,11 @@ DEFAULT_LLM_PROVIDER_MODELS = {
 }
 
 
+DEFAULT_EMBEDDING_PROVIDER_MODELS = {
+    "openai": ["text-embedding-3-small", "text-embedding-3-large", "text-embedding-ada-002"],
+}
+
+
 def get_default_model(provider_type: str) -> Model:
     return next((m for m in DEFAULT_LLM_PROVIDER_MODELS[provider_type] if m.is_default), None)
 
@@ -96,6 +101,23 @@ def update_llm_provider_models():
     from apps.service_providers.models import LlmProviderModel
 
     _update_llm_provider_models(LlmProviderModel)
+
+
+@transaction.atomic()
+def update_embedding_provider_models():
+    from apps.service_providers.models import EmbeddingProviderModel
+
+    _update_embedding_provider_models(EmbeddingProviderModel)
+
+
+def _update_embedding_provider_models(EmbeddingProviderModel):
+    """
+    This method updates the EmbeddingProviderModel objects in the database to match the
+    DEFAULT_EMBEDDING_PROVIDER_MODELS.
+    """
+    for provider_type, provider_models in DEFAULT_EMBEDDING_PROVIDER_MODELS.items():
+        for model in provider_models:
+            EmbeddingProviderModel.objects.get_or_create(team=None, name=model, type=provider_type)
 
 
 def _update_llm_provider_models(LlmProviderModel):
