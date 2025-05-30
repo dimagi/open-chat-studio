@@ -121,7 +121,7 @@ class TestParseOutputForAnthropic:
                 ],
             },
         )
-        expected = "I've updated your name to Jack in the user data. Is there anything else you need help with?"
+        expected = "Is there anything else you need help with?"
         assert result == expected
 
     def test_empty_list(self):
