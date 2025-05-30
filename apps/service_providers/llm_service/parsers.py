@@ -75,3 +75,24 @@ def custom_parse_ai_message(message) -> list[AgentAction] | AgentFinish:
     if not actions:
         return AgentFinish(return_values={"output": message.content}, log=str(message.content))
     return actions
+
+
+def parse_output_for_anthropic(output):
+    if output is None or isinstance(output, str):
+        return output or ""
+
+    if isinstance(output, list):
+        return "".join(parse_output_for_anthropic(item) for item in output)
+
+    if isinstance(output, dict):
+        if "output" in output:
+            return parse_output_for_anthropic(output["output"])
+        elif output.get("type") == "text":
+            text = output.get("text", "")
+            for citation in output.get("citations", []):
+                if citation.get("title") and citation.get("url"):
+                    text += f" [{citation['title']}]({citation['url']})"
+            return text
+        else:
+            return ""
+    return ""
