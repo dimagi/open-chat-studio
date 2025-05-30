@@ -209,10 +209,11 @@ class Flag(AbstractUserFlag):
         cache.add(cache_key, team_ids or CACHE_EMPTY)
         return team_ids
 
+    def clean(self):
+        # Custom validation logic to enforce naming convention
+        if not self.name.startswith("flag_"):
+            raise ValidationError(f"Flag name must start with 'flag_': {self.name}")
+
     def save(self, *args, **kwargs):
-        if not self.pk:
-            # Prevent creating flags with names that do not start with "flag_"
-            # In future this can be moved to the `clean` method
-            if not self.name.startswith("flag_"):
-                raise ValidationError(f"Flag name must start with 'feature_': {self.name}")
+        self.full_clean()
         super().save(*args, **kwargs)
