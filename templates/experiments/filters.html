@@ -135,7 +135,7 @@
                         <div class="py-1">
                           <template x-for="option in dateRangeOptions" :key="option.value">
                             <div
-                              @click="filter.value = option.value; triggerFilterChange(); syncExternalDropdown(filter.value); showDateRangeOptions = false;"
+                              @click="filter.value = option.value; triggerFilterChange(); syncDateRangeDropdown(filter.value); showDateRangeOptions = false;"
                               class="px-4 py-2 hover:bg-base-200 cursor-pointer text-sm"
                               :class="{ 'bg-base-200': filter.value === option.value }"
                             >
@@ -276,10 +276,6 @@
       },
 
       removeFilter(index) {
-        const removedFilter = this.filterData.filters[index];
-        if (removedFilter.column === 'last_message' && removedFilter.operator === 'range') {
-            this.syncExternalDropdown(null);
-        }
         this.filterData.filters.splice(index, 1);
         if (this.filterData.filters.length === 0) {
           this.addFilter();
@@ -295,13 +291,9 @@
         }).length;
       },
       clearAllFilters() {
-        const hadLastMessageRangeFilter = this.filterData.filters.some(f => f.column === 'last_message' && f.operator === 'range');
         this.filterData.filters = [];
         this.addFilter();
         this.filterData.showFilters = false;
-        if (hadLastMessageRangeFilter !== null && typeof this.syncExternalDropdown === 'function') {
-             this.syncExternalDropdown(null);
-        }
         this.triggerFilterChange();
       },
       filterDropdownOptions(index) {
@@ -462,6 +454,11 @@
           values: filterParams
         }).finally(() => {
           this.filterData.loading = false;
+          // remove selected value from date range dropdown if range filter is removed
+          const hasLastMessageRange = this.filterData.filters.some(f => f.column === 'last_message' && f.operator === 'range');
+          if (!hasLastMessageRange) {
+            this.syncDateRangeDropdown(null);
+          }
         });
       },
       // Functions for date range dropdown
@@ -517,7 +514,7 @@
         return null;
       },
 
-      syncExternalDropdown(value) {
+      syncDateRangeDropdown(value) {
         const selected = this.dateRangeOptions.find(opt => opt.value === value);
         this.selectedLabel = selected ? selected.label : '';
       },
