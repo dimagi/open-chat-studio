@@ -67,7 +67,7 @@
       </li>
     {% endif %}
   {% endflag %}
-  {% flag "chatbots" %}
+  {% flag "flag_chatbots" %}
     <li>
       <a href="{% url 'chatbots:chatbots_home' request.team.slug %}" {% if active_tab == 'chatbots' %}class="menu-active"{% endif %}>
         <i class="fas fa-comments"></i>
