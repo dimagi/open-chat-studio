@@ -21,17 +21,20 @@
       selectedLabel: '',
 
       init() {
+        this.setLabelFromURL();
+        window.addEventListener('popstate', () => {
+          this.setLabelFromURL();
+        });
+      },
+
+      setLabelFromURL() {
         const url = new URL(window.location.href);
         const params = url.searchParams;
         const matchedIndex = this.getLastMessageFilterIndex(params);
         if (matchedIndex !== null) {
           const filterValue = params.get(`filter_${matchedIndex}_value`);
           const found = this.options.find(opt => opt.value === filterValue);
-          if (found) {
-            this.selectedLabel = found.label;
-          } else {
-            this.selectedLabel = '';
-          }
+          this.selectedLabel = found?.label || '';
         } else {
           this.selectedLabel = '';
         }
@@ -46,6 +49,7 @@
         const url = new URL(window.location.href);
         const params = url.searchParams;
         const matchedIndex = this.getLastMessageFilterIndex(params);
+
         if (matchedIndex !== null) {
           params.set(`filter_${matchedIndex}_operator`, 'range');
           params.set(`filter_${matchedIndex}_value`, value);
@@ -60,7 +64,6 @@
           params.set(`filter_${nextIndex}_operator`, 'range');
           params.set(`filter_${nextIndex}_value`, value);
         }
-        url.search = params.toString();
         window.location.href = url.toString();
       },
 
