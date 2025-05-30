@@ -112,6 +112,8 @@ class Command(BaseCommand):
             rf"Flag\.get\s*\(\s*(?:name\s*=\s*)?['\"]((?:{flag_pattern}))['\"]\)",
             # {% flag 'flag_name' %}
             rf"\{{%\s*flag\s+['\"]((?:{flag_pattern}))['\"]\s*%\}}",
+            # @override_flag("assistants", active=True)
+            rf"@override_flag\s*\(\s*['\"]((?:{flag_pattern}))['\"]",
         ]
 
         compiled_patterns = [re.compile(pattern, re.IGNORECASE) for pattern in patterns]
