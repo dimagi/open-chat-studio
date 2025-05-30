@@ -102,7 +102,6 @@ def test_group_def():
     group_def.update_or_create()
     group = Group.objects.get(name=group_def.name)
     assert [(p.content_type.name, p.codename) for p in group.permissions.all()] == [
-        ("experiment channel", "view_experimentchannel"),
         ("chat", "add_chat"),
         ("chat", "change_chat"),
         ("chat", "delete_chat"),
@@ -115,6 +114,7 @@ def test_group_def():
         ("chat message", "change_chatmessage"),
         ("chat message", "delete_chatmessage"),
         ("chat message", "view_chatmessage"),
+        ("experiment channel", "view_experimentchannel"),
         ("team", "change_team"),
         ("team", "view_team"),
     ]
