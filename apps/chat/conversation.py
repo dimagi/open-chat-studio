@@ -292,10 +292,13 @@ def summarize_history(llm, history, max_token_limit, input_message_tokens, summa
         # Generate a new summary after pruning messages
         summary_token_limit = max_token_limit - history_tokens - input_message_tokens
 
-        summary = _get_new_summary(llm, pruned_memory, summary, model_token_limit=max_token_limit)
-        summary_tokens = llm.get_num_tokens_from_messages([SystemMessage(content=summary)])
-        if summary and summary_tokens > summary_token_limit:
-            summary, summary_token_limit = _reduce_summary_size(llm, summary, summary_token_limit)
+        if summary := _get_new_summary(llm, pruned_memory, summary, model_token_limit=max_token_limit):
+            summary_tokens = llm.get_num_tokens_from_messages([SystemMessage(content=summary)])
+            if summary_tokens > summary_token_limit:
+                summary, summary_token_limit = _reduce_summary_size(llm, summary, summary_token_limit)
+        else:
+            summary = ""
+            summary_tokens = 0
 
     return history, pruned_memory, summary
 

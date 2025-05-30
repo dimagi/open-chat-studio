@@ -19,6 +19,7 @@ from pydantic import BaseModel
 
 from apps.files.models import File
 from apps.service_providers.llm_service.callbacks import TokenCountingCallbackHandler
+from apps.service_providers.llm_service.parsers import parse_output_for_anthropic
 from apps.service_providers.llm_service.token_counters import (
     AnthropicTokenCounter,
     GeminiTokenCounter,
@@ -291,37 +292,7 @@ class AnthropicLlmService(LlmService):
         return tools
 
     def get_output_parser(self):
-        return self._parse_output_for_anthropic
-
-    def _parse_output_for_anthropic(self, output):
-        if output is None or isinstance(output, str):
-            return output or ""
-
-        if isinstance(output, dict):
-            if "output" in output:
-                return self._parse_output_for_anthropic(output["output"])
-            elif "text" in output:
-                return output.get("text", "")
-            else:
-                return str(output)
-
-        if isinstance(output, list):
-            result = []
-            for item in output:
-                if not isinstance(item, (dict | str)):
-                    continue
-
-                if isinstance(item, dict) and item.get("type") == "text":
-                    text = item.get("text", "")
-                    for citation in item.get("citations", []):
-                        if citation.get("title") and citation.get("url"):
-                            text += f" [{citation['title']}]({citation['url']})"
-                    result.append(text)
-                elif isinstance(item, str):
-                    result.append(item)
-            return "".join(result)
-
-        return str(output)
+        return parse_output_for_anthropic
 
 
 class DeepSeekLlmService(LlmService):

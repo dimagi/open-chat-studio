@@ -528,7 +528,7 @@ class BooleanNode(PipelineRouterNode):
 
 class RouterMixin(BaseModel):
     keywords: list[str] = Field(default_factory=list, json_schema_extra=UiSchema(widget=Widgets.keywords))
-    default_keyword_index: int = Field(default=0)
+    default_keyword_index: int = Field(default=0, json_schema_extra=UiSchema(widget=Widgets.none))
     tag_output_message: bool = Field(
         default=False,
         description="Tag the output message with the selected route",
