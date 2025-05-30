@@ -25,15 +25,19 @@ class TestObfuscatingForm(SimpleTestCase):
         assert form.cleaned_data == {"field_a": "a" * 8, "field_b": "", "field_c": "c" * 8}
 
     def test_initial(self):
-        form = TestForm(initial={"field_a": "a" * 8, "field_b": "", "field_c": "c" * 8})
+        form = TestForm(initial={"field_a": "abcdefghijklmnop", "field_b": "1234", "field_c": "qwerty"})
         field_values = [f[0].value() for f in form.get_context()["fields"]]
-        assert field_values == ["aaaa****", "", "cccccccc"]
+        assert field_values == ["abcd...op", "1234...34", "qwerty"]
 
     def test_update_no_change(self):
         self._test_update("a" * 8, "b" * 8)
 
     def test_update_change(self):
         self._test_update("1" * 8, "2" * 8)
+
+    def test_update_change_end(self):
+        """Test that changing only the beginning or end of a field works correctly."""
+        self._test_update("1aaaaaaa", "bbbbbbb2")
 
     def _test_update(self, field_a_new, field_b_new):
         form = TestForm(

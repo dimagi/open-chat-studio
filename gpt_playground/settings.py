@@ -105,6 +105,7 @@ PROJECT_APPS = [
     "apps.sso",
     "apps.participants",
     "apps.chatbots",
+    "apps.banners",
 ]
 
 SPECIAL_APPS = [
@@ -134,6 +135,7 @@ MIDDLEWARE = [
     "apps.web.htmx_middleware.HtmxMessageMiddleware",
     "tz_detect.middleware.TimezoneMiddleware",
     "apps.generics.middleware.OriginDetectionMiddleware",
+    "apps.banners.middleware.BannerLocationMiddleware",
 ]
 
 ROOT_URLCONF = "gpt_playground.urls"
@@ -165,6 +167,7 @@ TEMPLATES = [
                 "apps.users.context_processors.user_teams",
                 # this line can be removed if not using google analytics
                 "apps.web.context_processors.google_analytics_id",
+                "apps.banners.context_processors.banner_context",
             ],
             "loaders": _DEFAULT_LOADERS if DEBUG else _CACHED_LOADERS,
             "builtins": [
@@ -559,6 +562,7 @@ DOCUMENTATION_LINKS = {
     "node_extract_structured_data": "/concepts/pipelines/nodes/#extract-structured-data",
     "node_update_participant_data": "/concepts/pipelines/nodes/#update-participant-data",
     "chatbots": "/concepts/chatbots/",
+    "collections": "/concepts/collections/",
 }
 # Available in templates as `docs_base_url`. Also see `apps.generics.help` and `generics/help.html`
 DOCUMENTATION_BASE_URL = env("DOCUMENTATION_BASE_URL", default="https://docs.openchatstudio.com")

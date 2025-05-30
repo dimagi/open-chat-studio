@@ -19,8 +19,8 @@
               <tr>
                 <td>{{ team.name }}</td>
                 <td><a class="link" href="{% url 'web_team:home' team.slug %}">{% translate "View Dashboard" %}</a></td>
-                <td class="pg-inline-buttons pg-justify-content-end">
-                  <a class="pg-button-secondary mx-1" href="{% url 'single_team:manage_team' team.slug %}">
+                <td class="pg-inline-buttons justify-end">
+                  <a class="btn btn-outline mx-1" href="{% url 'single_team:manage_team' team.slug %}">
                     <span class="pg-icon">
                       <i class="fa fa-gear"></i>
                     </span>
@@ -33,7 +33,7 @@
         </table>
       </div>
       <div class="mt-2">
-        <a class="pg-button-secondary" href="{% url 'teams:create_team' %}">
+        <a class="btn btn-outline" href="{% url 'teams:create_team' %}">
           <span class="pg-icon"><i class="fa fa-plus"></i></span>
           <span>{% translate "Add Team" %}</span>
         </a>
@@ -48,7 +48,7 @@
             <h1 class="pg-title">{% translate "No Teams Yet!" %}</h1>
             <h2 class="pg-subtitle">{% translate "Create your first team below to get started." %}</h2>
             <p>
-              <a class="pg-button-primary" href="{% url 'teams:create_team' %}">
+              <a class="btn btn-primary" href="{% url 'teams:create_team' %}">
                 <span class="pg-icon"><i class="fa fa-plus"></i></span>
                 <span>{% translate "Create Team" %}</span>
               </a>

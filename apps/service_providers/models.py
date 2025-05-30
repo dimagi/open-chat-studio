@@ -139,6 +139,9 @@ class LlmProvider(BaseTeamModel, ProviderMixin):
         config = {k: v for k, v in self.config.items() if v}
         return self.type_enum.get_llm_service(config)
 
+    def get_index_manager(self):
+        return self.get_llm_service().get_index_manager()
+
 
 class LlmProviderModelManager(models.Manager):
     def get_or_create_for_team(self, team, name, type, max_token_limit=8192):
@@ -450,7 +453,6 @@ class AuthProvider(BaseTeamModel):
 
 class TraceProviderType(models.TextChoices):
     langfuse = "langfuse", _("Langfuse")
-    langsmith = "langsmith", _("LangSmith")
 
     @property
     def form_cls(self) -> type["ProviderTypeConfigForm"]:
@@ -459,16 +461,12 @@ class TraceProviderType(models.TextChoices):
         match self:
             case TraceProviderType.langfuse:
                 return forms.LangfuseTraceProviderForm
-            case TraceProviderType.langsmith:
-                return forms.LangsmithTraceProviderForm
         raise Exception(f"No config form configured for {self}")
 
     def get_service(self, config: dict) -> tracing.Tracer:
         match self:
             case TraceProviderType.langfuse:
                 return tracing.LangFuseTracer(self, config)
-            case TraceProviderType.langsmith:
-                return tracing.LangSmithTracer(self, config)
         raise Exception(f"No tracing service configured for {self}")
 
 

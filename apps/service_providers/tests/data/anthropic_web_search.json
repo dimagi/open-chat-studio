@@ -1,0 +1,72 @@
+{
+  "content": [
+    {
+      "text": "Let me search for that.",
+      "type": "text",
+      "index": 0
+    },
+    {
+      "partial_json": "{\"query\": \"What's the weather\"}",
+      "type": "tool_use",
+      "index": 1
+    },
+    {
+      "text": "Based on the search results",
+      "type": "text",
+      "index": 3
+    },
+    {
+      "type": "text",
+      "index": 4,
+      "citations": [
+        {
+          "cited_text": "The weather forecast",
+          "encrypted_index": "123123",
+          "title": "Weather",
+          "type": "web_search_result_location",
+          "url": "https://weather.com/"
+        }
+      ],
+      "text": "The weather"
+    }
+  ],
+  "additional_kwargs": {},
+  "response_metadata": {
+    "model_name": "claude-3-5-sonnet-20241022",
+    "stop_reason": "end_turn",
+    "stop_sequence": null
+  },
+  "type": "AIMessageChunk",
+  "name": null,
+  "id": "run--45a982a5-511b-42dc-ab15-a9d5834b93f8",
+  "example": false,
+  "tool_calls": [
+    {
+      "name": "",
+      "args": {
+        "query": "how to use taskbadger app guide documentation"
+      },
+      "id": null,
+      "type": "tool_call"
+    }
+  ],
+  "invalid_tool_calls": [],
+  "usage_metadata": {
+    "input_tokens": 2999,
+    "output_tokens": 834,
+    "total_tokens": 3833,
+    "input_token_details": {
+      "cache_creation": 0,
+      "cache_read": 0
+    }
+  },
+  "tool_call_chunks": [
+    {
+      "name": null,
+      "args": "{\"query\": \"What is the weather forecast\"}",
+      "id": null,
+      "index": 1,
+      "type": "tool_call_chunk"
+    }
+  ]
+}

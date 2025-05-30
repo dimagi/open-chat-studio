@@ -1,6 +1,12 @@
 {
   "description": "Uses and LLM to respond to the input.",
   "properties": {
+    "tag": {
+      "default": "",
+      "description": "The tag that the output message should be tagged with",
+      "title": "Message Tag",
+      "type": "string"
+    },
     "llm_provider_id": {
       "title": "LLM Model",
       "type": "integer",
@@ -92,7 +98,7 @@
     "collection_id": {
       "default": null,
       "title": "Media",
-      "ui:flagRequired": "document_management",
+      "ui:flagRequired": "pipelines-v2",
       "ui:optionsSource": "collection",
       "ui:widget": "select",
       "type": "integer"
@@ -100,7 +106,7 @@
     "collection_index_id": {
       "default": null,
       "title": "Collection Index",
-      "ui:flagRequired": "document_management",
+      "ui:flagRequired": "pipelines-v2",
       "ui:optionsSource": "collection_index",
       "ui:widget": "select",
       "type": "integer"
@@ -124,6 +130,27 @@
       "type": "array",
       "ui:optionsSource": "custom_actions",
       "ui:widget": "multiselect"
+    },
+    "built_in_tools": {
+      "description": "Built in tools provided by the LLM model",
+      "items": {
+        "enum": [
+          "web-search",
+          "code-execution"
+        ],
+        "title": "BuiltInTools",
+        "type": "string"
+      },
+      "title": "Built In Tools",
+      "type": "array",
+      "ui:optionsSource": "built_in_tools",
+      "ui:widget": "built_in_tools"
+    },
+    "tool_config": {
+      "description": "Configuration for builtin tools",
+      "title": "Tool Config",
+      "ui:widget": "none",
+      "type": "object"
     }
   },
   "required": [

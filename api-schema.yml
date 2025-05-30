@@ -625,10 +625,15 @@ components:
           type: integer
           maximum: 2147483647
           minimum: 0
+        versions:
+          type: array
+          items:
+            $ref: '#/components/schemas/ExperimentVersion'
       required:
       - id
       - name
       - url
+      - versions
     ExperimentSession:
       type: object
       properties:
@@ -736,6 +741,22 @@ components:
       - team
       - updated_at
       - url
+    ExperimentVersion:
+      type: object
+      properties:
+        name:
+          type: string
+          maxLength: 128
+        version_number:
+          type: integer
+          maximum: 2147483647
+          minimum: 0
+        is_default_version:
+          type: boolean
+        version_description:
+          type: string
+      required:
+      - name
     File:
       type: object
       properties:
@@ -772,10 +793,7 @@ components:
           description: |2
 
             Metadata for the message. Currently documented keys:
-              * `is_summary`: boolean, whether this message is a summary of the conversation to date. When this
-                is true, the message will not be displayed in the chat interface but it will be used when
-                generating the chat history for the LLM. The history will include all messages up to the last
-                summary message (starting from the most recent message).
+              * `compression_marker`: Slug that marks this message as a checkpoint for session history compression
         tags:
           type: array
           items:

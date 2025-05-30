@@ -1,0 +1,58 @@
+{
+  "content": [
+    {
+      "text": "I'll help you set a reminder for dinner. Since you want the reminder in 5 minutes from now (15:59:38 SAST), I'll set it for 16:04:38 SAST.",
+      "type": "text",
+      "index": 0
+    },
+    {
+      "id": "toolu_01WHbL5bh7AkAfYdDzgsEmKp",
+      "input": {},
+      "name": "one-off-reminder",
+      "type": "tool_use",
+      "index": 1,
+      "partial_json": "{\"schedule_name\": \"Make Dinner Reminder\", \"message\": \"Make dinner\", \"datetime_due\": \"2025-05-29T16:04:38+02:00\"}"
+    }
+  ],
+  "additional_kwargs": {},
+  "response_metadata": {
+    "model_name": "claude-3-5-sonnet-20241022",
+    "stop_reason": "tool_use",
+    "stop_sequence": null
+  },
+  "type": "AIMessageChunk",
+  "name": null,
+  "id": "run--9a5e0350-bfee-4530-8916-0a501e671ef1",
+  "example": false,
+  "tool_calls": [
+    {
+      "name": "one-off-reminder",
+      "args": {
+        "schedule_name": "Make Dinner Reminder",
+        "message": "Make dinner",
+        "datetime_due": "2025-05-29T16:04:38+02:00"
+      },
+      "id": "toolu_01WHbL5bh7AkAfYdDzgsEmKp",
+      "type": "tool_call"
+    }
+  ],
+  "invalid_tool_calls": [],
+  "usage_metadata": {
+    "input_tokens": 3158,
+    "output_tokens": 163,
+    "total_tokens": 3321,
+    "input_token_details": {
+      "cache_creation": 0,
+      "cache_read": 0
+    }
+  },
+  "tool_call_chunks": [
+    {
+      "name": "one-off-reminder",
+      "args": "{\"schedule_name\": \"Make Dinner Reminder\", \"message\": \"Make dinner\", \"datetime_due\": \"2025-05-29T16:04:38+02:00\"}",
+      "id": "toolu_01WHbL5bh7AkAfYdDzgsEmKp",
+      "index": 1,
+      "type": "tool_call_chunk"
+    }
+  ]
+}

@@ -28,7 +28,7 @@ def fake_llm_service():
 @pytest.fixture()
 def session(fake_llm_service):
     chat = Chat()
-    chat.get_langchain_messages_until_summary = lambda: []
+    chat.get_langchain_messages_until_marker = lambda marker: []
     chat.refresh_from_db = lambda *args, **kwargs: None
     chat.save = lambda: None
     session = ExperimentSessionFactory.build(chat=chat)

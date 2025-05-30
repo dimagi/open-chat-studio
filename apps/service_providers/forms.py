@@ -52,9 +52,9 @@ class ObfuscatingMixin:
             return cleaned_data
 
         for field in self.obfuscate_fields:
-            initial = self.initial.get(field)
-            new = obfuscate_value(self.cleaned_data.get(field))
-            if new == initial:
+            initial_masked = self.initial.get(field)
+            if self.cleaned_data.get(field) == initial_masked:
+                # If the cleaned data is the same as the initial masked value, we keep initial unmasked value
                 cleaned_data[field] = self.initial_raw.get(field)
 
         return cleaned_data
@@ -146,7 +146,7 @@ class DeepSeekConfigForm(ObfuscatingMixin, ProviderTypeConfigForm):
 
 def obfuscate_value(value):
     if value and isinstance(value, str):
-        return value[:4] + "*" * (len(value) - 4)
+        return value[:4] + "..." + value[-2:]
     return value
 
 
@@ -248,14 +248,6 @@ class LangfuseTraceProviderForm(ObfuscatingMixin, ProviderTypeConfigForm):
     public_key = forms.CharField(label=_("Public Key"))
     secret_key = forms.CharField(label=_("Secret Key"))
     host = forms.URLField(label=_("Host"))
-
-
-class LangsmithTraceProviderForm(ObfuscatingMixin, ProviderTypeConfigForm):
-    obfuscate_fields = ["api_key"]
-
-    api_key = forms.CharField(label=_("API Key"))
-    api_url = forms.URLField(label=_("API URL"), initial="https://api.smith.langchain.com")
-    project = forms.CharField(label=_("Project Name"))
 
 
 class LlmProviderModelForm(forms.ModelForm):

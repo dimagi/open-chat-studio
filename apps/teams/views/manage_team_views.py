@@ -105,7 +105,7 @@ def delete_team(request, team_slug):
 def resend_invitation(request, team_slug, invitation_id):
     invitation = get_object_or_404(Invitation, team=request.team, id=invitation_id)
     send_invitation(invitation)
-    return HttpResponse('<span class="pg-button-light is-disbled btn-disabled">Sent!</span>')
+    return HttpResponse('<span class="btn btn-ghost is-disbled btn-disabled">Sent!</span>')
 
 
 @require_POST

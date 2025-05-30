@@ -104,8 +104,9 @@ def test_converts_old_global_models_to_custom_models_pipelines():
     )
     # pipeline is updated to use the custom model
     pipeline.refresh_from_db()
-    assert pipeline.node_set.all()[2].params["llm_provider_model_id"] == custom_model.id
-    assert pipeline.data["nodes"][2]["data"]["params"]["llm_provider_model_id"] == custom_model.id
+    assert pipeline.node_set.get(type="LLMResponseWithPrompt").params["llm_provider_model_id"] == custom_model.id
+    node_data = [node for node in pipeline.data["nodes"] if node["data"]["type"] == "LLMResponseWithPrompt"]
+    assert node_data[0]["data"]["params"]["llm_provider_model_id"] == custom_model.id
 
 
 def get_pipeline(llm_provider_model):

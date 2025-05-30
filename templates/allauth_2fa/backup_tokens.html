@@ -19,7 +19,7 @@
 
     <form method="post" class="mt-3">
       {% csrf_token %}
-      <button class="pg-button-primary" type="submit">
+      <button class="btn btn-primary" type="submit">
         {% translate 'Generate backup tokens' %}
       </button>
     </form>
@@ -27,6 +27,6 @@
   </section>
   <section class="app-card">
     <h2 class="pg-subtitle">{% translate "Disable Two-Factor Authentication" %}</h2>
-    <a class="pg-button-primary" href="{% url 'two-factor-remove' %}">Disable Two-Factor</a>
+    <a class="btn btn-primary" href="{% url 'two-factor-remove' %}">Disable Two-Factor</a>
   </section>
 {% endblock %}
