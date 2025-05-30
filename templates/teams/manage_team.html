@@ -28,7 +28,7 @@
     </form>
   </section>
   {% if not create %}
-    {% with button_style="btn-outline" title_class="pg-subtitle" title="LLM Service Providers" subtitle="Large Language Model services"  %}
+    {% with button_style="btn-outline" title_class="pg-subtitle" title="LLM and Embedding Model Service Providers" subtitle="Large Language Model and Embedding model services"  %}
       {% has_perm "service_providers" "add_llmprovider" as allow_new %}
       {% url "service_providers:table" request.team.slug "llm" as table_url %}
       {% url "service_providers:llm_new" request.team.slug as new_object_url %}

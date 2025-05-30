@@ -1,5 +1,5 @@
-{% if not models_by_type %}
+{% if not llm_models_by_type %}
   <p>No custom models</p>
 {% else %}
-  {% include "service_providers/components/llm_models.html" with models_by_type=models_by_type show_delete=True %}
+  {% include "service_providers/components/llm_models.html" with llm_models_by_type=llm_models_by_type show_delete=True %}
 {% endif %}

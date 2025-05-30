@@ -489,3 +489,20 @@ class TraceProvider(BaseTeamModel):
 
     def get_service(self) -> tracing.Tracer:
         return self.type_enum.get_service(self.config)
+
+
+class EmbeddingProviderModel(BaseTeamModel):
+    type = models.CharField(max_length=255, choices=LlmProviderTypes.choices)
+    name = models.CharField(max_length=128, help_text="The name of the model. e.g. 'text-embedding-3-small'")
+    team = models.ForeignKey(
+        Team,
+        verbose_name=gettext("Team"),
+        on_delete=models.CASCADE,
+        null=True,
+        blank=True,
+    )
+
+    class Meta:
+        constraints = [
+            models.UniqueConstraint(fields=("team", "name", "type"), name="unique_team_name_type"),
+        ]
