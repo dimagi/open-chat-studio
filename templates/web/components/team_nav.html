@@ -108,7 +108,7 @@
       {% endif %}
     </li>
   {% endflag %}
-  {% flag "session-analysis" %}
+  {% flag "flag_session-analysis" %}
     <li>
       <a href="{% url 'analysis:list' request.team.slug %}" {% if active_tab == 'analysis' %}class="menu-active"{% endif %}>
         <i class="fa-solid fa-bar-chart"></i>
