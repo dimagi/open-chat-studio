@@ -51,7 +51,7 @@
     "@codemirror/lang-python": "^6.1.7",
     "@sentry/webpack-plugin": "^3.3.1",
     "@tailwindcss/postcss": "^4.1.5",
-    "@uiw/codemirror-theme-github": "^4.23.11",
+    "@uiw/codemirror-theme-github": "^4.23.12",
     "@uiw/react-codemirror": "^4.23.7",
     "alertifyjs": "^1.14.0",
     "alpinejs": "^3.14.3",
