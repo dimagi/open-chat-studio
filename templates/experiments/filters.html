@@ -31,9 +31,9 @@
             <a href="#" x-text="option.label" @click.prevent="selectOption(option)"></a>
           </li>
         </template>
-    </ul>
+      </ul>
+    </div>
   </div>
-</div>
 
   <!-- Filters Panel -->
   <div x-show="filterData.showFilters" class="absolute left-0 mt-2 p-4 bg-base-100 border border-base-200 rounded-lg shadow-lg z-10 w-fit" x-cloak>
@@ -110,52 +110,52 @@
               </template>
 
               <template x-if="filterData.columns[filter.column]?.type === 'timestamp'">
-                  <div>
+                <div>
+                  <div
+                    x-data="{ showDateRangeOptions: false }"
+                    x-show="filter.operator === 'range'"
+                    class="relative"
+                  >
                     <div
-                      x-data="{ showDateRangeOptions: false }"
-                      x-show="filter.operator === 'range'"
-                      class="relative"
-                    >
-                      <div
-                        @click="showDateRangeOptions = !showDateRangeOptions"
-                        class="w-40 px-3 border border-base-200 rounded-lg bg-base-100 text-sm cursor-pointer flex justify-between items-center"
-                        style="height: 2rem;"
-                      >
-                        <span
-                          x-text="dateRangeOptions.find(opt => opt.value === filter.value)?.label || 'Select Date Range'"
-                        ></span>
-                        <i class="fa-solid fa-caret-down fa-sm"></i>
-                      </div>
-                      <div
-                        x-show="showDateRangeOptions"
-                        @click.outside="showDateRangeOptions = false"
-                        class="absolute z-50 mt-1 bg-base-100 rounded-lg max-h-64 overflow-y-auto w-40 border border-base-300"
-                        style="z-index: 9999 !important;"
-                      >
-                        <div class="py-1">
-                          <template x-for="option in dateRangeOptions" :key="option.value">
-                            <div
-                              @click="filter.value = option.value; triggerFilterChange(); syncDateRangeDropdown(filter.value); showDateRangeOptions = false;"
-                              class="px-4 py-2 hover:bg-base-200 cursor-pointer text-sm"
-                              :class="{ 'bg-base-200': filter.value === option.value }"
-                            >
-                              <span x-text="option.label"></span>
-                            </div>
-                          </template>
-                        </div>
-                      </div>
-                    </div>
-                    <!-- Date input for other operators -->
-                    <input
-                      x-show="filter.operator !== 'range'"
-                      type="date"
-                      x-model="filter.value"
-                      @input="triggerFilterChange()"
-                      class="w-40 block px-3 border border-base-200 rounded-lg bg-base-100 text-sm"
+                      @click="showDateRangeOptions = !showDateRangeOptions"
+                      class="w-40 px-3 border border-base-200 rounded-lg bg-base-100 text-sm cursor-pointer flex justify-between items-center"
                       style="height: 2rem;"
                     >
+                      <span
+                        x-text="dateRangeOptions.find(opt => opt.value === filter.value)?.label || 'Select Date Range'"
+                      ></span>
+                      <i class="fa-solid fa-caret-down fa-sm"></i>
+                    </div>
+                    <div
+                      x-show="showDateRangeOptions"
+                      @click.outside="showDateRangeOptions = false"
+                      class="absolute z-50 mt-1 bg-base-100 rounded-lg max-h-64 overflow-y-auto w-40 border border-base-300"
+                      style="z-index: 9999 !important;"
+                    >
+                      <div class="py-1">
+                        <template x-for="option in dateRangeOptions" :key="option.value">
+                          <div
+                            @click="filter.value = option.value; triggerFilterChange(); syncDateRangeDropdown(filter.value); showDateRangeOptions = false;"
+                            class="px-4 py-2 hover:bg-base-200 cursor-pointer text-sm"
+                            :class="{ 'bg-base-200': filter.value === option.value }"
+                          >
+                            <span x-text="option.label"></span>
+                          </div>
+                        </template>
+                      </div>
+                    </div>
                   </div>
-                </template>
+                    <!-- Date input for other operators -->
+                  <input
+                    x-show="filter.operator !== 'range'"
+                    type="date"
+                    x-model="filter.value"
+                    @input="triggerFilterChange()"
+                    class="w-40 block px-3 border border-base-200 rounded-lg bg-base-100 text-sm"
+                    style="height: 2rem;"
+                  >
+                </div>
+              </template>
             </div>
           </template>
 
@@ -180,7 +180,7 @@
   const dateRangeOptions = JSON.parse(document.getElementById('date-range-options').textContent);
   document.addEventListener('alpine:init', () => {
     Alpine.data('filterComponent', () => ({
-        dateRangeOptions,
+      dateRangeOptions,
       filterData: {
         showFilters: false,
         filters: [],
@@ -347,13 +347,13 @@
               filter.availableOperators = this.filterData.columns[columnParam].operators;
               filter.operator = operatorParam;
               if (operatorParam === 'range' && valueParam) {
-                  filter.options = this.filterData.columns[columnParam].options || this.dateRangeOptions;
-                  const matchedOption = filter.options.find(opt => opt.label === valueParam || opt.value === valueParam);
-                  if (matchedOption) {
-                    filter.value = matchedOption.value.toString();
-                  } else {
-                    filter.value = valueParam;
-                  }
+                filter.options = this.filterData.columns[columnParam].options || this.dateRangeOptions;
+                const matchedOption = filter.options.find(opt => opt.label === valueParam || opt.value === valueParam);
+                if (matchedOption) {
+                  filter.value = matchedOption.value.toString();
+                } else {
+                  filter.value = valueParam;
+                }
               }
               else if (['any of', 'all of', 'excludes'].includes(operatorParam) && valueParam) {
                 try {
