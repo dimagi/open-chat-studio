@@ -477,29 +477,14 @@
 
       selectOption(option) {
         this.selectedLabel = option.label;
-        this.updateUrlParams(option.value);
-      },
-
-      updateUrlParams(value) {
-        const url = new URL(window.location.href);
-        const params = url.searchParams;
-        const matchedIndex = this.getLastMessageFilterIndex(params);
-
-        if (matchedIndex !== null) {
-          params.set(`filter_${matchedIndex}_operator`, 'range');
-          params.set(`filter_${matchedIndex}_value`, value);
-        } else {
-          let maxIndex = -1;
-          for (const key of params.keys()) {
-            const match = key.match(/^filter_(\d+)_column$/);
-            if (match) maxIndex = Math.max(maxIndex, parseInt(match[1]));
-          }
-          const nextIndex = maxIndex + 1;
-          params.set(`filter_${nextIndex}_column`, 'last_message');
-          params.set(`filter_${nextIndex}_operator`, 'range');
-          params.set(`filter_${nextIndex}_value`, value);
-        }
-        window.location.href = url.toString();
+        this.filterData.filters = this.filterData.filters.filter(f => f.column !== 'last_message');
+        this.filterData.filters.push({
+          column: 'last_message',
+          operator: 'range',
+          value: option.value,
+          availableOperators: fieldTypeFilters.timestamp,
+        });
+        this.triggerFilterChange();
       },
 
       getLastMessageFilterIndex(params) {
