@@ -56,6 +56,7 @@ class TestCollection:
         collection = CollectionFactory(
             name="Test Collection",
             is_index=True,
+            is_remote_index=True,
             openai_vector_store_id="old-vs-123",
             llm_provider=LlmProviderFactory(),
         )
@@ -108,7 +109,7 @@ class TestCollection:
     def test_remove_remote_index(self, index_manager_mock):
         """Test that the index can be removed"""
         collection = CollectionFactory(
-            is_index=True, openai_vector_store_id="vs-123", llm_provider=LlmProviderFactory()
+            is_index=True, is_remote_index=True, openai_vector_store_id="vs-123", llm_provider=LlmProviderFactory()
         )
         file = FileFactory(external_id="remote-file-123")
         collection.files.add(file)
@@ -119,5 +120,5 @@ class TestCollection:
         # Check that the vector store ID is cleared and the index is removed
         assert collection.openai_vector_store_id == ""
         file.refresh_from_db()
-        index_manager_mock.delete_vector_store.assert_called_once_with("vs-123", fail_silently=True)
+        index_manager_mock.delete_vector_store.assert_called_once_with(fail_silently=True)
         index_manager_mock.delete_files.assert_called_once()

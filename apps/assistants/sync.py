@@ -73,7 +73,7 @@ from apps.assistants.models import OpenAiAssistant, ToolResources
 from apps.assistants.utils import get_assistant_tool_options
 from apps.files.models import File
 from apps.service_providers.exceptions import OpenAiUnableToLinkFileError
-from apps.service_providers.llm_service.index_managers import OpenAIVectorStoreManager
+from apps.service_providers.llm_service.index_managers import OpenAIRemoteIndexManager
 from apps.service_providers.models import LlmProvider, LlmProviderModel, LlmProviderTypes
 from apps.teams.models import Team
 from apps.utils.prompt import validate_prompt_variables
@@ -417,9 +417,9 @@ def _get_files_missing_from_vector_store(client, vector_store_id, file_ids: list
             break
         kwargs["after"] = vector_store_files.last_id
 
-    vector_store_manager = OpenAIVectorStoreManager(client)
+    vector_store_manager = OpenAIRemoteIndexManager(client, index_id=vector_store_id)
     for file_id in to_delete_remote:
-        vector_store_manager.delete_file(vector_store_id=vector_store_id, file_id=file_id)
+        vector_store_manager.delete_file(file_id=file_id)
 
     return file_ids
 
@@ -463,11 +463,11 @@ def _sync_tool_resources(assistant):
 
 def _update_or_create_vector_store(assistant, name, vector_store_id, file_ids) -> str:
     client = assistant.llm_provider.get_llm_service().get_raw_client()
-    vector_store_manager = OpenAIVectorStoreManager(client)
+    vector_store_manager = OpenAIRemoteIndexManager(client, index_id=vector_store_id)
 
     if vector_store_id:
         try:
-            vector_store_manager.get(vector_store_id)
+            vector_store_manager.get()
         except openai.NotFoundError:
             vector_store_id = None
 
@@ -485,7 +485,7 @@ def _update_or_create_vector_store(assistant, name, vector_store_id, file_ids) -
 
     with contextlib.suppress(OpenAiUnableToLinkFileError):
         # This will show an out-of-sync status on the assistant where the user can handle the error appropriately
-        vector_store_manager.link_files_to_vector_store(vector_store_id, file_ids)
+        vector_store_manager.link_files_to_vector_store(file_ids)
 
     return vector_store_id
 

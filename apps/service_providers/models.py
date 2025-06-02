@@ -139,8 +139,8 @@ class LlmProvider(BaseTeamModel, ProviderMixin):
         config = {k: v for k, v in self.config.items() if v}
         return self.type_enum.get_llm_service(config)
 
-    def get_index_manager(self):
-        return self.get_llm_service().get_index_manager()
+    def get_remote_index_manager(self, index_id: str):
+        return self.get_llm_service().get_remote_index_manager(index_id)
 
 
 class LlmProviderModelManager(models.Manager):

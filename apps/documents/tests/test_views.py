@@ -16,7 +16,9 @@ class TestEditCollection:
     @pytest.fixture()
     def collection(self):
         team = TeamWithUsersFactory()
-        return CollectionFactory(name="Tester", team=team, is_index=True, llm_provider=LlmProviderFactory(team=team))
+        return CollectionFactory(
+            name="Tester", team=team, is_index=True, is_remote_index=True, llm_provider=LlmProviderFactory(team=team)
+        )
 
     @mock.patch("apps.documents.tasks.migrate_vector_stores.delay")
     def test_update_collection_with_llm_provider_change(self, migrate_mock, index_manager_mock, collection, client):
@@ -32,6 +34,7 @@ class TestEditCollection:
             {
                 "name": collection.name,
                 "is_index": True,
+                "is_remote_index": True,
                 "llm_provider": new_llm_provider.id,
             },
         )
@@ -81,6 +84,7 @@ class TestDeleteCollection:
             name="Tester",
             team=team,
             is_index=is_index,
+            is_remote_index=is_index,
             llm_provider=LlmProviderFactory(team=team),
             openai_vector_store_id="store-123",
         )
