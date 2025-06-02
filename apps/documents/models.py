@@ -8,6 +8,7 @@ from field_audit import audit_fields
 from field_audit.models import AuditingManager
 
 from apps.experiments.versioning import VersionDetails, VersionField, VersionsMixin, VersionsObjectManagerMixin
+from apps.service_providers.models import EmbeddingProviderModel
 from apps.teams.models import BaseTeamModel
 from apps.utils.conversions import bytes_to_megabytes
 from apps.utils.deletion import get_related_pipeline_experiments_queryset, get_related_pipelines_queryset
@@ -79,6 +80,13 @@ class Collection(BaseTeamModel, VersionsMixin):
         null=True,
         blank=True,
         verbose_name="LLM Provider",
+    )
+    embedding_provider_model = models.ForeignKey(
+        EmbeddingProviderModel,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="collection_embedding_model",
     )
     openai_vector_store_id = models.CharField(blank=True, max_length=255)
     is_index = models.BooleanField(default=False)
