@@ -491,6 +491,11 @@ class TraceProvider(BaseTeamModel):
         return self.type_enum.get_service(self.config)
 
 
+class EmbeddingProviderModelManager(models.Manager):
+    def for_team(self, team):
+        return super().get_queryset().filter(models.Q(team=team) | models.Q(team__isnull=True))
+
+
 class EmbeddingProviderModel(BaseTeamModel):
     type = models.CharField(max_length=255, choices=LlmProviderTypes.choices)
     name = models.CharField(max_length=128, help_text="The name of the model. e.g. 'text-embedding-3-small'")
@@ -502,7 +507,16 @@ class EmbeddingProviderModel(BaseTeamModel):
         blank=True,
     )
 
+    objects = EmbeddingProviderModelManager()
+
     class Meta:
         constraints = [
             models.UniqueConstraint(fields=("team", "name", "type"), name="unique_team_name_type"),
         ]
+
+    @property
+    def type_enum(self):
+        return LlmProviderTypes[str(self.type)]
+
+    def __str__(self):
+        return f"{self.name}"

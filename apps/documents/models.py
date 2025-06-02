@@ -88,6 +88,9 @@ class Collection(BaseTeamModel, VersionsMixin):
         blank=True,
         related_name="collection_embedding_model",
     )
+    is_remote_index = models.BooleanField(
+        default=False, help_text="If selected, this index will be created at and hosted by the selected provider"
+    )
     openai_vector_store_id = models.CharField(blank=True, max_length=255)
     is_index = models.BooleanField(default=False)
 
