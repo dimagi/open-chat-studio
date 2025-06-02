@@ -28,7 +28,7 @@
       <ul tabindex="0" class="dropdown-content menu p-2 shadow bg-base-100 rounded-box w-52">
         <template x-for="option in dateRangeOptions" :key="option.value">
           <li>
-            <a href="#" x-text="option.label" @click.prevent="selectOption(option)"></a>
+            <a href="#" x-text="option.label" @click.prevent="selectOption(option); document.activeElement.blur()"></a>
           </li>
         </template>
       </ul>
