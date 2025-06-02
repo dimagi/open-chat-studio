@@ -1,5 +1,28 @@
 {% load i18n %}
 {% load django_tables2 %}
+{% if show_modal_instead %}
+  <div id="creation-redirect-modal" class="modal fade" tabindex="-1" role="dialog" aria-labelledby="creation-redirect-modal-title" aria-hidden="true">
+    <div class="modal-dialog modal-dialog-centered" role="document">
+      <div class="modal-content">
+        <div class="modal-header">
+          <h5 class="modal-title" id="creation-redirect-modal-title">Experiments are Deprecated</h5>
+          <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+        </div>
+        <div class="modal-body">
+          <div>
+            <p class="mb-0">Experiments are replaced with the new Chatbots for enhanced functionlity!</p><a href="https://docs.openchatstudio.com/concepts/chatbots/" target="_blank" rel="noopener noreferrer">[Learn More]</a>
+          </div>
+        </div>
+        <div class="modal-footer">
+          <a href="{% url 'chatbots:chatbots_home' request.team.slug %}" class="btn btn-primary">
+            <i class="bi bi-arrow-right me-1"></i>
+            Go to Chatbots
+          </a>
+        </div>
+      </div>
+    </div>
+  </div>
+{% endif %}
 <div class="app-card">
   <div class="grid grid-cols-6">
     <div class="col-span-5">
@@ -74,3 +97,16 @@
     {% include "table/table_placeholder.html" %}
   </div>
 </div>
+
+<script>
+  document.addEventListener('DOMContentLoaded', function() {
+    const newButton = document.querySelector('a[href="{{ new_object_url }}"]');
+    if (newButton) {
+      newButton.addEventListener('click', function(e) {
+        e.preventDefault();
+        const modal = new bootstrap.Modal(document.getElementById('creation-redirect-modal'));
+        modal.show();
+      });
+    }
+  });
+</script>
