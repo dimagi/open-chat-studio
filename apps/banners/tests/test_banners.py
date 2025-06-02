@@ -17,7 +17,7 @@ class BannerServiceTests(TestCase):
         self.team_with_flag = Team.objects.create(id=1, name="Team With Flag")
         self.team_without_flag = Team.objects.create(id=2, name="Team Without Flag")
 
-        self.test_flag = Flag.objects.create(name="test_banner_flag", everyone=False)
+        self.test_flag = Flag.objects.create(name="flag_test_banner", everyone=False)
         self.test_flag.teams.add(self.team_with_flag)
 
         self.active_global_banner = Banner.objects.create(
