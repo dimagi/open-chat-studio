@@ -107,7 +107,9 @@ CUSTOM_ERROR_MESSAGE = (
 @login_and_team_required
 @permission_required("experiments.view_experiment", raise_exception=True)
 def experiments_home(request, team_slug: str):
-    return generic_home(request, team_slug, "Experiments", "experiments:table", "experiments:new")
+    return generic_home(
+        request, team_slug, "Experiments", "experiments:table", "experiments:new", show_modal_instead=True
+    )
 
 
 class ExperimentTableView(BaseExperimentTableView):
