@@ -91,4 +91,4 @@ class TraceProviderAdmin(admin.ModelAdmin):
 class EmbeddingProviderModelAdmin(admin.ModelAdmin):
     list_display = ("name", "team", "type")
     list_filter = ("team", "type")
-    readonly_fields=("team",)
+    readonly_fields = ("team",)
