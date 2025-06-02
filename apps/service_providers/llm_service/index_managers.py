@@ -4,7 +4,6 @@ from abc import abstractmethod
 
 import openai
 
-from apps.assistants.sync import create_files_remote
 from apps.assistants.utils import chunk_list
 from apps.documents.exceptions import FileUploadError
 from apps.files.models import File
@@ -14,12 +13,12 @@ logger = logging.getLogger("ocs.index_manager")
 
 
 class RemoteIndexManager:
-    def __int__(self, client, index_id: str | None = None):
+    def __init__(self, client, index_id: str | None = None):
         self.client = client
         self.index_id = index_id
 
     @abstractmethod
-    def get(self, vector_store_id: str):
+    def get(self):
         """Retrieve the vector store from the remote index."""
         ...
 
@@ -29,14 +28,12 @@ class RemoteIndexManager:
         ...
 
     @abstractmethod
-    def delete_vector_store(self, vector_store_id: str, fail_silently: bool = False):
+    def delete_vector_store(self, fail_silently: bool = False):
         """Delete the vector store from the remote index."""
         ...
 
     @abstractmethod
-    def link_files_to_vector_store(
-        self, vector_store_id: str, file_ids: list[str], chunk_size=None, chunk_overlap=None
-    ) -> str:
+    def link_files_to_vector_store(self, file_ids: list[str], chunk_size=None, chunk_overlap=None) -> str:
         """Link files to the vector store in the remote index."""
         ...
 
@@ -62,11 +59,11 @@ class OpenAIRemoteIndexManager(RemoteIndexManager):
         self.index_id = vector_store.id
         return self.index_id
 
-    def delete_vector_store(self, vector_store_id: str, fail_silently: bool = False):
+    def delete_vector_store(self, fail_silently: bool = False):
         try:
-            self.client.vector_stores.delete(vector_store_id=vector_store_id)
+            self.client.vector_stores.delete(vector_store_id=self.index_id)
         except (openai.NotFoundError, ValueError) as e:
-            logger.warning("Vector store %s not found in OpenAI", vector_store_id)
+            logger.warning("Vector store %s not found in OpenAI", self.index_id)
             if not fail_silently:
                 raise e
 
@@ -101,6 +98,8 @@ class OpenAIRemoteIndexManager(RemoteIndexManager):
             raise OpenAiUnableToLinkFileError("Failed to link files to OpenAI vector store") from e
 
     def ensure_remote_file_exists(self, file: File, re_upload: bool):
+        from apps.assistants.sync import create_files_remote
+
         try:
             if re_upload or not file.external_id:
                 file.external_id = None
@@ -123,3 +122,31 @@ class OpenAIRemoteIndexManager(RemoteIndexManager):
 
             file.external_id = ""
         File.objects.bulk_update(files, fields=["external_id"])
+
+    def add_files_to_index(
+        self, files: list[File], chunk_size: int = None, chunk_overlap: int = None, re_upload: bool = False
+    ) -> dict:
+        """
+        Add files to the index. This method is a convenience method that uploads the files to the remote index and
+        links them to the vector store.
+        """
+        failed_uploads = []
+        success_upload_files = []
+        for file in files:
+            try:
+                self.ensure_remote_file_exists(file, re_upload=re_upload)
+                success_upload_files.append(file)
+            except FileUploadError:
+                failed_uploads.append(file)
+
+        try:
+            self.link_files_to_vector_store(
+                file_ids=[file.external_id for file in success_upload_files],
+                chunk_size=chunk_size,
+                chunk_overlap=chunk_overlap,
+            )
+        except OpenAiUnableToLinkFileError as e:
+            logger.error("Failed to link files to OpenAI vector store", exc_info=e)
+            raise e
+
+        return success_upload_files, failed_uploads
