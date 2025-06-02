@@ -82,8 +82,8 @@ class TestCollection:
         index_collection_files.assert_called()
 
     @pytest.mark.parametrize("is_index", [True, False])
-    @mock.patch("apps.documents.models.Collection._remove_index")
-    def test_archive_collection(self, _remove_index, is_index):
+    @mock.patch("apps.documents.models.Collection._remove_remote_index")
+    def test_archive_collection(self, _remove_remote_index, is_index):
         """Test that a collection can be archived"""
         provider = LlmProviderFactory() if is_index else None
         collection = CollectionFactory(is_index=is_index, openai_vector_store_id="vs-123", llm_provider=provider)
@@ -101,11 +101,11 @@ class TestCollection:
             assert file.is_archived
 
         if is_index:
-            _remove_index.assert_called_once()
+            _remove_remote_index.assert_called_once()
         else:
-            _remove_index.assert_not_called()
+            _remove_remote_index.assert_not_called()
 
-    def test_remove_index(self, index_manager_mock):
+    def test_remove_remote_index(self, index_manager_mock):
         """Test that the index can be removed"""
         collection = CollectionFactory(
             is_index=True, openai_vector_store_id="vs-123", llm_provider=LlmProviderFactory()
@@ -114,7 +114,7 @@ class TestCollection:
         collection.files.add(file)
 
         # Invoke the remove_index method
-        collection._remove_index()
+        collection._remove_remote_index()
 
         # Check that the vector store ID is cleared and the index is removed
         assert collection.openai_vector_store_id == ""
