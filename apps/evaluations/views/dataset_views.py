@@ -51,7 +51,7 @@ class CreateDataset(LoginAndTeamRequiredMixin, CreateView, PermissionRequiredMix
     form_class = EvaluationDatasetForm
     extra_context = {
         "title": "Create Dataset",
-        "button_text": "Create",
+        "button_text": "Create Dataset",
         "active_tab": "evaluation_datasets",
         "new_message_form": EvaluationMessageForm(),
     }

@@ -1,5 +1,5 @@
 from django.contrib.auth.mixins import PermissionRequiredMixin
-from django.http import JsonResponse
+from django.http import HttpResponseRedirect
 from django.shortcuts import get_object_or_404
 from django.urls import reverse
 from django.views.generic import CreateView, TemplateView, UpdateView
@@ -163,5 +163,5 @@ class EvaluationResultTableView(SingleTableView):
 def create_evaluation_run(request, team_slug, evaluation_pk):
     # TODO: Assert all the permissions, etc.
     config = get_object_or_404(EvaluationConfig, team__slug=team_slug, pk=evaluation_pk)
-    config.run()
-    return JsonResponse({"success": "true"})
+    run = config.run()
+    return HttpResponseRedirect(reverse("evaluations:evaluation_results_home", args=[team_slug, evaluation_pk, run.pk]))
