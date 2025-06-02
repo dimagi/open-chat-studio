@@ -111,7 +111,7 @@ class EvaluationConfig(BaseTeamModel):
     def get_absolute_url(self):
         return reverse("evaluations:evaluation_runs_home", args=[self.team.slug, self.id])
 
-    def run(self) -> list["EvaluationResult"]:
+    def run(self) -> "EvaluationRun":
         # TODO: Run this in a celery task
         """Runs the evaluation"""
         run = EvaluationRun.objects.create(team=self.team, config=self)
@@ -127,7 +127,7 @@ class EvaluationConfig(BaseTeamModel):
                 )
         run.finished_at = timezone.now()
         run.save()
-        return results
+        return run
 
 
 class EvaluationRun(BaseTeamModel):

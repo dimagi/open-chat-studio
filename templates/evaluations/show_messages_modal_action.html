@@ -1,16 +1,18 @@
-<button
-  class="btn btn-xs"
-  onclick="session_message_modal.showModal();"
-  hx-get="{% url 'experiments:experiment_session_messages_view' request.team.slug record.experiment.public_id record.external_id %}"
-  hx-target="#session_message_modal_content"
-  hx-swap="innerHTML"
->
-  View Messages
-</button>
-<button
-  type="button"
-  class="btn btn-primary btn-xs"
-  @click="cloneMessagesFromSessionUrl('{{ record.external_id }}');"
->
-  Clone Messages
-</button>
+<div class="join">
+  <button
+    class="btn btn-xs rounded-l-full"
+    onclick="session_message_modal.showModal();"
+    hx-get="{% url 'experiments:experiment_session_messages_view' request.team.slug record.experiment.public_id record.external_id %}"
+    hx-target="#session_message_modal_content"
+    hx-swap="innerHTML"
+  >
+    View
+  </button>
+  <button
+    type="button"
+    class="btn btn-primary btn-xs rounded-r-full"
+    @click="cloneMessagesFromSessionUrl('{{ record.external_id }}');"
+  >
+    Clone
+  </button>
+</div>

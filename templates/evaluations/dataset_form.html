@@ -5,18 +5,18 @@
   {% render_form_fields form %}
   <div x-data="messageBuilder()" x-init="init()">
     <input type="hidden" name="messages_json" x-model="jsonString">
-    <div class="w-full mt-4" x-show="messages.length === 0">
-      <div x-data="{ showClone: false }" class="border rounded-lg p-4 bg-base-100">
+    <div class="w-full mt-4">
+      <div x-data="{ showClone: false }" class="border p-4 bg-base-100 rounded-sm shadow-sm mb-2">
         <button
           type="button"
           class="flex justify-between items-center w-full text-left"
           @click="showClone = !showClone"
         >
-          <h3 class="text-md font-bold">Clone messages from a previous session</h3>
+          <h3 class="text-md">Clone messages from a previous session</h3>
           <i :class="showClone ? 'fa fa-chevron-up' : 'fa fa-chevron-down'" class="mr-2 float-right" aria-hidden="true"></i>
         </button>
 
-        <div x-show="showClone">
+        <div class="mt-4" x-show="showClone">
           <div id="sessions-table"
                hx-get="{% url 'evaluations:dataset_sessions_list' request.team.slug %}"
                hx-trigger="load"
@@ -34,6 +34,9 @@
           <i class="fa-solid fa-plus"></i> Add Message
         </button>
       </div>
+    </div>
+    <div x-show="messages.length === 0" class="mt-4">
+      <p>Add a message to the dataset or start by cloning a session above.</p>
     </div>
     <table class="table w-full mt-4" x-show="messages.length > 0">
       <thead>
