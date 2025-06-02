@@ -22,6 +22,8 @@ from apps.documents.tables import CollectionsTable
 from apps.files.models import File
 from apps.generics.chips import Chip
 from apps.generics.help import render_help_with_link
+from apps.service_providers.models import LlmProviderTypes
+from apps.service_providers.utils import get_embedding_provider_choices
 from apps.teams.decorators import login_and_team_required
 from apps.teams.mixins import LoginAndTeamRequiredMixin
 from apps.utils.search import similarity_search
@@ -141,6 +143,21 @@ class CollectionFormMixin:
         kwargs["request"] = self.request
         return kwargs
 
+    def get_context_data(self, **kwargs):
+        context = super().get_context_data(**kwargs)
+
+        # Create a mapping of provider ID to provider type for JavaScript
+        provider_types = {}
+        for provider in self.request.team.llmprovider_set.all():
+            provider_types[provider.id] = provider.type
+
+        context["provider_types"] = provider_types
+        context["embedding_model_options"] = get_embedding_provider_choices(self.request.team)
+        context["open_ai_provider_ids"] = list(
+            self.request.team.llmprovider_set.filter(type=LlmProviderTypes.openai).values_list("id", flat=True)
+        )
+        return context
+
 
 class CreateCollection(LoginAndTeamRequiredMixin, CollectionFormMixin, CreateView, PermissionRequiredMixin):
     model = Collection
@@ -160,13 +177,17 @@ class CreateCollection(LoginAndTeamRequiredMixin, CollectionFormMixin, CreateVie
     def form_valid(self, form):
         form.instance.team = self.request.team
         response = super().form_valid(form)
+        collection = form.instance
         if form.instance.is_index:
-            collection = form.instance
-            manager = collection.llm_provider.get_index_manager()
-            collection.openai_vector_store_id = manager.create_vector_store(name=collection.index_name)
-            collection.save(update_fields=["openai_vector_store_id"])
+            if form.cleaned_data["is_remote_index"]:
+                self._create_remote_index(collection)
 
         return response
+
+    def _create_remote_index(self, collection: Collection):
+        manager = collection.llm_provider.get_index_manager()
+        collection.openai_vector_store_id = manager.create_vector_store(name=collection.index_name)
+        collection.save(update_fields=["openai_vector_store_id"])
 
 
 class EditCollection(LoginAndTeamRequiredMixin, CollectionFormMixin, UpdateView, PermissionRequiredMixin):
