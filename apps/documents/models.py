@@ -163,14 +163,18 @@ class Collection(BaseTeamModel, VersionsMixin):
             # Create vector store at llm service
             # Optimization suggestion: Only when the file set changed, should we create a new vector store at the
             # provider
-            manager = new_version.llm_provider.get_index_manager()
-            version_name = f"{new_version.index_name} v{new_version.version_number}"
-            new_version.openai_vector_store_id = manager.create_vector_store(name=version_name)
-            new_version.save(update_fields=["openai_vector_store_id"])
+            if self.is_remote_index:
+                manager = new_version.get_index_manager()
+                version_name = f"{new_version.index_name} v{new_version.version_number}"
+                new_version.openai_vector_store_id = manager.create_vector_store(name=version_name)
+                new_version.save(update_fields=["openai_vector_store_id"])
 
-            # Upload files to vector store
-            if collection_files := CollectionFile.objects.filter(collection_id=new_version.id):
-                index_collection_files(collection_files)
+                # Upload files to vector store
+                if collection_files := CollectionFile.objects.filter(collection_id=new_version.id):
+                    index_collection_files(collection_files)
+            else:
+                # TODO
+                pass
 
         return new_version
 
@@ -237,9 +241,13 @@ class Collection(BaseTeamModel, VersionsMixin):
 
     def _remove_remote_index(self):
         """Remove the index backend"""
-        manager = self.llm_provider.get_index_manager()
-        manager.delete_vector_store(self.openai_vector_store_id, fail_silently=True)
+        manager = self.get_index_manager()
+        manager.delete_vector_store(fail_silently=True)
         manager.delete_files(self.files.all())
 
         self.openai_vector_store_id = ""
         self.save(update_fields=["openai_vector_store_id"])
+
+    def get_index_manager(self):
+        if self.is_index and self.is_remote_index:
+            return self.llm_provider.get_remote_index_manager(self.openai_vector_store_id)

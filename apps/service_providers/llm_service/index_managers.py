@@ -48,6 +48,16 @@ class RemoteIndexManager:
         """
         ...
 
+    @abstractmethod
+    def add_files_to_index(
+        self, files: list[File], chunk_size: int = None, chunk_overlap: int = None, re_upload: bool = False
+    ) -> dict:
+        """
+        Add files to the index. This method is a convenience method that uploads the files to the remote index and
+        links them to the vector store.
+        """
+        ...
+
 
 class OpenAIRemoteIndexManager(RemoteIndexManager):
     def get(self):
