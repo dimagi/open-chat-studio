@@ -7,12 +7,12 @@
 {% block breadcrumbs %}
   {% flag "flag_chatbots" %}
     {% if experiment.pipeline %}
-      <div class="banners-container">
+      <div>
         <div class="alert alert-info alert-soft alert-vertical sm:alert-horizontal" role="alert">
-          <div class="banner-content">
+          <div>
             <strong>We've upgraded your experiment!</strong> Your experiment has been upgraded to a full chatbot with enhanced features. Find it in the new Chatbots section. <a href="https://docs.openchatstudio.com/concepts/chatbots/" target="_blank" rel="noopener noreferrer">[Learn More]</a>
           </div>
-          <div class="banner-actions">
+          <div>
             <a href="{% url 'chatbots:single_chatbot_home' request.team.slug experiment.id %}"
                class="btn btn-primary">
               Go to Chatbot
