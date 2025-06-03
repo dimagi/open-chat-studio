@@ -8,7 +8,7 @@
       </div>
       <div class="flex items-start">
         <div>
-          <p>Experiments are replaced with the new Chatbots for enhanced functionality!</p>
+          <p class="p-2">Experiments are replaced with Chatbots for new enhanced functionality!</p>
           <a href="https://docs.openchatstudio.com/concepts/chatbots/" target="_blank" rel="noopener noreferrer" class="link link-primary">
             Learn More →
           </a>
@@ -100,20 +100,22 @@
   </div>
 </div>
 
-<script>
-  function showModal() {
-    const modal = document.getElementById('creation-redirect-modal');
-    if (modal) {
-      modal.showModal();
+{% if show_modal_instead %}
+  <script>
+    function showModal() {
+      const modal = document.getElementById('creation-redirect-modal');
+      if (modal) {
+        modal.showModal();
+      }
     }
-  }
-  document.addEventListener('DOMContentLoaded', function() {
-    const newButton = document.querySelector('a[href="{{ new_object_url }}"]');
-    if (newButton) {
-      newButton.addEventListener('click', function(e) {
-        e.preventDefault();
-        showModal();
-      });
-    }
-  });
-</script>
+    document.addEventListener('DOMContentLoaded', function() {
+      const newButton = document.querySelector('a[href="{{ new_object_url }}"]');
+      if (newButton) {
+        newButton.addEventListener('click', function(e) {
+          e.preventDefault();
+          showModal();
+        });
+      }
+    });
+  </script>
+{% endif %}
