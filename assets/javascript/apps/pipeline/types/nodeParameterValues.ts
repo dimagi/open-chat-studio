@@ -15,7 +15,13 @@
     export type NodeParameterValues = {
       LlmProviderId: TypedOption[];
       LlmProviderModelId: TypedOption[];
-      [k: string]: Option[];
+      source_material: Option[];
+      assistant: Option[];
+      collection: Option[];
+      collection_index: Option[];
+      agent_tools: Option[];
+      custom_actions: Option[];
+      [k: string]: any;
     };
 
    export type LlmProviderModel = TypedOption & {
