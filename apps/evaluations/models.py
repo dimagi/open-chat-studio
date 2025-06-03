@@ -1,9 +1,11 @@
 from __future__ import annotations
 
+import importlib
 from collections import defaultdict
-from collections.abc import Generator, Iterable
+from collections.abc import Iterable
 from datetime import datetime
-from typing import cast
+from functools import cached_property
+from typing import TYPE_CHECKING, cast
 
 from django.conf import settings
 from django.db import models
@@ -13,9 +15,11 @@ from langchain_core.messages import AIMessage, BaseMessage, HumanMessage
 from pydantic import BaseModel as PydanticBaseModel
 
 from apps.chat.models import ChatMessage, ChatMessageType
-from apps.evaluations import evaluators
 from apps.teams.models import BaseTeamModel
 from apps.utils.models import BaseModel
+
+if TYPE_CHECKING:
+    from apps.evaluations.evaluators import EvaluatorResult
 
 
 class Evaluator(BaseTeamModel):
@@ -28,10 +32,14 @@ class Evaluator(BaseTeamModel):
     def __str__(self):
         return f"{self.name} ({self.type})"
 
-    def run(self, messages: list[BaseMessage]) -> evaluators.EvaluatorResult:
+    @cached_property
+    def evaluator(self):
+        module = importlib.import_module("apps.evaluations.evaluators")
+        return getattr(module, self.type)
+
+    def run(self, message: EvaluationMessage, message_type: EvaluationMessageTypeChoices) -> EvaluatorResult:
         try:
-            evaluator = getattr(evaluators, self.type)
-            return evaluator(**self.params).run(messages)
+            return self.evaluator(**self.params).run(message, message_type)
         except:
             raise  # TODO
 
@@ -113,7 +121,7 @@ class EvaluationMessage(BaseModel):
         )
 
 
-class DatasetMessageTypeChoices(models.TextChoices):
+class EvaluationMessageTypeChoices(models.TextChoices):
     HUMAN = "human", "Human Only"
     AI = "ai", "AI Only"
     ALL = "all", "All"
@@ -133,8 +141,8 @@ class EvaluationConfig(BaseTeamModel):
     dataset = models.ForeignKey(EvaluationDataset, on_delete=models.CASCADE)
     message_type = models.CharField(
         max_length=10,
-        choices=DatasetMessageTypeChoices,
-        default=DatasetMessageTypeChoices.ALL,
+        choices=EvaluationMessageTypeChoices,
+        default=EvaluationMessageTypeChoices.ALL,
     )
 
     # experiment = models.ForeignKey(Experiment, on_delete=models.SET_NULL, null=True, blank=True)
@@ -146,15 +154,6 @@ class EvaluationConfig(BaseTeamModel):
     def get_absolute_url(self):
         return reverse("evaluations:evaluation_runs_home", args=[self.team.slug, self.id])
 
-    def iter_messages(self) -> Generator[tuple[int, list[BaseMessage]], None, None]:
-        for message in self.dataset.messages.all():
-            if self.message_type == DatasetMessageTypeChoices.ALL:
-                yield (message.id, message.as_langchain_messages())
-            elif self.message_type == DatasetMessageTypeChoices.HUMAN:
-                yield (message.id, [message.as_human_langchain_message()])
-            elif self.message_type == DatasetMessageTypeChoices.AI:
-                yield (message.id, [message.as_ai_langchain_message()])
-
     def run(self) -> EvaluationRun:
         # TODO: Run this in a celery task
         """Runs the evaluation"""
@@ -162,11 +161,11 @@ class EvaluationConfig(BaseTeamModel):
         results = []
         # TODO: Run in parallel with langgraph
         for evaluator in cast(Iterable[Evaluator], self.evaluators.all()):
-            for message_id, messages in self.iter_messages():
-                result = evaluator.run(messages)
+            for message in self.dataset.messages.all():
+                result = evaluator.run(message, self.message_type)
                 results.append(
                     EvaluationResult.objects.create(
-                        message_id=message_id, run=run, evaluator=evaluator, output=result.model_dump(), team=self.team
+                        message=message, run=run, evaluator=evaluator, output=result.model_dump(), team=self.team
                     )
                 )
         run.finished_at = timezone.now()

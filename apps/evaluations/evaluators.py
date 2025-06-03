@@ -1,8 +1,8 @@
 from langchain_core.language_models import BaseChatModel
-from langchain_core.messages import BaseMessage
 from langchain_core.prompts import PromptTemplate
 from pydantic import BaseModel, Field
 
+from apps.evaluations.models import EvaluationMessage, EvaluationMessageTypeChoices
 from apps.service_providers.exceptions import ServiceProviderConfigError
 from apps.service_providers.llm_service.main import LlmService
 from apps.service_providers.models import LlmProviderModel
@@ -15,7 +15,7 @@ class EvaluatorResult(BaseModel):
 
 
 class BaseEvaluator:
-    def run(self, messages: list) -> EvaluatorResult:
+    def run(self, message: EvaluationMessage, message_type: EvaluationMessageTypeChoices) -> EvaluatorResult:
         raise NotImplementedError
 
 
@@ -50,11 +50,17 @@ class LlmEvaluator(LLMResponseMixin, BaseEvaluator):
     prompt: str
     output_schema: dict
 
-    def run(self, messages: list[BaseMessage]) -> EvaluatorResult:
-        input = "\n".join(f"{message.type}: {message.content}" for message in messages)
+    def run(self, message: EvaluationMessage, message_type: EvaluationMessageTypeChoices) -> EvaluatorResult:
+        if message_type == EvaluationMessageTypeChoices.ALL:
+            input = f"Human: {message.human_message_content} \n AI: {message.ai_message_content}"
+        elif message_type == EvaluationMessageTypeChoices.HUMAN:
+            input = f"Human: {message.human_message_content}"
+        elif message_type == EvaluationMessageTypeChoices.AI:
+            input = f"AI: {message.ai_message_content}"
+
         output_schema = dict_to_json_schema(self.output_schema)
         llm = self.get_chat_model().with_structured_output(output_schema)
         prompt = PromptTemplate.from_template(self.prompt)
         chain = prompt | llm
-        result = chain.invoke({"input": input})
+        result = chain.invoke({"input": input, **message.context})
         return EvaluatorResult(result=result)
