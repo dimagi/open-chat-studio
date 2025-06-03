@@ -15,6 +15,9 @@ export type PropertySchema = {
   "ui:enumDiscriminatorValues"?: string[] | undefined;
   "ui:discriminatorField"?: string | undefined;
   "ui:flagRequired"?: string | undefined;
+  "additionalProperties"?: {
+    anyOf?: JsonSchema[] | undefined;
+  }
   [k: string]: any;
 }
 

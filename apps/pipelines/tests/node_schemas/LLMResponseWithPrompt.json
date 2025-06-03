@@ -150,8 +150,13 @@
       "type": "array",
       "ui:discriminatorField": "llm_provider_type",
       "ui:enumDiscriminatorValues": [
-        "openai",
-        "anthropic"
+        [
+          "openai",
+          "anthropic"
+        ],
+        [
+          "openai"
+        ]
       ],
       "ui:enumLabels": [
         "Web Search",
@@ -161,31 +166,45 @@
     },
     "tool_config": {
       "additionalProperties": {
-        "properties": {
-          "allowed_domains": {
-            "items": {
-              "type": "string"
-            },
-            "title": "Allowed Domains",
-            "type": "array",
-            "ui:widget": "none"
+        "anyOf": [
+          {
+            "properties": {},
+            "title": "BuiltinToolConfig",
+            "type": "object"
           },
-          "blocked_domains": {
-            "items": {
-              "type": "string"
+          {
+            "discriminatorValue": "anthropic",
+            "properties": {
+              "allowed_domains": {
+                "description": "Add domains without https from which you want the search results. Use space to add multiple domains",
+                "items": {
+                  "type": "string"
+                },
+                "title": "Allowed Domains",
+                "type": "array",
+                "ui:widget": "expandable_text"
+              },
+              "blocked_domains": {
+                "description": "Add domains without https from which you don't want the search results. Use space to add multiple domain.",
+                "items": {
+                  "type": "string"
+                },
+                "title": "Blocked Domains",
+                "type": "array",
+                "ui:widget": "expandable_text"
+              }
             },
-            "title": "Blocked Domains",
-            "type": "array",
-            "ui:widget": "none"
+            "title": "AnthropicWebSearchToolConfig",
+            "tool_key": "web-search",
+            "type": "object"
           }
-        },
-        "title": "ToolConfigModel",
-        "type": "object"
+        ]
       },
       "description": "Configuration for builtin tools",
       "title": "Tool Config",
-      "ui:widget": "none",
-      "type": "object"
+      "type": "object",
+      "ui:discriminatorField": "llm_provider_type",
+      "ui:widget": "built_in_tools_config"
     }
   },
   "required": [

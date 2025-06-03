@@ -38,8 +38,8 @@ export function getWidget(name: string, params: PropertySchema) {
       return KeywordsWidget
     case "node_name":
       return NodeNameWidget
-    case "built_in_tools":
-        return BuiltInToolsWidget
+    case "built_in_tools_config":
+      return BuiltInToolsConfigWidget
     default:
       if (params.enum) {
         return SelectWidget
@@ -236,7 +236,6 @@ function SelectWidget(props: WidgetParams) {
 function MultiSelectWidget(props: WidgetParams) {
   const allOptions = getSelectOptions(props.schema);
   const options = useDiscriminator(props.schema, props.nodeParams, allOptions);
-  console.log(props.name, allOptions, options)
 
   // props.paramValue is made immutable when produce is used to update the node, so we have to copy props.paramValue
   // in order to push to it
@@ -1020,35 +1019,21 @@ export function InputField({label, help_text, inputError, children}: React.Props
   );
 }
 
-function BuiltInToolsWidget(props: WidgetParams) {
-  const llmProviderId = concatenate(props.nodeParams["llm_provider_model_id"]);
-  const { parameterValues } = getCachedData();
-  const models = parameterValues.LlmProviderModelId as LlmProviderModel[];
-  const model = models.find((m) => String(m.value) === String(llmProviderId));
-  const providerKey = model?.type?.toLowerCase() || "";
-  const providerToolMap = parameterValues.built_in_tools as unknown as Record<string, TypedOption[]>
-  const options = providerToolMap[providerKey] || [];
+function BuiltInToolsConfigWidget(props: WidgetParams) {
+  const discriminatorField = props.schema["ui:discriminatorField"]!;
+  const discriminatorValue = concatenate(props.nodeParams[discriminatorField]);
+  const options = props.schema.additionalProperties?.anyOf?.filter((schema => schema.discriminatorValue && schema.discriminatorValue === discriminatorValue));
+  if (!options || !options.length) {
+    return <></>;
+  }
 
-  if (options.length === 0) return <></>;
+  const builtinTools: string[] = props.nodeParams["built_in_tools"];
+  if (!builtinTools || !builtinTools.length) {
+    return <></>;
+  }
 
-  const toolConfigsMap = parameterValues.built_in_tools_config as unknown as Record<string, Record<string, PropertySchema[]>>;
-  const providerToolConfigs = toolConfigsMap[providerKey] || {};
-
-  const toolConfig = props.nodeParams.tool_config || {};
-  const [selectedValues, setSelectedValue] = useState(Array.isArray(props.paramValue) ? [...props.paramValue] : []);
   const setNode = usePipelineStore((state) => state.setNode);
-
-  function getNewNodeData(old: Node, updatedList: string[]) {
-    return produce(old, (next) => {
-      next.data.params[props.name] = updatedList;
-    });
-  }
-
-  function onUpdate(event: ChangeEvent<HTMLInputElement>) {
-    const updatedList = event.target.checked ? [...selectedValues, event.target.name] : selectedValues.filter((tool) => tool !== event.target.name);
-    setSelectedValue(updatedList);
-    setNode(props.nodeId, (old) => getNewNodeData(old, updatedList));
-  }
+  const toolConfig = props.nodeParams[props.name] || {};
 
   function onConfigUpdate(toolName: string, event: React.ChangeEvent<HTMLTextAreaElement | HTMLSelectElement | HTMLInputElement>) {
     const {name, value} = event.target;
@@ -1059,53 +1044,57 @@ function BuiltInToolsWidget(props: WidgetParams) {
       if (!next.data.params.tool_config[toolName]) {
         next.data.params.tool_config[toolName] = {};
       }
-      next.data.params.tool_config[toolName][name] = value.split(" ").map(value => value.trim());
+      next.data.params.tool_config[toolName][name] = value.split(" ").map(value => value.trim()).filter(value => value.length > 0);
     }))
   }
+
   return (
-    <InputField label={props.label} help_text={props.helpText} inputError={props.inputError}>
-      {options.map((option:  { value: string; label: string }) => (
-        <div className="flex items-center mb-1" key={option.value}>
-          <input
-            className="checkbox"
-            name={option.value}
-            onChange={onUpdate}
-            checked={selectedValues.includes(option.value)}
-            id={option.value}
-            type="checkbox"
-          />
-          <span className="ml-2">{option.label}</span>
-        </div>
-      ))}
-      {/* Configs for selected tools */}
-      {selectedValues.map((toolKey) => {
-        const widgets = providerToolConfigs[toolKey] || [];
-        if (!widgets || widgets.length === 0) return null;
+    <React.Fragment key={`${props.name}-op`}>
+      {builtinTools.map(toolKey => {
+        const toolOptions = options.filter(option => toolKey === option.tool_key);
+        if (!toolOptions || !toolOptions.length) {
+          return <React.Fragment key={`${toolKey}-config`}></React.Fragment>;
+        }
+        if (toolOptions.length > 1) {
+          console.error("More than one set of options found for the discriminator value", discriminatorValue, "with tools", builtinTools);
+          return <React.Fragment key={`${toolKey}-config`}></React.Fragment>;
+        }
+
+        const optionSchema = toolOptions[0];
+        const schemaProperties = Object.getOwnPropertyNames(optionSchema.properties);
+        const requiredProperties = optionSchema.required || [];
 
         return (
           <div className="mt-3" key={`${toolKey}-config`}>
             <div className="font-medium mb-1 text-sm text-base-content/70">
               {toolKey} configuration
             </div>
-            {widgets.map((widget: PropertySchema) => {
-              const value = toolConfig[toolKey]?.[widget.name] ?? [];
-              const rawError = props.getNodeFieldError(props.nodeId, "tool_config");
-              const error = rawError?.includes(`field '${widget.name}'`) ? rawError : "";
+            {schemaProperties.map(name => {
+              const value = toolConfig[toolKey]?.[name] ?? [];
+              const rawError = props.getNodeFieldError(props.nodeId, props.name);
+              const error = rawError?.includes(`field '${name}'`) ? rawError : "";
+              const widgetSchema = optionSchema.properties[name];
               const widgetProps: WidgetParams = {
-                ...props,
-                name: widget.name,
-                label: widget.label,
-                helpText: widget.helpText ?? "",
+                nodeId: props.nodeId,
+                name: name,
+                label: widgetSchema.title || name,
+                helpText: widgetSchema.description || "",
                 paramValue: Array.isArray(value) ? value.join(" ") : value,
-                updateParamValue: (event) => onConfigUpdate(toolKey, event),
                 inputError: error,
-              };
-              const WidgetComponent = getWidget(widget.type, widget) as React.ComponentType<WidgetParams>;
-              return <WidgetComponent key={widget.name} {...widgetProps} />;
+                updateParamValue: (event) => onConfigUpdate(toolKey, event),
+                schema: widgetSchema,
+                nodeParams: props.nodeParams,
+                nodeSchema: props.nodeSchema,
+                required: requiredProperties.includes(name),
+                getNodeFieldError: props.getNodeFieldError,
+              }
+              const widgetOrType = widgetSchema["ui:widget"] || widgetSchema.type;
+              const WidgetComponent = getWidget(widgetOrType, widgetSchema) as React.ComponentType<WidgetParams>;
+              return <WidgetComponent key={name} {...widgetProps} />;
             })}
-    </div>
-    );
-    })}
-    </InputField>
-  );
+          </div>
+        )
+      })}
+    </React.Fragment>
+  )
 }

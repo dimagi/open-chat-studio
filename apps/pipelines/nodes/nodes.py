@@ -5,7 +5,7 @@ import logging
 import random
 import time
 import unicodedata
-from typing import Annotated, Literal, Self
+from typing import Annotated, ClassVar, Literal, Self
 
 import tiktoken
 from django.conf import settings
@@ -267,18 +267,27 @@ class LLMResponse(PipelineNode, LLMResponseMixin):
         return PipelineState.from_node_output(node_name=self.name, node_id=self.node_id, output=output.content)
 
 
-class ToolConfigModel(BaseModel):
+class BuiltinToolConfig(BaseModel):
+    provider_type: ClassVar[str]
+    tool_name: ClassVar[str]
+    model_config = ConfigDict(extra="forbid")  # Reject extra fields
+
+
+class AnthropicWebSearchToolConfig(BuiltinToolConfig):
+    provider_type: ClassVar[str] = "anthropic"
+    tool_name: ClassVar[str] = "web-search"
+    model_config = ConfigDict(json_schema_extra={"discriminatorValue": provider_type, "tool_key": tool_name})
     allowed_domains: list[str] = Field(
         default_factory=list,
-        json_schema_extra=UiSchema(
-            widget=Widgets.none,
-        ),
+        description="Add domains without https from which you want the search results. "
+        "Use space to add multiple domains",
+        json_schema_extra=UiSchema(widget=Widgets.expandable_text),
     )
     blocked_domains: list[str] = Field(
         default_factory=list,
-        json_schema_extra=UiSchema(
-            widget=Widgets.none,
-        ),
+        description="Add domains without https from which you don't want the search results. "
+        "Use space to add multiple domain.",
+        json_schema_extra=UiSchema(widget=Widgets.expandable_text),
     )
 
     @field_validator("allowed_domains", "blocked_domains", mode="after")
@@ -346,14 +355,14 @@ class LLMResponseWithPrompt(LLMResponse, HistoryMixin, OutputMessageTagMixin):
         json_schema_extra=UiSchema(
             widget=Widgets.multiselect,
             enum_labels=BuiltInTools.labels,
-            discriminatorField="llm_provider_type",
+            discriminator_field="llm_provider_type",
             enum_discriminator_values=[["openai", "anthropic"], ["openai"]],
         ),
     )
-    tool_config: dict[str, ToolConfigModel] | None = Field(
+    tool_config: dict[str, BuiltinToolConfig | AnthropicWebSearchToolConfig] = Field(
         default_factory=dict,
         description="Configuration for builtin tools",
-        json_schema_extra=UiSchema(widget=Widgets.none),
+        json_schema_extra=UiSchema(widget=Widgets.built_in_tools_config, discriminator_field="llm_provider_type"),
     )
 
     @model_validator(mode="after")

@@ -359,7 +359,7 @@ class Widgets(StrEnum):
     history = "history"
     keywords = "keywords"
     history_mode = "history_mode"
-    built_in_tools = "built_in_tools"
+    built_in_tools_config = "built_in_tools_config"
 
 
 class OptionsSource(StrEnum):
@@ -368,9 +368,7 @@ class OptionsSource(StrEnum):
     agent_tools = "agent_tools"
     custom_actions = "custom_actions"
     collection = "collection"
-    built_in_tools = "built_in_tools"
     collection_index = "collection_index"
-    built_in_tools_config = "built_in_tools_config"
 
 
 class UiSchema(BaseModel):
@@ -379,7 +377,7 @@ class UiSchema(BaseModel):
     # Use this with Enum fields to provide label text
     enum_labels: list[str] = None
 
-    discriminatorField: str = None
+    discriminator_field: str = None
     enum_discriminator_values: list = None
 
     # Use this with 'select' type fields to indicate where the options should come from
@@ -396,8 +394,8 @@ class UiSchema(BaseModel):
             schema["ui:optionsSource"] = self.options_source
         if self.flag_required:
             schema["ui:flagRequired"] = self.flag_required
-        if self.discriminatorField:
-            schema["ui:discriminatorField"] = self.discriminatorField
+        if self.discriminator_field:
+            schema["ui:discriminatorField"] = self.discriminator_field
         if self.enum_discriminator_values:
             schema["ui:enumDiscriminatorValues"] = self.enum_discriminator_values
 

@@ -5,7 +5,7 @@ from langgraph.graph.state import CompiledStateGraph
 from apps.pipelines.graph import PipelineGraph
 from apps.pipelines.models import Pipeline
 from apps.pipelines.nodes import nodes
-from apps.pipelines.nodes.nodes import ToolConfigModel
+from apps.pipelines.nodes.nodes import AnthropicWebSearchToolConfig, BuiltinToolConfig
 
 
 def _make_edges(nodes) -> list[dict]:
@@ -65,7 +65,7 @@ def llm_response_with_prompt_node(
     prompt: str | None = None,
     history_type: str | None = None,
     history_name: str | None = None,
-    tool_config: dict[str, ToolConfigModel] | None = None,
+    tool_config: dict[str, BuiltinToolConfig | AnthropicWebSearchToolConfig] | None = None,
     **kwargs,
 ):
     if prompt is None:
