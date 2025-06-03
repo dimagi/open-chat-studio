@@ -56,9 +56,5 @@ class EvaluationResultAdmin(admin.ModelAdmin):
 
 @admin.register(EvaluationMessage)
 class EvaluationMessageAdmin(admin.ModelAdmin):
-    list_display = ("id", "chat_message", "message_type", "content", "metadata")
-    list_filter = ("chat_message", "message_type")
-    search_fields = (
-        "id",
-        "content",
-    )
+    list_display = ("id", "human_message_content", "ai_message_content", "context")
+    search_fields = ("id",)

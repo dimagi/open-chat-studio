@@ -5,6 +5,7 @@ from django.urls import reverse
 from django.views.generic import CreateView, TemplateView, UpdateView
 from django_tables2 import SingleTableView
 
+from apps.chat.models import ChatMessageType
 from apps.evaluations.forms import EvaluationDatasetForm, EvaluationMessageForm
 from apps.evaluations.models import EvaluationDataset
 from apps.evaluations.tables import EvaluationDatasetTable, EvaluationSessionsTable
@@ -109,5 +110,28 @@ class DatasetSessionsTableView(LoginAndTeamRequiredMixin, SingleTableView, Permi
 # TODO Permissions
 def session_messages_json(request, team_slug: str, session_id: str):
     session = get_object_or_404(ExperimentSession, team__slug=team_slug, external_id=session_id)
-    messages = session.chat.messages.values("id", "message_type", "content").order_by("id")
-    return JsonResponse(list(messages), safe=False)
+    messages = session.chat.messages.order_by("created_at")
+
+    pairs = []
+    i = 0
+    while i < len(messages) - 1:
+        m1, m2 = messages[i], messages[i + 1]
+        if m1.message_type == ChatMessageType.HUMAN and m2.message_type == ChatMessageType.AI:
+            pairs.append(
+                {
+                    "human": {"id": m1.id, "content": m1.content},
+                    "ai": {"id": m2.id, "content": m2.content},
+                    "context": {
+                        "current_datetime": m1.created_at,
+                        "history": "\n".join(
+                            f"{message.get_message_type_display()}: {message.content}"
+                            for message in session.chat.messages.filter(created_at__lt=m1.created_at)
+                        ),
+                    },
+                }
+            )
+            i += 2
+        else:
+            # Skip bad/malformed pairs
+            i += 1
+    return JsonResponse(pairs, safe=False)

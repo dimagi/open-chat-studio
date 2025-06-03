@@ -1,5 +1,6 @@
 {% extends 'generic/object_form.html' %}
 {% load form_tags %}
+{% load i18n %}
 {% block form %}
   {{ form.non_field_errors }}
   {% render_form_fields form %}
@@ -41,16 +42,27 @@
     <table class="table w-full mt-4" x-show="messages.length > 0">
       <thead>
         <tr>
-          <th>Type</th>
-          <th>Content</th>
+          <th>Human Message</th>
+          <th>AI Message</th>
+          <th>Context</th>
           <th></th>
         </tr>
       </thead>
       <tbody>
         <template x-for="(msg, index) in messages" :key="index">
           <tr>
-            <td x-text="msg.message_type"></td>
-            <td x-text="msg.content"></td>
+            <td x-text="msg.human.content"></td>
+            <td x-text="msg.ai.content"></td>
+            <td>
+              <dl>
+                <template x-for="(value, key) in msg.context" :key="key">
+                  <div class="mb-1">
+                    <dt class="font-bold" x-text="key"></dt>
+                    <dd class="ml-2" x-html="value?.toString().replaceAll('\n', '<br>')"></dd>
+                  </div>
+                </template>
+              </dl>
+            </td>
             <td>
               <button class="btn btn-ghost" type="button" @click="removeMessage(index)"><i class="fa-solid fa-trash"></i></button>
             </td>
@@ -75,23 +87,21 @@
         <div id="new_message_form" class="form">
           <div class="fieldset w-full">
             <label class="label mt-2">
-              {{ new_message_form.message_type.label }}
+              {% trans "Human Message" %}
             </label>
-            <select x-model="newMessage.message_type" class="select w-full">
-              {% for val, label in new_message_form.fields.message_type.choices %}
-                <option value="{{ val }}">{{ label }}</option>
-              {% endfor %}
-            </select>
+            <textarea x-model="newMessage.human.content" class="w-full textarea textarea-bordered" rows="3"></textarea>
           </div>
           <div class="fieldset w-full">
-            <label class="label mt-2">{{ new_message_form.content.label }}</label>
-            <textarea x-model="newMessage.content" class="w-full textarea textarea-bordered" rows="3"></textarea>
+            <label class="label mt-2">
+              {% trans "AI Message" %}
+            </label>
+            <textarea x-model="newMessage.ai.content" class="w-full textarea textarea-bordered" rows="3"></textarea>
           </div>
         </div>
 
         <div class="modal-action">
           <button type="button" class="btn" @click="resetNewMessage(); new_message_modal.close()">Cancel</button>
-          <button type="button" class="btn btn-primary" @click="addMessage(); new_message_modal.close()" :disabled="!(newMessage.content.trim() && newMessage.message_type)">Add</button>
+          <button type="button" class="btn btn-primary" @click="addMessage(); new_message_modal.close()" :disabled="!(newMessage.ai.content.trim() || newMessage.human.content.trim())">Add</button>
         </div>
       </div>
     </dialog>
@@ -103,7 +113,7 @@
     function messageBuilder() {
       return {
         messages: [],
-        newMessage: { id: null, message_type: null, content: "" },
+        newMessage: {human: { content: "", id: ""}, ai: { content: "", id: ""}, context: {}},
         jsonString: "[]",
 
         init() {
@@ -111,14 +121,13 @@
         },
 
         addMessage() {
-          if (!this.newMessage.content.trim()) return;
           this.messages.push({ ...this.newMessage });
           this.resetNewMessage();
           this.updateJson();
         },
 
         resetNewMessage() {
-          this.newMessage = { id: null, message_type: null, content: "" };
+          this.newMessage = {human: { content: "", id: ""}, ai: { content: "", id: ""}};
         },
 
         removeMessage(index) {
@@ -141,11 +150,7 @@
             })
             .then(data => {
               if (!Array.isArray(data)) return;
-              this.messages = data.map(m => ({
-                id: m.id,
-                message_type: m.message_type,
-                content: m.content,
-              }));
+              this.messages = data;
               this.updateJson();
             })
             .catch(error => {
