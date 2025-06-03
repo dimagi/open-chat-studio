@@ -12,6 +12,7 @@ urlpatterns = [
         "collections/<int:pk>/files/<int:file_id>/delete", views.delete_collection_file, name="delete_collection_file"
     ),
     path("collections/<int:pk>/retry_failed_uploads", views.retry_failed_uploads, name="retry_failed_uploads"),
+    path("collections/create-from-assistant", views.CreateCollectionFromAssistant.as_view(), name="create_from_assistant"),
 ]
 
 urlpatterns.extend(make_crud_urls(views, "Collection", "collection"))
