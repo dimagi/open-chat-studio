@@ -15,6 +15,7 @@ from apps.chat.channels import (
     MESSAGE_TYPES,
     URL_REGEX,
     ChannelBase,
+    TelegramChannel,
     strip_urls_and_emojis,
 )
 from apps.chat.exceptions import VersionedExperimentSessionsNotAllowedException
@@ -945,3 +946,67 @@ def test_chat_message_returned_for_cancelled_generate():
     response = channel.new_user_message(channel.message)
 
     assert type(response) is ChatMessage
+
+
+@pytest.fixture()
+def base_setup():
+    experiment = Mock()
+    session = Mock()
+    session.id = 123
+    experiment_channel = Mock()
+    experiment_channel.extra_data = {"bot_token": "fake_token"}
+    channel = TelegramChannel(experiment, experiment_channel=experiment_channel, experiment_session=session)
+    return channel, session
+
+
+def make_mock_file(name, content_type, size, file_data="file_data"):
+    file = Mock(spec=File)
+    file.name = name
+    file.content_type = content_type
+    file.content_size = size
+    file.file = file_data
+    file.download_link.return_value = f"http://example.com/{name}"
+    return file
+
+
+def test_supported_image_file(base_setup):
+    channel, _ = base_setup
+    image_file = make_mock_file("img.jpg", "image/jpeg", 5 * 1024 * 1024)
+
+    with (
+        patch.object(channel, "_send_files_to_user") as mock_send_file,
+        patch.object(channel, "send_text_to_user") as mock_send_text,
+    ):
+        channel.send_message_to_user("Here is your file", files=[image_file])
+
+        mock_send_file.assert_called_once_with([image_file])
+        mock_send_text.assert_called_once_with("Here is your file")
+
+
+def test_large_image_fallback_to_text(base_setup):
+    channel, _ = base_setup
+    large_image = make_mock_file("big_img.jpg", "image/jpeg", 15 * 1024 * 1024)
+
+    with (
+        patch.object(channel, "send_text_to_user") as mock_send_text,
+        patch.object(channel, "_send_files_to_user") as mock_send_file,
+    ):
+        channel.send_message_to_user("Here is your file", files=[large_image])
+
+        mock_send_file.assert_not_called()
+
+        expected_message = "Here is your file\n\nbig_img.jpg\nhttp://example.com/big_img.jpg\n"
+        mock_send_text.assert_called_once_with(expected_message)
+
+
+def test_unsupported_mime_file(base_setup):
+    channel, _ = base_setup
+    exe_file = make_mock_file("script.exe", "application/octet-stream", 1 * 1024 * 1024)
+
+    with (
+        patch.object(channel, "_send_files_to_user") as mock_send_file,
+        patch.object(channel, "send_text_to_user") as mock_send_text,
+    ):
+        channel.send_message_to_user("Please find the file", files=[exe_file])
+        mock_send_file.assert_called_once_with([exe_file])
+        mock_send_text.assert_called_once_with("Please find the file")

@@ -910,9 +910,9 @@ class TelegramChannel(ChannelBase):
             is_inline_supported = False
             if (
                 mime.startswith("image/")
-                and size <= 10 * 1024 * 1024 #10mb
+                and size <= 10 * 1024 * 1024  # 10mb
                 or mime.startswith(("video/", "audio/", "application/"))
-                and size <= 50 * 1024 * 1024 #50mb
+                and size <= 50 * 1024 * 1024  # 50mb
             ):
                 is_inline_supported = True
 
