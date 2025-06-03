@@ -19,9 +19,9 @@ class EvaluatorAdmin(admin.ModelAdmin):
 
 @admin.register(EvaluationDataset)
 class EvaluationDatasetAdmin(admin.ModelAdmin):
-    list_display = ("id", "message_type", "team")
-    list_filter = ("message_type", "team")
-    search_fields = ("messages__content",)
+    list_display = ("id", "team")
+    list_filter = ("team",)
+    search_fields = ("messages__human_message_content", "messages__ai_message_content")
 
 
 @admin.register(EvaluationConfig)

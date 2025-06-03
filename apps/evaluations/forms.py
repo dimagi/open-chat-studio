@@ -14,7 +14,7 @@ from apps.evaluations.models import (
 class EvaluationConfigForm(forms.ModelForm):
     class Meta:
         model = EvaluationConfig
-        fields = ("name", "dataset", "evaluators")
+        fields = ("name", "dataset", "message_type", "evaluators")
 
     def __init__(self, team, *args, **kwargs):
         super().__init__(*args, **kwargs)
@@ -36,7 +36,7 @@ class EvaluatorForm(forms.ModelForm):
 class EvaluationDatasetForm(forms.ModelForm):
     class Meta:
         model = EvaluationDataset
-        fields = ("name", "message_type")
+        fields = ("name",)
 
     def __init__(self, team, *args, **kwargs):
         super().__init__(*args, **kwargs)
