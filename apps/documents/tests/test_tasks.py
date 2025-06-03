@@ -42,10 +42,10 @@ def test_collection_files_grouped_by_chunking_strategy(add_files_to_index_mock, 
     assert add_files_to_index_mock.call_count == 2
     # The first call should be for the first file with chunking strategy 800/400
     assert add_files_to_index_mock.mock_calls[0].kwargs["collection_files"][0].id == col_file_1.id
-    add_files_to_index_mock.assert_any_call(collection_files=ANY, chunk_size=800, chunk_overlap=400, re_upload=False)
+    add_files_to_index_mock.assert_any_call(collection_files=ANY, chunk_size=800, chunk_overlap=400)
     # The second call should be for the second file with chunking strategy 1000/100
     assert add_files_to_index_mock.mock_calls[1].kwargs["collection_files"][0].id == col_file_2.id
-    add_files_to_index_mock.assert_any_call(collection_files=ANY, chunk_size=1000, chunk_overlap=100, re_upload=False)
+    add_files_to_index_mock.assert_any_call(collection_files=ANY, chunk_size=1000, chunk_overlap=100)
 
 
 @patch("apps.documents.models.Collection.add_files_to_index")
@@ -65,7 +65,7 @@ def test_migrate_vector_stores_does_cleanup(add_files_to_index_mock, collection,
     )
     assert add_files_to_index_mock.call_count == 1
     assert add_files_to_index_mock.mock_calls[0].kwargs["collection_files"][0].id == col_file.id
-    add_files_to_index_mock.assert_any_call(collection_files=ANY, chunk_size=800, chunk_overlap=400, re_upload=True)
+    add_files_to_index_mock.assert_any_call(collection_files=ANY, chunk_size=800, chunk_overlap=400)
 
     index_manager_mock.delete_vector_store.assert_called()
     index_manager_mock.client.files.delete.assert_called_once_with(file.external_id)

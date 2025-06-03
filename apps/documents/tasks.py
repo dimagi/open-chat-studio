@@ -23,19 +23,18 @@ def index_collection_files_task(collection_file_ids: list[int]):
 def migrate_vector_stores(collection_id: int, from_vector_store_id: str, from_llm_provider_id: int):
     """Migrate vector stores from one provider to another"""
     collection_files = CollectionFile.objects.filter(collection_id=collection_id)
-    previous_remote_ids = index_collection_files(collection_files_queryset=collection_files, re_upload=True)
+    previous_remote_ids = index_collection_files(collection_files_queryset=collection_files)
 
     collection = Collection.objects.get(id=collection_id)
     if collection.is_remote_index:
         _cleanup_old_vector_store(from_llm_provider_id, from_vector_store_id, previous_remote_ids)
 
 
-def index_collection_files(collection_files_queryset: QuerySet[CollectionFile], re_upload: bool = False) -> list[str]:
+def index_collection_files(collection_files_queryset: QuerySet[CollectionFile]) -> list[str]:
     """Add files to the collection index.
 
     Args:
         collection_files_queryset: The queryset of `CollectionFile` objects to be indexed.
-        re_upload: If True, the files will be re-uploaded to the index
     Returns:
         list[str]: List of file IDs that were previously linked to the files.
 
@@ -70,7 +69,6 @@ def index_collection_files(collection_files_queryset: QuerySet[CollectionFile], 
             collection_files=list(CollectionFile.objects.filter(id__in=ids).all()),
             chunk_size=strategy.chunk_size,
             chunk_overlap=strategy.chunk_overlap,
-            re_upload=re_upload,
         )
 
     return previous_remote_file_ids

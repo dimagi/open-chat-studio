@@ -272,14 +272,13 @@ class Collection(BaseTeamModel, VersionsMixin):
         collection_files: list[CollectionFile],
         chunk_size: int = None,
         chunk_overlap: int = None,
-        re_upload: bool = False,
     ):
         index_manager = self.get_index_manager()
         uploaded_files: list[File] = []
         for collection_file in collection_files:
             file = collection_file.file
             try:
-                index_manager.ensure_remote_file_exists(file, re_upload=re_upload)
+                index_manager.ensure_remote_file_exists(file)
                 uploaded_files.append(file)
             except FileUploadError:
                 collection_file.status = FileStatus.FAILED
@@ -305,7 +304,6 @@ class Collection(BaseTeamModel, VersionsMixin):
         collection_files: list[CollectionFile],
         chunk_size: int = None,
         chunk_overlap: int = None,
-        re_upload: bool = False,
     ):
         index_manager = self.get_index_manager()
         for collection_file in collection_files:
