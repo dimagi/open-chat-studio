@@ -1,8 +1,16 @@
+import contextlib
+
 import pytest
 from pydantic import BaseModel, TypeAdapter
 from pydantic_core import ValidationError
 
-from apps.pipelines.nodes.nodes import OptionalInt, SendEmail, StructuredDataSchemaValidatorMixin
+from apps.pipelines.nodes.nodes import (
+    AnthropicWebSearchToolConfig,
+    LLMResponseWithPrompt,
+    OptionalInt,
+    SendEmail,
+    StructuredDataSchemaValidatorMixin,
+)
 
 
 class TestStructuredDataSchemaValidatorMixin:
@@ -60,3 +68,42 @@ def test_optional_int_type():
 
     with pytest.raises(ValidationError):
         ta.validate_python("test")
+
+
+@pytest.mark.parametrize(
+    ("allowed_domains", "blocked_domains", "error_expected"),
+    [
+        ([], [], False),
+        ([""], [""], False),
+        (["invalid-domain"], [], True),
+        ([], ["invalid-domain"], True),
+        (["test.com"], [], False),
+        ([], ["test.com"], False),
+        (["test.com", "example.com"], [], False),
+        (["test.com", "@example.com"], [], True),
+        ([], ["test.com", "example.com"], False),
+        ([], ["test.@com", "example.com"], True),
+    ],
+)
+def test_tool_config(allowed_domains, blocked_domains, error_expected):
+    raw_config = {"allowed_domains": allowed_domains, "blocked_domains": blocked_domains}
+    context = pytest.raises(ValidationError) if error_expected else contextlib.nullcontext()
+    with context:
+        node = LLMResponseWithPrompt.model_validate(
+            {
+                "node_id": "123",
+                "django_node": None,
+                "name": "LLMResponseWithPrompt-aAgkv",
+                "tool_config": {"web-search": raw_config},
+                "llm_provider_id": "23",
+                "llm_provider_type": "anthropic",
+                "llm_provider_model_id": "7",
+            }
+        )
+    if not error_expected:
+        assert isinstance(node.tool_config, dict)
+        assert isinstance(node.tool_config["web-search"], AnthropicWebSearchToolConfig)
+        assert node.tool_config["web-search"].model_dump() == {
+            "allowed_domains": list(filter(None, allowed_domains)) or None,
+            "blocked_domains": list(filter(None, blocked_domains)) or None,
+        }
