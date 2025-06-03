@@ -6,7 +6,14 @@ from apps.assistants.models import OpenAiAssistant
 from apps.experiments.models import Experiment
 from apps.pipelines.models import Node
 
-from .models import LlmProvider, LlmProviderModel, MessagingProvider, TraceProvider, VoiceProvider
+from .models import (
+    EmbeddingProviderModel,
+    LlmProvider,
+    LlmProviderModel,
+    MessagingProvider,
+    TraceProvider,
+    VoiceProvider,
+)
 
 
 @admin.register(LlmProvider)
@@ -78,3 +85,10 @@ class MessagingProviderAdmin(admin.ModelAdmin):
 class TraceProviderAdmin(admin.ModelAdmin):
     list_display = ("name", "team", "type")
     list_filter = ("team", "type")
+
+
+@admin.register(EmbeddingProviderModel)
+class EmbeddingProviderModelAdmin(admin.ModelAdmin):
+    list_display = ("name", "team", "type")
+    list_filter = ("team", "type")
+    readonly_fields = ("team",)

@@ -1,5 +1,5 @@
 {% define 2 as num_cols %}
-{% for type_, models in models_by_type.items %}
+{% for type_, models in llm_models_by_type.items %}
   <div id="models_{{ type_ }}" x-show="type === '{{ type_ }}'" class="mt-2"
        {% if not for_type or type_ != for_type %}style="display:none"{% endif %}
   >
