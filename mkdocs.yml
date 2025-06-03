@@ -69,3 +69,4 @@ nav:
   - Developer Guides:
     - Versioning: developer_guides/versioning.md
     - Changelog: developer_guides/changelog.md
+    - Feature Flags: developer_guides/feature_flags.md
