@@ -142,6 +142,12 @@ class LlmProvider(BaseTeamModel, ProviderMixin):
     def get_remote_index_manager(self, index_id: str):
         return self.get_llm_service().get_remote_index_manager(index_id)
 
+    def get_local_index_manager(self, embedding_model_name: str):
+        """
+        Returns a LocalIndexManager for the given embedding model.
+        """
+        return self.get_llm_service().get_local_index_manager(embedding_model_name)
+
 
 class LlmProviderModelManager(models.Manager):
     def get_or_create_for_team(self, team, name, type, max_token_limit=8192):

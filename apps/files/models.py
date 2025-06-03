@@ -166,7 +166,7 @@ class FileChunkEmbedding(BaseTeamModel):
     chunk_number = models.PositiveIntegerField()
     text = models.TextField()
     page_number = models.PositiveIntegerField(blank=True)
-    embedding = VectorField(dimensions=1024)
+    embedding = VectorField(dimensions=settings.EMBEDDING_VECTOR_SIZE)
 
     class Meta:
         indexes = [
