@@ -72,7 +72,7 @@ from tenacity import before_sleep_log, retry, retry_if_exception_type, stop_afte
 from apps.assistants.models import OpenAiAssistant, ToolResources
 from apps.assistants.utils import get_assistant_tool_options
 from apps.files.models import File
-from apps.service_providers.exceptions import OpenAiUnableToLinkFileError
+from apps.service_providers.exceptions import UnableToLinkFileException
 from apps.service_providers.llm_service.index_managers import OpenAIRemoteIndexManager
 from apps.service_providers.models import LlmProvider, LlmProviderModel, LlmProviderTypes
 from apps.teams.models import Team
@@ -483,7 +483,7 @@ def _update_or_create_vector_store(assistant, name, vector_store_id, file_ids) -
         vector_store_id = vector_store_manager.create_vector_store(name=name, file_ids=file_ids[:100])
         file_ids = file_ids[100:]
 
-    with contextlib.suppress(OpenAiUnableToLinkFileError):
+    with contextlib.suppress(UnableToLinkFileException):
         # This will show an out-of-sync status on the assistant where the user can handle the error appropriately
         vector_store_manager.link_files_to_vector_store(file_ids)
 
