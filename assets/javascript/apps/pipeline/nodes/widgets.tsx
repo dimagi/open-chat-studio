@@ -189,7 +189,7 @@ function useDiscriminator(schema: PropertySchema, nodeParams: NodeParams, allOpt
       return;
     }
 
-    setOptions(allOptions.filter(option => option.discriminatorValue === discriminatorValue));
+    setOptions(allOptions.filter(option => option.displayForDiscriminator(discriminatorValue)));
   }, [nodeParams]);
   return options;
 }

@@ -99,10 +99,16 @@ export function getSelectOptions(schema: PropertySchema): Option[] {
     enums = schema.items.enum;
   }
   return enums.map((value: string, index: number) => {
-    return {
-      value: value,
-      label: enumLabels ? enumLabels[index] : value,
-      discriminatorValue: discriminatorValues ? discriminatorValues[index] : undefined,
-    };
+    let discriminator: string[] = [];
+    if (discriminatorValues) {
+      const value = discriminatorValues[index];
+      discriminator = Array.isArray(value) ? value : [value];
+    }
+    return new Option(
+      value,
+      enumLabels ? enumLabels[index] : value,
+      undefined,
+      discriminator
+    );
   });
 }

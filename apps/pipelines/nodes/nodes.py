@@ -347,7 +347,7 @@ class LLMResponseWithPrompt(LLMResponse, HistoryMixin, OutputMessageTagMixin):
             widget=Widgets.multiselect,
             enum_labels=BuiltInTools.labels,
             discriminatorField="llm_provider_type",
-            enum_discriminator_values=["openai", "anthropic"],
+            enum_discriminator_values=[["openai", "anthropic"], ["openai"]],
         ),
     )
     tool_config: dict[str, ToolConfigModel] | None = Field(
