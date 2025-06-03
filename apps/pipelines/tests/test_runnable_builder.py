@@ -1230,7 +1230,7 @@ def test_router_node_output_structure(provider, provider_model, pipeline, experi
             temp_state={"user_input": "hello world", "outputs": {}},
             path=[],
         )
-        with mock.patch.object(node, "_process_conditional", return_value="A"):
+        with mock.patch.object(node, "_process_conditional", return_value=("A", True)):
             edge_map = {"A": "next_node_a", "B": "next_node_b"}
             incoming_edges = ["123"]
             router_func = node.build_router_function(edge_map, incoming_edges)
@@ -1347,5 +1347,6 @@ def test_router_node_openai_refusal_uses_default_keyword(get_llm_service, provid
         experiment_session=experiment_session,
     )
 
-    keyword = node._process_conditional(state)
+    keyword, is_default_keyword = node._process_conditional(state)
     assert keyword == "DEFAULT"
+    assert is_default_keyword

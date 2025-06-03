@@ -1,6 +1,7 @@
 import csv
 import io
 import logging
+from io import StringIO
 
 from celery import shared_task
 from celery_progress.backend import ProgressRecorder
@@ -61,14 +62,15 @@ def process_transcript_analysis(self, analysis_id):
                     progress_value, 100, description=f"Processing session {index + 1}/{total_sessions}"
                 )
 
-                # Get the transcript
-                transcript = ""
+                out = StringIO()
+                writer = csv.writer(out)
                 for message in session.chat.messages.all().order_by("created_at"):
-                    prefix = "User: " if message.message_type == "human" else "Bot: "
-                    transcript += f"{prefix}{message.content}\n\n"
+                    writer.writerow([f"{message.created_at:%Y-%m-%d %H:%M}", message.role, message.content])
+
+                transcript = out.getvalue().strip()
 
                 # Skip empty transcripts
-                if not transcript.strip():
+                if not transcript:
                     continue
 
                 # Start row with session info
@@ -89,7 +91,7 @@ def process_transcript_analysis(self, analysis_id):
                     
                     QUERY: {sanitized_query}
                     
-                    TRANSCRIPT:
+                    TRANSCRIPT as CSV:
                     {transcript}
                     
                     Please provide a concise, objective response to the query based only on the transcript content.

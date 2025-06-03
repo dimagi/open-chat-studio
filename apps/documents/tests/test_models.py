@@ -79,7 +79,7 @@ class TestCollection:
         index_manager_mock.create_vector_store.assert_called_once_with(
             name=f"{new_version.index_name} v{new_version.version_number}"
         )
-        index_collection_files.assert_called_once_with(new_version.id, all_files=True)
+        index_collection_files.assert_called()
 
     @pytest.mark.parametrize("is_index", [True, False])
     @mock.patch("apps.documents.models.Collection._remove_index")

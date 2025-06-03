@@ -1,0 +1,2 @@
+class FileUploadError(Exception):
+    pass
