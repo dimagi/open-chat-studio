@@ -6,7 +6,7 @@
       <span x-show="getActiveFilterCount() > 0" x-cloak>(<span x-text="getActiveFilterCount()"></span>)</span>
     </button>
 
-    <div x-show="filterData.loading" x-cloak class="ml-2">
+    <div x-show="filterData.loading" x-cloak class="btn btn-square btn-sm btn-ghost animate-none cursor-auto">
       <i class="fa-solid fa-spinner fa-spin"></i>
     </div>
 
@@ -18,6 +18,21 @@
       title="Clear all filters" x-cloak>
       x
     </button>
+    <!-- Date Range dropdown filter -->
+    <div x-init="init" class="dropdown">
+      <div tabindex="0" role="button" class="btn btn-ghost btn-sm normal-case">
+        <i class="fa-regular fa-clock"></i>
+        <span x-text="selectedLabel || 'Date Range'" class="dropdown-label"></span>
+        <i class="fa-solid fa-caret-down ml-1"></i>
+      </div>
+      <ul tabindex="0" class="dropdown-content menu p-2 shadow bg-base-100 rounded-box w-52">
+        <template x-for="option in dateRangeOptions" :key="option.value">
+          <li>
+            <a href="#" x-text="option.label" @click.prevent="selectOption(option); document.activeElement.blur()"></a>
+          </li>
+        </template>
+      </ul>
+    </div>
   </div>
 
   <!-- Filters Panel -->
@@ -95,7 +110,51 @@
               </template>
 
               <template x-if="filterData.columns[filter.column]?.type === 'timestamp'">
-                <input type="date" x-model="filter.value" @input="triggerFilterChange()" class="w-40 block px-3 border border-base-200 rounded-lg bg-base-100 text-sm" style="height: 2rem;">
+                <div>
+                  <div
+                    x-data="{ showDateRangeOptions: false }"
+                    x-show="filter.operator === 'range'"
+                    class="relative"
+                  >
+                    <div
+                      @click="showDateRangeOptions = !showDateRangeOptions"
+                      class="w-40 px-3 border border-base-200 rounded-lg bg-base-100 text-sm cursor-pointer flex justify-between items-center"
+                      style="height: 2rem;"
+                    >
+                      <span
+                        x-text="dateRangeOptions.find(opt => opt.value === filter.value)?.label || 'Select Date Range'"
+                      ></span>
+                      <i class="fa-solid fa-caret-down fa-sm"></i>
+                    </div>
+                    <div
+                      x-show="showDateRangeOptions"
+                      @click.outside="showDateRangeOptions = false"
+                      class="absolute z-50 mt-1 bg-base-100 rounded-lg max-h-64 overflow-y-auto w-40 border border-base-300"
+                      style="z-index: 9999 !important;"
+                    >
+                      <div class="py-1">
+                        <template x-for="option in dateRangeOptions" :key="option.value">
+                          <div
+                            @click="filter.value = option.value; triggerFilterChange(); syncDateRangeDropdown(filter.value); showDateRangeOptions = false;"
+                            class="px-4 py-2 hover:bg-base-200 cursor-pointer text-sm"
+                            :class="{ 'bg-base-200': filter.value === option.value }"
+                          >
+                            <span x-text="option.label"></span>
+                          </div>
+                        </template>
+                      </div>
+                    </div>
+                  </div>
+                    <!-- Date input for other operators -->
+                  <input
+                    x-show="filter.operator !== 'range'"
+                    type="date"
+                    x-model="filter.value"
+                    @input="triggerFilterChange()"
+                    class="w-40 block px-3 border border-base-200 rounded-lg bg-base-100 text-sm"
+                    style="height: 2rem;"
+                  >
+                </div>
               </template>
             </div>
           </template>
@@ -112,24 +171,27 @@
 </div>
 
 {{ field_type_filters|json_script:"field-type-filters" }}
+{{ date_range_options|json_script:"date-range-options" }}
 <script>
   const tags = JSON.parse(document.getElementById('available-tags-data').textContent);
   const versionsList = JSON.parse(document.getElementById('experiment-versions-data').textContent);
   const fieldTypeFilters = JSON.parse(document.getElementById('field-type-filters').textContent);
   const channelsList = JSON.parse(document.getElementById('channel-list-data').textContent);
+  const dateRangeOptions = JSON.parse(document.getElementById('date-range-options').textContent);
   document.addEventListener('alpine:init', () => {
     Alpine.data('filterComponent', () => ({
+      dateRangeOptions,
       filterData: {
         showFilters: false,
         filters: [],
         loading: false,
         columns: {
           'participant': {type: 'string', operators: fieldTypeFilters.string, label: 'Participant'},
-          'first_message': {type: 'timestamp', operators: fieldTypeFilters.timestamp, label: 'First Message'},
-          'last_message': {type: 'timestamp', operators: fieldTypeFilters.timestamp, label: 'Last Message'},
+          'first_message': {type: 'timestamp', operators: fieldTypeFilters.timestamp, label: 'First Message',  options: dateRangeOptions},
+          'last_message': {type: 'timestamp', operators: fieldTypeFilters.timestamp, label: 'Last Message',  options: dateRangeOptions},
           'tags': {type: 'choice', operators: fieldTypeFilters.choice, options: tags, label: 'Tags' },
           'versions': {type: 'choice', operators: fieldTypeFilters.choice.filter(op => op === 'any of' || op === 'excludes'), options: versionsList, label: 'Versions'},
-          'channels': {type: 'choice', operators: fieldTypeFilters.choice, options: channelsList, label: 'Channels'}
+          'channels': {type: 'choice', operators: fieldTypeFilters.choice, options: channelsList, label: 'Channels'},
         }
       },
 
@@ -163,6 +225,11 @@
           // Always trigger a data load on init to ensure correct data is shown
         this.$nextTick(() => {
           this.triggerFilterChange(defaultFilterApplied); // Don't update URL again since we just loaded from it
+        });
+        // for date range dropdown
+        this.setLabelFromURL();
+        window.addEventListener('popstate', () => {
+          this.setLabelFromURL();
         });
       },
 
@@ -279,8 +346,16 @@
             if (this.filterData.columns[columnParam]) {
               filter.availableOperators = this.filterData.columns[columnParam].operators;
               filter.operator = operatorParam;
-
-              if (['any of', 'all of', 'excludes'].includes(operatorParam) && valueParam) {
+              if (operatorParam === 'range' && valueParam) {
+                filter.options = this.filterData.columns[columnParam].options || this.dateRangeOptions;
+                const matchedOption = filter.options.find(opt => opt.label === valueParam || opt.value === valueParam);
+                if (matchedOption) {
+                  filter.value = matchedOption.value.toString();
+                } else {
+                  filter.value = valueParam;
+                }
+              }
+              else if (['any of', 'all of', 'excludes'].includes(operatorParam) && valueParam) {
                 try {
                   filter.selectedValues = JSON.parse(valueParam);
                   if (this.filterData.columns[columnParam].options) {
@@ -379,8 +454,55 @@
           values: filterParams
         }).finally(() => {
           this.filterData.loading = false;
+          // remove selected value from date range dropdown if range filter is removed
+          const hasLastMessageRange = this.filterData.filters.some(f => f.column === 'last_message' && f.operator === 'range');
+          if (!hasLastMessageRange) {
+            this.syncDateRangeDropdown(null);
+          }
         });
-      }
+      },
+      // Functions for date range dropdown
+      setLabelFromURL() {
+        const url = new URL(window.location.href);
+        const params = url.searchParams;
+        const matchedIndex = this.getLastMessageFilterIndex(params);
+        if (matchedIndex !== null) {
+          const filterValue = params.get(`filter_${matchedIndex}_value`);
+          const found = this.dateRangeOptions.find(opt => opt.value === filterValue);
+          this.selectedLabel = found?.label || '';
+        } else {
+          this.selectedLabel = '';
+        }
+      },
+
+      selectOption(option) {
+        this.selectedLabel = option.label;
+        this.filterData.filters = this.filterData.filters.filter(f => f.column !== 'last_message');
+        this.filterData.filters.push({
+          column: 'last_message',
+          operator: 'range',
+          value: option.value,
+          availableOperators: fieldTypeFilters.timestamp,
+        });
+        this.triggerFilterChange();
+      },
+
+      getLastMessageFilterIndex(params) {
+        for (const [key, val] of params.entries()) {
+          if (key.includes('_column') && val === 'last_message') {
+            const match = key.match(/filter_(\d+)_column/);
+            if (match) {
+              return match[1];
+            }
+          }
+        }
+        return null;
+      },
+
+      syncDateRangeDropdown(value) {
+        const selected = this.dateRangeOptions.find(opt => opt.value === value);
+        this.selectedLabel = selected ? selected.label : '';
+      },
     }));
   });
 </script>
