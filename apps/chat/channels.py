@@ -833,6 +833,7 @@ class WebChannel(ChannelBase):
 class TelegramChannel(ChannelBase):
     voice_replies_supported = True
     supported_message_types = [MESSAGE_TYPES.TEXT, MESSAGE_TYPES.VOICE]
+    supports_multimedia = True
 
     def __init__(
         self,
@@ -895,10 +896,6 @@ class TelegramChannel(ChannelBase):
             self.participant_identifier, text=f"I heard: {transcript}", reply_to_message_id=self.message.message_id
         )
 
-    @property
-    def supports_multimedia(self) -> bool:
-        return True
-
     def _get_supported_unsupported_files(self, files: list[File]) -> tuple[list[File], list[File]]:
         supported_files = []
         unsupported_files = []
@@ -928,33 +925,24 @@ class TelegramChannel(ChannelBase):
         mime = file.content_type
         file_data = file.file
 
-        # Mapping of MIME type prefixes to Telegram methods and argument names
-        mime_method_map = {
-            "image/": ("send_photo", "photo"),
-            "video/": ("send_video", "video"),
-            "audio/": ("send_audio", "audio"),
-        }
+        main_type = mime.split("/")[0]
+        arg_name = ""
 
-        for prefix, (method_name, arg_name) in mime_method_map.items():
-            if mime.startswith(prefix):
-                method = getattr(self.telegram_bot, method_name)
-                antiflood(method, chat_id, **{arg_name: file_data})
-                return
+        match main_type:
+            case "image":
+                method = self.telegram_bot.send_photo
+                arg_name = "photo"
+            case "video":
+                method = self.telegram_bot.send_video
+                arg_name = "video"
+            case "audio":
+                method = self.telegram_bot.send_audio
+                arg_name = "audio"
+            case _:
+                method = self.telegram_bot.send_document
+                arg_name = "document"
 
-        antiflood(self.telegram_bot.send_document, chat_id, document=file_data)
-
-    def _send_files_to_user(self, files: list[File]):
-        for file in files:
-            try:
-                self.send_file_to_user(file)
-            except ApiTelegramException as e:
-                logger.exception(f"Telegram API error when sending file {file.name}: {e}")
-                download_link = file.download_link(self.experiment_session.id)
-                self.send_text_to_user(download_link)
-            except Exception as e:
-                logger.exception(f"Unexpected error when sending file {file.name}: {e}")
-                download_link = file.download_link(self.experiment_session.id)
-                self.send_text_to_user(download_link)
+        antiflood(method, chat_id, **{arg_name: file_data})
 
 
 class WhatsappChannel(ChannelBase):
