@@ -31,7 +31,7 @@ def migrate_vector_stores(collection_id: int, from_vector_store_id: str, from_ll
 
 
 def index_collection_files(collection_files_queryset: QuerySet[CollectionFile], re_upload: bool = False) -> list[str]:
-    """Uploads files to the remote index.
+    """Add files to the collection index.
 
     Args:
         collection_files_queryset: The queryset of `CollectionFile` objects to be indexed.
