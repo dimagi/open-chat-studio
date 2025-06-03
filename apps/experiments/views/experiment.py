@@ -275,6 +275,12 @@ class CreateExperiment(BaseExperimentView, CreateView):
     def form_invalid(self, form, file_formset):
         return self.render_to_response(self.get_context_data(form=form, file_formset=file_formset))
 
+    def dispatch(self, request, *args, **kwargs):
+        is_chatbot = kwargs.get("new_chatbot", False)
+        if flag_is_active(request, "flag_chatbots") and not is_chatbot:
+            return HttpResponseRedirect(reverse("chatbots:new", args=[request.team.slug]))
+        return super().dispatch(request, *args, **kwargs)
+
 
 class EditExperiment(BaseExperimentView, UpdateView):
     title = "Update Experiment"
