@@ -107,8 +107,11 @@ CUSTOM_ERROR_MESSAGE = (
 @login_and_team_required
 @permission_required("experiments.view_experiment", raise_exception=True)
 def experiments_home(request, team_slug: str):
+    show_modal = False
+    if flag_is_active(request, "flag_chatbots"):
+        show_modal = True
     return generic_home(
-        request, team_slug, "Experiments", "experiments:table", "experiments:new", show_modal_instead=True
+        request, team_slug, "Experiments", "experiments:table", "experiments:new", show_modal_instead=show_modal
     )
 
 
