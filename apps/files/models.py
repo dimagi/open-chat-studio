@@ -159,6 +159,12 @@ class File(BaseTeamModel, VersionsMixin):
         else:
             self.delete()
 
+    def read_content(self) -> str:
+        from apps.documents.readers import Document
+
+        document = Document.from_file(self)
+        return document.get_contents_as_string()
+
 
 class FileChunkEmbedding(BaseTeamModel):
     file = models.ForeignKey(File, on_delete=models.CASCADE)

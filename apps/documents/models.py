@@ -1,3 +1,5 @@
+import logging
+
 import pydantic
 from django.db import models, transaction
 from django.urls import reverse
@@ -7,11 +9,16 @@ from django_pydantic_field import SchemaField
 from field_audit import audit_fields
 from field_audit.models import AuditingManager
 
+from apps.documents.exceptions import FileUploadError
 from apps.experiments.versioning import VersionDetails, VersionField, VersionsMixin, VersionsObjectManagerMixin
+from apps.files.models import File, FileChunkEmbedding
+from apps.service_providers.exceptions import UnableToLinkFileException
 from apps.service_providers.models import EmbeddingProviderModel
 from apps.teams.models import BaseTeamModel
 from apps.utils.conversions import bytes_to_megabytes
 from apps.utils.deletion import get_related_pipeline_experiments_queryset, get_related_pipelines_queryset
+
+indexing_logger = logging.getLogger("ocs.collections.indexing")
 
 
 class ChunkingStrategy(pydantic.BaseModel):
@@ -253,3 +260,72 @@ class Collection(BaseTeamModel, VersionsMixin):
             return self.llm_provider.get_remote_index_manager(self.openai_vector_store_id)
         else:
             return self.llm_provider.get_local_index_manager(embedding_model_name=self.embedding_provider_model.name)
+
+    def add_files_to_index(self, *args, **kwargs):
+        if self.is_remote_index:
+            self._handle_remote_indexing(*args, **kwargs)
+        else:
+            self._handle_local_indexing(*args, **kwargs)
+
+    def _handle_remote_indexing(
+        self,
+        collection_files: list[CollectionFile],
+        chunk_size: int = None,
+        chunk_overlap: int = None,
+        re_upload: bool = False,
+    ):
+        index_manager = self.get_index_manager()
+        uploaded_files: list[File] = []
+        for collection_file in collection_files:
+            file = collection_file.file
+            try:
+                index_manager.ensure_remote_file_exists(file, re_upload=re_upload)
+                uploaded_files.append(file)
+            except FileUploadError:
+                collection_file.status = FileStatus.FAILED
+                collection_file.save(update_fields=["status"])
+
+        try:
+            index_manager.link_files_to_vector_store(
+                file_ids=[file.external_id for file in uploaded_files],
+                chunk_size=chunk_size,
+                chunk_overlap=chunk_overlap,
+            )
+            CollectionFile.objects.filter(file_id__in=[file.id for file in uploaded_files]).update(
+                status=FileStatus.COMPLETED
+            )
+        except UnableToLinkFileException:
+            indexing_logger.exception("Failed to link files to remote index")
+            CollectionFile.objects.filter(file_id__in=[file.id for file in uploaded_files]).update(
+                status=FileStatus.FAILED
+            )
+
+    def _handle_local_indexing(
+        self,
+        collection_files: list[CollectionFile],
+        chunk_size: int = None,
+        chunk_overlap: int = None,
+        re_upload: bool = False,
+    ):
+        index_manager = self.get_index_manager()
+        for collection_file in collection_files:
+            file = collection_file.file
+            try:
+                content = file.read_content()
+                text_chunks = index_manager.chunk_content(content, chunk_size=chunk_size, chunk_overlap=chunk_overlap)
+                for idx, chunk in enumerate(text_chunks):
+                    embedding_vector = index_manager.get_embedding_vector(chunk)
+                    FileChunkEmbedding.objects.create(
+                        team_id=self.team_id,
+                        file=file,
+                        collection=self,
+                        chunk_number=idx,
+                        text=chunk,
+                        embedding=embedding_vector,
+                        page_number=0,
+                    )
+                collection_file.status = FileStatus.COMPLETED
+            except Exception as e:
+                indexing_logger.exception("Failed to index file", extra={"file_id": file.id, "error": str(e)})
+                collection_file.status = FileStatus.FAILED
+            collection_file.save(update_fields=["status"])
