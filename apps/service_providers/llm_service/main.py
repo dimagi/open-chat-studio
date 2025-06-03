@@ -1,7 +1,7 @@
 import contextlib
 from io import BytesIO
 from time import sleep
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
 import pydantic
 from langchain.agents.openai_assistant import OpenAIAssistantRunnable as BrokenOpenAIAssistantRunnable
@@ -25,6 +25,9 @@ from apps.service_providers.llm_service.token_counters import (
     GeminiTokenCounter,
     OpenAITokenCounter,
 )
+
+if TYPE_CHECKING:
+    from apps.service_providers.llm_service.index_managers import IndexManager
 
 
 class OpenAIBuiltinTool(dict):
@@ -165,7 +168,10 @@ class LlmService(pydantic.BaseModel):
                     remote_file_ids.extend([entry["file_id"] for entry in annotation_entries if "file_id" in entry])
         return File.objects.filter(external_id__in=remote_file_ids).all()
 
-    def get_index_manager(self):
+    def get_remote_index_manager(self, index_id: str = None) -> "IndexManager":
+        raise NotImplementedError
+
+    def get_local_index_manager(self, embedding_model_name: str) -> "IndexManager":
         raise NotImplementedError
 
 
@@ -232,10 +238,15 @@ class OpenAILlmService(OpenAIGenericService):
                 raise ValueError(f"Unsupported built-in tool for openai: '{tool_name}'")
         return tools
 
-    def get_remote_index_manager(self, index_id: str = None):
+    def get_remote_index_manager(self, index_id: str = None) -> "IndexManager":
         from apps.service_providers.llm_service.index_managers import OpenAIRemoteIndexManager
 
         return OpenAIRemoteIndexManager(client=self.get_raw_client(), index_id=index_id)
+
+    def get_local_index_manager(self, embedding_model_name: str) -> "IndexManager":
+        from apps.service_providers.llm_service.index_managers import OpenAILocalIndexManager
+
+        return OpenAILocalIndexManager(client=self.get_raw_client(), embedding_model_name=embedding_model_name)
 
 
 class AzureLlmService(LlmService):

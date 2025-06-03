@@ -251,3 +251,5 @@ class Collection(BaseTeamModel, VersionsMixin):
     def get_index_manager(self):
         if self.is_index and self.is_remote_index:
             return self.llm_provider.get_remote_index_manager(self.openai_vector_store_id)
+        else:
+            return self.llm_provider.get_local_index_manager(embedding_model_name=self.embedding_provider_model.name)

@@ -3,6 +3,9 @@ import logging
 from abc import abstractmethod
 
 import openai
+from django.conf import settings
+from langchain_openai import OpenAIEmbeddings
+from langchain_text_splitters import RecursiveCharacterTextSplitter
 
 from apps.assistants.utils import chunk_list
 from apps.documents.exceptions import FileUploadError
@@ -10,6 +13,8 @@ from apps.files.models import File
 from apps.service_providers.exceptions import UnableToLinkFileException
 
 logger = logging.getLogger("ocs.index_manager")
+
+Vector = list[float]
 
 
 class RemoteIndexManager:
@@ -45,16 +50,6 @@ class RemoteIndexManager:
         """
         Delete files from the remote index. Depending on the service, this may only disassociate files from the index
         and not delete them from the remote storage as well.
-        """
-        ...
-
-    @abstractmethod
-    def add_files_to_index(
-        self, files: list[File], chunk_size: int = None, chunk_overlap: int = None, re_upload: bool = False
-    ) -> dict:
-        """
-        Add files to the index. This method is a convenience method that uploads the files to the remote index and
-        links them to the vector store.
         """
         ...
 
@@ -133,30 +128,31 @@ class OpenAIRemoteIndexManager(RemoteIndexManager):
             file.external_id = ""
         File.objects.bulk_update(files, fields=["external_id"])
 
-    def add_files_to_index(
-        self, files: list[File], chunk_size: int = None, chunk_overlap: int = None, re_upload: bool = False
-    ) -> dict:
-        """
-        Add files to the index. This method is a convenience method that uploads the files to the remote index and
-        links them to the vector store.
-        """
-        failed_uploads = []
-        success_upload_files = []
-        for file in files:
-            try:
-                self.ensure_remote_file_exists(file, re_upload=re_upload)
-                success_upload_files.append(file)
-            except FileUploadError:
-                failed_uploads.append(file)
 
-        try:
-            self.link_files_to_vector_store(
-                file_ids=[file.external_id for file in success_upload_files],
-                chunk_size=chunk_size,
-                chunk_overlap=chunk_overlap,
-            )
-        except OpenAiUnableToLinkFileError as e:
-            logger.error("Failed to link files to OpenAI vector store", exc_info=e)
-            raise e
+class LocalIndexManager:
+    def __init__(self, client: any, embedding_model_name: str):
+        self.client = client
+        self.embedding_model_name = embedding_model_name
 
-        return success_upload_files, failed_uploads
+    @abstractmethod
+    def get_embedding_vector(self, content: str): ...
+
+    def chunk_content(self, content: str) -> list[str]: ...
+
+
+class OpenAILocalIndexManager(LocalIndexManager):
+    def get_embedding_vector(self, content: str) -> Vector:
+        embeddings = OpenAIEmbeddings(
+            api_key=self.client.api_key, model=self.embedding_model_name, dimensions=settings.EMBEDDING_VECTOR_SIZE
+        )
+        return embeddings.embed_query(content)
+
+    def chunk_content(self, text: str, chunk_size: int, chunk_overlap: int) -> list[str]:
+        text_splitter = RecursiveCharacterTextSplitter.from_tiktoken_encoder(
+            model_name="gpt-4",
+            chunk_size=chunk_size,
+            chunk_overlap=chunk_overlap,
+        )
+
+        documents = text_splitter.create_documents([text])
+        return [doc.page_content for doc in documents]
