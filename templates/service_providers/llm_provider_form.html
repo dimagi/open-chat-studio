@@ -2,30 +2,45 @@
 {% load form_tags %}
 {% load i18n %}
 {% block pre_secondary_form %}
-  <div class="my-4">
-    <h2 class="font-bold text-lg">Default Models
-      {% blocktranslate asvar help_text %}
-        Default models are the published models for this provider. If you need to use a model that isn't in
-        this list, create a custom model.
-      {% endblocktranslate %}
-      {% include "generic/help.html" with help_content=help_text %}
-    </h2>
-    {% include "service_providers/components/llm_models.html" with models_by_type=default_models_by_type %}
-    <div class="flex justify-between">
-      <h2 class="font-bold text-lg mt-2">Custom Models
+  <div class="my-4 flex flex-col gap-4">
+    <div>
+      <h2 class="font-bold text-lg">Default LLM Models
         {% blocktranslate asvar help_text %}
-          Custom models are specific to this provider type and are available to all providers of the same type.
+          Default models are the published models for this provider. If you need to use a model that isn't in
+          this list, create a custom model.
         {% endblocktranslate %}
         {% include "generic/help.html" with help_content=help_text %}
       </h2>
-      <div class="tooltip" data-tip="Add a new custom model">
-        <button class="btn btn-primary btn-xs" type="button" onclick="new_custom_model.showModal()">
-          <i class="fa-solid fa-plus"></i>
-        </button>
+      {% include "service_providers/components/llm_models.html" with llm_models_by_type=default_llm_models_by_type %}
+    </div>
+
+    <div>
+      <div class="flex justify-between">
+        <h2 class="font-bold text-lg">Custom LLM Models
+          {% blocktranslate asvar help_text %}
+            Custom models are specific to this provider type and are available to all providers of the same type.
+          {% endblocktranslate %}
+          {% include "generic/help.html" with help_content=help_text %}
+        </h2>
+        <div class="tooltip" data-tip="Add a new custom model">
+          <button class="btn btn-primary btn-xs" type="button" onclick="new_custom_model.showModal()">
+            <i class="fa-solid fa-plus"></i>
+          </button>
+        </div>
+      </div>
+      <div id="custom_model_list">
+        {% include "service_providers/components/custom_llm_models.html" with llm_models_by_type=custom_llm_models_by_type %}
       </div>
     </div>
-    <div id="custom_model_list">
-      {% include "service_providers/components/custom_llm_models.html" with models_by_type=custom_models_by_type %}
+
+    <div>
+      <h2 class="font-bold text-lg">Embedding Models
+        {% blocktranslate asvar help_text %}
+          Embedding models are used to convert text into vector representations.
+        {% endblocktranslate %}
+        {% include "generic/help.html" with help_content=help_text %}
+      </h2>
+      {% include "service_providers/components/embedding_models.html" with embedding_models_by_type=embedding_models_by_type %}
     </div>
   </div>
 {% endblock pre_secondary_form %}
