@@ -7,7 +7,7 @@ import openai
 from apps.assistants.utils import chunk_list
 from apps.documents.exceptions import FileUploadError
 from apps.files.models import File
-from apps.service_providers.exceptions import OpenAiUnableToLinkFileError
+from apps.service_providers.exceptions import UnableToLinkFileException
 
 logger = logging.getLogger("ocs.index_manager")
 
@@ -105,7 +105,7 @@ class OpenAIRemoteIndexManager(RemoteIndexManager):
                 "Failed to link files to OpenAI vector store",
                 extra={"vector_store_id": self.index_id, "chunking_strategy": chunking_strategy},
             )
-            raise OpenAiUnableToLinkFileError("Failed to link files to OpenAI vector store") from e
+            raise UnableToLinkFileException("Failed to link files to OpenAI vector store") from e
 
     def ensure_remote_file_exists(self, file: File, re_upload: bool):
         from apps.assistants.sync import create_files_remote
