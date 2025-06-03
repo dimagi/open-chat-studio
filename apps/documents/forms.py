@@ -41,6 +41,11 @@ class CollectionForm(forms.ModelForm):
             return self.instance.is_index
         return self.cleaned_data["is_index"]
 
+    def clean_is_remote_index(self):
+        if self.instance.id:
+            return self.instance.is_remote_index
+        return self.cleaned_data["is_remote_index"]
+
     def clean_llm_provider(self):
         if self.cleaned_data["is_index"] and not self.cleaned_data["llm_provider"]:
             raise forms.ValidationError("This field is required when creating an index.")
