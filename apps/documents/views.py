@@ -52,12 +52,17 @@ def single_collection_home(request, team_slug: str, pk: int):
     collection_files = CollectionFile.objects.filter(collection=collection)
     # Load the labels for the file statuses
 
+    collection_files_count = collection_files.count()
     context = {
         "collection": collection,
         "collection_files": collection_files,
+        "collection_files_count": collection_files_count,
         "collections_supported_file_types": settings.SUPPORTED_FILE_TYPES["collections"],
         "file_search_supported_file_types": settings.SUPPORTED_FILE_TYPES["file_search"],
         "max_summary_length": settings.MAX_SUMMARY_LENGTH,
+        "max_files_per_collection": settings.MAX_FILES_PER_COLLECTION,
+        "files_remaining": settings.MAX_FILES_PER_COLLECTION - collection_files_count,
+        "max_file_size_mb": settings.MAX_FILE_SIZE_MB,
     }
     return render(request, "documents/single_collection_home.html", context)
 

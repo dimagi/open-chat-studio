@@ -42,7 +42,7 @@
       <div role="tabpanel" class="tab-content">
         {% render_form_fields form "assistant" %}
       </div>
-      {% flag "pipelines-v2" %}
+      {% flag "flag_pipelines-v2" %}
         <input type="radio" name="main_tabs" role="tab" class="tab" aria-label="Pipeline" x-bind:checked="type === 'pipeline'" x-show="type === 'pipeline'" {% if experiment_type != "pipeline" %}x-cloak{% endif %}>
         <div role="tabpanel" class="tab-content">
           {% render_form_fields form "pipeline" %}
@@ -70,7 +70,7 @@
       <input type="radio" name="main_tabs" role="tab" class="tab" aria-label="Source Material" x-show="type === 'llm'" {% if experiment_type != "llm" %}x-cloak{% endif %}>
       <div role="tabpanel" class="tab-content">
         {% render_form_fields form "source_material" %}
-        {% flag "experiment_rag" %}
+        {% flag "flag_experiment_rag" %}
           {% if not object.id %}
             {% include "files/partials/file_formset.html" %}
           {% else %}
