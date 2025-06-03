@@ -156,7 +156,7 @@
       </a>
     </li>
   {% endflag %}
-  {% flag "evaluations" %}
+  {% flag "flag_evaluations" %}
     <li>
       <a href="{% url 'evaluations:home' request.team.slug %}" {% if active_tab == 'evaluations' %}class="active"{% endif %}>
         <i class="fa-solid fa-chart-simple"></i>

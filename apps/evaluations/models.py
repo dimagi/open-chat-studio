@@ -1,14 +1,18 @@
+from __future__ import annotations
+
 from collections import defaultdict
 from collections.abc import Iterable
+from datetime import datetime
 from typing import cast
 
 from django.conf import settings
 from django.db import models
 from django.urls import reverse
 from django.utils import timezone
-from langchain_core.messages import BaseMessage, messages_from_dict
+from langchain_core.messages import AIMessage, BaseMessage, HumanMessage
+from pydantic import BaseModel as PydanticBaseModel
 
-from apps.chat.models import ChatMessage
+from apps.chat.models import ChatMessage, ChatMessageType
 from apps.evaluations import evaluators
 from apps.teams.models import BaseTeamModel
 from apps.utils.models import BaseModel
@@ -35,45 +39,71 @@ class Evaluator(BaseTeamModel):
         return reverse("evaluations:evaluator_edit", args=[self.team.slug, self.id])
 
 
-class EvaluationMessageType(models.TextChoices):
-    HUMAN = "human", "Human"
-    AI = "ai", "AI"
+class EvaluationMessageContext(PydanticBaseModel):
+    current_datetime: datetime
+    history: list[BaseMessage]
 
 
 class EvaluationMessage(BaseModel):
-    chat_message = models.ForeignKey(ChatMessage, on_delete=models.SET_NULL, null=True, blank=True)
-    # This is null when it is generated manually
+    human_chat_message = models.ForeignKey(
+        ChatMessage, on_delete=models.SET_NULL, null=True, blank=True, related_name="human_evaluation_messages"
+    )
+    # null when it is generated manually
+    ai_chat_message = models.ForeignKey(
+        ChatMessage, on_delete=models.SET_NULL, null=True, blank=True, related_name="ai_evaluation_messages"
+    )
+    # null when it is generated manually
 
-    message_type = models.CharField(max_length=10, choices=EvaluationMessageType.choices)
-    content = models.TextField()
+    human_message_content = models.TextField()
+    ai_message_content = models.TextField()
+    context = models.JSONField(default=dict)
+
     metadata = models.JSONField(default=dict)
 
     def __str__(self):
-        return f"{self.get_message_type_display()}: {self.content}"
+        return f"Human: {self.human_message_content}, AI: {self.ai_message_content}"
 
     @staticmethod
-    def from_chat_message(chat_message: ChatMessage) -> "EvaluationMessage":
+    def from_chat_messages(human_chat_message: ChatMessage, ai_chat_message: ChatMessage) -> EvaluationMessage:
+        if (
+            human_chat_message.message_type != ChatMessageType.HUMAN
+            or ai_chat_message.message_type != ChatMessageType.AI
+        ):
+            raise ValueError(
+                f"Expected HUMAN and AI types, got {human_chat_message.message_type} and {ai_chat_message.message_type}"
+            )
+        if human_chat_message.chat_id != ai_chat_message.chat_id:
+            raise ValueError("Messages are from different chats")
+        if ai_chat_message.created_at <= human_chat_message.created_at:
+            raise ValueError("AI message must be created after the human message")
+
         return EvaluationMessage.objects.create(
-            chat_message=chat_message,
-            message_type=chat_message.message_type,
-            content=chat_message.content,
-            metadata=chat_message.metadata,
+            human_chat_message=human_chat_message,
+            human_message_content=human_chat_message.content,
+            ai_chat_message=ai_chat_message,
+            ai_message_content=ai_chat_message.content,
+            context={
+                "current_datetime": human_chat_message.created_at,
+                "history": "\n".join(
+                    f"{message.message_type}: {message.content}"
+                    for message in human_chat_message.chat.get_langchain_messages()
+                ),
+            },
         )
 
-    def to_langchain_message(self) -> BaseMessage:
-        return messages_from_dict(
-            [
-                {
-                    "type": self.message_type,
-                    "data": {
-                        "content": self.content,
-                        "additional_kwargs": {
-                            "id": self.id,
-                        },
-                    },
-                }
-            ]
-        )[0]
+    def as_langchain_messages(self) -> list[BaseMessage]:
+        """
+        Converts this message instance into a list of Langchain `BaseMessage` objects.
+        """
+        return [
+            HumanMessage(
+                content=self.human_message,
+                additional_kwargs={"id": self.id, "chat_message_id": self.human_chat_message_id},
+            ),
+            AIMessage(
+                content=self.ai_message, additional_kwargs={"id": self.id, "chat_message_id": self.ai_chat_message_id}
+            ),
+        ]
 
 
 class DatasetMessageTypeChoices(models.TextChoices):
@@ -111,7 +141,7 @@ class EvaluationConfig(BaseTeamModel):
     def get_absolute_url(self):
         return reverse("evaluations:evaluation_runs_home", args=[self.team.slug, self.id])
 
-    def run(self) -> "EvaluationRun":
+    def run(self) -> EvaluationRun:
         # TODO: Run this in a celery task
         """Runs the evaluation"""
         run = EvaluationRun.objects.create(team=self.team, config=self)
