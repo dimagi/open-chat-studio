@@ -33,7 +33,7 @@ class RemoteIndexManager:
         ...
 
     @abstractmethod
-    def delete_vector_store(self, fail_silently: bool = False):
+    def delete_remote_index(self, fail_silently: bool = False):
         """Delete the vector store from the remote index."""
         ...
 
@@ -43,7 +43,20 @@ class RemoteIndexManager:
         ...
 
     @abstractmethod
-    def ensure_remote_file_exists(self, file: File, re_upload: bool = False): ...
+    def file_exists_at_remote(self, file: File) -> bool:
+        """
+        Check if a file exists at the remote index. This is used to determine if a file needs to be uploaded or not.
+        Returns True if the file exists, False otherwise.
+        """
+        ...
+
+    @abstractmethod
+    def upload_file_to_remote(self, file: File):
+        """
+        Upload a file to the remote index. This method should handle the file upload and set the `external_id` on the
+        File instance.
+        """
+        ...
 
     @abstractmethod
     def delete_files(self, files: list[File]):
@@ -52,6 +65,29 @@ class RemoteIndexManager:
         and not delete them from the remote storage as well.
         """
         ...
+
+    def ensure_remote_file_exists(self, file: File):
+        try:
+            if not (file.external_id and self.file_exists_at_remote(file)):
+                file.external_id = None
+                self.upload_file_to_remote(file)
+        except Exception:
+            logger.exception(
+                "Failed to upload file to the remote index",
+                extra={
+                    "file_id": file.id,
+                    "team": file.team.slug,
+                },
+            )
+            raise FileUploadError() from None
+
+    def delete_vector_store(self, fail_silently: bool = False):
+        try:
+            self.delete_remote_index()
+        except Exception as e:
+            logger.warning("Vector store %s not found", self.index_id)
+            if not fail_silently:
+                raise e
 
 
 class OpenAIRemoteIndexManager(RemoteIndexManager):
@@ -64,21 +100,14 @@ class OpenAIRemoteIndexManager(RemoteIndexManager):
         self.index_id = vector_store.id
         return self.index_id
 
-    def delete_vector_store(self, fail_silently: bool = False):
-        try:
-            self.client.vector_stores.delete(vector_store_id=self.index_id)
-        except (openai.NotFoundError, ValueError) as e:
-            logger.warning("Vector store %s not found in OpenAI", self.index_id)
-            if not fail_silently:
-                raise e
+    def delete_remote_index(self):
+        self.client.vector_stores.delete(vector_store_id=self.index_id)
 
     # TODO: Rename to remove ambiguious usage
     def delete_file(self, file_id: str):
         """Disassociates the file with the vector store"""
-        try:
+        with contextlib.suppress(Exception):
             self.client.vector_stores.files.delete(vector_store_id=self.index_id, file_id=file_id)
-        except openai.NotFoundError:
-            logger.warning("File %s not found in OpenAI", file_id)
 
     def link_files_to_vector_store(self, file_ids: list[str], chunk_size=None, chunk_overlap=None) -> str:
         """Link OpenAI files `file_ids` to the vector store in OpenAI."""
@@ -102,22 +131,17 @@ class OpenAIRemoteIndexManager(RemoteIndexManager):
             )
             raise UnableToLinkFileException("Failed to link files to OpenAI vector store") from e
 
-    def ensure_remote_file_exists(self, file: File, re_upload: bool):
+    def file_exists_at_remote(self, file: File) -> bool:
+        try:
+            self.client.files.retrieve(file.external_id)
+            return True
+        except openai.NotFoundError:
+            return False
+
+    def upload_file_to_remote(self, file: File):
         from apps.assistants.sync import create_files_remote
 
-        try:
-            if re_upload or not file.external_id:
-                file.external_id = None
-                create_files_remote(self.client, files=[file])
-        except Exception:
-            logger.exception(
-                "Failed to upload file to the remote index",
-                extra={
-                    "file_id": file.id,
-                    "team": self.file.team.slug,
-                },
-            )
-            raise FileUploadError() from None
+        create_files_remote(self.client, files=[file])
 
     def delete_files(self, files: list[File]):
         """A convenience method to delete files from the remote service"""
@@ -135,9 +159,11 @@ class LocalIndexManager:
         self.embedding_model_name = embedding_model_name
 
     @abstractmethod
-    def get_embedding_vector(self, content: str): ...
+    def get_embedding_vector(self, content: str):
+        """Get the embedding vector for the given content using the embedding model."""
 
-    def chunk_content(self, content: str) -> list[str]: ...
+    def chunk_content(self, text: str, chunk_size: int, chunk_overlap: int) -> list[str]:
+        """Chunk `text` according to `chunk_size` and `chunk_overlap`."""
 
 
 class OpenAILocalIndexManager(LocalIndexManager):
