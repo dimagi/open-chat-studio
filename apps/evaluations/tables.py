@@ -132,7 +132,6 @@ class EvaluationDatasetTable(tables.Table):
         model = EvaluationDataset
         fields = (
             "name",
-            "message_type",
             "messages",
         )
         row_attrs = settings.DJANGO_TABLES2_ROW_ATTRS

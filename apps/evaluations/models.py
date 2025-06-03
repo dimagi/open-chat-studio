@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from collections import defaultdict
-from collections.abc import Iterable
+from collections.abc import Generator, Iterable
 from datetime import datetime
 from typing import cast
 
@@ -28,10 +28,10 @@ class Evaluator(BaseTeamModel):
     def __str__(self):
         return f"{self.name} ({self.type})"
 
-    def run(self, message: BaseMessage) -> evaluators.EvaluatorResult:
+    def run(self, messages: list[BaseMessage]) -> evaluators.EvaluatorResult:
         try:
             evaluator = getattr(evaluators, self.type)
-            return evaluator(**self.params).run(message)
+            return evaluator(**self.params).run(messages)
         except:
             raise  # TODO
 
@@ -96,14 +96,21 @@ class EvaluationMessage(BaseModel):
         Converts this message instance into a list of Langchain `BaseMessage` objects.
         """
         return [
-            HumanMessage(
-                content=self.human_message,
-                additional_kwargs={"id": self.id, "chat_message_id": self.human_chat_message_id},
-            ),
-            AIMessage(
-                content=self.ai_message, additional_kwargs={"id": self.id, "chat_message_id": self.ai_chat_message_id}
-            ),
+            self.as_human_langchain_message(),
+            self.as_ai_langchain_message(),
         ]
+
+    def as_human_langchain_message(self) -> BaseMessage:
+        return HumanMessage(
+            content=self.human_message_content,
+            additional_kwargs={"id": self.id, "chat_message_id": self.human_chat_message_id},
+        )
+
+    def as_ai_langchain_message(self) -> BaseMessage:
+        return AIMessage(
+            content=self.ai_message_content,
+            additional_kwargs={"id": self.id, "chat_message_id": self.ai_chat_message_id},
+        )
 
 
 class DatasetMessageTypeChoices(models.TextChoices):
@@ -113,25 +120,23 @@ class DatasetMessageTypeChoices(models.TextChoices):
 
 
 class EvaluationDataset(BaseTeamModel):
-    message_type = models.CharField(max_length=10, choices=DatasetMessageTypeChoices)
-
     name = models.CharField(max_length=255)
     messages = models.ManyToManyField(EvaluationMessage)
 
     def __str__(self):
         return f"{self.name} ({self.messages.count()} messages)"
 
-    def iter_messages(self):
-        if self.message_type == DatasetMessageTypeChoices.ALL:
-            return self.messages.all()
-
-        return self.messages.filter(message_type=self.message_type)
-
 
 class EvaluationConfig(BaseTeamModel):
     name = models.CharField(max_length=255)
     evaluators = models.ManyToManyField(Evaluator)
     dataset = models.ForeignKey(EvaluationDataset, on_delete=models.CASCADE)
+    message_type = models.CharField(
+        max_length=10,
+        choices=DatasetMessageTypeChoices,
+        default=DatasetMessageTypeChoices.ALL,
+    )
+
     # experiment = models.ForeignKey(Experiment, on_delete=models.SET_NULL, null=True, blank=True)
     # The bot / experiment we are targeting
 
@@ -141,6 +146,15 @@ class EvaluationConfig(BaseTeamModel):
     def get_absolute_url(self):
         return reverse("evaluations:evaluation_runs_home", args=[self.team.slug, self.id])
 
+    def iter_messages(self) -> Generator[tuple[int, list[BaseMessage]], None, None]:
+        for message in self.dataset.messages.all():
+            if self.message_type == DatasetMessageTypeChoices.ALL:
+                yield (message.id, message.as_langchain_messages())
+            elif self.message_type == DatasetMessageTypeChoices.HUMAN:
+                yield (message.id, [message.as_human_langchain_message()])
+            elif self.message_type == DatasetMessageTypeChoices.AI:
+                yield (message.id, [message.as_ai_langchain_message()])
+
     def run(self) -> EvaluationRun:
         # TODO: Run this in a celery task
         """Runs the evaluation"""
@@ -148,11 +162,11 @@ class EvaluationConfig(BaseTeamModel):
         results = []
         # TODO: Run in parallel with langgraph
         for evaluator in cast(Iterable[Evaluator], self.evaluators.all()):
-            for message in self.dataset.messages.all():
-                result = evaluator.run(message.to_langchain_message())
+            for message_id, messages in self.iter_messages():
+                result = evaluator.run(messages)
                 results.append(
                     EvaluationResult.objects.create(
-                        message=message, run=run, evaluator=evaluator, output=result.model_dump(), team=self.team
+                        message_id=message_id, run=run, evaluator=evaluator, output=result.model_dump(), team=self.team
                     )
                 )
         run.finished_at = timezone.now()
@@ -180,7 +194,9 @@ class EvaluationRun(BaseTeamModel):
         for result in results:
             table_by_message[result.message.id].update(
                 {
-                    "message": result.message.content,
+                    "human_message": result.message.human_message_content,
+                    "ai_message": result.message.ai_message_content,
+                    **{f"{key}": value for key, value in result.message.context.items()},
                     **{
                         f"{key} ({result.evaluator.name})": value
                         for key, value in result.output.get("result", {}).items()

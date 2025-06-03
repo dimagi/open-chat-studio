@@ -50,8 +50,8 @@ class LlmEvaluator(LLMResponseMixin, BaseEvaluator):
     prompt: str
     output_schema: dict
 
-    def run(self, message: BaseMessage) -> EvaluatorResult:
-        input = f"{message.type}: {message.content}"
+    def run(self, messages: list[BaseMessage]) -> EvaluatorResult:
+        input = "\n".join(f"{message.type}: {message.content}" for message in messages)
         output_schema = dict_to_json_schema(self.output_schema)
         llm = self.get_chat_model().with_structured_output(output_schema)
         prompt = PromptTemplate.from_template(self.prompt)
