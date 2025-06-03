@@ -66,18 +66,12 @@ def index_collection_files(collection_files_queryset: QuerySet[CollectionFile], 
 
         CollectionFile.objects.filter(id__in=ids).update(status=FileStatus.IN_PROGRESS)
 
-        index_manager = collection.get_index_manager()
-
-        files = [cf.file for cf in collection_files]
-        success_files, failed_files = index_manager.add_files_to_index(
-            files, chunk_size=strategy.chunk_size, chunk_overlap=strategy.chunk_overlap, re_upload=re_upload
+        collection.add_files_to_index(
+            collection_files=list(CollectionFile.objects.filter(id__in=ids).all()),
+            chunk_size=strategy.chunk_size,
+            chunk_overlap=strategy.chunk_overlap,
+            re_upload=re_upload,
         )
-
-        CollectionFile.objects.filter(file_id__in=[file.id for file in success_files]).update(
-            status=FileStatus.COMPLETED
-        )
-
-        CollectionFile.objects.filter(file_id__in=[file.id for file in failed_files]).update(status=FileStatus.FAILED)
 
     return previous_remote_file_ids
 
