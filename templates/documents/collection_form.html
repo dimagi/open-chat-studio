@@ -22,7 +22,7 @@
 
     <div x-cloak x-show="isIndex">
       {% render_field form.llm_provider %}
-      {% render_field form.embedding_provider_model %}
+      {% render_field form.embedding_provider_model xshow="!isRemoteIndex" %}
       {% render_field form.is_remote_index xshow="showIndexingBackendChoice" %}
 
       {% if form.instance.id %}
@@ -49,6 +49,7 @@
         embedding_provider_model_options: [],
         openAIProviderIds: JSON.parse(document.getElementById("openAIProviderIds").textContent),
         showIndexingBackendChoice: false,
+        isRemoteIndex: false,
         init() {
           this.updateEmbeddingModels();
 

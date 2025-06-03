@@ -218,7 +218,7 @@ class EditCollection(LoginAndTeamRequiredMixin, CollectionFormMixin, UpdateView,
         collection = form.instance
         old_vector_store_id = collection.openai_vector_store_id
 
-        if form.instance.is_index and "llm_provider" in form.changed_data:
+        if form.instance.is_index and form.instance.is_remote_index and "llm_provider" in form.changed_data:
             with transaction.atomic():
                 new_manager = collection.get_index_manager()
                 collection.openai_vector_store_id = new_manager.create_vector_store(collection.index_name)
@@ -230,6 +230,7 @@ class EditCollection(LoginAndTeamRequiredMixin, CollectionFormMixin, UpdateView,
                 from_vector_store_id=old_vector_store_id,
                 from_llm_provider_id=form.initial["llm_provider"],
             )
+
         return response
 
 

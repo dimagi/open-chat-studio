@@ -23,13 +23,14 @@ class CollectionForm(forms.ModelForm):
 
         # Alpine.js bindings
         self.fields["is_index"].widget.attrs = {"x-model": "isIndex"}
+        self.fields["is_remote_index"].widget.attrs = {"x-model": "isRemoteIndex"}
         self.fields["llm_provider"].widget.attrs = {
             "x-model.number.fill": "selectedLlmProviderId",
         }
 
         if self.instance.id:
             self.fields["is_index"].widget.attrs["disabled"] = True
-            if self.instance.has_pending_index_uploads():
+            if self.instance.has_pending_index_uploads() or not self.instance.is_remote_index:
                 self.fields["llm_provider"].widget.attrs["disabled"] = True
 
             if self.instance.is_index:
