@@ -15,8 +15,9 @@ class BannerAdmin(admin.ModelAdmin):
         "end_date",
         "is_active",
         "status_display",
+        "feature_flag_display",
     ]
-    list_filter = ["banner_type", "is_active", "location"]
+    list_filter = ["banner_type", "is_active", "location", "feature_flag"]
     search_fields = ["title", "message"]
     date_hierarchy = "end_date"
     list_editable = ["is_active", "location"]
@@ -28,6 +29,13 @@ class BannerAdmin(admin.ModelAdmin):
             {
                 "fields": ("location",),
                 "description": 'Select which pages this banner should appear. Choose "global" to show it on all pages.',
+            },
+        ),
+        (
+            "Feature Flag",
+            {
+                "fields": ("feature_flag",),
+                "description": "Banner will only appear if the team has this feature flag enabled.",
             },
         ),
         (
@@ -62,3 +70,8 @@ class BannerAdmin(admin.ModelAdmin):
             return "Active"
 
     status_display.short_description = "Status"
+
+    def feature_flag_display(self, obj):
+        return obj.feature_flag.name if obj.feature_flag else "None"
+
+    feature_flag_display.short_description = "Feature Flag"

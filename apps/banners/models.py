@@ -35,6 +35,13 @@ class Banner(models.Model):
     location = models.CharField(
         max_length=100, choices=LOCATIONS, default="global", help_text="Location of banner on site"
     )
+    feature_flag = models.ForeignKey(
+        "teams.Flag",
+        on_delete=models.CASCADE,
+        blank=True,
+        null=True,
+        help_text="Banner will only show if team has the flag enabled",
+    )
 
     class Meta:
         ordering = ["-end_date"]

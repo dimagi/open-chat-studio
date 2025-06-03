@@ -62,7 +62,7 @@ class CustomLoginView(LoginView):
     """
 
     def get_form_class(self):
-        if not flag_is_active(self.request, "sso_login"):
+        if not flag_is_active(self.request, "flag_sso_login"):
             return super().get_form_class()
 
         if self.request.method == "GET":
@@ -74,7 +74,7 @@ class CustomLoginView(LoginView):
                 return get_form_class(app_settings.FORMS, "login", self.form_class)
 
     def form_valid(self, form):
-        if not flag_is_active(self.request, "sso_login"):
+        if not flag_is_active(self.request, "flag_sso_login"):
             return super().form_valid(form)
 
         if response := _redirect_for_sso(self.request, form.cleaned_data["login"]):
@@ -125,7 +125,7 @@ class SignupAfterInvite(SignupView):
             )
             return redirect("web:home")
 
-        if flag_is_active(self.request, "sso_login"):
+        if flag_is_active(self.request, "flag_sso_login"):
             if response := _redirect_for_sso(self.request, self.invitation.email, for_signup=True):
                 return response
         return super().get(request, *args, **kwargs)

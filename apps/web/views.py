@@ -11,6 +11,7 @@ from django.utils.http import url_has_allowed_host_and_scheme
 from django.utils.translation import gettext_lazy as _
 from django.views.decorators.debug import sensitive_post_parameters
 from health_check.views import MainView
+from waffle import flag_is_active
 
 from apps.teams.decorators import check_superuser_team_access, login_and_team_required
 from apps.teams.models import Membership, Team
@@ -26,6 +27,8 @@ def home(request):
     if request.user.is_authenticated:
         team = request.team
         if team:
+            if flag_is_active(request, "flag_chatbots"):
+                return HttpResponseRedirect(reverse("chatbots:chatbots_home", args=[team.slug]))
             return HttpResponseRedirect(reverse("experiments:experiments_home", args=[team.slug]))
         else:
             messages.info(
