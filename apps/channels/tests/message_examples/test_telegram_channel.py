@@ -25,18 +25,14 @@ def telegram_channel():
     return TelegramChannel(experiment, experiment_channel=experiment_channel, experiment_session=session)
 
 
-@pytest.fixture()
-def make_mock_file():
-    def _make_mock_file(name, content_type, size, file_data="file_data"):
-        file = Mock(spec=File)
-        file.name = name
-        file.content_type = content_type
-        file.content_size = size
-        file.file = file_data
-        file.download_link.return_value = f"http://example.com/{name}"
-        return file
-
-    return _make_mock_file
+def make_mock_file(name, content_type, size, file_data="file_data"):
+    file = Mock(spec=File)
+    file.name = name
+    file.content_type = content_type
+    file.content_size = size
+    file.file = file_data
+    file.download_link.return_value = f"http://example.com/{name}"
+    return file
 
 
 @pytest.mark.django_db()
@@ -113,7 +109,7 @@ def test_handle_telegram_api_error_other_errors():
     assert excinfo.value.__cause__ == api_error
 
 
-def test_supported_image_file(telegram_channel, make_mock_file):
+def test_supported_image_file(telegram_channel):
     image_file = make_mock_file("img.jpg", "image/jpeg", 5 * 1024 * 1024)
 
     with (
@@ -126,7 +122,7 @@ def test_supported_image_file(telegram_channel, make_mock_file):
         mock_send_text.assert_called_once_with("Here is your file")
 
 
-def test_large_image_fallback_to_text(telegram_channel, make_mock_file):
+def test_large_image_fallback_to_text(telegram_channel):
     channel = telegram_channel
     large_image = make_mock_file("big_img.jpg", "image/jpeg", 15 * 1024 * 1024)
 
@@ -142,7 +138,7 @@ def test_large_image_fallback_to_text(telegram_channel, make_mock_file):
         mock_send_text.assert_called_once_with(expected_message)
 
 
-def test_unsupported_mime_file(telegram_channel, make_mock_file):
+def test_unsupported_mime_file(telegram_channel):
     channel = telegram_channel
     exe_file = make_mock_file("script.exe", "application/octet-stream", 1 * 1024 * 1024)
 
