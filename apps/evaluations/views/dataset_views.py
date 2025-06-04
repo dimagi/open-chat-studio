@@ -6,9 +6,9 @@ from django.views.generic import CreateView, TemplateView, UpdateView
 from django_tables2 import SingleTableView
 
 from apps.chat.models import ChatMessageType
-from apps.evaluations.forms import EvaluationDatasetForm, EvaluationMessageForm
+from apps.evaluations.forms import EvaluationDatasetForm, EvaluationDatasetFromSessionsForm, EvaluationMessageForm
 from apps.evaluations.models import EvaluationDataset
-from apps.evaluations.tables import EvaluationDatasetTable, EvaluationSessionsTable
+from apps.evaluations.tables import EvaluationDatasetTable, EvaluationSessionsSelectionTable, EvaluationSessionsTable
 from apps.experiments.filters import apply_dynamic_filters
 from apps.experiments.models import ExperimentSession
 from apps.teams.mixins import LoginAndTeamRequiredMixin
@@ -89,6 +89,37 @@ class EditDataset(UpdateView):
         return reverse("evaluations:dataset_home", args=[self.request.team.slug])
 
 
+class CreateDatasetFromSessions(LoginAndTeamRequiredMixin, CreateView, PermissionRequiredMixin):
+    # permission_required = "pipelines.add_pipeline"
+    template_name = "evaluations/dataset_from_sessions_form.html"
+    model = EvaluationDataset
+    form_class = EvaluationDatasetFromSessionsForm
+    extra_context = {
+        "title": "Create Dataset from Sessions",
+        "button_text": "Create Dataset",
+        "active_tab": "evaluation_datasets",
+    }
+
+    def get_form_kwargs(self):
+        return {**super().get_form_kwargs(), "team": self.request.team}
+
+    def get_initial(self):
+        """Support pre-selected sessions via URL parameters."""
+        initial = super().get_initial()
+        preselected_sessions = self.request.GET.get("sessions", "")
+        if preselected_sessions:
+            initial["session_ids"] = preselected_sessions
+        return initial
+
+    def get_success_url(self):
+        return reverse("evaluations:dataset_home", args=[self.request.team.slug])
+
+    def form_valid(self, form):
+        form.instance.team = self.request.team
+        form.instance.created_by = self.request.user
+        return super().form_valid(form)
+
+
 class DatasetSessionsTableView(LoginAndTeamRequiredMixin, SingleTableView, PermissionRequiredMixin):
     model = ExperimentSession
     paginate_by = 20
@@ -101,6 +132,27 @@ class DatasetSessionsTableView(LoginAndTeamRequiredMixin, SingleTableView, Permi
             ExperimentSession.objects.with_last_message_created_at()
             .filter(team=self.request.team)
             .select_related("participant__user")
+            .order_by("experiment__name")
+        )
+        query_set = apply_dynamic_filters(query_set, self.request)
+        return query_set
+
+
+class DatasetSessionsSelectionTableView(LoginAndTeamRequiredMixin, SingleTableView, PermissionRequiredMixin):
+    """Table view for selecting sessions to create a dataset from."""
+
+    model = ExperimentSession
+    paginate_by = 3
+    table_class = EvaluationSessionsSelectionTable
+    template_name = "table/single_table.html"
+    permission_required = "experiments.view_experimentsession"
+
+    def get_queryset(self):
+        query_set = (
+            ExperimentSession.objects.with_last_message_created_at()
+            .filter(team=self.request.team)
+            .select_related("participant__user", "chat")
+            .prefetch_related("chat__messages")
             .order_by("experiment__name")
         )
         query_set = apply_dynamic_filters(query_set, self.request)
