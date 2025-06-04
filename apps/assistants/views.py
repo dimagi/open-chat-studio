@@ -13,11 +13,13 @@ from django.views.generic import CreateView, FormView, TemplateView, UpdateView
 from django_tables2 import SingleTableView
 
 from apps.chat.agent.tools import get_assistant_tools
-from apps.files.views import BaseAddMultipleFilesHtmxView, BaseDeleteFileView
+from apps.files.views import BaseAddMultipleFilesHtmxView
 from apps.generics import actions
+from apps.service_providers.llm_service.index_managers import OpenAIVectorStoreManager
 from apps.service_providers.models import LlmProvider
 from apps.service_providers.utils import get_llm_provider_choices
 from apps.teams.mixins import LoginAndTeamRequiredMixin
+from apps.utils.deletion import get_related_m2m_objects
 from apps.utils.tables import render_table_row
 
 from ..files.models import File
@@ -317,17 +319,34 @@ class AddFileToAssistant(BaseAddMultipleFilesHtmxView):
         )
 
 
-class DeleteFileFromAssistant(BaseDeleteFileView):
-    def get_success_response(self, file):
+class DeleteFileFromAssistant(LoginAndTeamRequiredMixin, View, PermissionRequiredMixin):
+    permission_required = "files.delete_file"
+
+    @transaction.atomic()
+    def delete(self, request, team_slug: str, **kwargs):
+        """
+        Delete a file from an assistant's resource. Only the connection between the file and the resource is deleted.
+        The file itself is deleted only if it is not used in any other resources.
+        """
+        file = get_object_or_404(File, team=request.team, pk=kwargs["file_id"])
         resource = get_object_or_404(
             ToolResources,
             assistant_id=self.kwargs["pk"],
             id=self.kwargs["resource_id"],
         )
 
+        resource.files.through.objects.filter(file_id=file.id).delete()
+
         client = resource.assistant.llm_provider.get_llm_service().get_raw_client()
-        if delete_file_from_openai(client, file):
-            file.save()
+        if file not in get_related_m2m_objects([file]):
+            # The file doesn't have related objects, so it's safe to remove it
+            delete_file_from_openai(client, file)
+            file.delete()
+        else:
+            index_manager = OpenAIVectorStoreManager(client)
+            index_manager.delete_file(vector_store_id=resource.extra["vector_store_id"], file_id=file.external_id)
+
+        messages.success(self.request, "File Deleted")
         return HttpResponse()
 
 
