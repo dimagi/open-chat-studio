@@ -157,3 +157,27 @@ class EvaluationSessionsTable(tables.Table):
         }
         orderable = False
         empty_text = "No sessions yet!"
+
+
+class EvaluationSessionsSelectionTable(tables.Table):
+    selection = columns.CheckBoxColumn(
+        accessor="external_id",
+        verbose_name="Select",
+        orderable=False,
+        attrs={"input": {"class": "checkbox checkbox-primary session-checkbox", "@change": "updateSelectedSessions()"}},
+    )
+    experiment = columns.Column(accessor="experiment", verbose_name="Experiment", order_by="experiment__name")
+    participant = columns.Column(accessor="participant", verbose_name="Participant", order_by="participant__identifier")
+    last_message = columns.Column(accessor="last_message_created_at", verbose_name="Last Message", orderable=True)
+    versions = columns.Column(verbose_name="Versions", accessor="experiment_version_for_display", orderable=False)
+    message_count = columns.Column(accessor="chat.messages.count", verbose_name="Messages", orderable=False)
+
+    class Meta:
+        model = ExperimentSession
+        fields = []
+        row_attrs = {
+            **settings.DJANGO_TABLES2_ROW_ATTRS,
+            "data-redirect-url": None,
+        }
+        orderable = False
+        empty_text = "No sessions available for selection."

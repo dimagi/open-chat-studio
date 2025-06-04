@@ -37,6 +37,16 @@ urlpatterns = [
         dataset_views.DatasetSessionsTableView.as_view(),
         name="dataset_sessions_list",
     ),
+    path(
+        "sessions_selection_table",
+        dataset_views.DatasetSessionsSelectionTableView.as_view(),
+        name="dataset_sessions_selection_list",
+    ),
+    path(
+        "dataset/new_from_sessions/",
+        dataset_views.CreateDatasetFromSessions.as_view(),
+        name="new_dataset_from_sessions",
+    ),
     path("session/<str:session_id>/messages_json/", dataset_views.session_messages_json, name="session_messages_json"),
 ]
 
