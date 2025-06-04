@@ -76,6 +76,7 @@ from apps.service_providers.exceptions import OpenAiUnableToLinkFileError
 from apps.service_providers.llm_service.index_managers import OpenAIVectorStoreManager
 from apps.service_providers.models import LlmProvider, LlmProviderModel, LlmProviderTypes
 from apps.teams.models import Team
+from apps.utils.deletion import get_related_m2m_objects
 from apps.utils.prompt import validate_prompt_variables
 
 logger = logging.getLogger("ocs.openai_sync")
@@ -393,8 +394,34 @@ def _sync_tool_resource_files_from_openai(file_ids, ocs_resource):
             unused_files.remove(file.id)
         except KeyError:
             ocs_resource.files.add(_fetch_file_from_openai(ocs_resource.assistant, file_id))
+
     if unused_files:
-        File.objects.filter(id__in=unused_files).delete()
+        unused_files_objects = File.objects.filter(id__in=unused_files)
+        remove_files_from_tool(ocs_resource, unused_files_objects)
+
+
+def remove_files_from_tool(ocs_resource: ToolResources, files: list[int]):
+    """
+    Remove files from the tool resource and delete them if they are not used elsewhere.
+    """
+    client = ocs_resource.assistant.llm_provider.get_llm_service().get_raw_client()
+
+    for file in files:
+        # Remove the link to the tool resource
+        ocs_resource.files.through.objects.get(file=file).delete()
+
+        if file not in get_related_m2m_objects([file]):
+            # The file doesn't have related objects, so it's safe to remove it completely
+            delete_file_from_openai(client, file)
+            file.delete()
+        else:
+            # File is used elsewhere, only remove from vector store if this is a file_search resource
+            # and the file has a valid external_id and external_source
+            if ocs_resource.extra["vector_store_id"] and file.external_id:
+                index_manager = OpenAIVectorStoreManager(client)
+                index_manager.delete_file(
+                    vector_store_id=ocs_resource.extra["vector_store_id"], file_id=file.external_id
+                )
 
 
 def _get_files_missing_from_vector_store(client, vector_store_id, file_ids: list[str]):

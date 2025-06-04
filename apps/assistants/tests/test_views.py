@@ -1,4 +1,4 @@
-from unittest.mock import Mock, patch
+from unittest.mock import patch
 
 import pytest
 from django.urls import reverse
@@ -6,19 +6,9 @@ from django.urls import reverse
 from apps.assistants.models import ToolResources
 from apps.documents.models import CollectionFile
 from apps.files.models import File
-from apps.service_providers.llm_service.index_managers import OpenAIVectorStoreManager
 from apps.utils.factories.assistants import OpenAiAssistantFactory
 from apps.utils.factories.documents import CollectionFactory
 from apps.utils.factories.files import FileFactory
-
-
-@pytest.fixture()
-def index_manager_mock():
-    index_manager = Mock(spec=OpenAIVectorStoreManager)
-    with patch("apps.assistants.views.OpenAIVectorStoreManager") as get_index_manager:
-        index_manager.client = Mock()
-        get_index_manager.return_value = index_manager
-        yield index_manager
 
 
 @pytest.mark.django_db()
@@ -33,8 +23,9 @@ class TestDeleteFileFromAssistant:
             assistant=assistant, tool_type="code_interpreter", extra={"vector_store_id": "vs-123"}
         )
 
+    @patch("apps.assistants.sync.OpenAIVectorStoreManager.delete_file")
     def test_delete_file_removes_relationship_and_keeps_file_when_used_elsewhere(
-        self, assistant, resource, client, index_manager_mock
+        self, delete_file, assistant, resource, client
     ):
         """Test that file relationship is removed but file is kept when used in other resources."""
         team = assistant.team
@@ -58,11 +49,12 @@ class TestDeleteFileFromAssistant:
         assert File.objects.filter(id=file.id).exists()
         assert CollectionFile.objects.filter(file_id=file.id).exists()  # File is preserved on the collection
 
-        index_manager_mock.delete_file.assert_called_once_with(vector_store_id="vs-123", file_id="file_123")
+        delete_file.assert_called_once_with(vector_store_id="vs-123", file_id="file_123")
 
-    @patch("apps.assistants.views.delete_file_from_openai")
+    @patch("apps.assistants.sync.delete_file_from_openai")
+    @patch("apps.assistants.sync.OpenAIVectorStoreManager.delete_file")
     def test_delete_file_removes_file_when_no_other_references(
-        self, mock_delete_from_openai, assistant, resource, client, index_manager_mock
+        self, delete_file, mock_delete_from_openai, assistant, resource, client
     ):
         """Test that file is completely deleted when not used in other resources."""
         team = assistant.team
@@ -85,4 +77,4 @@ class TestDeleteFileFromAssistant:
 
         # Check that OpenAI deletion was called
         mock_delete_from_openai.assert_called_once()
-        index_manager_mock.delete_file.assert_not_called()
+        delete_file.assert_not_called()
