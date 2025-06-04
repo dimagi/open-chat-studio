@@ -2,6 +2,8 @@ from unittest import mock
 
 import pytest
 
+from apps.assistants.models import ToolResources
+from apps.utils.factories.assistants import OpenAiAssistantFactory
 from apps.utils.factories.documents import CollectionFactory
 from apps.utils.factories.files import FileFactory
 from apps.utils.factories.service_provider_factories import LlmProviderFactory
@@ -104,6 +106,23 @@ class TestCollection:
             _remove_index.assert_called_once()
         else:
             _remove_index.assert_not_called()
+
+    @mock.patch("apps.documents.models.Collection._remove_index")
+    def test_archive_collection_does_not_archive_files_in_use(self, _remove_index):
+        """Test that a collection can be archived"""
+        collection = CollectionFactory()
+        file = FileFactory(external_id="remote-file-123")
+        collection.files.add(file)
+        resource = ToolResources.objects.create(assistant=OpenAiAssistantFactory())
+        resource.files.add(file)
+
+        # Archive the collection
+        collection.archive()
+
+        # Check that only the collection is archived, not the file
+        assert collection.is_archived
+        file.refresh_from_db()
+        assert file.is_archived is False
 
     def test_remove_index(self, index_manager_mock):
         """Test that the index can be removed"""
