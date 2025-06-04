@@ -5,12 +5,13 @@ from django.urls import reverse
 from django.views.generic import CreateView, TemplateView, UpdateView
 from django_tables2 import SingleTableView
 
+from apps.channels.models import ChannelPlatform
 from apps.chat.models import ChatMessageType
 from apps.evaluations.forms import EvaluationDatasetForm, EvaluationDatasetFromSessionsForm, EvaluationMessageForm
 from apps.evaluations.models import EvaluationDataset
 from apps.evaluations.tables import EvaluationDatasetTable, EvaluationSessionsSelectionTable, EvaluationSessionsTable
-from apps.experiments.filters import apply_dynamic_filters
-from apps.experiments.models import ExperimentSession
+from apps.experiments.filters import DATE_RANGE_OPTIONS, FIELD_TYPE_FILTERS, apply_dynamic_filters
+from apps.experiments.models import Experiment, ExperimentSession
 from apps.teams.mixins import LoginAndTeamRequiredMixin
 
 
@@ -110,6 +111,41 @@ class CreateDatasetFromSessions(LoginAndTeamRequiredMixin, CreateView, Permissio
         if preselected_sessions:
             initial["session_ids"] = preselected_sessions
         return initial
+
+    def _get_filter_context_data(self):
+        experiments = Experiment.objects.filter(team=self.request.team).values("id", "name").order_by("name")
+        experiment_list = [{"id": exp["id"], "name": exp["name"]} for exp in experiments]
+
+        channel_list = ChannelPlatform.for_filter(self.request.team)
+        available_tags = [tag.name for tag in self.request.team.tag_set.filter(is_system_tag=False)]
+
+        experiment_versions = []
+        for experiment in Experiment.objects.filter(team=self.request.team):
+            experiment_versions.extend(experiment.get_version_name_list())
+        experiment_versions = list(set(experiment_versions))
+
+        return {
+            "available_tags": available_tags,
+            "experiment_versions": experiment_versions,
+            "experiment_list": experiment_list,
+            "field_type_filters": FIELD_TYPE_FILTERS,
+            "channel_list": channel_list,
+            "date_range_options": DATE_RANGE_OPTIONS,
+            "filter_columns": [
+                "experiment",
+                "participant",
+                "last_message",
+                "first_message",
+                "tags",
+                "versions",
+                "channels",
+            ],
+        }
+
+    def get_context_data(self, **kwargs):
+        context = super().get_context_data(**kwargs)
+        context.update(self._get_filter_context_data())
+        return context
 
     def get_success_url(self):
         return reverse("evaluations:dataset_home", args=[self.request.team.slug])
