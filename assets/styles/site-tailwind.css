@@ -160,6 +160,22 @@ input[type=number]::-webkit-outer-spin-button {
   @apply border-none rounded-md
 }
 
+.alert-success {
+  @apply bg-green-50 px-2 py-1 text-green-700;
+}
+
+.alert-info {
+  @apply bg-blue-50 px-2 py-1 text-blue-700;
+}
+
+.alert-warning {
+  @apply bg-yellow-50 px-2 py-1 text-yellow-800;
+}
+
+.alert-error {
+  @apply bg-red-50 px-2 py-1 text-red-700;
+}
+
 .menu-active {
   background-color: oklch(0.313815 0.021108 254.139);
 }
