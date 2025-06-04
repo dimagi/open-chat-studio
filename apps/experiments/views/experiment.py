@@ -107,9 +107,7 @@ CUSTOM_ERROR_MESSAGE = (
 @login_and_team_required
 @permission_required("experiments.view_experiment", raise_exception=True)
 def experiments_home(request, team_slug: str):
-    show_modal = False
-    if flag_is_active(request, "flag_chatbots"):
-        show_modal = True
+    show_modal = flag_is_active(request, "flag_chatbots")
     return generic_home(
         request, team_slug, "Experiments", "experiments:table", "experiments:new", show_modal_instead=show_modal
     )
@@ -277,7 +275,7 @@ class CreateExperiment(BaseExperimentView, CreateView):
 
     def dispatch(self, request, *args, **kwargs):
         is_chatbot = kwargs.get("new_chatbot", False)
-        if flag_is_active(request, "flag_chatbots") and not is_chatbot:
+        if not is_chatbot and flag_is_active(request, "flag_chatbots"):
             return HttpResponseRedirect(reverse("chatbots:new", args=[request.team.slug]))
         return super().dispatch(request, *args, **kwargs)
 
