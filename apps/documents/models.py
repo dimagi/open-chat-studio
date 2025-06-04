@@ -320,6 +320,7 @@ class Collection(BaseTeamModel, VersionsMixin):
                         chunk_number=idx,
                         text=chunk,
                         embedding=embedding_vector,
+                        # TODO: Get the page number if possible. Also, what file types are supported?
                         page_number=0,
                     )
                 collection_file.status = FileStatus.COMPLETED
