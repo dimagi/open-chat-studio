@@ -46,13 +46,11 @@ class CreateCollectionFromAssistantForm(forms.Form):
         queryset=OpenAiAssistant.objects.none(),
         label="Assistant",
         help_text="Select an assistant with file search enabled to create a collection from",
-        widget=forms.Select(attrs={"class": "select select-bordered w-full"}),
     )
     collection_name = forms.CharField(
         max_length=255,
         label="Collection Name",
         help_text="Enter a name for the new collection",
-        widget=forms.TextInput(attrs={"class": "input input-bordered w-full", "placeholder": "Collection name"}),
     )
 
     def __init__(self, request, *args, **kwargs):
@@ -78,15 +76,20 @@ class CreateCollectionFromAssistantForm(forms.Form):
         assistant = self.cleaned_data["assistant"]
         if not assistant:
             raise forms.ValidationError("Please select an assistant.")
-        
+
         # Verify the assistant has file search tool resources
         file_search_resources = assistant.tool_resources.filter(tool_type="file_search")
         if not file_search_resources.exists():
             raise forms.ValidationError("The selected assistant does not have file search enabled or configured.")
-        
+
         # Verify the assistant has files
         has_files = file_search_resources.filter(files__isnull=False).exists()
         if not has_files:
             raise forms.ValidationError("The selected assistant does not have any files for file search.")
-        
+
         return assistant
+
+    def clean_collection(self):
+        collection_name = self.cleaned_data["collection_name"]
+        if Collection.objects.filter(team=self.request.team, name=collection_name, is_version=False).exists():
+            raise forms.ValidationError("A collection with this name already exists.")

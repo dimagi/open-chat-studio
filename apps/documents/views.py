@@ -304,16 +304,7 @@ class CreateCollectionFromAssistant(LoginAndTeamRequiredMixin, FormView, Permiss
         # Get file search resources from the assistant
         file_search_resources = assistant.tool_resources.filter(tool_type="file_search")
 
-        if not file_search_resources.exists():
-            messages.error(self.request, "The selected assistant does not have any file search resources.")
-            return self.form_invalid(form)
-
         try:
-            # Check for existing collection with same name
-            if Collection.objects.filter(team=self.request.team, name=collection_name, is_version=False).exists():
-                messages.error(self.request, f"A collection with the name '{collection_name}' already exists.")
-                return self.form_invalid(form)
-
             # Create the collection
             collection = Collection.objects.create(
                 team=self.request.team,
