@@ -23,6 +23,13 @@
           </button>
         </div>
 
+        <div class="mb-4">
+          {{ available_tags|default:""|json_script:"available-tags-data" }}
+          {{ experiment_versions|default:""|json_script:"experiment-versions-data" }}
+          {{ channel_list|default:"[]"|json_script:"channel-list-data" }}
+          {% include "experiments/filters.html" %}
+        </div>
+
         <div id="sessions-table"
              hx-get="{% url 'evaluations:dataset_sessions_selection_list' request.team.slug %}"
              hx-trigger="load"
