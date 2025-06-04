@@ -896,29 +896,16 @@ class TelegramChannel(ChannelBase):
             self.participant_identifier, text=f"I heard: {transcript}", reply_to_message_id=self.message.message_id
         )
 
-    def _get_supported_unsupported_files(self, files: list[File]) -> tuple[list[File], list[File]]:
-        supported_files = []
-        unsupported_files = []
+    def _can_send_file(self, file: File) -> bool:
+        mime = file.content_type
+        size = file.content_size or 0  # in bytes
 
-        for file in files:
-            mime = file.content_type
-            size = file.content_size or 0  # in bytes
-
-            is_inline_supported = False
-            if (
-                mime.startswith("image/")
-                and size <= 10 * 1024 * 1024  # 10mb
-                or mime.startswith(("video/", "audio/", "application/"))
-                and size <= 50 * 1024 * 1024  # 50mb
-            ):
-                is_inline_supported = True
-
-            if is_inline_supported:
-                supported_files.append(file)
-            else:
-                unsupported_files.append(file)
-
-        return supported_files, unsupported_files
+        if mime.startswith("image/"):
+            return size <= 10 * 1024 * 1024  # 10 MB for images
+        elif mime.startswith(("video/", "audio/", "application/")):
+            return size <= 50 * 1024 * 1024  # 50 MB for other supported types
+        else:
+            return False
 
     def send_file_to_user(self, file: File):
         chat_id = self.participant_identifier
