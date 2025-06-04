@@ -287,6 +287,7 @@ class CreateCollectionFromAssistant(LoginAndTeamRequiredMixin, FormView, Permiss
         "button_text": "Create Collection",
         "active_tab": "collections",
     }
+    object = None
 
     def get_form_kwargs(self):
         kwargs = super().get_form_kwargs()
@@ -296,89 +297,19 @@ class CreateCollectionFromAssistant(LoginAndTeamRequiredMixin, FormView, Permiss
     def get_success_url(self):
         return reverse("documents:single_collection_home", args=[self.request.team.slug, self.object.id])
 
-    @transaction.atomic()
     def form_valid(self, form):
-        assistant = form.cleaned_data["assistant"]
-        collection_name = form.cleaned_data["collection_name"]
-
-        # Get file search resources from the assistant
-        file_search_resources = assistant.tool_resources.filter(tool_type="file_search")
-
-        try:
-            # Create the collection
+        with transaction.atomic():
+            assistant = form.cleaned_data["assistant"]
+            collection_name = form.cleaned_data["collection_name"]
             collection = Collection.objects.create(
                 team=self.request.team,
                 name=collection_name,
                 is_index=True,
                 llm_provider=assistant.llm_provider,
             )
-
-            # Create vector store for the collection
-            manager = collection.llm_provider.get_index_manager()
-            collection.openai_vector_store_id = manager.create_vector_store(name=collection.index_name)
-            collection.save(update_fields=["openai_vector_store_id"])
-
-            # Collect all files from file search resources
-            all_files = []
-            external_file_ids = []
-
-            for resource in file_search_resources:
-                files = resource.files.all()
-                all_files.extend(files)
-                # Collect external IDs for OpenAI API
-                external_file_ids.extend([f.external_id for f in files if f.external_id])
-
-            # Add files to the collection
-            # Create CollectionFile entries
-            collection_files = []
-            for file in all_files:
-                collection_files.append(
-                    CollectionFile(
-                        collection=collection,
-                        file=file,
-                        status=FileStatus.PENDING,
-                        metadata=CollectionFileMetadata(
-                            chunking_strategy=ChunkingStrategy(chunk_size=800, chunk_overlap=400)
-                        ),
-                    )
-                )
-            CollectionFile.objects.bulk_create(collection_files)
-
-            # Link files to the new vector store at OpenAI
-            if external_file_ids:
-                try:
-                    manager.link_files_to_vector_store(
-                        vector_store_id=collection.openai_vector_store_id,
-                        file_ids=external_file_ids,
-                    )
-                    # Update status to completed for successfully linked files
-                    CollectionFile.objects.filter(
-                        collection=collection, file__external_id__in=external_file_ids
-                    ).update(status=FileStatus.COMPLETED)
-
-                except Exception as e:
-                    logger.error(f"Failed to link files to vector store: {e}")
-                    # Mark files as failed
-                    CollectionFile.objects.filter(collection=collection).update(status=FileStatus.FAILED)
-                    messages.error(
-                        self.request,
-                        (
-                            "Collection created but failed to link files to vector store. You can retry from the"
-                            "collections page"
-                        ),
-                    )
-            else:
-                # No external file IDs - files need to be re-uploaded
-                messages.warning(
-                    self.request,
-                    f"Collection created with {len(all_files)} files, but none have external IDs. "
-                    f"Files will need to be re-uploaded to be indexed.",
-                )
-
             self.object = collection
-            return HttpResponseRedirect(self.get_success_url())
-
-        except Exception as e:
-            logger.error(f"Failed to create collection from assistant: {e}")
-            messages.error(self.request, f"Failed to create collection from assistant: {e}")
-            return self.form_invalid(form)
+        tasks.create_collection_from_assistant_task.delay(
+            collection_id=collection.id,
+            assistant_id=assistant.id,
+        )
+        return HttpResponseRedirect(self.get_success_url())
