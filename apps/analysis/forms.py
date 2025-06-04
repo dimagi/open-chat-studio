@@ -29,10 +29,11 @@ class TranscriptAnalysisForm(forms.ModelForm):
         self.team = kwargs.pop("team", None)
         super().__init__(*args, **kwargs)
 
+        timezone = self.request.session.get("detected_tz", None)
         referer = self.request.headers.get("referer") or ""
         parsed_url = urlparse(referer)
         query_params = parse_qs(parsed_url.query)
-        sessions = get_filtered_sessions(self.request, self.experiment, query_params)
+        sessions = get_filtered_sessions(self.request, self.experiment, query_params, timezone)
         session_ids = sessions.values_list("id", flat=True)
 
         self.fields["sessions"] = SessionChoiceField(
