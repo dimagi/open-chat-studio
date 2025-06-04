@@ -205,17 +205,18 @@ class Collection(BaseTeamModel, VersionsMixin):
             return False
 
         super().archive()
-        if self.is_index and self.openai_vector_store_id:
-            self._remove_index()
 
         files = list(self.files.all())
-
         # Remove the references to the files in the collection
         CollectionFile.objects.filter(collection=self).delete()
 
         # Cleanup conditionally
         files_with_references = get_related_m2m_objects(files)
-        unused_file_ids = [file.id for file in files if file not in files_with_references]
+        unused_files = [file for file in files if file not in files_with_references]
+        unused_file_ids = [file.id for file in unused_files]
+
+        if self.is_index and self.openai_vector_store_id:
+            self._remove_index(unused_files)
 
         File.objects.filter(id__in=unused_file_ids).update(is_archived=True)
         return True
@@ -238,11 +239,11 @@ class Collection(BaseTeamModel, VersionsMixin):
             status__in=[FileStatus.PENDING, FileStatus.IN_PROGRESS],
         ).exists()
 
-    def _remove_index(self):
+    def _remove_index(self, remote_files_to_remove: list[File]):
         """Remove the index backend"""
         manager = self.llm_provider.get_index_manager()
         manager.delete_vector_store(self.openai_vector_store_id, fail_silently=True)
-        manager.delete_files(self.files.all())
+        manager.delete_files(remote_files_to_remove)
 
         self.openai_vector_store_id = ""
         self.save(update_fields=["openai_vector_store_id"])
