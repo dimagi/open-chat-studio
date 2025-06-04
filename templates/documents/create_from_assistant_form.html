@@ -1,78 +1,78 @@
 {% extends 'web/app/app_base.html' %}
 {% load i18n %}
-{% load django_bootstrap5 %}
+{% load form_tags %}
 
 {% block app %}
-<div class="app-card">
-  <div class="grid grid-cols-6">
-    <div class="col-span-5">
-      <h1 class="pg-title">{{ title }}</h1>
-      <span class="text-neutral-500">Create an indexed collection from an OpenAI assistant's file search tools</span>
+  <div class="app-card">
+    <div class="grid grid-cols-6">
+      <div class="col-span-5">
+        <h1 class="pg-title">{{ title }}</h1>
+        <span class="text-neutral-500">Create an indexed collection from an OpenAI assistant's file search tools</span>
+      </div>
+    </div>
+
+    <hr class="my-4">
+
+    <form method="post" class="space-y-4">
+      {% csrf_token %}
+
+      <div class="grid grid-cols-1 gap-4">
+        <div class="form-control w-full">
+          <label class="label" for="{{ form.assistant.id_for_label }}">
+            <span class="label-text">{{ form.assistant.label }}</span>
+          </label>
+          {{ form.assistant }}
+          {% if form.assistant.help_text %}
+            <label class="label">
+              <span class="label-text-alt">{{ form.assistant.help_text }}</span>
+            </label>
+          {% endif %}
+          {% if form.assistant.errors %}
+            <label class="label">
+              <span class="label-text-alt text-error">{{ form.assistant.errors.0 }}</span>
+            </label>
+          {% endif %}
+        </div>
+
+        <div class="form-control w-full">
+          <label class="label" for="{{ form.collection_name.id_for_label }}">
+            <span class="label-text">{{ form.collection_name.label }}</span>
+          </label>
+          {{ form.collection_name }}
+          {% if form.collection_name.help_text %}
+            <label class="label">
+              <span class="label-text-alt">{{ form.collection_name.help_text }}</span>
+            </label>
+          {% endif %}
+          {% if form.collection_name.errors %}
+            <label class="label">
+              <span class="label-text-alt text-error">{{ form.collection_name.errors.0 }}</span>
+            </label>
+          {% endif %}
+        </div>
+      </div>
+
+      {% if form.non_field_errors %}
+        <div class="alert alert-error">
+          {{ form.non_field_errors }}
+        </div>
+      {% endif %}
+
+      <div class="flex justify-end space-x-2 pt-4">
+        <a href="{% url 'documents:collection_home' team.slug %}" class="btn btn-outline">Cancel</a>
+        <button type="submit" class="btn btn-primary">{{ button_text }}</button>
+      </div>
+    </form>
+
+    <div class="mt-6 p-4 bg-base-200 rounded-lg">
+      <h3 class="font-semibold mb-2">What happens when you create a collection from an assistant?</h3>
+      <ul class="list-disc list-inside space-y-1 text-sm">
+        <li>A new indexed collection will be created using the same LLM provider as the assistant</li>
+        <li>All files from the assistant's file search tools will be copied to the new collection</li>
+        <li>A new vector store will be created at OpenAI for the collection</li>
+        <li>The assistant's original vector store and files remain unchanged</li>
+        <li>The collection can be used independently for RAG and document search</li>
+      </ul>
     </div>
   </div>
-  
-  <hr class="my-4">
-
-  <form method="post" class="space-y-4">
-    {% csrf_token %}
-    
-    <div class="grid grid-cols-1 gap-4">
-      <div class="form-control w-full">
-        <label class="label" for="{{ form.assistant.id_for_label }}">
-          <span class="label-text">{{ form.assistant.label }}</span>
-        </label>
-        {{ form.assistant }}
-        {% if form.assistant.help_text %}
-          <label class="label">
-            <span class="label-text-alt">{{ form.assistant.help_text }}</span>
-          </label>
-        {% endif %}
-        {% if form.assistant.errors %}
-          <label class="label">
-            <span class="label-text-alt text-error">{{ form.assistant.errors.0 }}</span>
-          </label>
-        {% endif %}
-      </div>
-
-      <div class="form-control w-full">
-        <label class="label" for="{{ form.collection_name.id_for_label }}">
-          <span class="label-text">{{ form.collection_name.label }}</span>
-        </label>
-        {{ form.collection_name }}
-        {% if form.collection_name.help_text %}
-          <label class="label">
-            <span class="label-text-alt">{{ form.collection_name.help_text }}</span>
-          </label>
-        {% endif %}
-        {% if form.collection_name.errors %}
-          <label class="label">
-            <span class="label-text-alt text-error">{{ form.collection_name.errors.0 }}</span>
-          </label>
-        {% endif %}
-      </div>
-    </div>
-
-    {% if form.non_field_errors %}
-      <div class="alert alert-error">
-        {{ form.non_field_errors }}
-      </div>
-    {% endif %}
-
-    <div class="flex justify-end space-x-2 pt-4">
-      <a href="{% url 'documents:collection_home' team.slug %}" class="btn btn-outline">Cancel</a>
-      <button type="submit" class="btn btn-primary">{{ button_text }}</button>
-    </div>
-  </form>
-
-  <div class="mt-6 p-4 bg-base-200 rounded-lg">
-    <h3 class="font-semibold mb-2">What happens when you create a collection from an assistant?</h3>
-    <ul class="list-disc list-inside space-y-1 text-sm">
-      <li>A new indexed collection will be created using the same LLM provider as the assistant</li>
-      <li>All files from the assistant's file search tools will be copied to the new collection</li>
-      <li>A new vector store will be created at OpenAI for the collection</li>
-      <li>The assistant's original vector store and files remain unchanged</li>
-      <li>The collection can be used independently for RAG and document search</li>
-    </ul>
-  </div>
-</div>
 {% endblock %}

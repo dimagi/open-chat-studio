@@ -11,10 +11,9 @@ from django.template.loader import render_to_string
 from django.urls import reverse
 from django.views import View
 from django.views.decorators.http import require_POST
-from django.views.generic import CreateView, TemplateView, UpdateView
+from django.views.generic import CreateView, FormView, TemplateView, UpdateView
 from django_tables2 import SingleTableView
 
-from apps.assistants.models import ToolResources
 from apps.assistants.sync import delete_file_from_openai
 from apps.documents import tasks
 from apps.documents.forms import CollectionForm, CreateCollectionFromAssistantForm
@@ -279,8 +278,7 @@ def retry_failed_uploads(request, team_slug: str, pk: int):
     return redirect("documents:single_collection_home", team_slug=team_slug, pk=pk)
 
 
-class CreateCollectionFromAssistant(LoginAndTeamRequiredMixin, CreateView, PermissionRequiredMixin):
-    model = Collection
+class CreateCollectionFromAssistant(LoginAndTeamRequiredMixin, FormView, PermissionRequiredMixin):
     form_class = CreateCollectionFromAssistantForm
     template_name = "documents/create_from_assistant_form.html"
     permission_required = "documents.add_collection"
@@ -302,18 +300,20 @@ class CreateCollectionFromAssistant(LoginAndTeamRequiredMixin, CreateView, Permi
     def form_valid(self, form):
         assistant = form.cleaned_data["assistant"]
         collection_name = form.cleaned_data["collection_name"]
-        
+
+        # Get file search resources from the assistant
+        file_search_resources = assistant.tool_resources.filter(tool_type="file_search")
+
+        if not file_search_resources.exists():
+            messages.error(self.request, "The selected assistant does not have any file search resources.")
+            return self.form_invalid(form)
+
         try:
-            # Validate assistant has LLM provider
-            if not assistant.llm_provider:
-                messages.error(self.request, "The selected assistant does not have an LLM provider configured.")
-                return self.form_invalid(form)
-            
             # Check for existing collection with same name
             if Collection.objects.filter(team=self.request.team, name=collection_name, is_version=False).exists():
                 messages.error(self.request, f"A collection with the name '{collection_name}' already exists.")
                 return self.form_invalid(form)
-            
+
             # Create the collection
             collection = Collection.objects.create(
                 team=self.request.team,
@@ -321,37 +321,22 @@ class CreateCollectionFromAssistant(LoginAndTeamRequiredMixin, CreateView, Permi
                 is_index=True,
                 llm_provider=assistant.llm_provider,
             )
-            
+
             # Create vector store for the collection
             manager = collection.llm_provider.get_index_manager()
             collection.openai_vector_store_id = manager.create_vector_store(name=collection.index_name)
             collection.save(update_fields=["openai_vector_store_id"])
-            
-            # Get file search resources from the assistant
-            file_search_resources = assistant.tool_resources.filter(tool_type="file_search")
-            
-            if not file_search_resources.exists():
-                # Clean up and show error
-                collection.delete()
-                messages.error(self.request, "The selected assistant does not have any file search resources.")
-                return self.form_invalid(form)
-            
+
             # Collect all files from file search resources
             all_files = []
             external_file_ids = []
-            
+
             for resource in file_search_resources:
                 files = resource.files.all()
                 all_files.extend(files)
                 # Collect external IDs for OpenAI API
                 external_file_ids.extend([f.external_id for f in files if f.external_id])
-            
-            if not all_files:
-                # Clean up and show error
-                collection.delete()
-                messages.error(self.request, "The selected assistant does not have any files in its file search resources.")
-                return self.form_invalid(form)
-            
+
             # Add files to the collection
             # Create CollectionFile entries
             collection_files = []
@@ -367,7 +352,7 @@ class CreateCollectionFromAssistant(LoginAndTeamRequiredMixin, CreateView, Permi
                     )
                 )
             CollectionFile.objects.bulk_create(collection_files)
-            
+
             # Link files to the new vector store at OpenAI
             if external_file_ids:
                 try:
@@ -377,54 +362,32 @@ class CreateCollectionFromAssistant(LoginAndTeamRequiredMixin, CreateView, Permi
                     )
                     # Update status to completed for successfully linked files
                     CollectionFile.objects.filter(
-                        collection=collection,
-                        file__external_id__in=external_file_ids
+                        collection=collection, file__external_id__in=external_file_ids
                     ).update(status=FileStatus.COMPLETED)
-                    
-                    linked_count = len(external_file_ids)
-                    total_count = len(all_files)
-                    
-                    if linked_count < total_count:
-                        messages.warning(
-                            self.request,
-                            f"Collection created successfully. {linked_count} of {total_count} files were linked to the vector store. "
-                            f"Files without external IDs need to be re-uploaded."
-                        )
-                    else:
-                        messages.success(
-                            self.request,
-                            f"Successfully created collection '{collection_name}' from assistant '{assistant.name}' with {total_count} files."
-                        )
-                        
+
                 except Exception as e:
                     logger.error(f"Failed to link files to vector store: {e}")
                     # Mark files as failed
                     CollectionFile.objects.filter(collection=collection).update(status=FileStatus.FAILED)
                     messages.error(
                         self.request,
-                        f"Collection created but failed to link files to vector store: {e}. You can retry from the collection page."
+                        (
+                            "Collection created but failed to link files to vector store. You can retry from the"
+                            "collections page"
+                        ),
                     )
             else:
                 # No external file IDs - files need to be re-uploaded
                 messages.warning(
                     self.request,
                     f"Collection created with {len(all_files)} files, but none have external IDs. "
-                    f"Files will need to be re-uploaded to be indexed."
+                    f"Files will need to be re-uploaded to be indexed.",
                 )
-            
+
             self.object = collection
             return HttpResponseRedirect(self.get_success_url())
-            
+
         except Exception as e:
             logger.error(f"Failed to create collection from assistant: {e}")
-            # Clean up if collection was created
-            if 'collection' in locals():
-                try:
-                    collection.delete()
-                except Exception:
-                    pass
-            messages.error(
-                self.request,
-                f"Failed to create collection from assistant: {e}"
-            )
+            messages.error(self.request, f"Failed to create collection from assistant: {e}")
             return self.form_invalid(form)
