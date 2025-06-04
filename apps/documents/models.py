@@ -8,9 +8,14 @@ from field_audit import audit_fields
 from field_audit.models import AuditingManager
 
 from apps.experiments.versioning import VersionDetails, VersionField, VersionsMixin, VersionsObjectManagerMixin
+from apps.files.models import File
 from apps.teams.models import BaseTeamModel
 from apps.utils.conversions import bytes_to_megabytes
-from apps.utils.deletion import get_related_pipeline_experiments_queryset, get_related_pipelines_queryset
+from apps.utils.deletion import (
+    get_related_m2m_objects,
+    get_related_pipeline_experiments_queryset,
+    get_related_pipelines_queryset,
+)
 
 
 class ChunkingStrategy(pydantic.BaseModel):
@@ -203,7 +208,16 @@ class Collection(BaseTeamModel, VersionsMixin):
         if self.is_index and self.openai_vector_store_id:
             self._remove_index()
 
-        self.files.update(is_archived=True)
+        files = list(self.files.all())
+
+        # Remove the references to the files in the collection
+        CollectionFile.objects.filter(collection=self).delete()
+
+        # Cleanup conditionally
+        files_with_references = get_related_m2m_objects(files)
+        unused_file_ids = [file.id for file in files if file not in files_with_references]
+
+        File.objects.filter(id__in=unused_file_ids).update(is_archived=True)
         return True
 
     def has_failed_index_uploads(self) -> bool:

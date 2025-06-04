@@ -126,12 +126,16 @@ def delete_collection_file(request, team_slug: str, pk: int, file_id: int):
         CollectionFile.objects.select_related("collection", "file"), collection_id=pk, file_id=file_id
     )
 
-    collection_file.file.delete_or_archive()
-    if collection_file.collection.is_index:
-        client = collection_file.collection.llm_provider.get_llm_service().get_raw_client()
-        delete_file_from_openai(client, collection_file.file)
-
+    file = collection_file.file
+    collection = collection_file.collection
     collection_file.delete()
+
+    if not file.is_used():
+        # Nothing else is using it
+        if collection.is_index:
+            client = collection.llm_provider.get_llm_service().get_raw_client()
+            delete_file_from_openai(client, file)
+        collection_file.file.delete_or_archive()
 
     messages.success(request, "File removed from collection")
     return redirect("documents:single_collection_home", team_slug=team_slug, pk=pk)

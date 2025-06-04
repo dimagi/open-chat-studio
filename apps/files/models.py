@@ -13,6 +13,7 @@ from apps.experiments.versioning import VersionDetails, VersionField, VersionsMi
 from apps.generics.chips import Chip
 from apps.teams.models import BaseTeamModel
 from apps.utils.conversions import bytes_to_megabytes
+from apps.utils.deletion import get_related_m2m_objects
 from apps.web.meta import absolute_url
 
 
@@ -158,6 +159,10 @@ class File(BaseTeamModel, VersionsMixin):
             self.archive()
         else:
             self.delete()
+
+    def is_used(self) -> bool:
+        # get_related_m2m_objects returns a dictionary with the file instance as the key if there are related objects
+        return self in get_related_m2m_objects([self])
 
 
 class FileChunkEmbedding(BaseTeamModel):
