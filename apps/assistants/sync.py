@@ -228,8 +228,9 @@ def delete_openai_files_for_resource(client, team, resource: ToolResources):
 
 
 def _get_files_to_delete(team, tool_resource_id):
-    """Get files linked to the tool resource that are not referenced by any other tool resource."""
-    files_with_single_reference = (
+    """Get files linked to the tool resource that are not referenced by any other tool resource or collection."""
+    # Get files that are only referenced by this tool resource
+    files_with_single_assistant_reference = (
         ToolResources.files.through.objects.filter(toolresources__assistant__team=team)
         .values("file")
         .annotate(count=Count("toolresources"))
@@ -237,8 +238,20 @@ def _get_files_to_delete(team, tool_resource_id):
         .values("file_id")
     )
 
-    subquery = Subquery(files_with_single_reference)
-    return File.objects.filter(toolresources=tool_resource_id, id__in=subquery).iterator()
+    # Get files that are also used in collections
+    from apps.documents.models import CollectionFile
+    files_used_in_collections = CollectionFile.objects.filter(
+        collection__team=team
+    ).values_list("file_id", flat=True)
+
+    # Only delete files that have single reference AND are not used in collections
+    single_ref_subquery = Subquery(files_with_single_assistant_reference)
+    files_to_check = File.objects.filter(
+        toolresources=tool_resource_id, 
+        id__in=single_ref_subquery
+    ).exclude(id__in=files_used_in_collections)
+    
+    return files_to_check.iterator()
 
 
 def is_tool_configured_remotely_but_missing_locally(assistant_data, local_tool_types, tool_name: str) -> bool:

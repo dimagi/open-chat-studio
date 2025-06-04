@@ -29,6 +29,74 @@ def migrate_vector_stores(collection_id: int, from_vector_store_id: str, from_ll
     _cleanup_old_vector_store(from_llm_provider_id, from_vector_store_id, previous_remote_ids)
 
 
+@shared_task(base=TaskbadgerTask, ignore_result=True)
+def create_collection_from_assistant_task(collection_id: int, assistant_id: int, team_id: int):
+    """Create a collection from an assistant's file search resources"""
+    from apps.assistants.models import OpenAiAssistant, ToolResources
+    from apps.files.models import File
+    
+    try:
+        collection = Collection.objects.get(id=collection_id, team_id=team_id)
+        assistant = OpenAiAssistant.objects.get(id=assistant_id, team_id=team_id)
+        
+        # Get file search tool resource from the assistant
+        file_search_resource = ToolResources.objects.filter(
+            assistant=assistant, 
+            tool_type="file_search"
+        ).first()
+        
+        if not file_search_resource:
+            logger.warning(f"No file search resource found for assistant {assistant_id}")
+            return
+            
+        # Copy files from assistant to collection
+        assistant_files = file_search_resource.files.all()
+        if not assistant_files.exists():
+            logger.warning(f"No files found in assistant {assistant_id} file search resource")
+            return
+            
+        # Create vector store if collection is an index
+        if collection.is_index and collection.llm_provider:
+            manager = collection.llm_provider.get_index_manager()
+            collection.openai_vector_store_id = manager.create_vector_store(name=collection.index_name)
+            collection.save(update_fields=["openai_vector_store_id"])
+            
+        # Fetch chunking strategies from OpenAI for each file
+        client = assistant.llm_provider.get_llm_service().get_raw_client()
+        vector_store_id = file_search_resource.extra.get("vector_store_id")
+        
+        # Create collection files with chunking strategies
+        collection_files = []
+        for file in assistant_files:
+            # Fetch chunking strategy used for this file from OpenAI
+            chunking_strategy = _fetch_file_chunking_strategy_from_openai(client, vector_store_id, file.external_id)
+            
+            metadata = None
+            if collection.is_index and chunking_strategy:
+                metadata = CollectionFileMetadata(chunking_strategy=chunking_strategy)
+            
+            collection_file = CollectionFile(
+                collection=collection,
+                file=file,
+                status=FileStatus.PENDING if collection.is_index else "",
+                metadata=metadata
+            )
+            collection_files.append(collection_file)
+            
+        # Bulk create collection files
+        created_files = CollectionFile.objects.bulk_create(collection_files)
+        
+        # Index files if collection is an index
+        if collection.is_index:
+            index_collection_files_task.delay([cf.id for cf in created_files])
+            
+        logger.info(f"Successfully created collection {collection_id} from assistant {assistant_id} with {len(created_files)} files")
+        
+    except Exception as e:
+        logger.exception(f"Failed to create collection from assistant: {e}")
+        raise
+
+
 def index_collection_files(collection_files_queryset: QuerySet[CollectionFile], re_upload: bool = False) -> list[str]:
     """Uploads files to the remote index.
 
@@ -152,3 +220,32 @@ def _ensure_remote_file_exists(client, collection_file: CollectionFile, re_uploa
             },
         )
         raise FileUploadError() from None
+
+
+def _fetch_file_chunking_strategy_from_openai(client, vector_store_id: str, file_id: str) -> ChunkingStrategy | None:
+    """Fetch the chunking strategy used for a specific file from OpenAI"""
+    if not vector_store_id or not file_id:
+        return None
+        
+    try:
+        # Get the vector store file details from OpenAI
+        vector_store_file = client.vector_stores.files.retrieve(
+            vector_store_id=vector_store_id,
+            file_id=file_id
+        )
+        
+        # Extract chunking strategy from the file details
+        if hasattr(vector_store_file, 'chunking_strategy') and vector_store_file.chunking_strategy:
+            strategy = vector_store_file.chunking_strategy
+            if strategy.type == "static" and hasattr(strategy, 'static'):
+                return ChunkingStrategy(
+                    chunk_size=strategy.static.max_chunk_size_tokens,
+                    chunk_overlap=strategy.static.chunk_overlap_tokens
+                )
+        
+        # Return default strategy if none found
+        return ChunkingStrategy(chunk_size=800, chunk_overlap=400)
+        
+    except Exception as e:
+        logger.warning(f"Failed to fetch chunking strategy for file {file_id}: {e}")
+        return ChunkingStrategy(chunk_size=800, chunk_overlap=400)

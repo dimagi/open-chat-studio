@@ -115,10 +115,25 @@ def delete_collection_file(request, team_slug: str, pk: int, file_id: int):
         CollectionFile.objects.select_related("collection", "file"), collection_id=pk, file_id=file_id
     )
 
-    collection_file.file.delete_or_archive()
-    if collection_file.collection.is_index:
+    # Check if file is also used by assistants before deletion
+    file_used_by_assistants = _is_file_used_by_assistants(collection_file.file, request.team)
+    file_used_in_other_collections = _is_file_used_in_other_collections(collection_file.file, request.team, pk)
+    
+    # Only delete/archive the file if it's not used elsewhere
+    if not file_used_by_assistants and not file_used_in_other_collections:
+        collection_file.file.delete_or_archive()
+        if collection_file.collection.is_index:
+            client = collection_file.collection.llm_provider.get_llm_service().get_raw_client()
+            delete_file_from_openai(client, collection_file.file)
+    elif collection_file.collection.is_index:
+        # If file is used elsewhere, just remove it from this collection's vector store
         client = collection_file.collection.llm_provider.get_llm_service().get_raw_client()
-        delete_file_from_openai(client, collection_file.file)
+        vector_store_manager = collection_file.collection.llm_provider.get_index_manager()
+        if collection_file.file.external_id:
+            vector_store_manager.delete_file(
+                vector_store_id=collection_file.collection.openai_vector_store_id,
+                file_id=collection_file.file.external_id
+            )
 
     collection_file.delete()
 
@@ -266,3 +281,51 @@ def retry_failed_uploads(request, team_slug: str, pk: int):
     queryset.update(status=FileStatus.PENDING)
     tasks.index_collection_files_task.delay(collection_file_ids)
     return redirect("documents:single_collection_home", team_slug=team_slug, pk=pk)
+
+
+class CreateCollectionFromAssistant(LoginAndTeamRequiredMixin, CollectionFormMixin, CreateView, PermissionRequiredMixin):
+    model = Collection
+    form_class = CollectionForm
+    template_name = "documents/collection_form.html"
+    permission_required = "documents.add_collection"
+    extra_context = {
+        "title": "Create Collection from Assistant",
+        "button_text": "Create",
+        "active_tab": "collections",
+    }
+
+    def get_success_url(self):
+        return reverse("documents:single_collection_home", args=[self.request.team.slug, self.object.id])
+
+    @transaction.atomic()
+    def form_valid(self, form):
+        form.instance.team = self.request.team
+        response = super().form_valid(form)
+        
+        # Move the logic to a background task
+        tasks.create_collection_from_assistant_task.delay(
+            collection_id=form.instance.id,
+            assistant_id=self.kwargs.get('assistant_id'),
+            team_id=self.request.team.id
+        )
+        
+        return response
+
+
+def _is_file_used_by_assistants(file, team):
+    """Check if a file is used by any assistants in the team"""
+    from apps.assistants.models import ToolResources
+    return ToolResources.objects.filter(
+        assistant__team=team,
+        files=file,
+        assistant__is_archived=False
+    ).exists()
+
+
+def _is_file_used_in_other_collections(file, team, current_collection_id):
+    """Check if a file is used in other collections besides the current one"""
+    return CollectionFile.objects.filter(
+        file=file,
+        collection__team=team,
+        collection__is_archived=False
+    ).exclude(collection_id=current_collection_id).exists()

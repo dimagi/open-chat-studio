@@ -49,7 +49,7 @@ class OpenAIVectorStoreManager:
             }
 
         try:
-            for chunk in chunk_list(file_ids, 500):
+            for chunk in chunk_list(file_ids, 50):
                 self.client.vector_stores.file_batches.create(
                     vector_store_id=vector_store_id, file_ids=chunk, chunking_strategy=chunking_strategy
                 )
