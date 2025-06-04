@@ -1023,6 +1023,7 @@ class ApiChannel(ChannelBase):
 class SlackChannel(ChannelBase):
     voice_replies_supported = False
     supported_message_types = [MESSAGE_TYPES.TEXT]
+    supports_multimedia = True
 
     def __init__(
         self,
@@ -1049,7 +1050,6 @@ class SlackChannel(ChannelBase):
         else:
             channel_id = self.message.channel_id
             thread_ts = self.message.thread_ts
-
         self.messaging_service.send_text_message(
             text,
             from_="",
@@ -1061,6 +1061,25 @@ class SlackChannel(ChannelBase):
     def _ensure_sessions_exists(self):
         if not self.experiment_session:
             raise ChannelException("WebChannel requires an existing session")
+
+    def _can_send_file(self, file: File) -> bool:
+        mime = file.content_type
+        size = file.content_size or 0
+        # slack allows 1 GB, but keeping it to 50MB as we can only upload file upto 50MB in collections
+        max_size = 50 * 1024 * 1024
+        return mime.startswith(("image/", "video/", "audio/", "application/")) and size <= max_size
+
+    def send_file_to_user(self, file: File):
+        if not self.message:
+            channel_id, thread_ts = parse_session_external_id(self.experiment_session.external_id)
+        else:
+            channel_id = self.message.channel_id
+            thread_ts = self.message.thread_ts
+        self.messaging_service.send_file_message(
+            file=file,
+            to=channel_id,
+            thread_ts=thread_ts,
+        )
 
 
 class CommCareConnectChannel(ChannelBase):
