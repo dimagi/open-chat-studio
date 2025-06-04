@@ -42,6 +42,7 @@ class CollectionHome(LoginAndTeamRequiredMixin, TemplateView, PermissionRequired
             "new_object_url": reverse("documents:collection_new", args=[team_slug]),
             "table_url": reverse("documents:collection_table", args=[team_slug]),
             "enable_search": True,
+            "button_style": "btn-primary",
             "actions": [
                 actions.Action(
                     "documents:create_from_assistant",
