@@ -15,6 +15,30 @@ from apps.utils.factories.channels import ExperimentChannelFactory
 from apps.utils.factories.experiment import ExperimentFactory
 
 
+@pytest.fixture()
+def telegram_channel():
+    experiment = Mock()
+    session = Mock()
+    session.id = 123
+    experiment_channel = Mock()
+    experiment_channel.extra_data = {"bot_token": "fake_token"}
+    return TelegramChannel(experiment, experiment_channel=experiment_channel, experiment_session=session)
+
+
+@pytest.fixture()
+def make_mock_file():
+    def _make_mock_file(name, content_type, size, file_data="file_data"):
+        file = Mock(spec=File)
+        file.name = name
+        file.content_type = content_type
+        file.content_size = size
+        file.file = file_data
+        file.download_link.return_value = f"http://example.com/{name}"
+        return file
+
+    return _make_mock_file
+
+
 @pytest.mark.django_db()
 def test_handle_telegram_block_updates_consent():
     experiment = ExperimentFactory()
@@ -89,43 +113,21 @@ def test_handle_telegram_api_error_other_errors():
     assert excinfo.value.__cause__ == api_error
 
 
-@pytest.fixture()
-def base_setup():
-    experiment = Mock()
-    session = Mock()
-    session.id = 123
-    experiment_channel = Mock()
-    experiment_channel.extra_data = {"bot_token": "fake_token"}
-    channel = TelegramChannel(experiment, experiment_channel=experiment_channel, experiment_session=session)
-    return channel, session
-
-
-def make_mock_file(name, content_type, size, file_data="file_data"):
-    file = Mock(spec=File)
-    file.name = name
-    file.content_type = content_type
-    file.content_size = size
-    file.file = file_data
-    file.download_link.return_value = f"http://example.com/{name}"
-    return file
-
-
-def test_supported_image_file(base_setup):
-    channel, _ = base_setup
+def test_supported_image_file(telegram_channel, make_mock_file):
     image_file = make_mock_file("img.jpg", "image/jpeg", 5 * 1024 * 1024)
 
     with (
-        patch.object(channel, "_send_files_to_user") as mock_send_file,
-        patch.object(channel, "send_text_to_user") as mock_send_text,
+        patch.object(telegram_channel.telegram_bot, "send_photo") as mock_send_photo,
+        patch.object(telegram_channel, "send_text_to_user") as mock_send_text,
     ):
-        channel.send_message_to_user("Here is your file", files=[image_file])
+        telegram_channel.send_message_to_user("Here is your file", files=[image_file])
 
-        mock_send_file.assert_called_once_with([image_file])
+        mock_send_photo.assert_called_once()
         mock_send_text.assert_called_once_with("Here is your file")
 
 
-def test_large_image_fallback_to_text(base_setup):
-    channel, _ = base_setup
+def test_large_image_fallback_to_text(telegram_channel, make_mock_file):
+    channel = telegram_channel
     large_image = make_mock_file("big_img.jpg", "image/jpeg", 15 * 1024 * 1024)
 
     with (
@@ -140,8 +142,8 @@ def test_large_image_fallback_to_text(base_setup):
         mock_send_text.assert_called_once_with(expected_message)
 
 
-def test_unsupported_mime_file(base_setup):
-    channel, _ = base_setup
+def test_unsupported_mime_file(telegram_channel, make_mock_file):
+    channel = telegram_channel
     exe_file = make_mock_file("script.exe", "application/octet-stream", 1 * 1024 * 1024)
 
     with (
