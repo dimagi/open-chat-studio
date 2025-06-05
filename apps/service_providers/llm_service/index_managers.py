@@ -222,7 +222,7 @@ class LocalIndexManager(metaclass=ABCMeta):
         self.embedding_model_name = embedding_model_name
 
     @abstractmethod
-    def get_embedding_vector(self, content: str):
+    def get_embedding_vector(self, content: str) -> Vector:
         """
         Generate an embedding vector for the given text content.
 
