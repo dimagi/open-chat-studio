@@ -1,4 +1,5 @@
 import logging
+import mimetypes
 import uuid
 from datetime import datetime, timedelta
 from functools import cached_property
@@ -155,9 +156,9 @@ class TwilioService(MessagingService):
 
         return number in self._get_account_numbers()
 
-    def send_file_to_user(self, from_: str, to: str, platform: ChannelPlatform, file_name: str, download_link: str):
+    def send_file_to_user(self, from_: str, to: str, platform: ChannelPlatform, file: File, download_link: str):
         from_, to = self._parse_addressing_params(platform, from_=from_, to=to)
-        self.client.messages.create(from_=from_, to=to, body=file_name, media_url=download_link)
+        self.client.messages.create(from_=from_, to=to, body=file.name, media_url=download_link)
 
     def can_send_file(self, file: File) -> bool:
         return file.content_type in supported_mime_types.TWILIO and file.size_mb <= self.max_file_size_mb
@@ -192,8 +193,48 @@ class TurnIOService(MessagingService):
         return audio.convert_audio(ogg_audio, target_format="wav", source_format="ogg")
 
     def can_send_file(self, file: File) -> bool:
-        # When support for Turn.IO is added, this should be updated
-        return False
+        mime = file.content_type
+        size = file.content_size or 0  # in bytes
+
+        if mime.startswith("image/"):
+            return size <= 5 * 1024 * 1024  # 5 MB
+        elif mime.startswith(("video/", "audio/")):
+            return size <= 16 * 1024 * 1024  # 16 MB
+        elif mime.startswith("application/"):
+            return size <= 100 * 1024 * 1024  # 100 MB
+        else:
+            return False
+
+    def send_file_to_user(
+        self,
+        to: str,
+        file: File,
+    ):
+        file_name = file.name
+        mime_type, _ = mimetypes.guess_type(file_name)
+
+        if mime_type is None:
+            raise Exception(f"Cannot determine MIME type for file: {file_name}")
+
+        if mime_type.startswith("image/"):
+            media_type = "image"
+        elif mime_type.startswith("video/"):
+            media_type = "video"
+        elif mime_type.startswith("audio/"):
+            media_type = "audio"
+        else:
+            media_type = "document"
+
+        with file.file.open("rb") as file_obj:
+            message_id = self.turn_media_client.send_media(
+                whatsapp_id=to,
+                file_obj=file_obj,
+                content_type=mime_type,
+                media_type=media_type,
+                caption=None,
+            )
+
+        return message_id
 
 
 class SureAdhereService(MessagingService):
