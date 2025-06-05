@@ -169,7 +169,10 @@ class EvaluationSessionsSelectionTable(tables.Table):
         accessor="external_id",
         verbose_name="Select",
         orderable=False,
-        attrs={"input": {"class": "checkbox checkbox-primary session-checkbox", "@change": "updateSelectedSessions()"}},
+        attrs={
+            "input": {"class": "checkbox checkbox-primary session-checkbox", "@change": "updateSelectedSessions()"},
+            "th__input": {"style": "display: none;"},  # Hide the select all checkbox in header
+        },
     )
     experiment = columns.Column(accessor="experiment", verbose_name="Experiment", order_by="experiment__name")
     participant = columns.Column(accessor="participant", verbose_name="Participant", order_by="participant__identifier")
