@@ -128,12 +128,16 @@ class Command(BaseCommand):
 
         experiment.save()
 
-    def _create_assistant_pipeline(self, experiment):
-        """Create a start -> AssistantNode -> end nodes pipeline for an assistant experiment."""
+    def _get_chatbots_flag_team_ids(self):
+        chatbots_flag = Flag.objects.get(name="flag_chatbots")
+        return list(chatbots_flag.teams.values_list("id", flat=True))
+
+    def _create_pipeline_with_node(self, experiment, node_type, node_label, node_params):
+        """Create a pipeline with start -> custom_node -> end structure."""
         pipeline_name = f"{experiment.name} Pipeline"
         pipeline = Pipeline.objects.create(team=experiment.team, name=pipeline_name, data={"nodes": [], "edges": []})
         start_id = str(uuid4())
-        assistant_id = str(uuid4())
+        middle_id = str(uuid4())
         end_id = str(uuid4())
 
         start_node = FlowNode(
@@ -143,20 +147,15 @@ class Command(BaseCommand):
             data=FlowNodeData(id=start_id, type=StartNode.__name__, params={"name": "start"}),
         )
 
-        assistant_node = FlowNode(
-            id=assistant_id,
+        middle_node = FlowNode(
+            id=middle_id,
             type="pipelineNode",
             position={"x": 400, "y": 200},
             data=FlowNodeData(
-                id=assistant_id,
-                type=AssistantNode.__name__,
-                label="OpenAI Assistant",
-                params={
-                    "name": "assistant",
-                    "assistant_id": str(experiment.assistant.id),
-                    "citations_enabled": experiment.citations_enabled,
-                    "input_formatter": experiment.input_formatter or "",
-                },
+                id=middle_id,
+                type=node_type,
+                label=node_label,
+                params=node_params,
             ),
         )
 
@@ -168,22 +167,22 @@ class Command(BaseCommand):
         )
         edges = [
             {
-                "id": f"edge-{start_id}-{assistant_id}",
+                "id": f"edge-{start_id}-{middle_id}",
                 "source": start_id,
-                "target": assistant_id,
+                "target": middle_id,
                 "sourceHandle": "output",
                 "targetHandle": "input",
             },
             {
-                "id": f"edge-{assistant_id}-{end_id}",
-                "source": assistant_id,
+                "id": f"edge-{middle_id}-{end_id}",
+                "source": middle_id,
                 "target": end_id,
                 "sourceHandle": "output",
                 "targetHandle": "input",
             },
         ]
         pipeline.data = {
-            "nodes": [start_node.model_dump(), assistant_node.model_dump(), end_node.model_dump()],
+            "nodes": [start_node.model_dump(), middle_node.model_dump(), end_node.model_dump()],
             "edges": edges,
         }
         pipeline.save()
@@ -191,24 +190,8 @@ class Command(BaseCommand):
 
         return pipeline
 
-    def _get_chatbots_flag_team_ids(self):
-        chatbots_flag = Flag.objects.get(name="flag_chatbots")
-        return list(chatbots_flag.teams.values_list("id", flat=True))
-
     def _create_llm_pipeline(self, experiment):
         """Create a start -> LLMResponseWithPrompt -> end nodes pipeline for an LLM experiment."""
-        pipeline_name = f"{experiment.name} Pipeline"
-        pipeline = Pipeline.objects.create(team=experiment.team, name=pipeline_name, data={"nodes": [], "edges": []})
-        start_id = str(uuid4())
-        llm_id = str(uuid4())
-        end_id = str(uuid4())
-
-        start_node = FlowNode(
-            id=start_id,
-            type="startNode",
-            position={"x": 100, "y": 200},
-            data=FlowNodeData(id=start_id, type=StartNode.__name__, params={"name": "start"}),
-        )
         llm_params = {
             "name": "llm",
             "llm_provider_id": experiment.llm_provider.id,
@@ -227,40 +210,22 @@ class Command(BaseCommand):
             "tool_config": {},
         }
 
-        llm_node = FlowNode(
-            id=llm_id,
-            type="pipelineNode",
-            position={"x": 400, "y": 200},
-            data=FlowNodeData(id=llm_id, type=LLMResponseWithPrompt.__name__, label="LLM", params=llm_params),
+        return self._create_pipeline_with_node(
+            experiment=experiment, node_type=LLMResponseWithPrompt.__name__, node_label="LLM", node_params=llm_params
         )
 
-        end_node = FlowNode(
-            id=end_id,
-            type="endNode",
-            position={"x": 700, "y": 200},
-            data=FlowNodeData(id=end_id, type=EndNode.__name__, params={"name": "end"}),
-        )
-        edges = [
-            {
-                "id": f"edge-{start_id}-{llm_id}",
-                "source": start_id,
-                "target": llm_id,
-                "sourceHandle": "output",
-                "targetHandle": "input",
-            },
-            {
-                "id": f"edge-{llm_id}-{end_id}",
-                "source": llm_id,
-                "target": end_id,
-                "sourceHandle": "output",
-                "targetHandle": "input",
-            },
-        ]
-        pipeline.data = {
-            "nodes": [start_node.model_dump(), llm_node.model_dump(), end_node.model_dump()],
-            "edges": edges,
-        }
-        pipeline.save()
-        pipeline.update_nodes_from_data()
+        def _create_assistant_pipeline(self, experiment):
+            """Create a start -> AssistantNode -> end nodes pipeline for an assistant experiment."""
+            assistant_params = {
+                "name": "assistant",
+                "assistant_id": str(experiment.assistant.id),
+                "citations_enabled": experiment.citations_enabled,
+                "input_formatter": experiment.input_formatter or "",
+            }
 
-        return pipeline
+            return self._create_pipeline_with_node(
+                experiment=experiment,
+                node_type=AssistantNode.__name__,
+                node_label="OpenAI Assistant",
+                node_params=assistant_params,
+            )
