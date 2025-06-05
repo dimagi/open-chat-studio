@@ -200,6 +200,12 @@ else:
         }
     }
 
+DATABASES["default"]["OPTIONS"]["pool"] = {
+    "min_size": env.int("DJANGO_DATABASE_POOL_MIN_SIZE", default=2),
+    "max_size": env.int("DJANGO_DATABASE_POOL_MAX_SIZE", default=10),
+    "timeout": env.int("DJANGO_DATABASE_POOL_TIMEOUT", default=10),
+}
+
 # Auth / login stuff
 
 # Django recommends overriding the user model even if you don't think you need to because it makes
