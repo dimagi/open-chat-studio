@@ -1,0 +1,16 @@
+{% load i18n %}
+<div class="text-xs">
+  {% if record.human_chat_message %}
+    {% with session=record.human_chat_message.chat.experiment_session %}
+      <a href="{% url 'experiments:experiment_session_view' request.team.slug session.experiment.public_id session.external_id %}" class="btn btn-sm join-item ">
+        Session
+        <i class="fa-solid fa-external-link"></i>
+      </a>
+    {% endwith %}
+  {% else %}
+    <span class="text-gray-400">
+      <i class="fa-solid fa-pencil mr-1"></i>
+      {% trans "Manual entry" %}
+    </span>
+  {% endif %}
+</div>

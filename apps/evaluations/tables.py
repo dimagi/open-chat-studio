@@ -2,7 +2,7 @@ from django.conf import settings
 from django.urls import reverse
 from django_tables2 import TemplateColumn, columns, tables
 
-from apps.evaluations.models import EvaluationConfig, EvaluationDataset, EvaluationRun, Evaluator
+from apps.evaluations.models import EvaluationConfig, EvaluationDataset, EvaluationMessage, EvaluationRun, Evaluator
 from apps.experiments.models import ExperimentSession
 from apps.generics import actions
 
@@ -181,3 +181,43 @@ class EvaluationSessionsSelectionTable(tables.Table):
         }
         orderable = False
         empty_text = "No sessions available for selection."
+
+
+class DatasetMessagesTable(tables.Table):
+    human_message_content = columns.Column(
+        verbose_name="Human Message",
+        orderable=False,
+    )
+    ai_message_content = columns.Column(
+        verbose_name="AI Message",
+        orderable=False,
+    )
+    context = TemplateColumn(
+        template_name="evaluations/dataset_message_context_column.html",
+        verbose_name="Context",
+        orderable=False,
+    )
+    source = TemplateColumn(
+        template_name="evaluations/dataset_message_source_column.html",
+        verbose_name="Source",
+        orderable=False,
+    )
+
+    def render_human_message_content(self, value):
+        """Truncate human message content for display"""
+        from django.utils.text import Truncator
+
+        return Truncator(value).words(30)
+
+    def render_ai_message_content(self, value):
+        """Truncate AI message content for display"""
+        from django.utils.text import Truncator
+
+        return Truncator(value).words(30)
+
+    class Meta:
+        model = EvaluationMessage
+        fields = ("human_message_content", "ai_message_content", "context", "source")
+        row_attrs = settings.DJANGO_TABLES2_ROW_ATTRS
+        orderable = False
+        empty_text = "No messages in this dataset yet."
