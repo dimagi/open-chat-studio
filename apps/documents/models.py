@@ -157,7 +157,6 @@ class Collection(BaseTeamModel, VersionsMixin):
 
         new_version = super().create_new_version(save=False)
         new_version.version_number = version_number
-        vector_store_present = bool(new_version.openai_vector_store_id)
         new_version.openai_vector_store_id = ""
         new_version.save()
 
@@ -171,11 +170,11 @@ class Collection(BaseTeamModel, VersionsMixin):
 
         new_version.files.add(*file_versions)
 
-        if self.is_index and vector_store_present:
-            # Create vector store at llm service
+        if self.is_index:
+            # Create a new vector store at llm service for the new version of the collection.
             # Optimization suggestion: Only when the file set changed, should we create a new vector store at the
             # provider
-            if self.is_remote_index:
+            if self.is_remote_index and new_version.openai_vector_store_id:
                 manager = new_version.get_index_manager()
                 version_name = f"{new_version.index_name} v{new_version.version_number}"
                 new_version.openai_vector_store_id = manager.create_remote_index(name=version_name)
