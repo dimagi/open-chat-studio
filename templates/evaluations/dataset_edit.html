@@ -1,0 +1,15 @@
+{% extends 'generic/object_form.html' %}
+{% load i18n %}
+
+{% block post_form %}
+  <h2 class="pg-subtitle">{% trans "Dataset Messages" %}</h2>
+  <div id="dataset-messages-table"
+       hx-get="{% url 'evaluations:dataset_messages_table' request.team.slug object.id %}"
+       hx-trigger="load"
+       hx-target="this"
+       hx-swap="innerHTML">
+    <div class="text-center py-4">
+      <i class="fa-solid fa-spinner fa-spin"></i> {% trans "Loading messages..." %}
+    </div>
+  </div>
+{% endblock %}

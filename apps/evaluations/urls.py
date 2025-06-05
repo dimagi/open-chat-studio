@@ -43,6 +43,11 @@ urlpatterns = [
         name="dataset_sessions_selection_list",
     ),
     path("session/<str:session_id>/messages_json/", dataset_views.session_messages_json, name="session_messages_json"),
+    path(
+        "dataset/<int:dataset_id>/messages_table/",
+        dataset_views.DatasetMessagesTableView.as_view(),
+        name="dataset_messages_table",
+    ),
 ]
 
 urlpatterns.extend(make_crud_urls(evalutation_config_views, "Evaluation", delete=False))

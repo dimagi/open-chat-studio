@@ -7,9 +7,14 @@ from django_tables2 import SingleTableView
 
 from apps.channels.models import ChannelPlatform
 from apps.chat.models import ChatMessageType
-from apps.evaluations.forms import EvaluationDatasetForm
-from apps.evaluations.models import EvaluationDataset
-from apps.evaluations.tables import EvaluationDatasetTable, EvaluationSessionsSelectionTable, EvaluationSessionsTable
+from apps.evaluations.forms import EvaluationDatasetEditForm, EvaluationDatasetForm
+from apps.evaluations.models import EvaluationDataset, EvaluationMessage
+from apps.evaluations.tables import (
+    DatasetMessagesTable,
+    EvaluationDatasetTable,
+    EvaluationSessionsSelectionTable,
+    EvaluationSessionsTable,
+)
 from apps.experiments.filters import DATE_RANGE_OPTIONS, FIELD_TYPE_FILTERS, apply_dynamic_filters
 from apps.experiments.models import Experiment, ExperimentSession
 from apps.teams.mixins import LoginAndTeamRequiredMixin
@@ -48,8 +53,8 @@ class DatasetTableView(SingleTableView, PermissionRequiredMixin):
 
 class EditDataset(UpdateView):
     model = EvaluationDataset
-    form_class = EvaluationDatasetForm
-    template_name = "generic/object_form.html"
+    form_class = EvaluationDatasetEditForm
+    template_name = "evaluations/dataset_edit.html"
     extra_context = {
         "title": "Update Dataset",
         "button_text": "Update",
@@ -180,6 +185,30 @@ class DatasetSessionsSelectionTableView(LoginAndTeamRequiredMixin, SingleTableVi
         )
         query_set = apply_dynamic_filters(query_set, self.request)
         return query_set
+
+
+class DatasetMessagesTableView(LoginAndTeamRequiredMixin, SingleTableView, PermissionRequiredMixin):
+    """Table view for dataset messages with pagination."""
+
+    model = EvaluationMessage
+    paginate_by = 10
+    table_class = DatasetMessagesTable
+    template_name = "table/single_table.html"
+    permission_required = "evaluations.view_evaluationdataset"
+
+    def get_queryset(self):
+        dataset_id = self.kwargs.get("dataset_id")
+        # Verify the dataset exists and user has access
+        get_object_or_404(EvaluationDataset, id=dataset_id, team=self.request.team)
+
+        # Query messages that belong to this dataset with related chat messages and sessions
+        return (
+            EvaluationMessage.objects.filter(
+                evaluationdataset__id=dataset_id, evaluationdataset__team=self.request.team
+            )
+            .select_related("human_chat_message__chat__experiment_session__experiment")
+            .order_by("id")
+        )
 
 
 # TODO Permissions

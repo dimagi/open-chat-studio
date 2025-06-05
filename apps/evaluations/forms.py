@@ -203,3 +203,15 @@ class EvaluationDatasetForm(forms.ModelForm):
             dataset.messages.set(evaluation_messages)
 
         return dataset
+
+
+class EvaluationDatasetEditForm(forms.ModelForm):
+    """Simple form for editing existing evaluation datasets (name only)."""
+
+    class Meta:
+        model = EvaluationDataset
+        fields = ("name",)
+
+    def __init__(self, team, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        self.team = team
