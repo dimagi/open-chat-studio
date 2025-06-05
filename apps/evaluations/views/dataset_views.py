@@ -1,12 +1,12 @@
 import json
 
 from django.contrib.auth.mixins import PermissionRequiredMixin
-from django.http import JsonResponse
+from django.http import HttpResponse, JsonResponse
 from django.shortcuts import get_object_or_404
 from django.urls import reverse
 from django.views.decorators.csrf import csrf_exempt
 from django.views.decorators.http import require_http_methods
-from django.views.generic import CreateView, TemplateView, UpdateView
+from django.views.generic import CreateView, DeleteView, TemplateView, UpdateView
 from django_tables2 import SingleTableView
 
 from apps.channels.models import ChannelPlatform
@@ -48,10 +48,12 @@ class DatasetTableView(SingleTableView, PermissionRequiredMixin):
     template_name = "table/single_table.html"
 
     def get_queryset(self):
+        from django.db.models import Count
+
         return (
             EvaluationDataset.objects.filter(team=self.request.team)
-            # .annotate(run_count=Count("runs"))
-            # .order_by("name")
+            .annotate(message_count=Count("messages"))
+            .order_by("name")
         )
 
 
@@ -73,6 +75,21 @@ class EditDataset(UpdateView):
 
     def get_success_url(self):
         return reverse("evaluations:dataset_home", args=[self.request.team.slug])
+
+
+class DeleteDataset(LoginAndTeamRequiredMixin, DeleteView, PermissionRequiredMixin):
+    model = EvaluationDataset
+
+    def get_queryset(self):
+        return EvaluationDataset.objects.filter(team=self.request.team)
+
+    def delete(self, request, *args, **kwargs):
+        """Handle AJAX delete requests."""
+        self.object = self.get_object()
+        self.object.delete()
+
+        # Return empty response for HTMX to trigger table reload
+        return HttpResponse(status=200)
 
 
 class CreateDataset(LoginAndTeamRequiredMixin, CreateView, PermissionRequiredMixin):
