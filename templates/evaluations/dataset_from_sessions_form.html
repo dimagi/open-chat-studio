@@ -5,8 +5,10 @@
 {% block form %}
   {{ form.non_field_errors }}
   {% render_form_fields form %}
-  <div x-data="sessionDatasetBuilder()" x-init="init()">
-    <div class="w-full mt-4">
+  <div x-data="datasetBuilder()" x-init="init()">
+
+    <!-- Clone from sessions mode -->
+    <div x-show="mode === 'clone'" class="w-full mt-4">
       <div class="border p-4 bg-base-100 rounded-sm shadow-sm mb-4">
         <h3 class="text-lg font-semibold mb-4">{% trans "Select Sessions to Clone Messages From" %}</h3>
         <p class="text-sm text-gray-600 mb-4">
@@ -42,38 +44,172 @@
       </div>
     </div>
 
+    <!-- Manual creation mode -->
+    <div x-show="mode === 'manual'" class="w-full mt-4">
+      <div class="border p-4 bg-base-100 rounded-sm shadow-sm mb-4">
+        <h3 class="text-lg font-semibold mb-4">{% trans "Manually Add Message Pairs" %}</h3>
+        <p class="text-sm text-gray-600 mb-4">
+          {% trans "Add individual message pairs with human messages, AI responses, and optional context data." %}
+        </p>
+
+        <input type="hidden" name="messages_json" x-model="messagesJsonString">
+
+        <!-- Add message button -->
+        <div class="flex items-center justify-between mb-4">
+          <h4 class="font-medium">{% trans "Message Pairs" %}</h4>
+          <button type="button" class="btn btn-primary btn-sm" @click="addMessage()">
+            <i class="fa-solid fa-plus"></i> {% trans "Add Message Pair" %}
+          </button>
+        </div>
+
+        <!-- Messages table -->
+        <div x-show="messages.length === 0" class="text-center py-8 text-gray-500">
+          <i class="fa-solid fa-comments text-2xl mb-2"></i>
+          <p>{% trans "No message pairs added yet. Click 'Add Message Pair' to get started." %}</p>
+        </div>
+
+        <div x-show="messages.length > 0" class="table-responsive">
+          <table class="table w-full table-fixed">
+            <thead class="bg-base-200 base-content uppercase text-sm leading-normal">
+              <tr>
+                <th class="w-2/5 px-3 py-3 text-left">{% trans "Human Message" %}</th>
+                <th class="w-2/5 px-3 py-3 text-left">{% trans "AI Message" %}</th>
+                <th class="w-1/6 px-3 py-3 text-left">{% trans "Context (JSON)" %}</th>
+                <th class="w-16 px-3 py-3 text-left">{% trans "Actions" %}</th>
+              </tr>
+            </thead>
+            <tbody>
+              <template x-for="(message, index) in messages" :key="index">
+                <tr>
+                  <td class="align-top">
+                    <textarea
+                      x-model="message.human"
+                      @input="updateMessagesJson()"
+                      class="w-full min-h-[80px] p-0 text-sm bg-transparent border-none resize-none focus:outline-none focus:ring-0"
+                      placeholder="Enter human message..."
+                      required
+                    ></textarea>
+                  </td>
+                  <td class="align-top">
+                    <textarea
+                      x-model="message.ai"
+                      @input="updateMessagesJson()"
+                      class="w-full min-h-[80px] p-0 text-sm bg-transparent border-none resize-none focus:outline-none focus:ring-0"
+                      placeholder="Enter AI response..."
+                      required
+                    ></textarea>
+                  </td>
+                  <td class="align-top">
+                    <textarea
+                      x-model="message.context"
+                      @input="updateMessagesJson()"
+                      class="w-full min-h-[80px] p-0 text-xs font-mono bg-transparent border-none resize-none focus:outline-none focus:ring-0"
+                      placeholder='{"key": "value"}'
+                    ></textarea>
+                  </td>
+                  <td class="text-center align-top">
+                    <button type="button"
+                            class="btn btn-xs"
+                            @click="removeMessage(index)"
+                            title="Remove message pair">
+                      <i class="fa-solid fa-trash"></i>
+                    </button>
+                  </td>
+                </tr>
+              </template>
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+
     <div x-show="showError" class="alert alert-error mb-4">
       <i class="fa-solid fa-exclamation-triangle"></i>
-      <span>{% trans "Please select at least one session to create the dataset." %}</span>
+      <span x-text="errorMessage"></span>
     </div>
   </div>
 {% endblock %}
 
 {% block page_js %}
   <script>
-    function sessionDatasetBuilder() {
+    function datasetBuilder() {
       return {
+        mode: 'clone',
         selectedSessionIds: [],
+        messages: [],
+        messagesJsonString: '[]',
         showError: false,
+        errorMessage: '',
 
         init() {
+          // Watch for mode changes
+          this.mode = document.querySelector('input[name="mode"]:checked')?.value || 'clone';
+          document.addEventListener('change', (e) => {
+            if (e.target.name === 'mode') {
+              this.mode = e.target.value;
+              this.showError = false;
+            }
+          });
+
+          // Initialize session selection for clone mode
           const preselected = document.querySelector('input[name="session_ids"]').value;
           if (preselected) {
             this.selectedSessionIds = preselected.split(',').filter(id => id.trim());
           }
-          this.updateHiddenField();
+          this.updateSessionHiddenField();
 
+          // Initialize messages for manual mode
+          const messagesData = document.querySelector('input[name="messages_json"]').value;
+          if (messagesData) {
+            try {
+              this.messages = JSON.parse(messagesData);
+            } catch (e) {
+              this.messages = [];
+            }
+          }
+          this.updateMessagesJson();
+
+          // Form submission validation
           const form = document.querySelector('form');
           form.addEventListener('submit', (e) => {
+            this.validateForm(e);
+          });
+        },
+
+        validateForm(e) {
+          this.showError = false;
+          this.errorMessage = '';
+
+          if (this.mode === 'clone') {
             if (this.selectedSessionIds.length === 0) {
               e.preventDefault();
               this.showError = true;
+              this.errorMessage = 'Please select at least one session to create the dataset.';
               window.scrollTo({ top: 0, behavior: 'smooth' });
             }
-          });
-
+          } else if (this.mode === 'manual') {
+            if (this.messages.length === 0) {
+              e.preventDefault();
+              this.showError = true;
+              this.errorMessage = 'Please add at least one message pair to create the dataset.';
+              window.scrollTo({ top: 0, behavior: 'smooth' });
+            } else {
+              // Validate that all messages have content
+              for (let i = 0; i < this.messages.length; i++) {
+                const msg = this.messages[i];
+                if (!msg.human.trim() || !msg.ai.trim()) {
+                  e.preventDefault();
+                  this.showError = true;
+                  this.errorMessage = `Message pair ${i + 1} is missing required content.`;
+                  window.scrollTo({ top: 0, behavior: 'smooth' });
+                  return;
+                }
+              }
+            }
+          }
         },
 
+        // Session selection methods (for clone mode)
         updateSelectedSessions() {
           const checkboxes = document.querySelectorAll('.session-checkbox:checked');
           const currentPageSelections = Array.from(checkboxes).map(cb => cb.value);
@@ -90,21 +226,44 @@
             }
           });
 
-          this.updateHiddenField();
+          this.updateSessionHiddenField();
           this.showError = false;
         },
 
         clearAllSelections() {
           this.selectedSessionIds = [];
-          this.updateHiddenField();
+          this.updateSessionHiddenField();
           document.querySelectorAll('.session-checkbox:checked').forEach(cb => {
             cb.checked = false;
           });
         },
 
-        updateHiddenField() {
+        updateSessionHiddenField() {
           const hiddenField = document.querySelector('input[name="session_ids"]');
           hiddenField.value = this.selectedSessionIds.join(',');
+        },
+
+        // Manual message methods (for manual mode)
+        addMessage() {
+          this.messages.push({
+            human: '',
+            ai: '',
+            context: ''
+          });
+          this.updateMessagesJson();
+        },
+
+        removeMessage(index) {
+          this.messages.splice(index, 1);
+          this.updateMessagesJson();
+        },
+
+        updateMessagesJson() {
+          this.messagesJsonString = JSON.stringify(this.messages);
+          const hiddenField = document.querySelector('input[name="messages_json"]');
+          if (hiddenField) {
+            hiddenField.value = this.messagesJsonString;
+          }
         }
       };
     }
