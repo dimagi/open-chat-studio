@@ -62,7 +62,7 @@ from functools import wraps
 from io import BytesIO
 
 import openai
-from django.db.models import Count, Subquery
+from django.db.models import Count, Exists, OuterRef, Subquery
 from django.forms import ValidationError
 from langchain_core.utils.function_calling import convert_to_openai_tool as lc_convert_to_openai_tool
 from openai import OpenAI
@@ -71,6 +71,7 @@ from tenacity import before_sleep_log, retry, retry_if_exception_type, stop_afte
 
 from apps.assistants.models import OpenAiAssistant, ToolResources
 from apps.assistants.utils import get_assistant_tool_options
+from apps.documents.models import CollectionFile
 from apps.files.models import File
 from apps.service_providers.exceptions import OpenAiUnableToLinkFileError
 from apps.service_providers.llm_service.index_managers import OpenAIVectorStoreManager
@@ -228,17 +229,21 @@ def delete_openai_files_for_resource(client, team, resource: ToolResources):
 
 
 def _get_files_to_delete(team, tool_resource_id):
-    """Get files linked to the tool resource that are not referenced by any other tool resource."""
+    """Get files linked to the tool resource that are not referenced by any other tool resource or collection."""
     files_with_single_reference = (
         ToolResources.files.through.objects.filter(toolresources__assistant__team=team)
-        .values("file")
         .annotate(count=Count("toolresources"))
         .filter(count=1)
         .values("file_id")
     )
 
+    # Files that are not used by any collections
+    files_not_in_collections = ~Exists(CollectionFile.objects.filter(file_id=OuterRef("id"), collection__team=team))
+
     subquery = Subquery(files_with_single_reference)
-    return File.objects.filter(toolresources=tool_resource_id, id__in=subquery).iterator()
+    return (
+        File.objects.filter(toolresources=tool_resource_id, id__in=subquery).filter(files_not_in_collections).iterator()
+    )
 
 
 def is_tool_configured_remotely_but_missing_locally(assistant_data, local_tool_types, tool_name: str) -> bool:
@@ -409,9 +414,7 @@ def remove_files_from_tool(ocs_resource: ToolResources, files: list[int]):
         # Remove the link to the tool resource
         ocs_resource.files.through.objects.get(file=file).delete()
 
-        if file.is_used():
-            # File is used elsewhere, only remove from vector store if this is a file_search resource
-            # and the file has a valid external_id and external_source
+        if ocs_resource.tool_type == "file_search" and file.is_used():
             if ocs_resource.extra["vector_store_id"] and file.external_id:
                 index_manager = OpenAIVectorStoreManager(client)
                 index_manager.delete_file(
