@@ -410,10 +410,10 @@ def remove_files_from_tool(ocs_resource: ToolResources, files: list[int]):
     """
     client = ocs_resource.assistant.llm_provider.get_llm_service().get_raw_client()
 
-    for file in files:
-        # Remove the link to the tool resource
-        ocs_resource.files.through.objects.get(file=file).delete()
+    # Remove the link to the tool resource
+    ocs_resource.files.through.objects.filter(file__in=files).delete()
 
+    for file in files:
         if ocs_resource.tool_type == "file_search" and file.is_used():
             if ocs_resource.extra["vector_store_id"] and file.external_id:
                 index_manager = OpenAIVectorStoreManager(client)
