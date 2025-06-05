@@ -168,6 +168,25 @@ class PipelineState(dict):
 
         return routes_dict
 
+    def get_node_output(self, node_id: str) -> Any:
+        """
+        Get the output of a node by its ID.
+        """
+        for output in self["outputs"].values():
+            if output.get("node_id") == node_id:
+                return output["message"]
+        return None
+
+    def get_node_inputs(self, incoming_nodes: list[str]) -> dict[str, Any]:
+        """
+        Get the inputs for the given incoming nodes from the state.
+
+        Returns:
+            A dictionary mapping incoming node IDs to their respective outputs in the state.
+            If a node ID is not found in the state, it's value in the dictionary will be None.
+        """
+        return {incoming_node_id: self.get_node_output(incoming_node_id) for incoming_node_id in incoming_nodes}
+
     @classmethod
     def from_router_output(
         cls, node_id, node_name, output, output_handle, tags, route_path, conditional_branch
@@ -203,12 +222,6 @@ class BasePipelineNode(BaseModel, ABC):
         """
         from apps.channels.datamodels import Attachment
 
-        def _get_output(node_id):
-            for output in state["outputs"].values():
-                if output.get("node_id") == node_id:
-                    return output["message"]
-            raise Exception(f"unable to determine output for {node_id}")
-
         if not incoming_nodes:
             # This is the first node in the graph
             state["node_input"] = state["messages"][-1]
@@ -219,40 +232,21 @@ class BasePipelineNode(BaseModel, ABC):
             state["temp_state"]["attachments"] = [
                 Attachment.model_validate(att) for att in state.get("attachments", [])
             ]
-        elif len(incoming_nodes) == 1:
-            incoming_node_id = incoming_nodes[0]
-            state["node_input"] = _get_output(incoming_node_id)
-            state["node_source"] = incoming_node_id
         else:
-            # state.path is a list of tuples (previous, current, next)
-            for path in reversed(state["path"]):
-                candidate_node_ids = path[2]
-                for candidate_node_id in candidate_node_ids:
-                    if candidate_node_id == node_id:
-                        previous_node_id = path[1]
-                        state["node_input"] = _get_output(previous_node_id)
-                        state["node_source"] = previous_node_id
-                        break
-                else:
-                    continue
-                break
+            for incoming_node_id, output in reversed(state.get_node_inputs(incoming_nodes).items()):
+                if output:
+                    state["node_input"] = output
+                    state["node_source"] = incoming_node_id
+                    break
             else:
-                # This shouldn't happen, but keeping it here for now to avoid breaking
-                logger.warning(f"Cannot determine which input to use for node {node_id}. Switching to fallback.")
-                for incoming_node_id in reversed(incoming_nodes):
-                    if incoming_node_id in state["outputs"]:
-                        state["node_input"] = _get_output(incoming_node_id)
-                        state["node_source"] = incoming_node_id
-                        break
-                else:
-                    raise PipelineNodeRunError(
-                        f"Cannot determine which input to use for node {node_id}",
-                        {
-                            "node_id": node_id,
-                            "edge_ids": incoming_nodes,
-                            "state_outputs": state["outputs"],
-                        },
-                    )
+                raise PipelineNodeRunError(
+                    f"Cannot determine which input to use for node {node_id}",
+                    {
+                        "node_id": node_id,
+                        "edge_ids": incoming_nodes,
+                        "state_outputs": state["outputs"],
+                    },
+                )
         return state
 
     def get_participant_data_proxy(self, state: PipelineState) -> "ParticipantDataProxy":
@@ -292,6 +286,7 @@ class PipelineNode(BasePipelineNode, ABC):
         self, incoming_nodes: list, outgoing_nodes: list, state: PipelineState, config: RunnableConfig
     ) -> PipelineState:
         self._config = config
+        state = PipelineState(state)
         state = self._prepare_state(self.node_id, incoming_nodes, state)
         output = self._process(input=state["node_input"], state=state)
         output["path"] = [(state["node_source"], self.node_id, outgoing_nodes)]
