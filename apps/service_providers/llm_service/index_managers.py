@@ -106,8 +106,7 @@ class OpenAIRemoteIndexManager(RemoteIndexManager):
     def delete_remote_index(self):
         self.client.vector_stores.delete(vector_store_id=self.index_id)
 
-    # TODO: Rename to remove ambiguious usage
-    def delete_file(self, file_id: str):
+    def delete_file_from_index(self, file_id: str):
         """Disassociates the file with the vector store"""
         with contextlib.suppress(Exception):
             self.client.vector_stores.files.delete(vector_store_id=self.index_id, file_id=file_id)
