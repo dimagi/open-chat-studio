@@ -7,7 +7,7 @@ from django_tables2 import SingleTableView
 
 from apps.channels.models import ChannelPlatform
 from apps.chat.models import ChatMessageType
-from apps.evaluations.forms import EvaluationDatasetForm, EvaluationDatasetFromSessionsForm, EvaluationMessageForm
+from apps.evaluations.forms import EvaluationDatasetForm
 from apps.evaluations.models import EvaluationDataset
 from apps.evaluations.tables import EvaluationDatasetTable, EvaluationSessionsSelectionTable, EvaluationSessionsTable
 from apps.experiments.filters import DATE_RANGE_OPTIONS, FIELD_TYPE_FILTERS, apply_dynamic_filters
@@ -46,30 +46,6 @@ class DatasetTableView(SingleTableView, PermissionRequiredMixin):
         )
 
 
-class CreateDataset(LoginAndTeamRequiredMixin, CreateView, PermissionRequiredMixin):
-    # permission_required = "pipelines.add_pipeline"
-    template_name = "evaluations/dataset_form.html"
-    model = EvaluationDataset
-    form_class = EvaluationDatasetForm
-    extra_context = {
-        "title": "Create Dataset",
-        "button_text": "Create Dataset",
-        "active_tab": "evaluation_datasets",
-        "new_message_form": EvaluationMessageForm(),
-    }
-
-    def get_form_kwargs(self):
-        return {**super().get_form_kwargs(), "team": self.request.team}
-
-    def get_success_url(self):
-        return reverse("evaluations:dataset_home", args=[self.request.team.slug])
-
-    def form_valid(self, form):
-        form.instance.team = self.request.team
-        form.instance.created_by = self.request.user
-        return super().form_valid(form)
-
-
 class EditDataset(UpdateView):
     model = EvaluationDataset
     form_class = EvaluationDatasetForm
@@ -90,13 +66,13 @@ class EditDataset(UpdateView):
         return reverse("evaluations:dataset_home", args=[self.request.team.slug])
 
 
-class CreateDatasetFromSessions(LoginAndTeamRequiredMixin, CreateView, PermissionRequiredMixin):
+class CreateDataset(LoginAndTeamRequiredMixin, CreateView, PermissionRequiredMixin):
     # permission_required = "pipelines.add_pipeline"
     template_name = "evaluations/dataset_from_sessions_form.html"
     model = EvaluationDataset
-    form_class = EvaluationDatasetFromSessionsForm
+    form_class = EvaluationDatasetForm
     extra_context = {
-        "title": "Create Dataset from Sessions",
+        "title": "Create Dataset",
         "button_text": "Create Dataset",
         "active_tab": "evaluation_datasets",
     }
