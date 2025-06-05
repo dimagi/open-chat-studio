@@ -1,0 +1,30 @@
+{% load i18n %}
+<div class="text-sm" x-data="editableMessage({{ record.id }}, '{{ message_type }}', '{{ content|escapejs }}')">
+  <div x-show="!editing">
+    <span x-text="displayText"></span>
+    <button class="btn btn-xs"  @click="startEditing()"><i class="fa-solid fa-pencil"></i></button>
+
+  </div>
+
+  <div x-show="editing">
+    <textarea
+      x-ref="editTextarea"
+      x-model="editValue"
+      @keydown.escape="cancelEdit()"
+      @keydown.enter.ctrl="saveEdit()"
+      class="w-full p-2 text-sm border border-gray-300 rounded resize-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+      rows="3"
+      :placeholder="'{{ placeholder }}'"
+    ></textarea>
+    <div class="flex gap-2 mt-2">
+      <button @click="saveEdit()" class="btn btn-primary btn-xs">
+        <i class="fa-solid fa-check mr-1"></i>
+        {% trans "Save" %}
+      </button>
+      <button @click="cancelEdit()" class="btn btn-ghost btn-xs">
+        <i class="fa-solid fa-times mr-1"></i>
+        {% trans "Cancel" %}
+      </button>
+    </div>
+  </div>
+</div>

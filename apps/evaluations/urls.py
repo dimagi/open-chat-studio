@@ -48,6 +48,16 @@ urlpatterns = [
         dataset_views.DatasetMessagesTableView.as_view(),
         name="dataset_messages_table",
     ),
+    path(
+        "message/<int:message_id>/update/",
+        dataset_views.update_message_content,
+        name="update_message_content",
+    ),
+    path(
+        "dataset/<int:dataset_id>/add_message/",
+        dataset_views.add_message_to_dataset,
+        name="add_message_to_dataset",
+    ),
 ]
 
 urlpatterns.extend(make_crud_urls(evalutation_config_views, "Evaluation", delete=False))

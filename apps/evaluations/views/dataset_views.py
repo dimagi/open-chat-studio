@@ -1,7 +1,11 @@
+import json
+
 from django.contrib.auth.mixins import PermissionRequiredMixin
 from django.http import JsonResponse
 from django.shortcuts import get_object_or_404
 from django.urls import reverse
+from django.views.decorators.csrf import csrf_exempt
+from django.views.decorators.http import require_http_methods
 from django.views.generic import CreateView, TemplateView, UpdateView
 from django_tables2 import SingleTableView
 
@@ -239,3 +243,80 @@ def session_messages_json(request, team_slug: str, session_id: str):
             # Skip bad/malformed pairs
             i += 1
     return JsonResponse(pairs, safe=False)
+
+
+@require_http_methods(["POST"])
+@csrf_exempt  # We'll handle CSRF via HTMX headers
+def update_message_content(request, team_slug: str, message_id: int):
+    """Update human or AI message content and remove chat message relationship if edited."""
+    try:
+        # Get the message and verify team access
+        message = get_object_or_404(
+            EvaluationMessage.objects.filter(id=message_id, evaluationdataset__team__slug=team_slug)
+        )
+
+        message_type = request.POST.get("message_type")
+        new_content = request.POST.get("content", "").strip()
+
+        if not new_content:
+            return JsonResponse({"error": "Content cannot be empty"}, status=400)
+
+        if message_type == "human":
+            if message.human_message_content != new_content:
+                message.human_message_content = new_content
+                # Remove both foreign key relationships since content was manually edited
+                message.human_chat_message = None
+                message.ai_chat_message = None
+        elif message_type == "ai":
+            if message.ai_message_content != new_content:
+                message.ai_message_content = new_content
+                # Remove both foreign key relationships since content was manually edited
+                message.human_chat_message = None
+                message.ai_chat_message = None
+        else:
+            return JsonResponse({"error": "Invalid message type"}, status=400)
+
+        message.save()
+
+        return JsonResponse({"success": True, "content": new_content, "message_type": message_type})
+
+    except Exception as e:
+        return JsonResponse({"error": str(e)}, status=500)
+
+
+@require_http_methods(["POST"])
+@csrf_exempt  # We'll handle CSRF via HTMX headers
+def add_message_to_dataset(request, team_slug: str, dataset_id: int):
+    """Add a new message pair to an existing dataset."""
+    try:
+        # Get the dataset and verify team access
+        dataset = get_object_or_404(EvaluationDataset.objects.filter(id=dataset_id, team__slug=team_slug))
+
+        human_message = request.POST.get("human_message", "").strip()
+        ai_message = request.POST.get("ai_message", "").strip()
+        context_json = request.POST.get("context", "{}")
+
+        if not human_message or not ai_message:
+            return JsonResponse({"error": "Both human and AI messages are required"}, status=400)
+
+        # Parse context JSON
+        try:
+            context = json.loads(context_json)
+        except json.JSONDecodeError:
+            return JsonResponse({"error": "Invalid JSON format in context"}, status=400)
+
+        # Create new evaluation message
+        message = EvaluationMessage.objects.create(
+            human_message_content=human_message,
+            ai_message_content=ai_message,
+            context=context,
+            metadata={"created_mode": "manual"},
+        )
+
+        # Add to dataset
+        dataset.messages.add(message)
+
+        return JsonResponse({"success": True, "message_id": message.id})
+
+    except Exception as e:
+        return JsonResponse({"error": str(e)}, status=500)
