@@ -12,4 +12,280 @@
       <i class="fa-solid fa-spinner fa-spin"></i> {% trans "Loading messages..." %}
     </div>
   </div>
+
+  <section class="app-card">
+    <div x-data="messageBuilder()" x-init="init()">
+      <input type="hidden" name="messages_json" x-model="jsonString">
+      <!-- Messages table -->
+      <div x-show="messages.length > 0" class="table-responsive">
+        <table class="table pg-table">
+          <thead>
+            <tr>
+              <th class="w-1/3">{% trans "Human Message" %}</th>
+              <th class="w-1/3">{% trans "AI Message" %}</th>
+              <th class="w-1/4">{% trans "Context (JSON)" %}</th>
+              <th class="w-12">{% trans "Actions" %}</th>
+            </tr>
+          </thead>
+          <tbody>
+            <template x-for="(msg, index) in messages" :key="index">
+              <tr>
+                <td class="align-top">
+                  <textarea
+                    x-model="msg.human"
+                    @input="updateJson()"
+                    class="w-full min-h-[80px] p-0 text-sm bg-transparent border-none resize-none focus:outline-none focus:ring-0"
+                    placeholder="Enter human message..."
+                    required
+                  ></textarea>
+                </td>
+                <td class="align-top">
+                  <textarea
+                    x-model="msg.ai"
+                    @input="updateJson()"
+                    class="w-full min-h-[80px] p-0 text-sm bg-transparent border-none resize-none focus:outline-none focus:ring-0"
+                    placeholder="Enter AI response..."
+                    required
+                  ></textarea>
+                </td>
+                <td class="align-top">
+                  <textarea
+                    x-model="msg.context"
+                    @input="updateJson()"
+                    class="w-full min-h-[80px] p-0 text-xs font-mono bg-transparent border-none resize-none focus:outline-none focus:ring-0"
+                    placeholder='{"key": "value"}'
+                  ></textarea>
+                </td>
+                <td class="text-center align-top">
+                  <button type="button" class="btn btn-xs" @click="removeMessage(index)">
+                    <i class="fa-solid fa-trash"></i>
+                  </button>
+                </td>
+              </tr>
+            </template>
+          </tbody>
+        </table>
+      </div>
+
+      <div class="flex items-center justify-between mb-4">
+        <button type="button" class="btn btn-primary btn-sm" @click="addMessage()">
+          <i class="fa-solid fa-plus"></i> {% trans "Add Message" %}
+        </button>
+      </div>
+
+      <div class="mt-4" x-show="messages.length > 0">
+        <button
+          @click="saveMessages()"
+          class="btn btn-primary btn-sm"
+          :disabled="messages.length === 0"
+        >
+          {% trans "Save new messages" %}
+        </button>
+        <button
+          @click="clearAllMessages()"
+          class="btn btn-ghost btn-sm"
+        >
+          <i class="fa-solid fa-times"></i>
+          {% trans "Clear All" %}
+        </button>
+      </div>
+    </div>
+  </section>
+{% endblock %}
+
+{% block page_js %}
+  <script>
+    function editableMessage(messageId, messageType, initialContent) {
+      return {
+        editing: false,
+        originalContent: initialContent,
+        editValue: initialContent,
+
+        get displayText() {
+        // Truncate for display
+          const maxWords = 30;
+          const words = this.originalContent.split(' ');
+          if (words.length > maxWords) {
+            return words.slice(0, maxWords).join(' ') + '...';
+          }
+          return this.originalContent;
+        },
+
+        startEditing() {
+          this.editing = true;
+          this.editValue = this.originalContent;
+          this.$nextTick(() => {
+            this.$refs.editTextarea && this.$refs.editTextarea.focus();
+          });
+        },
+
+        cancelEdit() {
+          this.editing = false;
+          this.editValue = this.originalContent;
+        },
+
+        async saveEdit() {
+          if (this.editValue.trim() === '') {
+            alertify.error('Content cannot be empty');
+            return;
+          }
+
+          if (this.editValue === this.originalContent) {
+            this.editing = false;
+            return;
+          }
+
+          try {
+            const response = await fetch(`{% url 'evaluations:update_message_content' request.team.slug 0 %}`.replace('0', messageId), {
+              method: 'POST',
+              headers: {
+                'Content-Type': 'application/x-www-form-urlencoded',
+                'X-CSRFToken': document.querySelector('[name=csrfmiddlewaretoken]')?.value || ''
+              },
+              body: new URLSearchParams({
+                'message_type': messageType,
+                'content': this.editValue.trim()
+              })
+            });
+
+            const data = await response.json();
+
+            if (data.success) {
+              this.originalContent = data.content;
+              this.editing = false;
+              alertify.success('Message updated successfully');
+
+            // Update the source column in the same row to show "Manual entry"
+            // Since editing either message removes both foreign keys
+              const currentRow = this.$el.closest('tr');
+              if (currentRow) {
+                const sourceCell = currentRow.querySelector('td:last-child'); // Source is the last column
+                if (sourceCell) {
+                  sourceCell.innerHTML = `
+                  <div class="text-xs">
+                    <span class="text-gray-400">
+                      {% trans "Manual entry" %}
+                    </span>
+                  </div>
+                `;
+                }
+              }
+            } else {
+              alertify.error(data.error || 'Failed to update message');
+            }
+          } catch (error) {
+            alertify.error('Failed to update message');
+            console.error('Error updating message:', error);
+          }
+        }
+      };
+    }
+
+    function messageBuilder() {
+      return {
+        messages: [],
+        jsonString: '',
+
+        init() {
+          this.updateJson();
+        },
+
+        addMessage() {
+          this.messages.push({
+            human: '',
+            ai: '',
+            context: ''
+          });
+          this.updateJson();
+        },
+
+        removeMessage(index) {
+          this.messages.splice(index, 1);
+          this.updateJson();
+        },
+
+        updateJson() {
+        // Convert messages to the format expected by the backend
+          const formattedMessages = this.messages.map(msg => ({
+            human_message: msg.human,
+            ai_message: msg.ai,
+            context: msg.context ? (typeof msg.context === 'string' ? msg.context : JSON.stringify(msg.context)) : '{}'
+          }));
+          this.jsonString = JSON.stringify(formattedMessages);
+        },
+
+        async saveMessages() {
+          if (this.messages.length === 0) {
+            alertify.error('Please add at least one message pair');
+            return;
+          }
+
+        // Validate that all messages have content
+          for (let i = 0; i < this.messages.length; i++) {
+            const msg = this.messages[i];
+            if (!msg.human.trim() || !msg.ai.trim()) {
+              alertify.error(`Message pair ${i + 1}: Both human and AI messages are required`);
+              return;
+            }
+
+          // Validate context JSON if provided
+            if (msg.context.trim()) {
+              try {
+                JSON.parse(msg.context.trim());
+              } catch (e) {
+                alertify.error(`Message pair ${i + 1}: Invalid JSON format in context field`);
+                return;
+              }
+            }
+          }
+
+          try {
+          // Save each message individually using the existing endpoint
+            for (const msg of this.messages) {
+              const contextData = msg.context.trim() ? JSON.parse(msg.context.trim()) : {};
+
+              const response = await fetch(`{% url 'evaluations:add_message_to_dataset' request.team.slug object.id %}`, {
+                method: 'POST',
+                headers: {
+                  'Content-Type': 'application/x-www-form-urlencoded',
+                  'X-CSRFToken': document.querySelector('[name=csrfmiddlewaretoken]')?.value || ''
+                },
+                body: new URLSearchParams({
+                  'human_message': msg.human.trim(),
+                  'ai_message': msg.ai.trim(),
+                  'context': JSON.stringify(contextData)
+                })
+              });
+
+              const data = await response.json();
+              if (!data.success) {
+                alertify.error(data.error || 'Failed to add message pair');
+                return;
+              }
+            }
+
+            alertify.success(`${this.messages.length} message pair(s) added successfully`);
+            this.clearAllMessages();
+
+          // Reload the table to show the new messages
+            const tableElement = document.getElementById('dataset-messages-table');
+            if (tableElement) {
+              htmx.ajax('GET', tableElement.getAttribute('hx-get'), {
+                target: '#dataset-messages-table',
+                swap: 'innerHTML'
+              });
+            }
+          } catch (error) {
+            alertify.error('Failed to add message pairs');
+            console.error('Error adding messages:', error);
+          }
+        },
+
+        clearAllMessages() {
+          this.messages = [];
+          this.updateJson();
+        }
+      };
+    }
+  </script>
 {% endblock %}

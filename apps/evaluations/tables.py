@@ -184,11 +184,13 @@ class EvaluationSessionsSelectionTable(tables.Table):
 
 
 class DatasetMessagesTable(tables.Table):
-    human_message_content = columns.Column(
+    human_message_content = TemplateColumn(
+        template_name="evaluations/dataset_message_human_column.html",
         verbose_name="Human Message",
         orderable=False,
     )
-    ai_message_content = columns.Column(
+    ai_message_content = TemplateColumn(
+        template_name="evaluations/dataset_message_ai_column.html",
         verbose_name="AI Message",
         orderable=False,
     )
@@ -202,18 +204,6 @@ class DatasetMessagesTable(tables.Table):
         verbose_name="Source",
         orderable=False,
     )
-
-    def render_human_message_content(self, value):
-        """Truncate human message content for display"""
-        from django.utils.text import Truncator
-
-        return Truncator(value).words(30)
-
-    def render_ai_message_content(self, value):
-        """Truncate AI message content for display"""
-        from django.utils.text import Truncator
-
-        return Truncator(value).words(30)
 
     class Meta:
         model = EvaluationMessage
