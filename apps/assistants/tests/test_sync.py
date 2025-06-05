@@ -352,13 +352,13 @@ def test_vector_store_create_batch_files(create_file_batch, create_vector_store,
 
 class TestVectorStoreManager:
     @patch("openai.resources.vector_stores.file_batches.FileBatches.create")
-    def test_link_files_to_vector_store(self, mock_file_batches_create):
+    def test_link_files_to_remote_index(self, mock_file_batches_create):
         """Test linking files to vector store with and without chunking strategy"""
         manager = OpenAIRemoteIndexManager(client=OpenAI(api_key="fake_key"), index_id="vs_123")
         file_ids = [f"file_{i}" for i in range(600)]  # Create more than 500 files to test batching
 
         # Test without chunking strategy
-        manager.link_files_to_vector_store(file_ids)
+        manager.link_files_to_remote_index(file_ids)
         assert mock_file_batches_create.call_count == 2
         mock_file_batches_create.assert_has_calls(
             [
@@ -373,7 +373,7 @@ class TestVectorStoreManager:
         # Test with chunking strategy
         chunk_size = 1000
         chunk_overlap = 100
-        manager.link_files_to_vector_store(file_ids, chunk_size=chunk_size, chunk_overlap=chunk_overlap)
+        manager.link_files_to_remote_index(file_ids, chunk_size=chunk_size, chunk_overlap=chunk_overlap)
         assert mock_file_batches_create.call_count == 2
 
         expected_chunking_strategy = {

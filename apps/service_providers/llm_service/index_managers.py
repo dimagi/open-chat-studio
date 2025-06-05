@@ -66,7 +66,7 @@ class RemoteIndexManager:
         ...
 
     @abstractmethod
-    def link_files_to_vector_store(self, file_ids: list[str], chunk_size=None, chunk_overlap=None):
+    def link_files_to_remote_index(self, file_ids: list[str], chunk_size=None, chunk_overlap=None):
         """
         Associate files with the vector store in the remote index service.
 
@@ -165,7 +165,7 @@ class OpenAIRemoteIndexManager(RemoteIndexManager):
         with contextlib.suppress(Exception):
             self.client.vector_stores.files.delete(vector_store_id=self.index_id, file_id=file_id)
 
-    def link_files_to_vector_store(self, file_ids: list[str], chunk_size=None, chunk_overlap=None):
+    def link_files_to_remote_index(self, file_ids: list[str], chunk_size=None, chunk_overlap=None):
         """Link OpenAI files `file_ids` to the vector store in OpenAI."""
         chunking_strategy = None
         if chunk_size and chunk_overlap:

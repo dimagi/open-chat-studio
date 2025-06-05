@@ -94,17 +94,17 @@ class TestOpenAIRemoteIndexManager:
             vector_store_id="vs-test-123", file_id="file-123"
         )
 
-    def test_link_files_to_vector_store_success(self, index_manager, client_mock):
+    def test_link_files_to_remote_index_success(self, index_manager, client_mock):
         """Test successful linking of files to vector store"""
-        index_manager.link_files_to_vector_store(["file-1", "file-2"])
+        index_manager.link_files_to_remote_index(["file-1", "file-2"])
 
         client_mock.vector_stores.file_batches.create.assert_called_once_with(
             vector_store_id="vs-test-123", file_ids=["file-1", "file-2"], chunking_strategy=None
         )
 
-    def test_link_files_to_vector_store_with_chunking_strategy(self, index_manager, client_mock):
+    def test_link_files_to_remote_index_with_chunking_strategy(self, index_manager, client_mock):
         """Test linking files with chunking strategy"""
-        index_manager.link_files_to_vector_store(["file-1", "file-2"], chunk_size=1000, chunk_overlap=200)
+        index_manager.link_files_to_remote_index(["file-1", "file-2"], chunk_size=1000, chunk_overlap=200)
 
         expected_chunking_strategy = {
             "type": "static",
@@ -115,22 +115,22 @@ class TestOpenAIRemoteIndexManager:
         )
 
     @mock.patch("apps.service_providers.llm_service.index_managers.chunk_list")
-    def test_link_files_to_vector_store_large_batch(self, mock_chunk_list, index_manager, client_mock):
+    def test_link_files_to_remote_index_large_batch(self, mock_chunk_list, index_manager, client_mock):
         """Test linking large number of files with batching"""
         file_ids = [f"file-{i}" for i in range(1000)]
         mock_chunk_list.return_value = [file_ids[:500], file_ids[500:]]
 
-        index_manager.link_files_to_vector_store(file_ids)
+        index_manager.link_files_to_remote_index(file_ids)
 
         mock_chunk_list.assert_called_once_with(file_ids, 500)
         assert client_mock.vector_stores.file_batches.create.call_count == 2
 
-    def test_link_files_to_vector_store_failure(self, index_manager, client_mock):
+    def test_link_files_to_remote_index_failure(self, index_manager, client_mock):
         """Test linking files failure"""
         client_mock.vector_stores.file_batches.create.side_effect = Exception("Connection error")
 
         with pytest.raises(UnableToLinkFileException) as exc_info:
-            index_manager.link_files_to_vector_store(["file-1", "file-2"])
+            index_manager.link_files_to_remote_index(["file-1", "file-2"])
 
         assert "Failed to link files to OpenAI vector store" in str(exc_info.value)
 

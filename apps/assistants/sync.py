@@ -485,7 +485,7 @@ def _update_or_create_vector_store(assistant, name, vector_store_id, file_ids) -
 
     with contextlib.suppress(UnableToLinkFileException):
         # This will show an out-of-sync status on the assistant where the user can handle the error appropriately
-        vector_store_manager.link_files_to_vector_store(file_ids)
+        vector_store_manager.link_files_to_remote_index(file_ids)
 
     return vector_store_id
 

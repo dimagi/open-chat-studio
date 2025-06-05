@@ -286,7 +286,7 @@ class Collection(BaseTeamModel, VersionsMixin):
                 collection_file.save(update_fields=["status"])
 
         try:
-            index_manager.link_files_to_vector_store(
+            index_manager.link_files_to_remote_index(
                 file_ids=[file.external_id for file in uploaded_files],
                 chunk_size=chunk_size,
                 chunk_overlap=chunk_overlap,
