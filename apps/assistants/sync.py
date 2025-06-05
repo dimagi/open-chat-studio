@@ -419,7 +419,7 @@ def _get_files_missing_from_vector_store(client, vector_store_id, file_ids: list
 
     vector_store_manager = OpenAIRemoteIndexManager(client, index_id=vector_store_id)
     for file_id in to_delete_remote:
-        vector_store_manager.delete_file(file_id=file_id)
+        vector_store_manager.delete_file_from_index(file_id=file_id)
 
     return file_ids
 

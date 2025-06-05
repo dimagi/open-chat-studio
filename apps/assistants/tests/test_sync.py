@@ -449,13 +449,13 @@ class TestVectorStoreManager:
             manager.delete_vector_store(fail_silently=False)
 
     @patch("openai.resources.vector_stores.files.Files.delete")
-    def test_delete_file(self, mock_delete):
+    def test_delete_file_from_index(self, mock_delete):
         """Test deleting a file from a vector store"""
         manager = OpenAIRemoteIndexManager(client=OpenAI(api_key="fake_key"), index_id="vs_123")
         file_id = "file_123"
 
         # Test successful deletion
-        manager.delete_file(file_id)
+        manager.delete_file_from_index(file_id)
         mock_delete.assert_called_once_with(vector_store_id="vs_123", file_id=file_id)
 
         # Test handling of not found error
@@ -463,5 +463,5 @@ class TestVectorStoreManager:
         mock_delete.side_effect = openai.NotFoundError(
             message="", response=Response(status_code=404, request=Mock()), body=None
         )
-        manager.delete_file(file_id)  # Should not raise an exception
+        manager.delete_file_from_index(file_id)  # Should not raise an exception
         mock_delete.assert_called_once_with(vector_store_id="vs_123", file_id=file_id)
