@@ -508,7 +508,7 @@ class BooleanNode(PipelineRouterNode):
     )
 
     def _process_conditional(self, state: PipelineState) -> tuple[Literal["true", "false"], bool]:
-        if self.input_equals == state["messages"][-1]:
+        if self.input_equals == state["node_input"]:
             return "true", False
         return "false", False
 
@@ -614,8 +614,7 @@ class RouterNode(RouterMixin, PipelineRouterNode, HistoryMixin):
             ]
         )
         session: ExperimentSession = state["experiment_session"]
-        node_input = state["messages"][-1]
-
+        node_input = state["node_input"]
         context = {"input": node_input}
         context.update(PromptTemplateContext(session).get_context(prompt.input_variables))
 
