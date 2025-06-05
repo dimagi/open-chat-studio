@@ -105,11 +105,22 @@ class CreateDatasetFromSessions(LoginAndTeamRequiredMixin, CreateView, Permissio
         return {**super().get_form_kwargs(), "team": self.request.team}
 
     def get_initial(self):
-        """Support pre-selected sessions via URL parameters."""
+        """Support filters from experiment session list via URL parameters."""
         initial = super().get_initial()
-        preselected_sessions = self.request.GET.get("sessions", "")
-        if preselected_sessions:
-            initial["session_ids"] = preselected_sessions
+
+        # Apply the same filters to get the filtered session IDs
+        queryset = (
+            ExperimentSession.objects.with_last_message_created_at()
+            .filter(team=self.request.team)
+            .select_related("participant__user")
+        )
+        from apps.experiments.filters import apply_dynamic_filters
+
+        filtered_queryset = apply_dynamic_filters(queryset, self.request)
+        filtered_session_ids = ",".join(str(session.external_id) for session in filtered_queryset)
+        if filtered_session_ids:
+            initial["session_ids"] = filtered_session_ids
+
         return initial
 
     def _get_filter_context_data(self):

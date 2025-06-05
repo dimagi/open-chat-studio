@@ -450,7 +450,15 @@
 
           if (['any of', 'all of', 'excludes'].includes(filter.operator)) {
             if (filter.selectedValues && filter.selectedValues.length > 0) {
-              params.set(`filter_${i}_value`, JSON.stringify(filter.selectedValues));
+              // For experiment filter, convert names back to IDs
+              let valuesToSerialize = filter.selectedValues;
+              if (filter.column === 'experiment') {
+                valuesToSerialize = filter.selectedValues.map(name => {
+                  const experiment = experimentList.find(exp => exp.name === name);
+                  return experiment ? experiment.id : name;
+                });
+              }
+              params.set(`filter_${i}_value`, JSON.stringify(valuesToSerialize));
             }
           } else {
             params.set(`filter_${i}_value`, filter.value);
@@ -482,7 +490,15 @@
 
             if (['any of', 'all of', 'excludes'].includes(filter.operator)) {
               if (filter.selectedValues && filter.selectedValues.length > 0) {
-                filterParams[`filter_${i}_value`] = JSON.stringify(filter.selectedValues);
+                // For experiment filter, convert names back to IDs
+                let valuesToSend = filter.selectedValues;
+                if (filter.column === 'experiment') {
+                  valuesToSend = filter.selectedValues.map(name => {
+                    const experiment = experimentList.find(exp => exp.name === name);
+                    return experiment ? experiment.id : name;
+                  });
+                }
+                filterParams[`filter_${i}_value`] = JSON.stringify(valuesToSend);
               }
             } else {
               filterParams[`filter_${i}_value`] = filter.value;
