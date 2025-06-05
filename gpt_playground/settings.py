@@ -200,7 +200,8 @@ else:
         }
     }
 
-DATABASES["default"]["OPTIONS"]["pool"] = {
+db_options = DATABASES["default"].setdefault("OPTIONS", {})
+db_options["pool"] = {
     "min_size": env.int("DJANGO_DATABASE_POOL_MIN_SIZE", default=2),
     "max_size": env.int("DJANGO_DATABASE_POOL_MAX_SIZE", default=10),
     "timeout": env.int("DJANGO_DATABASE_POOL_TIMEOUT", default=10),
