@@ -47,7 +47,7 @@ class RemoteIndexManager(metaclass=ABCMeta):
 
         Args:
             name: The name to assign to the new vector store.
-            file_ids: Optional list of file IDs to initially associate with the vector store.
+            file_ids: Optional list of remote file IDs to initially associate with the vector store.
 
         Returns:
             str: The unique identifier of the newly created vector store.
@@ -71,7 +71,7 @@ class RemoteIndexManager(metaclass=ABCMeta):
         Associate files with the vector store in the remote index service.
 
         Args:
-            file_ids: List of file identifiers to link to the vector store.
+            file_ids: List of file's remote identifiers to link to the vector store.
             chunk_size: Optional maximum size for text chunks when processing files.
             chunk_overlap: Optional overlap size between consecutive chunks.
         """
