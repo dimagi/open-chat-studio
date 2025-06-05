@@ -134,6 +134,9 @@ class EvaluationDataset(BaseTeamModel):
     def __str__(self):
         return f"{self.name} ({self.messages.count()} messages)"
 
+    def get_absolute_url(self):
+        return reverse("evaluations:dataset_edit", args=[self.team.slug, self.id])
+
 
 class EvaluationConfig(BaseTeamModel):
     name = models.CharField(max_length=255)

@@ -111,28 +111,33 @@ class EvaluatorTable(tables.Table):
 
 
 class EvaluationDatasetTable(tables.Table):
+    name = columns.Column(
+        linkify=True,
+        attrs={
+            "a": {"class": "link"},
+        },
+        orderable=True,
+    )
+    message_count = columns.Column(accessor="message_count", verbose_name="Messages", orderable=False)
     actions = actions.ActionsColumn(
         actions=[
             actions.edit_action(url_name="evaluations:dataset_edit"),
+            actions.AjaxAction(
+                "evaluations:dataset_delete",
+                title="Delete",
+                icon_class="fa-solid fa-trash",
+                confirm_message="This will permanently delete the dataset and all its messages. Are you sure?",
+                hx_method="delete",
+            ),
         ]
-        # actions=[
-        #     actions.edit_action(url_name="pipelines:edit"),
-        #     actions.AjaxAction(
-        #         "pipelines:delete",
-        #         title="Archive",
-        #         icon_class="fa-solid fa-box-archive",
-        #         required_permissions=["pipelines.delete_pipeline"],
-        #         confirm_message="This will delete the pipeline and any associated logs. Are you sure?",
-        #         hx_method="delete",
-        #     ),
-        # ]
     )
 
     class Meta:
         model = EvaluationDataset
         fields = (
             "name",
-            "messages",
+            "message_count",
+            "actions",
         )
         row_attrs = settings.DJANGO_TABLES2_ROW_ATTRS
         orderable = False
