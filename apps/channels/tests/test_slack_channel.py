@@ -10,9 +10,24 @@ from apps.channels.models import ChannelPlatform, ExperimentChannel
 from apps.chat.channels import SlackChannel
 from apps.chat.models import ChatMessage, ChatMessageType
 from apps.files.models import File
+from apps.service_providers.messaging_service import SlackService
 from apps.service_providers.tracing import TraceInfo
 from apps.slack.utils import make_session_external_id
 from apps.utils.factories.channels import ExperimentChannelFactory
+
+
+@pytest.fixture()
+def slack_service():
+    service = SlackService(slack_team_id="123", slack_installation_id=1)
+    service.__dict__["client"] = Mock(
+        conversations_list=Mock(
+            return_value=[
+                {"channels": [{"id": "123", "name": "channel1"}]},
+                {"channels": [{"id": "345", "name": "channel2"}]},
+            ]
+        )
+    )
+    return service
 
 
 def make_mock_file(name, content_type, size, file_data=b"filedata"):
