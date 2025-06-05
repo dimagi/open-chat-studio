@@ -197,7 +197,7 @@ class BasePipelineNode(BaseModel, ABC):
 
     name: str = Field(title="Node Name", json_schema_extra={"ui:widget": "node_name"})
 
-    def _prepare_state(self, node_id: str, incoming_edges: list, state: PipelineState):
+    def _prepare_state(self, node_id: str, incoming_nodes: list, state: PipelineState):
         """This function initializes the state before executing the node function. This is primarily
         determining which output to select from the state as this node's input.
         """
@@ -209,7 +209,7 @@ class BasePipelineNode(BaseModel, ABC):
                     return output["message"]
             raise Exception(f"unable to determine output for {node_id}")
 
-        if not incoming_edges:
+        if not incoming_nodes:
             # This is the first node in the graph
             state["node_input"] = state["messages"][-1]
             state["node_source"] = None
@@ -219,10 +219,10 @@ class BasePipelineNode(BaseModel, ABC):
             state["temp_state"]["attachments"] = [
                 Attachment.model_validate(att) for att in state.get("attachments", [])
             ]
-        elif len(incoming_edges) == 1:
-            incoming_edge = incoming_edges[0]
-            state["node_input"] = _get_output(incoming_edge)
-            state["node_source"] = incoming_edge
+        elif len(incoming_nodes) == 1:
+            incoming_node_id = incoming_nodes[0]
+            state["node_input"] = _get_output(incoming_node_id)
+            state["node_source"] = incoming_node_id
         else:
             # state.path is a list of tuples (previous, current, next)
             for path in reversed(state["path"]):
@@ -239,17 +239,17 @@ class BasePipelineNode(BaseModel, ABC):
             else:
                 # This shouldn't happen, but keeping it here for now to avoid breaking
                 logger.warning(f"Cannot determine which input to use for node {node_id}. Switching to fallback.")
-                for incoming_edge in reversed(incoming_edges):
-                    if incoming_edge in state["outputs"]:
-                        state["node_input"] = _get_output(incoming_edge)
-                        state["node_source"] = incoming_edge
+                for incoming_node_id in reversed(incoming_nodes):
+                    if incoming_node_id in state["outputs"]:
+                        state["node_input"] = _get_output(incoming_node_id)
+                        state["node_source"] = incoming_node_id
                         break
                 else:
                     raise PipelineNodeRunError(
                         f"Cannot determine which input to use for node {node_id}",
                         {
                             "node_id": node_id,
-                            "edge_ids": incoming_edges,
+                            "edge_ids": incoming_nodes,
                             "state_outputs": state["outputs"],
                         },
                     )
@@ -289,10 +289,10 @@ class PipelineNode(BasePipelineNode, ABC):
     """
 
     def process(
-        self, incoming_edges: list, outgoing_edges: list, state: PipelineState, config: RunnableConfig
+        self, incoming_nodes: list, outgoing_edges: list, state: PipelineState, config: RunnableConfig
     ) -> PipelineState:
         self._config = config
-        state = self._prepare_state(self.node_id, incoming_edges, state)
+        state = self._prepare_state(self.node_id, incoming_nodes, state)
         output = self._process(input=state["node_input"], state=state)
         output["path"] = [(state["node_source"], self.node_id, outgoing_edges)]
         get_output_tags_fn = getattr(self, "get_output_tags", None)
