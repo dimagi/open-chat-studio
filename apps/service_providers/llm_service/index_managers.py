@@ -18,8 +18,7 @@ Vector = list[float]
 
 
 class RemoteIndexManager:
-    def __init__(self, client, index_id: str | None = None):
-        self.client = client
+    def __init__(self, index_id: str | None = None):
         self.index_id = index_id
 
     @abstractmethod
@@ -91,6 +90,10 @@ class RemoteIndexManager:
 
 
 class OpenAIRemoteIndexManager(RemoteIndexManager):
+    def __init__(self, client, index_id: str | None = None):
+        super().__init__(index_id)
+        self.client = client
+
     def get(self):
         return self.client.vector_stores.retrieve(self.index_id)
 
