@@ -1,0 +1,266 @@
+from uuid import uuid4
+
+from django.core.management.base import BaseCommand
+from django.db import transaction
+from django.db.models import Q
+
+from apps.experiments.models import Experiment
+from apps.pipelines.flow import FlowNode, FlowNodeData
+from apps.pipelines.models import Pipeline
+from apps.pipelines.nodes.nodes import AssistantNode, EndNode, LLMResponseWithPrompt, StartNode
+from apps.teams.models import Flag
+
+
+class Command(BaseCommand):
+    help = "Convert assistant and LLM experiments to pipeline experiments"
+
+    def add_arguments(self, parser):
+        parser.add_argument(
+            "--dry-run",
+            action="store_true",
+            help="Show what would be converted without making changes",
+        )
+        parser.add_argument(
+            "--team-slug",
+            type=str,
+            help="Only convert experiments for a specific team (by slug)",
+        )
+        parser.add_argument(
+            "--experiment-id",
+            type=int,
+            help="Convert only a specific experiment by ID",
+        )
+        parser.add_argument(
+            "--chatbots-flag-only",
+            action="store_true",
+            help='Only convert experiments for teams that have the "flag_chatbots" feature flag enabled',
+        )
+
+    def handle(self, *args, **options):
+        dry_run = options["dry_run"]
+        team_slug = options.get("team_slug")
+        experiment_id = options.get("experiment_id")
+        chatbots_flag_only = options["chatbots_flag_only"]
+
+        query = Q(pipeline__isnull=True) & (Q(assistant__isnull=False) | Q(llm_provider__isnull=False))
+
+        if team_slug:
+            query &= Q(team__slug=team_slug)
+
+        if experiment_id:
+            query &= Q(id=experiment_id)
+
+        if chatbots_flag_only:
+            chatbots_flag_team_ids = self._get_chatbots_flag_team_ids()
+            if not chatbots_flag_team_ids:
+                self.stdout.write(self.style.WARNING('No teams found with the "flag_chatbots" feature flag enabled.'))
+                return
+            query &= Q(team_id__in=chatbots_flag_team_ids)
+            self.stdout.write(f"Filtering to teams with 'flag_chatbots' FF ({len(chatbots_flag_team_ids)} teams)")
+
+        experiments_to_convert = Experiment.objects.filter(query).select_related(
+            "team", "assistant", "llm_provider", "llm_provider_model"
+        )
+
+        if not experiments_to_convert.exists():
+            self.stdout.write(self.style.WARNING("No matching experiments found."))
+            return
+
+        self.stdout.write(f"Found {experiments_to_convert.count()} experiments to migrate:")
+
+        for experiment in experiments_to_convert:
+            experiment_type = self._get_experiment_type(experiment)
+            team_info = f"{experiment.team.name} ({experiment.team.slug})"
+            self.stdout.write(f"{experiment.name} (ID: {experiment.id}) - Type: {experiment_type} - Team: {team_info}")
+
+        if dry_run:
+            self.stdout.write(self.style.WARNING("\nDry run - no changes will be made."))
+            return
+
+        confirm = input("\nContinue? (y/N): ")
+        if confirm.lower() != "y":
+            self.stdout.write("Cancelled.")
+            return
+
+        converted_count = 0
+        failed_count = 0
+
+        for experiment in experiments_to_convert:
+            try:
+                with transaction.atomic():
+                    self._convert_experiment(experiment)
+                    converted_count += 1
+                    self.stdout.write(self.style.SUCCESS(f"Success: {experiment.name}"))
+            except Exception as e:
+                failed_count += 1
+                self.stdout.write(self.style.ERROR(f"FAILED {experiment.name}: {str(e)}"))
+
+        self.stdout.write(
+            self.style.SUCCESS(f"\nMigration is complete!: {converted_count} succeeded, {failed_count} failed")
+        )
+
+    def _get_experiment_type(self, experiment):
+        if experiment.assistant:
+            return "Assistant"
+        elif experiment.llm_provider:
+            return "LLM"
+        else:
+            return "Unknown"
+
+    def _convert_experiment(self, experiment):
+        experiment_type = self._get_experiment_type(experiment)
+
+        if experiment_type == "Assistant":
+            pipeline = self._create_assistant_pipeline(experiment)
+        elif experiment_type == "LLM":
+            pipeline = self._create_llm_pipeline(experiment)
+        else:
+            raise ValueError(f"Unknown experiment type for experiment {experiment.id}: {experiment_type}")
+
+        experiment.pipeline = pipeline
+
+        # Clear the old type-specific fields
+        if experiment_type == "Assistant":
+            experiment.assistant = None
+        elif experiment_type == "LLM":
+            experiment.llm_provider = None
+            experiment.llm_provider_model = None
+
+        experiment.save()
+
+    def _create_assistant_pipeline(self, experiment):
+        """Create a start -> AssistantNode -> end nodes pipeline for an assistant experiment."""
+        pipeline_name = f"{experiment.name} Pipeline"
+        pipeline = Pipeline.objects.create(team=experiment.team, name=pipeline_name, data={"nodes": [], "edges": []})
+        start_id = str(uuid4())
+        assistant_id = str(uuid4())
+        end_id = str(uuid4())
+
+        start_node = FlowNode(
+            id=start_id,
+            type="startNode",
+            position={"x": 100, "y": 200},
+            data=FlowNodeData(id=start_id, type=StartNode.__name__, params={"name": "start"}),
+        )
+
+        assistant_node = FlowNode(
+            id=assistant_id,
+            type="pipelineNode",
+            position={"x": 400, "y": 200},
+            data=FlowNodeData(
+                id=assistant_id,
+                type=AssistantNode.__name__,
+                label="OpenAI Assistant",
+                params={
+                    "name": "assistant",
+                    "assistant_id": str(experiment.assistant.id),
+                    "citations_enabled": experiment.citations_enabled,
+                    "input_formatter": experiment.input_formatter or "",
+                },
+            ),
+        )
+
+        end_node = FlowNode(
+            id=end_id,
+            type="endNode",
+            position={"x": 700, "y": 200},
+            data=FlowNodeData(id=end_id, type=EndNode.__name__, params={"name": "end"}),
+        )
+        edges = [
+            {
+                "id": f"edge-{start_id}-{assistant_id}",
+                "source": start_id,
+                "target": assistant_id,
+                "sourceHandle": "output",
+                "targetHandle": "input",
+            },
+            {
+                "id": f"edge-{assistant_id}-{end_id}",
+                "source": assistant_id,
+                "target": end_id,
+                "sourceHandle": "output",
+                "targetHandle": "input",
+            },
+        ]
+        pipeline.data = {
+            "nodes": [start_node.model_dump(), assistant_node.model_dump(), end_node.model_dump()],
+            "edges": edges,
+        }
+        pipeline.save()
+        pipeline.update_nodes_from_data()
+
+        return pipeline
+
+    def _get_chatbots_flag_team_ids(self):
+        chatbots_flag = Flag.objects.get(name="flag_chatbots")
+        return list(chatbots_flag.teams.values_list("id", flat=True))
+
+    def _create_llm_pipeline(self, experiment):
+        """Create a start -> LLMResponseWithPrompt -> end nodes pipeline for an LLM experiment."""
+        pipeline_name = f"{experiment.name} Pipeline"
+        pipeline = Pipeline.objects.create(team=experiment.team, name=pipeline_name, data={"nodes": [], "edges": []})
+        start_id = str(uuid4())
+        llm_id = str(uuid4())
+        end_id = str(uuid4())
+
+        start_node = FlowNode(
+            id=start_id,
+            type="startNode",
+            position={"x": 100, "y": 200},
+            data=FlowNodeData(id=start_id, type=StartNode.__name__, params={"name": "start"}),
+        )
+        llm_params = {
+            "name": "llm",
+            "llm_provider_id": experiment.llm_provider.id,
+            "llm_provider_model_id": experiment.llm_provider_model.id,
+            "llm_temperature": experiment.temperature,
+            "history_type": "none",
+            "history_name": None,
+            "history_mode": "summarize",
+            "user_max_token_limit": experiment.llm_provider_model.max_token_limit,
+            "max_history_length": 10,
+            "source_material_id": experiment.source_material.id if experiment.source_material else None,
+            "prompt": experiment.prompt_text or "",
+            "tools": list(experiment.tools) if experiment.tools else [],
+            "custom_actions": [],
+            "built_in_tools": [],
+            "tool_config": {},
+        }
+
+        llm_node = FlowNode(
+            id=llm_id,
+            type="pipelineNode",
+            position={"x": 400, "y": 200},
+            data=FlowNodeData(id=llm_id, type=LLMResponseWithPrompt.__name__, label="LLM", params=llm_params),
+        )
+
+        end_node = FlowNode(
+            id=end_id,
+            type="endNode",
+            position={"x": 700, "y": 200},
+            data=FlowNodeData(id=end_id, type=EndNode.__name__, params={"name": "end"}),
+        )
+        edges = [
+            {
+                "id": f"edge-{start_id}-{llm_id}",
+                "source": start_id,
+                "target": llm_id,
+                "sourceHandle": "output",
+                "targetHandle": "input",
+            },
+            {
+                "id": f"edge-{llm_id}-{end_id}",
+                "source": llm_id,
+                "target": end_id,
+                "sourceHandle": "output",
+                "targetHandle": "input",
+            },
+        ]
+        pipeline.data = {
+            "nodes": [start_node.model_dump(), llm_node.model_dump(), end_node.model_dump()],
+            "edges": edges,
+        }
+        pipeline.save()
+        pipeline.update_nodes_from_data()
+
+        return pipeline
