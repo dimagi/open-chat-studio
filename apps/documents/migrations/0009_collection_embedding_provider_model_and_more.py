@@ -3,7 +3,8 @@
 import django.db.models.deletion
 from django.db import migrations, models
 
-def make_indexes_remote(apps, schema_editor):
+def _make_indexes_remote(apps, schema_editor):
+    """All existing indexes are remote, so we have to update them to reflect that."""
     apps.get_model('documents', 'Collection').objects.update(is_remote_index=True)
 
 class Migration(migrations.Migration):
@@ -24,5 +25,5 @@ class Migration(migrations.Migration):
             name='is_remote_index',
             field=models.BooleanField(default=False, help_text='If selected, this index will be created at and hosted by the selected provider'),
         ),
-        migrations.RunPython(make_indexes_remote, migrations.RunPython.noop),
+        migrations.RunPython(_make_indexes_remote, migrations.RunPython.noop),
     ]
