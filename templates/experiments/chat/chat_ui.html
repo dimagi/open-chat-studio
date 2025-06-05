@@ -31,11 +31,13 @@
   {% endfor %}
 </div>
 {% include 'experiments/chat/input_bar.html' %}
-{% if experiment.consent_form or experiment.post_survey %}
-  <div class="w-full text-center bg-base-300">
-    <label for="end-experiment-modal" class="btn btn-warning btn-xs">End Experiment</label>
-  </div>
-  {% include 'experiments/chat/end_experiment_modal.html' %}
+{% if not embedded %}
+  {% if experiment.consent_form or experiment.post_survey %}
+    <div class="w-full text-center bg-base-300">
+      <label for="end-experiment-modal" class="btn btn-warning btn-xs">End Experiment</label>
+    </div>
+    {% include 'experiments/chat/end_experiment_modal.html' %}
+  {% endif %}
 {% endif %}
 <script>
   let refreshTimer = null;
