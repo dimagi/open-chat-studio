@@ -65,6 +65,10 @@ class CollectionFile(models.Model):
     def status_enum(self):
         return FileStatus(self.status)
 
+    @property
+    def chunk_count(self) -> int:
+        return FileChunkEmbedding.objects.filter(collection_id=self.collection_id, file_id=self.file_id).count()
+
 
 @audit_fields(
     "name",
