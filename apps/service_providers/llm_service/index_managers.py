@@ -123,7 +123,6 @@ class OpenAIRemoteIndexManager(RemoteIndexManager):
                 self.client.vector_stores.file_batches.create(
                     vector_store_id=self.index_id, file_ids=chunk, chunking_strategy=chunking_strategy
                 )
-            return self.index_id
         except Exception as e:
             logger.warning(
                 "Failed to link files to OpenAI vector store",

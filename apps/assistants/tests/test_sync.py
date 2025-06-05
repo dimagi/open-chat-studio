@@ -352,20 +352,18 @@ def test_vector_store_create_batch_files(create_file_batch, create_vector_store,
 
 class TestVectorStoreManager:
     @patch("openai.resources.vector_stores.file_batches.FileBatches.create")
-    def test_link_files_to_vector_store(self, mock_file_batches_create):
+    def test_link_files_to_vector_store_1(self, mock_file_batches_create):
         """Test linking files to vector store with and without chunking strategy"""
-        manager = OpenAIRemoteIndexManager(client=OpenAI(api_key="fake_key"))
-        vector_store_id = "vs_123"
+        manager = OpenAIRemoteIndexManager(client=OpenAI(api_key="fake_key"), index_id="vs_123")
         file_ids = [f"file_{i}" for i in range(600)]  # Create more than 500 files to test batching
 
         # Test without chunking strategy
-        result = manager.link_files_to_vector_store(vector_store_id, file_ids)
-        assert result == vector_store_id
+        manager.link_files_to_vector_store(file_ids)
         assert mock_file_batches_create.call_count == 2
         mock_file_batches_create.assert_has_calls(
             [
-                call(vector_store_id=vector_store_id, file_ids=file_ids[:500], chunking_strategy=None),
-                call(vector_store_id=vector_store_id, file_ids=file_ids[500:], chunking_strategy=None),
+                call(vector_store_id="vs_123", file_ids=file_ids[:500], chunking_strategy=None),
+                call(vector_store_id="vs_123", file_ids=file_ids[500:], chunking_strategy=None),
             ]
         )
 
@@ -375,10 +373,7 @@ class TestVectorStoreManager:
         # Test with chunking strategy
         chunk_size = 1000
         chunk_overlap = 100
-        result = manager.link_files_to_vector_store(
-            vector_store_id, file_ids, chunk_size=chunk_size, chunk_overlap=chunk_overlap
-        )
-        assert result == vector_store_id
+        manager.link_files_to_vector_store(file_ids, chunk_size=chunk_size, chunk_overlap=chunk_overlap)
         assert mock_file_batches_create.call_count == 2
 
         expected_chunking_strategy = {
@@ -391,12 +386,12 @@ class TestVectorStoreManager:
         mock_file_batches_create.assert_has_calls(
             [
                 call(
-                    vector_store_id=vector_store_id,
+                    vector_store_id="vs_123",
                     file_ids=file_ids[:500],
                     chunking_strategy=expected_chunking_strategy,
                 ),
                 call(
-                    vector_store_id=vector_store_id,
+                    vector_store_id="vs_123",
                     file_ids=file_ids[500:],
                     chunking_strategy=expected_chunking_strategy,
                 ),
@@ -406,71 +401,67 @@ class TestVectorStoreManager:
     @patch("openai.resources.vector_stores.VectorStores.retrieve")
     def test_get(self, mock_retrieve):
         """Test retrieving a vector store"""
-        manager = OpenAIRemoteIndexManager(client=OpenAI(api_key="fake_key"))
-        vector_store_id = "vs_123"
-        expected_result = ObjectWithId(id=vector_store_id)
+        manager = OpenAIRemoteIndexManager(client=OpenAI(api_key="fake_key"), index_id="vs_123")
+        expected_result = ObjectWithId(id="vs_123")
         mock_retrieve.return_value = expected_result
 
-        result = manager.get(vector_store_id)
+        result = manager.get()
         assert result == expected_result
-        mock_retrieve.assert_called_once_with(vector_store_id)
+        mock_retrieve.assert_called_once_with("vs_123")
 
     @patch("openai.resources.vector_stores.VectorStores.create")
     def test_create_vector_store(self, mock_create):
         """Test creating a vector store with and without files"""
-        manager = OpenAIRemoteIndexManager(client=OpenAI(api_key="fake_key"))
-        expected_id = "vs_123"
-        mock_create.return_value = ObjectWithId(id=expected_id)
+        manager = OpenAIRemoteIndexManager(client=OpenAI(api_key="fake_key"), index_id="vs_123")
+        mock_create.return_value = ObjectWithId(id="vs_123")
 
         # Test creating without files
         result = manager.create_vector_store("test_store")
-        assert result == expected_id
+        assert result == "vs_123"
         mock_create.assert_called_once_with(name="test_store", file_ids=[])
 
         # Test creating with files
         mock_create.reset_mock()
         file_ids = ["file1", "file2"]
         result = manager.create_vector_store("test_store", file_ids=file_ids)
-        assert result == expected_id
+        assert result == "vs_123"
         mock_create.assert_called_once_with(name="test_store", file_ids=file_ids)
 
     @patch("openai.resources.vector_stores.VectorStores.delete")
     def test_delete_vector_store(self, mock_delete):
         """Test deleting a vector store with different error scenarios"""
-        manager = OpenAIRemoteIndexManager(client=OpenAI(api_key="fake_key"))
-        vector_store_id = "vs_123"
+        manager = OpenAIRemoteIndexManager(client=OpenAI(api_key="fake_key"), index_id="vs_123")
 
         # Test successful deletion
-        manager.delete_vector_store(vector_store_id)
-        mock_delete.assert_called_once_with(vector_store_id=vector_store_id)
+        manager.delete_vector_store()
+        mock_delete.assert_called_once_with(vector_store_id="vs_123")
 
         # Test not found error with fail_silently=True
         mock_delete.reset_mock()
         mock_delete.side_effect = openai.NotFoundError(
             message="", response=Response(status_code=404, request=Mock()), body=None
         )
-        manager.delete_vector_store(vector_store_id, fail_silently=True)
-        mock_delete.assert_called_once_with(vector_store_id=vector_store_id)
+        manager.delete_vector_store(fail_silently=True)
+        mock_delete.assert_called_once_with(vector_store_id="vs_123")
 
         # Test not found error with fail_silently=False
         with pytest.raises(openai.NotFoundError):
-            manager.delete_vector_store(vector_store_id, fail_silently=False)
+            manager.delete_vector_store(fail_silently=False)
 
     @patch("openai.resources.vector_stores.files.Files.delete")
     def test_delete_file(self, mock_delete):
         """Test deleting a file from a vector store"""
-        manager = OpenAIRemoteIndexManager(client=OpenAI(api_key="fake_key"))
-        vector_store_id = "vs_123"
+        manager = OpenAIRemoteIndexManager(client=OpenAI(api_key="fake_key"), index_id="vs_123")
         file_id = "file_123"
 
         # Test successful deletion
-        manager.delete_file(vector_store_id, file_id)
-        mock_delete.assert_called_once_with(vector_store_id=vector_store_id, file_id=file_id)
+        manager.delete_file(file_id)
+        mock_delete.assert_called_once_with(vector_store_id="vs_123", file_id=file_id)
 
         # Test handling of not found error
         mock_delete.reset_mock()
         mock_delete.side_effect = openai.NotFoundError(
             message="", response=Response(status_code=404, request=Mock()), body=None
         )
-        manager.delete_file(vector_store_id, file_id)  # Should not raise an exception
-        mock_delete.assert_called_once_with(vector_store_id=vector_store_id, file_id=file_id)
+        manager.delete_file(file_id)  # Should not raise an exception
+        mock_delete.assert_called_once_with(vector_store_id="vs_123", file_id=file_id)
