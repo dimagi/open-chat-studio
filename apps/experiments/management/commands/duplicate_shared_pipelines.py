@@ -21,7 +21,7 @@ class Command(BaseCommand):
         dry_run = options["dry_run"]
 
         shared_pipelines = Pipeline.objects.annotate(experiment_count=Count("experiment")).filter(
-            experiment_count__gt=1
+            experiment_count__gt=1, working_version=None
         )
 
         if not shared_pipelines.exists():
@@ -58,8 +58,8 @@ class Command(BaseCommand):
                             team=shared_pipeline.team,
                             name=f"{shared_pipeline.name} (Copy for {experiment.name})",
                             data=shared_pipeline.data,
-                            working_version=shared_pipeline.working_version,
-                            version_number=shared_pipeline.version_number,
+                            working_version=None,
+                            version_number=1,
                             is_archived=shared_pipeline.is_archived,
                         )
                         original_nodes = Node.objects.filter(pipeline=shared_pipeline)
@@ -69,7 +69,7 @@ class Command(BaseCommand):
                                 type=node.type,
                                 label=node.label,
                                 params=node.params,
-                                working_version=node.working_version,
+                                working_version=None,
                                 is_archived=node.is_archived,
                                 pipeline=new_pipeline,
                             )
