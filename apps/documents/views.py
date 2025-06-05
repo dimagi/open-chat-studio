@@ -191,7 +191,7 @@ class CreateCollection(LoginAndTeamRequiredMixin, CollectionFormMixin, CreateVie
 
     def _create_remote_index(self, collection: Collection):
         manager = collection.get_index_manager()
-        collection.openai_vector_store_id = manager.create_vector_store(name=collection.index_name)
+        collection.openai_vector_store_id = manager.create_remote_index(name=collection.index_name)
         collection.save(update_fields=["openai_vector_store_id"])
 
 
@@ -221,7 +221,7 @@ class EditCollection(LoginAndTeamRequiredMixin, CollectionFormMixin, UpdateView,
         if form.instance.is_index and form.instance.is_remote_index and "llm_provider" in form.changed_data:
             with transaction.atomic():
                 new_manager = collection.get_index_manager()
-                collection.openai_vector_store_id = new_manager.create_vector_store(collection.index_name)
+                collection.openai_vector_store_id = new_manager.create_remote_index(collection.index_name)
                 collection.save(update_fields=["openai_vector_store_id"])
 
                 CollectionFile.objects.filter(collection_id=collection.id).update(status=FileStatus.PENDING)

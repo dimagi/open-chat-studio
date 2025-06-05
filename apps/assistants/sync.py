@@ -480,7 +480,7 @@ def _update_or_create_vector_store(assistant, name, vector_store_id, file_ids) -
     if vector_store_id:
         file_ids = _get_files_missing_from_vector_store(client, vector_store_id, file_ids)
     else:
-        vector_store_id = vector_store_manager.create_vector_store(name=name, file_ids=file_ids[:100])
+        vector_store_id = vector_store_manager.create_remote_index(name=name, file_ids=file_ids[:100])
         file_ids = file_ids[100:]
 
     with contextlib.suppress(UnableToLinkFileException):

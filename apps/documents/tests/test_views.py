@@ -24,7 +24,7 @@ class TestEditCollection:
     def test_update_collection_with_llm_provider_change(self, migrate_mock, index_manager_mock, collection, client):
         new_llm_provider = LlmProviderFactory(team=collection.team)
         new_vector_store_id = "new-store-123"
-        index_manager_mock.create_vector_store.return_value = new_vector_store_id
+        index_manager_mock.create_remote_index.return_value = new_vector_store_id
 
         client.force_login(collection.team.members.first())
         url = reverse("documents:collection_edit", args=[collection.team.slug, collection.id])
@@ -113,7 +113,7 @@ class TestDeleteCollection:
         assert response.status_code == 400
 
         # Case 2 - Remove the collection from the node so that only a pipeline version is using it
-        index_manager_mock.create_vector_store.return_value = "v-321"
+        index_manager_mock.create_remote_index.return_value = "v-321"
         collection.create_new_version()
         node.params = {}
         node.save()

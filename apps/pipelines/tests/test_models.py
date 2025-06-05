@@ -176,7 +176,7 @@ class TestArchivingNodes:
         )
 
         # Setup mocks
-        index_manager_mock.create_vector_store.return_value = "v-456"
+        index_manager_mock.create_remote_index.return_value = "v-456"
 
         # Build the pipeline
         pipeline = PipelineFactory()
