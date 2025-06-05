@@ -289,12 +289,12 @@ class PipelineNode(BasePipelineNode, ABC):
     """
 
     def process(
-        self, incoming_nodes: list, outgoing_edges: list, state: PipelineState, config: RunnableConfig
+        self, incoming_nodes: list, outgoing_nodes: list, state: PipelineState, config: RunnableConfig
     ) -> PipelineState:
         self._config = config
         state = self._prepare_state(self.node_id, incoming_nodes, state)
         output = self._process(input=state["node_input"], state=state)
-        output["path"] = [(state["node_source"], self.node_id, outgoing_edges)]
+        output["path"] = [(state["node_source"], self.node_id, outgoing_nodes)]
         get_output_tags_fn = getattr(self, "get_output_tags", None)
         if callable(get_output_tags_fn):
             output["output_message_tags"] = get_output_tags_fn()
