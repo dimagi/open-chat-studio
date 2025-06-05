@@ -1,3 +1,4 @@
+import platform
 import textwrap
 import time
 from distutils.version import LooseVersion
@@ -149,8 +150,16 @@ def runserver(c: Context, public=False):
     runserver_command = "python manage.py runserver"
     if public:
         public_url = ngrok_url(c)
-        runserver_command = f"SITE_URL_ROOT={public_url} {runserver_command}"
-    c.run(runserver_command, echo=True, pty=True)
+        if platform.system() == "Windows":
+            runserver_command = f"powershell -Command \"$env:SITE_URL_ROOT='{public_url}'; {runserver_command}\""
+            pty = False
+        else:
+            runserver_command = f"SITE_URL_ROOT={public_url} {runserver_command}"
+            pty = True
+    else:
+        pty = True
+
+    c.run(runserver_command, echo=True, pty=pty)
 
 
 @task

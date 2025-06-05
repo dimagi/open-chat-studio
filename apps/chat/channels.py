@@ -833,6 +833,7 @@ class WebChannel(ChannelBase):
 class TelegramChannel(ChannelBase):
     voice_replies_supported = True
     supported_message_types = [MESSAGE_TYPES.TEXT, MESSAGE_TYPES.VOICE]
+    supports_multimedia = True
 
     def __init__(
         self,
@@ -894,6 +895,41 @@ class TelegramChannel(ChannelBase):
         self.telegram_bot.send_message(
             self.participant_identifier, text=f"I heard: {transcript}", reply_to_message_id=self.message.message_id
         )
+
+    def _can_send_file(self, file: File) -> bool:
+        mime = file.content_type
+        size = file.content_size or 0  # in bytes
+
+        if mime.startswith("image/"):
+            return size <= 10 * 1024 * 1024  # 10 MB for images
+        elif mime.startswith(("video/", "audio/", "application/")):
+            return size <= 50 * 1024 * 1024  # 50 MB for other supported types
+        else:
+            return False
+
+    def send_file_to_user(self, file: File):
+        chat_id = self.participant_identifier
+        mime = file.content_type
+        file_data = file.file
+
+        main_type = mime.split("/")[0]
+        arg_name = ""
+
+        match main_type:
+            case "image":
+                method = self.telegram_bot.send_photo
+                arg_name = "photo"
+            case "video":
+                method = self.telegram_bot.send_video
+                arg_name = "video"
+            case "audio":
+                method = self.telegram_bot.send_audio
+                arg_name = "audio"
+            case _:
+                method = self.telegram_bot.send_document
+                arg_name = "document"
+
+        antiflood(method, chat_id, **{arg_name: file_data})
 
 
 class WhatsappChannel(ChannelBase):
