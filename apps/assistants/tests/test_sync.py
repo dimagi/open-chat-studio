@@ -352,7 +352,7 @@ def test_vector_store_create_batch_files(create_file_batch, create_vector_store,
 
 class TestVectorStoreManager:
     @patch("openai.resources.vector_stores.file_batches.FileBatches.create")
-    def test_link_files_to_vector_store_1(self, mock_file_batches_create):
+    def test_link_files_to_vector_store(self, mock_file_batches_create):
         """Test linking files to vector store with and without chunking strategy"""
         manager = OpenAIRemoteIndexManager(client=OpenAI(api_key="fake_key"), index_id="vs_123")
         file_ids = [f"file_{i}" for i in range(600)]  # Create more than 500 files to test batching
