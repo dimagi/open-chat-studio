@@ -9,27 +9,28 @@
 
     <!-- Clone from sessions mode -->
     <div x-show="mode === 'clone'" class="w-full mt-4">
-      <div class="border p-4 bg-base-100 rounded-sm shadow-sm mb-4">
+      <div class="p-4 bg-base-100 rounded-sm shadow-sm mb-4">
         <h3 class="text-lg font-semibold mb-4">{% trans "Select Sessions to Clone Messages From" %}</h3>
         <p class="text-sm text-gray-600 mb-4">
           {% trans "Select one or more experiment sessions. All message pairs (human-AI) from the selected sessions will be cloned into the new dataset." %}
         </p>
 
-        <!-- Show selection summary -->
-        <div x-show="selectedSessionIds.length > 0" class="mb-4 p-3 bg-blue-50 border border-blue-200 rounded">
-          <p class="text-sm font-medium text-blue-800">
-            <span x-text="selectedSessionIds.length"></span> session<span x-show="selectedSessionIds.length !== 1">s</span> selected
-          </p>
-          <button type="button" class="btn btn-xs btn-outline mt-2" @click="clearAllSelections()">
-            Clear All Selections
-          </button>
-        </div>
-
         <div class="mb-4">
           {{ available_tags|default:""|json_script:"available-tags-data" }}
           {{ experiment_versions|default:""|json_script:"experiment-versions-data" }}
           {{ channel_list|default:"[]"|json_script:"channel-list-data" }}
-          {% include "experiments/filters.html" %}
+
+          <div class="flex items-center justify-between">
+            <div>
+              {% include "experiments/filters.html" %}
+            </div>
+            <div x-show="selectedSessionIds.length > 0" class="text-sm font-medium ml-4">
+              <span x-text="selectedSessionIds.length"></span> session<span x-show="selectedSessionIds.length !== 1">s</span> selected
+              <button type="button" class="btn btn-xs btn-outline ml-2" @click="clearAllSelections()">
+                Clear
+              </button>
+            </div>
+          </div>
         </div>
 
         <div id="sessions-table"
@@ -46,7 +47,7 @@
 
     <!-- Manual creation mode -->
     <div x-show="mode === 'manual'" class="w-full mt-4">
-      <div class="border p-4 bg-base-100 rounded-sm shadow-sm mb-4">
+      <div class="p-4 bg-base-100 rounded-sm shadow-sm mb-4">
         <h3 class="text-lg font-semibold mb-4">{% trans "Manually Add Message Pairs" %}</h3>
         <p class="text-sm text-gray-600 mb-4">
           {% trans "Add individual message pairs with human messages, AI responses, and optional context data." %}

@@ -110,18 +110,23 @@ class CreateDataset(LoginAndTeamRequiredMixin, CreateView, PermissionRequiredMix
         """Support filters from experiment session list via URL parameters."""
         initial = super().get_initial()
 
-        # Apply the same filters to get the filtered session IDs
-        queryset = (
-            ExperimentSession.objects.with_last_message_created_at()
-            .filter(team=self.request.team)
-            .select_related("participant__user")
-        )
-        from apps.experiments.filters import apply_dynamic_filters
+        # Only pre-populate sessions if there are explicit filter parameters in the URL
+        # This prevents selecting all sessions when default filters are applied
+        has_explicit_filters = any(key.startswith("filter_") for key in self.request.GET)
 
-        filtered_queryset = apply_dynamic_filters(queryset, self.request)
-        filtered_session_ids = ",".join(str(session.external_id) for session in filtered_queryset)
-        if filtered_session_ids:
-            initial["session_ids"] = filtered_session_ids
+        if has_explicit_filters:
+            # Apply the same filters to get the filtered session IDs
+            queryset = (
+                ExperimentSession.objects.with_last_message_created_at()
+                .filter(team=self.request.team)
+                .select_related("participant__user")
+            )
+            from apps.experiments.filters import apply_dynamic_filters
+
+            filtered_queryset = apply_dynamic_filters(queryset, self.request)
+            filtered_session_ids = ",".join(str(session.external_id) for session in filtered_queryset)
+            if filtered_session_ids:
+                initial["session_ids"] = filtered_session_ids
 
         return initial
 
@@ -191,7 +196,7 @@ class DatasetSessionsSelectionTableView(LoginAndTeamRequiredMixin, SingleTableVi
     """Table view for selecting sessions to create a dataset from."""
 
     model = ExperimentSession
-    paginate_by = 3
+    paginate_by = 20
     table_class = EvaluationSessionsSelectionTable
     template_name = "table/single_table.html"
     permission_required = "experiments.view_experimentsession"
