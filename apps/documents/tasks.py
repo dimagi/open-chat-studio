@@ -196,7 +196,6 @@ def create_collection_from_assistant_task(collection_id: int, assistant_id: int)
 
         # Link files to the new vector store at OpenAI (only if there are files with external IDs)
         if file_with_remote_ids:
-            # TODO: Figure out the chunking strategy for these files
             manager.link_files_to_vector_store(
                 vector_store_id=collection.openai_vector_store_id,
                 file_ids=[file.external_id for file in file_with_remote_ids],
