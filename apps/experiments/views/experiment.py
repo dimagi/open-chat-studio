@@ -107,7 +107,10 @@ CUSTOM_ERROR_MESSAGE = (
 @login_and_team_required
 @permission_required("experiments.view_experiment", raise_exception=True)
 def experiments_home(request, team_slug: str):
-    return generic_home(request, team_slug, "Experiments", "experiments:table", "experiments:new")
+    show_modal = flag_is_active(request, "flag_chatbots")
+    return generic_home(
+        request, team_slug, "Experiments", "experiments:table", "experiments:new", show_modal_instead=show_modal
+    )
 
 
 class ExperimentTableView(BaseExperimentTableView):
@@ -269,6 +272,12 @@ class CreateExperiment(BaseExperimentView, CreateView):
 
     def form_invalid(self, form, file_formset):
         return self.render_to_response(self.get_context_data(form=form, file_formset=file_formset))
+
+    def dispatch(self, request, *args, **kwargs):
+        is_chatbot = kwargs.get("new_chatbot", False)
+        if not is_chatbot and flag_is_active(request, "flag_chatbots"):
+            return HttpResponseRedirect(reverse("chatbots:new", args=[request.team.slug]))
+        return super().dispatch(request, *args, **kwargs)
 
 
 class EditExperiment(BaseExperimentView, UpdateView):
