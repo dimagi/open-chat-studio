@@ -414,8 +414,8 @@ def remove_files_from_tool(ocs_resource: ToolResources, files: list[int]):
     ocs_resource.files.through.objects.filter(file__in=files).delete()
 
     for file in files:
-        if ocs_resource.tool_type == "file_search" and file.is_used():
-            if ocs_resource.extra["vector_store_id"] and file.external_id:
+        if file.is_used():
+            if ocs_resource.extra.get("vector_store_id") and file.external_id:
                 index_manager = OpenAIVectorStoreManager(client)
                 index_manager.delete_file(
                     vector_store_id=ocs_resource.extra["vector_store_id"], file_id=file.external_id
