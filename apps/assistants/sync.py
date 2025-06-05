@@ -232,6 +232,7 @@ def _get_files_to_delete(team, tool_resource_id):
     """Get files linked to the tool resource that are not referenced by any other tool resource or collection."""
     files_with_single_reference = (
         ToolResources.files.through.objects.filter(toolresources__assistant__team=team)
+        .values("file")
         .annotate(count=Count("toolresources"))
         .filter(count=1)
         .values("file_id")

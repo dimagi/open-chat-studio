@@ -384,13 +384,11 @@ def test_get_files_to_delete():
     collection.files.add(file)
     resource.files.add(file)
 
-    files = [file for file in _get_files_to_delete(team, resource.id)]
-    assert len(files) == 0
+    assert len(list(_get_files_to_delete(team, resource.id))) == 0
 
     collection.files.through.objects.all().delete()  # Clear the collection files
 
-    files = [file for file in _get_files_to_delete(team, resource.id)]
-    assert len(files) == 1
+    assert len(list(_get_files_to_delete(team, resource.id))) == 1
 
 
 class TestVectorStoreManager:

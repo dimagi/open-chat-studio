@@ -39,7 +39,7 @@ class TestAssistantDeletion:
     def test_files_not_to_delete_when_referenced_by_multiple_resources(self, code_resource):
         all_files = list(code_resource.files.all())
         tool_resource = ToolResources.objects.create(tool_type="file_search", assistant=code_resource.assistant)
-        tool_resource.files.set([all_files[0]])
+        tool_resource.files.add(all_files[0])
 
         # only the second file should be deleted
         files_to_delete = list(_get_files_to_delete(code_resource.assistant.team, code_resource.id))
