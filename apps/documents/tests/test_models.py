@@ -67,7 +67,7 @@ class TestCollection:
     @mock.patch("apps.documents.tasks.index_collection_files")
     def test_create_new_version_of_a_collection_index(self, index_collection_files, index_manager_mock):
         """Ensure that a new vector store is created for the new version when one is created"""
-        index_manager_mock.create_vector_store.return_value = "new-vs-123"
+        index_manager_mock.create_remote_index.return_value = "new-vs-123"
 
         collection = CollectionFactory(
             name="Test Collection",
@@ -93,7 +93,7 @@ class TestCollection:
         assert collection.openai_vector_store_id == "old-vs-123"
 
         # Verify vector store was created and files were indexed
-        index_manager_mock.create_vector_store.assert_called_once_with(
+        index_manager_mock.create_remote_index.assert_called_once_with(
             name=f"{new_version.index_name} v{new_version.version_number}"
         )
         index_collection_files.assert_called()

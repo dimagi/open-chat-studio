@@ -174,7 +174,7 @@ class Collection(BaseTeamModel, VersionsMixin):
             if self.is_remote_index:
                 manager = new_version.get_index_manager()
                 version_name = f"{new_version.index_name} v{new_version.version_number}"
-                new_version.openai_vector_store_id = manager.create_vector_store(name=version_name)
+                new_version.openai_vector_store_id = manager.create_remote_index(name=version_name)
                 new_version.save(update_fields=["openai_vector_store_id"])
 
                 # Upload files to vector store

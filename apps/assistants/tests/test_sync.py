@@ -416,14 +416,14 @@ class TestVectorStoreManager:
         mock_create.return_value = ObjectWithId(id="vs_123")
 
         # Test creating without files
-        result = manager.create_vector_store("test_store")
+        result = manager.create_remote_index("test_store")
         assert result == "vs_123"
         mock_create.assert_called_once_with(name="test_store", file_ids=[])
 
         # Test creating with files
         mock_create.reset_mock()
         file_ids = ["file1", "file2"]
-        result = manager.create_vector_store("test_store", file_ids=file_ids)
+        result = manager.create_remote_index("test_store", file_ids=file_ids)
         assert result == "vs_123"
         mock_create.assert_called_once_with(name="test_store", file_ids=file_ids)
 

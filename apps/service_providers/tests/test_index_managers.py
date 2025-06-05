@@ -37,7 +37,7 @@ class TestOpenAIRemoteIndexManager:
         mock_vector_store.id = "vs-new-456"
         client_mock.vector_stores.create.return_value = mock_vector_store
 
-        result = index_manager.create_vector_store("Test Vector Store")
+        result = index_manager.create_remote_index("Test Vector Store")
 
         client_mock.vector_stores.create.assert_called_once_with(name="Test Vector Store", file_ids=[])
         assert result == "vs-new-456"
@@ -49,7 +49,7 @@ class TestOpenAIRemoteIndexManager:
         mock_vector_store.id = "vs-new-789"
         client_mock.vector_stores.create.return_value = mock_vector_store
 
-        result = index_manager.create_vector_store("Test Vector Store", file_ids=["file-1", "file-2"])
+        result = index_manager.create_remote_index("Test Vector Store", file_ids=["file-1", "file-2"])
 
         client_mock.vector_stores.create.assert_called_once_with(
             name="Test Vector Store", file_ids=["file-1", "file-2"]
