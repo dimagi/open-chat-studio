@@ -56,9 +56,8 @@ def index_collection_files(collection_files_queryset: QuerySet[CollectionFile]) 
     )
 
     for strategy, collection_files_group in strategy_groups:
-        collection_files = list(collection_files_group)
         ids = []
-        for collection_file in collection_files:
+        for collection_file in collection_files_group:
             ids.append(collection_file.id)
             if collection_file.file.external_id:
                 previous_remote_file_ids.append(collection_file.file.external_id)
@@ -66,7 +65,7 @@ def index_collection_files(collection_files_queryset: QuerySet[CollectionFile]) 
         CollectionFile.objects.filter(id__in=ids).update(status=FileStatus.IN_PROGRESS)
 
         collection.add_files_to_index(
-            collection_files=list(CollectionFile.objects.filter(id__in=ids).all()),
+            collection_files=CollectionFile.objects.filter(id__in=ids).iterator(100),
             chunk_size=strategy.chunk_size,
             chunk_overlap=strategy.chunk_overlap,
         )

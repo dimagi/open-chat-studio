@@ -1,4 +1,5 @@
 import logging
+from collections.abc import Iterator
 
 import pydantic
 from django.db import models, transaction
@@ -269,7 +270,7 @@ class Collection(BaseTeamModel, VersionsMixin):
 
     def _handle_remote_indexing(
         self,
-        collection_files: list[CollectionFile],
+        collection_files: Iterator[CollectionFile],
         chunk_size: int = None,
         chunk_overlap: int = None,
     ):
@@ -301,7 +302,7 @@ class Collection(BaseTeamModel, VersionsMixin):
 
     def _handle_local_indexing(
         self,
-        collection_files: list[CollectionFile],
+        collection_files: Iterator[CollectionFile],
         chunk_size: int = None,
         chunk_overlap: int = None,
     ):

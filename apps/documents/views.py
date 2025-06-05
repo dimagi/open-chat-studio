@@ -224,7 +224,7 @@ class EditCollection(LoginAndTeamRequiredMixin, CollectionFormMixin, UpdateView,
                 collection.openai_vector_store_id = new_manager.create_vector_store(collection.index_name)
                 collection.save(update_fields=["openai_vector_store_id"])
 
-            CollectionFile.objects.filter(collection_id=collection.id).update(status=FileStatus.PENDING)
+                CollectionFile.objects.filter(collection_id=collection.id).update(status=FileStatus.PENDING)
             tasks.migrate_vector_stores.delay(
                 collection_id=form.instance.id,
                 from_vector_store_id=old_vector_store_id,

@@ -158,7 +158,8 @@ class TestCollection:
         index_manager_mock.ensure_remote_file_exists.side_effect = None
         index_manager_mock.link_files_to_vector_store.side_effect = None
 
-        remote_collection_index.add_files_to_index([collection_file])
+        iterator = CollectionFile.objects.filter(id=collection_file.id).iterator(1)
+        remote_collection_index.add_files_to_index(iterator)
 
         collection_file.refresh_from_db()
         assert collection_file.status == FileStatus.COMPLETED
@@ -173,7 +174,8 @@ class TestCollection:
         # Mock ensure_remote_file_exists to raise FileUploadError
         index_manager_mock.ensure_remote_file_exists.side_effect = FileUploadError("Upload failed")
 
-        remote_collection_index.add_files_to_index([collection_file])
+        iterator = CollectionFile.objects.filter(id=collection_file.id).iterator(1)
+        remote_collection_index.add_files_to_index(iterator)
 
         collection_file.refresh_from_db()
         assert collection_file.status == FileStatus.FAILED
@@ -194,7 +196,8 @@ class TestCollection:
         index_manager_mock.ensure_remote_file_exists.side_effect = None
         index_manager_mock.link_files_to_vector_store.side_effect = UnableToLinkFileException("Link failed")
 
-        remote_collection_index.add_files_to_index([collection_file])
+        iterator = CollectionFile.objects.filter(id=collection_file.id).iterator(1)
+        remote_collection_index.add_files_to_index(iterator)
 
         collection_file.refresh_from_db()
         assert collection_file.status == FileStatus.FAILED
@@ -210,7 +213,8 @@ class TestCollection:
         local_index_manager_mock.get_embedding_vector.return_value = [0.1] * settings.EMBEDDING_VECTOR_SIZE
 
         with mock.patch.object(file, "read_content", return_value="test content"):
-            local_collection_index.add_files_to_index([collection_file])
+            iterator = CollectionFile.objects.filter(id=collection_file.id).iterator(1)
+            local_collection_index.add_files_to_index(iterator)
 
         collection_file.refresh_from_db()
         assert collection_file.status == FileStatus.COMPLETED
@@ -231,7 +235,8 @@ class TestCollection:
 
         # Mock file.read_content to raise an exception
         with mock.patch.object(file, "read_content", side_effect=Exception("Read failed")):
-            local_collection_index.add_files_to_index([collection_file])
+            iterator = CollectionFile.objects.filter(id=collection_file.id).iterator(1)
+            local_collection_index.add_files_to_index(iterator)
 
         collection_file.refresh_from_db()
         assert collection_file.status == FileStatus.FAILED
