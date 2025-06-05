@@ -1,6 +1,6 @@
 import contextlib
 import logging
-from abc import abstractmethod
+from abc import ABCMeta, abstractmethod
 
 import openai
 from django.conf import settings
@@ -17,7 +17,7 @@ logger = logging.getLogger("ocs.index_manager")
 Vector = list[float]
 
 
-class RemoteIndexManager:
+class RemoteIndexManager(metaclass=ABCMeta):
     """
     Abstract base class for managing vector stores in remote indexing services.
 
@@ -208,7 +208,7 @@ class OpenAIRemoteIndexManager(RemoteIndexManager):
         File.objects.bulk_update(files, fields=["external_id"])
 
 
-class LocalIndexManager:
+class LocalIndexManager(metaclass=ABCMeta):
     """
     Abstract base class for managing local embedding operations.
 
@@ -233,6 +233,7 @@ class LocalIndexManager:
             Vector: A list of floats representing the embedding vector.
         """
 
+    @abstractmethod
     def chunk_content(self, text: str, chunk_size: int, chunk_overlap: int) -> list[str]:
         """
         Split text content into overlapping chunks for processing.
