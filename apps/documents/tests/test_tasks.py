@@ -2,14 +2,17 @@ from unittest.mock import ANY, patch
 
 import pytest
 
+from apps.assistants.models import ToolResources
 from apps.assistants.sync import OpenAiSyncError
 from apps.documents.models import CollectionFile, FileStatus
 from apps.documents.tasks import (
     _upload_files_to_vector_store,
+    create_collection_from_assistant_task,
     index_collection_files_task,
     migrate_vector_stores,
 )
 from apps.files.models import File
+from apps.utils.factories.assistants import OpenAiAssistantFactory
 from apps.utils.factories.documents import CollectionFactory
 from apps.utils.factories.files import FileFactory
 from apps.utils.factories.service_provider_factories import LlmProviderFactory
@@ -204,3 +207,31 @@ class TestUploadFilesToVectorStoreHelper:
 
         collection_file.refresh_from_db()
         assert collection_file.status == FileStatus.FAILED
+
+
+@pytest.mark.django_db()
+class TestCreateCollectionFromAssistantTask:
+    @patch("apps.documents.tasks.index_collection_files_task")
+    def test_create_collection_from_assistant_task_success(self, index_collection_files_task, index_manager_mock):
+        """
+        Test that files from the assistant's tool resources are linked to the collection's new vector store.
+        - If the files have external IDs, they are linked to the vector store.
+        - If the files do not have external IDs, they are indexed by OpenAI and linked to the vector store.
+        """
+        index_manager_mock.create_vector_store.return_value = "vs_456"
+        collection = CollectionFactory(llm_provider=LlmProviderFactory())
+        assistant = OpenAiAssistantFactory()
+        resource = ToolResources.objects.create(
+            tool_type="file_search", assistant=assistant, extra={"vector_store_id": "vs_123"}
+        )
+        remote_file = FileFactory(external_id="file-123")
+        local_file = FileFactory(external_id="")
+        resource.files.add(*[remote_file.id, local_file.id])
+
+        create_collection_from_assistant_task(collection_id=collection.id, assistant_id=assistant.id)
+
+        # Verify files were indexed
+        index_manager_mock.link_files_to_vector_store.assert_called_once_with(
+            vector_store_id=ANY, file_ids=["file-123"]
+        )
+        index_collection_files_task.assert_called_once()
