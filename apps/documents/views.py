@@ -130,11 +130,18 @@ def delete_collection_file(request, team_slug: str, pk: int, file_id: int):
     collection = collection_file.collection
     collection_file.delete()
 
-    if not file.is_used():
+    if file.is_used():
+        if collection.is_index:
+            # Remove it from the index only
+            index_manager = collection.llm_provider.get_index_manager()
+            index_manager.delete_file(collection.openai_vector_store_id, file_id=file.external_id)
+    else:
         # Nothing else is using it
         if collection.is_index:
+            # Remove it from the remote service altogether
             client = collection.llm_provider.get_llm_service().get_raw_client()
             delete_file_from_openai(client, file)
+
         collection_file.file.delete_or_archive()
 
     messages.success(request, "File removed from collection")
