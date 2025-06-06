@@ -338,6 +338,7 @@ class CreateCollectionFromAssistant(LoginAndTeamRequiredMixin, FormView, Permiss
                 team=self.request.team,
                 name=collection_name,
                 is_index=True,
+                is_remote_index=True,
                 llm_provider=assistant.llm_provider,
             )
             self.object = collection

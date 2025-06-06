@@ -167,8 +167,14 @@ class OpenAIRemoteIndexManager(RemoteIndexManager):
 
     def delete_file_from_index(self, file_id: str):
         """Disassociates the file with the vector store"""
-        with contextlib.suppress(Exception):
+        try:
             self.client.vector_stores.files.delete(vector_store_id=self.index_id, file_id=file_id)
+        except Exception as e:
+            logger.warning(
+                "Failed to delete file from OpenAI vector store",
+                extra={"vector_store_id": self.index_id, "file_id": file_id},
+            )
+            raise UnableToLinkFileException("Failed to delete file from OpenAI vector store") from e
 
     def link_files_to_remote_index(self, file_ids: list[str], chunk_size=None, chunk_overlap=None):
         """Link OpenAI files `file_ids` to the vector store in OpenAI."""
