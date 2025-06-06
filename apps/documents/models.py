@@ -333,8 +333,7 @@ class Collection(BaseTeamModel, VersionsMixin):
         for collection_file in collection_files:
             file = collection_file.file
             try:
-                content = file.read_content()
-                text_chunks = index_manager.chunk_content(content, chunk_size=chunk_size, chunk_overlap=chunk_overlap)
+                text_chunks = index_manager.chunk_file(file, chunk_size=chunk_size, chunk_overlap=chunk_overlap)
                 for idx, chunk in enumerate(text_chunks):
                     embedding_vector = index_manager.get_embedding_vector(chunk)
                     FileChunkEmbedding.objects.create(
