@@ -30,13 +30,20 @@ class CollectionForm(forms.ModelForm):
         }
 
         if self.instance.id:
+            # Changing the collection type is not allowed
             self.fields["is_index"].widget.attrs["disabled"] = True
-            if self.instance.has_pending_index_uploads() or not self.instance.is_remote_index:
-                self.fields["llm_provider"].widget.attrs["disabled"] = True
 
             if self.instance.is_index:
-                self.fields["embedding_provider_model"].widget.attrs["disabled"] = True
+                # Changing the index location is not allowed
                 self.fields["is_remote_index"].widget.attrs["disabled"] = True
+
+                if self.instance.has_pending_index_uploads():
+                    self.fields["llm_provider"].widget.attrs["disabled"] = True
+
+                if not self.instance.is_remote_index:
+                    # We don't yet support changing the embedding model or llm provider for local indexes
+                    self.fields["embedding_provider_model"].widget.attrs["disabled"] = True
+                    self.fields["llm_provider"].widget.attrs["disabled"] = True
 
     def clean_is_index(self):
         if self.instance.id:
@@ -52,6 +59,14 @@ class CollectionForm(forms.ModelForm):
         if self.cleaned_data["is_index"] and not self.cleaned_data["llm_provider"]:
             raise forms.ValidationError("This field is required when creating an index.")
         return self.cleaned_data["llm_provider"]
+
+    def clean(self):
+        cleaned_data = super().clean()
+        is_remote_index = self.cleaned_data["is_remote_index"]
+        embedding_provider_model = self.cleaned_data["embedding_provider_model"]
+        if is_remote_index is False and not embedding_provider_model:
+            raise forms.ValidationError("An embedding model is required for local indexes.")
+        return cleaned_data
 
 
 class CreateCollectionFromAssistantForm(forms.Form):
