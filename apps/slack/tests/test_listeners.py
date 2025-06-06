@@ -1,4 +1,4 @@
-from unittest.mock import Mock
+from unittest.mock import MagicMock, Mock
 
 import pytest
 from django.utils import timezone
@@ -146,6 +146,7 @@ def test_response_to_mention_in_session_thread(bolt_context):
     assert ExperimentSession.objects.count() == 1
 
 
+@pytest.mark.usefixtures("experiment_channel")
 def test_response_to_mention_in_non_session_thread(bolt_context):
     bolt_context.client.chat_postMessage = Mock()
 
