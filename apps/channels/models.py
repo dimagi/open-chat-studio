@@ -61,8 +61,8 @@ class ChannelPlatform(models.TextChoices):
             platform_availability[cls.COMMCARE_CONNECT] = True
 
         # Platforms already used should not be displayed
-        for platform in used_platforms:
-            platform_availability.pop(platform)
+        # for platform in used_platforms:
+        #     platform_availability.pop(platform)
 
         return platform_availability
 

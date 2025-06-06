@@ -278,11 +278,8 @@ class SlackService(MessagingService):
         self.client.conversations_join(channel=channel_id)
 
     def send_file_message(self, file: File, to: str, thread_ts: str):
-        if hasattr(file.file, "read"):
-            file_bytes = BytesIO(file.file.read())
-            file_bytes.seek(0)
-        else:
-            raise ValueError("Unsupported file object")
+        file_bytes = BytesIO(file.file.read())
+        file_bytes.seek(0)
 
         self.client.files_upload_v2(
             channels=to,
