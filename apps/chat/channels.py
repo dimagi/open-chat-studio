@@ -11,6 +11,7 @@ from typing import TYPE_CHECKING, ClassVar
 
 import emoji
 import requests
+from django.conf import settings
 from django.db import transaction
 from django.http import Http404
 from telebot import TeleBot
@@ -1074,7 +1075,7 @@ class SlackChannel(ChannelBase):
         mime = file.content_type
         size = file.content_size or 0
         # slack allows 1 GB, but keeping it to 50MB as we can only upload file upto 50MB in collections
-        max_size = 50 * 1024 * 1024
+        max_size = settings.MAX_FILE_SIZE_MB
         return mime.startswith(("image/", "video/", "audio/", "application/")) and size <= max_size
 
     def send_file_to_user(self, file: File):
