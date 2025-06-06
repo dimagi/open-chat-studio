@@ -1,7 +1,6 @@
 import logging
 import uuid
 from datetime import datetime, timedelta
-from functools import cached_property
 from io import BytesIO
 from typing import ClassVar
 from urllib.parse import urljoin
@@ -236,6 +235,7 @@ class SlackService(MessagingService):
 
     slack_team_id: str
     slack_installation_id: int
+    _client: WebClient | None
 
     def send_text_message(
         self, message: str, from_: str, to: str, platform: ChannelPlatform, thread_ts: str = None, **kwargs
@@ -246,11 +246,17 @@ class SlackService(MessagingService):
             thread_ts=thread_ts,
         )
 
-    @cached_property
+    @property
     def client(self) -> WebClient:
+        if self._client:
+            return self._client
         from apps.slack.client import get_slack_client
 
         return get_slack_client(self.slack_installation_id)
+
+    @client.setter
+    def client(self, value: WebClient):
+        self._client = value
 
     def iter_channels(self):
         for page in self.client.conversations_list():

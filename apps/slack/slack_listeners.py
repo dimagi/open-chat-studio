@@ -18,6 +18,7 @@ from apps.channels.datamodels import SlackMessage
 from apps.channels.models import ChannelPlatform, ExperimentChannel
 from apps.chat.channels import SlackChannel
 from apps.experiments.models import ExperimentSession
+from apps.service_providers.messaging_service import SlackService
 from apps.slack.exceptions import TeamAccessException
 from apps.slack.models import SlackInstallation
 from apps.slack.utils import make_session_external_id
@@ -76,11 +77,18 @@ def _respond_to_message(event, channel_id, thread_ts, experiment_channel, experi
         participant_id=slack_user, channel_id=channel_id, thread_ts=thread_ts, message_text=message_text
     )
 
-    # Set `send_response_to_user` to `False` to prevent it sending the message since we're going to send
-    # it here using the already authenticated client.
-    ocs_channel = SlackChannel(experiment.default_version, experiment_channel, session, send_response_to_user=False)
-    response = ocs_channel.new_user_message(message).content
-    context.say(response, thread_ts=thread_ts)
+    # Set `send_response_to_user` to True here because the channel will handle sending,
+    # with already authenticated client
+    messaging_service = SlackService(slack_team_id="_", slack_installation_id=0)
+    messaging_service.client = context.client
+    ocs_channel = SlackChannel(
+        experiment=experiment.default_version,
+        experiment_channel=experiment_channel,
+        experiment_session=session,
+        send_response_to_user=True,
+        messaging_service=messaging_service,
+    )
+    ocs_channel.new_user_message(message)
 
 
 def load_installation(context: BoltContext, next):

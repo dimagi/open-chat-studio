@@ -1031,6 +1031,7 @@ class SlackChannel(ChannelBase):
         experiment_channel: ExperimentChannel,
         experiment_session: ExperimentSession,
         send_response_to_user: bool = True,
+        messaging_service: Optional[MessagingService] = None,
     ):
         """
         Args:
@@ -1040,6 +1041,13 @@ class SlackChannel(ChannelBase):
         """
         super().__init__(experiment, experiment_channel, experiment_session)
         self.send_response_to_user = send_response_to_user
+        self._messaging_service = messaging_service
+
+    @property
+    def messaging_service(self) -> MessagingService:
+        if self._messaging_service:
+            return self._messaging_service
+        return self.experiment_channel.messaging_provider.get_messaging_service()
 
     def send_text_to_user(self, text: str):
         if not self.send_response_to_user:
