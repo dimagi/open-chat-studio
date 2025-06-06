@@ -1,7 +1,6 @@
 import logging
 import uuid
 from datetime import datetime, timedelta
-from functools import cached_property
 from io import BytesIO
 from typing import ClassVar
 from urllib.parse import urljoin
@@ -236,6 +235,7 @@ class SlackService(MessagingService):
 
     slack_team_id: str
     slack_installation_id: int
+    _client: WebClient | None
 
     def send_text_message(
         self, message: str, from_: str, to: str, platform: ChannelPlatform, thread_ts: str = None, **kwargs
@@ -246,11 +246,17 @@ class SlackService(MessagingService):
             thread_ts=thread_ts,
         )
 
-    @cached_property
+    @property
     def client(self) -> WebClient:
-        from apps.slack.client import get_slack_client
+        if not self._client:
+            from apps.slack.client import get_slack_client
 
-        return get_slack_client(self.slack_installation_id)
+            self._client = get_slack_client(self.slack_installation_id)
+        return self._client
+
+    @client.setter
+    def client(self, value: WebClient):
+        self._client = value
 
     def iter_channels(self):
         for page in self.client.conversations_list():
@@ -270,3 +276,15 @@ class SlackService(MessagingService):
             raise ServiceProviderConfigError(self._type, message) from e
 
         self.client.conversations_join(channel=channel_id)
+
+    def send_file_message(self, file: File, to: str, thread_ts: str):
+        file_bytes = BytesIO(file.file.read())
+        file_bytes.seek(0)
+
+        self.client.files_upload_v2(
+            channels=to,
+            file=file_bytes,
+            filename=file.name,
+            thread_ts=thread_ts,
+            title=file.name,
+        )
