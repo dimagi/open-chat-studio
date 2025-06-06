@@ -76,6 +76,12 @@ class CollectionFile(models.Model):
 
 @audit_fields(
     "name",
+    "version_number",
+    "llm_provider",
+    "is_index",
+    "is_remote_index",
+    "embedding_provider_model",
+    "openai_vector_store_id",
     audit_special_queryset_writes=True,
 )
 class Collection(BaseTeamModel, VersionsMixin):
