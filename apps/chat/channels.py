@@ -1031,13 +1031,13 @@ class SlackChannel(ChannelBase):
         experiment: Experiment,
         experiment_channel: ExperimentChannel,
         experiment_session: ExperimentSession,
-        messaging_service: MessagingService | None = None,
+        messaging_service=None,
     ):
         super().__init__(experiment, experiment_channel, experiment_session)
         self._messaging_service = messaging_service
 
     @property
-    def messaging_service(self) -> MessagingService:
+    def messaging_service(self):
         if not self._messaging_service:
             self._messaging_service = self.experiment_channel.messaging_provider.get_messaging_service()
         return self._messaging_service
