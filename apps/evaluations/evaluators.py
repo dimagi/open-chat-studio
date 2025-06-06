@@ -3,6 +3,7 @@ from langchain_core.prompts import PromptTemplate
 from pydantic import BaseModel, Field
 
 from apps.evaluations.models import EvaluationMessage, EvaluationMessageTypeChoices
+from apps.pipelines.nodes.base import UiSchema, Widgets
 from apps.service_providers.exceptions import ServiceProviderConfigError
 from apps.service_providers.llm_service.main import LlmService
 from apps.service_providers.models import LlmProviderModel
@@ -14,15 +15,17 @@ class EvaluatorResult(BaseModel):
     result: dict | None
 
 
-class BaseEvaluator:
+class BaseEvaluator(BaseModel):
     def run(self, message: EvaluationMessage, message_type: EvaluationMessageTypeChoices) -> EvaluatorResult:
         raise NotImplementedError
 
 
 class LLMResponseMixin(BaseModel):
-    llm_provider_id: int
-    llm_provider_model_id: int
-    llm_temperature: float = Field(default=0.7, ge=0.0, le=2.0, title="Temperature")
+    llm_provider_id: int = Field(..., title="LLM Model", json_schema_extra=UiSchema(widget=Widgets.llm_provider_model))
+    llm_provider_model_id: int = Field(..., json_schema_extra=UiSchema(widget=Widgets.none))
+    llm_temperature: float = Field(
+        default=0.7, ge=0.0, le=2.0, title="Temperature", json_schema_extra=UiSchema(widget=Widgets.range)
+    )
 
     def get_llm_service(self) -> LlmService:
         from apps.service_providers.models import LlmProvider
@@ -46,9 +49,14 @@ class LLMResponseMixin(BaseModel):
 
 
 class LlmEvaluator(LLMResponseMixin, BaseEvaluator):
-    # TODO: Use pipelines.nodes.nodes.LLMResponseMixin?
-    prompt: str
-    output_schema: dict
+    prompt: str = Field(
+        description="The prompt template to use for evaluation",
+        json_schema_extra=UiSchema(widget=Widgets.expandable_text),
+    )
+    output_schema: dict = Field(
+        description="The expected output schema for the evaluation",
+        json_schema_extra=UiSchema(widget=Widgets.key_value_pairs),
+    )
 
     def run(self, message: EvaluationMessage, message_type: EvaluationMessageTypeChoices) -> EvaluatorResult:
         if message_type == EvaluationMessageTypeChoices.ALL:
