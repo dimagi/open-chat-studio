@@ -12,16 +12,19 @@ from openai.pagination import SyncCursorPage
 from apps.assistants.models import ToolResources
 from apps.assistants.sync import (
     OpenAiSyncError,
+    _get_files_to_delete,
     _update_or_create_vector_store,
     delete_openai_assistant,
     get_out_of_sync_files,
     import_openai_assistant,
     push_assistant_to_openai,
+    remove_files_from_tool,
     sync_from_openai,
 )
 from apps.chat.agent import tools
 from apps.service_providers.llm_service.index_managers import OpenAIRemoteIndexManager
 from apps.utils.factories.assistants import OpenAiAssistantFactory
+from apps.utils.factories.documents import CollectionFactory
 from apps.utils.factories.files import FileFactory
 from apps.utils.factories.openai import AssistantFactory, FileObjectFactory
 from apps.utils.factories.service_provider_factories import LlmProviderFactory
@@ -348,6 +351,44 @@ def test_vector_store_create_batch_files(create_file_batch, create_vector_store,
         assert len(create_file_batch.call_args_list[1][1]["file_ids"]) == 180
     else:
         assert create_file_batch.call_count == 0
+
+
+@pytest.mark.django_db()
+@patch("apps.assistants.sync.delete_file_from_openai")
+@patch("apps.assistants.sync.OpenAIVectorStoreManager.delete_file")
+def test_remove_files_from_tool(delete_file, delete_file_from_openai):
+    collection = CollectionFactory()
+    resource = ToolResources.objects.create(
+        tool_type="file_search", assistant=OpenAiAssistantFactory(), extra={"vector_store_id": "vs-123"}
+    )
+    file1 = FileFactory(external_id="file1")
+    collection.files.add(file1)
+
+    file2 = FileFactory(external_id="file2")
+    resource.files.add(*[file1.id, file2.id])
+
+    remove_files_from_tool(resource, files=[file1, file2])
+    delete_file_from_openai.assert_called_once()
+    assert delete_file_from_openai.mock_calls[0].args[1].external_id == "file2"
+    delete_file.assert_called_once_with(vector_store_id="vs-123", file_id="file1")
+
+
+@pytest.mark.django_db()
+def test_get_files_to_delete():
+    collection = CollectionFactory()
+    team = collection.team
+    resource = ToolResources.objects.create(
+        tool_type="file_search", assistant=OpenAiAssistantFactory(team=team), extra={"vector_store_id": "vs-123"}
+    )
+    file = FileFactory(external_id="file1")
+    collection.files.add(file)
+    resource.files.add(file)
+
+    assert len(list(_get_files_to_delete(team, resource.id))) == 0
+
+    collection.files.through.objects.all().delete()  # Clear the collection files
+
+    assert len(list(_get_files_to_delete(team, resource.id))) == 1
 
 
 class TestVectorStoreManager:

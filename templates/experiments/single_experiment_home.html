@@ -8,9 +8,9 @@
   {% flag "flag_chatbots" %}
     {% if experiment.pipeline %}
       <div>
-        <div class="alert alert-info alert-soft alert-vertical sm:alert-horizontal" role="alert">
+        <div class="alert alert-info alert-vertical sm:alert-horizontal w-full flex items-center justify-between" role="alert">
           <div>
-            We're migrating Experiments to a new interface for a more streamlined bot building experience. You can access the new interface in the Chatbots section. <a href="https://docs.openchatstudio.com/concepts/chatbots/" target="_blank" rel="noopener noreferrer">[Learn More]</a>
+            We're migrating Experiments to a new interface for a more streamlined bot building experience. You can access the new interface in the Chatbots section. <a href="https://docs.openchatstudio.com/concepts/chatbots/" class="italic" target="_blank" rel="noopener noreferrer">Learn More →</a>
           </div>
           <div>
             <a href="{% url 'chatbots:single_chatbot_home' request.team.slug experiment.id %}"

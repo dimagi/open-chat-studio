@@ -5,21 +5,22 @@ from django.contrib import messages
 from django.contrib.auth.decorators import permission_required
 from django.contrib.auth.mixins import PermissionRequiredMixin
 from django.db import transaction
-from django.http import HttpResponse
+from django.http import HttpResponse, HttpResponseRedirect
 from django.shortcuts import get_object_or_404, redirect, render
 from django.template.loader import render_to_string
 from django.urls import reverse
 from django.views import View
 from django.views.decorators.http import require_POST
-from django.views.generic import CreateView, TemplateView, UpdateView
+from django.views.generic import CreateView, FormView, TemplateView, UpdateView
 from django_tables2 import SingleTableView
 
 from apps.assistants.sync import delete_file_from_openai
 from apps.documents import tasks
-from apps.documents.forms import CollectionForm
+from apps.documents.forms import CollectionForm, CreateCollectionFromAssistantForm
 from apps.documents.models import ChunkingStrategy, Collection, CollectionFile, CollectionFileMetadata, FileStatus
 from apps.documents.tables import CollectionsTable
 from apps.files.models import File
+from apps.generics import actions
 from apps.generics.chips import Chip
 from apps.generics.help import render_help_with_link
 from apps.service_providers.models import LlmProviderTypes
@@ -43,6 +44,16 @@ class CollectionHome(LoginAndTeamRequiredMixin, TemplateView, PermissionRequired
             "new_object_url": reverse("documents:collection_new", args=[team_slug]),
             "table_url": reverse("documents:collection_table", args=[team_slug]),
             "enable_search": True,
+            "button_style": "btn-primary",
+            "actions": [
+                actions.Action(
+                    "documents:create_from_assistant",
+                    label="Create from assistant",
+                    icon_class="fa-solid fa-robot",
+                    title="Create an indexed collection from an OpenAI assistant's file search tools",
+                    required_permissions=["documents.add_collection"],
+                )
+            ],
         }
 
 
@@ -117,12 +128,23 @@ def delete_collection_file(request, team_slug: str, pk: int, file_id: int):
         CollectionFile.objects.select_related("collection", "file"), collection_id=pk, file_id=file_id
     )
 
-    collection_file.file.delete_or_archive()
-    if collection_file.collection.is_index:
-        client = collection_file.collection.llm_provider.get_llm_service().get_raw_client()
-        delete_file_from_openai(client, collection_file.file)
-
+    file = collection_file.file
+    collection = collection_file.collection
     collection_file.delete()
+
+    if file.is_used():
+        if collection.is_index:
+            # Remove it from the index only
+            index_manager = collection.llm_provider.get_index_manager()
+            index_manager.delete_file(collection.openai_vector_store_id, file_id=file.external_id)
+    else:
+        # Nothing else is using it
+        if collection.is_index:
+            # Remove it from the remote service altogether
+            client = collection.llm_provider.get_llm_service().get_raw_client()
+            delete_file_from_openai(client, file)
+
+        collection_file.file.delete_or_archive()
 
     messages.success(request, "File removed from collection")
     return redirect("documents:single_collection_home", team_slug=team_slug, pk=pk)
@@ -288,3 +310,40 @@ def retry_failed_uploads(request, team_slug: str, pk: int):
     queryset.update(status=FileStatus.PENDING)
     tasks.index_collection_files_task.delay(collection_file_ids)
     return redirect("documents:single_collection_home", team_slug=team_slug, pk=pk)
+
+
+class CreateCollectionFromAssistant(LoginAndTeamRequiredMixin, FormView, PermissionRequiredMixin):
+    form_class = CreateCollectionFromAssistantForm
+    template_name = "documents/create_from_assistant_form.html"
+    permission_required = "documents.add_collection"
+    extra_context = {
+        "title": "Create Collection from Assistant",
+        "button_text": "Create Collection",
+        "active_tab": "collections",
+    }
+    object = None
+
+    def get_form_kwargs(self):
+        kwargs = super().get_form_kwargs()
+        kwargs["request"] = self.request
+        return kwargs
+
+    def get_success_url(self):
+        return reverse("documents:single_collection_home", args=[self.request.team.slug, self.object.id])
+
+    def form_valid(self, form):
+        with transaction.atomic():
+            assistant = form.cleaned_data["assistant"]
+            collection_name = form.cleaned_data["collection_name"]
+            collection = Collection.objects.create(
+                team=self.request.team,
+                name=collection_name,
+                is_index=True,
+                llm_provider=assistant.llm_provider,
+            )
+            self.object = collection
+        tasks.create_collection_from_assistant_task.delay(
+            collection_id=collection.id,
+            assistant_id=assistant.id,
+        )
+        return HttpResponseRedirect(self.get_success_url())

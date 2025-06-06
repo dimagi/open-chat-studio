@@ -3,7 +3,10 @@ from unittest.mock import ANY, patch
 import pytest
 
 from apps.documents.models import CollectionFile, FileStatus
-from apps.documents.tasks import index_collection_files_task, migrate_vector_stores
+from apps.documents.tasks import (
+    index_collection_files_task,
+    migrate_vector_stores,
+)
 from apps.utils.factories.documents import CollectionFactory
 from apps.utils.factories.files import FileFactory
 from apps.utils.factories.service_provider_factories import LlmProviderFactory
