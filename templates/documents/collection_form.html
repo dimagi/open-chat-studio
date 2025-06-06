@@ -55,7 +55,7 @@
         embedding_provider_model_options: [],
         openAIProviderIds: JSON.parse(document.getElementById("openAIProviderIds").textContent),
         showIndexingBackendChoice: false,
-        isRemoteIndex: false,
+        isRemoteIndex: {% if form.instance.is_remote_index %}true{% else %}false{% endif %},
         init() {
           this.updateEmbeddingModels();
 
