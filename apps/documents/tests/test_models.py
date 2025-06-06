@@ -228,7 +228,7 @@ class TestCollection:
         collection_file = CollectionFile.objects.get(collection=local_collection_index, file=file)
 
         # Mock the index manager and file content reading
-        local_index_manager_mock.chunk_content.return_value = ["test", "content"]
+        local_index_manager_mock.chunk_file.return_value = ["test", "content"]
         local_index_manager_mock.get_embedding_vector.return_value = [0.1] * settings.EMBEDDING_VECTOR_SIZE
 
         with mock.patch.object(file, "read_content", return_value="test content"):
