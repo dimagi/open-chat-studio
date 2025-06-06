@@ -77,6 +77,7 @@ from apps.service_providers.exceptions import OpenAiUnableToLinkFileError
 from apps.service_providers.llm_service.index_managers import OpenAIVectorStoreManager
 from apps.service_providers.models import LlmProvider, LlmProviderModel, LlmProviderTypes
 from apps.teams.models import Team
+from apps.utils.deletion import get_related_m2m_objects
 from apps.utils.prompt import validate_prompt_variables
 
 logger = logging.getLogger("ocs.openai_sync")
@@ -414,8 +415,9 @@ def remove_files_from_tool(ocs_resource: ToolResources, files: list[int]):
     # Remove the link to the tool resource
     ocs_resource.files.through.objects.filter(file__in=files).delete()
 
+    file_references = get_related_m2m_objects(files)
     for file in files:
-        if file.is_used():
+        if file in file_references:
             if ocs_resource.extra.get("vector_store_id") and file.external_id:
                 index_manager = OpenAIVectorStoreManager(client)
                 index_manager.delete_file(
