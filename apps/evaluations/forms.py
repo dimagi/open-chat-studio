@@ -1,6 +1,8 @@
+import importlib
 import json
 
 from django import forms
+from pydantic import ValidationError as PydanticValidationError
 
 from apps.chat.models import ChatMessageType
 from apps.evaluations.models import (
@@ -28,10 +30,47 @@ class EvaluatorForm(forms.ModelForm):
     class Meta:
         model = Evaluator
         fields = ("name", "type", "params")
+        widgets = {
+            "type": forms.HiddenInput(),
+            "params": forms.HiddenInput(),
+        }
 
     def __init__(self, team, *args, **kwargs):
         super().__init__(*args, **kwargs)
         self.team = team
+
+    def clean_params(self):
+        params = self.cleaned_data.get("params")
+        evaluator_type = self.cleaned_data.get("type")
+
+        if not evaluator_type:
+            raise forms.ValidationError("Missing evaluator type")
+
+        if isinstance(params, str):
+            try:
+                params = json.loads(params) or {}
+            except json.JSONDecodeError as err:
+                raise forms.ValidationError("Invalid JSON format for parameters") from err
+
+        try:
+            evaluators_module = importlib.import_module("apps.evaluations.evaluators")
+            evaluator_class = getattr(evaluators_module, evaluator_type)
+
+            # Validate parameters against the Pydantic model
+            evaluator_class(**params)
+
+        except AttributeError as err:
+            raise forms.ValidationError(f"Unknown evaluator type: {evaluator_type}") from err
+        except PydanticValidationError as err:
+            # Convert Pydantic errors to Django form errors
+            error_messages = []
+            for error in err.errors():
+                field_name = error["loc"][0] if error["loc"] else "unknown"
+                message = error["msg"]
+                error_messages.append(f"{field_name}: {message}")
+            raise forms.ValidationError(f"Parameter validation failed: {'; '.join(error_messages)}") from err
+
+        return params
 
 
 class EvaluationMessageForm(forms.ModelForm):
