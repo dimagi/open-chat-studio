@@ -209,5 +209,7 @@ class TestOpenAILocalIndexManager:
         return OpenAILocalIndexManager(client=client_mock, embedding_model_name="embedding-model")
 
     def test_chunk_content(self, index_manager):
-        response = index_manager.chunk_content("This is test content.", chunk_size=2, chunk_overlap=0)
+        file = mock.Mock()
+        file.read_content = lambda: "This is test content."
+        response = index_manager.chunk_file(file, chunk_size=2, chunk_overlap=0)
         assert response == ["This is", "test", "c", "on", "te", "nt", "."]
