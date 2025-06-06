@@ -4,6 +4,7 @@ import pytest
 from django.urls import reverse
 
 from apps.documents.models import Collection, CollectionFile, FileStatus
+from apps.files.models import File
 from apps.utils.factories.documents import CollectionFactory
 from apps.utils.factories.files import FileFactory
 from apps.utils.factories.pipelines import NodeFactory, PipelineFactory
@@ -133,3 +134,101 @@ class TestDeleteCollection:
         assert response.status_code == 200
         collection.refresh_from_db()
         assert collection.is_archived
+
+
+@pytest.mark.django_db()
+class TestDeleteCollectionFile:
+    @pytest.fixture()
+    def team_with_user(self):
+        return TeamWithUsersFactory()
+
+    def test_delete_file_from_non_indexed_collection(self, team_with_user, client):
+        """Test deleting a file from a non-indexed collection when file is not used elsewhere."""
+        collection = CollectionFactory(team=team_with_user, is_index=False)
+        file = FileFactory(team=team_with_user, external_id="file-123", external_source="openai")
+        CollectionFile.objects.create(collection=collection, file=file)
+
+        client.force_login(team_with_user.members.first())
+
+        # Mock the file deletion since it's not used elsewhere
+        with mock.patch.object(File, "delete_or_archive") as mock_delete_archive:
+            url = reverse("documents:delete_collection_file", args=[team_with_user.slug, collection.id, file.id])
+            client.post(url)
+
+            # Verify collection file relationship is deleted
+            assert not CollectionFile.objects.filter(collection=collection, file=file).exists()
+
+            # Verify file is deleted/archived since it's not used elsewhere
+            mock_delete_archive.assert_called_once()
+
+    def test_delete_file_from_indexed_collection_not_used_by_assistant(
+        self, team_with_user, client, index_manager_mock
+    ):
+        """Test deleting a file from an indexed collection when file is not used by an assistant."""
+        llm_provider = LlmProviderFactory(team=team_with_user)
+        collection = CollectionFactory(
+            team=team_with_user,
+            is_index=True,
+            is_remote_index=True,
+            llm_provider=llm_provider,
+            openai_vector_store_id="vs-123",
+        )
+        file = FileFactory(team=team_with_user, external_id="file-123", external_source="openai")
+        CollectionFile.objects.create(collection=collection, file=file)
+
+        client.force_login(team_with_user.members.first())
+
+        # Mock the file as not being used elsewhere
+        with mock.patch.object(File, "delete_or_archive") as mock_delete_archive:
+            url = reverse("documents:delete_collection_file", args=[team_with_user.slug, collection.id, file.id])
+            client.post(url)
+
+            # Verify collection file relationship is deleted
+            assert CollectionFile.objects.filter(collection=collection, file=file).exists() is False
+
+            # Verify OpenAI file deletion WAS called since file is still used
+            index_manager_mock.delete_files.assert_called()
+
+            # Verify file is deleted/archived since it's not used elsewhere
+            mock_delete_archive.assert_called_once()
+
+    def test_delete_file_from_indexed_collection_used_by_assistant(self, team_with_user, client, index_manager_mock):
+        """Test deleting a file from an indexed collection when file is also used by another object."""
+        # Setup: Create indexed collection with file
+        llm_provider = LlmProviderFactory(team=team_with_user)
+        collection = CollectionFactory(
+            team=team_with_user,
+            is_index=True,
+            is_remote_index=True,
+            llm_provider=llm_provider,
+            openai_vector_store_id="vs-123",
+        )
+        file = FileFactory(team=team_with_user, external_id="file-123", external_source="openai")
+        CollectionFile.objects.create(collection=collection, file=file)
+
+        # Login user
+        client.force_login(team_with_user.members.first())
+
+        # Mock the file as being used elsewhere (by assistant)
+        with (
+            mock.patch.object(File, "is_used", return_value=True),
+            mock.patch.object(File, "delete_or_archive") as mock_delete_archive,
+        ):
+            url = reverse("documents:delete_collection_file", args=[team_with_user.slug, collection.id, file.id])
+            client.post(url)
+
+            # Verify collection file relationship is deleted
+            assert CollectionFile.objects.filter(collection=collection, file=file).exists() is False
+
+            # Verify file is NOT deleted/archived since it's used by assistant
+            mock_delete_archive.assert_not_called()
+
+            # Verify OpenAI file deletion was NOT called since file is still used
+            index_manager_mock.delete_files.assert_not_called()
+
+            # Verify the file is removed from the remote index
+            index_manager_mock.delete_file_from_index.assert_called()
+
+            # Verify file still exists and is still linked to assistant
+            file.refresh_from_db()
+            assert file.is_archived is False

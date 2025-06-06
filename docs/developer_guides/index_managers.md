@@ -76,7 +76,7 @@ index_manager.link_files_to_remote_index(
 exists = index_manager.file_exists_at_remote(file)
 
 # Clean up - delete vector store
-index_manager.delete_remote_index()
+index_manager.delete_vector_store()
 ```
 
 ### Local Index Operations

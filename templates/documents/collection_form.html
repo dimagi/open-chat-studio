@@ -26,8 +26,14 @@
       {% render_field form.is_remote_index xshow="showIndexingBackendChoice" %}
 
       {% if form.instance.id %}
-        <div role="alert" class="mt-2 alert alert-warning alert-soft" x-cloak x-show="initialProviderId !== selectedLlmProviderId">
-          <span>Changing the LLM provider will create a new vector store and remove the old vector store. This might take a while. Continue with caution</span>
+        <div role="alert" class="bg-base-200 rounded-lg alert alert-warning alert-soft flex flex-col" x-cloak x-show="initialProviderId !== selectedLlmProviderId">
+          <h3 class="font-semibold mb-2">Continue with caution! Changing the LLM provider will</h3>
+          <ul class="w-full list-disc list-inside space-y-1 text-sm">
+            <li>Remove the current vector store</li>
+            <li>Create a new vector store at the new provider</li>
+            <li>Re-upload the files to the new vector store</li>
+            <li>If this collection was created from an assistant, this operation might break the assistant</li>
+          </ul>
         </div>
       {% endif %}
     </div>

@@ -160,6 +160,19 @@ input[type=number]::-webkit-outer-spin-button {
   @apply border-none rounded-md
 }
 
+.alert-success {
+  @apply bg-green-50 px-2 py-1 text-green-700 dark:bg-green-900 dark:text-green-300;
+}
+.alert-info {
+  @apply bg-blue-50 px-2 py-1 text-blue-700 dark:bg-blue-900 dark:text-blue-300;
+}
+.alert-warning {
+  @apply bg-yellow-50 px-2 py-1 text-yellow-800 dark:bg-yellow-900 dark:text-yellow-300;
+}
+.alert-error {
+  @apply bg-red-50 px-2 py-1 text-red-700 dark:bg-red-900 dark:text-red-300;
+}
+
 .menu-active {
   background-color: oklch(0.313815 0.021108 254.139);
 }

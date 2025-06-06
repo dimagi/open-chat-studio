@@ -111,6 +111,10 @@ class RemoteIndexManager(metaclass=ABCMeta):
         """
         ...
 
+    @abstractmethod
+    def delete_file_from_index(self, file_id: str):
+        """Disassociates the file with the vector store"""
+
     def ensure_remote_file_exists(self, file: File):
         try:
             if not (file.external_id and self.file_exists_at_remote(file)):
@@ -127,6 +131,7 @@ class RemoteIndexManager(metaclass=ABCMeta):
             raise FileUploadError() from None
 
     def delete_vector_store(self, fail_silently: bool = False):
+        # TODO: Rename all instances to delete_remote_index and move delete_remote_index to _delete_remote_index
         try:
             self.delete_remote_index()
         except Exception as e:
@@ -204,8 +209,8 @@ class OpenAIRemoteIndexManager(RemoteIndexManager):
             with contextlib.suppress(openai.NotFoundError):
                 self.client.files.delete(file.external_id)
 
-            file.external_id = ""
-        File.objects.bulk_update(files, fields=["external_id"])
+            file.external_id = file.external_source = ""
+        File.objects.bulk_update(files, fields=["external_id", "external_source"])
 
 
 class LocalIndexManager(metaclass=ABCMeta):
