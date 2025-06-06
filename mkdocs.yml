@@ -70,3 +70,4 @@ nav:
     - Versioning: developer_guides/versioning.md
     - Changelog: developer_guides/changelog.md
     - Feature Flags: developer_guides/feature_flags.md
+    - Index Managers: developer_guides/index_managers.md

@@ -15,7 +15,7 @@ from apps.pipelines.tests.utils import (
     render_template_node,
     start_node,
 )
-from apps.service_providers.llm_service.index_managers import OpenAIVectorStoreManager
+from apps.service_providers.llm_service.index_managers import RemoteIndexManager
 from apps.utils.factories.assistants import OpenAiAssistantFactory
 from apps.utils.factories.documents import CollectionFactory
 from apps.utils.factories.events import EventActionFactory, ExperimentFactory, StaticTriggerFactory
@@ -35,8 +35,8 @@ from apps.utils.pytest import django_db_with_data
 
 @pytest.fixture()
 def index_manager_mock():
-    index_manager = Mock(spec=OpenAIVectorStoreManager)
-    with patch("apps.service_providers.models.LlmProvider.get_index_manager") as get_index_manager:
+    index_manager = Mock(spec=RemoteIndexManager)
+    with patch("apps.service_providers.models.LlmProvider.get_remote_index_manager") as get_index_manager:
         get_index_manager.return_value = index_manager
         yield index_manager
 
@@ -176,7 +176,7 @@ class TestArchivingNodes:
         )
 
         # Setup mocks
-        index_manager_mock.create_vector_store.return_value = "v-456"
+        index_manager_mock.create_remote_index.return_value = "v-456"
 
         # Build the pipeline
         pipeline = PipelineFactory()

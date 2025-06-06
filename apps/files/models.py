@@ -160,6 +160,12 @@ class File(BaseTeamModel, VersionsMixin):
         else:
             self.delete()
 
+    def read_content(self) -> str:
+        from apps.documents.readers import Document
+
+        document = Document.from_file(self)
+        return document.get_contents_as_string()
+
     def is_used(self) -> bool:
         # get_related_m2m_objects returns a dictionary with the file instance as the key if there are related objects
         return self in get_related_m2m_objects([self])
@@ -171,7 +177,7 @@ class FileChunkEmbedding(BaseTeamModel):
     chunk_number = models.PositiveIntegerField()
     text = models.TextField()
     page_number = models.PositiveIntegerField(blank=True)
-    embedding = VectorField(dimensions=1024)
+    embedding = VectorField(dimensions=settings.EMBEDDING_VECTOR_SIZE)
 
     class Meta:
         indexes = [
