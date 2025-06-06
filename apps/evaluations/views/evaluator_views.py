@@ -143,6 +143,11 @@ def _get_evaluator_schema(evaluator_class):
             any_of = value.pop("anyOf")
             value["type"] = [item["type"] for item in any_of if item["type"] != "null"][0]  # take the first type
 
+    evaluator_schema = evaluator_class.model_config.get("evaluator_schema")
+    if evaluator_schema:
+        schema["label"] = evaluator_schema.label
+        schema["icon"] = evaluator_schema.icon
+
     return schema
 
 

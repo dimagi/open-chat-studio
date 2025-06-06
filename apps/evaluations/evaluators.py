@@ -1,6 +1,7 @@
 from langchain_core.language_models import BaseChatModel
 from langchain_core.prompts import PromptTemplate
 from pydantic import BaseModel, Field
+from pydantic.config import ConfigDict
 
 from apps.evaluations.models import EvaluationMessage, EvaluationMessageTypeChoices
 from apps.pipelines.nodes.base import UiSchema, Widgets
@@ -8,6 +9,11 @@ from apps.service_providers.exceptions import ServiceProviderConfigError
 from apps.service_providers.llm_service.main import LlmService
 from apps.service_providers.models import LlmProviderModel
 from apps.utils.langchain import dict_to_json_schema
+
+
+class EvaluatorSchema(BaseModel):
+    label: str
+    icon: str = None
 
 
 class EvaluatorResult(BaseModel):
@@ -49,6 +55,8 @@ class LLMResponseMixin(BaseModel):
 
 
 class LlmEvaluator(LLMResponseMixin, BaseEvaluator):
+    model_config = ConfigDict(evaluator_schema=EvaluatorSchema(label="LLM Evaluator", icon="fa-robot"))
+
     prompt: str = Field(
         description="The prompt template to use for evaluation",
         json_schema_extra=UiSchema(widget=Widgets.expandable_text),

@@ -1,7 +1,11 @@
+import inspect
+
 from django.conf import settings
 from django.urls import reverse
+from django.utils.safestring import mark_safe
 from django_tables2 import TemplateColumn, columns, tables
 
+from apps.evaluations import evaluators
 from apps.evaluations.models import EvaluationConfig, EvaluationDataset, EvaluationMessage, EvaluationRun, Evaluator
 from apps.experiments.models import ExperimentSession
 from apps.generics import actions
@@ -82,6 +86,10 @@ class EvaluatorTable(tables.Table):
         },
         orderable=True,
     )
+    type = columns.Column(
+        verbose_name="Type",
+        orderable=True,
+    )
     actions = actions.ActionsColumn(
         actions=[
             # actions.edit_action(url_name="evaluations:edit"),
@@ -99,10 +107,30 @@ class EvaluatorTable(tables.Table):
         # ]
     )
 
+    def render_type(self, value, record):
+        """Render the type column with icon and label."""
+        evaluator_classes = [
+            cls
+            for _, cls in inspect.getmembers(evaluators, inspect.isclass)
+            if issubclass(cls, evaluators.BaseEvaluator) and cls != evaluators.BaseEvaluator
+        ]
+        evaluator_class = None
+        for cls in evaluator_classes:
+            if cls.__name__ == value:
+                evaluator_class = cls
+                break
+        if evaluator_class:
+            evaluator_schema = evaluator_class.model_config.get("evaluator_schema")
+            if evaluator_schema:
+                icon_html = f'<i class="fa {evaluator_schema.icon}"></i> ' if evaluator_schema.icon else ""
+                return mark_safe(f"{icon_html}{evaluator_schema.label}")
+        return value
+
     class Meta:
         model = Evaluator
         fields = (
             "name",
+            "type",
             "actions",
         )
         row_attrs = settings.DJANGO_TABLES2_ROW_ATTRS
