@@ -169,6 +169,7 @@ class TurnIOService(MessagingService):
     supported_platforms: ClassVar[list] = [ChannelPlatform.WHATSAPP]
     voice_replies_supported: ClassVar[bool] = True
     supported_message_types = [MESSAGE_TYPES.TEXT, MESSAGE_TYPES.VOICE]
+    supports_multimedia = True
 
     auth_token: str
 
@@ -205,11 +206,7 @@ class TurnIOService(MessagingService):
         else:
             return False
 
-    def send_file_to_user(
-        self,
-        to: str,
-        file: File,
-    ):
+    def send_file_to_user(self, from_: str, to: str, platform: ChannelPlatform, file: File, download_link: str):
         file_name = file.name
         mime_type, _ = mimetypes.guess_type(file_name)
 
@@ -226,9 +223,9 @@ class TurnIOService(MessagingService):
             media_type = "document"
 
         with file.file.open("rb") as file_obj:
-            message_id = self.turn_media_client.send_media(
+            message_id = self.client.messages.send_media(
                 whatsapp_id=to,
-                file_obj=file_obj,
+                file=file_obj,
                 content_type=mime_type,
                 media_type=media_type,
                 caption=None,
