@@ -8,6 +8,7 @@ from django_tables2 import SingleTableView, columns, tables
 from apps.evaluations.forms import EvaluationConfigForm
 from apps.evaluations.models import EvaluationConfig, EvaluationRun
 from apps.evaluations.tables import EvaluationConfigTable, EvaluationRunTable
+from apps.evaluations.utils import get_evaluators_with_schema
 from apps.teams.mixins import LoginAndTeamRequiredMixin
 
 
@@ -44,7 +45,7 @@ class EvaluationTableView(SingleTableView, PermissionRequiredMixin):
 
 class CreateEvaluation(LoginAndTeamRequiredMixin, CreateView, PermissionRequiredMixin):
     # permission_required = "pipelines.add_pipeline"
-    template_name = "generic/object_form.html"
+    template_name = "evaluations/evaluation_config_form.html"
     model = EvaluationConfig
     form_class = EvaluationConfigForm
     extra_context = {
@@ -52,6 +53,11 @@ class CreateEvaluation(LoginAndTeamRequiredMixin, CreateView, PermissionRequired
         "button_text": "Create",
         # "active_tab": "tags",
     }
+
+    def get_context_data(self, **kwargs):
+        context = super().get_context_data(**kwargs)
+        context["available_evaluators"] = get_evaluators_with_schema(self.request.team)
+        return context
 
     def get_form_kwargs(self):
         return {**super().get_form_kwargs(), "team": self.request.team}
@@ -68,12 +74,17 @@ class CreateEvaluation(LoginAndTeamRequiredMixin, CreateView, PermissionRequired
 class EditEvaluation(UpdateView):
     model = EvaluationConfig
     form_class = EvaluationConfigForm
-    template_name = "generic/object_form.html"
+    template_name = "evaluations/evaluation_config_form.html"
     extra_context = {
         "title": "Update Evaluation",
         "button_text": "Update",
         "active_tab": "evaluations",
     }
+
+    def get_context_data(self, **kwargs):
+        context = super().get_context_data(**kwargs)
+        context["available_evaluators"] = get_evaluators_with_schema(self.request.team)
+        return context
 
     def get_queryset(self):
         return EvaluationConfig.objects.filter(team=self.request.team)

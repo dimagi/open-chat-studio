@@ -18,6 +18,9 @@ class EvaluationConfigForm(forms.ModelForm):
     class Meta:
         model = EvaluationConfig
         fields = ("name", "dataset", "message_type", "evaluators")
+        widgets = {
+            "evaluators": forms.MultipleHiddenInput(),
+        }
 
     def __init__(self, team, *args, **kwargs):
         super().__init__(*args, **kwargs)
