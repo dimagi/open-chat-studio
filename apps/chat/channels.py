@@ -1041,19 +1041,15 @@ class SlackChannel(ChannelBase):
                 (e.g., in a slack event listener)
         """
         super().__init__(experiment, experiment_channel, experiment_session)
-        self.send_response_to_user = send_response_to_user
         self._messaging_service = messaging_service
 
     @property
     def messaging_service(self) -> MessagingService:
-        if self._messaging_service:
-            return self._messaging_service
-        return self.experiment_channel.messaging_provider.get_messaging_service()
+        if not self._messaging_service:
+            self._messaging_service = self.experiment_channel.messaging_provider.get_messaging_service()
+        return self._messaging_service
 
     def send_text_to_user(self, text: str):
-        if not self.send_response_to_user:
-            return
-
         if not self.message:
             channel_id, thread_ts = parse_session_external_id(self.experiment_session.external_id)
         else:

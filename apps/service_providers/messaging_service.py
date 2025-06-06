@@ -248,11 +248,11 @@ class SlackService(MessagingService):
 
     @property
     def client(self) -> WebClient:
-        if self._client:
-            return self._client
-        from apps.slack.client import get_slack_client
+        if not self._client:
+            from apps.slack.client import get_slack_client
 
-        return get_slack_client(self.slack_installation_id)
+            self._client = get_slack_client(self.slack_installation_id)
+        return self._client
 
     @client.setter
     def client(self, value: WebClient):
