@@ -35,12 +35,18 @@ class Command(BaseCommand):
             action="store_true",
             help='Only convert experiments for teams that have the "flag_chatbots" feature flag enabled',
         )
+        parser.add_argument(
+            "--skip-confirmation",
+            action="store_true",
+            help="Skip confirmation prompt and proceed automatically",
+        )
 
     def handle(self, *args, **options):
         dry_run = options["dry_run"]
         team_slug = options.get("team_slug")
         experiment_id = options.get("experiment_id")
         chatbots_flag_only = options["chatbots_flag_only"]
+        skip_confirmation = options["skip_confirmation"]
 
         query = Q(pipeline__isnull=True) & (Q(assistant__isnull=False) | Q(llm_provider__isnull=False))
 
@@ -77,10 +83,11 @@ class Command(BaseCommand):
             self.stdout.write(self.style.WARNING("\nDry run - no changes will be made."))
             return
 
-        confirm = input("\nContinue? (y/N): ")
-        if confirm.lower() != "y":
-            self.stdout.write("Cancelled.")
-            return
+        if not skip_confirmation:
+            confirm = input("\nContinue? (y/N): ")
+            if confirm.lower() != "y":
+                self.stdout.write("Cancelled.")
+                return
 
         converted_count = 0
         failed_count = 0
