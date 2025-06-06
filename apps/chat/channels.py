@@ -1031,15 +1031,8 @@ class SlackChannel(ChannelBase):
         experiment: Experiment,
         experiment_channel: ExperimentChannel,
         experiment_session: ExperimentSession,
-        send_response_to_user: bool = True,
         messaging_service: Optional[MessagingService] = None,
     ):
-        """
-        Args:
-            send_response_to_user: A boolean indicating whether the handler should send the response to the user.
-                This is useful when the message sending happens as part of the slack event handler
-                (e.g., in a slack event listener)
-        """
         super().__init__(experiment, experiment_channel, experiment_session)
         self._messaging_service = messaging_service
 
@@ -1071,7 +1064,7 @@ class SlackChannel(ChannelBase):
         mime = file.content_type
         size = file.content_size or 0
         # slack allows 1 GB, but keeping it to 50MB as we can only upload file upto 50MB in collections
-        max_size = settings.MAX_FILE_SIZE_MB
+        max_size = settings.MAX_FILE_SIZE_MB * 1024 * 1024
         return mime.startswith(("image/", "video/", "audio/", "application/")) and size <= max_size
 
     def send_file_to_user(self, file: File):

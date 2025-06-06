@@ -1,6 +1,6 @@
 from io import BytesIO
 from unittest import mock
-from unittest.mock import Mock, PropertyMock
+from unittest.mock import Mock
 
 import pytest
 from mock.mock import patch
@@ -101,22 +101,17 @@ def test_send_message_to_user_with_file(slack_channel, slack_service):
         "SLACK_USER_ID",
         session_external_id=make_session_external_id("channel_id", "thread_ts"),
     )
-
     channel = SlackChannel(
         experiment=slack_channel.experiment,
         experiment_channel=slack_channel,
         experiment_session=session,
-        send_response_to_user=True,
+        messaging_service=slack_service,
     )
+    slack_service.client.files_upload_v2 = Mock()
+    file = make_mock_file("document.pdf", "application/pdf", 2 * 1024 * 1024)
 
-    with patch.object(channel.__class__, "messaging_service", new_callable=PropertyMock) as mock_messaging_service:
-        mock_messaging_service.return_value = slack_service
-        slack_service.client.files_upload_v2 = Mock()
+    with patch.object(channel, "send_text_to_user") as mock_send_text:
+        channel.send_message_to_user("Here's your file", files=[file])
 
-        file = make_mock_file("document.pdf", "application/pdf", 2 * 1024 * 1024)
-
-        with patch.object(channel, "send_text_to_user") as mock_send_text:
-            channel.send_message_to_user("Here's your file", files=[file])
-
-            slack_service.client.files_upload_v2.assert_called_once()
-            mock_send_text.assert_called_once_with("Here's your file")
+        slack_service.client.files_upload_v2.assert_called_once()
+        mock_send_text.assert_called_once_with("Here's your file")
