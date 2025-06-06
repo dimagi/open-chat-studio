@@ -88,7 +88,6 @@ class DeleteDataset(LoginAndTeamRequiredMixin, DeleteView, PermissionRequiredMix
         self.object = self.get_object()
         self.object.delete()
 
-        # Return empty response for HTMX to trigger table reload
         return HttpResponse(status=200)
 
 

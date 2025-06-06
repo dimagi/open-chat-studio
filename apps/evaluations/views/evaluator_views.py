@@ -1,8 +1,9 @@
 import inspect
 
 from django.contrib.auth.mixins import PermissionRequiredMixin
+from django.http import HttpResponse
 from django.urls import reverse
-from django.views.generic import CreateView, TemplateView, UpdateView
+from django.views.generic import CreateView, DeleteView, TemplateView, UpdateView
 from django_tables2 import SingleTableView
 
 from apps.evaluations.forms import EvaluatorForm
@@ -110,6 +111,19 @@ class EditEvaluator(UpdateView):
 
     def get_success_url(self):
         return reverse("evaluations:evaluator_home", args=[self.request.team.slug])
+
+
+class DeleteEvaluator(LoginAndTeamRequiredMixin, DeleteView, PermissionRequiredMixin):
+    # permission_required = "evaluations.delete_evaluator"
+    model = Evaluator
+
+    def get_queryset(self):
+        return Evaluator.objects.filter(team=self.request.team)
+
+    def delete(self, request, *args, **kwargs):
+        self.object = self.get_object()
+        self.object.delete()
+        return HttpResponse(status=200)
 
 
 def _evaluator_schemas():

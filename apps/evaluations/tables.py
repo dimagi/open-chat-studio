@@ -92,19 +92,15 @@ class EvaluatorTable(tables.Table):
     )
     actions = actions.ActionsColumn(
         actions=[
-            # actions.edit_action(url_name="evaluations:edit"),
+            actions.edit_action(url_name="evaluations:evaluator_edit"),
+            actions.AjaxAction(
+                "evaluations:evaluator_delete",
+                title="Delete",
+                icon_class="fa-solid fa-trash",
+                confirm_message="This will permanently delete the evaluator. Are you sure?",
+                hx_method="delete",
+            ),
         ]
-        # actions=[
-        #     actions.edit_action(url_name="pipelines:edit"),
-        #     actions.AjaxAction(
-        #         "pipelines:delete",
-        #         title="Archive",
-        #         icon_class="fa-solid fa-box-archive",
-        #         required_permissions=["pipelines.delete_pipeline"],
-        #         confirm_message="This will delete the pipeline and any associated logs. Are you sure?",
-        #         hx_method="delete",
-        #     ),
-        # ]
     )
 
     def render_type(self, value, record):

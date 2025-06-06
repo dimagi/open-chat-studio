@@ -61,5 +61,5 @@ urlpatterns = [
 ]
 
 urlpatterns.extend(make_crud_urls(evalutation_config_views, "Evaluation", delete=False))
-urlpatterns.extend(make_crud_urls(evaluator_views, "Evaluator", prefix="evaluator", delete=False))
+urlpatterns.extend(make_crud_urls(evaluator_views, "Evaluator", prefix="evaluator"))
 urlpatterns.extend(make_crud_urls(dataset_views, "Dataset", prefix="dataset"))
