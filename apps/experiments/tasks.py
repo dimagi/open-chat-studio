@@ -3,6 +3,7 @@ import time
 
 from celery.app import shared_task
 from django.core.files.base import ContentFile
+from django.core.management import call_command
 from django.utils import timezone
 from field_audit.models import AuditAction
 from langchain_core.messages import AIMessage, HumanMessage
@@ -153,3 +154,18 @@ def _convert_prompt_builder_history(messages_history):
         elif message["author"] == "Assistant":
             history.append(AIMessage(content=message["message"]))
     return history
+
+
+@shared_task(bind=True, base=TaskbadgerTask)
+def migrate_experiment_to_pipeline_task(self, experiment_id: int) -> dict:
+    """
+    Migrate a single assistant or llm experiment to pipeline experiment.
+    """
+    try:
+        experiment = Experiment.objects.get(id=experiment_id)
+        call_command("migrate_nonpipeline_to_pipeline_experiments", experiment_id=experiment_id, skip_confirmation=True)
+
+        return {"success": True, "experiment_id": experiment_id, "experiment_name": experiment.name}
+    except Exception as e:
+        logger.exception(f"Failed to migrate experiment {experiment_id}: {e}")
+        raise

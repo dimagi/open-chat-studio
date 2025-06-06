@@ -40,6 +40,7 @@ from .experiment import (  # noqa: F401
     get_export_download_link,
     get_message_response,
     get_release_status_badge,
+    migrate_experiment_view,
     poll_messages,
     poll_messages_embed,
     send_invitation,
