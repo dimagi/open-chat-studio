@@ -44,7 +44,6 @@ from apps.experiments.models import (
 from apps.files.models import File
 from apps.service_providers.llm_service.history_managers import ExperimentHistoryManager
 from apps.service_providers.llm_service.runnables import GenerationCancelled
-from apps.service_providers.messaging_service import MessagingService
 from apps.service_providers.speech_service import SynthesizedAudio
 from apps.service_providers.tracing import TraceInfo, TracingService
 from apps.slack.utils import parse_session_external_id
