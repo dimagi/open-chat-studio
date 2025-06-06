@@ -419,10 +419,8 @@ def remove_files_from_tool(ocs_resource: ToolResources, files: list[int]):
     for file in files:
         if file in file_references:
             if ocs_resource.extra.get("vector_store_id") and file.external_id:
-                index_manager = OpenAIVectorStoreManager(client)
-                index_manager.delete_file(
-                    vector_store_id=ocs_resource.extra["vector_store_id"], file_id=file.external_id
-                )
+                index_manager = OpenAIRemoteIndexManager(client, index_id=ocs_resource.extra.get("vector_store_id"))
+                index_manager.delete_file_from_index(file_id=file.external_id)
         else:
             # The file doesn't have related objects, so it's safe to remove it completely
             delete_file_from_openai(client, file)

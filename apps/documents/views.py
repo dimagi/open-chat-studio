@@ -14,7 +14,6 @@ from django.views.decorators.http import require_POST
 from django.views.generic import CreateView, FormView, TemplateView, UpdateView
 from django_tables2 import SingleTableView
 
-from apps.assistants.sync import delete_file_from_openai
 from apps.documents import tasks
 from apps.documents.forms import CollectionForm, CreateCollectionFromAssistantForm
 from apps.documents.models import ChunkingStrategy, Collection, CollectionFile, CollectionFileMetadata, FileStatus
@@ -135,14 +134,14 @@ def delete_collection_file(request, team_slug: str, pk: int, file_id: int):
     if file.is_used():
         if collection.is_index:
             # Remove it from the index only
-            index_manager = collection.llm_provider.get_index_manager()
-            index_manager.delete_file(collection.openai_vector_store_id, file_id=file.external_id)
+            index_manager = collection.get_index_manager()
+            index_manager.delete_file_from_index(collection.openai_vector_store_id, file_id=file.external_id)
     else:
         # Nothing else is using it
         if collection.is_index:
             # Remove it from the remote service altogether
-            client = collection.llm_provider.get_llm_service().get_raw_client()
-            delete_file_from_openai(client, file)
+            index_manager = collection.get_index_manager()
+            index_manager.delete_files(collection.openai_vector_store_id, file_id=file.external_id)
 
         collection_file.file.delete_or_archive()
 
@@ -339,6 +338,7 @@ class CreateCollectionFromAssistant(LoginAndTeamRequiredMixin, FormView, Permiss
                 team=self.request.team,
                 name=collection_name,
                 is_index=True,
+                is_remote_index=True,
                 llm_provider=assistant.llm_provider,
             )
             self.object = collection

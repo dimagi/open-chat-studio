@@ -161,14 +161,17 @@ class TestDeleteCollectionFile:
             # Verify file is deleted/archived since it's not used elsewhere
             mock_delete_archive.assert_called_once()
 
-    @mock.patch("apps.documents.views.delete_file_from_openai")
     def test_delete_file_from_indexed_collection_not_used_by_assistant(
-        self, mock_delete_openai, team_with_user, client, index_manager_mock
+        self, team_with_user, client, index_manager_mock
     ):
         """Test deleting a file from an indexed collection when file is not used by an assistant."""
         llm_provider = LlmProviderFactory(team=team_with_user)
         collection = CollectionFactory(
-            team=team_with_user, is_index=True, llm_provider=llm_provider, openai_vector_store_id="vs-123"
+            team=team_with_user,
+            is_index=True,
+            is_remote_index=True,
+            llm_provider=llm_provider,
+            openai_vector_store_id="vs-123",
         )
         file = FileFactory(team=team_with_user, external_id="file-123", external_source="openai")
         CollectionFile.objects.create(collection=collection, file=file)
@@ -184,20 +187,21 @@ class TestDeleteCollectionFile:
             assert CollectionFile.objects.filter(collection=collection, file=file).exists() is False
 
             # Verify OpenAI file deletion was called for indexed collection
-            mock_delete_openai.assert_called_once()
+            index_manager_mock.delete_files.assert_called_once()
 
             # Verify file is deleted/archived since it's not used elsewhere
             mock_delete_archive.assert_called_once()
 
-    @mock.patch("apps.documents.views.delete_file_from_openai")
-    def test_delete_file_from_indexed_collection_used_by_assistant(
-        self, mock_delete_openai, team_with_user, client, index_manager_mock
-    ):
+    def test_delete_file_from_indexed_collection_used_by_assistant(self, team_with_user, client, index_manager_mock):
         """Test deleting a file from an indexed collection when file is also used by another object."""
         # Setup: Create indexed collection with file
         llm_provider = LlmProviderFactory(team=team_with_user)
         collection = CollectionFactory(
-            team=team_with_user, is_index=True, llm_provider=llm_provider, openai_vector_store_id="vs-123"
+            team=team_with_user,
+            is_index=True,
+            is_remote_index=True,
+            llm_provider=llm_provider,
+            openai_vector_store_id="vs-123",
         )
         file = FileFactory(team=team_with_user, external_id="file-123", external_source="openai")
         CollectionFile.objects.create(collection=collection, file=file)
@@ -220,7 +224,9 @@ class TestDeleteCollectionFile:
             mock_delete_archive.assert_not_called()
 
             # Verify OpenAI file deletion was NOT called since file is still used
-            mock_delete_openai.assert_not_called()
+            index_manager_mock.delete_files.assert_not_called()
+
+            index_manager_mock.delete_file_from_index.assert_called()
 
             # Verify file still exists and is still linked to assistant
             file.refresh_from_db()

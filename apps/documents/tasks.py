@@ -119,13 +119,13 @@ def create_collection_from_assistant_task(collection_id: int, assistant_id: int)
 
     try:
         # Create vector store for the collection
-        manager = collection.get_index_manager()
-        collection.openai_vector_store_id = manager.create_remote_index(name=collection.index_name)
+        index_manager = collection.get_index_manager()
+        collection.openai_vector_store_id = index_manager.create_remote_index(name=collection.index_name)
         collection.save(update_fields=["openai_vector_store_id"])
 
         # Link files to the new vector store at OpenAI (only if there are files with external IDs)
         if file_with_remote_ids:
-            manager.link_files_to_remote_index(
+            index_manager.link_files_to_remote_index(
                 file_ids=[file.external_id for file in file_with_remote_ids],
             )
             # Update status to completed for successfully linked files
@@ -134,7 +134,7 @@ def create_collection_from_assistant_task(collection_id: int, assistant_id: int)
             )
 
     except Exception as e:
-        logger.error(f"Failed to link files to vector store: {e}")
+        logger.exception(f"Failed to link files to vector store: {e}")
         # Mark files as failed
         if file_with_remote_ids:
             CollectionFile.objects.filter(collection=collection, file__in=file_with_remote_ids).update(
