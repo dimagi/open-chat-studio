@@ -244,8 +244,7 @@ class LocalIndexManager(metaclass=ABCMeta):
             Vector: A list of floats representing the embedding vector.
         """
 
-    @abstractmethod
-    def chunk_content(self, text: str, chunk_size: int, chunk_overlap: int) -> list[str]:
+    def chunk_file(self, file: File, chunk_size: int, chunk_overlap: int) -> list[str]:
         """
         Split text content into overlapping chunks for processing.
 
@@ -257,6 +256,15 @@ class LocalIndexManager(metaclass=ABCMeta):
         Returns:
             list[str]: List of text chunks with specified overlap.
         """
+
+        text_splitter = RecursiveCharacterTextSplitter.from_tiktoken_encoder(
+            model_name="gpt-4",
+            chunk_size=chunk_size,
+            chunk_overlap=chunk_overlap,
+        )
+
+        documents = text_splitter.create_documents([file.read_content()])
+        return [doc.page_content for doc in documents]
 
 
 class OpenAILocalIndexManager(LocalIndexManager):
@@ -273,13 +281,3 @@ class OpenAILocalIndexManager(LocalIndexManager):
             api_key=self.client.api_key, model=self.embedding_model_name, dimensions=settings.EMBEDDING_VECTOR_SIZE
         )
         return embeddings.embed_query(content)
-
-    def chunk_content(self, text: str, chunk_size: int, chunk_overlap: int) -> list[str]:
-        text_splitter = RecursiveCharacterTextSplitter.from_tiktoken_encoder(
-            model_name="gpt-4",
-            chunk_size=chunk_size,
-            chunk_overlap=chunk_overlap,
-        )
-
-        documents = text_splitter.create_documents([text])
-        return [doc.page_content for doc in documents]
