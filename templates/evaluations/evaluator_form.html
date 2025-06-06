@@ -18,7 +18,7 @@
               class="select w-full">
         <option value="">{% translate "Select an evaluator type..." %}</option>
         <template x-for="schema in evaluatorSchemas" :key="schema.title">
-          <option :value="schema.title" x-text="schema.title"></option>
+          <option :value="schema.title" x-text="schema.label || schema.title"></option>
         </template>
       </select>
       <small class="form-text text-muted" x-show="selectedSchema && selectedSchema.description" x-text="selectedSchema.description"></small>
