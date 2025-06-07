@@ -197,6 +197,9 @@ class TurnIOService(MessagingService):
         mime = file.content_type
         size = file.content_size or 0  # in bytes
 
+        if mime is None:
+            return False
+
         if mime.startswith("image/"):
             return size <= 5 * 1024 * 1024  # 5 MB
         elif mime.startswith(("video/", "audio/")):
@@ -209,9 +212,6 @@ class TurnIOService(MessagingService):
     def send_file_to_user(self, from_: str, to: str, platform: ChannelPlatform, file: File, download_link: str):
         file_name = file.name
         mime_type, _ = mimetypes.guess_type(file_name)
-
-        if mime_type is None:
-            raise Exception(f"Cannot determine MIME type for file: {file_name}")
 
         if mime_type.startswith("image/"):
             media_type = "image"
