@@ -92,7 +92,7 @@ class TestDeleteCollection:
         collection.files.add(file)
         return collection
 
-    @pytest.mark.parametrize("is_index", [False])
+    @pytest.mark.parametrize("is_index", [True, False])
     def test_user_cannot_delete_a_collection_in_use(self, is_index, index_manager_mock, client, experiment):
         """
         The user should not be able to delete a collection if it is being used by a pipeline.
