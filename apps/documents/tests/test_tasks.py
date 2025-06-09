@@ -24,6 +24,7 @@ def collection(db):
     )
 
 
+@pytest.mark.django_db()
 @patch("apps.documents.models.Collection.add_files_to_index")
 def test_collection_files_grouped_by_chunking_strategy(add_files_to_index_mock, collection):
     """Test that collection files are grouped by chunking strategy"""
@@ -46,17 +47,18 @@ def test_collection_files_grouped_by_chunking_strategy(add_files_to_index_mock, 
 
     # The first call should be for the first file with chunking strategy 800/400
     iterator_param = add_files_to_index_mock.mock_calls[0].kwargs["collection_files"]
-    collection_file = next(iterator_param)
+    collection_file = list(iterator_param)[0]
     assert collection_file.id == col_file_1.id
     add_files_to_index_mock.assert_any_call(collection_files=ANY, chunk_size=800, chunk_overlap=400)
 
     # The second call should be for the second file with chunking strategy 1000/100
     iterator_param = add_files_to_index_mock.mock_calls[1].kwargs["collection_files"]
-    collection_file = next(iterator_param)
+    collection_file = list(iterator_param)[0]
     assert collection_file.id == col_file_2.id
     add_files_to_index_mock.assert_any_call(collection_files=ANY, chunk_size=1000, chunk_overlap=100)
 
 
+@pytest.mark.django_db()
 @patch("apps.documents.models.Collection.add_files_to_index")
 def test_migrate_vector_stores_does_cleanup(add_files_to_index_mock, collection, index_manager_mock):
     """Test that the migration task cleans up old vector stores"""
@@ -74,7 +76,7 @@ def test_migrate_vector_stores_does_cleanup(add_files_to_index_mock, collection,
     )
     assert add_files_to_index_mock.call_count == 1
     iterator_param = add_files_to_index_mock.mock_calls[0].kwargs["collection_files"]
-    collection_file = next(iterator_param)
+    collection_file = list(iterator_param)[0]
     assert collection_file.id == col_file.id
     add_files_to_index_mock.assert_any_call(collection_files=ANY, chunk_size=800, chunk_overlap=400)
 
