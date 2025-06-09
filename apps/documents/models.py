@@ -276,15 +276,6 @@ class Collection(BaseTeamModel, VersionsMixin):
             status__in=[FileStatus.PENDING, FileStatus.IN_PROGRESS],
         ).exists()
 
-    def _remove_remote_index(self, remote_files_to_remove: list[File]):
-        """Remove the index backend"""
-        manager = self.get_index_manager()
-        manager.delete_vector_store(fail_silently=True)
-        manager.delete_files(remote_files_to_remove)
-
-        self.openai_vector_store_id = ""
-        self.save(update_fields=["openai_vector_store_id"])
-
     def get_index_manager(self):
         if self.is_index and self.is_remote_index:
             return self.llm_provider.get_remote_index_manager(self.openai_vector_store_id)
@@ -296,6 +287,15 @@ class Collection(BaseTeamModel, VersionsMixin):
             self._handle_remote_indexing(*args, **kwargs)
         else:
             self._handle_local_indexing(*args, **kwargs)
+
+    def _remove_remote_index(self, remote_files_to_remove: list[File]):
+        """Remove the index backend"""
+        manager = self.get_index_manager()
+        manager.delete_vector_store(fail_silently=True)
+        manager.delete_files(remote_files_to_remove)
+
+        self.openai_vector_store_id = ""
+        self.save(update_fields=["openai_vector_store_id"])
 
     def _handle_remote_indexing(
         self,
