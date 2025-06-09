@@ -203,7 +203,7 @@ class Command(BaseCommand):
             "source_material_id": experiment.source_material.id if experiment.source_material else None,
             "prompt": experiment.prompt_text or "",
             "tools": list(experiment.tools) if experiment.tools else [],
-            "custom_actions": [],
+            "custom_actions": [op.get_model_id(False) for op in experiment.custom_action_operations.select_related("custom_action").all()],
             "built_in_tools": [],
             "tool_config": {},
         }
