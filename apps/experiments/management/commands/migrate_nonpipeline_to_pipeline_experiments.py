@@ -120,11 +120,9 @@ class Command(BaseCommand):
         experiment.pipeline = pipeline
 
         # Clear the old type-specific fields
-        if experiment_type == "Assistant":
-            experiment.assistant = None
-        elif experiment_type == "LLM":
-            experiment.llm_provider = None
-            experiment.llm_provider_model = None
+        experiment.assistant = None
+        experiment.llm_provider = None
+        experiment.llm_provider_model = None
 
         experiment.save()
 
