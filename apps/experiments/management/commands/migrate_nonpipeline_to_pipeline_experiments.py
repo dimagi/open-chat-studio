@@ -108,11 +108,9 @@ class Command(BaseCommand):
             return "Unknown"
 
     def _convert_experiment(self, experiment):
-        experiment_type = self._get_experiment_type(experiment)
-
-        if experiment_type == "Assistant":
+        if experiment.assistant:
             pipeline = self._create_assistant_pipeline(experiment)
-        elif experiment_type == "LLM":
+        elif experiment.llm_provider:
             pipeline = self._create_llm_pipeline(experiment)
         else:
             raise ValueError(f"Unknown experiment type for experiment {experiment.id}: {experiment_type}")
