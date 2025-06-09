@@ -55,3 +55,7 @@ class UpdateUserDataSchema(BaseModel):
 
 class AttachMediaSchema(BaseModel):
     file_id: int = Field(description="The file id of the media to attach")
+
+
+class SearchIndexSchema(BaseModel):
+    pass

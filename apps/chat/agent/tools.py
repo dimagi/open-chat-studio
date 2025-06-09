@@ -222,6 +222,21 @@ class AttachMediaTool(CustomBaseTool):
             return f"Unable to attach file '{file_id}' to the message"
 
 
+class SearchIndexTool(CustomBaseTool):
+    name: str = AgentTools.SEARCH_INDEX
+    description: str = "Search files / source material for relevant information pertaining to the user's query"
+    requires_session: bool = False
+    args_schema: type[schemas.SearchIndexSchema] = schemas.SearchIndexSchema
+    query: str
+    max_results: int
+
+    @transaction.atomic
+    def action(self) -> str:
+        # 1. Query index
+        # 2. Generate references
+        return ""
+
+
 def _move_datetime_to_new_weekday_and_time(date: datetime, new_weekday: int, new_hour: int, new_minute: int):
     current_weekday = date.weekday()
     day_diff = new_weekday - current_weekday
