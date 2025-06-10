@@ -145,3 +145,21 @@ def voice_message():
             }
         ],
     }
+
+def media_message():
+    return {
+        "contacts": [{"profile": {"name": "User"}, "wa_id": "27456897512"}],
+        "messages": [
+            {
+                "from": "27456897512",
+                "id": "ABCDEFGHIJKL_MEDIA123",
+                "timestamp": "1706709716",
+                "type": "media"
+                "image": {
+                    "id": "180e1c3f-ae50-481b-a9f0-7c698233965f",
+                    "caption": "Check this image",
+                    "mime_type": "image/jpeg"
+                }
+            }
+        ]
+    }
