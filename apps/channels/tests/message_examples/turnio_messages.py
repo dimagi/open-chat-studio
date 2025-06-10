@@ -156,7 +156,7 @@ def media_message():
                 "id": "ABCDEFGHIJKL_MEDIA123",
                 "timestamp": "1706709716",
                 "type": "media",
-                "image": {
+                "media": {
                     "id": "180e1c3f-ae50-481b-a9f0-7c698233965f",
                     "caption": "Check this image",
                     "mime_type": "image/jpeg",
