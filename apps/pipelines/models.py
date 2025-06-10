@@ -507,7 +507,8 @@ class Node(BaseModel, VersionsMixin, CustomActionOperationMixin):
             _set_versioned_param_value(new_version, "collection_index_id", Collection)
 
         new_version.save()
-        self._copy_custom_action_operations_to_new_version(new_node=new_version, is_copy=is_copy)
+        if self.params.get("custom_actions"):
+            self._copy_custom_action_operations_to_new_version(new_node=new_version, is_copy=is_copy)
 
         return new_version
 
@@ -579,7 +580,7 @@ class Node(BaseModel, VersionsMixin, CustomActionOperationMixin):
                 VersionField(group_name=node_name, name=name, raw_value=value, to_display=display_formatter),
             )
 
-        if self.type == LLMResponseWithPrompt.__name__:
+        if self.type == LLMResponseWithPrompt.__name__ and self.params.get("custom_actions"):
             param_versions.append(
                 VersionField(
                     group_name=node_name,
