@@ -87,13 +87,13 @@ class VersionField:
         if self.current_value and not hasattr(self.current_value, "version_details"):
             return
 
-        if self.queryset:
+        if self.queryset is not None:
             for record in self.queryset.all():
                 self.queryset_results.append(VersionField(raw_value=record, to_display=self.to_display))
 
     def display_value(self) -> Any:
         to_display = self.to_display or default_to_display
-        if self.queryset:
+        if self.queryset is not None:
             return to_display(self.queryset_results)
         if self.current_value:
             return to_display(self.current_value)
