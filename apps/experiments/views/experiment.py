@@ -27,6 +27,7 @@ from django.views.decorators.clickjacking import xframe_options_exempt
 from django.views.decorators.csrf import csrf_exempt
 from django.views.decorators.http import require_GET, require_POST
 from django.views.generic import CreateView, UpdateView
+from django.views.generic.edit import FormView
 from django_tables2 import SingleTableView
 from field_audit.models import AuditAction
 from waffle import flag_is_active
@@ -358,14 +359,17 @@ class DeleteFileFromExperiment(BaseDeleteFileView):
     pass
 
 
-class CreateExperimentVersion(LoginAndTeamRequiredMixin, UpdateView, PermissionRequiredMixin):
+class CreateExperimentVersion(LoginAndTeamRequiredMixin, FormView, PermissionRequiredMixin):
     model = Experiment
     form_class = ExperimentVersionForm
     template_name = "experiments/create_version_form.html"
     title = "Create Experiment Version"
     button_title = "Create"
     permission_required = "experiments.add_experiment"
-    pk_url_kwarg = "experiment_id"
+
+    @cached_property
+    def object(self):
+        return get_object_or_404(Experiment, pk=self.kwargs["experiment_id"], team=self.request.team)
 
     @cached_property
     def latest_version(self):
@@ -377,8 +381,8 @@ class CreateExperimentVersion(LoginAndTeamRequiredMixin, UpdateView, PermissionR
             form_kwargs["initial"] = {"is_default_version": True}
         return form_kwargs
 
-    def get_context_data(self, *args, **kwargs):
-        context = super().get_context_data(*args, **kwargs)
+    def get_context_data(self, **kwargs):
+        context = super().get_context_data(**kwargs)
         working_experiment = self.object
         version = working_experiment.version_details
         if self.latest_version:
@@ -419,7 +423,7 @@ class CreateExperimentVersion(LoginAndTeamRequiredMixin, UpdateView, PermissionR
 
     def _check_pipleline_and_assistant_for_errors(self) -> str:
         """Checks if the pipeline or assistant has errors before creating a new version."""
-        experiment = self.get_object()
+        experiment = self.object
 
         try:
             if self._is_assistant_out_of_sync(experiment):

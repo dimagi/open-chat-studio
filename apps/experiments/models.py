@@ -744,7 +744,7 @@ class Experiment(BaseTeamModel, VersionsMixin, CustomActionOperationMixin):
         return f"{self.name} ({self.version_display})"
 
     def save(self, *args, **kwargs):
-        if self.working_version is None and self.is_default_version is True:
+        if self.working_version_id is None and self.is_default_version is True:
             raise ValueError("A working experiment cannot be a default version")
         self._clear_version_cache()
         return super().save(*args, **kwargs)
