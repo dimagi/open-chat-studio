@@ -32,6 +32,7 @@ SECRET_KEY = env("SECRET_KEY", default="YNAazYQdzqQWddeZmFZfBfROzqlzvLEwVxoOjGgK
 # SECURITY WARNING: don't run with debug turned on in production!
 DEBUG = True
 IS_TESTING = "pytest" in sys.modules
+USE_DEBUG_TOOLBAR = DEBUG and not IS_TESTING
 
 ALLOWED_HOSTS = ["*"]
 CSRF_TRUSTED_ORIGINS = env.list("CSRF_TRUSTED_ORIGINS", default=[])
@@ -108,34 +109,42 @@ PROJECT_APPS = [
     "apps.banners",
 ]
 
-SPECIAL_APPS = [
-    "django_cleanup"  # according to the docs, this should be the last app installed
-]
-
+SPECIAL_APPS = ["debug_toolbar"] if USE_DEBUG_TOOLBAR else []
+SPECIAL_APPS.append("django_cleanup")  # according to the docs, this should be the last app installed
 INSTALLED_APPS = DJANGO_APPS + THIRD_PARTY_APPS + PROJECT_APPS + SPECIAL_APPS
 
-MIDDLEWARE = [
-    "django.middleware.security.SecurityMiddleware",
-    "whitenoise.middleware.WhiteNoiseMiddleware",
-    "django.contrib.sessions.middleware.SessionMiddleware",
-    "allauth.account.middleware.AccountMiddleware",
-    "django.middleware.locale.LocaleMiddleware",
-    "django.middleware.common.CommonMiddleware",
-    "django.middleware.csrf.CsrfViewMiddleware",
-    "django.contrib.auth.middleware.AuthenticationMiddleware",
-    "django_otp.middleware.OTPMiddleware",
-    "apps.teams.middleware.TeamsMiddleware",
-    "apps.web.scope_middleware.RequestContextMiddleware",
-    "apps.web.locale_middleware.UserLocaleMiddleware",
-    "django.contrib.messages.middleware.MessageMiddleware",
-    "django.middleware.clickjacking.XFrameOptionsMiddleware",
-    "waffle.middleware.WaffleMiddleware",
-    "field_audit.middleware.FieldAuditMiddleware",
-    "apps.audit.middleware.AuditTransactionMiddleware",
-    "apps.web.htmx_middleware.HtmxMessageMiddleware",
-    "tz_detect.middleware.TimezoneMiddleware",
-    "apps.generics.middleware.OriginDetectionMiddleware",
-    "apps.banners.middleware.BannerLocationMiddleware",
+MIDDLEWARE = list(
+    filter(
+        None,
+        [
+            "django.middleware.security.SecurityMiddleware",
+            "whitenoise.middleware.WhiteNoiseMiddleware",
+            "debug_toolbar.middleware.DebugToolbarMiddleware" if USE_DEBUG_TOOLBAR else None,
+            "django.contrib.sessions.middleware.SessionMiddleware",
+            "allauth.account.middleware.AccountMiddleware",
+            "django.middleware.locale.LocaleMiddleware",
+            "django.middleware.common.CommonMiddleware",
+            "django.middleware.csrf.CsrfViewMiddleware",
+            "django.contrib.auth.middleware.AuthenticationMiddleware",
+            "django_otp.middleware.OTPMiddleware",
+            "apps.teams.middleware.TeamsMiddleware",
+            "apps.web.scope_middleware.RequestContextMiddleware",
+            "apps.web.locale_middleware.UserLocaleMiddleware",
+            "django.contrib.messages.middleware.MessageMiddleware",
+            "django.middleware.clickjacking.XFrameOptionsMiddleware",
+            "waffle.middleware.WaffleMiddleware",
+            "field_audit.middleware.FieldAuditMiddleware",
+            "apps.audit.middleware.AuditTransactionMiddleware",
+            "apps.web.htmx_middleware.HtmxMessageMiddleware",
+            "tz_detect.middleware.TimezoneMiddleware",
+            "apps.generics.middleware.OriginDetectionMiddleware",
+            "apps.banners.middleware.BannerLocationMiddleware",
+        ],
+    )
+)
+
+INTERNAL_IPS = [
+    "127.0.0.1",  # Django debug toolbar
 ]
 
 ROOT_URLCONF = "gpt_playground.urls"

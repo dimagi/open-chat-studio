@@ -1,7 +1,9 @@
+import contextlib
 from collections import defaultdict
 from dataclasses import dataclass
 from dataclasses import field as data_field
 from difflib import Differ
+from functools import cached_property
 from typing import Any, Self
 
 from django.core.exceptions import FieldDoesNotExist
@@ -66,7 +68,6 @@ class VersionField:
     changed: bool = False
     label: str = data_field(default="")
     queryset: QuerySet | None = None
-    queryset_results: list["VersionField"] = data_field(default_factory=list)
     text_diffs: list[TextDiff] = data_field(default_factory=list)
     raw_value_version: Self | None = None
 
@@ -82,18 +83,22 @@ class VersionField:
     def is_a_version(self):
         return self.raw_value_version is not None
 
+    @cached_property
+    def queryset_results(self) -> list["VersionField"]:
+        if self.current_value and not hasattr(self.current_value, "version_details"):
+            return []
+
+        if self.queryset is None:
+            return []
+
+        return [VersionField(raw_value=record, to_display=self.to_display) for record in self.queryset.all()]
+
     def __post_init__(self):
         self.label = self.name.replace("_", " ").title()
-        if self.current_value and not hasattr(self.current_value, "version_details"):
-            return
-
-        if self.queryset:
-            for record in self.queryset.all():
-                self.queryset_results.append(VersionField(raw_value=record, to_display=self.to_display))
 
     def display_value(self) -> Any:
         to_display = self.to_display or default_to_display
-        if self.queryset:
+        if self.queryset is not None:
             return to_display(self.queryset_results)
         if self.current_value:
             return to_display(self.current_value)
@@ -172,15 +177,18 @@ class VersionField:
         same "version family". This relationship is identified through the `working_version_id` field of each record,
         which is expected to be present on each result.
         """
-        previous_queryset = self.previous_field_version.queryset
-        previous_records = list(previous_queryset.values_list("id", flat=True))
+        previous_queryset_results = self.previous_field_version.queryset_results
+        previous_records = {result.raw_value.id: result.raw_value for result in previous_queryset_results}
         for version_field in self.queryset_results:
             record = version_field.raw_value
-            previous_record = previous_queryset.filter(id__in=record.version_family_ids).first()
+            previous_record = None
+            for version_id in record.version_family_ids:
+                if version_id in previous_records:
+                    previous_record = previous_records.pop(version_id)
+                    break
 
             if previous_record:
                 # A version of the current record exists in the previous queryset
-                previous_records.remove(previous_record.id)
                 prev_version_field = VersionField(raw_value=previous_record, to_display=self.to_display)
                 version_field.compare(prev_version_field, early_abort=early_abort)
                 self.changed = self.changed or version_field.changed
@@ -191,13 +199,12 @@ class VersionField:
             if early_abort and self.changed:
                 return
 
-        records_removed_queryset = previous_queryset.filter(id__in=previous_records)
-        if records_removed_queryset.exists():
+        if previous_records:
             self.changed = True
             if early_abort:
                 return
 
-        for record in records_removed_queryset.all():
+        for record in previous_records.values():
             # We need to add version fields for each removed record, but with the current value set to None
             prev_version_field = VersionField(raw_value=record, to_display=self.to_display)
             version_field = VersionField(raw_value=None, previous_field_version=prev_version_field, changed=True)
@@ -303,6 +310,8 @@ class VersionDetails:
                 self.fields.append(missing_field)
                 self._fields_dict[missing_field.name] = missing_field
                 missing_field.compare(previous_field, early_abort=early_abort)
+                if early_abort:
+                    return
 
 
 class VersionsMixin:
@@ -397,6 +406,21 @@ class VersionsMixin:
         if prev_version := self.latest_version:
             version.compare(prev_version.version_details, early_abort=True)
         return version.fields_changed
+
+    @cached_property
+    def version_details(self) -> VersionDetails:
+        return self._get_version_details()
+
+    def _get_version_details(self) -> VersionDetails:
+        raise NotImplementedError()
+
+    def save(self, *args, **kwargs):
+        self._clear_version_cache()
+        super().save(*args, **kwargs)
+
+    def _clear_version_cache(self):
+        with contextlib.suppress(AttributeError):
+            del self.version_details
 
 
 class VersionsObjectManagerMixin:
