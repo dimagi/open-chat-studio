@@ -1,5 +1,6 @@
 import logging
 from collections.abc import Callable
+from dataclasses import dataclass
 from datetime import datetime, timedelta
 from functools import cached_property
 from typing import TYPE_CHECKING, Any, Union
@@ -7,6 +8,7 @@ from typing import TYPE_CHECKING, Any, Union
 from django.db import transaction, utils
 from langchain_community.utilities.openapi import OpenAPISpec
 from langchain_core.tools import BaseTool
+from pgvector.django import CosineDistance
 
 from apps.channels.models import ChannelPlatform
 from apps.chat.agent import schemas
@@ -15,6 +17,7 @@ from apps.chat.models import ChatAttachment
 from apps.events.forms import ScheduledMessageConfigForm
 from apps.events.models import ScheduledMessage, TimePeriod
 from apps.experiments.models import AgentTools, Experiment, ExperimentSession, ParticipantData
+from apps.files.models import FileChunkEmbedding
 from apps.pipelines.models import Node
 from apps.utils.time import pretty_date
 
@@ -28,6 +31,18 @@ CREATE_LINK_TEXT = """You can use this markdown link to reference it in your res
     `[{name}](file:{team_slug}:{session_id}:{file_id})` or `![](file:{team_slug}:{session_id}:{file_id})`
     if it is an image.
 """
+
+
+@dataclass
+class SearchToolConfig:
+    index_id: int
+    query: str
+    max_results: int = 5
+
+    def get_index(self):
+        from apps.documents.models import Collection
+
+        return Collection.objects.get(id=self.index_id)
 
 
 class CustomBaseTool(BaseTool):
@@ -227,14 +242,26 @@ class SearchIndexTool(CustomBaseTool):
     description: str = "Search files / source material for relevant information pertaining to the user's query"
     requires_session: bool = False
     args_schema: type[schemas.SearchIndexSchema] = schemas.SearchIndexSchema
-    query: str
-    max_results: int
+    search_config: SearchToolConfig
 
     @transaction.atomic
     def action(self) -> str:
-        # 1. Query index
-        # 2. Generate references
-        return ""
+        # TODO: test
+        # - [x] Query index
+        # - [ ] Generate references
+        index = self.search_config.get_index()
+        query = self.search_config.query
+        max_results = self.search_config.max_results
+
+        query_vector = index.get_query_vector(query)
+        embeddings = (
+            FileChunkEmbedding.objects.annotate(distance=CosineDistance("embedding", query_vector))
+            .filter(collection_id=index.id)
+            .order_by("distance")
+            .distinct()[:max_results]
+        )
+
+        return "\n\n".join([embedding.text for embedding in embeddings])
 
 
 def _move_datetime_to_new_weekday_and_time(date: datetime, new_weekday: int, new_hour: int, new_minute: int):

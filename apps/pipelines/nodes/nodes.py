@@ -28,7 +28,7 @@ from RestrictedPython import compile_restricted, safe_builtins, safe_globals
 
 from apps.annotations.models import TagCategories
 from apps.assistants.models import OpenAiAssistant
-from apps.chat.agent.tools import SearchIndexTool, get_node_tools
+from apps.chat.agent.tools import SearchIndexTool, SearchToolConfig, get_node_tools
 from apps.chat.conversation import compress_chat_history, compress_pipeline_chat_history
 from apps.documents.models import Collection
 from apps.experiments.models import BuiltInTools, ExperimentSession, ParticipantData
@@ -407,6 +407,7 @@ class LLMResponseWithPrompt(LLMResponse, HistoryMixin, OutputMessageTagMixin):
         tools.extend(self.get_llm_service().attach_built_in_tools(built_in_tools, self.tool_config))
         if self.collection_index_id:
             # TODO: Refactor: Linking tools should follow 1 pattern
+            # TODO: test
             collection = Collection.objects.get(id=self.collection_index_id)
             if collection.is_remote_index:
                 builtin_tools = OpenAIBuiltinTool(
@@ -415,7 +416,8 @@ class LLMResponseWithPrompt(LLMResponse, HistoryMixin, OutputMessageTagMixin):
                 tools.append(builtin_tools)
             else:
                 # TODO: max_results to come from tool config
-                tools.append(SearchIndexTool(query=input, max_results=5))
+                search_config = SearchToolConfig(index_id=collection.id, query=input, max_results=5)
+                tools.append(SearchIndexTool(search_config=search_config))
 
         chat_adapter = ChatAdapter.for_pipeline(
             session=session,

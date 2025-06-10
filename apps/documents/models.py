@@ -10,7 +10,7 @@ from django_pydantic_field import SchemaField
 from field_audit import audit_fields
 from field_audit.models import AuditingManager
 
-from apps.documents.exceptions import FileUploadError
+from apps.documents.exceptions import FileUploadError, IndexConfigurationException
 from apps.experiments.versioning import VersionDetails, VersionField, VersionsMixin, VersionsObjectManagerMixin
 from apps.files.models import File, FileChunkEmbedding
 from apps.service_providers.exceptions import UnableToLinkFileException
@@ -287,6 +287,15 @@ class Collection(BaseTeamModel, VersionsMixin):
             self._handle_remote_indexing(*args, **kwargs)
         else:
             self._handle_local_indexing(*args, **kwargs)
+
+    def get_query_vector(self, query: str) -> list[float]:
+        # TODO: test
+        """Get the embedding vector for a query using the embedding provider model"""
+        if not self.embedding_provider_model:
+            raise IndexConfigurationException("Embedding provider model is not set for this collection")
+
+        index_manager = self.get_index_manager()
+        return index_manager.get_embedding_vector(query)
 
     def _remove_remote_index(self, remote_files_to_remove: list[File]):
         """Remove the index backend"""
