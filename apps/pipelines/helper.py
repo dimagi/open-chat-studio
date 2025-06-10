@@ -35,3 +35,83 @@ def duplicate_pipeline_with_new_ids(pipeline_data):
         edge["target"] = new_target_id
 
     return new_data, old_to_new_node_ids
+
+
+def convert_non_pipeline_experiment_to_pipeline(experiment):
+    if experiment.assistant:
+        pipeline = _create_assistant_pipeline(experiment)
+    elif experiment.llm_provider:
+        pipeline = _create_llm_pipeline(experiment)
+    else:
+        raise ValueError(f"Unknown experiment type for experiment {experiment.id}")
+
+    experiment.pipeline = pipeline
+    experiment.assistant = None
+    experiment.llm_provider = None
+    experiment.llm_provider_model = None
+    experiment.save()
+
+
+def _create_pipeline_with_node(experiment, node_type, node_label, node_params):
+    from .models import Pipeline
+
+    """Create a pipeline with start -> custom_node -> end structure."""
+    pipeline_name = f"{experiment.name} Pipeline"
+    middle_node_config = {
+        "id": str(uuid4()),
+        "type": "pipelineNode",
+        "position": {"x": 400, "y": 200},
+        "data": {"type": node_type, "label": node_label, "params": node_params},
+    }
+
+    return Pipeline._create_pipeline_with_nodes(
+        team=experiment.team, name=pipeline_name, middle_nodes_config=middle_node_config
+    )
+
+
+def _create_llm_pipeline(experiment):
+    from apps.pipelines.nodes.nodes import LLMResponseWithPrompt
+
+    """Create a start -> LLMResponseWithPrompt -> end nodes pipeline for an LLM experiment."""
+    llm_params = {
+        "name": "llm",
+        "llm_provider_id": experiment.llm_provider.id,
+        "llm_provider_model_id": experiment.llm_provider_model.id,
+        "llm_temperature": experiment.temperature,
+        "history_type": "global",
+        "history_name": None,
+        "history_mode": "summarize",
+        "user_max_token_limit": experiment.llm_provider_model.max_token_limit,
+        "max_history_length": 10,
+        "source_material_id": experiment.source_material.id if experiment.source_material else None,
+        "prompt": experiment.prompt_text or "",
+        "tools": list(experiment.tools) if experiment.tools else [],
+        "custom_actions": [
+            op.get_model_id(False) for op in experiment.custom_action_operations.select_related("custom_action").all()
+        ],
+        "built_in_tools": [],
+        "tool_config": {},
+    }
+
+    return _create_pipeline_with_node(
+        experiment=experiment, node_type=LLMResponseWithPrompt.__name__, node_label="LLM", node_params=llm_params
+    )
+
+
+def _create_assistant_pipeline(experiment):
+    from apps.pipelines.nodes.nodes import AssistantNode
+
+    """Create a start -> AssistantNode -> end nodes pipeline for an assistant experiment."""
+    assistant_params = {
+        "name": "assistant",
+        "assistant_id": str(experiment.assistant.id),
+        "citations_enabled": experiment.citations_enabled,
+        "input_formatter": experiment.input_formatter or "",
+    }
+
+    return _create_pipeline_with_node(
+        experiment=experiment,
+        node_type=AssistantNode.__name__,
+        node_label="OpenAI Assistant",
+        node_params=assistant_params,
+    )
