@@ -115,44 +115,82 @@ class Pipeline(BaseTeamModel, VersionsMixin):
         return f"v{self.version_number}"
 
     @classmethod
+    def _create_pipeline_with_nodes(cls, team, name, middle_nodes_config=None):
+        """
+        Create a pipeline with start -> middle node -> end structure.
+        """
+        from apps.pipelines.nodes.nodes import EndNode, StartNode
+
+        start_node_config = {
+            "id": str(uuid4()),
+            "type": "startNode",
+            "position": {"x": 100, "y": 200},
+            "data": {"type": StartNode.__name__, "params": {"name": "start"}},
+        }
+        end_node_config = {
+            "id": str(uuid4()),
+            "type": "endNode",
+            "position": {"x": 800, "y": 200},
+            "data": {"type": EndNode.__name__, "params": {"name": "end"}},
+        }
+        all_nodes_config = [start_node_config]
+        if middle_nodes_config:
+            all_nodes_config.append(middle_nodes_config)
+        all_nodes_config.append(end_node_config)
+
+        flow_nodes = []
+        for node_config in all_nodes_config:
+            flow_node = FlowNode(
+                id=node_config["id"],
+                type=node_config["type"],
+                position=node_config["position"],
+                data=FlowNodeData(
+                    id=node_config["id"],
+                    type=node_config["data"]["type"],
+                    label=node_config["data"].get("label", ""),
+                    params=node_config["data"]["params"],
+                ),
+            )
+            flow_nodes.append(flow_node)
+        edges = []
+        if middle_nodes_config:
+            for i in range(len(flow_nodes) - 1):
+                current_node = flow_nodes[i]
+                next_node = flow_nodes[i + 1]
+                edge = {
+                    "id": f"edge-{current_node.id}-{next_node.id}",
+                    "source": current_node.id,
+                    "target": next_node.id,
+                    "sourceHandle": "output",
+                    "targetHandle": "input",
+                }
+                edges.append(edge)
+
+        pipeline = cls.objects.create(
+            team=team, name=name, data={"nodes": [node.model_dump() for node in flow_nodes], "edges": edges}
+        )
+        pipeline.update_nodes_from_data()
+        return pipeline
+
+    @classmethod
     def create_default_pipeline_with_name(cls, team, name, llm_provider_id=None, llm_provider_model=None):
         return cls.create_default(team, name, llm_provider_id, llm_provider_model)
 
     @classmethod
     def create_default(cls, team, name=None, llm_provider_id=None, llm_provider_model=None):
-        from apps.pipelines.nodes.nodes import EndNode, StartNode
-
         default_name = "New Pipeline" if name is None else name
         existing_pipeline_count = cls.objects.filter(team=team, name__startswith=default_name).count()
 
-        start_id = str(uuid4())
-        start_node = FlowNode(
-            id=start_id,
-            type="startNode",
-            position={
-                "x": -200,
-                "y": 200,
-            },
-            data=FlowNodeData(id=start_id, type=StartNode.__name__, params={"name": "start"}),
-        )
-        end_id = str(uuid4())
-        end_node = FlowNode(
-            id=end_id,
-            type="endNode",
-            position={"x": 1000, "y": 200},
-            data=FlowNodeData(id=end_id, type=EndNode.__name__, params={"name": "end"}),
-        )
         if llm_provider_id and llm_provider_model:
             llm_id = f"LLMResponseWithPrompt-{uuid4().hex[:5]}"
-            llm_node = FlowNode(
-                id=llm_id,
-                type="pipelineNode",
-                position={"x": 300, "y": 0},
-                data=FlowNodeData(
-                    id=llm_id,
-                    type="LLMResponseWithPrompt",
-                    label="LLM",
-                    params={
+            llm_node_config = {
+                "id": llm_id,
+                "type": "pipelineNode",
+                "position": {"x": 300, "y": 0},
+                "data": {
+                    "type": "LLMResponseWithPrompt",
+                    "label": "LLM",
+                    "params": {
                         "name": llm_id,
                         "llm_provider_id": llm_provider_id,
                         "llm_provider_model_id": llm_provider_model.id,
@@ -168,38 +206,15 @@ class Pipeline(BaseTeamModel, VersionsMixin):
                         "custom_actions": None,
                         "keywords": [""],
                     },
-                ),
-            )
-            edges = [
-                {
-                    "id": f"edge-{start_id}-{llm_id}",
-                    "source": start_id,
-                    "target": llm_id,
-                    "sourceHandle": "output",
-                    "targetHandle": "input",
                 },
-                {
-                    "id": f"edge-{llm_id}-{end_id}",
-                    "source": llm_id,
-                    "target": end_id,
-                    "sourceHandle": "output",
-                    "targetHandle": "input",
-                },
-            ]
-        else:
-            llm_node = None
-            edges = []
-        default_nodes = [start_node.model_dump()]
-        if llm_node:
-            default_nodes.append(llm_node.model_dump())
-        default_nodes.append(end_node.model_dump())
-        new_pipeline = cls.objects.create(
+            }
+
+        final_name = default_name if name else f"New Pipeline {existing_pipeline_count + 1}"
+        return cls._create_pipeline_with_nodes(
             team=team,
-            data={"nodes": default_nodes, "edges": edges},
-            name=default_name if name else f"New Pipeline {existing_pipeline_count + 1}",
+            name=final_name,
+            middle_nodes_config=llm_node_config if llm_provider_id and llm_provider_model else None,
         )
-        new_pipeline.update_nodes_from_data()
-        return new_pipeline
 
     def get_absolute_url(self):
         return reverse("pipelines:edit", args=[self.team.slug, self.id])
