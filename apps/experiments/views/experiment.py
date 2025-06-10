@@ -386,6 +386,7 @@ class CreateExperimentVersion(LoginAndTeamRequiredMixin, UpdateView, PermissionR
             version.compare(self.latest_version.version_details)
 
         context["version_details"] = version
+        context["has_versions"] = self.latest_version is not None
         context["experiment"] = working_experiment
         return context
 
