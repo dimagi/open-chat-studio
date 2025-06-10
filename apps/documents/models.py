@@ -115,8 +115,7 @@ class Collection(BaseTeamModel, VersionsMixin):
     def file_names(self) -> list[str]:
         return list(self.files.values_list("name", flat=True))
 
-    @property
-    def version_details(self) -> VersionDetails:
+    def _get_version_details(self) -> VersionDetails:
         return VersionDetails(
             instance=self,
             fields=[

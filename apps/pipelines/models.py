@@ -436,8 +436,7 @@ class Pipeline(BaseTeamModel, VersionsMixin):
             .values("trigger_experiment_id")
         )
 
-    @property
-    def version_details(self) -> VersionDetails:
+    def _get_version_details(self) -> VersionDetails:
         reserved_types = ["StartNode", "EndNode"]
 
         def node_name(node):
@@ -536,8 +535,7 @@ class Node(BaseModel, VersionsMixin, CustomActionOperationMixin):
 
         self._archive_related_params()
 
-    @property
-    def version_details(self) -> VersionDetails:
+    def _get_version_details(self) -> VersionDetails:
         from apps.assistants.models import OpenAiAssistant
         from apps.documents.models import Collection
         from apps.experiments.models import VersionFieldDisplayFormatters

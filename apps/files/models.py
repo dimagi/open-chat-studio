@@ -103,8 +103,7 @@ class File(BaseTeamModel, VersionsMixin):
         """Returns the size of this file in megabytes"""
         return bytes_to_megabytes(self.content_size)
 
-    @property
-    def version_details(self) -> VersionDetails:
+    def _get_version_details(self) -> VersionDetails:
         return VersionDetails(
             instance=self,
             fields=[
@@ -121,6 +120,7 @@ class File(BaseTeamModel, VersionsMixin):
                 self.name = filename
             if not self.content_type:
                 self.content_type = File.get_content_type(self.file)
+        self._clear_cache()
         super().save(*args, **kwargs)
 
     def duplicate(self):
