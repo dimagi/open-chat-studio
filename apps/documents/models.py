@@ -10,10 +10,12 @@ from django_pydantic_field import SchemaField
 from field_audit import audit_fields
 from field_audit.models import AuditingManager
 
+from apps.chat.agent.tools import SearchIndexTool, SearchToolConfig
 from apps.documents.exceptions import FileUploadError, IndexConfigurationException
 from apps.experiments.versioning import VersionDetails, VersionField, VersionsMixin, VersionsObjectManagerMixin
 from apps.files.models import File, FileChunkEmbedding
 from apps.service_providers.exceptions import UnableToLinkFileException
+from apps.service_providers.llm_service.main import OpenAIBuiltinTool
 from apps.service_providers.models import EmbeddingProviderModel
 from apps.teams.models import BaseTeamModel
 from apps.utils.conversions import bytes_to_megabytes
@@ -295,6 +297,20 @@ class Collection(BaseTeamModel, VersionsMixin):
 
         index_manager = self.get_index_manager()
         return index_manager.get_embedding_vector(query)
+
+    def get_search_tool(self, query: str, max_results: int) -> OpenAIBuiltinTool | SearchIndexTool:
+        """
+        Returns either the tool configuration. If the collection is a remote index, it returns the builtin file search
+        tool, otherwise it returns a SearchIndexTool.
+        """
+        if not self.is_index:
+            raise IndexConfigurationException("Non indexed collections do not have search tools")
+
+        if self.is_remote_index:
+            return OpenAIBuiltinTool(type="file_search", vector_store_ids=[self.openai_vector_store_id])
+        else:
+            search_config = SearchToolConfig(index_id=self.id, query=query, max_results=max_results)
+            return SearchIndexTool(search_config=search_config)
 
     def _remove_remote_index(self, remote_files_to_remove: list[File]):
         """Remove the index backend"""

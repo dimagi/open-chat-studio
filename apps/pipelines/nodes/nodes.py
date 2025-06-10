@@ -17,6 +17,7 @@ from jinja2.sandbox import SandboxedEnvironment
 from langchain_core.messages import BaseMessage
 from langchain_core.prompts import MessagesPlaceholder, PromptTemplate
 from langchain_core.runnables import RunnableLambda, RunnablePassthrough
+from langchain_core.tools import BaseTool
 from langchain_openai.chat_models.base import OpenAIRefusalError
 from langchain_text_splitters import RecursiveCharacterTextSplitter
 from pydantic import BaseModel, BeforeValidator, Field, create_model, field_serializer, field_validator, model_validator
@@ -28,7 +29,7 @@ from RestrictedPython import compile_restricted, safe_builtins, safe_globals
 
 from apps.annotations.models import TagCategories
 from apps.assistants.models import OpenAiAssistant
-from apps.chat.agent.tools import SearchIndexTool, SearchToolConfig, get_node_tools
+from apps.chat.agent.tools import get_node_tools
 from apps.chat.conversation import compress_chat_history, compress_pipeline_chat_history
 from apps.documents.models import Collection
 from apps.experiments.models import BuiltInTools, ExperimentSession, ParticipantData
@@ -48,7 +49,6 @@ from apps.pipelines.tasks import send_email_from_pipeline
 from apps.service_providers.exceptions import ServiceProviderConfigError
 from apps.service_providers.llm_service.adapters import AssistantAdapter, ChatAdapter
 from apps.service_providers.llm_service.history_managers import PipelineHistoryManager
-from apps.service_providers.llm_service.main import OpenAIBuiltinTool
 from apps.service_providers.llm_service.prompt_context import PromptTemplateContext
 from apps.service_providers.llm_service.runnables import (
     AgentAssistantChat,
@@ -402,23 +402,13 @@ class LLMResponseWithPrompt(LLMResponse, HistoryMixin, OutputMessageTagMixin):
             max_token_limit=provider_model.max_token_limit,
             chat_model=chat_model,
         )
-        tools = get_node_tools(self.django_node, session, attachment_callback=history_manager.attach_file_id)
-        built_in_tools = self.built_in_tools
-        tools.extend(self.get_llm_service().attach_built_in_tools(built_in_tools, self.tool_config))
-        if self.collection_index_id:
-            # TODO CS: Refactor: Linking tools should follow 1 pattern
-            # TODO CS: test
-            collection = Collection.objects.get(id=self.collection_index_id)
-            if collection.is_remote_index:
-                builtin_tools = OpenAIBuiltinTool(
-                    type="file_search", vector_store_ids=[collection.openai_vector_store_id]
-                )
-                tools.append(builtin_tools)
-            else:
-                # TODO CS: max_results to come from tool config
-                search_config = SearchToolConfig(index_id=collection.id, query=input, max_results=5)
-                tools.append(SearchIndexTool(search_config=search_config))
 
+        # Tools setup
+        tools = self._get_configured_tools(
+            session=session, attach_file_callback=history_manager.attach_file_id, query=input
+        )
+
+        # Chat setup
         chat_adapter = ChatAdapter.for_pipeline(
             session=session,
             node=self,
@@ -447,6 +437,18 @@ class LLMResponseWithPrompt(LLMResponse, HistoryMixin, OutputMessageTagMixin):
             output=result.output,
             output_message_metadata=history_manager.output_message_metadata,
         )
+
+    def _get_configured_tools(
+        self, session: ExperimentSession | None, attach_file_callback: callable, query: str
+    ) -> list[dict | BaseTool]:
+        """Get instantiated tools for the given node configuration."""
+        tools = get_node_tools(self.django_node, session, attachment_callback=attach_file_callback)
+        tools.extend(self.get_llm_service().attach_built_in_tools(self.built_in_tools, self.tool_config))
+        if self.collection_index_id:
+            collection = Collection.objects.get(id=self.collection_index_id)
+            tools.append(collection.get_search_tool(query=query, max_results=5))
+
+        return tools
 
 
 class SendEmail(PipelineNode, OutputMessageTagMixin):

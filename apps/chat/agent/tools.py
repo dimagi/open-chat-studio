@@ -258,6 +258,7 @@ class SearchIndexTool(CustomBaseTool):
 
     @transaction.atomic
     def action(self) -> str:
+        """Do a simple search for the top most relevant file chunks based on the query provided by the user."""
         # - [ ] Generate references
         index = self.search_config.get_index()
         query = self.search_config.query
