@@ -67,9 +67,9 @@ class TestCollection:
         assert new_version.openai_vector_store_id == ""
 
     @mock.patch("apps.documents.tasks.index_collection_files")
-    def test_create_new_version_of_a_collection_index(self, index_collection_files, index_manager_mock):
+    def test_create_new_version_of_a_collection_index(self, index_collection_files, remote_index_manager_mock):
         """Ensure that a new vector store is created for the new version when one is created"""
-        index_manager_mock.create_remote_index.return_value = "new-vs-123"
+        remote_index_manager_mock.create_remote_index.return_value = "new-vs-123"
 
         collection = CollectionFactory(
             name="Test Collection",
@@ -95,7 +95,7 @@ class TestCollection:
         assert collection.openai_vector_store_id == "old-vs-123"
 
         # Verify vector store was created and files were indexed
-        index_manager_mock.create_remote_index.assert_called_once_with(
+        remote_index_manager_mock.create_remote_index.assert_called_once_with(
             name=f"{new_version.index_name} v{new_version.version_number}"
         )
         index_collection_files.assert_called()
@@ -190,7 +190,7 @@ class TestCollection:
         file.refresh_from_db()
         assert file.is_archived is False
 
-    def test_remove_remote_index(self, index_manager_mock):
+    def test_remove_remote_index(self, remote_index_manager_mock):
         """Test that the index can be removed"""
         collection = CollectionFactory(
             is_index=True, is_remote_index=True, openai_vector_store_id="vs-123", llm_provider=LlmProviderFactory()
@@ -204,8 +204,8 @@ class TestCollection:
         # Check that the vector store ID is cleared and the index is removed
         assert collection.openai_vector_store_id == ""
         file.refresh_from_db()
-        index_manager_mock.delete_vector_store.assert_called_once_with(fail_silently=True)
-        index_manager_mock.delete_files.assert_called_once()
+        remote_index_manager_mock.delete_vector_store.assert_called_once_with(fail_silently=True)
+        remote_index_manager_mock.delete_files.assert_called_once()
 
     def test_get_index_manager_returns_correct_manager(self):
         """Remote indexes should return a remote index manager whereas local indexes should return a local one"""
@@ -215,7 +215,7 @@ class TestCollection:
         assert isinstance(collection_remote.get_index_manager(), RemoteIndexManager)
         assert isinstance(collection_local.get_index_manager(), LocalIndexManager)
 
-    def test_handle_remote_indexing_success(self, remote_collection_index, index_manager_mock):
+    def test_handle_remote_indexing_success(self, remote_collection_index, remote_index_manager_mock):
         file = FileFactory(external_id="test_file_id_3")
         remote_collection_index.files.add(file)
         collection_file = CollectionFile.objects.get(collection=remote_collection_index, file=file)
@@ -223,8 +223,8 @@ class TestCollection:
         collection_file.save()
 
         # Mock successful upload and linking
-        index_manager_mock.ensure_remote_file_exists.side_effect = None
-        index_manager_mock.link_files_to_remote_index.side_effect = None
+        remote_index_manager_mock.ensure_remote_file_exists.side_effect = None
+        remote_index_manager_mock.link_files_to_remote_index.side_effect = None
 
         iterator = CollectionFile.objects.filter(id=collection_file.id).iterator(1)
         remote_collection_index.add_files_to_index(iterator)
@@ -232,7 +232,7 @@ class TestCollection:
         collection_file.refresh_from_db()
         assert collection_file.status == FileStatus.COMPLETED
 
-    def test_handle_remote_indexing_with_file_upload_failures(self, remote_collection_index, index_manager_mock):
+    def test_handle_remote_indexing_with_file_upload_failures(self, remote_collection_index, remote_index_manager_mock):
         file = FileFactory()
         remote_collection_index.files.add(file)
         collection_file = CollectionFile.objects.get(collection=remote_collection_index, file=file)
@@ -240,20 +240,20 @@ class TestCollection:
         collection_file.save()
 
         # Mock ensure_remote_file_exists to raise FileUploadError
-        index_manager_mock.ensure_remote_file_exists.side_effect = FileUploadError("Upload failed")
+        remote_index_manager_mock.ensure_remote_file_exists.side_effect = FileUploadError("Upload failed")
 
         iterator = CollectionFile.objects.filter(id=collection_file.id).iterator(1)
         remote_collection_index.add_files_to_index(iterator)
 
         collection_file.refresh_from_db()
         assert collection_file.status == FileStatus.FAILED
-        index_manager_mock.ensure_remote_file_exists.assert_called_once()
+        remote_index_manager_mock.ensure_remote_file_exists.assert_called_once()
         # link_files_to_remote_index should be called with empty list when all uploads fail
-        index_manager_mock.link_files_to_remote_index.assert_called_once_with(
+        remote_index_manager_mock.link_files_to_remote_index.assert_called_once_with(
             file_ids=[], chunk_size=None, chunk_overlap=None
         )
 
-    def test_handle_remote_indexing_with_linking_failures(self, remote_collection_index, index_manager_mock):
+    def test_handle_remote_indexing_with_linking_failures(self, remote_collection_index, remote_index_manager_mock):
         file = FileFactory(external_id="test_file_id")
         remote_collection_index.files.add(file)
         collection_file = CollectionFile.objects.get(collection=remote_collection_index, file=file)
@@ -261,15 +261,15 @@ class TestCollection:
         collection_file.save()
 
         # Mock successful upload but failed linking
-        index_manager_mock.ensure_remote_file_exists.side_effect = None
-        index_manager_mock.link_files_to_remote_index.side_effect = UnableToLinkFileException("Link failed")
+        remote_index_manager_mock.ensure_remote_file_exists.side_effect = None
+        remote_index_manager_mock.link_files_to_remote_index.side_effect = UnableToLinkFileException("Link failed")
 
         iterator = CollectionFile.objects.filter(id=collection_file.id).iterator(1)
         remote_collection_index.add_files_to_index(iterator)
 
         collection_file.refresh_from_db()
         assert collection_file.status == FileStatus.FAILED
-        index_manager_mock.link_files_to_remote_index.assert_called_once()
+        remote_index_manager_mock.link_files_to_remote_index.assert_called_once()
 
     def test_handle_local_indexing_success(self, local_collection_index, local_index_manager_mock):
         file = FileFactory()

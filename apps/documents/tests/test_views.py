@@ -22,10 +22,12 @@ class TestEditCollection:
         )
 
     @mock.patch("apps.documents.tasks.migrate_vector_stores.delay")
-    def test_update_collection_with_llm_provider_change(self, migrate_mock, index_manager_mock, collection, client):
+    def test_update_collection_with_llm_provider_change(
+        self, migrate_mock, remote_index_manager_mock, collection, client
+    ):
         new_llm_provider = LlmProviderFactory(team=collection.team)
         new_vector_store_id = "new-store-123"
-        index_manager_mock.create_remote_index.return_value = new_vector_store_id
+        remote_index_manager_mock.create_remote_index.return_value = new_vector_store_id
 
         client.force_login(collection.team.members.first())
         url = reverse("documents:collection_edit", args=[collection.team.slug, collection.id])
@@ -93,7 +95,7 @@ class TestDeleteCollection:
         return collection
 
     @pytest.mark.parametrize("is_index", [True, False])
-    def test_user_cannot_delete_a_collection_in_use(self, is_index, index_manager_mock, client, experiment):
+    def test_user_cannot_delete_a_collection_in_use(self, is_index, remote_index_manager_mock, client, experiment):
         """
         The user should not be able to delete a collection if it is being used by a pipeline.
         There are two cases where this can happen:
@@ -114,7 +116,7 @@ class TestDeleteCollection:
         assert response.status_code == 400
 
         # Case 2 - Remove the collection from the node so that only a pipeline version is using it
-        index_manager_mock.create_remote_index.return_value = "v-321"
+        remote_index_manager_mock.create_remote_index.return_value = "v-321"
         collection.create_new_version()
         node.params = {}
         node.save()
@@ -122,7 +124,7 @@ class TestDeleteCollection:
         response = client.delete(url)
         assert response.status_code == 400
 
-    @pytest.mark.usefixtures("index_manager_mock")
+    @pytest.mark.usefixtures("remote_index_manager_mock")
     @pytest.mark.parametrize("is_index", [True, False])
     def test_collection_is_archived(self, is_index, client):
         collection = self.setup_collection(is_index=is_index)
@@ -162,7 +164,7 @@ class TestDeleteCollectionFile:
             mock_delete_archive.assert_called_once()
 
     def test_delete_file_from_indexed_collection_not_used_by_assistant(
-        self, team_with_user, client, index_manager_mock
+        self, team_with_user, client, remote_index_manager_mock
     ):
         """Test deleting a file from an indexed collection when file is not used by an assistant."""
         llm_provider = LlmProviderFactory(team=team_with_user)
@@ -187,12 +189,14 @@ class TestDeleteCollectionFile:
             assert CollectionFile.objects.filter(collection=collection, file=file).exists() is False
 
             # Verify OpenAI file deletion was called for indexed collection
-            index_manager_mock.delete_files.assert_called_once()
+            remote_index_manager_mock.delete_files.assert_called_once()
 
             # Verify file is deleted/archived since it's not used elsewhere
             mock_delete_archive.assert_called_once()
 
-    def test_delete_file_from_indexed_collection_used_by_assistant(self, team_with_user, client, index_manager_mock):
+    def test_delete_file_from_indexed_collection_used_by_assistant(
+        self, team_with_user, client, remote_index_manager_mock
+    ):
         """Test deleting a file from an indexed collection when file is also used by another object."""
         # Setup: Create indexed collection with file
         llm_provider = LlmProviderFactory(team=team_with_user)
@@ -224,9 +228,9 @@ class TestDeleteCollectionFile:
             mock_delete_archive.assert_not_called()
 
             # Verify OpenAI file deletion was NOT called since file is still used
-            index_manager_mock.delete_files.assert_not_called()
+            remote_index_manager_mock.delete_files.assert_not_called()
 
-            index_manager_mock.delete_file_from_index.assert_called()
+            remote_index_manager_mock.delete_file_from_index.assert_called()
 
             # Verify file still exists and is still linked to assistant
             file.refresh_from_db()

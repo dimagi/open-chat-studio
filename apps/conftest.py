@@ -26,8 +26,7 @@ def experiment(team_with_users, db):
 
 
 @pytest.fixture()
-def index_manager_mock():
-    # TODO CS: Rename to remote_index_manager_mock
+def remote_index_manager_mock():
     index_manager = Mock(spec=RemoteIndexManager)
     with patch("apps.service_providers.models.LlmProvider.get_remote_index_manager") as get_remote_index_manager:
         index_manager.client = Mock()
