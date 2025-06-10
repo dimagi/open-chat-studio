@@ -185,8 +185,12 @@ class TurnIOService(MessagingService):
     ):
         # OGG must use the opus codec: https://whatsapp.turn.io/docs/api/media#uploading-media
         voice_audio_bytes = synthetic_voice.get_audio_bytes(format="ogg", codec="libopus")
-        media_id = self.client.media.upload_media(voice_audio_bytes, content_type="audio/ogg")
-        self.client.messages.send_audio(whatsapp_id=to, media_id=media_id)
+        audio_file = BytesIO(voice_audio_bytes)
+        audio_file.name = "voice_message.ogg"
+
+        message_id = self.client.messages.send_media(
+            whatsapp_id=to, file=audio_file, content_type="audio/ogg", media_type="audio", caption=None
+        )
 
     def get_message_audio(self, message: TurnWhatsappMessage) -> BytesIO:
         response = self.client.media.get_media(message.media_id)
