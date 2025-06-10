@@ -14,6 +14,7 @@ from django.contrib import messages
 from django.contrib.auth.decorators import permission_required
 from django.contrib.auth.mixins import PermissionRequiredMixin
 from django.core.exceptions import PermissionDenied, ValidationError
+from django.core.management import call_command
 from django.db import transaction
 from django.db.models import Case, Count, IntegerField, When
 from django.http import FileResponse, Http404, HttpResponse, HttpResponseForbidden, HttpResponseRedirect
@@ -87,7 +88,6 @@ from apps.experiments.tasks import (
     async_create_experiment_version,
     async_export_chat,
     get_response_for_webchat_task,
-    migrate_experiment_to_pipeline_task,
 )
 from apps.experiments.views.prompt import PROMPT_DATA_SESSION_KEY
 from apps.files.forms import get_file_formset
@@ -1511,8 +1511,8 @@ def migrate_experiment_view(request, team_slug, experiment_id):
         kwargs={"team_slug": team_slug, "experiment_id": experiment_id},
     )
     try:
-        task = migrate_experiment_to_pipeline_task.delay(experiment_id)
-        task.get(timeout=60)
+        experiment = Experiment.objects.get(id=experiment_id)
+        call_command("migrate_nonpipeline_to_pipeline_experiments", experiment_id=experiment_id, skip_confirmation=True)
         messages.success(request, f'Successfully migrated experiment "{experiment.name}" to chatbot!')
         return redirect("chatbots:single_chatbot_home", team_slug=team_slug, experiment_id=experiment_id)
     except Exception as e:
