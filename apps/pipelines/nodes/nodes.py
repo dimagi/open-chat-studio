@@ -406,8 +406,8 @@ class LLMResponseWithPrompt(LLMResponse, HistoryMixin, OutputMessageTagMixin):
         built_in_tools = self.built_in_tools
         tools.extend(self.get_llm_service().attach_built_in_tools(built_in_tools, self.tool_config))
         if self.collection_index_id:
-            # TODO: Refactor: Linking tools should follow 1 pattern
-            # TODO: test
+            # TODO CS: Refactor: Linking tools should follow 1 pattern
+            # TODO CS: test
             collection = Collection.objects.get(id=self.collection_index_id)
             if collection.is_remote_index:
                 builtin_tools = OpenAIBuiltinTool(
@@ -415,7 +415,7 @@ class LLMResponseWithPrompt(LLMResponse, HistoryMixin, OutputMessageTagMixin):
                 )
                 tools.append(builtin_tools)
             else:
-                # TODO: max_results to come from tool config
+                # TODO CS: max_results to come from tool config
                 search_config = SearchToolConfig(index_id=collection.id, query=input, max_results=5)
                 tools.append(SearchIndexTool(search_config=search_config))
 

@@ -289,7 +289,6 @@ class Collection(BaseTeamModel, VersionsMixin):
             self._handle_local_indexing(*args, **kwargs)
 
     def get_query_vector(self, query: str) -> list[float]:
-        # TODO: test
         """Get the embedding vector for a query using the embedding provider model"""
         if not self.embedding_provider_model:
             raise IndexConfigurationException("Embedding provider model is not set for this collection")

@@ -32,6 +32,18 @@ CREATE_LINK_TEXT = """You can use this markdown link to reference it in your res
     if it is an image.
 """
 
+CHUNK_RESULT_TEMPLATE = """
+<chunk>
+    <chunk_file_details>
+    From '{file_name}'
+    </chunk_file_details>
+
+    <file_content>
+    {chunk}
+    </file_content>
+</chunk>
+"""
+
 
 @dataclass
 class SearchToolConfig:
@@ -246,22 +258,29 @@ class SearchIndexTool(CustomBaseTool):
 
     @transaction.atomic
     def action(self) -> str:
-        # TODO: test
-        # - [x] Query index
         # - [ ] Generate references
         index = self.search_config.get_index()
         query = self.search_config.query
         max_results = self.search_config.max_results
 
         query_vector = index.get_query_vector(query)
+        # This query is automatically team scoped
         embeddings = (
             FileChunkEmbedding.objects.annotate(distance=CosineDistance("embedding", query_vector))
             .filter(collection_id=index.id)
             .order_by("distance")
+            .prefetch_related("file")
             .distinct()[:max_results]
         )
+        return "".join([self._format_result(embedding) for embedding in embeddings])
 
-        return "\n\n".join([embedding.text for embedding in embeddings])
+    def _format_result(self, embedding: FileChunkEmbedding) -> str:
+        """
+        Format the result from the search index into a more structured format.
+        """
+        return CHUNK_RESULT_TEMPLATE.format(
+            file_name=embedding.file.name, file_id=embedding.file_id, chunk=embedding.text
+        )
 
 
 def _move_datetime_to_new_weekday_and_time(date: datetime, new_weekday: int, new_hour: int, new_minute: int):

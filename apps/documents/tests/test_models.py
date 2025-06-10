@@ -4,7 +4,7 @@ import pytest
 from django.conf import settings
 
 from apps.assistants.models import ToolResources
-from apps.documents.exceptions import FileUploadError
+from apps.documents.exceptions import FileUploadError, IndexConfigurationException
 from apps.documents.models import CollectionFile, FileStatus
 from apps.files.models import FileChunkEmbedding
 from apps.service_providers.exceptions import UnableToLinkFileException
@@ -308,3 +308,15 @@ class TestCollection:
 
         collection_file.refresh_from_db()
         assert collection_file.status == FileStatus.FAILED
+
+    def test_get_query_vector(self, local_index_manager_mock):
+        """Test that get_query_vector raises an exception for remote indexes"""
+        collection = CollectionFactory(is_index=True, is_remote_index=False)
+        collection.get_query_vector("test query")
+        local_index_manager_mock.get_embedding_vector.assert_called_once_with("test query")
+
+    def test_get_query_vector_with_missing_embedding_model(self):
+        """Test that get_query_vector raises an exception for remote indexes"""
+        collection = CollectionFactory(is_index=True, is_remote_index=False, embedding_provider_model=None)
+        with pytest.raises(IndexConfigurationException):
+            collection.get_query_vector("test query")

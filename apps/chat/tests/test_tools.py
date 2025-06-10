@@ -3,6 +3,7 @@ from unittest import mock
 
 import pytest
 import pytz
+from django.conf import settings
 from django.utils import timezone
 from freezegun import freeze_time
 
@@ -11,14 +12,19 @@ from apps.chat.agent.schemas import WeekdaysEnum
 from apps.chat.agent.tools import (
     TOOL_CLASS_MAP,
     DeleteReminderTool,
+    SearchIndexTool,
+    SearchToolConfig,
     UpdateParticipantDataTool,
     _move_datetime_to_new_weekday_and_time,
     create_schedule_message,
 )
 from apps.events.models import ScheduledMessage, TimePeriod
 from apps.experiments.models import AgentTools, Experiment
+from apps.files.models import FileChunkEmbedding
+from apps.utils.factories.documents import CollectionFactory
 from apps.utils.factories.events import EventActionFactory
 from apps.utils.factories.experiment import ExperimentSessionFactory
+from apps.utils.factories.files import FileFactory
 from apps.utils.time import pretty_date
 
 
@@ -377,6 +383,68 @@ class TestUpdateParticipantDataTool:
         assert response == "Success"
 
         assert session.participant_data_from_experiment == {"test": value}
+
+
+@pytest.mark.django_db()
+class TestSearchIndexTool:
+    def test_action_returns_relevant_chunks(self, team, local_index_manager_mock):
+        collection = CollectionFactory(team=team)
+        file = FileFactory(team=team, name="the_greatness_of_fruit.txt")
+        file_chunk_embedding = FileChunkEmbedding.objects.create(
+            team=team,
+            file=file,
+            collection=collection,
+            chunk_number=1,
+            text="Oranges are nice",
+            embedding=[0.1] * settings.EMBEDDING_VECTOR_SIZE,
+            page_number=0,
+        )
+        file_chunk_embedding = FileChunkEmbedding.objects.create(
+            team=team,
+            file=file,
+            collection=collection,
+            chunk_number=2,
+            text="Apples are great",
+            embedding=[0.5] * settings.EMBEDDING_VECTOR_SIZE,
+            page_number=0,
+        )
+        file_chunk_embedding = FileChunkEmbedding.objects.create(
+            team=team,
+            file=file,
+            collection=collection,
+            chunk_number=3,
+            text="Greatness is subjective",
+            embedding=[0.9] * settings.EMBEDDING_VECTOR_SIZE,
+            page_number=0,
+        )
+        collection = file_chunk_embedding.collection
+
+        # The return value of get_embedding_vector is what determines the search results.
+        local_index_manager_mock.get_embedding_vector.return_value = [1.1] * settings.EMBEDDING_VECTOR_SIZE
+        search_config = SearchToolConfig(index_id=collection.id, query="What are great fruit?", max_results=2)
+        result = SearchIndexTool(search_config=search_config).action()
+        expected_result = """
+<chunk>
+    <chunk_file_details>
+    From 'the_greatness_of_fruit.txt'
+    </chunk_file_details>
+
+    <file_content>
+    Greatness is subjective
+    </file_content>
+</chunk>
+
+<chunk>
+    <chunk_file_details>
+    From 'the_greatness_of_fruit.txt'
+    </chunk_file_details>
+
+    <file_content>
+    Apples are great
+    </file_content>
+</chunk>
+"""
+        assert result == expected_result
 
 
 def test_tools_present():
