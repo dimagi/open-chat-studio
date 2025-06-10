@@ -2,6 +2,7 @@ import logging
 import unicodedata
 import uuid
 from datetime import datetime
+from functools import cached_property
 from typing import cast
 from urllib.parse import parse_qs, urlparse
 
@@ -366,10 +367,13 @@ class CreateExperimentVersion(LoginAndTeamRequiredMixin, UpdateView, PermissionR
     permission_required = "experiments.add_experiment"
     pk_url_kwarg = "experiment_id"
 
+    @cached_property
+    def latest_version(self):
+        return self.object.latest_version
+
     def get_form_kwargs(self) -> dict:
         form_kwargs = super().get_form_kwargs()
-        experiment = self.object
-        if not experiment.has_versions:
+        if not self.latest_version:
             form_kwargs["initial"] = {"is_default_version": True}
         return form_kwargs
 
@@ -377,9 +381,9 @@ class CreateExperimentVersion(LoginAndTeamRequiredMixin, UpdateView, PermissionR
         context = super().get_context_data(*args, **kwargs)
         working_experiment = self.object
         version = working_experiment.version_details
-        if prev_version := working_experiment.latest_version:
+        if self.latest_version:
             # Populate diffs
-            version.compare(prev_version.version_details)
+            version.compare(self.latest_version.version_details)
 
         context["version_details"] = version
         context["experiment"] = working_experiment
