@@ -18,7 +18,7 @@
     {% if experiment.create_version_task_id %}
       <h2 class="pg-subtitle pb-5">A new version being created. Please wait until it is complete before making another version.</h2>
     {% else %}
-      {% if not version_details.instance.has_versions or version_details.fields_changed %}
+      {% if not has_versions or version_details.fields_changed %}
         <form method="post">
           {% csrf_token %}
           {% render_form_fields form "version_description" %}
@@ -33,7 +33,7 @@
           </div>
         </form>
       {% endif %}
-      {% if version_details.instance.has_versions %}
+      {% if has_versions %}
         {% if version_details.fields_changed %}
           <h1 class="pg-subtitle pb-5">Changes since version {{ version_details.previous_instance.version_number }}</h1>
           <div class="p-5 border border-white rounded-lg">

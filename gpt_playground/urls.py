@@ -73,3 +73,8 @@ urlpatterns = [
     path("api/", include("apps.api.urls", namespace="api")),
     path("tz_detect/", include("tz_detect.urls")),
 ] + static(settings.MEDIA_URL, document_root=settings.MEDIA_ROOT)
+
+if settings.USE_DEBUG_TOOLBAR:
+    from debug_toolbar.toolbar import debug_toolbar_urls
+
+    urlpatterns.extend(debug_toolbar_urls())

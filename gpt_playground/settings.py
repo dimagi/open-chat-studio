@@ -30,8 +30,9 @@ env.read_env(os.path.join(BASE_DIR, ".env"))
 SECRET_KEY = env("SECRET_KEY", default="YNAazYQdzqQWddeZmFZfBfROzqlzvLEwVxoOjGgK")
 
 # SECURITY WARNING: don't run with debug turned on in production!
-DEBUG = True
+DEBUG = env.bool("DEBUG", default=True)
 IS_TESTING = "pytest" in sys.modules
+USE_DEBUG_TOOLBAR = DEBUG and not IS_TESTING
 
 ALLOWED_HOSTS = ["*"]
 CSRF_TRUSTED_ORIGINS = env.list("CSRF_TRUSTED_ORIGINS", default=[])
@@ -108,34 +109,42 @@ PROJECT_APPS = [
     "apps.banners",
 ]
 
-SPECIAL_APPS = [
-    "django_cleanup"  # according to the docs, this should be the last app installed
-]
-
+SPECIAL_APPS = ["debug_toolbar"] if USE_DEBUG_TOOLBAR else []
+SPECIAL_APPS.append("django_cleanup")  # according to the docs, this should be the last app installed
 INSTALLED_APPS = DJANGO_APPS + THIRD_PARTY_APPS + PROJECT_APPS + SPECIAL_APPS
 
-MIDDLEWARE = [
-    "django.middleware.security.SecurityMiddleware",
-    "whitenoise.middleware.WhiteNoiseMiddleware",
-    "django.contrib.sessions.middleware.SessionMiddleware",
-    "allauth.account.middleware.AccountMiddleware",
-    "django.middleware.locale.LocaleMiddleware",
-    "django.middleware.common.CommonMiddleware",
-    "django.middleware.csrf.CsrfViewMiddleware",
-    "django.contrib.auth.middleware.AuthenticationMiddleware",
-    "django_otp.middleware.OTPMiddleware",
-    "apps.teams.middleware.TeamsMiddleware",
-    "apps.web.scope_middleware.RequestContextMiddleware",
-    "apps.web.locale_middleware.UserLocaleMiddleware",
-    "django.contrib.messages.middleware.MessageMiddleware",
-    "django.middleware.clickjacking.XFrameOptionsMiddleware",
-    "waffle.middleware.WaffleMiddleware",
-    "field_audit.middleware.FieldAuditMiddleware",
-    "apps.audit.middleware.AuditTransactionMiddleware",
-    "apps.web.htmx_middleware.HtmxMessageMiddleware",
-    "tz_detect.middleware.TimezoneMiddleware",
-    "apps.generics.middleware.OriginDetectionMiddleware",
-    "apps.banners.middleware.BannerLocationMiddleware",
+MIDDLEWARE = list(
+    filter(
+        None,
+        [
+            "django.middleware.security.SecurityMiddleware",
+            "whitenoise.middleware.WhiteNoiseMiddleware",
+            "debug_toolbar.middleware.DebugToolbarMiddleware" if USE_DEBUG_TOOLBAR else None,
+            "django.contrib.sessions.middleware.SessionMiddleware",
+            "allauth.account.middleware.AccountMiddleware",
+            "django.middleware.locale.LocaleMiddleware",
+            "django.middleware.common.CommonMiddleware",
+            "django.middleware.csrf.CsrfViewMiddleware",
+            "django.contrib.auth.middleware.AuthenticationMiddleware",
+            "django_otp.middleware.OTPMiddleware",
+            "apps.teams.middleware.TeamsMiddleware",
+            "apps.web.scope_middleware.RequestContextMiddleware",
+            "apps.web.locale_middleware.UserLocaleMiddleware",
+            "django.contrib.messages.middleware.MessageMiddleware",
+            "django.middleware.clickjacking.XFrameOptionsMiddleware",
+            "waffle.middleware.WaffleMiddleware",
+            "field_audit.middleware.FieldAuditMiddleware",
+            "apps.audit.middleware.AuditTransactionMiddleware",
+            "apps.web.htmx_middleware.HtmxMessageMiddleware",
+            "tz_detect.middleware.TimezoneMiddleware",
+            "apps.generics.middleware.OriginDetectionMiddleware",
+            "apps.banners.middleware.BannerLocationMiddleware",
+        ],
+    )
+)
+
+INTERNAL_IPS = [
+    "127.0.0.1",  # Django debug toolbar
 ]
 
 ROOT_URLCONF = "gpt_playground.urls"
@@ -199,6 +208,14 @@ else:
             "PORT": env("DJANGO_DATABASE_PORT", default="5432"),
         }
     }
+
+db_options = DATABASES["default"].setdefault("OPTIONS", {})
+db_options.pop("CONN_MAX_AGE", None)  # remove connection age since it's not compatible with connection pooling
+db_options["pool"] = {
+    "min_size": env.int("DJANGO_DATABASE_POOL_MIN_SIZE", default=2),
+    "max_size": env.int("DJANGO_DATABASE_POOL_MAX_SIZE", default=10),
+    "timeout": env.int("DJANGO_DATABASE_POOL_TIMEOUT", default=10),
+}
 
 # Auth / login stuff
 
