@@ -188,7 +188,7 @@ class TurnIOService(MessagingService):
         audio_file = BytesIO(voice_audio_bytes)
         audio_file.name = "voice_message.ogg"
 
-        message_id = self.client.messages.send_media(
+        self.client.messages.send_media(
             whatsapp_id=to, file=audio_file, content_type="audio/ogg", media_type="audio", caption=None
         )
 
