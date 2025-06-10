@@ -68,6 +68,7 @@ class EventAction(BaseModel, VersionsMixin):
         if not self.id:
             return super().save(*args, **kwargs)
         else:
+            self._clear_version_cache()
             res = super().save(*args, **kwargs)
             handler = ACTION_HANDLERS[self.action_type]()
             handler.event_action_updated(self)
@@ -154,8 +155,7 @@ class StaticTrigger(BaseModel, VersionsMixin):
         new_instance.save()
         return new_instance
 
-    @property
-    def version_details(self):
+    def _get_version_details(self):
         action_param_versions = []
         static_trigger_type = StaticTriggerType(self.type).label.lower()
         event_action_type = EventActionType(self.action.action_type).label
@@ -327,8 +327,7 @@ class TimeoutTrigger(BaseModel, VersionsMixin):
     def get_fields_to_exclude(self):
         return super().get_fields_to_exclude() + ["action", "experiment", "event_logs"]
 
-    @property
-    def version_details(self) -> VersionDetails:
+    def _get_version_details(self) -> VersionDetails:
         event_action_type = EventActionType(self.action.action_type).label
         group_name = event_action_type
 
