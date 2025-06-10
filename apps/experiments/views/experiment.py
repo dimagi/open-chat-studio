@@ -357,7 +357,7 @@ class DeleteFileFromExperiment(BaseDeleteFileView):
     pass
 
 
-class CreateExperimentVersion(LoginAndTeamRequiredMixin, CreateView):
+class CreateExperimentVersion(LoginAndTeamRequiredMixin, UpdateView, PermissionRequiredMixin):
     model = Experiment
     form_class = ExperimentVersionForm
     template_name = "experiments/create_version_form.html"
@@ -368,14 +368,14 @@ class CreateExperimentVersion(LoginAndTeamRequiredMixin, CreateView):
 
     def get_form_kwargs(self) -> dict:
         form_kwargs = super().get_form_kwargs()
-        experiment = self.get_object()
+        experiment = self.object
         if not experiment.has_versions:
             form_kwargs["initial"] = {"is_default_version": True}
         return form_kwargs
 
     def get_context_data(self, *args, **kwargs):
         context = super().get_context_data(*args, **kwargs)
-        working_experiment = self.get_object()
+        working_experiment = self.object
         version = working_experiment.version_details
         if prev_version := working_experiment.latest_version:
             # Populate diffs
@@ -388,7 +388,7 @@ class CreateExperimentVersion(LoginAndTeamRequiredMixin, CreateView):
     def form_valid(self, form):
         description = form.cleaned_data["version_description"]
         is_default = form.cleaned_data["is_default_version"]
-        working_version = Experiment.objects.get(id=self.kwargs["experiment_id"])
+        working_version = self.object
 
         if working_version.is_archived:
             raise PermissionDenied("Unable to version an archived experiment.")
