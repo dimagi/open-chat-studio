@@ -2,7 +2,7 @@
     {% if version_field.text_diffs %}
         <div class="tracking-tighter">
             {% for text_diff in version_field.text_diffs %}
-                <span class="{% if text_diff.removed or text_diff.added %}{{ text_highlight_classes }}{% endif %}">
+                <span class="{% if text_diff.op != 0 %}{{ text_highlight_classes }}{% endif %}">
                     {% if text_diff.character == ' ' %}
                         &nbsp;
                     {% else %}

@@ -52,8 +52,7 @@ class FieldGroup:
 @dataclass(slots=True)
 class TextDiff:
     character: str
-    added: bool = False
-    removed: bool = False
+    op: int
 
 
 @dataclass
@@ -219,14 +218,14 @@ class VersionField:
             match operation:
                 case " ":
                     # line is same in both
-                    self.previous_field_version.text_diffs.append(TextDiff(character=character))
-                    self.text_diffs.append(TextDiff(character=character))
+                    self.previous_field_version.text_diffs.append(TextDiff(character=character, op=0))
+                    self.text_diffs.append(TextDiff(character=character, op=1))
                 case "-":
                     # line is only on the left
-                    self.previous_field_version.text_diffs.append(TextDiff(character=character, removed=True))
+                    self.previous_field_version.text_diffs.append(TextDiff(character=character, op=-1))
                 case "+":
                     # line is only on the right
-                    self.text_diffs.append(TextDiff(character=character, added=True))
+                    self.text_diffs.append(TextDiff(character=character, op=+1))
 
 
 @dataclass
