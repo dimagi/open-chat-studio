@@ -68,7 +68,6 @@ class VersionField:
     changed: bool = False
     label: str = data_field(default="")
     queryset: QuerySet | None = None
-    queryset_results: list["VersionField"] = data_field(default_factory=list)
     text_diffs: list[TextDiff] = data_field(default_factory=list)
     raw_value_version: Self | None = None
 
@@ -84,14 +83,18 @@ class VersionField:
     def is_a_version(self):
         return self.raw_value_version is not None
 
+    @cached_property
+    def queryset_results(self) -> list["VersionField"]:
+        if self.current_value and not hasattr(self.current_value, "version_details"):
+            return []
+
+        if self.queryset is None:
+            return []
+
+        return [VersionField(raw_value=record, to_display=self.to_display) for record in self.queryset.all()]
+
     def __post_init__(self):
         self.label = self.name.replace("_", " ").title()
-        if self.current_value and not hasattr(self.current_value, "version_details"):
-            return
-
-        if self.queryset is not None:
-            for record in self.queryset.all():
-                self.queryset_results.append(VersionField(raw_value=record, to_display=self.to_display))
 
     def display_value(self) -> Any:
         to_display = self.to_display or default_to_display
