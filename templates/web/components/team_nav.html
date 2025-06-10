@@ -46,7 +46,7 @@
       {% translate "Experiments" %}
     </a>
     <ul>
-      {% flag "flag_chatbots" or %}
+      {% flag "flag_chatbots" %}
         <li>
           <a href="{% url 'experiments:safety_home' request.team.slug %}"
              {% if active_tab == 'safety_layers' %}class="menu-active"{% endif %}>
