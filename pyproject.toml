@@ -137,6 +137,7 @@ dev = [
     "pytest-httpx",
     "pytest-cov",
     "pytest-xdist",
+    "django-debug-toolbar>=5.2.0",
 ]
 docs = [
     "mkdocs-material>=9.6.12",
