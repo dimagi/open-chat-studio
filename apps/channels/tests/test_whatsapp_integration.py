@@ -139,7 +139,7 @@ class TestTurnio:
         elif message_type == "voice":
             assert message.media_id == "180e1c3f-ae50-481b-a9f0-7c698233965f"
             assert message.content_type == MESSAGE_TYPES.VOICE
-        elif message_type == "image":
+        elif message_type == "media":
             assert message.media_id == "180e1c3f-ae50-481b-a9f0-7c698233965f"
             assert message.content_type == MESSAGE_TYPES.MEDIA
 
