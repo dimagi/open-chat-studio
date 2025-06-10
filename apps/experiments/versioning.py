@@ -49,7 +49,7 @@ class FieldGroup:
     has_changed_fields: bool = data_field(default=False)
 
 
-@dataclass
+@dataclass(slots=True)
 class TextDiff:
     character: str
     added: bool = False
