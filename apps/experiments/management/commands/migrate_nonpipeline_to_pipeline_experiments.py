@@ -5,9 +5,8 @@ from django.db import transaction
 from django.db.models import Q
 
 from apps.experiments.models import Experiment
-from apps.pipelines.flow import FlowNode, FlowNodeData
 from apps.pipelines.models import Pipeline
-from apps.pipelines.nodes.nodes import AssistantNode, EndNode, LLMResponseWithPrompt, StartNode
+from apps.pipelines.nodes.nodes import AssistantNode, LLMResponseWithPrompt
 from apps.teams.models import Flag
 
 
@@ -58,7 +57,17 @@ class Command(BaseCommand):
             query &= Q(team_id__in=chatbots_flag_team_ids)
             self.stdout.write(f"Filtering to teams with 'flag_chatbots' FF ({len(chatbots_flag_team_ids)} teams)")
 
-        experiments_to_convert = Experiment.objects.filter(query).select_related(
+        default_experiments = Experiment.objects.filter(query & Q(is_default_version=True))
+        default_working_version_ids = default_experiments.exclude(working_version__isnull=True).values_list(
+            "working_version_id", flat=True
+        )
+
+        working_experiments = Experiment.objects.filter(query & Q(working_version__isnull=True)).exclude(
+            id__in=default_working_version_ids
+        )
+        combined_ids = list(default_experiments.union(working_experiments).values_list("id", flat=True))
+
+        experiments_to_convert = Experiment.objects.filter(id__in=combined_ids).select_related(
             "team", "assistant", "llm_provider", "llm_provider_model"
         )
 
@@ -116,8 +125,6 @@ class Command(BaseCommand):
             raise ValueError(f"Unknown experiment type for experiment {experiment.id}")
 
         experiment.pipeline = pipeline
-
-        # Clear the old type-specific fields
         experiment.assistant = None
         experiment.llm_provider = None
         experiment.llm_provider_model = None
@@ -131,60 +138,16 @@ class Command(BaseCommand):
     def _create_pipeline_with_node(self, experiment, node_type, node_label, node_params):
         """Create a pipeline with start -> custom_node -> end structure."""
         pipeline_name = f"{experiment.name} Pipeline"
-        pipeline = Pipeline.objects.create(team=experiment.team, name=pipeline_name, data={"nodes": [], "edges": []})
-        start_id = str(uuid4())
-        middle_id = str(uuid4())
-        end_id = str(uuid4())
-
-        start_node = FlowNode(
-            id=start_id,
-            type="startNode",
-            position={"x": 100, "y": 200},
-            data=FlowNodeData(id=start_id, type=StartNode.__name__, params={"name": "start"}),
-        )
-
-        middle_node = FlowNode(
-            id=middle_id,
-            type="pipelineNode",
-            position={"x": 400, "y": 200},
-            data=FlowNodeData(
-                id=middle_id,
-                type=node_type,
-                label=node_label,
-                params=node_params,
-            ),
-        )
-
-        end_node = FlowNode(
-            id=end_id,
-            type="endNode",
-            position={"x": 800, "y": 200},
-            data=FlowNodeData(id=end_id, type=EndNode.__name__, params={"name": "end"}),
-        )
-        edges = [
-            {
-                "id": f"edge-{start_id}-{middle_id}",
-                "source": start_id,
-                "target": middle_id,
-                "sourceHandle": "output",
-                "targetHandle": "input",
-            },
-            {
-                "id": f"edge-{middle_id}-{end_id}",
-                "source": middle_id,
-                "target": end_id,
-                "sourceHandle": "output",
-                "targetHandle": "input",
-            },
-        ]
-        pipeline.data = {
-            "nodes": [start_node.model_dump(), middle_node.model_dump(), end_node.model_dump()],
-            "edges": edges,
+        middle_node_config = {
+            "id": str(uuid4()),
+            "type": "pipelineNode",
+            "position": {"x": 400, "y": 200},
+            "data": {"type": node_type, "label": node_label, "params": node_params},
         }
-        pipeline.save()
-        pipeline.update_nodes_from_data()
 
-        return pipeline
+        return Pipeline._create_pipeline_with_nodes(
+            team=experiment.team, name=pipeline_name, middle_nodes_config=middle_node_config
+        )
 
     def _create_llm_pipeline(self, experiment):
         """Create a start -> LLMResponseWithPrompt -> end nodes pipeline for an LLM experiment."""
@@ -193,7 +156,7 @@ class Command(BaseCommand):
             "llm_provider_id": experiment.llm_provider.id,
             "llm_provider_model_id": experiment.llm_provider_model.id,
             "llm_temperature": experiment.temperature,
-            "history_type": "none",
+            "history_type": "global",
             "history_name": None,
             "history_mode": "summarize",
             "user_max_token_limit": experiment.llm_provider_model.max_token_limit,
@@ -213,18 +176,18 @@ class Command(BaseCommand):
             experiment=experiment, node_type=LLMResponseWithPrompt.__name__, node_label="LLM", node_params=llm_params
         )
 
-        def _create_assistant_pipeline(self, experiment):
-            """Create a start -> AssistantNode -> end nodes pipeline for an assistant experiment."""
-            assistant_params = {
-                "name": "assistant",
-                "assistant_id": str(experiment.assistant.id),
-                "citations_enabled": experiment.citations_enabled,
-                "input_formatter": experiment.input_formatter or "",
-            }
+    def _create_assistant_pipeline(self, experiment):
+        """Createii a start -> AssistantNode -> end nodes pipeline for an assistant experiment."""
+        assistant_params = {
+            "name": "assistant",
+            "assistant_id": str(experiment.assistant.id),
+            "citations_enabled": experiment.citations_enabled,
+            "input_formatter": experiment.input_formatter or "",
+        }
 
-            return self._create_pipeline_with_node(
-                experiment=experiment,
-                node_type=AssistantNode.__name__,
-                node_label="OpenAI Assistant",
-                node_params=assistant_params,
-            )
+        return self._create_pipeline_with_node(
+            experiment=experiment,
+            node_type=AssistantNode.__name__,
+            node_label="OpenAI Assistant",
+            node_params=assistant_params,
+        )
