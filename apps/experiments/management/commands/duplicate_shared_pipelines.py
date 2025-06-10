@@ -20,8 +20,10 @@ class Command(BaseCommand):
     def handle(self, *args, **options):
         dry_run = options["dry_run"]
 
-        shared_pipelines = Pipeline.objects.annotate(experiment_count=Count("experiment")).filter(
-            experiment_count__gt=1, working_version=None
+        shared_pipelines = (
+            Pipeline.objects.get_all()
+            .annotate(experiment_count=Count("experiment"))
+            .filter(experiment_count__gt=1, working_version=None)
         )
 
         if not shared_pipelines.exists():
