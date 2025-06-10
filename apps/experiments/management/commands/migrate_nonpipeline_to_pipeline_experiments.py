@@ -113,7 +113,7 @@ class Command(BaseCommand):
         elif experiment.llm_provider:
             pipeline = self._create_llm_pipeline(experiment)
         else:
-            raise ValueError(f"Unknown experiment type for experiment {experiment.id}: {experiment_type}")
+            raise ValueError(f"Unknown experiment type for experiment {experiment.id}")
 
         experiment.pipeline = pipeline
 
@@ -158,7 +158,7 @@ class Command(BaseCommand):
         end_node = FlowNode(
             id=end_id,
             type="endNode",
-            position={"x": 700, "y": 200},
+            position={"x": 800, "y": 200},
             data=FlowNodeData(id=end_id, type=EndNode.__name__, params={"name": "end"}),
         )
         edges = [
@@ -201,7 +201,10 @@ class Command(BaseCommand):
             "source_material_id": experiment.source_material.id if experiment.source_material else None,
             "prompt": experiment.prompt_text or "",
             "tools": list(experiment.tools) if experiment.tools else [],
-            "custom_actions": [op.get_model_id(False) for op in experiment.custom_action_operations.select_related("custom_action").all()],
+            "custom_actions": [
+                op.get_model_id(False)
+                for op in experiment.custom_action_operations.select_related("custom_action").all()
+            ],
             "built_in_tools": [],
             "tool_config": {},
         }
