@@ -310,6 +310,8 @@ class VersionDetails:
                 self.fields.append(missing_field)
                 self._fields_dict[missing_field.name] = missing_field
                 missing_field.compare(previous_field, early_abort=early_abort)
+                if early_abort:
+                    return
 
 
 class VersionsMixin:
@@ -413,10 +415,10 @@ class VersionsMixin:
         raise NotImplementedError()
 
     def save(self, *args, **kwargs):
-        self._clear_cache()
+        self._clear_version_cache()
         super().save(*args, **kwargs)
 
-    def _clear_cache(self):
+    def _clear_version_cache(self):
         with contextlib.suppress(AttributeError):
             del self.version_details
 

@@ -68,7 +68,7 @@ class EventAction(BaseModel, VersionsMixin):
         if not self.id:
             return super().save(*args, **kwargs)
         else:
-            self._clear_cache()
+            self._clear_version_cache()
             res = super().save(*args, **kwargs)
             handler = ACTION_HANDLERS[self.action_type]()
             handler.event_action_updated(self)

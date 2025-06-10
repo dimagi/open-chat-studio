@@ -120,7 +120,7 @@ class File(BaseTeamModel, VersionsMixin):
                 self.name = filename
             if not self.content_type:
                 self.content_type = File.get_content_type(self.file)
-        self._clear_cache()
+        self._clear_version_cache()
         super().save(*args, **kwargs)
 
     def duplicate(self):

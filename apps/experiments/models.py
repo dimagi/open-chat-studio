@@ -746,7 +746,7 @@ class Experiment(BaseTeamModel, VersionsMixin, CustomActionOperationMixin):
     def save(self, *args, **kwargs):
         if self.working_version is None and self.is_default_version is True:
             raise ValueError("A working experiment cannot be a default version")
-        self._clear_cache()
+        self._clear_version_cache()
         return super().save(*args, **kwargs)
 
     def get_absolute_url(self):
