@@ -2,7 +2,6 @@ import contextlib
 from collections import defaultdict
 from dataclasses import dataclass
 from dataclasses import field as data_field
-from difflib import Differ
 from functools import cached_property
 from typing import Any, Self
 
@@ -49,12 +48,6 @@ class FieldGroup:
     has_changed_fields: bool = data_field(default=False)
 
 
-@dataclass(slots=True)
-class TextDiff:
-    character: str
-    op: int
-
-
 @dataclass
 class VersionField:
     """Represents a specific detail about the instance. The label is the user friendly name"""
@@ -67,7 +60,6 @@ class VersionField:
     changed: bool = False
     label: str = data_field(default="")
     queryset: QuerySet | None = None
-    text_diffs: list[TextDiff] = data_field(default_factory=list)
     raw_value_version: Self | None = None
 
     @property
@@ -146,8 +138,6 @@ class VersionField:
                 self._compare_querysets(early_abort)
             case "primitive":
                 self.changed = self.current_value != self.previous_value
-                if isinstance(self.current_value, str) and isinstance(self.previous_value, str):
-                    self._compute_character_level_diff()
 
     def _get_field_type(self):
         if isinstance(self.current_value, VersioningMixin):
@@ -208,24 +198,6 @@ class VersionField:
             prev_version_field = VersionField(raw_value=record, to_display=self.to_display)
             version_field = VersionField(raw_value=None, previous_field_version=prev_version_field, changed=True)
             self.queryset_results.append(version_field)
-
-    def _compute_character_level_diff(self):
-        differ = Differ()
-        difflines = list(differ.compare(self.previous_value, self.current_value))
-
-        for line in difflines:
-            operation, character = line[0], line[2:]
-            match operation:
-                case " ":
-                    # line is same in both
-                    self.previous_field_version.text_diffs.append(TextDiff(character=character, op=0))
-                    self.text_diffs.append(TextDiff(character=character, op=1))
-                case "-":
-                    # line is only on the left
-                    self.previous_field_version.text_diffs.append(TextDiff(character=character, op=-1))
-                case "+":
-                    # line is only on the right
-                    self.text_diffs.append(TextDiff(character=character, op=+1))
 
 
 @dataclass
