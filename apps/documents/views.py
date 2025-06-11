@@ -135,13 +135,13 @@ def delete_collection_file(request, team_slug: str, pk: int, file_id: int):
         if collection.is_index:
             # Remove it from the index only
             index_manager = collection.get_index_manager()
-            index_manager.delete_file_from_index(collection.openai_vector_store_id, file_id=file.external_id)
+            index_manager.delete_file_from_index(file_id=file.external_id)
     else:
         # Nothing else is using it
         if collection.is_index:
             # Remove it from the remote service altogether
             index_manager = collection.get_index_manager()
-            index_manager.delete_files(collection.openai_vector_store_id, file_id=file.external_id)
+            index_manager.delete_files(files=[file])
 
         collection_file.file.delete_or_archive()
 
