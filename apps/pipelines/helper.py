@@ -37,6 +37,7 @@ def duplicate_pipeline_with_new_ids(pipeline_data):
     return new_data, old_to_new_node_ids
 
 
+# TODO: function is temporary and can be deleted after the exp -> chatbot transition is complete
 def convert_non_pipeline_experiment_to_pipeline(experiment):
     if experiment.assistant:
         pipeline = _create_assistant_pipeline(experiment)
@@ -52,6 +53,7 @@ def convert_non_pipeline_experiment_to_pipeline(experiment):
     experiment.save()
 
 
+# TODO: function is temporary and can be deleted after the exp -> chatbot transition is complete
 def _create_pipeline_with_node(experiment, node_type, node_label, node_params):
     from .models import Pipeline
 
@@ -69,6 +71,7 @@ def _create_pipeline_with_node(experiment, node_type, node_label, node_params):
     )
 
 
+# TODO: function is temporary and can be deleted after the exp -> chatbot transition is complete
 def _create_llm_pipeline(experiment):
     from apps.pipelines.nodes.nodes import LLMResponseWithPrompt
 
@@ -98,6 +101,7 @@ def _create_llm_pipeline(experiment):
     )
 
 
+# TODO: function is temporary and can be deleted after the exp -> chatbot transition is complete
 def _create_assistant_pipeline(experiment):
     from apps.pipelines.nodes.nodes import AssistantNode
 
