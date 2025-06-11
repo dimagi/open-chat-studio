@@ -167,6 +167,10 @@ class Pipeline(BaseTeamModel, VersionsMixin):
         return pipeline
 
     @classmethod
+    def create_default_pipeline_with_name(cls, team, name, llm_provider_id=None, llm_provider_model=None):
+        return cls.create_default(team, name, llm_provider_id, llm_provider_model)
+
+    @classmethod
     def create_default(cls, team, name=None, llm_provider_id=None, llm_provider_model=None):
         default_name = "New Pipeline" if name is None else name
         existing_pipeline_count = cls.objects.filter(team=team, name__startswith=default_name).count()

@@ -47,9 +47,6 @@ class Command(BaseCommand):
         if team_slug:
             query &= Q(team__slug=team_slug)
 
-        if experiment_id:
-            query &= Q(id=experiment_id)
-
         if chatbots_flag_only:
             chatbots_flag_team_ids = self._get_chatbots_flag_team_ids()
             if not chatbots_flag_team_ids:
@@ -58,19 +55,38 @@ class Command(BaseCommand):
             query &= Q(team_id__in=chatbots_flag_team_ids)
             self.stdout.write(f"Filtering to teams with 'flag_chatbots' FF ({len(chatbots_flag_team_ids)} teams)")
 
-        default_experiments = Experiment.objects.filter(query & Q(is_default_version=True))
-        default_working_version_ids = default_experiments.exclude(working_version__isnull=True).values_list(
-            "working_version_id", flat=True
-        )
+        if experiment_id:
+            query &= Q(id=experiment_id)
+            experiment = Experiment.objects.filter(query).first()
+            if not experiment:
+                self.stdout.write(
+                    self.style.WARNING(f"Experiment {experiment_id} not found or does not need migration.")
+                )
+                return
 
-        working_experiments = Experiment.objects.filter(query & Q(working_version__isnull=True)).exclude(
-            id__in=default_working_version_ids
-        )
-        combined_ids = list(default_experiments.union(working_experiments).values_list("id", flat=True))
+            if not (experiment.is_default_version or experiment.is_working_version):
+                self.stdout.write(
+                    self.style.WARNING(
+                        f"Experiment {experiment_id} is not a published or unreleased version so does not require migration."
+                    )
+                )
+                return
 
-        experiments_to_convert = Experiment.objects.filter(id__in=combined_ids).select_related(
-            "team", "assistant", "llm_provider", "llm_provider_model"
-        )
+            experiments_to_convert = Experiment.objects.filter(id=experiment.id).select_related(
+                "team", "assistant", "llm_provider", "llm_provider_model"
+            )
+        else:
+            default_experiments = Experiment.objects.filter(query & Q(is_default_version=True))
+            default_working_version_ids = default_experiments.exclude(working_version__isnull=True).values_list(
+                "working_version_id", flat=True
+            )
+            working_experiments = Experiment.objects.filter(query & Q(working_version__isnull=True)).exclude(
+                id__in=default_working_version_ids
+            )
+            combined_ids = list(default_experiments.union(working_experiments).values_list("id", flat=True))
+            experiments_to_convert = Experiment.objects.filter(id__in=combined_ids).select_related(
+                "team", "assistant", "llm_provider", "llm_provider_model"
+            )
 
         if not experiments_to_convert.exists():
             self.stdout.write(self.style.WARNING("No matching experiments found."))
