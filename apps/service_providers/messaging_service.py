@@ -1,5 +1,4 @@
 import logging
-import mimetypes
 import uuid
 from datetime import datetime, timedelta
 from functools import cached_property
@@ -215,7 +214,7 @@ class TurnIOService(MessagingService):
 
     def send_file_to_user(self, from_: str, to: str, platform: ChannelPlatform, file: File, download_link: str):
         file_name = file.name
-        mime_type, _ = mimetypes.guess_type(file_name)
+        mime_type = file.content_type
 
         if mime_type.startswith("image/"):
             media_type = "image"

@@ -79,7 +79,6 @@ def strip_urls_and_emojis(text: str) -> tuple[str, list[str]]:
 class MESSAGE_TYPES(Enum):
     TEXT = "text"
     VOICE = "voice"
-    MEDIA = "media"
 
     @staticmethod
     def is_member(value: str):

@@ -127,7 +127,6 @@ class TestTurnio:
         [
             (turnio_messages.text_message(), "text"),
             (turnio_messages.voice_message(), "voice"),
-            (turnio_messages.media_message(), "media"),
         ],
     )
     def test_parse_text_message(self, message, message_type):
@@ -136,12 +135,9 @@ class TestTurnio:
         if message_type == "text":
             assert message.message_text == "Hi there!"
             assert message.content_type == MESSAGE_TYPES.TEXT
-        elif message_type == "voice":
+        else:
             assert message.media_id == "180e1c3f-ae50-481b-a9f0-7c698233965f"
             assert message.content_type == MESSAGE_TYPES.VOICE
-        elif message_type == "media":
-            assert message.media_id == "180e1c3f-ae50-481b-a9f0-7c698233965f"
-            assert message.content_type == MESSAGE_TYPES.MEDIA
 
     @pytest.mark.django_db()
     @pytest.mark.parametrize(
