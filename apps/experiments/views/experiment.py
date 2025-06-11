@@ -134,7 +134,11 @@ class ExperimentSessionsTableView(LoginAndTeamRequiredMixin, SingleTableView, Pe
             .filter(team=self.request.team, experiment__id=self.kwargs["experiment_id"])
             .select_related("participant__user")
         )
-        query_set = apply_dynamic_filters(query_set, self.request)
+        timezone = self.request.session.get("detected_tz", None)
+        referer = self.request.headers.get("referer") or ""
+        parsed_url = urlparse(referer)
+        query_params = parse_qs(parsed_url.query)
+        query_set = apply_dynamic_filters(query_set, query_params, timezone)
         return query_set
 
 
