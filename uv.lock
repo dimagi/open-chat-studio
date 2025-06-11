@@ -2317,7 +2317,7 @@ requires-dist = [
     { name = "tenacity" },
     { name = "tiktoken" },
     { name = "transformers", specifier = ">=4.48.0" },
-    { name = "turn-python", specifier = ">=0.2.0" },
+    { name = "turn-python", specifier = ">=1.0.0" },
     { name = "twilio" },
     { name = "urllib3", specifier = ">=2.3.0" },
     { name = "whitenoise", extras = ["brotli"] },

@@ -213,7 +213,6 @@ class TurnIOService(MessagingService):
             return False
 
     def send_file_to_user(self, from_: str, to: str, platform: ChannelPlatform, file: File, download_link: str):
-        file_name = file.name
         mime_type = file.content_type
 
         if mime_type.startswith("image/"):
