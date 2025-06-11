@@ -21,10 +21,7 @@
                 const dismissed = JSON.parse(SiteJS.app.Cookies.get('dismissed_banners') || '[]');
                 if (!dismissed.includes(bannerId)) {
                     dismissed.push(bannerId);
-                    SiteJS.app.Cookies.set('dismissed_banners', JSON.stringify(dismissed), {
-                        path: '/',
-                        maxAge: 31536000
-                    });
+                    SiteJS.app.Cookies.set('dismissed_banners', JSON.stringify(dismissed));
                 }
             }
             document.querySelectorAll('.dismiss-banner').forEach(button => {

@@ -7,9 +7,10 @@ from celery.app import shared_task
 from django.db.models import QuerySet
 from taskbadger.celery import Task as TaskbadgerTask
 
+from apps.assistants.models import OpenAiAssistant
 from apps.assistants.sync import create_files_remote
 from apps.documents.exceptions import FileUploadError
-from apps.documents.models import ChunkingStrategy, Collection, CollectionFile, FileStatus
+from apps.documents.models import ChunkingStrategy, Collection, CollectionFile, CollectionFileMetadata, FileStatus
 from apps.service_providers.models import LlmProvider
 
 logger = logging.getLogger("ocs.documents.tasks.link_files_to_index")
@@ -152,3 +153,69 @@ def _ensure_remote_file_exists(client, collection_file: CollectionFile, re_uploa
             },
         )
         raise FileUploadError() from None
+
+
+@shared_task(base=TaskbadgerTask, ignore_result=True)
+def create_collection_from_assistant_task(collection_id: int, assistant_id: int):
+    """Create a collection from an assistant's file search resources"""
+    # Get file search resources from the assistant
+    collection = Collection.objects.get(id=collection_id)
+    assistant = OpenAiAssistant.objects.get(id=assistant_id)
+    file_search_resource = assistant.tool_resources.filter(tool_type="file_search").first()
+
+    if not file_search_resource:
+        # This will never happen, but just in case
+        return
+
+    # Add files to the collection
+    # Create CollectionFile entries
+    collection_files = []
+    file_with_remote_ids = []
+    file_without_remote_ids = []
+    for file in file_search_resource.files.all():
+        if file.external_id:
+            file_with_remote_ids.append(file)
+        else:
+            file_without_remote_ids.append(file)
+
+        collection_files.append(
+            CollectionFile(
+                collection=collection,
+                file=file,
+                status=FileStatus.PENDING,
+                metadata=CollectionFileMetadata(chunking_strategy=ChunkingStrategy(chunk_size=800, chunk_overlap=400)),
+            )
+        )
+    CollectionFile.objects.bulk_create(collection_files)
+
+    try:
+        # Create vector store for the collection
+        manager = collection.llm_provider.get_index_manager()
+        collection.openai_vector_store_id = manager.create_vector_store(name=collection.index_name)
+        collection.save(update_fields=["openai_vector_store_id"])
+
+        # Link files to the new vector store at OpenAI (only if there are files with external IDs)
+        if file_with_remote_ids:
+            manager.link_files_to_vector_store(
+                vector_store_id=collection.openai_vector_store_id,
+                file_ids=[file.external_id for file in file_with_remote_ids],
+            )
+            # Update status to completed for successfully linked files
+            CollectionFile.objects.filter(collection=collection, file__in=file_with_remote_ids).update(
+                status=FileStatus.COMPLETED
+            )
+
+    except Exception as e:
+        logger.error(f"Failed to link files to vector store: {e}")
+        # Mark files as failed
+        if file_with_remote_ids:
+            CollectionFile.objects.filter(collection=collection, file__in=file_with_remote_ids).update(
+                status=FileStatus.FAILED
+            )
+
+    # Index files that don't have external IDs
+    if file_without_remote_ids:
+        file_ids_to_index = list(
+            CollectionFile.objects.filter(file__in=file_without_remote_ids).values_list("id", flat=True)
+        )
+        index_collection_files_task(collection_file_ids=file_ids_to_index)
