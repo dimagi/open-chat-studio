@@ -13,7 +13,7 @@ const config = {
     adminDashboard: './assets/javascript/admin-dashboard.js',
     'tagMultiselect': './assets/javascript/tag-multiselect.js',
     'tokenCounter': './assets/javascript/tiktoken.js',
-    'jsonEditor': './assets/javascript/json-editor.js',
+    'editors': './assets/javascript/editors.js',
   },
 
   output: {

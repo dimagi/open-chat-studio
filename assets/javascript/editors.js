@@ -9,7 +9,7 @@ import "../styles/app/editors.css";
 /**
  * JsonEditor - A class to manage CodeMirror JSON editor instances
  */
-class JsonEditor {
+class Editors {
   /** Map of all editor instances by DOM element */
   static instances = new Map();
 
@@ -30,7 +30,7 @@ class JsonEditor {
     this.createEditor();
 
     // Store the instance
-    JsonEditor.instances.set(element, this);
+    Editors.instances.set(element, this);
   }
 
   /**
@@ -253,21 +253,21 @@ class JsonEditor {
       this.errorContainer.remove();
     }
 
-    JsonEditor.instances.delete(this.element);
+    Editors.instances.delete(this.element);
   }
 
   /**
    * Create or update a JSON editor for an element
    * @param {HTMLElement} element - DOM element to attach editor to
-   * @returns {JsonEditor} The editor instance
+   * @returns {Editors} The editor instance
    */
   static create(element) {
     // Clean up existing instance if present
-    if (JsonEditor.instances.has(element)) {
-      JsonEditor.instances.get(element).destroy();
+    if (Editors.instances.has(element)) {
+      Editors.instances.get(element).destroy();
     }
 
-    return new JsonEditor(element);
+    return new Editors(element);
   }
 
   /**
@@ -276,7 +276,7 @@ class JsonEditor {
    */
   static initAll(selector = '.json-editor') {
     Array.from(document.querySelectorAll(selector)).forEach(el => {
-      JsonEditor.create(el);
+      Editors.create(el);
     });
   }
 
@@ -284,23 +284,23 @@ class JsonEditor {
    * Destroy all editor instances
    */
   static destroyAll() {
-    JsonEditor.instances.forEach(editor => editor.destroy());
+    Editors.instances.forEach(editor => editor.destroy());
   }
 }
 
 // Initialize editors when the DOM is loaded
 export const initJsonEditors = () => {
-  JsonEditor.initAll();
+  Editors.initAll();
 };
 
 // Create a single editor instance
 export const createJsonEditor = (element) => {
-  return JsonEditor.create(element);
+  return Editors.create(element);
 };
 
 // Cleanup all editors
 export const destroyAllEditors = () => {
-  JsonEditor.destroyAll();
+  Editors.destroyAll();
 };
 
 // Global HTMX handler for reinitializing editors
@@ -308,7 +308,7 @@ document.addEventListener("htmx:afterSettle", (e) => {
   const newEditors = e.detail.target.querySelectorAll('.json-editor');
   if (newEditors.length) {
     Array.from(newEditors).forEach(el => {
-      JsonEditor.create(el);
+      Editors.create(el);
     });
   }
 });

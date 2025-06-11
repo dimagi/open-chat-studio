@@ -15,10 +15,10 @@
     min-height: 0; /* Allows flexbox to shrink if needed */
 }
 
-.cm-merge-a .cm-changedLine, .cm-deletedChunk {
+.cm-merge-a {
     background-color: oklab(0.704 0.176821 0.072217 / 0.2)
 }
 
-.cm-merge-b .cm-changedLine, .cm-inlineChangedLine {
+.cm-merge-b {
     background-color: oklab(0.792 -0.184039 0.0990491 / 0.2)
 }

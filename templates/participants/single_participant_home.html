@@ -1,9 +1,9 @@
 {% extends 'web/app/app_base.html' %}
 {% load static %}
 {% block page_js %}
-  <script src="{% static 'js/jsonEditor-bundle.js' %}"></script>
+  <script src="{% static 'js/editors-bundle.js' %}"></script>
   <script>
-    SiteJS.jsonEditor.initJsonEditors();
+    SiteJS.editors.initJsonEditors();
   </script>
 {% endblock %}
 
