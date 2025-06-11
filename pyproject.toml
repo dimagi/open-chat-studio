@@ -63,7 +63,7 @@ dependencies = [
     "tenacity",
     "tiktoken",
     "transformers>=4.48.0", # this is required by the tokenizer that langchain uses
-    "turn-python>=0.2.0",
+    "turn-python>=1.0.0",
     "twilio",
     "whitenoise[brotli]",
     "phonenumberslite",
