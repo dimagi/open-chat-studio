@@ -2,6 +2,7 @@
 
 import django.db.models.deletion
 from django.db import migrations, models
+import pgvector.django.halfvec
 
 
 class Migration(migrations.Migration):
@@ -20,5 +21,26 @@ class Migration(migrations.Migration):
             model_name='filechunkembedding',
             name='working_version',
             field=models.ForeignKey(blank=True, null=True, on_delete=django.db.models.deletion.CASCADE, related_name='versions', to='files.filechunkembedding'),
+        ),
+        migrations.RemoveIndex(
+            model_name='filechunkembedding',
+            name='embedding_index',
+        ),
+        migrations.AlterField(
+            model_name='filechunkembedding',
+            name='embedding',
+            field=pgvector.django.halfvec.HalfVectorField(dimensions=1024),
+        ),
+        # The Django ORM doesn't seem to support Half vector field with HNSW, so we need to use raw SQL for the index creation.
+        migrations.RunSQL(
+            sql="""
+                CREATE INDEX embedding_index
+                ON files_filechunkembedding
+                USING hnsw ((embedding::halfvec(1024)) halfvec_cosine_ops)
+                WITH (m = 16, ef_construction = 64);
+            """,
+            reverse_sql="""
+                DROP INDEX IF EXISTS embedding_index;
+            """
         ),
     ]
