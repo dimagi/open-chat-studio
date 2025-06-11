@@ -7,8 +7,7 @@ from django.conf import settings
 from django.core.files.base import ContentFile
 from django.db import models
 from django.urls import reverse
-from field_audit.models import AuditingManager
-from pgvector.django import HnswIndex, VectorField
+from pgvector.django import HalfVectorField
 
 from apps.experiments.versioning import VersionDetails, VersionField, VersionsMixin, VersionsObjectManagerMixin
 from apps.generics.chips import Chip
@@ -172,17 +171,18 @@ class File(BaseTeamModel, VersionsMixin):
         return self in get_related_m2m_objects([self])
 
 
-class FileChunkEmbeddingObjectManager(VersionsObjectManagerMixin, AuditingManager):
+class FileChunkEmbeddingObjectManager(VersionsObjectManagerMixin):
     pass
 
 
 class FileChunkEmbedding(BaseTeamModel, VersionsMixin):
+    # See 0009_remove_filechunkembedding_embedding_index_and_more.py migration for the index
     file = models.ForeignKey(File, on_delete=models.CASCADE)
     collection = models.ForeignKey("documents.Collection", on_delete=models.CASCADE)
     chunk_number = models.PositiveIntegerField()
     text = models.TextField()
     page_number = models.PositiveIntegerField(blank=True)
-    embedding = VectorField(dimensions=settings.EMBEDDING_VECTOR_SIZE)
+    embedding = HalfVectorField(dimensions=settings.EMBEDDING_VECTOR_SIZE)
     working_version = models.ForeignKey(
         "self",
         on_delete=models.CASCADE,
@@ -193,8 +193,3 @@ class FileChunkEmbedding(BaseTeamModel, VersionsMixin):
     is_archived = models.BooleanField(default=False)
 
     objects = FileChunkEmbeddingObjectManager()
-
-    class Meta:
-        indexes = [
-            HnswIndex(name="embedding_index", fields=["embedding"], opclasses=["vector_cosine_ops"]),
-        ]
