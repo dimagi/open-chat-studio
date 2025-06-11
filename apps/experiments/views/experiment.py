@@ -85,9 +85,7 @@ from apps.experiments.tables import (
 )
 from apps.experiments.tasks import async_create_experiment_version, async_export_chat, get_response_for_webchat_task
 from apps.experiments.views.prompt import PROMPT_DATA_SESSION_KEY
-from apps.files.forms import get_file_formset
 from apps.files.models import File
-from apps.files.views import BaseAddFileHtmxView, BaseDeleteFileView
 from apps.generics.chips import Chip
 from apps.generics.views import generic_home, paginate_session, render_session_details
 from apps.service_providers.utils import get_llm_provider_choices
