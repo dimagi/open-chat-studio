@@ -19,9 +19,9 @@ def _format_comments(user_comments: list[UserComment]) -> str:
     return " | ".join([str(comment) for comment in user_comments])
 
 
-def get_filtered_sessions(request, experiment, query_params, timezone):
+def get_filtered_sessions(experiment, query_params, timezone):
     sessions_queryset = ExperimentSession.objects.filter(experiment=experiment).select_related("participant__user")
-    sessions_queryset = apply_dynamic_filters(sessions_queryset, request, parsed_params=query_params, timezone=timezone)
+    sessions_queryset = apply_dynamic_filters(sessions_queryset, parsed_params=query_params, timezone=timezone)
 
     return sessions_queryset
 

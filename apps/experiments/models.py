@@ -684,7 +684,6 @@ class Experiment(BaseTeamModel, VersionsMixin, CustomActionOperationMixin):
         default=VoiceResponseBehaviours.RECIPROCAL,
         help_text="This tells the bot when to reply with voice messages",
     )
-    files = models.ManyToManyField("files.File", blank=True)
     children = models.ManyToManyField(
         "Experiment", blank=True, through="ExperimentRoute", symmetrical=False, related_name="parents"
     )
@@ -900,7 +899,6 @@ class Experiment(BaseTeamModel, VersionsMixin, CustomActionOperationMixin):
         self._copy_pipeline_to_new_version(new_version, is_copy)
         self._copy_custom_action_operations_to_new_version(new_experiment=new_version, is_copy=is_copy)
 
-        new_version.files.set(self.files.all())
         return new_version
 
     def get_fields_to_exclude(self):
