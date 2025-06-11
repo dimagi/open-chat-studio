@@ -170,15 +170,15 @@ class Collection(BaseTeamModel, VersionsMixin):
         new_version.openai_vector_store_id = ""
         new_version.save()
 
-        file_versions = []
+        file_versions: dict[int, int] = {}
         for file in self.files.iterator(chunk_size=15):
             file_version = file.create_new_version(save=False)
             file_version.external_id = ""
             file_version.external_source = ""
             file_version.save()
-            file_versions.append(file_version)
+            file_versions[file.id] = file_version.id
 
-        new_version.files.add(*file_versions)
+        new_version.files.add(*list(file_versions.values()))
 
         if self.is_index:
             # Create a new vector store at llm service for the new version of the collection.
@@ -194,8 +194,14 @@ class Collection(BaseTeamModel, VersionsMixin):
                 if collection_files := CollectionFile.objects.filter(collection_id=new_version.id):
                     index_collection_files(collection_files)
             else:
-                # TODO
-                pass
+                # Create versions of file chunk embeddings and add them to the new collection
+                for embedding in self.filechunkembedding_set.iterator(chunk_size=50):
+                    embedding_version = embedding.create_new_version(save=False)
+                    embedding_version.collection = new_version
+
+                    file_version_id = file_versions[embedding.file_id]
+                    embedding_version.file_id = file_version_id
+                    embedding_version.save()
 
         return new_version
 

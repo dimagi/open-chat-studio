@@ -100,6 +100,55 @@ class TestCollection:
         )
         index_collection_files.assert_called()
 
+    def test_create_new_version_of_local_collection_index(self):
+        """Ensure that file chunk embeddings are versioned when creating a new version of a local index"""
+        collection = CollectionFactory(
+            name="Test Local Collection",
+            is_index=True,
+            is_remote_index=False,
+            llm_provider=LlmProviderFactory(),
+        )
+        file = FileFactory()
+        collection.files.add(file)
+
+        # Create some file chunk embeddings for the original collection
+        original_embedding_1 = FileChunkEmbedding.objects.create(
+            team_id=collection.team_id,
+            file=file,
+            collection=collection,
+            chunk_number=0,
+            text="First chunk of text",
+            embedding=[0.1] * settings.EMBEDDING_VECTOR_SIZE,
+            page_number=1,
+        )
+        original_embedding_2 = FileChunkEmbedding.objects.create(
+            team_id=collection.team_id,
+            file=file,
+            collection=collection,
+            chunk_number=1,
+            text="Second chunk of text",
+            embedding=[0.2] * settings.EMBEDDING_VECTOR_SIZE,
+            page_number=1,
+        )
+
+        # Create new version
+        new_version = collection.create_new_version()
+        collection.refresh_from_db()
+
+        # Check that file chunk embeddings were versioned
+        new_embeddings = FileChunkEmbedding.objects.filter(collection=new_version)
+        assert new_embeddings.count() == 2
+
+        # Verify the versioned embeddings are correctly linked
+        file_version = new_version.files.first()
+        for new_embedding in new_embeddings:
+            assert new_embedding.file == file_version
+            assert new_embedding.collection == new_version
+            assert new_embedding.working_version in [original_embedding_1, original_embedding_2]
+
+        # Verify original embeddings still exist and are unchanged
+        assert FileChunkEmbedding.objects.filter(collection=collection).count() == 2
+
     @pytest.mark.parametrize("is_index", [True, False])
     @mock.patch("apps.documents.models.Collection._remove_remote_index")
     def test_archive_collection(self, _remove_remote_index, is_index):
