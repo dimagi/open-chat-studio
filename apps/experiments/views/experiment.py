@@ -230,16 +230,6 @@ class CreateExperiment(BaseExperimentView, CreateView):
     button_title = "Create"
     permission_required = "experiments.add_experiment"
 
-    def get_context_data(self, **kwargs):
-        context = super().get_context_data(**kwargs)
-        if "file_formset" not in context:
-            context["file_formset"] = self._get_file_formset()
-        return context
-
-    def _get_file_formset(self):
-        if flag_is_active(self.request, "flag_experiment_rag"):
-            return get_file_formset(self.request)
-
     def get_initial(self):
         initial = super().get_initial()
         long_data = self.request.session.pop(PROMPT_DATA_SESSION_KEY, None)
@@ -250,19 +240,15 @@ class CreateExperiment(BaseExperimentView, CreateView):
     def post(self, request, *args, **kwargs):
         self.object = None
         form = self.get_form()
-        file_formset = self._get_file_formset()
-        if form.is_valid() and (not file_formset or file_formset.is_valid()):
-            return self.form_valid(form, file_formset)
+        if form.is_valid():
+            return self.form_valid(form)
         else:
-            return self.form_invalid(form, file_formset)
+            return self.form_invalid(form)
 
-    def form_valid(self, form, file_formset):
+    def form_valid(self, form):
         with transaction.atomic():
             form.instance.name = unicodedata.normalize("NFC", form.instance.name)
             self.object = form.save()
-            if file_formset:
-                files = file_formset.save(self.request)
-                self.object.files.set(files)
 
         task_id = async_create_experiment_version.delay(
             experiment_id=self.object.id, version_description="", make_default=True
@@ -272,8 +258,8 @@ class CreateExperiment(BaseExperimentView, CreateView):
 
         return HttpResponseRedirect(self.get_success_url())
 
-    def form_invalid(self, form, file_formset):
-        return self.render_to_response(self.get_context_data(form=form, file_formset=file_formset))
+    def form_invalid(self, form):
+        return self.render_to_response(self.get_context_data(form=form))
 
     def dispatch(self, request, *args, **kwargs):
         is_chatbot = kwargs.get("new_chatbot", False)
@@ -341,22 +327,6 @@ def delete_experiment(request, team_slug: str, pk: int):
     safety_layer = get_object_or_404(Experiment, id=pk, team=request.team)
     safety_layer.delete()
     return redirect("experiments:experiments_home", team_slug=team_slug)
-
-
-class AddFileToExperiment(BaseAddFileHtmxView):
-    @transaction.atomic()
-    def form_valid(self, form):
-        experiment = get_object_or_404(Experiment, team=self.request.team, pk=self.kwargs["pk"])
-        file = super().form_valid(form)
-        experiment.files.add(file)
-        return file
-
-    def get_delete_url(self, file):
-        return reverse("experiments:remove_file", args=[self.request.team.slug, self.kwargs["pk"], file.pk])
-
-
-class DeleteFileFromExperiment(BaseDeleteFileView):
-    pass
 
 
 class CreateExperimentVersion(LoginAndTeamRequiredMixin, FormView, PermissionRequiredMixin):
