@@ -49,7 +49,7 @@ DATE_RANGE_OPTIONS = [
 ]
 
 
-def apply_dynamic_filters(query_set, request, parsed_params, timezone):
+def apply_dynamic_filters(query_set, parsed_params, timezone):
     query_set = _prepare_queryset(query_set)
     param_source = parsed_params
     filter_conditions = Q()
