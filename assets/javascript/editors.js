@@ -314,10 +314,13 @@ document.addEventListener("htmx:afterSettle", (e) => {
 });
 
 
-export const createDiffView = (doca, docb, parent) => {
+/**
+ * createDiffView - Create a CodeMirror diff view for comparing two documents
+ */
+export const createDiffView = (docOriginal, docChanged, parent) => {
   return new MergeView({
     a: {
-      doc: doca,
+      doc: docOriginal,
       extensions: [
         minimalSetup,
         EditorView.lineWrapping,
@@ -326,7 +329,7 @@ export const createDiffView = (doca, docb, parent) => {
       ]
     },
     b: {
-      doc: docb,
+      doc: docChanged,
       extensions: [
         minimalSetup,
         EditorView.lineWrapping,
