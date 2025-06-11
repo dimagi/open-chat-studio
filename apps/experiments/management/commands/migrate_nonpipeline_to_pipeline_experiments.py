@@ -5,6 +5,7 @@ from django.db import transaction
 from django.db.models import Q
 
 from apps.experiments.models import Experiment
+from apps.pipelines.flow import FlowNode, FlowNodeData
 from apps.pipelines.models import Pipeline
 from apps.pipelines.nodes.nodes import AssistantNode, LLMResponseWithPrompt
 from apps.teams.models import Flag
@@ -138,16 +139,20 @@ class Command(BaseCommand):
     def _create_pipeline_with_node(self, experiment, node_type, node_label, node_params):
         """Create a pipeline with start -> custom_node -> end structure."""
         pipeline_name = f"{experiment.name} Pipeline"
-        middle_node_config = {
-            "id": str(uuid4()),
-            "type": "pipelineNode",
-            "position": {"x": 400, "y": 200},
-            "data": {"type": node_type, "label": node_label, "params": node_params},
-        }
 
-        return Pipeline._create_pipeline_with_nodes(
-            team=experiment.team, name=pipeline_name, middle_nodes_config=middle_node_config
+        node = FlowNode(
+            id=str(uuid4()),
+            type="pipelineNode",
+            position={"x": 400, "y": 200},
+            data=FlowNodeData(
+                id=str(uuid4()),
+                type=node_type,
+                label=node_label,
+                params=node_params,
+            ),
         )
+
+        return Pipeline._create_pipeline_with_nodes(team=experiment.team, name=pipeline_name, middle_node=node)
 
     def _create_llm_pipeline(self, experiment):
         """Create a start -> LLMResponseWithPrompt -> end nodes pipeline for an LLM experiment."""
@@ -171,13 +176,12 @@ class Command(BaseCommand):
             "built_in_tools": [],
             "tool_config": {},
         }
-
         return self._create_pipeline_with_node(
             experiment=experiment, node_type=LLMResponseWithPrompt.__name__, node_label="LLM", node_params=llm_params
         )
 
     def _create_assistant_pipeline(self, experiment):
-        """Createii a start -> AssistantNode -> end nodes pipeline for an assistant experiment."""
+        """Create a start -> AssistantNode -> end nodes pipeline for an assistant experiment."""
         assistant_params = {
             "name": "assistant",
             "assistant_id": str(experiment.assistant.id),
