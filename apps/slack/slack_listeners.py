@@ -10,6 +10,7 @@ Manage event subscriptions at:
 import logging
 import re
 
+from django.db import IntegrityError
 from django.db.models import Q
 from slack_bolt import BoltContext, BoltResponse
 
@@ -64,13 +65,17 @@ def _respond_to_message(event, channel_id, thread_ts, experiment_channel, experi
 
     if not session:
         external_id = make_session_external_id(channel_id, thread_ts)
-        session = SlackChannel.start_new_session(
-            working_experiment=experiment,
-            experiment_channel=experiment_channel,
-            participant_identifier=slack_user,
-            session_external_id=external_id,
-        )
-
+        session = ExperimentSession.objects.filter(external_id=external_id).first()
+        if not session:
+            try:
+                session = SlackChannel.start_new_session(
+                    working_experiment=experiment,
+                    experiment_channel=experiment_channel,
+                    participant_identifier=slack_user,
+                    session_external_id=external_id,
+                )
+            except IntegrityError:
+                session = ExperimentSession.objects.get(external_id=external_id)
     # strip out the mention
     message_text = re.sub(rf"<@?{context.bot_user_id}>", "", event["text"])
     message = SlackMessage(
