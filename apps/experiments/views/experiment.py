@@ -1503,6 +1503,8 @@ def get_release_status_badge(request, team_slug: str, experiment_id: int):
     return render(request, "experiments/components/unreleased_badge.html", context)
 
 
+@login_required
+@permission_required(("experiments.change_experiment", "pipelines.add_pipeline"))
 def migrate_experiment_view(request, team_slug, experiment_id):
     from apps.pipelines.helper import convert_non_pipeline_experiment_to_pipeline
 
