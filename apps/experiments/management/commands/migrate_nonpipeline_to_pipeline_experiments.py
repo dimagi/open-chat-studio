@@ -67,7 +67,8 @@ class Command(BaseCommand):
             if not (experiment.is_default_version or experiment.is_working_version):
                 self.stdout.write(
                     self.style.WARNING(
-                        f"Experiment {experiment_id} is not a published or unreleased version so does not require migration."
+                        f"Experiment {experiment_id} is not a published or unreleased version so does not\
+                        require migration."
                     )
                 )
                 return
