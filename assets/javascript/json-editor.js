@@ -1,8 +1,10 @@
-import { basicSetup } from "codemirror"
+import { basicSetup, minimalSetup } from "codemirror"
 import { EditorView } from "@codemirror/view"
 import { linter, lintGutter, diagnosticCount } from "@codemirror/lint"
 import { json, jsonParseLinter } from "@codemirror/lang-json"
 import { Compartment, EditorState } from "@codemirror/state"
+import {MergeView} from "@codemirror/merge"
+import "../styles/app/editors.css";
 
 /**
  * JsonEditor - A class to manage CodeMirror JSON editor instances
@@ -10,12 +12,12 @@ import { Compartment, EditorState } from "@codemirror/state"
 class JsonEditor {
   /** Map of all editor instances by DOM element */
   static instances = new Map();
-  
+
   /** Editor configuration */
   readOnly = new Compartment();
   timeout = null;
   errorContainer = null;
-  
+
   /**
    * Create a new JSON editor instance
    * @param {HTMLElement} element - DOM element to attach editor to
@@ -26,11 +28,11 @@ class JsonEditor {
     this.createErrorContainer();
     this.setupEventListeners();
     this.createEditor();
-    
+
     // Store the instance
     JsonEditor.instances.set(element, this);
   }
-  
+
   /**
    * Find target elements for editor
    */
@@ -38,7 +40,7 @@ class JsonEditor {
     this.target = null;
     this.disableElement = null;
     this.initialValue = "";
-    
+
     // Get form field target
     const targetField = this.element.getAttribute('data-target-field');
     if (targetField) {
@@ -50,14 +52,14 @@ class JsonEditor {
     } else {
       console.error('json-editor element missing data-target-field attribute');
     }
-    
+
     // Get disable element if specified
     const disableEltQuery = this.element.getAttribute('data-disable-elt');
     if (disableEltQuery) {
       this.disableElement = document.querySelector(disableEltQuery);
     }
   }
-  
+
   /**
    * Create error message container
    */
@@ -66,7 +68,7 @@ class JsonEditor {
     this.errorContainer.className = 'json-editor-error text-error text-sm mt-1 transition-opacity duration-200 opacity-0';
     this.element.parentNode.insertBefore(this.errorContainer, this.element.nextSibling);
   }
-  
+
   /**
    * Set up HTMX event listeners
    */
@@ -89,7 +91,7 @@ class JsonEditor {
       }
     });
   }
-  
+
   /**
    * Format the current JSON content
    */
@@ -97,10 +99,10 @@ class JsonEditor {
     try {
       // Get current content
       const content = this.view.state.doc.toString();
-      
+
       // Parse and re-stringify with formatting
       const formatted = JSON.stringify(JSON.parse(content), null, 2);
-      
+
       // Replace editor content
       this.view.dispatch({
         changes: {
@@ -109,42 +111,42 @@ class JsonEditor {
           insert: formatted
         }
       });
-      
+
       // Show success indicator
       const indicator = document.createElement('div');
       indicator.className = 'absolute right-2 bottom-2 bg-success text-white text-xs py-1 px-2 rounded-md opacity-0 transition-opacity';
       indicator.textContent = 'Formatted';
       indicator.style.zIndex = '10';
       this.element.appendChild(indicator);
-      
+
       // Animate in then out
       setTimeout(() => indicator.classList.remove('opacity-0'), 10);
       setTimeout(() => {
         indicator.classList.add('opacity-0');
         setTimeout(() => indicator.remove(), 300);
       }, 1500);
-      
+
       return true;
     } catch (e) {
       // Update error container
       this.errorContainer.textContent = `Format failed: ${e.message}`;
       this.errorContainer.classList.remove('opacity-0');
-      
+
       setTimeout(() => {
         this.errorContainer.classList.add('opacity-0');
       }, 3000);
-      
+
       return false;
     }
   }
-  
+
   /**
    * Create CodeMirror editor instance
    */
   createEditor() {
     // Add Tailwind styling to the editor container
     this.element.classList.add('border', 'rounded-md', 'overflow-hidden', 'shadow-xs', 'focus-within:ring-2', 'focus-within:ring-primary-focus', 'bg-base-100', 'relative');
-    
+
     // Create format button
     const formatBtn = document.createElement('button');
     formatBtn.className = 'absolute bottom-2 right-2 z-10 text-xs bg-base-200 hover:bg-base-300 text-base-content px-2 py-1 rounded-sm transition-colors';
@@ -154,7 +156,7 @@ class JsonEditor {
       this.formatJSON();
     });
     this.element.appendChild(formatBtn);
-    
+
     this.view = new EditorView({
       doc: this.initialValue || "",
       parent: this.element,
@@ -187,7 +189,7 @@ class JsonEditor {
       ]
     });
   }
-  
+
   /**
    * Handle editor content updates
    * @param {*} update - CodeMirror update object
@@ -195,41 +197,41 @@ class JsonEditor {
   handleEditorUpdate(update) {
     if (this.target && update.docChanged) {
       this.target.value = update.state.doc.toString();
-      
+
       // Handle Alpine.js integration
       if (this.target._x_model) {
         this.target._x_model.set(this.target.value);
       }
-      
+
       // Clear existing timeout
       if (this.timeout) {
         clearTimeout(this.timeout);
       }
-      
+
       // Update error status
       this.updateErrorStatus();
-      
+
       this.timeout = setTimeout(() => {
         // Update error status after linter has finished
         this.updateErrorStatus();
       }, 500);
-      
+
       // Trigger change event
       this.target.dispatchEvent(new Event('change', { bubbles: true }));
     }
   }
-  
+
   /**
    * Update error status display
    */
   updateErrorStatus() {
     const errors = diagnosticCount(this.view.state);
-    
+
     // Update submit button state
     if (this.disableElement) {
       this.disableElement.disabled = errors > 0;
     }
-    
+
     // Update error message
     if (errors > 0) {
       this.errorContainer.textContent = `Invalid JSON: ${errors} error(s) found`;
@@ -237,7 +239,7 @@ class JsonEditor {
       this.errorContainer.textContent = '';
     }
   }
-  
+
   /**
    * Destroy the editor instance
    */
@@ -246,14 +248,14 @@ class JsonEditor {
       this.view.dom.remove();
       this.view = null;
     }
-    
+
     if (this.errorContainer) {
       this.errorContainer.remove();
     }
-    
+
     JsonEditor.instances.delete(this.element);
   }
-  
+
   /**
    * Create or update a JSON editor for an element
    * @param {HTMLElement} element - DOM element to attach editor to
@@ -264,10 +266,10 @@ class JsonEditor {
     if (JsonEditor.instances.has(element)) {
       JsonEditor.instances.get(element).destroy();
     }
-    
+
     return new JsonEditor(element);
   }
-  
+
   /**
    * Initialize all editors matching a selector
    * @param {string} selector - CSS selector to find editor elements
@@ -277,7 +279,7 @@ class JsonEditor {
       JsonEditor.create(el);
     });
   }
-  
+
   /**
    * Destroy all editor instances
    */
@@ -307,6 +309,45 @@ document.addEventListener("htmx:afterSettle", (e) => {
   if (newEditors.length) {
     Array.from(newEditors).forEach(el => {
       JsonEditor.create(el);
+    });
+  }
+});
+
+
+export const createDiffView = (doca, docb, parent) => {
+  return new MergeView({
+    a: {
+      doc: doca,
+      extensions: [
+        minimalSetup,
+        EditorView.lineWrapping,
+        EditorView.editable.of(false),
+        EditorState.readOnly.of(true),
+      ]
+    },
+    b: {
+      doc: docb,
+      extensions: [
+        minimalSetup,
+        EditorView.lineWrapping,
+        EditorView.editable.of(false),
+        EditorState.readOnly.of(true),
+      ]
+    },
+    parent: parent,
+    gutter: false,
+  })
+}
+
+document.addEventListener("DOMContentLoaded", () => {
+  const diffViews = document.querySelectorAll('.diff-view');
+  if (diffViews.length) {
+    Array.from(diffViews).forEach(el => {
+      createDiffView(
+        el.getAttribute('data-diff-a'),
+        el.getAttribute('data-diff-b'),
+        el
+      )
     });
   }
 });
