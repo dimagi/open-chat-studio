@@ -139,7 +139,6 @@ def delete_collection_file(request, team_slug: str, pk: int, file_id: int):
     else:
         # Nothing else is using it
         if collection.is_index:
-            # Remove it from the remote service altogether
             index_manager = collection.get_index_manager()
             index_manager.delete_files(files=[file])
 

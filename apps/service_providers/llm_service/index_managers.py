@@ -9,7 +9,7 @@ from langchain_text_splitters import RecursiveCharacterTextSplitter
 
 from apps.assistants.utils import chunk_list
 from apps.documents.exceptions import FileUploadError
-from apps.files.models import File
+from apps.files.models import File, FileChunkEmbedding
 from apps.service_providers.exceptions import UnableToLinkFileException
 
 logger = logging.getLogger("ocs.index_manager")
@@ -208,7 +208,7 @@ class OpenAIRemoteIndexManager(RemoteIndexManager):
         create_files_remote(self.client, files=[file])
 
     def delete_files(self, files: list[File]):
-        """A convenience method to delete files from the remote service"""
+        """A convenience method to delete a files from the remote service"""
         for file in files:
             with contextlib.suppress(openai.NotFoundError):
                 self.client.files.delete(file.external_id)
@@ -263,6 +263,21 @@ class LocalIndexManager(metaclass=ABCMeta):
 
         documents = text_splitter.create_documents([file.read_content()])
         return [doc.page_content for doc in documents]
+
+    def delete_files(self, files: list[File]):
+        """
+        Remove files from the local index.
+
+        This method should handle the deletion of file embeddings and any associated
+        metadata in the local index.
+
+        Args:
+            files: List of File instances to delete from the local index.
+        """
+        for file in files:
+            FileChunkEmbedding.objects.filter(file=file).delete()
+            file.external_id = ""
+        File.objects.bulk_update(files, fields=["external_id"])
 
 
 class OpenAILocalIndexManager(LocalIndexManager):

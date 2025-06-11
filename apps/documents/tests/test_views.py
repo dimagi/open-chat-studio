@@ -231,3 +231,32 @@ class TestDeleteCollectionFile:
             # Verify file still exists and is still linked to assistant
             file.refresh_from_db()
             assert file.is_archived is False
+
+    @pytest.mark.parametrize("is_remote_index", [True, False])
+    def test_delete_remote_indexed_file(
+        self, is_remote_index, team_with_user, client, local_index_manager_mock, remote_index_manager_mock
+    ):
+        """Test deleting a file from a remote indexed collection."""
+        llm_provider = LlmProviderFactory(team=team_with_user)
+        collection = CollectionFactory(
+            team=team_with_user,
+            is_index=True,
+            is_remote_index=is_remote_index,
+            llm_provider=llm_provider,
+            openai_vector_store_id="vs-123",
+        )
+        file = FileFactory(team=team_with_user, external_id="file-123", external_source="openai")
+        CollectionFile.objects.create(collection=collection, file=file)
+
+        # Login user
+        client.force_login(team_with_user.members.first())
+        reverse("documents:delete_collection_file", args=[team_with_user.slug, collection.id, file.id])
+
+        # Verify collection file relationship is deleted
+        assert not CollectionFile.objects.filter(collection=collection, file=file).exists()
+        if is_remote_index:
+            remote_index_manager_mock.delete_files.assert_called()
+            local_index_manager_mock.delete_files.assert_not_called()
+        else:
+            remote_index_manager_mock.delete_files.assert_not_called()
+            local_index_manager_mock.delete_files.assert_called()
