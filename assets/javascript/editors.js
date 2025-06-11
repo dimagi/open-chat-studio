@@ -339,6 +339,7 @@ export const createDiffView = (docOriginal, docChanged, parent) => {
     },
     parent: parent,
     gutter: false,
+    collapseUnchanged: {margin: 2, minSize: 3},
   })
 }
 
