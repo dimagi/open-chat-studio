@@ -437,7 +437,7 @@ class ScheduledMessage(BaseTeamModel):
         experiment_session.ad_hoc_bot_message(
             self.params["prompt_text"],
             trace_info,
-            fail_silently=False,
+            fail_silently=True,
             use_experiment=self._get_experiment_to_generate_response(),
         )
 

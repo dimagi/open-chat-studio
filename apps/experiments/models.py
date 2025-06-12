@@ -1675,9 +1675,14 @@ class ExperimentSession(BaseTeamModel):
             use_experiment: The experiment whose data to use. This is useful for multi-bot setups where we want a
             specific child bot to handle the check-in.
         """
-        with current_team(self.team):
-            bot_message = self._bot_prompt_for_user(instruction_prompt, trace_info, use_experiment=use_experiment)
-            self.try_send_message(message=bot_message, fail_silently=fail_silently)
+        try:
+            with current_team(self.team):
+                bot_message = self._bot_prompt_for_user(instruction_prompt, trace_info, use_experiment=use_experiment)
+                self.try_send_message(message=bot_message)
+        except Exception as e:
+            log.exception(f"Could not send message to experiment session {self.id}. Reason: {e}")
+            if not fail_silently:
+                raise e
 
     def _bot_prompt_for_user(
         self,
@@ -1697,19 +1702,14 @@ class ExperimentSession(BaseTeamModel):
         bot = EventBot(self, experiment, trace_info, history_manager)
         return bot.get_user_message(instruction_prompt)
 
-    def try_send_message(self, message: str, fail_silently=True):
+    def try_send_message(self, message: str):
         """Tries to send a message to this user session as the bot. Note that `message` will be send to the user
         directly. This is not an instruction to the bot.
         """
         from apps.chat.channels import ChannelBase
 
-        try:
-            channel = ChannelBase.from_experiment_session(self)
-            channel.send_message_to_user(message)
-        except Exception as e:
-            log.exception(f"Could not send message to experiment session {self.id}. Reason: {e}")
-            if not fail_silently:
-                raise e
+        channel = ChannelBase.from_experiment_session(self)
+        channel.send_message_to_user(message)
 
     @cached_property
     def participant_data_from_experiment(self) -> dict:
