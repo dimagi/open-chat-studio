@@ -1658,6 +1658,7 @@ class ExperimentSession(BaseTeamModel):
 
             enqueue_static_triggers.delay(self.id, StaticTriggerType.CONVERSATION_END)
 
+    @transaction.atomic()
     def ad_hoc_bot_message(
         self,
         instruction_prompt: str,
