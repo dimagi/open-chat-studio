@@ -134,7 +134,7 @@ def create_collection_from_assistant_task(collection_id: int, assistant_id: int)
             )
 
     except Exception as e:
-        logger.exception(f"Failed to link files to vector store: {e}")
+        logger.exception(f"Failed to link files to vector store")
         # Mark files as failed
         if file_with_remote_ids:
             CollectionFile.objects.filter(collection=collection, file__in=file_with_remote_ids).update(
