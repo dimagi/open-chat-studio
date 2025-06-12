@@ -329,6 +329,14 @@ class LLMResponseWithPrompt(LLMResponse, HistoryMixin, OutputMessageTagMixin):
             widget=Widgets.select, options_source=OptionsSource.collection_index, flag_required="flag_pipelines-v2"
         ),
     )
+    max_results: OptionalInt = Field(
+        default=10,
+        ge=0,
+        le=100,
+        description="The maximum number of results to retrieve from the index",
+        json_schema_extra=UiSchema(widget=Widgets.range),
+    )
+
     tools: list[str] = Field(
         default_factory=list,
         description="The tools to enable for the bot",
@@ -446,7 +454,7 @@ class LLMResponseWithPrompt(LLMResponse, HistoryMixin, OutputMessageTagMixin):
         tools.extend(self.get_llm_service().attach_built_in_tools(self.built_in_tools, self.tool_config))
         if self.collection_index_id:
             collection = Collection.objects.get(id=self.collection_index_id)
-            tools.append(collection.get_search_tool(query=query, max_results=5))
+            tools.append(collection.get_search_tool(query=query, max_results=self.max_results))
 
         return tools
 

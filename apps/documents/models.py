@@ -307,9 +307,14 @@ class Collection(BaseTeamModel, VersionsMixin):
             raise IndexConfigurationException("Non indexed collections do not have search tools")
 
         if self.is_remote_index:
-            return OpenAIBuiltinTool(type="file_search", vector_store_ids=[self.openai_vector_store_id])
+            return OpenAIBuiltinTool(
+                type="file_search",
+                vector_store_ids=[self.openai_vector_store_id],
+                max_num_results=max_results,
+                query=query,
+            )
         else:
-            search_config = SearchToolConfig(index_id=self.id, query=query, max_results=max_results)
+            search_config = SearchToolConfig(index_id=self.id, max_results=max_results)
             return SearchIndexTool(search_config=search_config)
 
     def _remove_remote_index(self, remote_files_to_remove: list[File]):
