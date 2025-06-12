@@ -22,11 +22,32 @@ def _make_edges(nodes) -> list[dict]:
     ]
 
 
+def _edges_from_strings(edge_strings: list[str], nodes: list[dict]) -> list[dict]:
+    nodes_by_name = {node["params"]["name"]: node for node in nodes}
+    edges = []
+    for edge in edge_strings:
+        source, target = edge.split(" - ")
+        if source not in nodes_by_name or target not in nodes_by_name:
+            raise ValueError(f"Invalid edge: {edge}")
+        source_node = nodes_by_name[source]
+        target_node = nodes_by_name[target]
+        edges.append(
+            {
+                "id": f"{source} -> {target}",
+                "source": source_node["id"],
+                "target": target_node["id"],
+            }
+        )
+    return edges
+
+
 def create_runnable(
-    pipeline: Pipeline, nodes: list[dict], edges: list[dict] | None = None, lenient=False
+    pipeline: Pipeline, nodes: list[dict], edges: list[dict | str] | None = None, lenient=False
 ) -> CompiledStateGraph:
     if edges is None:
         edges = _make_edges(nodes)
+    if isinstance(edges[0], str):
+        edges = _edges_from_strings(edges, nodes)
     flow_nodes = []
     for node in nodes:
         flow_nodes.append({"id": node["id"], "data": node})
@@ -45,13 +66,14 @@ def end_node():
     return {"id": str(uuid4()), "type": nodes.EndNode.__name__, "params": {"name": "end"}}
 
 
-def email_node():
+def email_node(name: str | None = None):
+    node_id = str(uuid4())
     return {
-        "id": str(uuid4()),
+        "id": node_id,
         "label": "Send an email",
         "type": "SendEmail",
         "params": {
-            "name": "email",
+            "name": name or "send email" + node_id[-4:],
             "recipient_list": "test@example.com",
             "subject": "This is an interesting email",
         },
@@ -66,6 +88,7 @@ def llm_response_with_prompt_node(
     history_type: str | None = None,
     history_name: str | None = None,
     tool_config: dict[str, ToolConfigModel] | None = None,
+    name: str | None = None,
     **kwargs,
 ):
     if prompt is None:
@@ -73,7 +96,7 @@ def llm_response_with_prompt_node(
 
     node_id = str(uuid4())
     params = {
-        "name": kwargs.get("name", "llm response with prompt" + node_id[-4:]),
+        "name": name or "llm response with prompt" + node_id[-4:],
         "llm_provider_id": provider_id,
         "llm_provider_model_id": provider_model_id,
         "prompt": prompt,
@@ -96,55 +119,59 @@ def llm_response_with_prompt_node(
     }
 
 
-def llm_response_node(provider_id: str, provider_model_id: str):
+def llm_response_node(provider_id: str, provider_model_id: str, name: str | None = None):
+    node_id = str(uuid4())
     return {
-        "id": str(uuid4()),
+        "id": node_id,
         "type": nodes.LLMResponse.__name__,
         "params": {
-            "name": "llm response",
+            "name": name or "llm response" + node_id[-4:],
             "llm_provider_id": provider_id,
             "llm_provider_model_id": provider_model_id,
         },
     }
 
 
-def render_template_node(template_string: str | None = None):
+def render_template_node(template_string: str | None = None, name: str | None = None):
     if template_string is None:
         template_string = "<b>{{ summary }}</b>"
-    id = str(uuid4())
+    node_id = str(uuid4())
     return {
-        "id": str(uuid4()),
+        "id": node_id,
         "type": nodes.RenderTemplate.__name__,
         "params": {
-            "name": "render template" + id[-4:],
+            "name": name or "render template" + node_id[-4:],
             "template_string": template_string,
         },
     }
 
 
-def passthrough_node():
+def passthrough_node(name: str | None = None):
+    node_id = str(uuid4())
     return {
-        "id": str(uuid4()),
+        "id": node_id,
         "type": nodes.Passthrough.__name__,
-        "params": {"name": "passthrough"},
+        "params": {"name": name or "passthrough-" + node_id[-4:]},
     }
 
 
-def boolean_node(input_equals="hello"):
+def boolean_node(input_equals="hello", name: str | None = None):
+    node_id = str(uuid4())
     return {
-        "id": str(uuid4()),
+        "id": node_id,
         "type": nodes.BooleanNode.__name__,
-        "params": {"name": "boolean", "input_equals": input_equals},
+        "params": {"name": name or "boolean-" + node_id[-4:], "input_equals": input_equals},
     }
 
 
-def router_node(provider_id: str, provider_model_id: str, keywords: list[str], **kwargs):
+def router_node(provider_id: str, provider_model_id: str, keywords: list[str], name: str | None = None, **kwargs):
+    node_id = str(uuid4())
     return {
-        "id": str(uuid4()),
+        "id": node_id,
         "type": nodes.RouterNode.__name__,
         "params": {
             **{
-                "name": "router",
+                "name": name or "router-" + node_id[-4:],
                 "prompt": "You are a router",
                 "keywords": keywords,
                 "llm_provider_id": provider_id,
@@ -155,12 +182,15 @@ def router_node(provider_id: str, provider_model_id: str, keywords: list[str], *
     }
 
 
-def state_key_router_node(route_key: str, keywords: list[str], data_source="temp_state", tag_output=False):
+def state_key_router_node(
+    route_key: str, keywords: list[str], data_source="temp_state", tag_output=False, name: str | None = None
+):
+    node_id = str(uuid4())
     return {
-        "id": str(uuid4()),
+        "id": node_id,
         "type": nodes.StaticRouterNode.__name__,
         "params": {
-            "name": "static router",
+            "name": name or "static router-" + node_id[-4:],
             "data_source": data_source,
             "route_key": route_key,
             "keywords": keywords,
@@ -169,12 +199,13 @@ def state_key_router_node(route_key: str, keywords: list[str], data_source="temp
     }
 
 
-def assistant_node(assistant_id: str):
+def assistant_node(assistant_id: str, name: str | None = None):
+    node_id = str(uuid4())
     return {
-        "id": str(uuid4()),
+        "id": node_id,
         "type": nodes.AssistantNode.__name__,
         "params": {
-            "name": "assistant",
+            "name": name or "assistant-" + node_id[-4:],
             "assistant_id": assistant_id,
             "citations_enabled": True,
             "input_formatter": "",
@@ -182,12 +213,15 @@ def assistant_node(assistant_id: str):
     }
 
 
-def extract_participant_data_node(provider_id: str, provider_model_id: str, data_schema: str, key_name: str):
+def extract_participant_data_node(
+    provider_id: str, provider_model_id: str, data_schema: str, key_name: str, name: str | None = None
+):
+    node_id = str(uuid4())
     return {
-        "id": str(uuid4()),
+        "id": node_id,
         "type": nodes.ExtractParticipantData.__name__,
         "params": {
-            "name": "extract participant data",
+            "name": name or "extract participant data" + node_id[-4:],
             "llm_provider_id": provider_id,
             "llm_provider_model_id": provider_model_id,
             "data_schema": data_schema,
@@ -196,12 +230,13 @@ def extract_participant_data_node(provider_id: str, provider_model_id: str, data
     }
 
 
-def extract_structured_data_node(provider_id: str, provider_model_id: str, data_schema: str):
+def extract_structured_data_node(provider_id: str, provider_model_id: str, data_schema: str, name: str | None = None):
+    node_id = str(uuid4())
     return {
-        "id": str(uuid4()),
+        "id": node_id,
         "type": nodes.ExtractStructuredData.__name__,
         "params": {
-            "name": "extract structured data",
+            "name": name or "extract structured data" + node_id[-4:],
             "llm_provider_id": provider_id,
             "llm_provider_model_id": provider_model_id,
             "data_schema": data_schema,
@@ -209,7 +244,7 @@ def extract_structured_data_node(provider_id: str, provider_model_id: str, data_
     }
 
 
-def code_node(code: str | None = None):
+def code_node(code: str | None = None, name: str | None = None):
     if code is None:
         code = "return f'Hello, {input}!'"
     node_id = str(uuid4())
@@ -217,7 +252,7 @@ def code_node(code: str | None = None):
         "id": node_id,
         "type": nodes.CodeNode.__name__,
         "params": {
-            "name": "code node" + node_id[-4:],
+            "name": name or "code node" + node_id[-4:],
             "code": code,
         },
     }

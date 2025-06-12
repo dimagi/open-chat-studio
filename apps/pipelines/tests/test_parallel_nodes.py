@@ -3,13 +3,14 @@ import pytest
 from apps.pipelines.exceptions import PipelineBuildError
 from apps.pipelines.nodes.base import PipelineState
 from apps.pipelines.tests.utils import (
+    code_node,
     create_runnable,
     end_node,
     passthrough_node,
     render_template_node,
     start_node,
 )
-from apps.utils.factories.experiment import ExperimentSessionFactory
+from apps.utils.factories.experiment import ExperimentFactory, ExperimentSessionFactory
 from apps.utils.factories.pipelines import PipelineFactory
 from apps.utils.pytest import django_db_with_data
 
@@ -20,85 +21,36 @@ def pipeline():
 
 
 @pytest.fixture()
-def experiment_session():
-    return ExperimentSessionFactory()
+def experiment(pipeline):
+    return ExperimentFactory(team=pipeline.team, pipeline=pipeline)
+
+
+@pytest.fixture()
+def experiment_session(experiment):
+    return ExperimentSessionFactory(experiment=experiment)
 
 
 @django_db_with_data(available_apps=("apps.service_providers",))
 def test_parallel_node_validation(pipeline):
     start = start_node()
-    passthrough_1 = passthrough_node()
-    passthrough_2 = passthrough_node()
+    passthrough_1 = passthrough_node(name="1")
+    passthrough_2 = passthrough_node(name="2")
     end = end_node()
     nodes = [start, passthrough_1, passthrough_2, end]
-    edges = [
-        {
-            "id": "start -> passthrough 1",
-            "source": start["id"],
-            "target": passthrough_1["id"],
-        },
-        {
-            "id": "start -> passthrough 2",
-            "source": start["id"],
-            "target": passthrough_2["id"],
-        },
-        {
-            "id": "passthrough 1 -> end",
-            "source": passthrough_1["id"],
-            "target": end["id"],
-        },
-        {
-            "id": "passthrough 2 -> end",
-            "source": passthrough_2["id"],
-            "target": end["id"],
-        },
-    ]
-
+    edges = ["start - 1", "start - 2", "1 - end", "2 - end"]
     with pytest.raises(PipelineBuildError, match="Multiple edges connected to the same output"):
         create_runnable(pipeline, nodes, edges, lenient=False)
 
 
 @django_db_with_data(available_apps=("apps.service_providers",))
-def test_branching_pipeline(pipeline, experiment_session):
+def test_parallel_branch_pipeline(pipeline, experiment_session):
     start = start_node()
-    template_a = render_template_node("A ({{input }})")
-    template_b = render_template_node("B ({{ input}})")
-    template_c = render_template_node("C ({{input }})")
+    template_a = render_template_node("A ({{ input }})", name="A")
+    template_b = render_template_node("B ({{ input }})", name="B")
+    template_c = render_template_node("C ({{ input }})", name="C")
     end = end_node()
-    nodes = [
-        start,
-        template_a,
-        template_b,
-        template_c,
-        end,
-    ]
-    edges = [
-        {
-            "id": "start -> RenderTemplate-A",
-            "source": start["id"],
-            "target": template_a["id"],
-        },
-        {
-            "id": "start -> RenderTemplate-B",
-            "source": start["id"],
-            "target": template_b["id"],
-        },
-        {
-            "id": "RenderTemplate-B -> RenderTemplate-C",
-            "source": template_b["id"],
-            "target": template_c["id"],
-        },
-        {
-            "id": "RenderTemplate-A -> END",
-            "source": template_a["id"],
-            "target": end["id"],
-        },
-        {
-            "id": "RenderTemplate-C -> END",
-            "source": template_c["id"],
-            "target": end["id"],
-        },
-    ]
+    nodes = [start, template_a, template_b, template_c, end]
+    edges = ["start - A", "start - B", "B - C", "A - end", "C - end"]
     user_input = "The Input"
     output = create_runnable(pipeline, nodes, edges, lenient=True).invoke(
         PipelineState(messages=[user_input], experiment_session=experiment_session)
@@ -114,3 +66,38 @@ def test_branching_pipeline(pipeline, experiment_session):
         ],
     }
     assert output == expected_output
+
+
+@django_db_with_data(available_apps=("apps.service_providers",))
+def test_parallel_branch_pipeline_even_length(pipeline, experiment_session):
+    start = start_node()
+    node_a = static_code_router("A", "A")
+    node_b = static_code_router("B", "B")
+    code = code_node(
+        code="""
+def main(input, **kwargs):
+    a = get_node_output("A")
+    b = get_node_output("B")
+    return f"{a},{b}"
+    """,
+        name="Code",
+    )
+    end = end_node()
+    nodes = [start, node_a, node_b, code, end]
+    edges = ["start - A", "start - B", "A - Code", "B - Code", "Code - end"]
+    user_input = "The Input"
+    output = create_runnable(pipeline, nodes, edges, lenient=True).invoke(
+        PipelineState(messages=[user_input], experiment_session=experiment_session)
+    )
+    output_state = PipelineState(output)
+    assert output_state.get_node_output_by_name("Code") == "A,B"
+
+
+def static_code_router(output: str, name: str):
+    return code_node(
+        code=f"""
+def main(input, **kwargs):
+    return "{output}"
+    """,
+        name=name,
+    )

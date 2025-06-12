@@ -168,6 +168,15 @@ class PipelineState(dict):
 
         return routes_dict
 
+    def get_node_output_by_name(self, node_name: str) -> Any:
+        """
+        Get the output of a node by its name.
+        """
+        output = self["outputs"].get(node_name)
+        if output:
+            return output["message"]
+        return None
+
     def get_node_output(self, node_id: str) -> Any:
         """
         Get the output of a node by its ID.
