@@ -20,7 +20,8 @@ from langchain_core.prompts import MessagesPlaceholder, PromptTemplate
 from langchain_core.runnables import RunnableLambda, RunnablePassthrough
 from langchain_openai.chat_models.base import OpenAIRefusalError
 from langchain_text_splitters import RecursiveCharacterTextSplitter
-from langgraph.types import interrupt
+from langgraph.constants import END
+from langgraph.types import Command, interrupt
 from pydantic import BaseModel, BeforeValidator, Field, create_model, field_serializer, field_validator, model_validator
 from pydantic import ValidationError as PydanticValidationError
 from pydantic.config import ConfigDict
@@ -1073,7 +1074,7 @@ class CodeNode(PipelineNode, OutputMessageTagMixin):
             raise PydanticCustomError("invalid_code", "{error}", {"error": exc.msg}) from None
         return value
 
-    def _process(self, input: str, state: PipelineState) -> PipelineState:
+    def _process(self, input: str, state: PipelineState) -> PipelineState | Command:
         function_name = "main"
         byte_code = compile_restricted(
             self.code,
@@ -1093,7 +1094,12 @@ class CodeNode(PipelineNode, OutputMessageTagMixin):
 
         if isinstance(result, Abort):
             return interrupt(result.reason)
-        return PipelineState.from_node_output(node_name=self.name, node_id=self.node_id, output=str(result))
+        if isinstance(result, Command):
+            return result
+        return Command(
+            goto=self._outgoing_nodes,
+            update=PipelineState.from_node_output(node_name=self.name, node_id=self.node_id, output=str(result)),
+        )
 
     def _get_custom_globals(self, node_id, state: PipelineState):
         from RestrictedPython.Eval import (
@@ -1116,7 +1122,6 @@ class CodeNode(PipelineNode, OutputMessageTagMixin):
                 "_getitem_": default_guarded_getitem,
                 "_getiter_": default_guarded_getiter,
                 "_write_": lambda x: x,
-                "Abort": Abort,
                 "get_participant_data": participant_data_proxy.get,
                 "set_participant_data": participant_data_proxy.set,
                 "get_participant_schedules": participant_data_proxy.get_schedules,
@@ -1128,6 +1133,9 @@ class CodeNode(PipelineNode, OutputMessageTagMixin):
                 "get_node_path": pipeline_state.get_node_path,
                 "get_all_routes": pipeline_state.get_all_routes,
                 "get_node_output": pipeline_state.get_node_output_by_name,
+                # control flow
+                "Abort": Abort,
+                "DoNothing": lambda: Command(goto=END),
             }
         )
         return custom_globals

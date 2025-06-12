@@ -12,7 +12,7 @@ from apps.pipelines.const import STANDARD_OUTPUT_NAME
 from apps.pipelines.exceptions import PipelineBuildError, PipelineNodeBuildError
 from apps.pipelines.models import Pipeline
 from apps.pipelines.nodes.base import PipelineRouterNode
-from apps.pipelines.nodes.nodes import EndNode, StartNode
+from apps.pipelines.nodes.nodes import CodeNode, EndNode, StartNode
 
 
 class Node(pydantic.BaseModel):
@@ -229,6 +229,9 @@ class PipelineGraph(pydantic.BaseModel):
 
     def _add_edges_to_graph(self, state_graph: StateGraph, reachable_nodes: list[Node]):
         for node in reachable_nodes:
+            if node.type == CodeNode.__name__:
+                # CodeNode manages its own routing similar to conditional nodes
+                continue
             for edge in self.edges_by_source[node.id]:
                 if not edge.is_conditional():
                     # conditional edges are handled by router node outputs

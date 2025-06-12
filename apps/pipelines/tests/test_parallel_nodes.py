@@ -68,7 +68,6 @@ def test_parallel_branch_pipeline(pipeline, experiment_session):
     assert output == expected_output
 
 
-# @django_db_with_data(available_apps=("apps.service_providers",))
 @pytest.mark.django_db()
 @pytest.mark.parametrize("safety_check", ["safe", "unsafe"])
 def test_code_node_abort(pipeline, experiment_session, safety_check):
@@ -90,9 +89,8 @@ def main(input, **kwargs):
     end = end_node()
     nodes = [start, node_a, node_b, code, node_c, end]
     edges = ["start - safety_check", "start - B", "safety_check - Code", "B - Code", "Code - C", "C - end"]
-    user_input = "The Input"
     output = create_runnable(pipeline, nodes, edges, lenient=True).invoke(
-        PipelineState(messages=[user_input], experiment_session=experiment_session)
+        PipelineState(messages=["Hi"], experiment_session=experiment_session)
     )
     output_state = PipelineState(output)
     if safety_check == "safe":
@@ -101,6 +99,45 @@ def main(input, **kwargs):
     else:
         assert output_state["__interrupt__"][0].value == "Unsafe input: unsafe"
         assert "C" not in output_state["outputs"]
+
+
+@django_db_with_data(available_apps=("apps.service_providers",))
+def test_code_node_do_nothing(pipeline, experiment_session):
+    """In this test the branches are of unequal length, so the code node will get called twice,
+    once when A and C are done, and once when B is done.
+
+    We want the code node to wait until all branches have completed before returning a result."""
+    start = start_node()
+    node_a = render_template_node("A: {{ input }}", "A")
+    node_b = render_template_node("B: {{ input }}", "B")
+    node_c = render_template_node("C: {{ input }}", "C")
+    code = code_node(
+        code="""
+def main(input, **kwargs):
+    c = get_node_output("C")
+    b = get_node_output("B")  # expect this to arrive after C
+    if b is None:
+        return DoNothing()
+    return f"{b},{c}"
+    """,
+        name="Code",
+    )
+    end = end_node()
+    nodes = [start, node_a, node_b, code, node_c, end]
+    edges = ["start - A", "start - C", "A - B", "B - Code", "C - Code", "Code - end"]
+    output = create_runnable(pipeline, nodes, edges, lenient=True).invoke(
+        PipelineState(messages=["Hi"], experiment_session=experiment_session)
+    )
+    output_state = PipelineState(output)
+    assert output_state.get_node_output_by_name("end") == "B: A: Hi,C: Hi"
+    assert isinstance(output_state["outputs"]["Code"], dict)
+    assert output_state.get_execution_flow() == [
+        (None, "start", ["A", "C"]),
+        ("start", "C", ["Code"]),
+        ("start", "A", ["B"]),
+        ("A", "B", ["Code"]),
+        ("Code", "end", []),
+    ]
 
 
 def static_code_router(output: str, name: str):

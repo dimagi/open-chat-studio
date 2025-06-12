@@ -156,6 +156,15 @@ class PipelineState(dict):
 
         return path
 
+    def get_execution_flow(self):
+        """Returns the execution flow of the pipeline as a list of tuples.
+        Each tuple contains the previous node name, the current node name, and a list of destination node names.
+        """
+        return [
+            (self.get_node_name(prev), self.get_node_name(source), [self.get_node_name(x) for x in dest])
+            for prev, source, dest in self.get("path", [])
+        ]
+
     def get_all_routes(self) -> dict:
         """
         Gets all routing decisions in the pipeline.
@@ -218,7 +227,9 @@ class PipelineState(dict):
 class BasePipelineNode(BaseModel, ABC):
     model_config = ConfigDict(arbitrary_types_allowed=True)
 
-    _config: RunnableConfig | None = None
+    _config: RunnableConfig = None
+    _incoming_nodes: list[str] = None
+    _outgoing_nodes: list[str] = None
 
     node_id: SkipJsonSchema[str] = Field(exclude=True)
     django_node: SkipJsonSchema[Any] = Field(exclude=True)
@@ -251,6 +262,7 @@ class BasePipelineNode(BaseModel, ABC):
                 raise PipelineNodeRunError(
                     f"Cannot determine which input to use for node {node_id}",
                     {
+                        "node_name": self.name,
                         "node_id": node_id,
                         "edge_ids": incoming_nodes,
                         "state_outputs": state["outputs"],
@@ -293,11 +305,15 @@ class PipelineNode(BasePipelineNode, ABC):
 
     def process(
         self, incoming_nodes: list, outgoing_nodes: list, state: PipelineState, config: RunnableConfig
-    ) -> PipelineState:
+    ) -> PipelineState | Command:
         self._config = config
+        self._incoming_nodes = incoming_nodes
+        self._outgoing_nodes = outgoing_nodes
         state = PipelineState(state)
         state = self._prepare_state(self.node_id, incoming_nodes, state)
         output = self._process(input=state["node_input"], state=state)
+        if not isinstance(output, dict):
+            return output
         output["path"] = [(state["node_source"], self.node_id, outgoing_nodes)]
         get_output_tags_fn = getattr(self, "get_output_tags", None)
         if callable(get_output_tags_fn):
@@ -306,7 +322,7 @@ class PipelineNode(BasePipelineNode, ABC):
             output["output_message_tags"] = []
         return output
 
-    def _process(self, input: str, state: PipelineState) -> PipelineState:
+    def _process(self, input: str, state: PipelineState) -> PipelineState | Command:
         """The method that executes node specific functionality"""
         raise NotImplementedError
 
