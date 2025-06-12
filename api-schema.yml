@@ -992,9 +992,11 @@ components:
         session_data:
           type: object
           additionalProperties: {}
+          title: Update session state
         participant_data:
           type: object
           additionalProperties: {}
+          title: Update participant data
       required:
       - experiment
       - identifier

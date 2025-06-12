@@ -89,7 +89,7 @@ def trigger_bot_message_task(data):
 
     with current_team(experiment.team):
         channel.ensure_session_exists_for_participant(identifier, new_session=start_new_session)
-        if session_data and channel.experiment_session:
+        if session_data:
             session = channel.experiment_session
             merged_state = {**session.state, **session_data}
             session.state = merged_state
