@@ -1194,14 +1194,16 @@ def _start_experiment_session(
             metadata=metadata or {},
         )
 
-        session = ExperimentSession.objects.create(
-            team=team,
-            experiment=working_experiment,
-            experiment_channel=experiment_channel,
-            status=session_status,
-            participant=participant,
+        session, _ = ExperimentSession.objects.get_or_create(
             external_id=session_external_id,
-            chat=chat,
+            defaults={
+                "team": team,
+                "experiment": working_experiment,
+                "experiment_channel": experiment_channel,
+                "status": session_status,
+                "participant": participant,
+                "chat": chat,
+            },
         )
 
         # Record the participant's timezone
