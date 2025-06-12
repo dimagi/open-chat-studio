@@ -48,7 +48,6 @@ CHUNK_RESULT_TEMPLATE = """
 @dataclass
 class SearchToolConfig:
     index_id: int
-    query: str
     max_results: int = 5
 
     def get_index(self):
@@ -257,11 +256,13 @@ class SearchIndexTool(CustomBaseTool):
     search_config: SearchToolConfig
 
     @transaction.atomic
-    def action(self) -> str:
-        """Do a simple search for the top most relevant file chunks based on the query provided by the user."""
+    def action(self, query: str) -> str:
+        """
+        Do a simple search for the top most relevant file chunks based on the query provided by the user. A little query
+        rewriting is automatically done by the LLM, since it decides what query to use when invoking this tool.
+        """
         # - [ ] Generate references
         index = self.search_config.get_index()
-        query = self.search_config.query
         max_results = self.search_config.max_results
 
         query_vector = index.get_query_vector(query)

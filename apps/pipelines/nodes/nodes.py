@@ -454,7 +454,7 @@ class LLMResponseWithPrompt(LLMResponse, HistoryMixin, OutputMessageTagMixin):
         tools.extend(self.get_llm_service().attach_built_in_tools(self.built_in_tools, self.tool_config))
         if self.collection_index_id:
             collection = Collection.objects.get(id=self.collection_index_id)
-            tools.append(collection.get_search_tool(query=query, max_results=self.max_results))
+            tools.append(collection.get_search_tool(max_results=self.max_results))
 
         return tools
 

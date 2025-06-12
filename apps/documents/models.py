@@ -298,7 +298,7 @@ class Collection(BaseTeamModel, VersionsMixin):
         index_manager = self.get_index_manager()
         return index_manager.get_embedding_vector(query)
 
-    def get_search_tool(self, query: str, max_results: int) -> OpenAIBuiltinTool | SearchIndexTool:
+    def get_search_tool(self, max_results: int) -> OpenAIBuiltinTool | SearchIndexTool:
         """
         Returns either the tool configuration. If the collection is a remote index, it returns the builtin file search
         tool, otherwise it returns a SearchIndexTool.
@@ -311,7 +311,6 @@ class Collection(BaseTeamModel, VersionsMixin):
                 type="file_search",
                 vector_store_ids=[self.openai_vector_store_id],
                 max_num_results=max_results,
-                query=query,
             )
         else:
             search_config = SearchToolConfig(index_id=self.id, max_results=max_results)

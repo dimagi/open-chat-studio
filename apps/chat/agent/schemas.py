@@ -58,4 +58,4 @@ class AttachMediaSchema(BaseModel):
 
 
 class SearchIndexSchema(BaseModel):
-    pass
+    query: str = Field(description="The search query to use. Keep this query as close to the user's query as possible")
