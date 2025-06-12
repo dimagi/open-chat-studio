@@ -78,6 +78,7 @@ def trigger_bot_message_task(data):
     prompt_text = data["prompt_text"]
     identifier = data["identifier"]
     start_new_session = data["start_new_session"]
+    session_data = data.get("session_data")
 
     experiment = Experiment.objects.get(public_id=experiment_public_id)
     experiment_channel = ExperimentChannel.objects.get(platform=platform, experiment=experiment)
@@ -88,6 +89,12 @@ def trigger_bot_message_task(data):
 
     with current_team(experiment.team):
         channel.ensure_session_exists_for_participant(identifier, new_session=start_new_session)
+        if session_data and channel.experiment_session:
+            session = channel.experiment_session
+            merged_state = {**session.state, **session_data}
+            session.state = merged_state
+            session.save(update_fields=["state"])
+
         channel.experiment_session.ad_hoc_bot_message(
             prompt_text, TraceInfo(name="api trigger"), use_experiment=published_experiment
         )

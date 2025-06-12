@@ -989,6 +989,12 @@ components:
           type: boolean
           default: false
           title: Starts a new session
+        session_data:
+          type: object
+          additionalProperties: {}
+        participant_data:
+          type: object
+          additionalProperties: {}
       required:
       - experiment
       - identifier

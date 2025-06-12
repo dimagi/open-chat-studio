@@ -548,6 +548,10 @@ def trigger_bot_message(request):
 
     if platform == ChannelPlatform.COMMCARE_CONNECT and not participant_data.has_consented():
         return JsonResponse({"detail": "User has not given consent"}, status=status.HTTP_400_BAD_REQUEST)
+    if participant_data and data["participant_data"]:
+        merged_data = {**participant_data.data, **data["participant_data"]}
+        participant_data.data = merged_data
+        participant_data.save(update_fields=["data"])
 
     trigger_bot_message_task.delay(data)
 
