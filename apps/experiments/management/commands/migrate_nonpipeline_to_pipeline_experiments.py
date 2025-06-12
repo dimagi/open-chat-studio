@@ -76,6 +76,7 @@ class Command(BaseCommand):
             experiments_to_convert = Experiment.objects.filter(id=experiment.id).select_related(
                 "team", "assistant", "llm_provider", "llm_provider_model"
             )
+            experiment_count = 1
         else:
             default_experiments = Experiment.objects.filter(query & Q(is_default_version=True))
             default_working_version_ids = default_experiments.exclude(working_version__isnull=True).values_list(
@@ -88,14 +89,15 @@ class Command(BaseCommand):
             experiments_to_convert = Experiment.objects.filter(id__in=combined_ids).select_related(
                 "team", "assistant", "llm_provider", "llm_provider_model"
             )
+            experiment_count = experiments_to_convert.count()
 
         if not experiments_to_convert.exists():
             self.stdout.write(self.style.WARNING("No matching experiments found."))
             return
 
-        self.stdout.write(f"Found {experiments_to_convert.count()} experiments to migrate:")
+        self.stdout.write(f"Found {experiment_count} experiments to migrate:")
 
-        for experiment in experiments_to_convert:
+        for experiment in experiments_to_convert.iterator(20):
             experiment_type = self._get_experiment_type(experiment)
             team_info = f"{experiment.team.name} ({experiment.team.slug})"
             self.stdout.write(f"{experiment.name} (ID: {experiment.id}) - Type: {experiment_type} - Team: {team_info}")
@@ -111,8 +113,7 @@ class Command(BaseCommand):
 
         converted_count = 0
         failed_count = 0
-
-        for experiment in experiments_to_convert:
+        for experiment in experiments_to_convert.iterator(20):
             try:
                 with transaction.atomic():
                     self._convert_experiment(experiment)
