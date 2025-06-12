@@ -197,5 +197,5 @@ class TriggerBotMessageRequest(serializers.Serializer):
     experiment = serializers.UUIDField(label="Experiment ID")
     prompt_text = serializers.CharField(label="Prompt to go to bot")
     start_new_session = serializers.BooleanField(label="Starts a new session", required=False, default=False)
-    session_data = serializers.DictField(label="Session Data", required=False, default=dict)
-    participant_data = serializers.DictField(label="Participant Data", required=False, default=dict)
+    session_data = serializers.DictField(help_text="Update session data", required=False, default=dict)
+    participant_data = serializers.DictField(help_text="Update Participant Data", required=False, default=dict)
