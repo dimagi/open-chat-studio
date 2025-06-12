@@ -57,7 +57,11 @@ class Command(BaseCommand):
 
         if experiment_id:
             query &= Q(id=experiment_id)
-            experiment = Experiment.objects.filter(query).first()
+            experiment = (
+                Experiment.objects.filter(query)
+                .select_related("team", "assistant", "llm_provider", "llm_provider_model")
+                .first()
+            )
             if not experiment:
                 self.stdout.write(
                     self.style.WARNING(f"Experiment {experiment_id} not found or does not need migration.")
@@ -73,9 +77,7 @@ class Command(BaseCommand):
                 )
                 return
 
-            experiments_to_convert = Experiment.objects.filter(id=experiment.id).select_related(
-                "team", "assistant", "llm_provider", "llm_provider_model"
-            )
+            experiments_to_convert = [experiment]
             experiment_count = 1
         else:
             default_experiments = Experiment.objects.filter(query & Q(is_default_version=True))
