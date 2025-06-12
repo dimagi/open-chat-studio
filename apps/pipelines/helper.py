@@ -39,7 +39,9 @@ def duplicate_pipeline_with_new_ids(pipeline_data):
 
 # TODO: function is temporary and can be deleted after the exp -> chatbot transition is complete
 def convert_non_pipeline_experiment_to_pipeline(experiment):
-    if experiment.assistant:
+    if experiment.pipeline:
+        raise ValueError(f"Experiment already has a pipeline attached: {experiment.id}")
+    elif experiment.assistant:
         pipeline = _create_assistant_pipeline(experiment)
     elif experiment.llm_provider:
         pipeline = _create_llm_pipeline(experiment)
