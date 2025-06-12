@@ -1,6 +1,7 @@
 import contextlib
 import logging
 from abc import ABCMeta, abstractmethod
+from collections.abc import Iterator
 
 import openai
 from django.conf import settings
@@ -9,12 +10,24 @@ from langchain_text_splitters import RecursiveCharacterTextSplitter
 
 from apps.assistants.utils import chunk_list
 from apps.documents.exceptions import FileUploadError
+from apps.documents.models import CollectionFile, FileStatus
 from apps.files.models import File, FileChunkEmbedding
 from apps.service_providers.exceptions import UnableToLinkFileException
 
 logger = logging.getLogger("ocs.index_manager")
 
 Vector = list[float]
+
+
+class IndexManager(metaclass=ABCMeta):
+    @abstractmethod
+    def add_files(
+        self,
+        collection_files: Iterator[CollectionFile],
+        chunk_size: int = None,
+        chunk_overlap: int = None,
+    ):
+        pass
 
 
 class RemoteIndexManager(metaclass=ABCMeta):
@@ -115,7 +128,38 @@ class RemoteIndexManager(metaclass=ABCMeta):
     def delete_file_from_index(self, file_id: str):
         """Disassociates the file with the vector store"""
 
-    def ensure_remote_file_exists(self, file: File):
+    def add_files(
+        self,
+        collection_files: Iterator[CollectionFile],
+        chunk_size: int = None,
+        chunk_overlap: int = None,
+    ):
+        uploaded_files: list[File] = []
+        for collection_file in collection_files:
+            file = collection_file.file
+            try:
+                self._ensure_remote_file_exists(file)
+                uploaded_files.append(file)
+            except FileUploadError:
+                collection_file.status = FileStatus.FAILED
+                collection_file.save(update_fields=["status"])
+
+        try:
+            self.link_files_to_remote_index(
+                file_ids=[file.external_id for file in uploaded_files],
+                chunk_size=chunk_size,
+                chunk_overlap=chunk_overlap,
+            )
+            CollectionFile.objects.filter(file_id__in=[file.id for file in uploaded_files]).update(
+                status=FileStatus.COMPLETED
+            )
+        except UnableToLinkFileException:
+            logger.exception("Failed to link files to remote index")
+            CollectionFile.objects.filter(file_id__in=[file.id for file in uploaded_files]).update(
+                status=FileStatus.FAILED
+            )
+
+    def _ensure_remote_file_exists(self, file: File):
         try:
             if not (file.external_id and self.file_exists_at_remote(file)):
                 file.external_id = None
@@ -129,14 +173,6 @@ class RemoteIndexManager(metaclass=ABCMeta):
                 },
             )
             raise FileUploadError() from None
-
-    def delete_vector_store(self, fail_silently: bool = False):
-        try:
-            self.delete_remote_index()
-        except Exception as e:
-            logger.warning("Vector store %s not found", self.index_id)
-            if not fail_silently:
-                raise e
 
 
 class OpenAIRemoteIndexManager(RemoteIndexManager):
@@ -241,6 +277,34 @@ class LocalIndexManager(metaclass=ABCMeta):
         Returns:
             Vector: A list of floats representing the embedding vector.
         """
+
+    def add_files(
+        self,
+        collection_files: Iterator[CollectionFile],
+        chunk_size: int = None,
+        chunk_overlap: int = None,
+    ):
+        for collection_file in collection_files:
+            file = collection_file.file
+            try:
+                text_chunks = self.chunk_file(file, chunk_size=chunk_size, chunk_overlap=chunk_overlap)
+                for idx, chunk in enumerate(text_chunks):
+                    embedding_vector = self.get_embedding_vector(chunk)
+                    FileChunkEmbedding.objects.create(
+                        team_id=self.team_id,
+                        file=file,
+                        collection=self,
+                        chunk_number=idx,
+                        text=chunk,
+                        embedding=embedding_vector,
+                        # TODO: Get the page number if possible. Also, what file types are supported?
+                        page_number=0,
+                    )
+                collection_file.status = FileStatus.COMPLETED
+            except Exception as e:
+                logger.exception("Failed to index file", extra={"file_id": file.id, "error": str(e)})
+                collection_file.status = FileStatus.FAILED
+            collection_file.save(update_fields=["status"])
 
     def chunk_file(self, file: File, chunk_size: int, chunk_overlap: int) -> list[str]:
         """

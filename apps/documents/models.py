@@ -1,4 +1,3 @@
-import logging
 from collections.abc import Iterator
 
 import pydantic
@@ -10,10 +9,8 @@ from django_pydantic_field import SchemaField
 from field_audit import audit_fields
 from field_audit.models import AuditingManager
 
-from apps.documents.exceptions import FileUploadError
 from apps.experiments.versioning import VersionDetails, VersionField, VersionsMixin, VersionsObjectManagerMixin
 from apps.files.models import File, FileChunkEmbedding
-from apps.service_providers.exceptions import UnableToLinkFileException
 from apps.service_providers.models import EmbeddingProviderModel
 from apps.teams.models import BaseTeamModel
 from apps.utils.conversions import bytes_to_megabytes
@@ -22,8 +19,6 @@ from apps.utils.deletion import (
     get_related_pipeline_experiments_queryset,
     get_related_pipelines_queryset,
 )
-
-indexing_logger = logging.getLogger("ocs.collections.indexing")
 
 
 class ChunkingStrategy(pydantic.BaseModel):
@@ -290,69 +285,11 @@ class Collection(BaseTeamModel, VersionsMixin):
         else:
             return self.llm_provider.get_local_index_manager(embedding_model_name=self.embedding_provider_model.name)
 
-    def add_files_to_index(self, *args, **kwargs):
-        if self.is_remote_index:
-            self._handle_remote_indexing(*args, **kwargs)
-        else:
-            self._handle_local_indexing(*args, **kwargs)
-
-    def _handle_remote_indexing(
+    def add_files_to_index(
         self,
         collection_files: Iterator[CollectionFile],
         chunk_size: int = None,
         chunk_overlap: int = None,
     ):
         index_manager = self.get_index_manager()
-        uploaded_files: list[File] = []
-        for collection_file in collection_files:
-            file = collection_file.file
-            try:
-                index_manager.ensure_remote_file_exists(file)
-                uploaded_files.append(file)
-            except FileUploadError:
-                collection_file.status = FileStatus.FAILED
-                collection_file.save(update_fields=["status"])
-
-        try:
-            index_manager.link_files_to_remote_index(
-                file_ids=[file.external_id for file in uploaded_files],
-                chunk_size=chunk_size,
-                chunk_overlap=chunk_overlap,
-            )
-            CollectionFile.objects.filter(file_id__in=[file.id for file in uploaded_files]).update(
-                status=FileStatus.COMPLETED
-            )
-        except UnableToLinkFileException:
-            indexing_logger.exception("Failed to link files to remote index")
-            CollectionFile.objects.filter(file_id__in=[file.id for file in uploaded_files]).update(
-                status=FileStatus.FAILED
-            )
-
-    def _handle_local_indexing(
-        self,
-        collection_files: Iterator[CollectionFile],
-        chunk_size: int = None,
-        chunk_overlap: int = None,
-    ):
-        index_manager = self.get_index_manager()
-        for collection_file in collection_files:
-            file = collection_file.file
-            try:
-                text_chunks = index_manager.chunk_file(file, chunk_size=chunk_size, chunk_overlap=chunk_overlap)
-                for idx, chunk in enumerate(text_chunks):
-                    embedding_vector = index_manager.get_embedding_vector(chunk)
-                    FileChunkEmbedding.objects.create(
-                        team_id=self.team_id,
-                        file=file,
-                        collection=self,
-                        chunk_number=idx,
-                        text=chunk,
-                        embedding=embedding_vector,
-                        # TODO: Get the page number if possible. Also, what file types are supported?
-                        page_number=0,
-                    )
-                collection_file.status = FileStatus.COMPLETED
-            except Exception as e:
-                indexing_logger.exception("Failed to index file", extra={"file_id": file.id, "error": str(e)})
-                collection_file.status = FileStatus.FAILED
-            collection_file.save(update_fields=["status"])
+        index_manager.add_files(collection_files, chunk_size=chunk_size, chunk_overlap=chunk_overlap)

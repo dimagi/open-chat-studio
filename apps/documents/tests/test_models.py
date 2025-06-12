@@ -223,7 +223,7 @@ class TestCollection:
         collection_file.save()
 
         # Mock successful upload and linking
-        index_manager_mock.ensure_remote_file_exists.side_effect = None
+        index_manager_mock._ensure_remote_file_exists.side_effect = None
         index_manager_mock.link_files_to_remote_index.side_effect = None
 
         iterator = CollectionFile.objects.filter(id=collection_file.id).iterator(1)
@@ -240,14 +240,14 @@ class TestCollection:
         collection_file.save()
 
         # Mock ensure_remote_file_exists to raise FileUploadError
-        index_manager_mock.ensure_remote_file_exists.side_effect = FileUploadError("Upload failed")
+        index_manager_mock._ensure_remote_file_exists.side_effect = FileUploadError("Upload failed")
 
         iterator = CollectionFile.objects.filter(id=collection_file.id).iterator(1)
         remote_collection_index.add_files_to_index(iterator)
 
         collection_file.refresh_from_db()
         assert collection_file.status == FileStatus.FAILED
-        index_manager_mock.ensure_remote_file_exists.assert_called_once()
+        index_manager_mock._ensure_remote_file_exists.assert_called_once()
         # link_files_to_remote_index should be called with empty list when all uploads fail
         index_manager_mock.link_files_to_remote_index.assert_called_once_with(
             file_ids=[], chunk_size=None, chunk_overlap=None
@@ -261,7 +261,7 @@ class TestCollection:
         collection_file.save()
 
         # Mock successful upload but failed linking
-        index_manager_mock.ensure_remote_file_exists.side_effect = None
+        index_manager_mock._ensure_remote_file_exists.side_effect = None
         index_manager_mock.link_files_to_remote_index.side_effect = UnableToLinkFileException("Link failed")
 
         iterator = CollectionFile.objects.filter(id=collection_file.id).iterator(1)
