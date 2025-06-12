@@ -60,7 +60,7 @@ def test_collection_files_grouped_by_chunking_strategy(add_files_to_index_mock, 
 
 @pytest.mark.django_db()
 @patch("apps.documents.models.Collection.add_files_to_index")
-def test_migrate_vector_stores_does_cleanup(add_files_to_index_mock, collection, index_manager_mock):
+def test_migrate_vector_stores_does_cleanup(add_files_to_index_mock, collection, remote_index_manager_mock):
     """Test that the migration task cleans up old vector stores"""
     previous_llm_provider = LlmProviderFactory(name="old-provider")
 
@@ -80,5 +80,5 @@ def test_migrate_vector_stores_does_cleanup(add_files_to_index_mock, collection,
     assert collection_file.id == col_file.id
     add_files_to_index_mock.assert_any_call(collection_files=ANY, chunk_size=800, chunk_overlap=400)
 
-    index_manager_mock.delete_vector_store.assert_called()
-    index_manager_mock.client.files.delete.assert_called_once_with(file.external_id)
+    remote_index_manager_mock.delete_vector_store.assert_called()
+    remote_index_manager_mock.client.files.delete.assert_called_once_with(file.external_id)

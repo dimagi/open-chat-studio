@@ -15,7 +15,6 @@ from apps.pipelines.tests.utils import (
     render_template_node,
     start_node,
 )
-from apps.service_providers.llm_service.index_managers import RemoteIndexManager
 from apps.utils.factories.assistants import OpenAiAssistantFactory
 from apps.utils.factories.documents import CollectionFactory
 from apps.utils.factories.events import EventActionFactory, ExperimentFactory, StaticTriggerFactory
@@ -31,14 +30,6 @@ from apps.utils.langchain import (
     build_fake_llm_service,
 )
 from apps.utils.pytest import django_db_with_data
-
-
-@pytest.fixture()
-def index_manager_mock():
-    index_manager = Mock(spec=RemoteIndexManager)
-    with patch("apps.service_providers.models.LlmProvider.get_remote_index_manager") as get_index_manager:
-        get_index_manager.return_value = index_manager
-        yield index_manager
 
 
 @pytest.mark.django_db()
@@ -167,7 +158,7 @@ class TestArchivingNodes:
         archive_related_params.assert_called()
 
     @patch("apps.assistants.sync.push_assistant_to_openai", Mock())
-    def test_archive_related_objects(self, index_manager_mock):
+    def test_archive_related_objects(self, remote_index_manager_mock):
         # Setup related objects
         assistant = OpenAiAssistantFactory()
         collection = CollectionFactory()
@@ -176,7 +167,7 @@ class TestArchivingNodes:
         )
 
         # Setup mocks
-        index_manager_mock.create_remote_index.return_value = "v-456"
+        remote_index_manager_mock.create_remote_index.return_value = "v-456"
 
         # Build the pipeline
         pipeline = PipelineFactory()

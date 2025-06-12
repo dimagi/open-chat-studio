@@ -10,10 +10,12 @@ from django_pydantic_field import SchemaField
 from field_audit import audit_fields
 from field_audit.models import AuditingManager
 
-from apps.documents.exceptions import FileUploadError
+from apps.chat.agent.tools import SearchIndexTool, SearchToolConfig
+from apps.documents.exceptions import FileUploadError, IndexConfigurationException
 from apps.experiments.versioning import VersionDetails, VersionField, VersionsMixin, VersionsObjectManagerMixin
 from apps.files.models import File, FileChunkEmbedding
 from apps.service_providers.exceptions import UnableToLinkFileException
+from apps.service_providers.llm_service.main import OpenAIBuiltinTool
 from apps.service_providers.models import EmbeddingProviderModel
 from apps.teams.models import BaseTeamModel
 from apps.utils.conversions import bytes_to_megabytes
@@ -276,15 +278,6 @@ class Collection(BaseTeamModel, VersionsMixin):
             status__in=[FileStatus.PENDING, FileStatus.IN_PROGRESS],
         ).exists()
 
-    def _remove_remote_index(self, remote_files_to_remove: list[File]):
-        """Remove the index backend"""
-        manager = self.get_index_manager()
-        manager.delete_vector_store(fail_silently=True)
-        manager.delete_files(remote_files_to_remove)
-
-        self.openai_vector_store_id = ""
-        self.save(update_fields=["openai_vector_store_id"])
-
     def get_index_manager(self):
         if self.is_index and self.is_remote_index:
             return self.llm_provider.get_remote_index_manager(self.openai_vector_store_id)
@@ -296,6 +289,41 @@ class Collection(BaseTeamModel, VersionsMixin):
             self._handle_remote_indexing(*args, **kwargs)
         else:
             self._handle_local_indexing(*args, **kwargs)
+
+    def get_query_vector(self, query: str) -> list[float]:
+        """Get the embedding vector for a query using the embedding provider model"""
+        if not self.embedding_provider_model:
+            raise IndexConfigurationException("Embedding provider model is not set for this collection")
+
+        index_manager = self.get_index_manager()
+        return index_manager.get_embedding_vector(query)
+
+    def get_search_tool(self, max_results: int) -> OpenAIBuiltinTool | SearchIndexTool:
+        """
+        Returns either the tool configuration. If the collection is a remote index, it returns the builtin file search
+        tool, otherwise it returns a SearchIndexTool.
+        """
+        if not self.is_index:
+            raise IndexConfigurationException("Non indexed collections do not have search tools")
+
+        if self.is_remote_index:
+            return OpenAIBuiltinTool(
+                type="file_search",
+                vector_store_ids=[self.openai_vector_store_id],
+                max_num_results=max_results,
+            )
+        else:
+            search_config = SearchToolConfig(index_id=self.id, max_results=max_results)
+            return SearchIndexTool(search_config=search_config)
+
+    def _remove_remote_index(self, remote_files_to_remove: list[File]):
+        """Remove the index backend"""
+        manager = self.get_index_manager()
+        manager.delete_vector_store(fail_silently=True)
+        manager.delete_files(remote_files_to_remove)
+
+        self.openai_vector_store_id = ""
+        self.save(update_fields=["openai_vector_store_id"])
 
     def _handle_remote_indexing(
         self,
