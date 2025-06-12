@@ -331,7 +331,7 @@ class LLMResponseWithPrompt(LLMResponse, HistoryMixin, OutputMessageTagMixin):
     )
     max_results: OptionalInt = Field(
         default=10,
-        ge=0,
+        ge=1,
         le=100,
         description="The maximum number of results to retrieve from the index",
         json_schema_extra=UiSchema(widget=Widgets.range),
