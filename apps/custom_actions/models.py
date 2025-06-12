@@ -170,8 +170,7 @@ class CustomActionOperation(BaseModel, VersionsMixin):
         new_instance.save()
         return new_instance
 
-    @property
-    def version_details(self) -> VersionDetails:
+    def _get_version_details(self) -> VersionDetails:
         return VersionDetails(
             instance=self,
             fields=[

@@ -676,9 +676,6 @@ class TestExperimentModel:
         working_child = ExperimentFactory(team=team)
         ExperimentRoute(team=team, parent=experiment, child=working_child, keyword="working")
 
-        # Setup Files
-        experiment.files.set(FileFactory.create_batch(3))
-
         # Setup Static Trigger
         StaticTriggerFactory(experiment=experiment)
 
@@ -753,7 +750,6 @@ class TestExperimentModel:
         self._assert_safety_layers_are_duplicated(original_experiment, new_version)
         self._assert_source_material_is_duplicated(original_experiment, new_version)
         self._assert_routes_are_duplicated(original_experiment, new_version)
-        self._assert_files_are_duplicated(original_experiment, new_version)
         self._assert_triggers_are_duplicated("static", original_experiment, new_version)
         self._assert_triggers_are_duplicated("timeout", original_experiment, new_version)
         self._assert_attribute_duplicated("source_material", original_experiment, new_version)
@@ -846,11 +842,6 @@ class TestExperimentModel:
             assert route.parent.working_version == original_experiment
             assert route.working_version.parent == original_experiment
             assert route.child.is_a_version is True
-
-    def _assert_files_are_duplicated(self, original_experiment, new_version):
-        new_version_file_ids = set(new_version.files.all().values_list("id", flat=True))
-        original_experiment = set(original_experiment.files.all().values_list("id", flat=True))
-        assert new_version_file_ids - original_experiment == set()
 
     def _assert_triggers_are_duplicated(self, trigger_type, original_experiment, new_version):
         assert trigger_type in ["static", "timeout"], "Unknown trigger type"

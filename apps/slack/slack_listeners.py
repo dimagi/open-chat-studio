@@ -70,7 +70,6 @@ def _respond_to_message(event, channel_id, thread_ts, experiment_channel, experi
             participant_identifier=slack_user,
             session_external_id=external_id,
         )
-
     # strip out the mention
     message_text = re.sub(rf"<@?{context.bot_user_id}>", "", event["text"])
     message = SlackMessage(

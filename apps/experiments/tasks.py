@@ -25,7 +25,7 @@ logger = logging.getLogger("ocs.experiments")
 @shared_task(bind=True, base=TaskbadgerTask)
 def async_export_chat(self, experiment_id: int, query_params: dict, time_zone) -> dict:
     experiment = Experiment.objects.get(id=experiment_id)
-    filtered_sessions = get_filtered_sessions(self.request, experiment, query_params, time_zone)
+    filtered_sessions = get_filtered_sessions(experiment, query_params, time_zone)
     csv_in_memory = filtered_export_to_csv(experiment, filtered_sessions)
     filename = f"{experiment.name} Chat Export {timezone.now().strftime('%Y-%m-%d_%H-%M-%S')}.csv"
     file_obj = File.objects.create(

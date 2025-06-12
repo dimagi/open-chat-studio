@@ -744,6 +744,19 @@ wheels = [
 ]
 
 [[package]]
+name = "django-debug-toolbar"
+version = "5.2.0"
+source = { registry = "https://pypi.org/simple" }
+dependencies = [
+    { name = "django" },
+    { name = "sqlparse" },
+]
+sdist = { url = "https://files.pythonhosted.org/packages/2a/9f/97ba2648f66fa208fc7f19d6895586d08bc5f0ab930a1f41032e60f31a41/django_debug_toolbar-5.2.0.tar.gz", hash = "sha256:9e7f0145e1a1b7d78fcc3b53798686170a5b472d9cf085d88121ff823e900821", size = 297901, upload-time = "2025-04-29T05:23:57.533Z" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/fa/c2/ed3cb815002664349e9e50799b8c00ef15941f4cad797247cadbdeebab02/django_debug_toolbar-5.2.0-py3-none-any.whl", hash = "sha256:15627f4c2836a9099d795e271e38e8cf5204ccd79d5dbcd748f8a6c284dcd195", size = 262834, upload-time = "2025-04-29T05:23:55.472Z" },
+]
+
+[[package]]
 name = "django-environ"
 version = "0.11.2"
 source = { registry = "https://pypi.org/simple" }
@@ -2228,6 +2241,7 @@ dependencies = [
 
 [package.dev-dependencies]
 dev = [
+    { name = "django-debug-toolbar" },
     { name = "factory-boy" },
     { name = "freezegun" },
     { name = "invoke" },
@@ -2317,7 +2331,7 @@ requires-dist = [
     { name = "tenacity" },
     { name = "tiktoken" },
     { name = "transformers", specifier = ">=4.48.0" },
-    { name = "turn-python", specifier = ">=0.2.0" },
+    { name = "turn-python", specifier = ">=1.0.0" },
     { name = "twilio" },
     { name = "urllib3", specifier = ">=2.3.0" },
     { name = "whitenoise", extras = ["brotli"] },
@@ -2325,6 +2339,7 @@ requires-dist = [
 
 [package.metadata.requires-dev]
 dev = [
+    { name = "django-debug-toolbar", specifier = ">=5.2.0" },
     { name = "factory-boy" },
     { name = "freezegun" },
     { name = "invoke" },
@@ -3651,11 +3666,11 @@ wheels = [
 
 [[package]]
 name = "turn-python"
-version = "0.2.0"
+version = "1.0.0"
 source = { registry = "https://pypi.org/simple" }
-sdist = { url = "https://files.pythonhosted.org/packages/13/87/dc97dd131efa46ff2c4d5af2cf1a0b0254a6ad87e8b59882c9173e8fc327/turn-python-0.2.0.tar.gz", hash = "sha256:b6a7f9509279bd76bf8690bcb0a699340434105cfa5be471d4797b07e69034f6", size = 5303, upload-time = "2024-02-12T14:57:41.85Z" }
+sdist = { url = "https://files.pythonhosted.org/packages/4e/b3/e0d3b3f5d692f7faaa3bde4467e2adb5a0eb9a9d6af9d5efeea8991039be/turn_python-1.0.0.tar.gz", hash = "sha256:4c925ec295b7ef1f48340747ee8f4eaebb5da7b6e9268a034491641f5eec3f7b", size = 5960, upload-time = "2025-06-11T07:15:02.78Z" }
 wheels = [
-    { url = "https://files.pythonhosted.org/packages/fa/dc/fa01ab410317a5c1d07115f4004060a1098137f40af050c60674ff91c701/turn_python-0.2.0-py3-none-any.whl", hash = "sha256:e2a7844fabe502c7e59b73b43afad813ced23f31ab39a0f0e918f936119f2b83", size = 5112, upload-time = "2024-02-12T14:57:39.886Z" },
+    { url = "https://files.pythonhosted.org/packages/bd/e2/0aaa50ccf60b7d30738b473309665bfac611089c6f58873e499179a0aec9/turn_python-1.0.0-py3-none-any.whl", hash = "sha256:9556523b6711deb8d8aa0bc5964a935056b5b2659cd1a0a0fc90f13b94607a25", size = 5391, upload-time = "2025-06-11T07:15:01.639Z" },
 ]
 
 [[package]]

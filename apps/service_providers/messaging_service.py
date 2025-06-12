@@ -154,9 +154,9 @@ class TwilioService(MessagingService):
 
         return number in self._get_account_numbers()
 
-    def send_file_to_user(self, from_: str, to: str, platform: ChannelPlatform, file_name: str, download_link: str):
+    def send_file_to_user(self, from_: str, to: str, platform: ChannelPlatform, file: File, download_link: str):
         from_, to = self._parse_addressing_params(platform, from_=from_, to=to)
-        self.client.messages.create(from_=from_, to=to, body=file_name, media_url=download_link)
+        self.client.messages.create(from_=from_, to=to, body=file.name, media_url=download_link)
 
     def can_send_file(self, file: File) -> bool:
         return file.content_type in supported_mime_types.TWILIO and file.size_mb <= self.max_file_size_mb
@@ -167,6 +167,7 @@ class TurnIOService(MessagingService):
     supported_platforms: ClassVar[list] = [ChannelPlatform.WHATSAPP]
     voice_replies_supported: ClassVar[bool] = True
     supported_message_types = [MESSAGE_TYPES.TEXT, MESSAGE_TYPES.VOICE]
+    supports_multimedia = True
 
     auth_token: str
 
@@ -182,8 +183,12 @@ class TurnIOService(MessagingService):
     ):
         # OGG must use the opus codec: https://whatsapp.turn.io/docs/api/media#uploading-media
         voice_audio_bytes = synthetic_voice.get_audio_bytes(format="ogg", codec="libopus")
-        media_id = self.client.media.upload_media(voice_audio_bytes, content_type="audio/ogg")
-        self.client.messages.send_audio(whatsapp_id=to, media_id=media_id)
+        audio_file = BytesIO(voice_audio_bytes)
+        audio_file.name = "voice_message.ogg"
+
+        self.client.messages.send_media(
+            whatsapp_id=to, file=audio_file, content_type="audio/ogg", media_type="audio", caption=None
+        )
 
     def get_message_audio(self, message: TurnWhatsappMessage) -> BytesIO:
         response = self.client.media.get_media(message.media_id)
@@ -191,8 +196,43 @@ class TurnIOService(MessagingService):
         return audio.convert_audio(ogg_audio, target_format="wav", source_format="ogg")
 
     def can_send_file(self, file: File) -> bool:
-        # When support for Turn.IO is added, this should be updated
-        return False
+        mime = file.content_type
+        size = file.content_size or 0  # in bytes
+
+        if mime is None:
+            return False
+
+        if mime.startswith("image/"):
+            return size <= 5 * 1024 * 1024  # 5 MB
+        elif mime.startswith(("video/", "audio/")):
+            return size <= 16 * 1024 * 1024  # 16 MB
+        elif mime.startswith("application/"):
+            return size <= 100 * 1024 * 1024  # 100 MB
+        else:
+            return False
+
+    def send_file_to_user(self, from_: str, to: str, platform: ChannelPlatform, file: File, download_link: str):
+        mime_type = file.content_type
+
+        if mime_type.startswith("image/"):
+            media_type = "image"
+        elif mime_type.startswith("video/"):
+            media_type = "video"
+        elif mime_type.startswith("audio/"):
+            media_type = "audio"
+        else:
+            media_type = "document"
+
+        with file.file.open("rb") as file_obj:
+            message_id = self.client.messages.send_media(
+                whatsapp_id=to,
+                file=file_obj,
+                content_type=mime_type,
+                media_type=media_type,
+                caption=None,
+            )
+
+        return message_id
 
 
 class SureAdhereService(MessagingService):
