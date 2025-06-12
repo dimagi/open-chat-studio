@@ -115,48 +115,43 @@ class Pipeline(BaseTeamModel, VersionsMixin):
         return f"v{self.version_number}"
 
     @classmethod
-    def _create_pipeline_with_nodes(cls, team, name, middle_nodes_config=None):
+    def _create_pipeline_with_nodes(cls, team, name, middle_node=None):
         """
         Create a pipeline with start -> middle node -> end structure.
         """
         from apps.pipelines.nodes.nodes import EndNode, StartNode
 
-        start_node_config = {
-            "id": str(uuid4()),
-            "type": "startNode",
-            "position": {"x": 100, "y": 200},
-            "data": {"type": StartNode.__name__, "params": {"name": "start"}},
-        }
-        end_node_config = {
-            "id": str(uuid4()),
-            "type": "endNode",
-            "position": {"x": 800, "y": 200},
-            "data": {"type": EndNode.__name__, "params": {"name": "end"}},
-        }
-        all_nodes_config = [start_node_config]
-        if middle_nodes_config:
-            all_nodes_config.append(middle_nodes_config)
-        all_nodes_config.append(end_node_config)
-
-        flow_nodes = []
-        for node_config in all_nodes_config:
-            flow_node = FlowNode(
-                id=node_config["id"],
-                type=node_config["type"],
-                position=node_config["position"],
-                data=FlowNodeData(
-                    id=node_config["id"],
-                    type=node_config["data"]["type"],
-                    label=node_config["data"].get("label", ""),
-                    params=node_config["data"]["params"],
-                ),
-            )
-            flow_nodes.append(flow_node)
+        start_node = FlowNode(
+            id=str(uuid4()),
+            type="startNode",
+            position={"x": 100, "y": 200},
+            data=FlowNodeData(
+                id=str(uuid4()),
+                type=StartNode.__name__,
+                label="",
+                params={"name": "start"},
+            ),
+        )
+        end_node = FlowNode(
+            id=str(uuid4()),
+            type="endNode",
+            position={"x": 800, "y": 200},
+            data=FlowNodeData(
+                id=str(uuid4()),
+                type=EndNode.__name__,
+                label="",
+                params={"name": "end"},
+            ),
+        )
+        all_flow_nodes = [start_node]
+        if middle_node:
+            all_flow_nodes.append(middle_node)
+        all_flow_nodes.append(end_node)
         edges = []
-        if middle_nodes_config:
-            for i in range(len(flow_nodes) - 1):
-                current_node = flow_nodes[i]
-                next_node = flow_nodes[i + 1]
+        if middle_node:
+            for i in range(len(all_flow_nodes) - 1):
+                current_node = all_flow_nodes[i]
+                next_node = all_flow_nodes[i + 1]
                 edge = {
                     "id": f"edge-{current_node.id}-{next_node.id}",
                     "source": current_node.id,
@@ -165,9 +160,8 @@ class Pipeline(BaseTeamModel, VersionsMixin):
                     "targetHandle": "input",
                 }
                 edges.append(edge)
-
         pipeline = cls.objects.create(
-            team=team, name=name, data={"nodes": [node.model_dump() for node in flow_nodes], "edges": edges}
+            team=team, name=name, data={"nodes": [node.model_dump() for node in all_flow_nodes], "edges": edges}
         )
         pipeline.update_nodes_from_data()
         return pipeline
@@ -181,16 +175,18 @@ class Pipeline(BaseTeamModel, VersionsMixin):
         default_name = "New Pipeline" if name is None else name
         existing_pipeline_count = cls.objects.filter(team=team, name__startswith=default_name).count()
 
+        node = None
         if llm_provider_id and llm_provider_model:
             llm_id = f"LLMResponseWithPrompt-{uuid4().hex[:5]}"
-            llm_node_config = {
-                "id": llm_id,
-                "type": "pipelineNode",
-                "position": {"x": 300, "y": 0},
-                "data": {
-                    "type": "LLMResponseWithPrompt",
-                    "label": "LLM",
-                    "params": {
+            node = FlowNode(
+                id=llm_id,
+                type="pipelineNode",
+                position={"x": 300, "y": 0},
+                data=FlowNodeData(
+                    id=llm_id,
+                    type="LLMResponseWithPrompt",
+                    label="LLM",
+                    params={
                         "name": llm_id,
                         "llm_provider_id": llm_provider_id,
                         "llm_provider_model_id": llm_provider_model.id,
@@ -206,15 +202,11 @@ class Pipeline(BaseTeamModel, VersionsMixin):
                         "custom_actions": None,
                         "keywords": [""],
                     },
-                },
-            }
+                ),
+            )
 
         final_name = default_name if name else f"New Pipeline {existing_pipeline_count + 1}"
-        return cls._create_pipeline_with_nodes(
-            team=team,
-            name=final_name,
-            middle_nodes_config=llm_node_config if llm_provider_id and llm_provider_model else None,
-        )
+        return cls._create_pipeline_with_nodes(team=team, name=final_name, middle_node=node)
 
     def get_absolute_url(self):
         return reverse("pipelines:edit", args=[self.team.slug, self.id])

@@ -1,9 +1,14 @@
+from uuid import uuid4
+
 from django.core.management.base import BaseCommand
 from django.db import transaction
 from django.db.models import Q
 
 from apps.experiments.helper import convert_non_pipeline_experiment_to_pipeline
 from apps.experiments.models import Experiment
+from apps.pipelines.flow import FlowNode, FlowNodeData
+from apps.pipelines.models import Pipeline
+from apps.pipelines.nodes.nodes import AssistantNode, LLMResponseWithPrompt
 from apps.teams.models import Flag
 
 
@@ -49,9 +54,6 @@ class Command(BaseCommand):
         if team_slug:
             query &= Q(team__slug=team_slug)
 
-        if experiment_id:
-            query &= Q(id=experiment_id)
-
         if chatbots_flag_only:
             chatbots_flag_team_ids = self._get_chatbots_flag_team_ids()
             if not chatbots_flag_team_ids:
@@ -60,19 +62,39 @@ class Command(BaseCommand):
             query &= Q(team_id__in=chatbots_flag_team_ids)
             self.stdout.write(f"Filtering to teams with 'flag_chatbots' FF ({len(chatbots_flag_team_ids)} teams)")
 
-        default_experiments = Experiment.objects.filter(query & Q(is_default_version=True))
-        default_working_version_ids = default_experiments.exclude(working_version__isnull=True).values_list(
-            "working_version_id", flat=True
-        )
+        if experiment_id:
+            query &= Q(id=experiment_id)
+            experiment = Experiment.objects.filter(query).first()
+            if not experiment:
+                self.stdout.write(
+                    self.style.WARNING(f"Experiment {experiment_id} not found or does not need migration.")
+                )
+                return
 
-        working_experiments = Experiment.objects.filter(query & Q(working_version__isnull=True)).exclude(
-            id__in=default_working_version_ids
-        )
-        combined_ids = list(default_experiments.union(working_experiments).values_list("id", flat=True))
+            if not (experiment.is_default_version or experiment.is_working_version):
+                self.stdout.write(
+                    self.style.WARNING(
+                        f"Experiment {experiment_id} is not a published or unreleased version so does not\
+                        require migration."
+                    )
+                )
+                return
 
-        experiments_to_convert = Experiment.objects.filter(id__in=combined_ids).select_related(
-            "team", "assistant", "llm_provider", "llm_provider_model"
-        )
+            experiments_to_convert = Experiment.objects.filter(id=experiment.id).select_related(
+                "team", "assistant", "llm_provider", "llm_provider_model"
+            )
+        else:
+            default_experiments = Experiment.objects.filter(query & Q(is_default_version=True))
+            default_working_version_ids = default_experiments.exclude(working_version__isnull=True).values_list(
+                "working_version_id", flat=True
+            )
+            working_experiments = Experiment.objects.filter(query & Q(working_version__isnull=True)).exclude(
+                id__in=default_working_version_ids
+            )
+            combined_ids = list(default_experiments.union(working_experiments).values_list("id", flat=True))
+            experiments_to_convert = Experiment.objects.filter(id__in=combined_ids).select_related(
+                "team", "assistant", "llm_provider", "llm_provider_model"
+            )
 
         if not experiments_to_convert.exists():
             self.stdout.write(self.style.WARNING("No matching experiments found."))
@@ -124,3 +146,63 @@ class Command(BaseCommand):
     def _get_chatbots_flag_team_ids(self):
         chatbots_flag = Flag.objects.get(name="flag_chatbots")
         return list(chatbots_flag.teams.values_list("id", flat=True))
+
+    def _create_pipeline_with_node(self, experiment, node_type, node_label, node_params):
+        """Create a pipeline with start -> custom_node -> end structure."""
+        pipeline_name = f"{experiment.name} Pipeline"
+
+        node = FlowNode(
+            id=str(uuid4()),
+            type="pipelineNode",
+            position={"x": 400, "y": 200},
+            data=FlowNodeData(
+                id=str(uuid4()),
+                type=node_type,
+                label=node_label,
+                params=node_params,
+            ),
+        )
+
+        return Pipeline._create_pipeline_with_nodes(team=experiment.team, name=pipeline_name, middle_node=node)
+
+    def _create_llm_pipeline(self, experiment):
+        """Create a start -> LLMResponseWithPrompt -> end nodes pipeline for an LLM experiment."""
+        llm_params = {
+            "name": "llm",
+            "llm_provider_id": experiment.llm_provider.id,
+            "llm_provider_model_id": experiment.llm_provider_model.id,
+            "llm_temperature": experiment.temperature,
+            "history_type": "global",
+            "history_name": None,
+            "history_mode": "summarize",
+            "user_max_token_limit": experiment.llm_provider_model.max_token_limit,
+            "max_history_length": 10,
+            "source_material_id": experiment.source_material.id if experiment.source_material else None,
+            "prompt": experiment.prompt_text or "",
+            "tools": list(experiment.tools) if experiment.tools else [],
+            "custom_actions": [
+                op.get_model_id(False)
+                for op in experiment.custom_action_operations.select_related("custom_action").all()
+            ],
+            "built_in_tools": [],
+            "tool_config": {},
+        }
+        return self._create_pipeline_with_node(
+            experiment=experiment, node_type=LLMResponseWithPrompt.__name__, node_label="LLM", node_params=llm_params
+        )
+
+    def _create_assistant_pipeline(self, experiment):
+        """Create a start -> AssistantNode -> end nodes pipeline for an assistant experiment."""
+        assistant_params = {
+            "name": "assistant",
+            "assistant_id": str(experiment.assistant.id),
+            "citations_enabled": experiment.citations_enabled,
+            "input_formatter": experiment.input_formatter or "",
+        }
+
+        return self._create_pipeline_with_node(
+            experiment=experiment,
+            node_type=AssistantNode.__name__,
+            node_label="OpenAI Assistant",
+            node_params=assistant_params,
+        )
