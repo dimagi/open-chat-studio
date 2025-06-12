@@ -976,7 +976,7 @@ class WhatsappChannel(ChannelBase):
             from_=from_number,
             to=to_number,
             platform=ChannelPlatform.WHATSAPP,
-            file_name=file.name,
+            file=file,
             download_link=file.download_link(experiment_session_id=self.experiment_session.id),
         )
 
