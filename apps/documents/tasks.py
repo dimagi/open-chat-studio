@@ -77,7 +77,7 @@ def index_collection_files(collection_files_queryset: QuerySet[CollectionFile]) 
 def _cleanup_old_vector_store(llm_provider_id: int, vector_store_id: str, file_ids: list[str]):
     llm_provider = LlmProvider.objects.get(id=llm_provider_id)
     old_manager = llm_provider.get_remote_index_manager(vector_store_id)
-    old_manager.delete_vector_store()
+    old_manager.delete_remote_index()
 
     for file_id in file_ids:
         with contextlib.suppress(openai.NotFoundError):

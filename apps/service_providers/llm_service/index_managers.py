@@ -68,13 +68,9 @@ class RemoteIndexManager(metaclass=ABCMeta):
         ...
 
     @abstractmethod
-    def delete_remote_index(self, fail_silently: bool = False):
+    def delete_remote_index(self):
         """
         Delete the vector store from the remote index service.
-
-        Args:
-            fail_silently: If True, suppress exceptions when the vector store doesn't exist
-                          or cannot be deleted. If False, raise exceptions on failures.
         """
         ...
 
@@ -198,7 +194,8 @@ class OpenAIRemoteIndexManager(RemoteIndexManager):
         return self.index_id
 
     def delete_remote_index(self):
-        self.client.vector_stores.delete(vector_store_id=self.index_id)
+        with contextlib.suppress(openai.NotFoundError):
+            self.client.vector_stores.delete(vector_store_id=self.index_id)
 
     def delete_file_from_index(self, file_id: str):
         """Disassociates the file with the vector store"""

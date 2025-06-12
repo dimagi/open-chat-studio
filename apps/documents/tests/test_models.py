@@ -204,7 +204,7 @@ class TestCollection:
         # Check that the vector store ID is cleared and the index is removed
         assert collection.openai_vector_store_id == ""
         file.refresh_from_db()
-        index_manager_mock.delete_vector_store.assert_called_once_with(fail_silently=True)
+        index_manager_mock.delete_remote_index.assert_called_once_with()
         index_manager_mock.delete_files.assert_called_once()
 
     def test_get_index_manager_returns_correct_manager(self):

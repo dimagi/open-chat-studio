@@ -57,20 +57,10 @@ class TestOpenAIRemoteIndexManager:
         assert result == "vs-new-789"
         assert index_manager.index_id == "vs-new-789"
 
-    def test_delete_vector_store_success(self, index_manager, client_mock):
+    def test_delete_remote_index_success(self, index_manager, client_mock):
         """Test successful deletion of vector store"""
         index_manager.delete_remote_index()
         client_mock.vector_stores.delete.assert_called_once_with(vector_store_id="vs-test-123")
-
-    @pytest.mark.parametrize("fail_silently", [False, True])
-    def test_delete_vector_store_with_error(self, fail_silently, index_manager, client_mock):
-        client_mock.vector_stores.delete.side_effect = Exception("Some error occurred")
-
-        if fail_silently:
-            index_manager.delete_vector_store(fail_silently=True)
-        else:
-            with pytest.raises(Exception, match="Some error occurred"):
-                index_manager.delete_vector_store(fail_silently=False)
 
     def test_delete_file_success(self, index_manager, client_mock):
         """Test successful file deletion from vector store"""

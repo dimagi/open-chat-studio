@@ -273,7 +273,7 @@ class Collection(BaseTeamModel, VersionsMixin):
     def _remove_remote_index(self, remote_files_to_remove: list[File]):
         """Remove the index backend"""
         manager = self.get_index_manager()
-        manager.delete_vector_store(fail_silently=True)
+        manager.delete_remote_index()
         manager.delete_files(remote_files_to_remove)
 
         self.openai_vector_store_id = ""
