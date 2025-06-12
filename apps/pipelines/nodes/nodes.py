@@ -1,3 +1,4 @@
+import dataclasses
 import datetime
 import inspect
 import json
@@ -19,6 +20,7 @@ from langchain_core.prompts import MessagesPlaceholder, PromptTemplate
 from langchain_core.runnables import RunnableLambda, RunnablePassthrough
 from langchain_openai.chat_models.base import OpenAIRefusalError
 from langchain_text_splitters import RecursiveCharacterTextSplitter
+from langgraph.types import interrupt
 from pydantic import BaseModel, BeforeValidator, Field, create_model, field_serializer, field_validator, model_validator
 from pydantic import ValidationError as PydanticValidationError
 from pydantic.config import ConfigDict
@@ -1015,6 +1017,11 @@ def main(input: str, **kwargs) -> str:
 """
 
 
+@dataclasses.dataclass(slots=True, frozen=True)
+class Abort:
+    reason: str
+
+
 class CodeNode(PipelineNode, OutputMessageTagMixin):
     """Runs python"""
 
@@ -1080,10 +1087,13 @@ class CodeNode(PipelineNode, OutputMessageTagMixin):
         kwargs = {}
         try:
             exec(byte_code, custom_globals, custom_locals)
-            result = str(custom_locals[function_name](input, **kwargs))
+            result = custom_locals[function_name](input, **kwargs)
         except Exception as exc:
             raise PipelineNodeRunError(exc) from exc
-        return PipelineState.from_node_output(node_name=self.name, node_id=self.node_id, output=result)
+
+        if isinstance(result, Abort):
+            return interrupt(result.reason)
+        return PipelineState.from_node_output(node_name=self.name, node_id=self.node_id, output=str(result))
 
     def _get_custom_globals(self, node_id, state: PipelineState):
         from RestrictedPython.Eval import (
@@ -1106,6 +1116,7 @@ class CodeNode(PipelineNode, OutputMessageTagMixin):
                 "_getitem_": default_guarded_getitem,
                 "_getiter_": default_guarded_getiter,
                 "_write_": lambda x: x,
+                "Abort": Abort,
                 "get_participant_data": participant_data_proxy.get,
                 "set_participant_data": participant_data_proxy.set,
                 "get_participant_schedules": participant_data_proxy.get_schedules,

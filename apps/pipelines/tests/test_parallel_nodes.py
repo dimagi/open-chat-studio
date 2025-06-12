@@ -71,7 +71,7 @@ def test_parallel_branch_pipeline(pipeline, experiment_session):
 # @django_db_with_data(available_apps=("apps.service_providers",))
 @pytest.mark.django_db()
 @pytest.mark.parametrize("safety_check", ["safe", "unsafe"])
-def test_parallel_branch_pipeline_even_length(pipeline, experiment_session, safety_check):
+def test_code_node_abort(pipeline, experiment_session, safety_check):
     start = start_node()
     node_a = static_code_router(safety_check, "safety_check")
     node_b = static_code_router("B", "B")
@@ -86,9 +86,10 @@ def main(input, **kwargs):
     """,
         name="Code",
     )
+    node_c = passthrough_node(name="C")
     end = end_node()
-    nodes = [start, node_a, node_b, code, end]
-    edges = ["start - safety_check", "start - B", "safety_check - Code", "B - Code", "Code - end"]
+    nodes = [start, node_a, node_b, code, node_c, end]
+    edges = ["start - safety_check", "start - B", "safety_check - Code", "B - Code", "Code - C", "C - end"]
     user_input = "The Input"
     output = create_runnable(pipeline, nodes, edges, lenient=True).invoke(
         PipelineState(messages=[user_input], experiment_session=experiment_session)
@@ -96,8 +97,10 @@ def main(input, **kwargs):
     output_state = PipelineState(output)
     if safety_check == "safe":
         assert output_state.get_node_output_by_name("end") == "B"
+        assert "C" in output_state["outputs"]
     else:
-        assert output_state["__interrupt__"][0].value == "Abort: Unsafe input: unsafe"
+        assert output_state["__interrupt__"][0].value == "Unsafe input: unsafe"
+        assert "C" not in output_state["outputs"]
 
 
 def static_code_router(output: str, name: str):
