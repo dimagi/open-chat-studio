@@ -409,7 +409,6 @@ class TestExperimentSession:
     def test_ad_hoc_message_transaction_rollback(self, get_user_message, from_experiment_session, experiment_session):
         """Test that the @transaction.atomic() decorator on ad_hoc_bot_message
         rolls back database changes when an exception occurs."""
-        from apps.chat.models import ChatMessage
 
         # Set up initial state
         initial_message_count = ChatMessage.objects.filter(chat=experiment_session.chat).count()
@@ -430,7 +429,7 @@ class TestExperimentSession:
                 chat=experiment_session.chat,
             )
             raise Exception("Send failed - should rollback")
-        
+
         mock_channel.send_message_to_user = mock_send_with_db_change
 
         # Call ad_hoc_bot_message with fail_silently=False so exception propagates
