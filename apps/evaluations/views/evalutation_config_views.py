@@ -6,7 +6,7 @@ from django.views.generic import CreateView, TemplateView, UpdateView
 from django_tables2 import SingleTableView, columns, tables
 
 from apps.evaluations.forms import EvaluationConfigForm
-from apps.evaluations.models import EvaluationConfig, EvaluationRun
+from apps.evaluations.models import EvaluationConfig, EvaluationRun, EvaluationRunStatus
 from apps.evaluations.tables import EvaluationConfigTable, EvaluationRunTable
 from apps.evaluations.utils import get_evaluators_with_schema
 from apps.teams.mixins import LoginAndTeamRequiredMixin
@@ -122,21 +122,33 @@ class EvaluationRunTableView(SingleTableView, PermissionRequiredMixin):
 
 class EvaluationResultHome(LoginAndTeamRequiredMixin, TemplateView):  # , PermissionRequiredMixin
     # permission_required = "pipelines.view_pipeline"
-    template_name = "generic/object_home.html"
+    template_name = "evaluations/evaluation_result_home.html"
 
     def get_context_data(self, team_slug: str, **kwargs):
-        return {
+        evaluation_run = get_object_or_404(
+            EvaluationRun, id=kwargs["evaluation_run_pk"], config_id=kwargs["evaluation_pk"], team__slug=team_slug
+        )
+
+        context = {
             "active_tab": "evaluations",
-            "title": "Evaluation Run Result",
+            "title": "Evaluation Run Results",
+            "evaluation_run": evaluation_run,
             "allow_new": False,
-            "table_url": reverse(
+        }
+
+        # Show progress if running, otherwise show results table
+        if (
+            evaluation_run.status in [EvaluationRunStatus.PENDING, EvaluationRunStatus.PROCESSING]
+            and evaluation_run.job_id
+        ):
+            context["celery_job_id"] = evaluation_run.job_id
+        else:
+            context["table_url"] = reverse(
                 "evaluations:evaluation_results_table",
                 args=[team_slug, kwargs["evaluation_pk"], kwargs["evaluation_run_pk"]],
-            ),
-            # "title_help_content": render_help_with_link(
-            #     "Pipelines allow you to create more complex bots by combining one or more steps together.", "pipelines"  # noqa
-            # ),
-        }
+            )
+
+        return context
 
 
 class EvaluationResultTableView(SingleTableView):

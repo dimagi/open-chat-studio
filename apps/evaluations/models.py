@@ -2,15 +2,13 @@ from __future__ import annotations
 
 import importlib
 from collections import defaultdict
-from collections.abc import Iterable
 from datetime import datetime
 from functools import cached_property
-from typing import TYPE_CHECKING, cast
+from typing import TYPE_CHECKING
 
 from django.conf import settings
 from django.db import models
 from django.urls import reverse
-from django.utils import timezone
 from langchain_core.messages import AIMessage, BaseMessage, HumanMessage
 from pydantic import BaseModel as PydanticBaseModel
 
@@ -158,22 +156,23 @@ class EvaluationConfig(BaseTeamModel):
         return reverse("evaluations:evaluation_runs_home", args=[self.team.slug, self.id])
 
     def run(self) -> EvaluationRun:
-        # TODO: Run this in a celery task
-        """Runs the evaluation"""
-        run = EvaluationRun.objects.create(team=self.team, config=self)
-        results = []
-        # TODO: Run in parallel with langgraph
-        for evaluator in cast(Iterable[Evaluator], self.evaluators.all()):
-            for message in self.dataset.messages.all():
-                result = evaluator.run(message, self.message_type)
-                results.append(
-                    EvaluationResult.objects.create(
-                        message=message, run=run, evaluator=evaluator, output=result.model_dump(), team=self.team
-                    )
-                )
-        run.finished_at = timezone.now()
-        run.save()
+        """Runs the evaluation asynchronously using Celery"""
+        run = EvaluationRun.objects.create(team=self.team, config=self, status=EvaluationRunStatus.PENDING)
+
+        from apps.evaluations.tasks import run_evaluation_task
+
+        result = run_evaluation_task.delay(run.id)
+        run.job_id = result.id
+        run.save(update_fields=["job_id"])
+
         return run
+
+
+class EvaluationRunStatus(models.TextChoices):
+    PENDING = "pending", "Pending"
+    PROCESSING = "processing", "Processing"
+    COMPLETED = "completed", "Completed"
+    FAILED = "failed", "Failed"
 
 
 class EvaluationRun(BaseTeamModel):
@@ -183,6 +182,9 @@ class EvaluationRun(BaseTeamModel):
     user = models.ForeignKey(
         settings.AUTH_USER_MODEL, on_delete=models.SET_NULL, null=True, blank=True
     )  # if manually triggered, who did it
+    status = models.CharField(max_length=20, choices=EvaluationRunStatus.choices, default=EvaluationRunStatus.PENDING)
+    job_id = models.CharField(max_length=255, blank=True)
+    error_message = models.TextField(blank=True)
 
     def __str__(self):
         return f"EvaluationRun ({self.created_at} - {self.finished_at})"

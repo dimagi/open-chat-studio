@@ -80,12 +80,15 @@ class EvaluationRunTable(tables.Table):
         orderable=True,
     )
 
+    status = TemplateColumn(
+        template_name="evaluations/evaluation_run_status_column.html", verbose_name="Status", orderable=False
+    )
+
     results = columns.Column(accessor="results.count", verbose_name="Result count", orderable=False)
-    # actions = actions.chip_column(label="Session Details")
 
     class Meta:
         model = EvaluationRun
-        fields = ("created_at", "finished_at", "results")
+        fields = ("created_at", "status", "finished_at", "results")
         row_attrs = settings.DJANGO_TABLES2_ROW_ATTRS
         orderable = False
         empty_text = "No runs found."
