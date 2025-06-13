@@ -93,7 +93,7 @@ class Command(BaseCommand):
             )
             experiment_count = experiments_to_convert.count()
 
-        if not experiments_to_convert.exists():
+        if not experiment_count:
             self.stdout.write(self.style.WARNING("No matching experiments found."))
             return
 
