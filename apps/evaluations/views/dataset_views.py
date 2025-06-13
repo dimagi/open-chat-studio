@@ -120,9 +120,8 @@ class CreateDataset(LoginAndTeamRequiredMixin, CreateView, PermissionRequiredMix
                 .filter(team=self.request.team)
                 .select_related("participant__user")
             )
-            from apps.experiments.filters import apply_dynamic_filters
-
-            filtered_queryset = apply_dynamic_filters(queryset, self.request)
+            timezone = self.request.session.get("detected_tz", None)
+            filtered_queryset = apply_dynamic_filters(queryset, self.request.GET, timezone)
             filtered_session_ids = ",".join(str(session.external_id) for session in filtered_queryset)
             if filtered_session_ids:
                 initial["session_ids"] = filtered_session_ids
@@ -187,7 +186,8 @@ class DatasetSessionsTableView(LoginAndTeamRequiredMixin, SingleTableView, Permi
             .select_related("participant__user")
             .order_by("experiment__name")
         )
-        query_set = apply_dynamic_filters(query_set, self.request)
+        timezone = self.request.session.get("detected_tz", None)
+        query_set = apply_dynamic_filters(query_set, self.request.GET, timezone)
         return query_set
 
 
@@ -208,7 +208,8 @@ class DatasetSessionsSelectionTableView(LoginAndTeamRequiredMixin, SingleTableVi
             .prefetch_related("chat__messages")
             .order_by("experiment__name")
         )
-        query_set = apply_dynamic_filters(query_set, self.request)
+        timezone = self.request.session.get("detected_tz", None)
+        query_set = apply_dynamic_filters(query_set, self.request.GET, timezone)
         return query_set
 
 
