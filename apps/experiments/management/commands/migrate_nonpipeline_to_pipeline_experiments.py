@@ -99,12 +99,9 @@ class Command(BaseCommand):
 
         self.stdout.write(f"Found {experiment_count} experiments to migrate:")
 
-        for experiment in experiments_to_convert.iterator(20):
-            experiment_type = self._get_experiment_type(experiment)
-            team_info = f"{experiment.team.name} ({experiment.team.slug})"
-            self.stdout.write(f"{experiment.name} (ID: {experiment.id}) - Type: {experiment_type} - Team: {team_info}")
-
         if dry_run:
+            for experiment in experiments_to_convert.iterator(20):
+                self._log_experiment_info(experiment)
             self.stdout.write(self.style.WARNING("\nDry run - no changes will be made."))
             return
 
@@ -116,6 +113,7 @@ class Command(BaseCommand):
         converted_count = 0
         failed_count = 0
         for experiment in experiments_to_convert.iterator(20):
+            self._log_experiment_info(experiment)
             try:
                 with transaction.atomic():
                     self._convert_experiment(experiment)
@@ -129,13 +127,10 @@ class Command(BaseCommand):
             self.style.SUCCESS(f"\nMigration is complete!: {converted_count} succeeded, {failed_count} failed")
         )
 
-    def _get_experiment_type(self, experiment):
-        if experiment.assistant:
-            return "Assistant"
-        elif experiment.llm_provider:
-            return "LLM"
-        else:
-            return "Unknown"
+    def _log_experiment_info(self, experiment):
+        experiment_type = "Assistant" if experiment.assistant else "LLM" if experiment.llm_provider else "Unknown"
+        team_info = f"{experiment.team.name} ({experiment.team.slug})"
+        self.stdout.write(f"{experiment.name} (ID: {experiment.id}) - Type: {experiment_type} - Team: {team_info}")
 
     def _convert_experiment(self, experiment):
         if experiment.assistant:
