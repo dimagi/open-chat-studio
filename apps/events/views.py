@@ -146,3 +146,30 @@ def _get_event_logs_context(trigger):
         "title": "Event logs",
         "trigger": trigger,
     }
+
+
+@login_and_team_required
+@permission_required("events.delete_statictrigger")
+def toggle_static_active_status(request, team_slug: str, experiment_id: str, trigger_id):
+    return _toggle_event_status_view("static", request, team_slug, experiment_id, trigger_id)
+
+
+@login_and_team_required
+@permission_required("events.delete_statictrigger")
+def toggle_timeout_active_status(request, team_slug: str, experiment_id: str, trigger_id):
+    return _toggle_event_status_view("timeout", request, team_slug, experiment_id, trigger_id)
+
+
+def _toggle_event_status_view(trigger_type, request, team_slug: str, experiment_id: str, trigger_id):
+    origin = request.origin
+    model_class = {
+        "static": StaticTrigger,
+        "timeout": TimeoutTrigger,
+    }[trigger_type]
+
+    trigger = get_object_or_404(model_class, id=trigger_id, experiment_id=experiment_id)
+
+    trigger.is_active = not trigger.is_active
+    trigger.save(update_fields=["is_active"])
+
+    return HttpResponseRedirect(_get_events_url(team_slug, experiment_id, origin))

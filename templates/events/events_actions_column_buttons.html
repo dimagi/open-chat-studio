@@ -1,3 +1,10 @@
 <a class="btn btn-sm btn-outline btn-primary" href="{{view_log_url}}">View Logs</a>
 <a class="btn btn-sm btn-outline btn-primary" href="{{edit_url}}">Edit</a>
 <a class="btn btn-sm btn-outline btn-primary" href="{{delete_url}}">Delete</a>
+<a class="btn btn-sm btn-outline btn-primary" href="{{ toggle_active_flag_url }}">
+    {% if is_active %}
+        Enable
+    {% else %}
+        Disable
+    {% endif %}
+</a>

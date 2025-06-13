@@ -506,7 +506,7 @@ def _get_events_context(experiment: Experiment, team_slug: str, origin=None):
                 Case(When(event_logs__status=EventLogStatusChoices.FAILURE, then=1), output_field=IntegerField())
             )
         )
-        .values("id", "experiment_id", "type", "action__action_type", "action__params", "failure_count")
+        .values("id", "experiment_id", "type", "action__action_type", "action__params", "failure_count", "is_active")
         .all()
     )
     timeout_events = (
@@ -524,6 +524,7 @@ def _get_events_context(experiment: Experiment, team_slug: str, origin=None):
             "action__params",
             "total_num_triggers",
             "failure_count",
+            "is_active",
         )
         .all()
     )
