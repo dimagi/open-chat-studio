@@ -1,4 +1,3 @@
-import dataclasses
 import datetime
 import inspect
 import json
@@ -35,7 +34,7 @@ from apps.chat.agent.tools import get_node_tools
 from apps.chat.conversation import compress_chat_history, compress_pipeline_chat_history
 from apps.documents.models import Collection
 from apps.experiments.models import BuiltInTools, ExperimentSession, ParticipantData
-from apps.pipelines.exceptions import PipelineNodeBuildError, PipelineNodeRunError, WaitForNextInput
+from apps.pipelines.exceptions import AbortPipeline, PipelineNodeBuildError, PipelineNodeRunError, WaitForNextInput
 from apps.pipelines.models import PipelineChatHistory, PipelineChatHistoryModes, PipelineChatHistoryTypes
 from apps.pipelines.nodes.base import (
     NodeSchema,
@@ -1018,11 +1017,6 @@ def main(input: str, **kwargs) -> str:
 """
 
 
-@dataclasses.dataclass(slots=True, frozen=True)
-class Abort:
-    reason: str
-
-
 class CodeNode(PipelineNode, OutputMessageTagMixin):
     """Runs python"""
 
@@ -1091,11 +1085,11 @@ class CodeNode(PipelineNode, OutputMessageTagMixin):
             result = custom_locals[function_name](input, **kwargs)
         except WaitForNextInput:
             return Command(goto=END)
+        except AbortPipeline as abort:
+            return interrupt(str(abort))
         except Exception as exc:
             raise PipelineNodeRunError(exc) from exc
 
-        if isinstance(result, Abort):
-            return interrupt(result.reason)
         if isinstance(result, Command):
             return result
         return Command(
@@ -1136,11 +1130,17 @@ class CodeNode(PipelineNode, OutputMessageTagMixin):
                 "get_all_routes": pipeline_state.get_all_routes,
                 "get_node_output": pipeline_state.get_node_output_by_name,
                 # control flow
-                "Abort": Abort,
+                "abort_with_message": self._abort_pipeline(),
                 "require_inputs_from": self._require_inputs_from(state),
             }
         )
         return custom_globals
+
+    def _abort_pipeline(self):
+        def abort_pipeline(message):
+            raise AbortPipeline(message)
+
+        return abort_pipeline
 
     def _require_inputs_from(self, state: PipelineState):
         """A helper function to require inputs from a specific node"""

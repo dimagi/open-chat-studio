@@ -34,3 +34,10 @@ class WaitForNextInput(Exception):
 
     This exception is handled by the node and used to alter the pipeline execution flow.
     """
+
+
+class AbortPipeline(Exception):
+    """Exception to raise when the pipeline should be aborted.
+
+    This exception is used to stop the pipeline execution and can be caught by the pipeline runner.
+    """

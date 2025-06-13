@@ -79,9 +79,9 @@ def test_code_node_abort(pipeline, experiment_session, safety_check):
 def main(input, **kwargs):
     safety_check = get_node_output("safety_check")
     b = get_node_output("B")
-    if safety_check == "safe":
-        return b
-    return Abort(f"Unsafe input: {safety_check}")
+    if safety_check != "safe":
+        abort_with_message(f"Unsafe input: {safety_check}")
+    return b
     """,
         name="Code",
     )
@@ -130,14 +130,22 @@ def main(input, **kwargs):
     output_state = PipelineState(output)
     assert output_state.get_node_output_by_name("end") == "B: A: Hi,C: Hi"
     assert isinstance(output_state["outputs"]["Code"], dict)
-    # user set comparison since order of parallel nodes is not guaranteed
-    assert set(output_state.get_execution_flow()) == {
-        (None, "start", ["A", "C"]),
-        ("start", "C", ["Code"]),
-        ("start", "A", ["B"]),
-        ("A", "B", ["Code"]),
-        ("Code", "end", []),
-    }
+    assert output_state.get_execution_flow() in [
+        [
+            (None, "start", ["A", "C"]),
+            ("start", "C", ["Code"]),
+            ("start", "A", ["B"]),
+            ("A", "B", ["Code"]),
+            ("Code", "end", []),
+        ],
+        [
+            (None, "start", ["A", "C"]),
+            ("start", "A", ["B"]),
+            ("start", "C", ["Code"]),
+            ("A", "B", ["Code"]),
+            ("Code", "end", []),
+        ],
+    ]
 
 
 def static_code_router(output: str, name: str):
