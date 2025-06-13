@@ -556,7 +556,7 @@ def trigger_bot_message(request):
             participant_data.data = merged_data
             participant_data.save(update_fields=["data"])
         else:
-            participant = Participant.objects.filter(identifier=identifier, platform=platform).first()
+            participant = Participant.objects.get(identifier=identifier, platform=platform, team=request.team)
             participant_data = ParticipantData.objects.create(
                 participant=participant, experiment=experiment, data=data["participant_data"], team=request.team
             )
