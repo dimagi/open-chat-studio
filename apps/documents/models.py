@@ -10,7 +10,7 @@ from field_audit import audit_fields
 from field_audit.models import AuditingManager
 
 from apps.experiments.versioning import VersionDetails, VersionField, VersionsMixin, VersionsObjectManagerMixin
-from apps.files.models import File, FileChunkEmbedding
+from apps.files.models import File
 from apps.service_providers.models import EmbeddingProviderModel
 from apps.teams.models import BaseTeamModel
 from apps.utils.conversions import bytes_to_megabytes
@@ -63,10 +63,6 @@ class CollectionFile(models.Model):
     @property
     def status_enum(self):
         return FileStatus(self.status)
-
-    @property
-    def chunk_count(self) -> int:
-        return FileChunkEmbedding.objects.filter(collection_id=self.collection_id, file_id=self.file_id).count()
 
 
 @audit_fields(
