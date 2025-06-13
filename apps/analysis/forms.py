@@ -33,7 +33,7 @@ class TranscriptAnalysisForm(forms.ModelForm):
         referer = self.request.headers.get("referer") or ""
         parsed_url = urlparse(referer)
         query_params = parse_qs(parsed_url.query)
-        sessions = get_filtered_sessions(self.request, self.experiment, query_params, timezone)
+        sessions = get_filtered_sessions(self.experiment, query_params, timezone)
         session_ids = sessions.values_list("id", flat=True)
 
         self.fields["sessions"] = SessionChoiceField(
