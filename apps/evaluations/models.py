@@ -12,7 +12,7 @@ from django.urls import reverse
 from langchain_core.messages import AIMessage, BaseMessage, HumanMessage
 from pydantic import BaseModel as PydanticBaseModel
 
-from apps.chat.models import ChatMessage, ChatMessageType
+from apps.chat.models import ChatMessage
 from apps.teams.models import BaseTeamModel
 from apps.utils.models import BaseModel
 
@@ -68,34 +68,6 @@ class EvaluationMessage(BaseModel):
 
     def __str__(self):
         return f"Human: {self.human_message_content}, AI: {self.ai_message_content}"
-
-    @staticmethod
-    def from_chat_messages(human_chat_message: ChatMessage, ai_chat_message: ChatMessage) -> EvaluationMessage:
-        if (
-            human_chat_message.message_type != ChatMessageType.HUMAN
-            or ai_chat_message.message_type != ChatMessageType.AI
-        ):
-            raise ValueError(
-                f"Expected HUMAN and AI types, got {human_chat_message.message_type} and {ai_chat_message.message_type}"
-            )
-        if human_chat_message.chat_id != ai_chat_message.chat_id:
-            raise ValueError("Messages are from different chats")
-        if ai_chat_message.created_at <= human_chat_message.created_at:
-            raise ValueError("AI message must be created after the human message")
-
-        return EvaluationMessage.objects.create(
-            human_chat_message=human_chat_message,
-            human_message_content=human_chat_message.content,
-            ai_chat_message=ai_chat_message,
-            ai_message_content=ai_chat_message.content,
-            context={
-                "current_datetime": human_chat_message.created_at,
-                "history": "\n".join(
-                    f"{message.message_type}: {message.content}"
-                    for message in human_chat_message.chat.get_langchain_messages()
-                ),
-            },
-        )
 
     def as_langchain_messages(self) -> list[BaseMessage]:
         """

@@ -78,12 +78,16 @@ class FakeLlm(FakeListChatModel):
             FakeLlm(responses=[AIMessage(content="value")]).with_structured_output(...) -> {"route": "value"}
         """
         from langchain_core.output_parsers.openai_tools import PydanticToolsParser
+        from langchain_core.runnables import RunnableLambda
 
         if isinstance(schema, type) and is_basemodel_subclass(schema):
             output_parser = PydanticToolsParser(tools=[cast(TypeBaseModel, schema)], first_tool_only=True)
             llm = self.bind_tools([schema], tool_choice="any")
             return llm | output_parser
-        raise Exception("Unsupported schema type, only pydantic models are supported")
+        elif isinstance(schema, dict):
+            # Handle JSON schema - for testing purposes, just return the response directly
+            return RunnableLambda(lambda _: self.responses[0] if self.responses else {})
+        raise Exception("Unsupported schema type, only pydantic models and dicts are supported")
 
 
 @dataclasses.dataclass
