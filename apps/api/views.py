@@ -486,6 +486,8 @@ def consent(request: Request):
                 "experiment": "exp1",
                 "platform": "connect_messaging",
                 "prompt_text": "Tell the user to do something",
+                "session_data": {"key": "value"},
+                "participant_data": {"key": "value"},
             },
             status_codes=[200],
         ),
@@ -548,6 +550,16 @@ def trigger_bot_message(request):
 
     if platform == ChannelPlatform.COMMCARE_CONNECT and not participant_data.has_consented():
         return JsonResponse({"detail": "User has not given consent"}, status=status.HTTP_400_BAD_REQUEST)
+    if data.get("participant_data"):
+        if participant_data:
+            merged_data = {**participant_data.data, **data["participant_data"]}
+            participant_data.data = merged_data
+            participant_data.save(update_fields=["data"])
+        else:
+            participant = Participant.objects.get(identifier=identifier, platform=platform, team=request.team)
+            participant_data = ParticipantData.objects.create(
+                participant=participant, experiment=experiment, data=data["participant_data"], team=request.team
+            )
 
     trigger_bot_message_task.delay(data)
 
