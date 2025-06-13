@@ -662,6 +662,7 @@ AI_HELPER_API_KEY = env("AI_HELPER_API_KEY", default="")
 MAX_SUMMARY_LENGTH = 1024
 MAX_FILES_PER_COLLECTION = 1000
 MAX_FILE_SIZE_MB = 50
+EMBEDDING_VECTOR_SIZE = 1024
 SUPPORTED_FILE_TYPES = {
     "file_search": (
         ".c,.cs,.cpp,.doc,.docx,.html,.java,.json,.md,.pdf,.php,.pptx,.py,.py,.rb,.tex,.txt,.css,.js,.sh,.ts"
