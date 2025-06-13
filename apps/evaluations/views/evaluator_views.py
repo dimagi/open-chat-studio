@@ -13,8 +13,8 @@ from apps.service_providers.models import LlmProvider, LlmProviderModel
 from apps.teams.mixins import LoginAndTeamRequiredMixin
 
 
-class EvaluatorHome(LoginAndTeamRequiredMixin, TemplateView):  # , PermissionRequiredMixin
-    # permission_required = "pipelines.view_pipeline"
+class EvaluatorHome(LoginAndTeamRequiredMixin, TemplateView, PermissionRequiredMixin):
+    permission_required = "evaluations.view_evaluator"
     template_name = "generic/object_home.html"
 
     def get_context_data(self, team_slug: str, **kwargs):
@@ -30,7 +30,7 @@ class EvaluatorHome(LoginAndTeamRequiredMixin, TemplateView):  # , PermissionReq
 
 
 class EvaluatorTableView(SingleTableView, PermissionRequiredMixin):
-    # permission_required = "pipelines.view_pipeline"
+    permission_required = "evaluations.view_evaluator"
     model = Evaluator
     paginate_by = 25
     table_class = EvaluatorTable
@@ -45,7 +45,7 @@ class EvaluatorTableView(SingleTableView, PermissionRequiredMixin):
 
 
 class CreateEvaluator(LoginAndTeamRequiredMixin, CreateView, PermissionRequiredMixin):
-    # permission_required = "pipelines.add_pipeline"
+    permission_required = "evaluations.add_evaluator"
     template_name = "evaluations/evaluator_form.html"
     model = Evaluator
     form_class = EvaluatorForm
@@ -80,7 +80,8 @@ class CreateEvaluator(LoginAndTeamRequiredMixin, CreateView, PermissionRequiredM
         return super().form_valid(form)
 
 
-class EditEvaluator(UpdateView):
+class EditEvaluator(LoginAndTeamRequiredMixin, UpdateView, PermissionRequiredMixin):
+    permission_required = "evaluations.change_evaluator"
     model = Evaluator
     form_class = EvaluatorForm
     template_name = "evaluations/evaluator_form.html"
@@ -114,7 +115,7 @@ class EditEvaluator(UpdateView):
 
 
 class DeleteEvaluator(LoginAndTeamRequiredMixin, DeleteView, PermissionRequiredMixin):
-    # permission_required = "evaluations.delete_evaluator"
+    permission_required = "evaluations.delete_evaluator"
     model = Evaluator
 
     def get_queryset(self):

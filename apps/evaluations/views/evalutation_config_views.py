@@ -1,5 +1,6 @@
 import csv
 
+from django.contrib.auth.decorators import permission_required
 from django.contrib.auth.mixins import PermissionRequiredMixin
 from django.http import HttpResponse, HttpResponseRedirect
 from django.shortcuts import get_object_or_404
@@ -14,8 +15,8 @@ from apps.evaluations.utils import get_evaluators_with_schema
 from apps.teams.mixins import LoginAndTeamRequiredMixin
 
 
-class EvaluationHome(LoginAndTeamRequiredMixin, TemplateView):  # , PermissionRequiredMixin
-    # permission_required = "pipelines.view_pipeline"
+class EvaluationHome(LoginAndTeamRequiredMixin, TemplateView, PermissionRequiredMixin):
+    permission_required = "evaluations.view_evaluationconfig"
     template_name = "generic/object_home.html"
 
     def get_context_data(self, team_slug: str, **kwargs):
@@ -31,7 +32,7 @@ class EvaluationHome(LoginAndTeamRequiredMixin, TemplateView):  # , PermissionRe
 
 
 class EvaluationTableView(SingleTableView, PermissionRequiredMixin):
-    permission_required = "pipelines.view_pipeline"
+    permission_required = "evaluations.view_evaluationconfig"
     model = EvaluationConfig
     paginate_by = 25
     table_class = EvaluationConfigTable
@@ -46,7 +47,7 @@ class EvaluationTableView(SingleTableView, PermissionRequiredMixin):
 
 
 class CreateEvaluation(LoginAndTeamRequiredMixin, CreateView, PermissionRequiredMixin):
-    # permission_required = "pipelines.add_pipeline"
+    permission_required = "evaluations.add_evaluationconfig"
     template_name = "evaluations/evaluation_config_form.html"
     model = EvaluationConfig
     form_class = EvaluationConfigForm
@@ -73,7 +74,8 @@ class CreateEvaluation(LoginAndTeamRequiredMixin, CreateView, PermissionRequired
         return super().form_valid(form)
 
 
-class EditEvaluation(UpdateView):
+class EditEvaluation(LoginAndTeamRequiredMixin, UpdateView, PermissionRequiredMixin):
+    permission_required = "evaluations.change_evaluationconfig"
     model = EvaluationConfig
     form_class = EvaluationConfigForm
     template_name = "evaluations/evaluation_config_form.html"
@@ -98,8 +100,8 @@ class EditEvaluation(UpdateView):
         return reverse("evaluations:home", args=[self.request.team.slug])
 
 
-class EvaluationRunHome(LoginAndTeamRequiredMixin, TemplateView):  # , PermissionRequiredMixin
-    # permission_required = "pipelines.view_pipeline"
+class EvaluationRunHome(LoginAndTeamRequiredMixin, TemplateView, PermissionRequiredMixin):
+    permission_required = "evaluations.view_evaluationrun"
     template_name = "generic/object_home.html"
 
     def get_context_data(self, team_slug: str, **kwargs):
@@ -112,7 +114,7 @@ class EvaluationRunHome(LoginAndTeamRequiredMixin, TemplateView):  # , Permissio
 
 
 class EvaluationRunTableView(SingleTableView, PermissionRequiredMixin):
-    # permission_required = "pipelines.view_pipelinerun"
+    permission_required = "evaluations.view_evaluationrun"
     model = EvaluationRun
     paginate_by = 25
     table_class = EvaluationRunTable
@@ -122,8 +124,8 @@ class EvaluationRunTableView(SingleTableView, PermissionRequiredMixin):
         return EvaluationRun.objects.filter(config_id=self.kwargs["evaluation_pk"]).order_by("-created_at")
 
 
-class EvaluationResultHome(LoginAndTeamRequiredMixin, TemplateView):  # , PermissionRequiredMixin
-    # permission_required = "pipelines.view_pipeline"
+class EvaluationResultHome(LoginAndTeamRequiredMixin, TemplateView, PermissionRequiredMixin):
+    permission_required = "evaluations.view_evaluationrun"
     template_name = "evaluations/evaluation_result_home.html"
 
     def get_context_data(self, team_slug: str, **kwargs):
@@ -153,7 +155,8 @@ class EvaluationResultHome(LoginAndTeamRequiredMixin, TemplateView):  # , Permis
         return context
 
 
-class EvaluationResultTableView(SingleTableView):
+class EvaluationResultTableView(SingleTableView, PermissionRequiredMixin):
+    permission_required = "evaluations.view_evaluationrun"
     template_name = "table/single_table.html"
 
     def get_queryset(self) -> EvaluationRun:
@@ -185,13 +188,14 @@ class EvaluationResultTableView(SingleTableView):
         return type("EvaluationResultTableTable", (tables.Table,), attrs)
 
 
+@permission_required("evaluations.add_evaluationrun")
 def create_evaluation_run(request, team_slug, evaluation_pk):
-    # TODO: Assert all the permissions, etc.
     config = get_object_or_404(EvaluationConfig, team__slug=team_slug, pk=evaluation_pk)
     run = config.run()
     return HttpResponseRedirect(reverse("evaluations:evaluation_results_home", args=[team_slug, evaluation_pk, run.pk]))
 
 
+@permission_required("evaluations.view_evaluationrun")
 def download_evaluation_run_csv(request, team_slug, evaluation_pk, evaluation_run_pk):
     evaluation_run = get_object_or_404(
         EvaluationRun, id=evaluation_run_pk, config_id=evaluation_pk, team__slug=team_slug

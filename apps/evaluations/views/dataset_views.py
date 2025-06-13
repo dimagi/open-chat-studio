@@ -24,8 +24,8 @@ from apps.experiments.models import Experiment, ExperimentSession
 from apps.teams.mixins import LoginAndTeamRequiredMixin
 
 
-class DatasetHome(LoginAndTeamRequiredMixin, TemplateView):  # , PermissionRequiredMixin
-    # permission_required = "pipelines.view_pipeline"
+class DatasetHome(LoginAndTeamRequiredMixin, TemplateView, PermissionRequiredMixin):
+    permission_required = "evaluations.view_evaluationdataset"
     template_name = "generic/object_home.html"
 
     def get_context_data(self, team_slug: str, **kwargs):
@@ -41,7 +41,7 @@ class DatasetHome(LoginAndTeamRequiredMixin, TemplateView):  # , PermissionRequi
 
 
 class DatasetTableView(SingleTableView, PermissionRequiredMixin):
-    # permission_required = "pipelines.view_pipeline"
+    permission_required = "evaluations.view_evaluationdataset"
     model = EvaluationDataset
     paginate_by = 25
     table_class = EvaluationDatasetTable
@@ -57,7 +57,8 @@ class DatasetTableView(SingleTableView, PermissionRequiredMixin):
         )
 
 
-class EditDataset(UpdateView):
+class EditDataset(LoginAndTeamRequiredMixin, UpdateView, PermissionRequiredMixin):
+    permission_required = "evaluations.change_evaluationdataset"
     model = EvaluationDataset
     form_class = EvaluationDatasetEditForm
     template_name = "evaluations/dataset_edit.html"
@@ -78,6 +79,7 @@ class EditDataset(UpdateView):
 
 
 class DeleteDataset(LoginAndTeamRequiredMixin, DeleteView, PermissionRequiredMixin):
+    permission_required = "evaluations.delete_evaluationdataset"
     model = EvaluationDataset
 
     def get_queryset(self):
@@ -92,7 +94,7 @@ class DeleteDataset(LoginAndTeamRequiredMixin, DeleteView, PermissionRequiredMix
 
 
 class CreateDataset(LoginAndTeamRequiredMixin, CreateView, PermissionRequiredMixin):
-    # permission_required = "pipelines.add_pipeline"
+    permission_required = "evaluations.add_evaluationdataset"
     template_name = "evaluations/dataset_from_sessions_form.html"
     model = EvaluationDataset
     form_class = EvaluationDatasetForm
