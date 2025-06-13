@@ -543,13 +543,16 @@ class BuiltInTools(models.TextChoices):
                         "name": "allowed_domains",
                         "type": "expandable_text",
                         "label": "Allowed Domains",
-                        "helpText": "Only search these domains (e.g. example.com or example.com/blog). Separate entries with newlines.",
+                        "helpText": (
+                            "Only search these domains (e.g. example.com or example.com/blog). "
+                            "Separate entries with newlines."
+                        ),
                     },
                     {
                         "name": "blocked_domains",
                         "type": "expandable_text",
                         "label": "Blocked Domains",
-                        "helpText": "Exclude these domains from search. Separate entries with newlines.", 
+                        "helpText": "Exclude these domains from search. Separate entries with newlines.",
                     },
                 ],
             }
