@@ -77,7 +77,7 @@ class Command(BaseCommand):
                 )
                 return
 
-            experiments_to_convert = [experiment]
+            experiments_to_convert = experiment
             experiment_count = 1
         else:
             default_experiments = Experiment.objects.filter(query & Q(is_default_version=True))
@@ -100,8 +100,11 @@ class Command(BaseCommand):
         self.stdout.write(f"Found {experiment_count} experiments to migrate:")
 
         if dry_run:
-            for experiment in experiments_to_convert.iterator(20):
-                self._log_experiment_info(experiment)
+            if experiment_count == 1:
+                self._log_experiment_info(experiments_to_convert)
+            else:
+                for experiment in experiments_to_convert.iterator(20):
+                    self._log_experiment_info(experiment)
             self.stdout.write(self.style.WARNING("\nDry run - no changes will be made."))
             return
 
@@ -112,20 +115,28 @@ class Command(BaseCommand):
 
         converted_count = 0
         failed_count = 0
-        for experiment in experiments_to_convert.iterator(20):
-            self._log_experiment_info(experiment)
-            try:
-                with transaction.atomic():
-                    self._convert_experiment(experiment)
-                    converted_count += 1
-                    self.stdout.write(self.style.SUCCESS(f"Success: {experiment.name}"))
-            except Exception as e:
-                failed_count += 1
-                self.stdout.write(self.style.ERROR(f"FAILED {experiment.name}: {str(e)}"))
-
+        if experiment_count == 1:
+            converted_count, failed_count = self._process_expriment(
+                experiments_to_convert, converted_count, failed_count
+            )
+        else:
+            for experiment in experiments_to_convert.iterator(20):
+                converted_count, failed_count = self._process_expriment(experiment, converted_count, failed_count)
         self.stdout.write(
             self.style.SUCCESS(f"\nMigration is complete!: {converted_count} succeeded, {failed_count} failed")
         )
+
+    def _process_expriment(self, experiment, converted_count, failed_count):
+        self._log_experiment_info(experiment)
+        try:
+            with transaction.atomic():
+                self._convert_experiment(experiment)
+                converted_count += 1
+                self.stdout.write(self.style.SUCCESS(f"Success: {experiment.name}"))
+        except Exception as e:
+            failed_count += 1
+            self.stdout.write(self.style.ERROR(f"FAILED {experiment.name}: {str(e)}"))
+        return converted_count, failed_count
 
     def _log_experiment_info(self, experiment):
         experiment_type = "Assistant" if experiment.assistant else "LLM" if experiment.llm_provider else "Unknown"
