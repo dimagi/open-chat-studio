@@ -149,6 +149,13 @@ class TranscriptAnalysisForm(forms.ModelForm):
         provider_id, model_id = map(int, self.cleaned_data["provider_model"].split(":"))
         instance.llm_provider_id = provider_id
         instance.llm_provider_model_id = model_id
+        instance.translation_language = self.cleaned_data.get("translation_language")
+
+        translation_provider_model = self.cleaned_data.get("translation_provider_model")
+        if translation_provider_model:
+            translation_provider_id, translation_model_id = map(int, translation_provider_model.split(":"))
+            instance.translation_llm_provider_id = translation_provider_id
+            instance.translation_llm_provider_model_id = translation_model_id
 
         if commit:
             instance.save()
