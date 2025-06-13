@@ -543,15 +543,16 @@ class BuiltInTools(models.TextChoices):
                         "name": "allowed_domains",
                         "type": "expandable_text",
                         "label": "Allowed Domains",
-                        "helpText": "Add domains without https from which you want the search results. "
-                        "Use space to add multiple domains",
+                        "helpText": (
+                            "Only search these domains (e.g. example.com or example.com/blog). "
+                            "Separate entries with newlines."
+                        ),
                     },
                     {
                         "name": "blocked_domains",
                         "type": "expandable_text",
                         "label": "Blocked Domains",
-                        "helpText": "Add domains without https from which you don't want the search results."
-                        " Use space to add multiple domains",
+                        "helpText": "Exclude these domains from search. Separate entries with newlines.",
                     },
                 ],
             }
@@ -684,7 +685,6 @@ class Experiment(BaseTeamModel, VersionsMixin, CustomActionOperationMixin):
         default=VoiceResponseBehaviours.RECIPROCAL,
         help_text="This tells the bot when to reply with voice messages",
     )
-    files = models.ManyToManyField("files.File", blank=True)
     children = models.ManyToManyField(
         "Experiment", blank=True, through="ExperimentRoute", symmetrical=False, related_name="parents"
     )
@@ -900,7 +900,6 @@ class Experiment(BaseTeamModel, VersionsMixin, CustomActionOperationMixin):
         self._copy_pipeline_to_new_version(new_version, is_copy)
         self._copy_custom_action_operations_to_new_version(new_experiment=new_version, is_copy=is_copy)
 
-        new_version.files.set(self.files.all())
         return new_version
 
     def get_fields_to_exclude(self):
@@ -1660,6 +1659,7 @@ class ExperimentSession(BaseTeamModel):
 
             enqueue_static_triggers.delay(self.id, StaticTriggerType.CONVERSATION_END)
 
+    @transaction.atomic()
     def ad_hoc_bot_message(
         self,
         instruction_prompt: str,
@@ -1677,9 +1677,14 @@ class ExperimentSession(BaseTeamModel):
             use_experiment: The experiment whose data to use. This is useful for multi-bot setups where we want a
             specific child bot to handle the check-in.
         """
-        with current_team(self.team):
-            bot_message = self._bot_prompt_for_user(instruction_prompt, trace_info, use_experiment=use_experiment)
-            self.try_send_message(message=bot_message, fail_silently=fail_silently)
+        try:
+            with current_team(self.team):
+                bot_message = self._bot_prompt_for_user(instruction_prompt, trace_info, use_experiment=use_experiment)
+                self.try_send_message(message=bot_message)
+        except Exception as e:
+            log.exception(f"Could not send message to experiment session {self.id}. Reason: {e}")
+            if not fail_silently:
+                raise e
 
     def _bot_prompt_for_user(
         self,
@@ -1699,19 +1704,14 @@ class ExperimentSession(BaseTeamModel):
         bot = EventBot(self, experiment, trace_info, history_manager)
         return bot.get_user_message(instruction_prompt)
 
-    def try_send_message(self, message: str, fail_silently=True):
+    def try_send_message(self, message: str):
         """Tries to send a message to this user session as the bot. Note that `message` will be send to the user
         directly. This is not an instruction to the bot.
         """
         from apps.chat.channels import ChannelBase
 
-        try:
-            channel = ChannelBase.from_experiment_session(self)
-            channel.send_message_to_user(message)
-        except Exception as e:
-            log.exception(f"Could not send message to experiment session {self.id}. Reason: {e}")
-            if not fail_silently:
-                raise e
+        channel = ChannelBase.from_experiment_session(self)
+        channel.send_message_to_user(message)
 
     @cached_property
     def participant_data_from_experiment(self) -> dict:

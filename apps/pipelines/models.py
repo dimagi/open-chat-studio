@@ -121,23 +121,25 @@ class Pipeline(BaseTeamModel, VersionsMixin):
         """
         from apps.pipelines.nodes.nodes import EndNode, StartNode
 
+        start_node_id = str(uuid4())
+        end_node_id = str(uuid4())
         start_node = FlowNode(
-            id=str(uuid4()),
+            id=start_node_id,
             type="startNode",
             position={"x": 100, "y": 200},
             data=FlowNodeData(
-                id=str(uuid4()),
+                id=start_node_id,
                 type=StartNode.__name__,
                 label="",
                 params={"name": "start"},
             ),
         )
         end_node = FlowNode(
-            id=str(uuid4()),
+            id=end_node_id,
             type="endNode",
             position={"x": 800, "y": 200},
             data=FlowNodeData(
-                id=str(uuid4()),
+                id=end_node_id,
                 type=EndNode.__name__,
                 label="",
                 params={"name": "end"},
