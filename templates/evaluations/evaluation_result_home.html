@@ -22,6 +22,15 @@
   <div class="container mx-auto px-4 py-8">
     <div class="flex justify-between items-center mb-6">
       <h1 class="text-2xl font-bold">{{ title }}</h1>
+      {% if evaluation_run.status == "completed" %}
+        <div>
+          <a href="{% url 'evaluations:evaluation_run_download' request.team.slug evaluation_run.config_id evaluation_run.id %}"
+             class="btn btn-primary">
+            <i class="fa-solid fa-download"></i>
+            Download CSV
+          </a>
+        </div>
+      {% endif %}
     </div>
 
     <div class="mb-6">

@@ -1,5 +1,7 @@
+import csv
+
 from django.contrib.auth.mixins import PermissionRequiredMixin
-from django.http import HttpResponseRedirect
+from django.http import HttpResponse, HttpResponseRedirect
 from django.shortcuts import get_object_or_404
 from django.urls import reverse
 from django.views.generic import CreateView, TemplateView, UpdateView
@@ -188,3 +190,26 @@ def create_evaluation_run(request, team_slug, evaluation_pk):
     config = get_object_or_404(EvaluationConfig, team__slug=team_slug, pk=evaluation_pk)
     run = config.run()
     return HttpResponseRedirect(reverse("evaluations:evaluation_results_home", args=[team_slug, evaluation_pk, run.pk]))
+
+
+def download_evaluation_run_csv(request, team_slug, evaluation_pk, evaluation_run_pk):
+    evaluation_run = get_object_or_404(
+        EvaluationRun, id=evaluation_run_pk, config_id=evaluation_pk, team__slug=team_slug
+    )
+    filename = f"{evaluation_run.config.name}_results_{evaluation_run.id}.csv"
+    table_data = list(evaluation_run.get_table_data())
+    response = HttpResponse(content_type="text/csv")
+    response["Content-Disposition"] = f"attachment; filename={filename}"
+    writer = csv.writer(response)
+
+    if not table_data:
+        writer.writerow(["No results available yet"])
+        return response
+
+    headers = list(table_data[0].keys())
+    writer.writerow(headers)
+
+    for row in table_data:
+        writer.writerow([row.get(header, "") for header in headers])
+
+    return response

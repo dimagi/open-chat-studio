@@ -33,6 +33,11 @@ urlpatterns = [
         name="evaluation_results_table",
     ),
     path(
+        "<int:evaluation_pk>/evaluation_runs/<int:evaluation_run_pk>/download",
+        evalutation_config_views.download_evaluation_run_csv,
+        name="evaluation_run_download",
+    ),
+    path(
         "sessions_table",
         dataset_views.DatasetSessionsTableView.as_view(),
         name="dataset_sessions_list",

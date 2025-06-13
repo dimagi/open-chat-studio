@@ -86,9 +86,23 @@ class EvaluationRunTable(tables.Table):
 
     results = columns.Column(accessor="results.count", verbose_name="Result count", orderable=False)
 
+    actions = actions.ActionsColumn(
+        actions=[
+            actions.Action(
+                url_name="evaluations:evaluation_run_download",
+                url_factory=lambda url_name, request, record, _: reverse(
+                    url_name, args=[request.team.slug, record.config_id, record.id]
+                ),
+                icon_class="fa-solid fa-download",
+                title="Download CSV",
+                enabled_condition=lambda _, record: record.status == "completed",
+            ),
+        ]
+    )
+
     class Meta:
         model = EvaluationRun
-        fields = ("created_at", "status", "finished_at", "results")
+        fields = ("created_at", "status", "finished_at", "results", "actions")
         row_attrs = settings.DJANGO_TABLES2_ROW_ATTRS
         orderable = False
         empty_text = "No runs found."
