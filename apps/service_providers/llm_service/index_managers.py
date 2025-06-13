@@ -288,9 +288,9 @@ class LocalIndexManager(metaclass=ABCMeta):
                 for idx, chunk in enumerate(text_chunks):
                     embedding_vector = self.get_embedding_vector(chunk)
                     FileChunkEmbedding.objects.create(
-                        team_id=self.team_id,
+                        team_id=file.team_id,
                         file=file,
-                        collection=self,
+                        collection_id=collection_file.collection_id,
                         chunk_number=idx,
                         text=chunk,
                         embedding=embedding_vector,

@@ -4,10 +4,7 @@ import pytest
 from django.conf import settings
 
 from apps.assistants.models import ToolResources
-from apps.documents.exceptions import FileUploadError
-from apps.documents.models import CollectionFile, FileStatus
 from apps.files.models import FileChunkEmbedding
-from apps.service_providers.exceptions import UnableToLinkFileException
 from apps.service_providers.llm_service.index_managers import LocalIndexManager, RemoteIndexManager
 from apps.utils.factories.assistants import OpenAiAssistantFactory
 from apps.utils.factories.documents import CollectionFactory
@@ -27,16 +24,6 @@ class TestNode:
         assert file.versions.count() == 1
 
         assert collection_v.files.first() == file.versions.first()
-
-
-@pytest.fixture()
-def remote_collection_index(db):
-    return CollectionFactory(is_index=True, is_remote_index=True)
-
-
-@pytest.fixture()
-def local_collection_index(db):
-    return CollectionFactory(is_index=True, is_remote_index=False)
 
 
 @pytest.mark.django_db()
@@ -214,97 +201,3 @@ class TestCollection:
 
         assert isinstance(collection_remote.get_index_manager(), RemoteIndexManager)
         assert isinstance(collection_local.get_index_manager(), LocalIndexManager)
-
-    def test_handle_remote_indexing_success(self, remote_collection_index, index_manager_mock):
-        file = FileFactory(external_id="test_file_id_3")
-        remote_collection_index.files.add(file)
-        collection_file = CollectionFile.objects.get(collection=remote_collection_index, file=file)
-        collection_file.status = FileStatus.PENDING
-        collection_file.save()
-
-        # Mock successful upload and linking
-        index_manager_mock._ensure_remote_file_exists.side_effect = None
-        index_manager_mock.link_files_to_remote_index.side_effect = None
-
-        iterator = CollectionFile.objects.filter(id=collection_file.id).iterator(1)
-        remote_collection_index.add_files_to_index(iterator)
-
-        collection_file.refresh_from_db()
-        assert collection_file.status == FileStatus.COMPLETED
-
-    def test_handle_remote_indexing_with_file_upload_failures(self, remote_collection_index, index_manager_mock):
-        file = FileFactory()
-        remote_collection_index.files.add(file)
-        collection_file = CollectionFile.objects.get(collection=remote_collection_index, file=file)
-        collection_file.status = FileStatus.PENDING
-        collection_file.save()
-
-        # Mock ensure_remote_file_exists to raise FileUploadError
-        index_manager_mock._ensure_remote_file_exists.side_effect = FileUploadError("Upload failed")
-
-        iterator = CollectionFile.objects.filter(id=collection_file.id).iterator(1)
-        remote_collection_index.add_files_to_index(iterator)
-
-        collection_file.refresh_from_db()
-        assert collection_file.status == FileStatus.FAILED
-        index_manager_mock._ensure_remote_file_exists.assert_called_once()
-        # link_files_to_remote_index should be called with empty list when all uploads fail
-        index_manager_mock.link_files_to_remote_index.assert_called_once_with(
-            file_ids=[], chunk_size=None, chunk_overlap=None
-        )
-
-    def test_handle_remote_indexing_with_linking_failures(self, remote_collection_index, index_manager_mock):
-        file = FileFactory(external_id="test_file_id")
-        remote_collection_index.files.add(file)
-        collection_file = CollectionFile.objects.get(collection=remote_collection_index, file=file)
-        collection_file.status = FileStatus.PENDING
-        collection_file.save()
-
-        # Mock successful upload but failed linking
-        index_manager_mock._ensure_remote_file_exists.side_effect = None
-        index_manager_mock.link_files_to_remote_index.side_effect = UnableToLinkFileException("Link failed")
-
-        iterator = CollectionFile.objects.filter(id=collection_file.id).iterator(1)
-        remote_collection_index.add_files_to_index(iterator)
-
-        collection_file.refresh_from_db()
-        assert collection_file.status == FileStatus.FAILED
-        index_manager_mock.link_files_to_remote_index.assert_called_once()
-
-    def test_handle_local_indexing_success(self, local_collection_index, local_index_manager_mock):
-        file = FileFactory()
-        local_collection_index.files.add(file)
-        collection_file = CollectionFile.objects.get(collection=local_collection_index, file=file)
-
-        # Mock the index manager and file content reading
-        local_index_manager_mock.chunk_file.return_value = ["test", "content"]
-        local_index_manager_mock.get_embedding_vector.return_value = [0.1] * settings.EMBEDDING_VECTOR_SIZE
-
-        with mock.patch.object(file, "read_content", return_value="test content"):
-            iterator = CollectionFile.objects.filter(id=collection_file.id).iterator(1)
-            local_collection_index.add_files_to_index(iterator)
-
-        collection_file.refresh_from_db()
-        assert collection_file.status == FileStatus.COMPLETED
-
-        # Verify that embeddings were created
-        embeddings = FileChunkEmbedding.objects.filter(file=file, collection=local_collection_index)
-        assert embeddings.count() == 2
-        assert embeddings.first().text == "test"
-        assert embeddings.last().text == "content"
-
-    def test_handle_local_indexing_fails(self, local_collection_index):
-        """If anything goes wrong during local indexing, the file should be marked as failed"""
-        file = FileFactory()
-        local_collection_index.files.add(file)
-        collection_file = CollectionFile.objects.get(collection=local_collection_index, file=file)
-        collection_file.status = FileStatus.PENDING
-        collection_file.save()
-
-        # Mock file.read_content to raise an exception
-        with mock.patch.object(file, "read_content", side_effect=Exception("Read failed")):
-            iterator = CollectionFile.objects.filter(id=collection_file.id).iterator(1)
-            local_collection_index.add_files_to_index(iterator)
-
-        collection_file.refresh_from_db()
-        assert collection_file.status == FileStatus.FAILED

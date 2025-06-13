@@ -66,7 +66,7 @@ def index_collection_files(collection_files_queryset: QuerySet[CollectionFile]) 
         CollectionFile.objects.filter(id__in=ids).update(status=FileStatus.IN_PROGRESS)
 
         collection.add_files_to_index(
-            collection_files=CollectionFile.objects.filter(id__in=ids).iterator(100),
+            collection_files=CollectionFile.objects.filter(id__in=ids).select_related("file").iterator(100),
             chunk_size=strategy.chunk_size,
             chunk_overlap=strategy.chunk_overlap,
         )
