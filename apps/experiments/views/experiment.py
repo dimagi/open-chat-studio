@@ -11,7 +11,7 @@ from celery.result import AsyncResult
 from celery_progress.backend import Progress
 from django.conf import settings
 from django.contrib import messages
-from django.contrib.auth.decorators import permission_required
+from django.contrib.auth.decorators import login_required, permission_required
 from django.contrib.auth.mixins import PermissionRequiredMixin
 from django.core.exceptions import PermissionDenied, ValidationError
 from django.db import transaction
@@ -83,7 +83,11 @@ from apps.experiments.tables import (
     ParentExperimentRoutesTable,
     TerminalBotsTable,
 )
-from apps.experiments.tasks import async_create_experiment_version, async_export_chat, get_response_for_webchat_task
+from apps.experiments.tasks import (
+    async_create_experiment_version,
+    async_export_chat,
+    get_response_for_webchat_task,
+)
 from apps.experiments.views.prompt import PROMPT_DATA_SESSION_KEY
 from apps.files.models import File
 from apps.generics.chips import Chip
@@ -1458,3 +1462,26 @@ def get_release_status_badge(request, team_slug: str, experiment_id: int):
     experiment = get_object_or_404(Experiment, id=experiment_id, team=request.team)
     context = {"has_changes": experiment.compare_with_latest(), "experiment": experiment}
     return render(request, "experiments/components/unreleased_badge.html", context)
+
+
+@login_required
+@permission_required(("experiments.change_experiment", "pipelines.add_pipeline"))
+def migrate_experiment_view(request, team_slug, experiment_id):
+    from apps.pipelines.helper import convert_non_pipeline_experiment_to_pipeline
+
+    experiment = get_object_or_404(Experiment, id=experiment_id, team__slug=team_slug)
+    failed_url = reverse(
+        "experiments:single_experiment_home",
+        kwargs={"team_slug": team_slug, "experiment_id": experiment_id},
+    )
+    try:
+        with transaction.atomic():
+            experiment = Experiment.objects.get(id=experiment_id)
+            convert_non_pipeline_experiment_to_pipeline(experiment)
+        messages.success(request, f'Successfully migrated experiment "{experiment.name}" to chatbot!')
+        return redirect("chatbots:single_chatbot_home", team_slug=team_slug, experiment_id=experiment_id)
+    except Exception as e:
+        messages.error(request, f"Migration failed: {str(e)}")
+        return redirect(failed_url)
+
+    return redirect(failed_url)

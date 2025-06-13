@@ -20,6 +20,22 @@
           </div>
         </div>
       </div>
+    {% else %}
+      <div>
+        <div class="alert alert-info alert-vertical sm:alert-horizontal w-full flex items-center justify-between" role="alert">
+          <div>
+            Your experiment is ready to migrate to a chatbot! Chatbots is a new interface for a more streamlined bot building experience. This is a safe operation that will not change the existing functionality. <a href="https://docs.openchatstudio.com/concepts/chatbots/" class="italic" target="_blank" rel="noopener noreferrer">Learn More →</a>
+          </div>
+          <div>
+            <form method="post" action="{% url 'experiments:migrate_experiment' request.team.slug experiment.id %}" style="display: inline;">
+              {% csrf_token %}
+              <button type="submit" class="btn btn-primary">
+                Migrate Experiment
+              </button>
+            </form>
+          </div>
+        </div>
+      </div>
     {% endif %}
   {% endflag %}
   <div class="text-sm breadcrumbs" aria-label="breadcrumbs">

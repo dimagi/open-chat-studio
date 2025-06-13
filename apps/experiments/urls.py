@@ -202,6 +202,11 @@ urlpatterns = [
         views.get_release_status_badge,
         name="get_release_status_badge",
     ),
+    path(
+        "e/<int:experiment_id>/migrate/",
+        views.migrate_experiment_view,
+        name="migrate_experiment",
+    ),
 ]
 
 urlpatterns.extend(make_crud_urls(views, "SafetyLayer", "safety"))
