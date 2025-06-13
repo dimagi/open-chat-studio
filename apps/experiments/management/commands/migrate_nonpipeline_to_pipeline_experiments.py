@@ -159,13 +159,13 @@ class Command(BaseCommand):
     def _create_pipeline_with_node(self, experiment, node_type, node_label, node_params):
         """Create a pipeline with start -> custom_node -> end structure."""
         pipeline_name = f"{experiment.name} Pipeline"
-
+        node_id = str(uuid4())
         node = FlowNode(
-            id=str(uuid4()),
+            id=node_id,
             type="pipelineNode",
             position={"x": 400, "y": 200},
             data=FlowNodeData(
-                id=str(uuid4()),
+                id=node_id,
                 type=node_type,
                 label=node_label,
                 params=node_params,
