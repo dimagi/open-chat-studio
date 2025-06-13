@@ -35,7 +35,7 @@ from apps.chat.agent.tools import get_node_tools
 from apps.chat.conversation import compress_chat_history, compress_pipeline_chat_history
 from apps.documents.models import Collection
 from apps.experiments.models import BuiltInTools, ExperimentSession, ParticipantData
-from apps.pipelines.exceptions import PipelineNodeBuildError, PipelineNodeRunError
+from apps.pipelines.exceptions import PipelineNodeBuildError, PipelineNodeRunError, WaitForNextInput
 from apps.pipelines.models import PipelineChatHistory, PipelineChatHistoryModes, PipelineChatHistoryTypes
 from apps.pipelines.nodes.base import (
     NodeSchema,
@@ -1089,6 +1089,8 @@ class CodeNode(PipelineNode, OutputMessageTagMixin):
         try:
             exec(byte_code, custom_globals, custom_locals)
             result = custom_locals[function_name](input, **kwargs)
+        except WaitForNextInput:
+            return Command(goto=END)
         except Exception as exc:
             raise PipelineNodeRunError(exc) from exc
 
@@ -1135,10 +1137,22 @@ class CodeNode(PipelineNode, OutputMessageTagMixin):
                 "get_node_output": pipeline_state.get_node_output_by_name,
                 # control flow
                 "Abort": Abort,
-                "DoNothing": lambda: Command(goto=END),
+                "require_inputs_from": self._require_inputs_from(state),
             }
         )
         return custom_globals
+
+    def _require_inputs_from(self, state: PipelineState):
+        """A helper function to require inputs from a specific node"""
+
+        def require_inputs_from(*node_names):
+            if not all(isinstance(name, str) for name in node_names):
+                raise PipelineNodeRunError("node names pass to 'require_inputs_from' must be a string")
+            for node_name in node_names:
+                if node_name not in state["outputs"]:
+                    raise WaitForNextInput(f"Node '{node_name}' has not produced any output yet")
+
+        return require_inputs_from
 
     def _get_session_state_key(self, session: ExperimentSession):
         def get_session_state_key(key_name: str):

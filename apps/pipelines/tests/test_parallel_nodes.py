@@ -102,7 +102,7 @@ def main(input, **kwargs):
 
 
 @django_db_with_data(available_apps=("apps.service_providers",))
-def test_code_node_do_nothing(pipeline, experiment_session):
+def test_code_node_wait_for_inputs(pipeline, experiment_session):
     """In this test the branches are of unequal length, so the code node will get called twice,
     once when A and C are done, and once when B is done.
 
@@ -114,10 +114,9 @@ def test_code_node_do_nothing(pipeline, experiment_session):
     code = code_node(
         code="""
 def main(input, **kwargs):
+    require_inputs_from("B")
     c = get_node_output("C")
     b = get_node_output("B")  # expect this to arrive after C
-    if b is None:
-        return DoNothing()
     return f"{b},{c}"
     """,
         name="Code",
@@ -131,13 +130,14 @@ def main(input, **kwargs):
     output_state = PipelineState(output)
     assert output_state.get_node_output_by_name("end") == "B: A: Hi,C: Hi"
     assert isinstance(output_state["outputs"]["Code"], dict)
-    assert output_state.get_execution_flow() == [
+    # user set comparison since order of parallel nodes is not guaranteed
+    assert set(output_state.get_execution_flow()) == {
         (None, "start", ["A", "C"]),
         ("start", "C", ["Code"]),
         ("start", "A", ["B"]),
         ("A", "B", ["Code"]),
         ("Code", "end", []),
-    ]
+    }
 
 
 def static_code_router(output: str, name: str):
