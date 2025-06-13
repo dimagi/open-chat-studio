@@ -1,0 +1,83 @@
+import json
+
+from apps.teams.utils import current_team
+
+
+class TranslationError(Exception):
+    pass
+
+
+def translate_messages_with_llm(messages, target_language, llm_provider, llm_provider_model):
+    """
+    Translate chat messages using the specified LLM provider and model
+    Only translates messages that don't already have the target language translation.
+    """
+    if not target_language or not messages:
+        return messages
+    messages_to_translate = []
+    message_indices = []
+
+    for i, msg in enumerate(messages):
+        if not hasattr(msg, "translations") or not msg.translations:
+            msg.translations = {}
+
+        if target_language not in msg.translations:
+            messages_to_translate.append(msg)
+            message_indices.append(i)
+
+    if not messages_to_translate:
+        return messages
+    try:
+        with current_team(llm_provider.team):
+            llm_service = llm_provider.get_llm_service()
+            model_name = llm_provider_model.name
+            llm = llm_service.get_chat_model(model_name, temperature=0.1)
+            message_data = []
+            for msg in messages_to_translate:
+                message_data.append({"content": msg.content, "role": msg.role, "timestamp": msg.created_at.isoformat()})
+
+            language_names = {
+                "eng": "English",
+                "cmn": "Mandarin",
+                "hin": "Hindi",
+                "spa": "Spanish",
+                "fra": "French",
+                "ara": "Arabic",
+                "ben": "Bengali",
+                "rus": "Russian",
+                "por": "Portuguese",
+                "urd": "Urdu",
+            }
+            target_lang_name = language_names.get(target_language, target_language)
+
+            prompt = f"""Please translate these chat messages to {target_lang_name}. Return a JSON array
+            where each object has:
+            - "translated_text": the {target_lang_name} translation
+            If the text is already in {target_lang_name}, the value of "translated_text" should be the original text.
+            Messages to translate:
+            {json.dumps(message_data)}
+            Output only the JSON array, without any additional text or explanation.
+            """
+            response = llm.invoke(prompt)
+            translated_data = json.loads(response.content)
+
+            for i, msg in enumerate(messages_to_translate):
+                if i < len(translated_data):
+                    msg.translations[target_language] = translated_data[i]["translated_text"]
+                    msg.save(update_fields=["translations"])
+
+            if messages_to_translate:
+                chat = messages_to_translate[0].chat
+                if target_language not in chat.translated_languages:
+                    chat.translated_languages.append(target_language)
+                    chat.save(update_fields=["translated_languages"])
+            return messages
+
+    except Exception as e:
+        raise TranslationError(f"Failed to translate messages to {target_language}: {str(e)}") from e
+
+
+def get_message_content(message, target_language=None):
+    if target_language and hasattr(message, "translations") and message.translations:
+        return message.translations.get(target_language, message.content)
+    return message.content

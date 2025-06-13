@@ -1,6 +1,7 @@
 from enum import StrEnum
 from urllib.parse import quote
 
+from django.contrib.postgres.fields import ArrayField
 from django.db import models
 from django.db.models import Q
 from django.utils.functional import classproperty
@@ -24,6 +25,13 @@ class Chat(BaseTeamModel, TaggedModelMixin, UserCommentsMixin):
 
     # must match or be greater than experiment name field
     name = models.CharField(max_length=128, default="Unnamed Chat")
+    translated_languages = ArrayField(
+        models.CharField(max_length=3),
+        default=list,
+        blank=True,
+        null=True,
+        help_text="List of language codes for which translated text is available",
+    )
     metadata = models.JSONField(default=dict)
 
     @property
@@ -118,6 +126,7 @@ class ChatMessage(BaseModel, TaggedModelMixin, UserCommentsMixin):
     summary = models.TextField(  # noqa DJ001
         null=True, blank=True, help_text="The summary of the conversation up to this point (not including this message)"
     )
+    translations = models.JSONField(default=dict, help_text="Dictionary of translated text keyed by the language code")
     metadata = models.JSONField(default=dict)
 
     class Meta:
