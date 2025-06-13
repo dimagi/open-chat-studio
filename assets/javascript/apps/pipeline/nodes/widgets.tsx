@@ -1033,7 +1033,11 @@ function BuiltInToolsWidget(props: WidgetParams) {
       if (!next.data.params.tool_config[toolName]) {
         next.data.params.tool_config[toolName] = {};
       }
-      next.data.params.tool_config[toolName][name] = value.split(" ").map(value => value.trim());
+      next.data.params.tool_config[toolName][name] = value.split("\n").map(url => {
+        const trimmedUrl = url.trim();
+        // Strip http:// or https:// prefixes
+        return trimmedUrl.replace(/^https?:\/\//, '');
+      }).filter(url => url.length > 0);
     }))
   }
   return (
@@ -1070,7 +1074,7 @@ function BuiltInToolsWidget(props: WidgetParams) {
                 name: widget.name,
                 label: widget.label,
                 helpText: widget.helpText ?? "",
-                paramValue: Array.isArray(value) ? value.join(" ") : value,
+                paramValue: Array.isArray(value) ? value.join("\n") : value,
                 updateParamValue: (event) => onConfigUpdate(toolKey, event),
                 inputError: error,
               };
