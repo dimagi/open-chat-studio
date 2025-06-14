@@ -187,7 +187,6 @@ class EvaluationResult(BaseTeamModel):
     message = models.ForeignKey(EvaluationMessage, on_delete=models.CASCADE)
     run = models.ForeignKey(EvaluationRun, on_delete=models.CASCADE, related_name="results")
     output = models.JSONField()
-    # TODO: track input with a generic FK relationship / normalized inputs
 
     def __str__(self):
         return f"EvaluatorResult for Evaluator {self.evaluator_id}"
