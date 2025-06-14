@@ -1,6 +1,6 @@
 import factory
 
-from apps.chat.models import Chat
+from apps.chat.models import Chat, ChatMessage
 from apps.experiments import models
 from apps.utils.factories.service_provider_factories import (
     LlmProviderFactory,
@@ -73,6 +73,11 @@ class ExperimentFactory(factory.django.DjangoModelFactory):
 class VersionedExperimentFactory(ExperimentFactory):
     working_version = factory.SubFactory(ExperimentFactory, version_number=2, team=factory.SelfAttribute("..team"))
     version_number = 1
+
+
+class ChatMessageFactory(factory.django.DjangoModelFactory):
+    class Meta:
+        model = ChatMessage
 
 
 class ChatFactory(factory.django.DjangoModelFactory):
