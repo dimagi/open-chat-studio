@@ -21,11 +21,13 @@ class TestEditCollection:
             name="Tester", team=team, is_index=True, is_remote_index=True, llm_provider=LlmProviderFactory(team=team)
         )
 
+    @pytest.mark.usefixtures("index_manager_mock")
     @mock.patch("apps.documents.tasks.migrate_vector_stores.delay")
-    def test_update_collection_with_llm_provider_change(self, migrate_mock, index_manager_mock, collection, client):
+    @mock.patch("apps.service_providers.models.LlmProvider.create_remote_index")
+    def test_update_collection_with_llm_provider_change(self, create_remote_index, migrate_mock, collection, client):
         new_llm_provider = LlmProviderFactory(team=collection.team)
         new_vector_store_id = "new-store-123"
-        index_manager_mock.create_remote_index.return_value = new_vector_store_id
+        create_remote_index.return_value = new_vector_store_id
 
         client.force_login(collection.team.members.first())
         url = reverse("documents:collection_edit", args=[collection.team.slug, collection.id])
@@ -92,8 +94,10 @@ class TestDeleteCollection:
         collection.files.add(file)
         return collection
 
+    @pytest.mark.usefixtures("index_manager_mock")
     @pytest.mark.parametrize("is_index", [True, False])
-    def test_user_cannot_delete_a_collection_in_use(self, is_index, index_manager_mock, client, experiment):
+    @mock.patch("apps.service_providers.models.LlmProvider.create_remote_index")
+    def test_user_cannot_delete_a_collection_in_use(self, create_remote_index, is_index, client, experiment):
         """
         The user should not be able to delete a collection if it is being used by a pipeline.
         There are two cases where this can happen:
@@ -114,7 +118,7 @@ class TestDeleteCollection:
         assert response.status_code == 400
 
         # Case 2 - Remove the collection from the node so that only a pipeline version is using it
-        index_manager_mock.create_remote_index.return_value = "v-321"
+        create_remote_index.return_value = "v-321"
         collection.create_new_version()
         node.params = {}
         node.save()

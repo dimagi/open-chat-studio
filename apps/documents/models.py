@@ -177,7 +177,6 @@ class Collection(BaseTeamModel, VersionsMixin):
             # Optimization suggestion: Only when the file set changed, should we create a new vector store at the
             # provider
             if self.is_remote_index:
-                new_version.openai_vector_store_id = None
                 new_version.ensure_remote_index_created()
 
                 # Upload files to vector store

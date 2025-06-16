@@ -53,10 +53,12 @@ class TestCollection:
         # Vector store ID should be None for non-indexed collections
         assert new_version.openai_vector_store_id == ""
 
+    @pytest.mark.usefixtures("index_manager_mock")
     @mock.patch("apps.documents.tasks.index_collection_files")
-    def test_create_new_version_of_a_collection_index(self, index_collection_files, index_manager_mock):
+    @mock.patch("apps.service_providers.models.LlmProvider.create_remote_index")
+    def test_create_new_version_of_a_collection_index(self, create_remote_index, index_collection_files):
         """Ensure that a new vector store is created for the new version when one is created"""
-        index_manager_mock.create_remote_index.return_value = "new-vs-123"
+        create_remote_index.return_value = "new-vs-123"
 
         collection = CollectionFactory(
             name="Test Collection",
@@ -82,9 +84,7 @@ class TestCollection:
         assert collection.openai_vector_store_id == "old-vs-123"
 
         # Verify vector store was created and files were indexed
-        index_manager_mock.create_remote_index.assert_called_once_with(
-            name=f"{new_version.index_name} v{new_version.version_number}"
-        )
+        create_remote_index.assert_called_once_with(name=new_version.index_name, file_ids=[])
         index_collection_files.assert_called()
 
     def test_create_new_version_of_local_collection_index(self):
@@ -201,3 +201,26 @@ class TestCollection:
 
         assert isinstance(collection_remote.get_index_manager(), RemoteIndexManager)
         assert isinstance(collection_local.get_index_manager(), LocalIndexManager)
+
+    @pytest.mark.parametrize(
+        ("is_remote_index", "openai_id", "expect_remote_call"),
+        [
+            (True, "", True),
+            (True, "vs-123", False),
+            (False, "", False),
+        ],
+    )
+    @mock.patch("apps.service_providers.models.LlmProvider.create_remote_index")
+    def test_ensure_remote_index_created(self, create_remote_index, is_remote_index, openai_id, expect_remote_call):
+        """Test creating vector store without file IDs"""
+        collection = CollectionFactory(is_index=True, is_remote_index=is_remote_index, openai_vector_store_id=openai_id)
+        create_remote_index.return_value = "new-vs-123"
+        collection.ensure_remote_index_created()
+        collection.refresh_from_db()
+
+        if expect_remote_call:
+            create_remote_index.assert_called()
+            assert collection.openai_vector_store_id == "new-vs-123"
+        else:
+            create_remote_index.assert_not_called()
+            assert collection.openai_vector_store_id == openai_id

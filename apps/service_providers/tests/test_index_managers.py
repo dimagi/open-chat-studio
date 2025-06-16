@@ -46,8 +46,6 @@ class LocalIndexManagerMock(LocalIndexManager):
 class RemoteIndexManagerMock(RemoteIndexManager):
     def get(self): ...
 
-    def create_remote_index(self, *args, **kwargs) -> str: ...
-
     def delete_remote_index(self): ...
 
     def delete_file_from_index(self, *args, **kwargs): ...
@@ -179,32 +177,6 @@ class TestOpenAIRemoteIndexManager:
 
         provider_client_mock.vector_stores.retrieve.assert_called_once_with("vs-test-123")
         assert result == mock_vector_store
-
-    def test_create_vector_store_without_file_ids(self, index_manager, provider_client_mock):
-        """Test creating vector store without file IDs"""
-        mock_vector_store = mock.Mock()
-        mock_vector_store.id = "vs-new-456"
-        provider_client_mock.vector_stores.create.return_value = mock_vector_store
-
-        result = index_manager.create_remote_index("Test Vector Store")
-
-        provider_client_mock.vector_stores.create.assert_called_once_with(name="Test Vector Store", file_ids=[])
-        assert result == "vs-new-456"
-        assert index_manager.index_id == "vs-new-456"
-
-    def test_create_vector_store_with_file_ids(self, index_manager, provider_client_mock):
-        """Test creating vector store with file IDs"""
-        mock_vector_store = mock.Mock()
-        mock_vector_store.id = "vs-new-789"
-        provider_client_mock.vector_stores.create.return_value = mock_vector_store
-
-        result = index_manager.create_remote_index("Test Vector Store", file_ids=["file-1", "file-2"])
-
-        provider_client_mock.vector_stores.create.assert_called_once_with(
-            name="Test Vector Store", file_ids=["file-1", "file-2"]
-        )
-        assert result == "vs-new-789"
-        assert index_manager.index_id == "vs-new-789"
 
     def test_delete_remote_index_success(self, index_manager, provider_client_mock):
         """Test successful deletion of vector store"""
