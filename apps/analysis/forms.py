@@ -9,21 +9,8 @@ from django.utils.html import format_html
 from apps.service_providers.models import LlmProvider, LlmProviderModel
 
 from ..experiments.export import get_filtered_sessions
+from .const import LANGUAGE_CHOICES
 from .models import AnalysisQuery, TranscriptAnalysis
-
-LANGUAGE_CHOICES = [
-    ("", "Original (default)"),
-    ("ara", "Arabic"),
-    ("ben", "Bengali"),
-    ("eng", "English"),
-    ("fra", "French"),
-    ("hin", "Hindi"),
-    ("cmn", "Mandarin"),
-    ("por", "Portuguese"),
-    ("rus", "Russian"),
-    ("spa", "Spanish"),
-    ("urd", "Urdu"),
-]
 
 
 class TranscriptAnalysisForm(forms.ModelForm):

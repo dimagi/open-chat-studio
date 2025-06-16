@@ -2,6 +2,8 @@ import json
 
 from apps.teams.utils import current_team
 
+from .const import LANGUAGE_CHOICES
+
 
 class TranslationError(Exception):
     pass
@@ -36,18 +38,7 @@ def translate_messages_with_llm(messages, target_language, llm_provider, llm_pro
             for msg in messages_to_translate:
                 message_data.append({"content": msg.content, "role": msg.role, "timestamp": msg.created_at.isoformat()})
 
-            language_names = {
-                "eng": "English",
-                "cmn": "Mandarin",
-                "hin": "Hindi",
-                "spa": "Spanish",
-                "fra": "French",
-                "ara": "Arabic",
-                "ben": "Bengali",
-                "rus": "Russian",
-                "por": "Portuguese",
-                "urd": "Urdu",
-            }
+            language_names = dict(choice for choice in LANGUAGE_CHOICES if choice[0])
             target_lang_name = language_names.get(target_language, target_language)
 
             prompt = f"""Please translate these chat messages to {target_lang_name}. Return a JSON array
