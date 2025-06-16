@@ -54,20 +54,6 @@ class RemoteIndexManager(metaclass=ABCMeta):
         ...
 
     @abstractmethod
-    def create_remote_index(self, name: str, file_ids: list = None) -> str:
-        """
-        Create a new vector store in the remote index service.
-
-        Args:
-            name: The name to assign to the new vector store.
-            file_ids: Optional list of remote file IDs to initially associate with the vector store.
-
-        Returns:
-            str: The unique identifier of the newly created vector store.
-        """
-        ...
-
-    @abstractmethod
     def delete_remote_index(self):
         """
         Delete the vector store from the remote index service.
@@ -186,12 +172,6 @@ class OpenAIRemoteIndexManager(RemoteIndexManager):
 
     def get(self):
         return self.client.vector_stores.retrieve(self.index_id)
-
-    def create_remote_index(self, name: str, file_ids: list = None) -> str:
-        file_ids = file_ids or []
-        vector_store = self.client.vector_stores.create(name=name, file_ids=file_ids)
-        self.index_id = vector_store.id
-        return self.index_id
 
     def delete_remote_index(self):
         with contextlib.suppress(openai.NotFoundError):

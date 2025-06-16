@@ -493,10 +493,10 @@ def _sync_tool_resources(assistant):
 
 def _update_or_create_vector_store(assistant, name, vector_store_id, file_ids) -> str:
     client = assistant.llm_provider.get_llm_service().get_raw_client()
-    vector_store_manager = OpenAIRemoteIndexManager(client, index_id=vector_store_id)
 
     if vector_store_id:
         try:
+            vector_store_manager = OpenAIRemoteIndexManager(client, index_id=vector_store_id)
             vector_store_manager.get()
         except openai.NotFoundError:
             vector_store_id = None
@@ -510,11 +510,12 @@ def _update_or_create_vector_store(assistant, name, vector_store_id, file_ids) -
     if vector_store_id:
         file_ids = _get_files_missing_from_vector_store(client, vector_store_id, file_ids)
     else:
-        vector_store_id = vector_store_manager.create_remote_index(name=name, file_ids=file_ids[:100])
+        vector_store_id = assistant.llm_provider.create_remote_index(name=name, file_ids=file_ids[:100])
         file_ids = file_ids[100:]
 
     with contextlib.suppress(UnableToLinkFileException):
         # This will show an out-of-sync status on the assistant where the user can handle the error appropriately
+        vector_store_manager = OpenAIRemoteIndexManager(client, index_id=vector_store_id)
         vector_store_manager.link_files_to_remote_index(file_ids)
 
     return vector_store_id

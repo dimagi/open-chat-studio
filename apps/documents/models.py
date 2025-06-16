@@ -122,7 +122,9 @@ class Collection(BaseTeamModel, VersionsMixin):
 
     @property
     def index_name(self) -> str:
-        return f"collection-{self.team.slug}-{slugify(self.name)}-{self.id}"
+        name = f"collection-{self.team.slug}-{slugify(self.name)}-{self.id}"
+        if self.is_a_version:
+            return f"{name} v{self.version_number}"
 
     @property
     def size(self) -> float:
@@ -175,10 +177,8 @@ class Collection(BaseTeamModel, VersionsMixin):
             # Optimization suggestion: Only when the file set changed, should we create a new vector store at the
             # provider
             if self.is_remote_index:
-                manager = new_version.get_index_manager()
-                version_name = f"{new_version.index_name} v{new_version.version_number}"
-                new_version.openai_vector_store_id = manager.create_remote_index(name=version_name)
-                new_version.save(update_fields=["openai_vector_store_id"])
+                new_version.openai_vector_store_id = None
+                new_version.ensure_remote_index_created()
 
                 # Upload files to vector store
                 if collection_files := CollectionFile.objects.filter(collection_id=new_version.id):
@@ -289,3 +289,15 @@ class Collection(BaseTeamModel, VersionsMixin):
     ):
         index_manager = self.get_index_manager()
         index_manager.add_files(collection_files, chunk_size=chunk_size, chunk_overlap=chunk_overlap)
+
+    def ensure_remote_index_created(self, file_ids: list[str] = None):
+        """
+        Ensure that the remote index is created for this collection if it is not already created.
+        This is used when the collection is created or when the version is created.
+        """
+        if not self.is_remote_index or self.openai_vector_store_id:
+            return
+
+        file_ids = file_ids or []
+        self.openai_vector_store_id = self.llm_provider.create_remote_index(name=self.index_name, file_ids=file_ids)
+        self.save(update_fields=["openai_vector_store_id"])

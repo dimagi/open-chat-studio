@@ -119,9 +119,8 @@ def create_collection_from_assistant_task(collection_id: int, assistant_id: int)
 
     try:
         # Create vector store for the collection
+        collection.ensure_remote_index_created()
         index_manager = collection.get_index_manager()
-        collection.openai_vector_store_id = index_manager.create_remote_index(name=collection.index_name)
-        collection.save(update_fields=["openai_vector_store_id"])
 
         # Link files to the new vector store at OpenAI (only if there are files with external IDs)
         if file_with_remote_ids:
