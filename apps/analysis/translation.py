@@ -14,8 +14,6 @@ def translate_messages_with_llm(messages, target_language, llm_provider, llm_pro
     Translate chat messages using the specified LLM provider and model
     Only translates messages that don't already have the target language translation.
     """
-    if not target_language or not messages:
-        return messages
     messages_to_translate = []
     message_indices = []
 
