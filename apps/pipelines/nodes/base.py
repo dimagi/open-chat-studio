@@ -337,6 +337,7 @@ class PipelineRouterNode(BasePipelineNode):
         def router(state: PipelineState, config: RunnableConfig) -> ReturnType:
             self._config = config
 
+            state = PipelineState(state)
             state = self._prepare_state(self.node_id, incoming_edges, state)
 
             conditional_branch, is_default_keyword = self._process_conditional(state)

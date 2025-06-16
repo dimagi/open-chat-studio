@@ -1,4 +1,4 @@
-from collections import Counter, defaultdict
+from collections import defaultdict
 from functools import cached_property, partial
 from typing import Any, Self
 
@@ -128,8 +128,6 @@ class PipelineGraph(pydantic.BaseModel):
             raise PipelineBuildError("There are no nodes in the graph")
 
         self._validate_start_end_nodes()
-        if not self.lenient_validation:
-            self._validate_no_parallel_nodes()
         if self._check_for_cycles():
             raise PipelineBuildError("A cycle was detected")
 
@@ -147,22 +145,6 @@ class PipelineGraph(pydantic.BaseModel):
         except ValueError as e:
             raise PipelineBuildError(str(e)) from e
         return compiled_graph
-
-    def _validate_no_parallel_nodes(self):
-        """This is a simple check to ensure that no two edges are connected to the same output
-        which serves as a proxy for parallel nodes."""
-        outgoing_edges = defaultdict(list)
-        for edge in self.edges:
-            outgoing_edges[edge.source].append(edge)
-
-        for source, edges in outgoing_edges.items():
-            handles = Counter(edge.sourceHandle for edge in edges)
-            handle, count = handles.most_common(1)[0]
-            if count > 1:
-                edge_ids = [edge.id for edge in edges if edge.sourceHandle == handle]
-                raise PipelineBuildError(
-                    "Multiple edges connected to the same output", node_id=source, edge_ids=edge_ids
-                )
 
     def _check_for_cycles(self):
         """Detect cycles in a directed graph."""
