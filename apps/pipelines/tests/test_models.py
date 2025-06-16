@@ -167,7 +167,8 @@ class TestArchivingNodes:
         archive_related_params.assert_called()
 
     @patch("apps.assistants.sync.push_assistant_to_openai", Mock())
-    def test_archive_related_objects(self, index_manager_mock):
+    @mock.patch("apps.service_providers.models.LlmProvider.create_remote_index")
+    def test_archive_related_objects(self, create_remote_index):
         # Setup related objects
         assistant = OpenAiAssistantFactory()
         collection = CollectionFactory()
@@ -176,7 +177,7 @@ class TestArchivingNodes:
         )
 
         # Setup mocks
-        index_manager_mock.create_remote_index.return_value = "v-456"
+        create_remote_index.return_value = "v-456"
 
         # Build the pipeline
         pipeline = PipelineFactory()
