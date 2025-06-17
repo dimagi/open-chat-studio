@@ -141,6 +141,10 @@ class Collection(BaseTeamModel, VersionsMixin):
             instance=self,
             fields=[
                 VersionField(group_name="General", name="name", raw_value=self.name),
+                VersionField(group_name="General", name="llm_provider", raw_value=self.llm_provider),
+                VersionField(
+                    group_name="General", name="embedding_provider_model", raw_value=self.embedding_provider_model
+                ),
                 VersionField(group_name="General", name="files", queryset=self.files.all()),
             ],
         )
