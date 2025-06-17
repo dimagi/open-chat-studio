@@ -55,7 +55,7 @@ class ActionsColumn(tables.Column):
                 "edit_url": edit_url,
                 "delete_url": delete_url,
                 "toggle_active_flag_url": toggle_active_flag_url,
-                "is_active": record["is_active"],
+                "event": record,
             }
         )
 

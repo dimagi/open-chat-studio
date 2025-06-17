@@ -1,10 +1,14 @@
+{% include "events/components/toggle_active_flag_modal.html" with event=event toggle_active_flag_url=toggle_active_flag_url%}
 <a class="btn btn-sm btn-outline btn-primary" href="{{ view_log_url }}" aria-label="View logs">View Logs</a>
 <a class="btn btn-sm btn-outline btn-primary" href="{{ edit_url }}" aria-label="Edit event">Edit</a>
 <a class="btn btn-sm btn-outline btn-primary" href="{{ delete_url }}" aria-label="Delete event">Delete</a>
-<a class="btn btn-sm btn-outline btn-primary" href="{{ toggle_active_flag_url }}" aria-label="Toggle active flag for this event">
-    {% if is_active %}
+<button type="button"
+        class="btn btn-sm btn-outline btn-primary"
+        onclick="document.getElementById('toggleEventModal-{{ event.id }}').showModal()"
+        aria-label="Toggle active flag for this event">
+    {% if event.is_active %}
         Disable
     {% else %}
         Enable
     {% endif %}
-</a>
+</button>
