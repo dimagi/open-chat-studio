@@ -1,4 +1,5 @@
 from django.contrib.auth.decorators import permission_required
+from django.db import models
 from django.http import HttpResponseRedirect
 from django.shortcuts import get_object_or_404, render
 from django.urls import reverse
@@ -167,8 +168,10 @@ def _toggle_event_status_view(trigger_type, request, team_slug: str, experiment_
         "timeout": TimeoutTrigger,
     }[trigger_type]
 
-    trigger = get_object_or_404(model_class, id=trigger_id, experiment_id=experiment_id)
-    trigger.is_active = not trigger.is_active
-    trigger.save(update_fields=["is_active"])
+    trigger = get_object_or_404(model_class, id=trigger_id)
+    working_root = trigger.working_version if trigger.working_version else trigger
+    all_versions = model_class.objects.filter(models.Q(id=working_root.id) | models.Q(working_version=working_root))
+    new_status = not trigger.is_active
+    all_versions.update(is_active=new_status)
 
     return HttpResponseRedirect(_get_events_url(team_slug, experiment_id, origin))
