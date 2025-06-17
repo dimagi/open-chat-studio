@@ -124,12 +124,25 @@ class TranscriptAnalysisForm(forms.ModelForm):
 
     def clean_translation_provider_model(self):
         translation_provider_model = self.cleaned_data.get("translation_provider_model")
-        translation_language = self.cleaned_data.get("translation_language")
 
+        if translation_provider_model:
+            return self._validate_provider_model(translation_provider_model, "translation LLM")
+
+        return translation_provider_model
+
+    def clean(self):
+        cleaned_data = super().clean()
+        translation_language = cleaned_data.get("translation_language")
+        translation_provider_model = cleaned_data.get("translation_provider_model")
         if translation_language and not translation_provider_model:
-            raise forms.ValidationError("Translation LLM provider is required when translation language is selected.")
+            raise forms.ValidationError(
+                {
+                    "translation_provider_model": "Translation LLM provider is required when translation \
+                    language is selected."
+                }
+            )
 
-        return self._validate_provider_model(translation_provider_model, "translation LLM")
+        return cleaned_data
 
     def save(self, commit=True):
         instance = super().save(commit=False)
