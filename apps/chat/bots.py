@@ -320,11 +320,13 @@ class EventBot:
         experiment: Experiment,
         trace_info: TraceInfo,
         history_manager=None,
+        trace_service=None,
     ):
         self.session = session
         self.experiment = experiment or session.experiment_version
         self.history_manager = history_manager
         self.trace_info = trace_info
+        self.trace_service = trace_service
 
     def get_user_message(self, event_prompt: str) -> str:
         provider = self.llm_provider
@@ -336,19 +338,21 @@ class EventBot:
         service = provider.get_llm_service()
         llm = service.get_chat_model(model.name, 0.7)
 
-        if self.history_manager:
-            trace_service = self.history_manager.trace_service
-        else:
-            trace_service = TracingService.create_for_experiment(self.experiment)
+        if not self.trace_service:
+            self.trace_service = (
+                self.history_manager.trace_service
+                if self.history_manager
+                else TracingService.create_for_experiment(self.experiment)
+            )
 
-        with trace_service.trace_or_span(
+        with self.trace_service.trace_or_span(
             name=f"{self.experiment.name} - {self.trace_info.name}",
             session_id=str(self.session.external_id),
             user_id=str(self.session.participant.identifier),
             inputs={"input": event_prompt},
             metadata=self.trace_info.metadata,
         ):
-            config = trace_service.get_langchain_config()
+            config = self.trace_service.get_langchain_config()
             response = llm.invoke(
                 [
                     {"role": "system", "content": self.system_prompt},
@@ -356,7 +360,7 @@ class EventBot:
                 ],
                 config=config,
             )
-            trace_service.set_current_span_outputs({"response": response.content})
+            self.trace_service.set_current_span_outputs({"response": response.content})
 
             message = response.content
             if self.history_manager:

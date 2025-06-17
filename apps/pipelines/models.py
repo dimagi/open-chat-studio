@@ -12,6 +12,7 @@ from django.db import models, transaction
 from django.urls import reverse
 from langchain_core.messages import AIMessage, BaseMessage, HumanMessage, SystemMessage
 
+from apps.annotations.models import TagCategories
 from apps.chat.models import ChatMessage, ChatMessageType
 from apps.custom_actions.form_utils import set_custom_actions
 from apps.custom_actions.mixins import CustomActionOperationMixin
@@ -23,6 +24,7 @@ from apps.pipelines.flow import Flow, FlowNode, FlowNodeData
 from apps.pipelines.helper import duplicate_pipeline_with_new_ids
 from apps.pipelines.nodes.base import PipelineState
 from apps.pipelines.nodes.helpers import temporary_session
+from apps.service_providers.tracing import TraceInfo
 from apps.teams.models import BaseTeamModel
 from apps.utils.models import BaseModel
 
@@ -346,12 +348,27 @@ class Pipeline(BaseTeamModel, VersionsMixin):
                 self._save_message_to_history(
                     session, input["messages"][-1], ChatMessageType.HUMAN, metadata=input_metadata
                 )
+
+            tags = output.get("output_message_tags") or []
+            if interrupt := output.get("interrupt"):
+                from apps.chat.bots import EventBot
+
+                trace_info = TraceInfo(name="interrupt", metadata={"interrupt": interrupt})
+                # TODO: is this the right thing to do here?
+                output_message = EventBot(
+                    session=session, experiment=experiment, trace_info=trace_info, trace_service=trace_service
+                ).get_user_message(interrupt["message"])
+                if tag_name := interrupt["tag_name"]:
+                    tags.append((TagCategories.SAFETY_LAYER_RESPONSE, tag_name))
+            else:
+                output_message = output["messages"][-1]
+
             ai_message = self._save_message_to_history(
                 session,
-                output["messages"][-1],
+                output_message,
                 ChatMessageType.AI,
                 metadata=output_metadata,
-                tags=output.get("output_message_tags"),
+                tags=tags,
             )
             ai_message.add_version_tag(version_number=experiment.version_number, is_a_version=experiment.is_a_version)
             return ai_message

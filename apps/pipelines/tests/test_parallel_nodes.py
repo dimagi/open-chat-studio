@@ -80,7 +80,7 @@ def main(input, **kwargs):
     safety_check = get_node_output("safety_check")
     b = get_node_output("B")
     if safety_check != "safe":
-        abort_with_message(f"Unsafe input: {safety_check}")
+        abort_with_message(f"Unsafe input: {safety_check}", "unsafe_input")
     return b
     """,
         name="Code",
@@ -97,8 +97,11 @@ def main(input, **kwargs):
         assert output_state.get_node_output_by_name("end") == "B"
         assert "C" in output_state["outputs"]
     else:
-        assert output_state["__interrupt__"][0].value == "Unsafe input: unsafe"
+        assert output_state["__interrupt__"][0].value == {"message": "Unsafe input: unsafe", "tag_name": "unsafe_input"}
         assert "C" not in output_state["outputs"]
+        json_safe = output_state.json_safe()
+        assert "__interrupt__" not in json_safe
+        assert json_safe["interrupt"] == {"message": "Unsafe input: unsafe", "tag_name": "unsafe_input"}
 
 
 @django_db_with_data(available_apps=("apps.service_providers",))

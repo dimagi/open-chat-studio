@@ -73,7 +73,7 @@ export default function TestMessageBox({
           if (result.error) {
             setError(result.error);
           } else if (result.interrupt) {
-            setResponseMessage({message: result.interrupt, className: "text-yellow-500", prefix: "Interrupt:"});
+            setResponseMessage({message: result.interrupt.message, className: "text-yellow-500", prefix: "Interrupt:"});
             for (const nodeOutput of Object.values(result.outputs)) {
                 setEdgeLabel(nodeOutput.node_id, nodeOutput.output_handle, nodeOutput.message);
             }

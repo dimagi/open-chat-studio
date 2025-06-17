@@ -1086,7 +1086,7 @@ class CodeNode(PipelineNode, OutputMessageTagMixin):
         except WaitForNextInput:
             return Command(goto=END)
         except AbortPipeline as abort:
-            return interrupt(str(abort))
+            return interrupt(abort.to_json())
         except Exception as exc:
             raise PipelineNodeRunError(exc) from exc
 
@@ -1137,8 +1137,8 @@ class CodeNode(PipelineNode, OutputMessageTagMixin):
         return custom_globals
 
     def _abort_pipeline(self):
-        def abort_pipeline(message):
-            raise AbortPipeline(message)
+        def abort_pipeline(message, tag_name: str = None):
+            raise AbortPipeline(message, tag_name)
 
         return abort_pipeline
 

@@ -41,3 +41,15 @@ class AbortPipeline(Exception):
 
     This exception is used to stop the pipeline execution and can be caught by the pipeline runner.
     """
+
+    def __init__(self, message: str, tag_name: str = None):
+        """
+        Parameters:
+            message (str): A descriptive error message explaining the reason for the abortion.
+        """
+        super().__init__(message)
+        self.message = message
+        self.tag_name = tag_name
+
+    def to_json(self):
+        return {"message": self.message, "tag_name": self.tag_name}
