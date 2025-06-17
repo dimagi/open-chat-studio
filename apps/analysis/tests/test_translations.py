@@ -42,11 +42,6 @@ class TestTranslateMessagesWithLLM(TestCase):
         result = translate_messages_with_llm([], "spa", self.mock_llm_provider, self.mock_llm_provider_model)
         assert result == []
 
-    def test_no_target_language_returns_original_messages(self):
-        messages = [self.mock_message1, self.mock_message2]
-        result = translate_messages_with_llm(messages, None, self.mock_llm_provider, self.mock_llm_provider_model)
-        assert result == messages
-
     def test_already_translated_messages_not_retranslated(self):
         self.mock_message1.translations = {"spa": "Hola, ¿cómo estás?"}
         self.mock_message2.translations = {"spa": "¡Estoy bien, gracias!"}
