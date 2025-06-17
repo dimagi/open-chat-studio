@@ -66,19 +66,20 @@ def process_transcript_analysis(self, analysis_id):
                 progress_recorder.set_progress(
                     progress_value, 100, description=f"Processing session {index + 1}/{total_sessions}"
                 )
-                messages = list(session.chat.messages.all().order_by("created_at"))
-
+                messages_queryset = session.chat.messages.all().order_by("created_at")
                 if translation_language and translation_llm_provider:
                     progress_recorder.set_progress(
                         progress_value, 100, description=f"Translating session {index + 1}/{total_sessions}"
                     )
+                    messages = list(messages_queryset)
                     messages = translate_messages_with_llm(
                         messages,
                         translation_language,
                         translation_llm_provider,
                         translation_llm_provider_model,
                     )
-
+                else:
+                    messages = messages_queryset.iterator(chunk_size=100)
                 out = StringIO()
                 writer = csv.writer(out)
                 for message in messages:
@@ -106,12 +107,12 @@ def process_transcript_analysis(self, analysis_id):
 
                     prompt = f"""
                     Analyze the following conversation transcript according to this query:
-                    
+
                     QUERY: {sanitized_query}
-                    
+
                     TRANSCRIPT as CSV:
                     {transcript}
-                    
+
                     Please provide a concise, objective response to the query based only on the transcript content.
                     """
 
