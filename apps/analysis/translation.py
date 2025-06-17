@@ -28,7 +28,7 @@ def translate_messages_with_llm(messages, target_language, llm_provider, llm_pro
     message_indices = []
 
     for i, msg in enumerate(messages):
-        if not hasattr(msg, "translations") or not msg.translations:
+        if not msg.translations:
             msg.translations = {}
 
         if target_language not in msg.translations:
