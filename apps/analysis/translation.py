@@ -74,6 +74,4 @@ def translate_messages_with_llm(messages, target_language, llm_provider, llm_pro
 
 
 def get_message_content(message, target_language=None):
-    if target_language and hasattr(message, "translations") and message.translations:
-        return message.translations.get(target_language, message.content)
-    return message.content
+    return message.translations.get(target_language, message.content)

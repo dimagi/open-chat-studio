@@ -126,20 +126,6 @@ class TestGetMessageContent(TestCase):
         result = get_message_content(self.mock_message, "ger")
         assert result == "Hello world"
 
-    def test_message_without_translations_attribute(self):
-        mock_message = Mock()
-        mock_message.content = "Hello world"
-        delattr(mock_message, "translations")
-        result = get_message_content(mock_message, "spa")
-        assert result == "Hello world"
-
-    def test_message_with_none_translations(self):
-        mock_message = Mock()
-        mock_message.content = "Hello world"
-        mock_message.translations = None
-        result = get_message_content(mock_message, "spa")
-        assert result == "Hello world"
-
     def test_empty_translations_dict(self):
         mock_message = Mock()
         mock_message.content = "Hello world"
