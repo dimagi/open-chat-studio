@@ -169,7 +169,7 @@ def _toggle_event_status_view(trigger_type, request, team_slug: str, experiment_
     }[trigger_type]
 
     trigger = get_object_or_404(model_class, id=trigger_id)
-    working_root = trigger.working_version if trigger.working_version else trigger
+    working_root = trigger.get_working_version()
     all_versions = model_class.objects.filter(models.Q(id=working_root.id) | models.Q(working_version=working_root))
     new_status = not trigger.is_active
     all_versions.update(is_active=new_status)
