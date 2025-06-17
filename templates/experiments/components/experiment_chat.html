@@ -75,7 +75,9 @@
                       <div class="flex flex-col">
                         {% for file in message.get_attached_files %}
                           <div class="inline text-sm p-1">
-                            <i class="fa-solid fa-file fa-sm"></i> {{ file.name }}
+                            <a href="{{ file.download_url }}" target="_blank" class="text-blue-600 underline">
+                              <i class="fa-solid fa-file fa-sm mr-1"></i>{{ file.name }}
+                            </a>
                           </div>
                         {% endfor %}
                       </div>

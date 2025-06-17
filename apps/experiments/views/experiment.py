@@ -510,7 +510,7 @@ def _get_events_context(experiment: Experiment, team_slug: str, origin=None):
                 Case(When(event_logs__status=EventLogStatusChoices.FAILURE, then=1), output_field=IntegerField())
             )
         )
-        .values("id", "experiment_id", "type", "action__action_type", "action__params", "failure_count")
+        .values("id", "experiment_id", "type", "action__action_type", "action__params", "failure_count", "is_active")
         .all()
     )
     timeout_events = (
@@ -528,6 +528,7 @@ def _get_events_context(experiment: Experiment, team_slug: str, origin=None):
             "action__params",
             "total_num_triggers",
             "failure_count",
+            "is_active",
         )
         .all()
     )
@@ -1266,6 +1267,11 @@ def experiment_session_messages_view(request, team_slug: str, experiment_id: uui
     start_idx = (page - 1) * page_size
     end_idx = start_idx + page_size
     paginated_messages = messages_queryset[start_idx:end_idx]
+    for message in paginated_messages:
+        message.attached_files = []
+        for file in message.get_attached_files():
+            file.download_url = file.download_link(session.id)
+            message.attached_files.append(file)
     context = {
         "experiment_session": session,
         "experiment": experiment,

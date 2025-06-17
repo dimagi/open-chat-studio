@@ -124,6 +124,7 @@ class StaticTrigger(BaseModel, VersionsMixin):
     )
     is_archived = models.BooleanField(default=False)
     objects = StaticTriggerObjectManager()
+    is_active = models.BooleanField(default=True)
 
     @property
     def trigger_type(self):
@@ -191,6 +192,7 @@ class TimeoutTrigger(BaseModel, VersionsMixin):
     )
     is_archived = models.BooleanField(default=False)
     objects = TimeoutTriggerObjectManager()
+    is_active = models.BooleanField(default=True)
 
     @transaction.atomic()
     def create_new_version(self, new_experiment: Experiment, is_copy: bool = False):

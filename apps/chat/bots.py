@@ -9,10 +9,11 @@ from pydantic import ValidationError
 from apps.annotations.models import TagCategories
 from apps.chat.conversation import BasicConversation
 from apps.chat.exceptions import ChatException
-from apps.chat.models import ChatMessage, ChatMessageType
+from apps.chat.models import ChatAttachment, ChatMessage, ChatMessageType
 from apps.events.models import StaticTriggerType
 from apps.events.tasks import enqueue_static_triggers
 from apps.experiments.models import Experiment, ExperimentRoute, ExperimentSession, SafetyLayer
+from apps.files.models import File
 from apps.pipelines.nodes.base import PipelineState
 from apps.service_providers.llm_service.default_models import get_default_model
 from apps.service_providers.llm_service.prompt_context import PromptTemplateContext
@@ -279,11 +280,21 @@ class PipelineBot:
     ) -> ChatMessage:
         attachments = attachments or []
         serializable_attachments = [attachment.model_dump() for attachment in attachments]
+        incoming_file_ids = []
+        for attachment in attachments:
+            file = File.objects.get(id=attachment.id)
+            ChatAttachment.objects.create(chat=self.session.chat, tool_type="ocs_attachments")
+            incoming_file_ids.append(file.id)
+
+        input_message_metadata = {}
+        if incoming_file_ids:
+            input_message_metadata["ocs_attachment_file_ids"] = incoming_file_ids
         return self.experiment.pipeline.invoke(
             PipelineState(
                 messages=[user_input],
                 experiment_session=self.session,
                 attachments=serializable_attachments,
+                input_message_metadata=input_message_metadata,
             ),
             self.session,
             self.experiment,
