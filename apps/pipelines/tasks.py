@@ -30,12 +30,8 @@ def get_response_for_pipeline_test_message(pipeline_id: int, message_text: str, 
     if errors:
         return {"error": "There are errors in the pipeline configuration. Please correct those before running a test."}
     try:
-        output = pipeline.simple_invoke(message_text, user_id)
+        return pipeline.simple_invoke(message_text, user_id)
     except PipelineBuildError as e:
         return {"error": e.message}
     except (GenerationError, PipelineNodeBuildError) as e:
         return {"error": str(e)}
-
-    if interrupt := output.pop("__interrupt__", None):
-        return {"interrupt": interrupt[0].value}
-    return output

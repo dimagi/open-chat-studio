@@ -74,6 +74,9 @@ export default function TestMessageBox({
             setError(result.error);
           } else if (result.interrupt) {
             setResponseMessage({message: result.interrupt, className: "text-yellow-500", prefix: "Interrupt:"});
+            for (const nodeOutput of Object.values(result.outputs)) {
+                setEdgeLabel(nodeOutput.node_id, nodeOutput.output_handle, nodeOutput.message);
+            }
           } else {
             setResponseMessage({message: result.messages[result.messages.length - 1], prefix: "Output:"});
             for (const nodeOutput of Object.values(result.outputs)) {
