@@ -4,6 +4,16 @@ from apps.teams.utils import current_team
 
 from .const import LANGUAGE_CHOICES
 
+TRANSLATION_PROMPT_TEMPLATE = """Translate these chat messages to {target_lang_name}.
+Return a JSON array where each object has a "translation" field.
+
+### Messages to translate:
+```json
+{message_data}
+```
+
+Output only the JSON array, no additional text."""
+
 
 class TranslationError(Exception):
     pass
@@ -39,20 +49,9 @@ def translate_messages_with_llm(messages, target_language, llm_provider, llm_pro
             language_names = dict(choice for choice in LANGUAGE_CHOICES if choice[0])
             target_lang_name = language_names.get(target_language, target_language)
 
-            prompt = f"""### Instructions
-            Translate chat messages to {target_lang_name}. Return a JSON array where each object
-            contains the translation.
-            **Response format:** Each object should have:
-            - "translation": the {target_lang_name} translation of the message content
-            **Translation rules:**
-            - If the text is already in {target_lang_name}, return the original text unchanged
-            - Preserve the order, meaning, and tone of the original messages
-            ### Messages to translate:
-            ```json
-            {json.dumps(message_data, indent=2)}
-            ```
-            ### Final instructions
-            Output only the JSON array with translations, without any additional text or explanation."""
+            prompt = TRANSLATION_PROMPT_TEMPLATE.format(
+                target_lang_name=target_lang_name, message_data=json.dumps(message_data)
+            )
 
             response = llm.invoke(prompt)
             translated_data = json.loads(response.content)
