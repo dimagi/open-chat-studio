@@ -8,6 +8,12 @@ type TestMessageBoxParams = {
   setIsOpen: (isOpen: boolean) => void;
 };
 
+type ResponseMessage = {
+  message?: string;
+  className?: string;
+  prefix?: string;
+}
+
 export default function TestMessageBox({
   isOpen,
   setIsOpen,
@@ -19,9 +25,12 @@ export default function TestMessageBox({
   const clearEdgeLabels = usePipelineStore((state) => state.clearEdgeLabels);
   const [newMessage, setNewMessage] = useState("");
   const [userMessage, setUserMessage] = useState("");
-  const [responseMessage, setResponseMessage] = useState("");
-  const [errorMessage, setErrorMessage] = useState("");
+  const [responseMessage, setResponseMessage] = useState<ResponseMessage>({});
   const [loading, setLoading] = useState(false);
+
+  const setError = (message: string) => {
+    setResponseMessage({ message, className: "text-red-500", prefix: "Error:" });
+  }
 
   function sendMessage() {
     const message = newMessage.trim() || userMessage.trim();
@@ -30,8 +39,8 @@ export default function TestMessageBox({
     }
     setUserMessage(message);
     setNewMessage("");
-    setErrorMessage("");
     clearEdgeLabels();
+    setResponseMessage({});
     setLoading(true);
     if (currentPipelineId) {
       apiClient.sendTestMessage(currentPipelineId, message).then((res) => {
@@ -62,9 +71,11 @@ export default function TestMessageBox({
           // The task finished successfully and we receive the response
           const result = response.result;
           if (result.error) {
-            setErrorMessage(result.error);
+            setError(result.error);
+          } else if (result.interrupt) {
+            setResponseMessage({message: result.interrupt, className: "text-yellow-500", prefix: "Interrupt:"});
           } else {
-            setResponseMessage(result.messages[result.messages.length - 1]);
+            setResponseMessage({message: result.messages[result.messages.length - 1], prefix: "Output:"});
             for (const nodeOutput of Object.values(result.outputs)) {
                 setEdgeLabel(nodeOutput.node_id, nodeOutput.output_handle, nodeOutput.message);
             }
@@ -78,7 +89,7 @@ export default function TestMessageBox({
               typeof response.result === "string"
                 ? response.result
                 : response.result.messages[0];
-            setErrorMessage(errorMessage);
+            setError(errorMessage);
           }
 
           setLoading(false);
@@ -93,7 +104,7 @@ export default function TestMessageBox({
         setLoading(false);
         if (error instanceof Error) {
           console.error(error.message);
-          setErrorMessage(error.message);
+          setError(error.message);
           throw error;
         } else {
           console.error("Unexpected error", error);
@@ -118,8 +129,7 @@ export default function TestMessageBox({
   function clear() {
     setNewMessage("");
     setUserMessage("");
-    setResponseMessage("");
-    setErrorMessage("");
+    setResponseMessage({});
     clearEdgeLabels();
   }
 
@@ -154,14 +164,10 @@ export default function TestMessageBox({
                     <div className="mt-2 p-2 border rounded-sm">
                       <span className="loading loading-dots loading-sm"></span>
                     </div>
-                  ) : errorMessage ? (
-                    <div className="mt-2 p-2 border rounded-sm text-red-500">
-                      <strong>Error:</strong> {errorMessage}
-                    </div>
                   ) : (
                     responseMessage && (
-                      <div className="mt-2 p-2 border rounded-sm">
-                        <strong>Output:</strong> {responseMessage}
+                      <div className={`mt-2 p-2 border rounded-sm ${responseMessage.className || ""}`}>
+                        <strong>{responseMessage.prefix}</strong> {responseMessage.message}
                       </div>
                     )
                   )}
