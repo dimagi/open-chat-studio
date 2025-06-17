@@ -1,5 +1,4 @@
 import json
-from datetime import datetime
 from unittest.mock import Mock, patch
 
 from django.test import TestCase
@@ -26,7 +25,6 @@ class TestTranslateMessagesWithLLM(TestCase):
         self.mock_message1.id = 1
         self.mock_message1.content = "Hello, how are you?"
         self.mock_message1.role = "user"
-        self.mock_message1.created_at = datetime(2024, 1, 1, 10, 0, 0)
         self.mock_message1.translations = {}
         self.mock_message1.chat = self.mock_chat
 
@@ -34,7 +32,6 @@ class TestTranslateMessagesWithLLM(TestCase):
         self.mock_message2.id = 2
         self.mock_message2.content = "I'm fine, thank you!"
         self.mock_message2.role = "assistant"
-        self.mock_message2.created_at = datetime(2024, 1, 1, 10, 0, 30)
         self.mock_message2.translations = {}
         self.mock_message2.chat = self.mock_chat
 

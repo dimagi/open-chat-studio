@@ -34,7 +34,7 @@ def translate_messages_with_llm(messages, target_language, llm_provider, llm_pro
             llm = llm_service.get_chat_model(model_name, temperature=0.1)
             message_data = []
             for msg in messages_to_translate:
-                message_data.append({"content": msg.content, "role": msg.role, "timestamp": msg.created_at.isoformat()})
+                message_data.append({"content": msg.content, "role": msg.role})
 
             language_names = dict(choice for choice in LANGUAGE_CHOICES if choice[0])
             target_lang_name = language_names.get(target_language, target_language)
