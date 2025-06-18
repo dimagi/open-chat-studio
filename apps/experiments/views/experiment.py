@@ -1487,7 +1487,10 @@ def migrate_experiment_view(request, team_slug, experiment_id):
         messages.success(request, f'Successfully migrated experiment "{experiment.name}" to chatbot!')
         return redirect("chatbots:single_chatbot_home", team_slug=team_slug, experiment_id=experiment_id)
     except Exception as e:
-        messages.error(request, f"Migration failed: {str(e)}")
+        logging.exception("Failed to migrate experiment to chatbot", details={
+            "team_slug": team_slug, "experiment_id": experiment_id
+         })
+        messages.error(request, "There was an error during the migration. Please try again later.")
         return redirect(failed_url)
 
     return redirect(failed_url)
