@@ -21,13 +21,13 @@ class TestEditCollection:
             name="Tester", team=team, is_index=True, is_remote_index=True, llm_provider=LlmProviderFactory(team=team)
         )
 
+    @pytest.mark.usefixtures("remote_index_manager_mock")
     @mock.patch("apps.documents.tasks.migrate_vector_stores.delay")
-    def test_update_collection_with_llm_provider_change(
-        self, migrate_mock, remote_index_manager_mock, collection, client
-    ):
+    @mock.patch("apps.service_providers.models.LlmProvider.create_remote_index")
+    def test_update_collection_with_llm_provider_change(self, create_remote_index, migrate_mock, collection, client):
         new_llm_provider = LlmProviderFactory(team=collection.team)
         new_vector_store_id = "new-store-123"
-        remote_index_manager_mock.create_remote_index.return_value = new_vector_store_id
+        create_remote_index.return_value = new_vector_store_id
 
         client.force_login(collection.team.members.first())
         url = reverse("documents:collection_edit", args=[collection.team.slug, collection.id])
@@ -94,8 +94,10 @@ class TestDeleteCollection:
         collection.files.add(file)
         return collection
 
+    @pytest.mark.usefixtures("remote_index_manager_mock")
     @pytest.mark.parametrize("is_index", [True, False])
-    def test_user_cannot_delete_a_collection_in_use(self, is_index, remote_index_manager_mock, client, experiment):
+    @mock.patch("apps.service_providers.models.LlmProvider.create_remote_index")
+    def test_user_cannot_delete_a_collection_in_use(self, create_remote_index, is_index, client, experiment):
         """
         The user should not be able to delete a collection if it is being used by a pipeline.
         There are two cases where this can happen:
@@ -116,7 +118,7 @@ class TestDeleteCollection:
         assert response.status_code == 400
 
         # Case 2 - Remove the collection from the node so that only a pipeline version is using it
-        remote_index_manager_mock.create_remote_index.return_value = "v-321"
+        create_remote_index.return_value = "v-321"
         collection.create_new_version()
         node.params = {}
         node.save()
@@ -237,7 +239,7 @@ class TestDeleteCollectionFile:
             assert file.is_archived is False
 
     @pytest.mark.parametrize("is_remote_index", [True, False])
-    def test_delete_remote_indexed_file(self, is_remote_index, team_with_user, client, index_manager_mock):
+    def test_delete_remote_indexed_file(self, is_remote_index, team_with_user, client, remote_index_manager_mock):
         """Test deleting a file from a remote indexed collection."""
         llm_provider = LlmProviderFactory(team=team_with_user)
         collection = CollectionFactory(
@@ -258,6 +260,6 @@ class TestDeleteCollectionFile:
         # Verify collection file relationship is deleted
         assert not CollectionFile.objects.filter(collection=collection, file=file).exists()
         if is_remote_index:
-            index_manager_mock.delete_files.assert_called()
+            remote_index_manager_mock.delete_files.assert_called()
         else:
-            index_manager_mock.delete_files.assert_not_called()
+            remote_index_manager_mock.delete_files.assert_not_called()

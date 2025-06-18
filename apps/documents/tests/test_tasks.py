@@ -80,5 +80,5 @@ def test_migrate_vector_stores_does_cleanup(add_files_to_index_mock, collection,
     assert collection_file.id == col_file.id
     add_files_to_index_mock.assert_any_call(collection_files=ANY, chunk_size=800, chunk_overlap=400)
 
-    remote_index_manager_mock.delete_vector_store.assert_called()
+    remote_index_manager_mock.delete_remote_index.assert_called()
     remote_index_manager_mock.client.files.delete.assert_called_once_with(file.external_id)

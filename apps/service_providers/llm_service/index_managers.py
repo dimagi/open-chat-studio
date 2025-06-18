@@ -1,6 +1,7 @@
 import contextlib
 import logging
 from abc import ABCMeta, abstractmethod
+from collections.abc import Iterator
 
 import openai
 from django.conf import settings
@@ -9,12 +10,24 @@ from langchain_text_splitters import RecursiveCharacterTextSplitter
 
 from apps.assistants.utils import chunk_list
 from apps.documents.exceptions import FileUploadError
+from apps.documents.models import CollectionFile, FileStatus
 from apps.files.models import File, FileChunkEmbedding
 from apps.service_providers.exceptions import UnableToLinkFileException
 
 logger = logging.getLogger("ocs.index_manager")
 
 Vector = list[float]
+
+
+class IndexManager(metaclass=ABCMeta):
+    @abstractmethod
+    def add_files(
+        self,
+        collection_files: Iterator[CollectionFile],
+        chunk_size: int = None,
+        chunk_overlap: int = None,
+    ):
+        pass
 
 
 class RemoteIndexManager(metaclass=ABCMeta):
@@ -41,27 +54,9 @@ class RemoteIndexManager(metaclass=ABCMeta):
         ...
 
     @abstractmethod
-    def create_remote_index(self, name: str, file_ids: list = None) -> str:
-        """
-        Create a new vector store in the remote index service.
-
-        Args:
-            name: The name to assign to the new vector store.
-            file_ids: Optional list of remote file IDs to initially associate with the vector store.
-
-        Returns:
-            str: The unique identifier of the newly created vector store.
-        """
-        ...
-
-    @abstractmethod
-    def delete_remote_index(self, fail_silently: bool = False):
+    def delete_remote_index(self):
         """
         Delete the vector store from the remote index service.
-
-        Args:
-            fail_silently: If True, suppress exceptions when the vector store doesn't exist
-                          or cannot be deleted. If False, raise exceptions on failures.
         """
         ...
 
@@ -115,7 +110,38 @@ class RemoteIndexManager(metaclass=ABCMeta):
     def delete_file_from_index(self, file_id: str):
         """Disassociates the file with the vector store"""
 
-    def ensure_remote_file_exists(self, file: File):
+    def add_files(
+        self,
+        collection_files: Iterator[CollectionFile],
+        chunk_size: int = None,
+        chunk_overlap: int = None,
+    ):
+        uploaded_files: list[File] = []
+        for collection_file in collection_files:
+            file = collection_file.file
+            try:
+                self._ensure_remote_file_exists(file)
+                uploaded_files.append(file)
+            except FileUploadError:
+                collection_file.status = FileStatus.FAILED
+                collection_file.save(update_fields=["status"])
+
+        try:
+            self.link_files_to_remote_index(
+                file_ids=[file.external_id for file in uploaded_files],
+                chunk_size=chunk_size,
+                chunk_overlap=chunk_overlap,
+            )
+            CollectionFile.objects.filter(file_id__in=[file.id for file in uploaded_files]).update(
+                status=FileStatus.COMPLETED
+            )
+        except UnableToLinkFileException:
+            logger.exception("Failed to link files to remote index")
+            CollectionFile.objects.filter(file_id__in=[file.id for file in uploaded_files]).update(
+                status=FileStatus.FAILED
+            )
+
+    def _ensure_remote_file_exists(self, file: File):
         try:
             if not (file.external_id and self.file_exists_at_remote(file)):
                 file.external_id = None
@@ -129,14 +155,6 @@ class RemoteIndexManager(metaclass=ABCMeta):
                 },
             )
             raise FileUploadError() from None
-
-    def delete_vector_store(self, fail_silently: bool = False):
-        try:
-            self.delete_remote_index()
-        except Exception as e:
-            logger.warning("Vector store %s not found", self.index_id)
-            if not fail_silently:
-                raise e
 
 
 class OpenAIRemoteIndexManager(RemoteIndexManager):
@@ -155,14 +173,9 @@ class OpenAIRemoteIndexManager(RemoteIndexManager):
     def get(self):
         return self.client.vector_stores.retrieve(self.index_id)
 
-    def create_remote_index(self, name: str, file_ids: list = None) -> str:
-        file_ids = file_ids or []
-        vector_store = self.client.vector_stores.create(name=name, file_ids=file_ids)
-        self.index_id = vector_store.id
-        return self.index_id
-
     def delete_remote_index(self):
-        self.client.vector_stores.delete(vector_store_id=self.index_id)
+        with contextlib.suppress(openai.NotFoundError):
+            self.client.vector_stores.delete(vector_store_id=self.index_id)
 
     def delete_file_from_index(self, file_id: str):
         """Disassociates the file with the vector store"""
@@ -241,6 +254,34 @@ class LocalIndexManager(metaclass=ABCMeta):
         Returns:
             Vector: A list of floats representing the embedding vector.
         """
+
+    def add_files(
+        self,
+        collection_files: Iterator[CollectionFile],
+        chunk_size: int = None,
+        chunk_overlap: int = None,
+    ):
+        for collection_file in collection_files:
+            file = collection_file.file
+            try:
+                text_chunks = self.chunk_file(file, chunk_size=chunk_size, chunk_overlap=chunk_overlap)
+                for idx, chunk in enumerate(text_chunks):
+                    embedding_vector = self.get_embedding_vector(chunk)
+                    FileChunkEmbedding.objects.create(
+                        team_id=file.team_id,
+                        file=file,
+                        collection_id=collection_file.collection_id,
+                        chunk_number=idx,
+                        text=chunk,
+                        embedding=embedding_vector,
+                        # TODO: Get the page number if possible. Also, what file types are supported?
+                        page_number=0,
+                    )
+                collection_file.status = FileStatus.COMPLETED
+            except Exception as e:
+                logger.exception("Failed to index file", extra={"file_id": file.id, "error": str(e)})
+                collection_file.status = FileStatus.FAILED
+            collection_file.save(update_fields=["status"])
 
     def chunk_file(self, file: File, chunk_size: int, chunk_overlap: int) -> list[str]:
         """

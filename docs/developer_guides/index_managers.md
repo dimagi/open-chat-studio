@@ -56,8 +56,7 @@ The method returns:
 
 ```python
 # Create a new vector store
-vector_store_id = index_manager.create_remote_index(
-    name="My Document Collection v1",
+collection.ensure_remote_index_created(
     file_ids=["file-123", "file-456"]  # Optional initial files.
 )
 

@@ -1,4 +1,3 @@
-import logging
 from collections.abc import Iterator
 
 import pydantic
@@ -11,10 +10,9 @@ from field_audit import audit_fields
 from field_audit.models import AuditingManager
 
 from apps.chat.agent.tools import SearchIndexTool, SearchToolConfig
-from apps.documents.exceptions import FileUploadError, IndexConfigurationException
+from apps.documents.exceptions import IndexConfigurationException
 from apps.experiments.versioning import VersionDetails, VersionField, VersionsMixin, VersionsObjectManagerMixin
-from apps.files.models import File, FileChunkEmbedding
-from apps.service_providers.exceptions import UnableToLinkFileException
+from apps.files.models import File
 from apps.service_providers.llm_service.main import OpenAIBuiltinTool
 from apps.service_providers.models import EmbeddingProviderModel
 from apps.teams.models import BaseTeamModel
@@ -24,8 +22,6 @@ from apps.utils.deletion import (
     get_related_pipeline_experiments_queryset,
     get_related_pipelines_queryset,
 )
-
-indexing_logger = logging.getLogger("ocs.collections.indexing")
 
 
 class ChunkingStrategy(pydantic.BaseModel):
@@ -70,10 +66,6 @@ class CollectionFile(models.Model):
     @property
     def status_enum(self):
         return FileStatus(self.status)
-
-    @property
-    def chunk_count(self) -> int:
-        return FileChunkEmbedding.objects.filter(collection_id=self.collection_id, file_id=self.file_id).count()
 
 
 @audit_fields(
@@ -133,7 +125,9 @@ class Collection(BaseTeamModel, VersionsMixin):
 
     @property
     def index_name(self) -> str:
-        return f"collection-{self.team.slug}-{slugify(self.name)}-{self.id}"
+        name = f"collection-{self.team.slug}-{slugify(self.name)}-{self.id}"
+        if self.is_a_version:
+            return f"{name} v{self.version_number}"
 
     @property
     def size(self) -> float:
@@ -145,12 +139,15 @@ class Collection(BaseTeamModel, VersionsMixin):
     def file_names(self) -> list[str]:
         return list(self.files.values_list("name", flat=True))
 
-    @property
-    def version_details(self) -> VersionDetails:
+    def _get_version_details(self) -> VersionDetails:
         return VersionDetails(
             instance=self,
             fields=[
                 VersionField(group_name="General", name="name", raw_value=self.name),
+                VersionField(group_name="General", name="llm_provider", raw_value=self.llm_provider),
+                VersionField(
+                    group_name="General", name="embedding_provider_model", raw_value=self.embedding_provider_model
+                ),
                 VersionField(group_name="General", name="files", queryset=self.files.all()),
             ],
         )
@@ -187,10 +184,7 @@ class Collection(BaseTeamModel, VersionsMixin):
             # Optimization suggestion: Only when the file set changed, should we create a new vector store at the
             # provider
             if self.is_remote_index:
-                manager = new_version.get_index_manager()
-                version_name = f"{new_version.index_name} v{new_version.version_number}"
-                new_version.openai_vector_store_id = manager.create_remote_index(name=version_name)
-                new_version.save(update_fields=["openai_vector_store_id"])
+                new_version.ensure_remote_index_created()
 
                 # Upload files to vector store
                 if collection_files := CollectionFile.objects.filter(collection_id=new_version.id):
@@ -278,17 +272,20 @@ class Collection(BaseTeamModel, VersionsMixin):
             status__in=[FileStatus.PENDING, FileStatus.IN_PROGRESS],
         ).exists()
 
+    def _remove_remote_index(self, remote_files_to_remove: list[File]):
+        """Remove the index backend"""
+        manager = self.get_index_manager()
+        manager.delete_remote_index()
+        manager.delete_files(remote_files_to_remove)
+
+        self.openai_vector_store_id = ""
+        self.save(update_fields=["openai_vector_store_id"])
+
     def get_index_manager(self):
         if self.is_index and self.is_remote_index:
             return self.llm_provider.get_remote_index_manager(self.openai_vector_store_id)
         else:
             return self.llm_provider.get_local_index_manager(embedding_model_name=self.embedding_provider_model.name)
-
-    def add_files_to_index(self, *args, **kwargs):
-        if self.is_remote_index:
-            self._handle_remote_indexing(*args, **kwargs)
-        else:
-            self._handle_local_indexing(*args, **kwargs)
 
     def get_query_vector(self, query: str) -> list[float]:
         """Get the embedding vector for a query using the embedding provider model"""
@@ -319,69 +316,29 @@ class Collection(BaseTeamModel, VersionsMixin):
     def _remove_remote_index(self, remote_files_to_remove: list[File]):
         """Remove the index backend"""
         manager = self.get_index_manager()
-        manager.delete_vector_store(fail_silently=True)
+        manager.delete_remote_index()
         manager.delete_files(remote_files_to_remove)
 
         self.openai_vector_store_id = ""
         self.save(update_fields=["openai_vector_store_id"])
 
-    def _handle_remote_indexing(
+    def add_files_to_index(
         self,
         collection_files: Iterator[CollectionFile],
         chunk_size: int = None,
         chunk_overlap: int = None,
     ):
         index_manager = self.get_index_manager()
-        uploaded_files: list[File] = []
-        for collection_file in collection_files:
-            file = collection_file.file
-            try:
-                index_manager.ensure_remote_file_exists(file)
-                uploaded_files.append(file)
-            except FileUploadError:
-                collection_file.status = FileStatus.FAILED
-                collection_file.save(update_fields=["status"])
+        index_manager.add_files(collection_files, chunk_size=chunk_size, chunk_overlap=chunk_overlap)
 
-        try:
-            index_manager.link_files_to_remote_index(
-                file_ids=[file.external_id for file in uploaded_files],
-                chunk_size=chunk_size,
-                chunk_overlap=chunk_overlap,
-            )
-            CollectionFile.objects.filter(file_id__in=[file.id for file in uploaded_files]).update(
-                status=FileStatus.COMPLETED
-            )
-        except UnableToLinkFileException:
-            indexing_logger.exception("Failed to link files to remote index")
-            CollectionFile.objects.filter(file_id__in=[file.id for file in uploaded_files]).update(
-                status=FileStatus.FAILED
-            )
+    def ensure_remote_index_created(self, file_ids: list[str] = None):
+        """
+        Ensure that the remote index is created for this collection if it is not already created.
+        This is used when the collection is created or when the version is created.
+        """
+        if not self.is_remote_index or self.openai_vector_store_id:
+            return
 
-    def _handle_local_indexing(
-        self,
-        collection_files: Iterator[CollectionFile],
-        chunk_size: int = None,
-        chunk_overlap: int = None,
-    ):
-        index_manager = self.get_index_manager()
-        for collection_file in collection_files:
-            file = collection_file.file
-            try:
-                text_chunks = index_manager.chunk_file(file, chunk_size=chunk_size, chunk_overlap=chunk_overlap)
-                for idx, chunk in enumerate(text_chunks):
-                    embedding_vector = index_manager.get_embedding_vector(chunk)
-                    FileChunkEmbedding.objects.create(
-                        team_id=self.team_id,
-                        file=file,
-                        collection=self,
-                        chunk_number=idx,
-                        text=chunk,
-                        embedding=embedding_vector,
-                        # TODO: Get the page number if possible. Also, what file types are supported?
-                        page_number=0,
-                    )
-                collection_file.status = FileStatus.COMPLETED
-            except Exception as e:
-                indexing_logger.exception("Failed to index file", extra={"file_id": file.id, "error": str(e)})
-                collection_file.status = FileStatus.FAILED
-            collection_file.save(update_fields=["status"])
+        file_ids = file_ids or []
+        self.openai_vector_store_id = self.llm_provider.create_remote_index(name=self.index_name, file_ids=file_ids)
+        self.save(update_fields=["openai_vector_store_id"])

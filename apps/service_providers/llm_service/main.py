@@ -174,6 +174,19 @@ class LlmService(pydantic.BaseModel):
     def get_local_index_manager(self, embedding_model_name: str) -> "IndexManager":
         raise NotImplementedError
 
+    def create_remote_index(self, name: str, file_ids: list = None) -> str:
+        """
+        Create a new vector store at the remote index service.
+
+        Args:
+            name: The name to assign to the new vector store.
+            file_ids: Optional list of remote file IDs to initially associate with the vector store.
+
+        Returns:
+            str: The unique identifier of the newly created vector store.
+        """
+        raise NotImplementedError
+
 
 class OpenAIGenericService(LlmService):
     openai_api_key: str
@@ -247,6 +260,11 @@ class OpenAILlmService(OpenAIGenericService):
         from apps.service_providers.llm_service.index_managers import OpenAILocalIndexManager
 
         return OpenAILocalIndexManager(client=self.get_raw_client(), embedding_model_name=embedding_model_name)
+
+    def create_remote_index(self, name: str, file_ids: list = None) -> str:
+        file_ids = file_ids or []
+        vector_store = self.get_raw_client().vector_stores.create(name=name, file_ids=file_ids)
+        return vector_store.id
 
 
 class AzureLlmService(LlmService):

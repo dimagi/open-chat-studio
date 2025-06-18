@@ -66,7 +66,7 @@ def index_collection_files(collection_files_queryset: QuerySet[CollectionFile]) 
         CollectionFile.objects.filter(id__in=ids).update(status=FileStatus.IN_PROGRESS)
 
         collection.add_files_to_index(
-            collection_files=CollectionFile.objects.filter(id__in=ids).iterator(100),
+            collection_files=CollectionFile.objects.filter(id__in=ids).select_related("file").iterator(100),
             chunk_size=strategy.chunk_size,
             chunk_overlap=strategy.chunk_overlap,
         )
@@ -77,7 +77,7 @@ def index_collection_files(collection_files_queryset: QuerySet[CollectionFile]) 
 def _cleanup_old_vector_store(llm_provider_id: int, vector_store_id: str, file_ids: list[str]):
     llm_provider = LlmProvider.objects.get(id=llm_provider_id)
     old_manager = llm_provider.get_remote_index_manager(vector_store_id)
-    old_manager.delete_vector_store()
+    old_manager.delete_remote_index()
 
     for file_id in file_ids:
         with contextlib.suppress(openai.NotFoundError):
@@ -119,9 +119,8 @@ def create_collection_from_assistant_task(collection_id: int, assistant_id: int)
 
     try:
         # Create vector store for the collection
+        collection.ensure_remote_index_created()
         index_manager = collection.get_index_manager()
-        collection.openai_vector_store_id = index_manager.create_remote_index(name=collection.index_name)
-        collection.save(update_fields=["openai_vector_store_id"])
 
         # Link files to the new vector store at OpenAI (only if there are files with external IDs)
         if file_with_remote_ids:
@@ -133,8 +132,8 @@ def create_collection_from_assistant_task(collection_id: int, assistant_id: int)
                 status=FileStatus.COMPLETED
             )
 
-    except Exception as e:
-        logger.exception(f"Failed to link files to vector store: {e}")
+    except Exception:
+        logger.exception("Failed to link files to vector store")
         # Mark files as failed
         if file_with_remote_ids:
             CollectionFile.objects.filter(collection=collection, file__in=file_with_remote_ids).update(

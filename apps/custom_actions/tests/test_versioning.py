@@ -91,7 +91,7 @@ def test_versioning(custom_action, experiment):
 def test_versioning_with_node(custom_action):
     """Test that the custom actions are also versioned when versioning the pipeline"""
     pipeline = PipelineFactory()
-    node = NodeFactory(pipeline=pipeline, type="LLMResponseWithPrompt", params={})
+    node = NodeFactory(pipeline=pipeline, type="LLMResponseWithPrompt", params={"custom_actions": ["weather_get"]})
     weather_get = CustomActionOperation.objects.create(
         custom_action=custom_action, node=node, operation_id="weather_get"
     )

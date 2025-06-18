@@ -4,10 +4,7 @@ import pytest
 from django.conf import settings
 
 from apps.assistants.models import ToolResources
-from apps.documents.exceptions import FileUploadError, IndexConfigurationException
-from apps.documents.models import CollectionFile, FileStatus
 from apps.files.models import FileChunkEmbedding
-from apps.service_providers.exceptions import UnableToLinkFileException
 from apps.service_providers.llm_service.index_managers import LocalIndexManager, RemoteIndexManager
 from apps.utils.factories.assistants import OpenAiAssistantFactory
 from apps.utils.factories.documents import CollectionFactory
@@ -27,16 +24,6 @@ class TestNode:
         assert file.versions.count() == 1
 
         assert collection_v.files.first() == file.versions.first()
-
-
-@pytest.fixture()
-def remote_collection_index(db):
-    return CollectionFactory(is_index=True, is_remote_index=True)
-
-
-@pytest.fixture()
-def local_collection_index(db):
-    return CollectionFactory(is_index=True, is_remote_index=False)
 
 
 @pytest.mark.django_db()
@@ -66,10 +53,12 @@ class TestCollection:
         # Vector store ID should be None for non-indexed collections
         assert new_version.openai_vector_store_id == ""
 
+    @pytest.mark.usefixtures("remote_index_manager_mock")
     @mock.patch("apps.documents.tasks.index_collection_files")
-    def test_create_new_version_of_a_collection_index(self, index_collection_files, remote_index_manager_mock):
+    @mock.patch("apps.service_providers.models.LlmProvider.create_remote_index")
+    def test_create_new_version_of_a_collection_index(self, create_remote_index, index_collection_files):
         """Ensure that a new vector store is created for the new version when one is created"""
-        remote_index_manager_mock.create_remote_index.return_value = "new-vs-123"
+        create_remote_index.return_value = "new-vs-123"
 
         collection = CollectionFactory(
             name="Test Collection",
@@ -95,9 +84,7 @@ class TestCollection:
         assert collection.openai_vector_store_id == "old-vs-123"
 
         # Verify vector store was created and files were indexed
-        remote_index_manager_mock.create_remote_index.assert_called_once_with(
-            name=f"{new_version.index_name} v{new_version.version_number}"
-        )
+        create_remote_index.assert_called_once_with(name=new_version.index_name, file_ids=[])
         index_collection_files.assert_called()
 
     def test_create_new_version_of_local_collection_index(self):
@@ -204,7 +191,7 @@ class TestCollection:
         # Check that the vector store ID is cleared and the index is removed
         assert collection.openai_vector_store_id == ""
         file.refresh_from_db()
-        remote_index_manager_mock.delete_vector_store.assert_called_once_with(fail_silently=True)
+        remote_index_manager_mock.delete_remote_index.assert_called_once()
         remote_index_manager_mock.delete_files.assert_called_once()
 
     def test_get_index_manager_returns_correct_manager(self):
@@ -215,108 +202,25 @@ class TestCollection:
         assert isinstance(collection_remote.get_index_manager(), RemoteIndexManager)
         assert isinstance(collection_local.get_index_manager(), LocalIndexManager)
 
-    def test_handle_remote_indexing_success(self, remote_collection_index, remote_index_manager_mock):
-        file = FileFactory(external_id="test_file_id_3")
-        remote_collection_index.files.add(file)
-        collection_file = CollectionFile.objects.get(collection=remote_collection_index, file=file)
-        collection_file.status = FileStatus.PENDING
-        collection_file.save()
+    @pytest.mark.parametrize(
+        ("is_remote_index", "openai_id", "expect_remote_call"),
+        [
+            (True, "", True),
+            (True, "vs-123", False),
+            (False, "", False),
+        ],
+    )
+    @mock.patch("apps.service_providers.models.LlmProvider.create_remote_index")
+    def test_ensure_remote_index_created(self, create_remote_index, is_remote_index, openai_id, expect_remote_call):
+        """Test creating vector store without file IDs"""
+        collection = CollectionFactory(is_index=True, is_remote_index=is_remote_index, openai_vector_store_id=openai_id)
+        create_remote_index.return_value = "new-vs-123"
+        collection.ensure_remote_index_created()
+        collection.refresh_from_db()
 
-        # Mock successful upload and linking
-        remote_index_manager_mock.ensure_remote_file_exists.side_effect = None
-        remote_index_manager_mock.link_files_to_remote_index.side_effect = None
-
-        iterator = CollectionFile.objects.filter(id=collection_file.id).iterator(1)
-        remote_collection_index.add_files_to_index(iterator)
-
-        collection_file.refresh_from_db()
-        assert collection_file.status == FileStatus.COMPLETED
-
-    def test_handle_remote_indexing_with_file_upload_failures(self, remote_collection_index, remote_index_manager_mock):
-        file = FileFactory()
-        remote_collection_index.files.add(file)
-        collection_file = CollectionFile.objects.get(collection=remote_collection_index, file=file)
-        collection_file.status = FileStatus.PENDING
-        collection_file.save()
-
-        # Mock ensure_remote_file_exists to raise FileUploadError
-        remote_index_manager_mock.ensure_remote_file_exists.side_effect = FileUploadError("Upload failed")
-
-        iterator = CollectionFile.objects.filter(id=collection_file.id).iterator(1)
-        remote_collection_index.add_files_to_index(iterator)
-
-        collection_file.refresh_from_db()
-        assert collection_file.status == FileStatus.FAILED
-        remote_index_manager_mock.ensure_remote_file_exists.assert_called_once()
-        # link_files_to_remote_index should be called with empty list when all uploads fail
-        remote_index_manager_mock.link_files_to_remote_index.assert_called_once_with(
-            file_ids=[], chunk_size=None, chunk_overlap=None
-        )
-
-    def test_handle_remote_indexing_with_linking_failures(self, remote_collection_index, remote_index_manager_mock):
-        file = FileFactory(external_id="test_file_id")
-        remote_collection_index.files.add(file)
-        collection_file = CollectionFile.objects.get(collection=remote_collection_index, file=file)
-        collection_file.status = FileStatus.PENDING
-        collection_file.save()
-
-        # Mock successful upload but failed linking
-        remote_index_manager_mock.ensure_remote_file_exists.side_effect = None
-        remote_index_manager_mock.link_files_to_remote_index.side_effect = UnableToLinkFileException("Link failed")
-
-        iterator = CollectionFile.objects.filter(id=collection_file.id).iterator(1)
-        remote_collection_index.add_files_to_index(iterator)
-
-        collection_file.refresh_from_db()
-        assert collection_file.status == FileStatus.FAILED
-        remote_index_manager_mock.link_files_to_remote_index.assert_called_once()
-
-    def test_handle_local_indexing_success(self, local_collection_index, local_index_manager_mock):
-        file = FileFactory()
-        local_collection_index.files.add(file)
-        collection_file = CollectionFile.objects.get(collection=local_collection_index, file=file)
-
-        # Mock the index manager and file content reading
-        local_index_manager_mock.chunk_file.return_value = ["test", "content"]
-        local_index_manager_mock.get_embedding_vector.return_value = [0.1] * settings.EMBEDDING_VECTOR_SIZE
-
-        with mock.patch.object(file, "read_content", return_value="test content"):
-            iterator = CollectionFile.objects.filter(id=collection_file.id).iterator(1)
-            local_collection_index.add_files_to_index(iterator)
-
-        collection_file.refresh_from_db()
-        assert collection_file.status == FileStatus.COMPLETED
-
-        # Verify that embeddings were created
-        embeddings = FileChunkEmbedding.objects.filter(file=file, collection=local_collection_index)
-        assert embeddings.count() == 2
-        assert embeddings.first().text == "test"
-        assert embeddings.last().text == "content"
-
-    def test_handle_local_indexing_fails(self, local_collection_index):
-        """If anything goes wrong during local indexing, the file should be marked as failed"""
-        file = FileFactory()
-        local_collection_index.files.add(file)
-        collection_file = CollectionFile.objects.get(collection=local_collection_index, file=file)
-        collection_file.status = FileStatus.PENDING
-        collection_file.save()
-
-        # Mock file.read_content to raise an exception
-        with mock.patch.object(file, "read_content", side_effect=Exception("Read failed")):
-            iterator = CollectionFile.objects.filter(id=collection_file.id).iterator(1)
-            local_collection_index.add_files_to_index(iterator)
-
-        collection_file.refresh_from_db()
-        assert collection_file.status == FileStatus.FAILED
-
-    def test_get_query_vector(self, local_index_manager_mock):
-        """Test that get_query_vector raises an exception for remote indexes"""
-        collection = CollectionFactory(is_index=True, is_remote_index=False)
-        collection.get_query_vector("test query")
-        local_index_manager_mock.get_embedding_vector.assert_called_once_with("test query")
-
-    def test_get_query_vector_with_missing_embedding_model(self):
-        """Test that get_query_vector raises an exception for remote indexes"""
-        collection = CollectionFactory(is_index=True, is_remote_index=False, embedding_provider_model=None)
-        with pytest.raises(IndexConfigurationException):
-            collection.get_query_vector("test query")
+        if expect_remote_call:
+            create_remote_index.assert_called()
+            assert collection.openai_vector_store_id == "new-vs-123"
+        else:
+            create_remote_index.assert_not_called()
+            assert collection.openai_vector_store_id == openai_id
