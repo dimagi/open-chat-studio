@@ -11,7 +11,7 @@ from celery.result import AsyncResult
 from celery_progress.backend import Progress
 from django.conf import settings
 from django.contrib import messages
-from django.contrib.auth.decorators import login_required, permission_required
+from django.contrib.auth.decorators import permission_required
 from django.contrib.auth.mixins import PermissionRequiredMixin
 from django.core.exceptions import PermissionDenied, ValidationError
 from django.db import transaction
@@ -1486,10 +1486,10 @@ def migrate_experiment_view(request, team_slug, experiment_id):
             convert_non_pipeline_experiment_to_pipeline(experiment)
         messages.success(request, f'Successfully migrated experiment "{experiment.name}" to chatbot!')
         return redirect("chatbots:single_chatbot_home", team_slug=team_slug, experiment_id=experiment_id)
-    except Exception as e:
-        logging.exception("Failed to migrate experiment to chatbot", details={
-            "team_slug": team_slug, "experiment_id": experiment_id
-         })
+    except Exception:
+        logging.exception(
+            "Failed to migrate experiment to chatbot", details={"team_slug": team_slug, "experiment_id": experiment_id}
+        )
         messages.error(request, "There was an error during the migration. Please try again later.")
         return redirect(failed_url)
 
