@@ -39,7 +39,7 @@ def test_parallel_branch_pipeline(pipeline, experiment_session):
     nodes = [start, template_a, template_b, template_c, end]
     edges = ["start - A", "start - B", "B - C", "A - end", "C - end"]
     user_input = "The Input"
-    output = create_runnable(pipeline, nodes, edges, lenient=True).invoke(
+    output = create_runnable(pipeline, nodes, edges).invoke(
         PipelineState(messages=[user_input], experiment_session=experiment_session)
     )["outputs"]
     expected_output = {
@@ -76,7 +76,7 @@ def main(input, **kwargs):
     end = end_node()
     nodes = [start, node_a, node_b, code, node_c, end]
     edges = ["start - safety_check", "start - B", "safety_check - Code", "B - Code", "Code - C", "C - end"]
-    output = create_runnable(pipeline, nodes, edges, lenient=True).invoke(
+    output = create_runnable(pipeline, nodes, edges).invoke(
         PipelineState(messages=["Hi"], experiment_session=experiment_session)
     )
     output_state = PipelineState(output)
@@ -114,7 +114,7 @@ def main(input, **kwargs):
     end = end_node()
     nodes = [start, node_a, node_b, code, node_c, end]
     edges = ["start - A", "start - C", "A - B", "B - Code", "C - Code", "Code - end"]
-    output = create_runnable(pipeline, nodes, edges, lenient=True).invoke(
+    output = create_runnable(pipeline, nodes, edges).invoke(
         PipelineState(messages=["Hi"], experiment_session=experiment_session)
     )
     output_state = PipelineState(output)

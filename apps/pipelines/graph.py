@@ -5,7 +5,6 @@ from typing import Any, Self
 import pydantic
 from langgraph.graph import StateGraph
 from langgraph.graph.state import CompiledStateGraph
-from pydantic import Field
 from pydantic_core import ValidationError
 
 from apps.pipelines.const import STANDARD_OUTPUT_NAME
@@ -54,7 +53,6 @@ class Edge(pydantic.BaseModel):
 class PipelineGraph(pydantic.BaseModel):
     nodes: list[Node]
     edges: list[Edge]
-    lenient_validation: bool = Field(default=False, description="Skip some validation checks. Used in tests.")
 
     @property
     def node_id_to_name_mapping(self):

@@ -902,7 +902,7 @@ def test_cyclical_graph(pipeline):
     ]
 
     with pytest.raises(PipelineBuildError, match="A cycle was detected"):
-        create_runnable(pipeline, nodes, edges, lenient=True)
+        create_runnable(pipeline, nodes, edges)
 
 
 @django_db_with_data(available_apps=("apps.service_providers",))
@@ -951,7 +951,7 @@ def test_multiple_valid_inputs(pipeline):
         messages=["not hello"],
         experiment_session=experiment_session,
     )
-    output = create_runnable(pipeline, nodes, edges, lenient=False).invoke(state)
+    output = create_runnable(pipeline, nodes, edges).invoke(state)
     assert output["messages"][-1] == "T: not hello"
 
 

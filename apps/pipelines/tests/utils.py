@@ -41,9 +41,7 @@ def _edges_from_strings(edge_strings: list[str], nodes: list[dict]) -> list[dict
     return edges
 
 
-def create_runnable(
-    pipeline: Pipeline, nodes: list[dict], edges: list[dict | str] | None = None, lenient=False
-) -> CompiledStateGraph:
+def create_runnable(pipeline: Pipeline, nodes: list[dict], edges: list[dict | str] | None = None) -> CompiledStateGraph:
     if edges is None:
         edges = _make_edges(nodes)
     if isinstance(edges[0], str):
@@ -54,7 +52,6 @@ def create_runnable(
     pipeline.data = {"edges": edges, "nodes": flow_nodes}
     pipeline.update_nodes_from_data()
     graph = PipelineGraph.build_from_pipeline(pipeline)
-    graph.lenient_validation = lenient
     return graph.build_runnable()
 
 
