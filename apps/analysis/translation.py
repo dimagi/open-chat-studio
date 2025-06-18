@@ -1,5 +1,6 @@
 import json
 
+from apps.chat.models import ChatMessage
 from apps.teams.utils import current_team
 
 from .const import LANGUAGE_CHOICES
@@ -62,19 +63,22 @@ def translate_messages_with_llm(messages, target_language, llm_provider, llm_pro
             translated_data = json.loads(response.content)
 
             messages_by_id = {str(msg.id): msg for msg in messages_to_translate}
+            updated_messages = []
 
             for item in translated_data:
                 message_id = item["id"]
                 if message_id in messages_by_id:
                     message = messages_by_id[message_id]
                     message.translations[target_language] = item["translation"]
-                    message.save(update_fields=["translations"])
+                    updated_messages.append(message)
 
-            if messages_to_translate:
-                chat = messages_to_translate[0].chat
+            if updated_messages:
+                ChatMessage.objects.bulk_update(updated_messages, fields=["translations"])
+                chat = updated_messages[0].chat
                 if target_language not in chat.translated_languages:
                     chat.translated_languages.append(target_language)
                     chat.save(update_fields=["translated_languages"])
+
             return messages
 
     except Exception as e:
