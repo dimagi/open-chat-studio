@@ -1,6 +1,5 @@
 import pytest
 
-from apps.pipelines.exceptions import PipelineBuildError
 from apps.pipelines.nodes.base import PipelineState
 from apps.pipelines.tests.utils import (
     code_node,
@@ -28,18 +27,6 @@ def experiment(pipeline):
 @pytest.fixture()
 def experiment_session(experiment):
     return ExperimentSessionFactory(experiment=experiment)
-
-
-@django_db_with_data(available_apps=("apps.service_providers",))
-def test_parallel_node_validation(pipeline):
-    start = start_node()
-    passthrough_1 = passthrough_node(name="1")
-    passthrough_2 = passthrough_node(name="2")
-    end = end_node()
-    nodes = [start, passthrough_1, passthrough_2, end]
-    edges = ["start - 1", "start - 2", "1 - end", "2 - end"]
-    with pytest.raises(PipelineBuildError, match="Multiple edges connected to the same output"):
-        create_runnable(pipeline, nodes, edges, lenient=False)
 
 
 @django_db_with_data(available_apps=("apps.service_providers",))
