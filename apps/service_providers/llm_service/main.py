@@ -175,7 +175,9 @@ class OpenAIGenericService(LlmService):
 
     def get_chat_model(self, llm_model: str, temperature: float) -> BaseChatModel:
         model = ChatOpenAI(
-            model=llm_model, temperature=1 if llm_model.startswith("o3") else temperature, **self._get_model_kwargs()
+            model=llm_model,
+            temperature=1 if llm_model.startswith(("o3", "o4")) else temperature,
+            **self._get_model_kwargs(),
         )
         try:
             model.get_num_tokens_from_messages([HumanMessage("Hello")])
