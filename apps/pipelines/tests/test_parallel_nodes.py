@@ -127,7 +127,7 @@ def test_code_node_wait_for_inputs(pipeline, experiment_session):
     code = code_node(
         code="""
 def main(input, **kwargs):
-    require_inputs_from("B")
+    require_node_outputs("B")
     c = get_node_output("C")
     b = get_node_output("B")  # expect this to arrive after C
     return f"{b},{c}"

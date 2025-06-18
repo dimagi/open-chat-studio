@@ -1131,7 +1131,7 @@ class CodeNode(PipelineNode, OutputMessageTagMixin):
                 "get_node_output": pipeline_state.get_node_output_by_name,
                 # control flow
                 "abort_with_message": self._abort_pipeline(),
-                "require_inputs_from": self._require_inputs_from(state),
+                "require_node_outputs": self._require_node_outputs(state),
             }
         )
         return custom_globals
@@ -1142,17 +1142,19 @@ class CodeNode(PipelineNode, OutputMessageTagMixin):
 
         return abort_pipeline
 
-    def _require_inputs_from(self, state: PipelineState):
+    def _require_node_outputs(self, state: PipelineState):
         """A helper function to require inputs from a specific node"""
 
-        def require_inputs_from(*node_names):
+        def require_node_outputs(*node_names):
+            if len(node_names) == 1 and isinstance(node_names[0], list):
+                node_names = node_names[0]
             if not all(isinstance(name, str) for name in node_names):
-                raise PipelineNodeRunError("node names pass to 'require_inputs_from' must be a string")
+                raise PipelineNodeRunError("node names pass to 'require_node_outputs' must be a string")
             for node_name in node_names:
                 if node_name not in state["outputs"]:
                     raise WaitForNextInput(f"Node '{node_name}' has not produced any output yet")
 
-        return require_inputs_from
+        return require_node_outputs
 
     def _get_session_state_key(self, session: ExperimentSession):
         def get_session_state_key(key_name: str):

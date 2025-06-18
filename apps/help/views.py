@@ -102,6 +102,24 @@ def code_completion(user_query, current_code, error=None, iteration_count=0) -> 
         def get_all_routes() -> dict:
             Returns a dictionary containing all routing decisions in the pipeline.
             The keys are the node names and the values are the routes chosen by each node.
+            
+        def get_node_output(node_name: str) -> Any:
+            Returns the output of the specified node if it has been executed.
+            If the node has not been executed, it returns `None`.
+            
+        def abort_pipeline(message, tag_name: str = None) -> None:
+            Calling this will terminate the pipeline execution. No further nodes will get executed in
+            any branch of the pipeline graph.
+            
+            The message provided will be used to notify the user about the reason for the termination.
+            If a tag name is provided, it will be used to tag the output message.
+            
+        def require_node_outputs(*node_names):
+            This function is used to ensure that the specified nodes have been executed and their outputs
+            are available in the pipelines state. If any of the specified nodes have not been executed,
+            the node will not execute and the pipeline will wait for the required nodes to complete.
+            
+            This should be called at the start of the main function.
         ```
 
         Return only the Python code and nothing else. Do not enclose it in triple quotes or have any other

@@ -504,60 +504,88 @@ function CodeNodeEditor(
   const customCompletions = {
     get_participant_data: snip("get_participant_data()", {
       label: "get_participant_data",
-      type: "keyword",
+      type: "function",
       detail: "Gets participant data for the current participant",
-      boost: 1
+      boost: 1,
+      section: "Participant Data"
     }),
     set_participant_data: snip("set_participant_data(${data})", {
       label: "set_participant_data",
-      type: "keyword",
+      type: "function",
       detail: "Overwrites the participant data with the value provided",
-      boost: 1
+      boost: 1,
+      section: "Participant Data",
     }),
     set_temp_state_key: snip("set_temp_state_key(\"${key_name}\", ${data})", {
       label: "set_temp_state_key",
-      type: "keyword",
+      type: "function",
       detail: "Sets the given key in the temporary state. Overwrites the current value",
-      boost: 1
+      boost: 1,
+      section: "Temporary Data",
     }),
     get_temp_state_key: snip("get_temp_state_key(\"${key_name}\")", {
       label: "get_temp_state_key",
-      type: "keyword",
+      type: "function",
       detail: "Gets the value for the given key from the temporary state",
-      boost: 1
+      boost: 1,
+      section: "Temporary Data",
     }),
     get_session_state: snip("get_session_state_key(\"${key_name}\")", {
       label: "get_session_state_key",
-      type: "keyword",
+      type: "function",
       detail: "Gets the value for the given key from the session's state",
-      boost: 1
+      boost: 1,
+      section: "Session Data",
     }),
     set_session_state: snip("set_session_state_key(\"${key_name}\", ${data})", {
       label: "set_session_state_key",
-      type: "keyword",
+      type: "function",
       detail: "Sets the given key in the session's state. Overwrites the current value",
-      boost: 1
+      boost: 1,
+      section: "Session Data",
     }),
     get_selected_route: snip("get_selected_route(\"${router_node_name}\")", {
       label: "get_selected_route",
-      type: "keyword",
+      type: "function",
       detail: "Gets the route selected by a specific router node",
-      boost: 1
+      boost: 1,
+      section: "Routing"
     }),
-
     get_node_path: snip("get_node_path(\"${node_name}\")", {
       label: "get_node_path",
-      type: "keyword",
+      type: "function",
       detail: "Gets the path (list of node names) leading to the specified node",
-      boost: 1
+      boost: 1,
+      section: "Routing"
     }),
-
     get_all_routes: snip("get_all_routes()", {
       label: "get_all_routes",
-      type: "keyword",
+      type: "function",
       detail: "Gets all routing decisions in the pipeline",
-      boost: 1
+      boost: 1,
+      section: "Routing"
     }),
+    get_node_output: snip("get_node_output(\"${node_name}\")", {
+      label: "get_node_output",
+      type: "function",
+      detail: "Returns the output of the specified node if it has been executed. If the node has not been executed, it returns `None.",
+      boost: 1,
+      section: "Node Outputs"
+    }),
+    abort_with_message: snip("abort_with_message(\"${message}\", tag_name=\"${tag_name}\")", {
+      label: "abort_with_message",
+      type: "function",
+      detail: "Terminates the pipeline execution. No further nodes will get executed in any branch of the pipeline graph.",
+      boost: 1,
+      section: "Flow Control",
+    }),
+    require_node_outputs: snip("require_node_outputs(${node_names})", {
+      label: "require_node_outputs",
+      type: "function",
+      detail: "Ensures that the specified nodes have been executed and their outputs are available in the pipeline's state.",
+      boost: 1,
+      section: "Flow Control",
+    })
   }
 
   function pythonCompletions(context: CompletionContext) {
