@@ -61,13 +61,14 @@ def translate_messages_with_llm(messages, target_language, llm_provider, llm_pro
             response = llm.invoke(prompt)
             translated_data = json.loads(response.content)
 
+            messages_by_id = {str(msg.id): msg for msg in messages_to_translate}
+
             for item in translated_data:
                 message_id = item["id"]
-                for message in messages_to_translate:
-                    if str(message.id) == message_id:
-                        message.translations[target_language] = item["translation"]
-                        message.save(update_fields=["translations"])
-                        break
+                if message_id in messages_by_id:
+                    message = messages_by_id[message_id]
+                    message.translations[target_language] = item["translation"]
+                    message.save(update_fields=["translations"])
 
             if messages_to_translate:
                 chat = messages_to_translate[0].chat
