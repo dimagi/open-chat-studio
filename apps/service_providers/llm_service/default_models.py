@@ -35,6 +35,8 @@ DEFAULT_LLM_PROVIDER_MODELS = {
         Model("claude-instant-1.2", k(100)),
     ],
     "openai": [
+        Model("o3", 128000),
+        Model("o3-mini", 128000),
         Model("gpt-4o-mini", 128000, is_default=True),
         Model("gpt-4o", 128000),
         Model("chatgpt-4o-latest", 128000),
