@@ -346,14 +346,15 @@ class PipelineRouterNode(BasePipelineNode):
             conditional_branch, is_default_keyword = self._process_conditional(state)
             output_handle = next((k for k, v in output_map.items() if v == conditional_branch), None)
             tags = self.get_output_tags(conditional_branch, is_default_keyword)
-            target_node_id = edge_map[conditional_branch]
-            route_path = (state["node_source"], self.node_id, [target_node_id])
+            # edge map won't contain the conditional branch if that handle isn't connected to another node
+            target_node_id = edge_map.get(conditional_branch)
+            route_path = (state["node_source"], self.node_id, [target_node_id] if target_node_id else [])
             output = PipelineState.from_router_output(
                 self.node_id, self.name, state["node_input"], output_handle, tags, route_path, conditional_branch
             )
             return Command(
                 update=output,
-                goto=target_node_id,
+                goto=[target_node_id] if target_node_id else [],
             )
 
         return router

@@ -2,6 +2,7 @@ from uuid import uuid4
 
 from langgraph.graph.state import CompiledStateGraph
 
+from apps.pipelines.const import STANDARD_OUTPUT_NAME
 from apps.pipelines.graph import PipelineGraph
 from apps.pipelines.models import Pipeline
 from apps.pipelines.nodes import nodes
@@ -23,10 +24,18 @@ def _make_edges(nodes) -> list[dict]:
 
 
 def _edges_from_strings(edge_strings: list[str], nodes: list[dict]) -> list[dict]:
+    """
+    Convert a list of edge strings into a list of edge dictionaries.
+
+    Each edge string should be in the format "source - target" or "source:handle_index - target".
+    """
     nodes_by_name = {node["params"]["name"]: node for node in nodes}
     edges = []
     for edge in edge_strings:
         source, target = edge.split(" - ")
+        source_handle_index = None
+        if ":" in source:
+            source, source_handle_index = source.split(":")
         if source not in nodes_by_name or target not in nodes_by_name:
             raise ValueError(f"Invalid edge: {edge}")
         source_node = nodes_by_name[source]
@@ -36,6 +45,9 @@ def _edges_from_strings(edge_strings: list[str], nodes: list[dict]) -> list[dict
                 "id": f"{source} -> {target}",
                 "source": source_node["id"],
                 "target": target_node["id"],
+                "sourceHandle": f"output_{source_handle_index}"
+                if source_handle_index is not None
+                else STANDARD_OUTPUT_NAME,
             }
         )
     return edges
