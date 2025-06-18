@@ -60,7 +60,12 @@ def translate_messages_with_llm(messages, target_language, llm_provider, llm_pro
             )
 
             response = llm.invoke(prompt)
-            translated_data = json.loads(response.content)
+            try:
+                translated_data = json.loads(response.content)
+            except json.JSONDecodeError as e:
+                raise TranslationError(
+                    f"Failed to parse LLM response as JSON for {target_language} translation. Error: {str(e)}"
+                ) from e
 
             messages_by_id = {str(msg.id): msg for msg in messages_to_translate}
             updated_messages = []
