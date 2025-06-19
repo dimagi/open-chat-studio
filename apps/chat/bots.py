@@ -278,25 +278,7 @@ class PipelineBot:
     def process_input(
         self, user_input: str, save_input_to_history=True, attachments: list["Attachment"] | None = None
     ) -> ChatMessage:
-        attachments = attachments or []
-        serializable_attachments = [attachment.model_dump() for attachment in attachments]
-        incoming_file_ids = []
-        for attachment in attachments:
-            file = File.objects.get(id=attachment.id)
-            ChatAttachment.objects.create(chat=self.session.chat, tool_type="ocs_attachments")
-            incoming_file_ids.append(file.id)
-
-        input_message_metadata = {}
-        if incoming_file_ids:
-            input_message_metadata["ocs_attachment_file_ids"] = incoming_file_ids
-
-        input_state = PipelineState(
-            messages=[user_input],
-            experiment_session=self.session,
-            attachments=serializable_attachments,
-            input_message_metadata=input_message_metadata,
-        )
-
+        input_state = self._get_input_state(attachments, user_input)
         return self.invoke_pipeline(
             input_state,
             save_run_to_history=True,
@@ -310,10 +292,37 @@ class PipelineBot:
         save_input_to_history=True,
         pipeline=None,
     ) -> ChatMessage:
+        pipeline_to_use = pipeline or self.experiment.pipeline
+        output = self._run_pipeline(input_state, pipeline_to_use)
+        if save_run_to_history and self.session is not None:
+            result = self._save_messages(input_state, output, save_input_to_history)
+        else:
+            result = ChatMessage(content=output)
+        self._process_intents(output)
+        return result
+
+    def _get_input_state(self, attachments, user_input):
+        attachments = attachments or []
+        serializable_attachments = [attachment.model_dump() for attachment in attachments]
+        incoming_file_ids = []
+        for attachment in attachments:
+            file = File.objects.get(id=attachment.id)
+            ChatAttachment.objects.create(chat=self.session.chat, tool_type="ocs_attachments")
+            incoming_file_ids.append(file.id)
+        input_message_metadata = {}
+        if incoming_file_ids:
+            input_message_metadata["ocs_attachment_file_ids"] = incoming_file_ids
+        return PipelineState(
+            messages=[user_input],
+            experiment_session=self.session,
+            attachments=serializable_attachments,
+            input_message_metadata=input_message_metadata,
+        )
+
+    def _run_pipeline(self, input_state, pipeline_to_use):
         from apps.experiments.models import AgentTools
         from apps.pipelines.graph import PipelineGraph
 
-        pipeline_to_use = pipeline or self.experiment.pipeline
         graph = PipelineGraph.build_from_pipeline(pipeline_to_use)
         config = self.trace_service.get_langchain_config(
             configurable={
@@ -325,33 +334,28 @@ class PipelineBot:
         runnable = graph.build_runnable()
         raw_output = runnable.invoke(input_state, config=config)
         output = PipelineState(**raw_output).json_safe()
+        return output
 
-        if save_run_to_history and self.session is not None:
-            input_metadata = output.get("input_message_metadata", {})
-            output_metadata = output.get("output_message_metadata", {})
-            trace_metadata = self.trace_service.get_trace_metadata() if self.trace_service else None
-            if trace_metadata:
-                input_metadata.update(trace_metadata)
-                output_metadata.update(trace_metadata)
+    def _save_messages(self, input_state, output, save_input_to_history):
+        input_metadata = output.get("input_message_metadata", {})
+        output_metadata = output.get("output_message_metadata", {})
+        trace_metadata = self.trace_service.get_trace_metadata() if self.trace_service else None
+        if trace_metadata:
+            input_metadata.update(trace_metadata)
+            output_metadata.update(trace_metadata)
 
-            if save_input_to_history:
-                self._save_message_to_history(
-                    input_state["messages"][-1], ChatMessageType.HUMAN, metadata=input_metadata
-                )
-            ai_message = self._save_message_to_history(
-                output["messages"][-1],
-                ChatMessageType.AI,
-                metadata=output_metadata,
-                tags=output.get("output_message_tags"),
-            )
-            ai_message.add_version_tag(
-                version_number=self.experiment.version_number, is_a_version=self.experiment.is_a_version
-            )
-            self._process_intents(output)
-            return ai_message
-        else:
-            self._process_intents(output)
-            return ChatMessage(content=output)
+        if save_input_to_history:
+            self._save_message_to_history(input_state["messages"][-1], ChatMessageType.HUMAN, metadata=input_metadata)
+        ai_message = self._save_message_to_history(
+            output["messages"][-1],
+            ChatMessageType.AI,
+            metadata=output_metadata,
+            tags=output.get("output_message_tags"),
+        )
+        ai_message.add_version_tag(
+            version_number=self.experiment.version_number, is_a_version=self.experiment.is_a_version
+        )
+        return ai_message
 
     def _process_intents(self, pipeline_output: dict):
         for intent in pipeline_output.get("intents", []):
