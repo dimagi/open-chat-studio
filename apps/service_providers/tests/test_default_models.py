@@ -118,6 +118,11 @@ def test_replaces_custom_models_with_global_models():
     old_custom_model = experiment.llm_provider_model
     assert old_custom_model.team is not None  # Ensure it's a custom model
 
+    # no global model should exist
+    assert not LlmProviderModel.objects.filter(
+        team=None, type=old_custom_model.type, name=old_custom_model.name
+    ).exists()
+
     defaults = {old_custom_model.type: [Model(old_custom_model.name, old_custom_model.max_token_limit)]}
     with patch("apps.service_providers.llm_service.default_models.DEFAULT_LLM_PROVIDER_MODELS", defaults):
         update_llm_provider_models()
@@ -127,6 +132,30 @@ def test_replaces_custom_models_with_global_models():
     assert not LlmProviderModel.objects.filter(id=old_custom_model.id).exists()
     experiment.refresh_from_db()
     assert experiment.llm_provider_model_id == new_global_model.id
+
+
+@pytest.mark.django_db()
+def test_converts_custom_models_to_global_models_pipelines():
+    custom_model = LlmProviderModelFactory()
+    pipeline = get_pipeline(custom_model)
+
+    # no custom model should exist
+    assert not LlmProviderModel.objects.filter(team=None, type=custom_model.type, name=custom_model.name).exists()
+
+    defaults = {custom_model.type: [Model(custom_model.name, custom_model.max_token_limit)]}
+    with patch("apps.service_providers.llm_service.default_models.DEFAULT_LLM_PROVIDER_MODELS", defaults):
+        update_llm_provider_models()
+
+    # custom model is removed
+    assert not LlmProviderModel.objects.filter(id=custom_model.id).exists()
+
+    # global model is created
+    global_model = LlmProviderModel.objects.get(team=None, type=custom_model.type, name=custom_model.name)
+    # pipeline is updated to use the custom model
+    pipeline.refresh_from_db()
+    assert pipeline.node_set.get(type="LLMResponseWithPrompt").params["llm_provider_model_id"] == global_model.id
+    node_data = [node for node in pipeline.data["nodes"] if node["data"]["type"] == "LLMResponseWithPrompt"]
+    assert node_data[0]["data"]["params"]["llm_provider_model_id"] == global_model.id
 
 
 def get_pipeline(llm_provider_model):

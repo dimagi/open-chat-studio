@@ -138,7 +138,6 @@ def _update_llm_provider_models(LlmProviderModel):
         existing_custom_global[(m.type, m.name)].append(m)
 
     created_models = dict()
-    print(DEFAULT_LLM_PROVIDER_MODELS)
     for provider_type, provider_models in DEFAULT_LLM_PROVIDER_MODELS.items():
         for model in provider_models:
             key = (provider_type, model.name)
@@ -172,10 +171,10 @@ def _update_llm_provider_models(LlmProviderModel):
 
         provider_model.delete()
 
+    # replace existing custom models with the new global model and delete the custom models
     for key, model in created_models.items():
-        if key in existing_global_model:
-            # replace existing custom models with the new global model and delete the custom models
-            for custom_model in existing_global_model[key]:
+        if key in existing_custom_global:
+            for custom_model in existing_custom_global[key]:
                 related_objects = get_related_objects(custom_model)
                 for obj in related_objects:
                     field = [f for f in obj._meta.fields if f.related_model == LlmProviderModel][0]
