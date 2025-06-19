@@ -3,6 +3,8 @@
  * Simplified reactive dashboard with Alpine.js
  */
 
+import TomSelect from "tom-select";
+
 function dashboard() {
     return {
         // Reactive data
@@ -40,9 +42,27 @@ function dashboard() {
             this.loadInitialData();
             this.setupFilterWatchers();
             this.setupAutoRefresh();
+            this.setupTomSelect();
             
             // Initialize form data
             this.updateFiltersFromForm();
+        },
+        
+        setupTomSelect() {
+            // Initialize TomSelect for experiments field
+            const experimentsSelect = document.getElementById('id_experiments');
+            if (experimentsSelect && !experimentsSelect.tomselect) {
+                new TomSelect(experimentsSelect, {
+                    plugins: ["remove_button", "caret_position"],
+                    maxItems: null,
+                    searchField: ['text', 'value'],
+                    placeholder: 'Select experiments...',
+                    allowEmptyOption: true,
+                    onChange: () => {
+                        this.handleFilterChange();
+                    }
+                });
+            }
         },
         
         setupFilterWatchers() {

@@ -61,10 +61,10 @@ class DashboardFilterForm(forms.Form):
         required=False,
         widget=forms.SelectMultiple(
             attrs={
-                "class": "form-select form-select-sm",
+                "class": "form-select form-select-sm experiment-multiselect",
                 "multiple": True,
                 "data-filter-type": "experiments",
-                "size": "4",
+                "id": "id_experiments",
             }
         ),
     )
