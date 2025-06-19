@@ -1,8 +1,7 @@
 import logging
-from collections.abc import Callable
 from datetime import datetime, timedelta
 from functools import cached_property
-from typing import TYPE_CHECKING, Any, Union
+from typing import TYPE_CHECKING, Any, ClassVar, Union
 
 from django.db import transaction, utils
 from langchain_community.utilities.openapi import OpenAPISpec
@@ -16,10 +15,12 @@ from apps.events.forms import ScheduledMessageConfigForm
 from apps.events.models import ScheduledMessage, TimePeriod
 from apps.experiments.models import AgentTools, Experiment, ExperimentSession, ParticipantData
 from apps.pipelines.models import Node
+from apps.pipelines.nodes.tool_callbacks import ToolCallbacks
 from apps.utils.time import pretty_date
 
 if TYPE_CHECKING:
     from apps.assistants.models import OpenAiAssistant
+    from apps.pipelines.models import Node
 
 
 SUCCESSFUL_ATTACHMENT_MESSAGE: str = "File {file_id} ({name}) is attached to your response"
@@ -31,9 +32,12 @@ CREATE_LINK_TEXT = """You can use this markdown link to reference it in your res
 
 
 class CustomBaseTool(BaseTool):
+    requires_callbacks: ClassVar[bool] = False
+
     experiment_session: ExperimentSession | None = None
     # Some tools like the reminder requires a chat session id in order to get back to the user later
     requires_session: bool = False
+    callbacks: ToolCallbacks = None
 
     def _run(self, *args, **kwargs):
         if self.requires_session and not self.experiment_session:
@@ -48,7 +52,7 @@ class CustomBaseTool(BaseTool):
         """Use the tool asynchronously."""
         raise NotImplementedError("custom_search does not support async")
 
-    def action(*args, **kwargs):
+    def action(self, *args, **kwargs):
         raise Exception("Not implemented")
 
 
@@ -183,12 +187,27 @@ class UpdateParticipantDataTool(CustomBaseTool):
         return "Success"
 
 
+class EndSessionTool(CustomBaseTool):
+    requires_callbacks: ClassVar[bool] = True
+    name: str = AgentTools.END_SESSION
+    description: str = (
+        "End the current chat session. "
+        "This will mark the session as completed. "
+        "New messages will result in a new session being createed."
+    )
+
+    def action(self):
+        from apps.pipelines.nodes.base import Intents
+
+        self.callbacks.register_intent(Intents.END_SESSION)
+
+
 class AttachMediaTool(CustomBaseTool):
+    requires_callbacks: ClassVar[bool] = True
     name: str = AgentTools.ATTACH_MEDIA
     description: str = "Attach a media file to your response"
     requires_session: bool = True
     args_schema: type[schemas.AttachMediaSchema] = schemas.AttachMediaSchema
-    callback: Callable[[str], None]
 
     @cached_property
     def chat_attachment(self) -> ChatAttachment:
@@ -204,7 +223,7 @@ class AttachMediaTool(CustomBaseTool):
         try:
             file = File.objects.get(id=file_id)
             self.chat_attachment.files.add(file_id)
-            self.callback(file_id)
+            self.callbacks.attach_file(file_id)
             response = SUCCESSFUL_ATTACHMENT_MESSAGE.format(file_id=file_id, name=file.name)
 
             if self.experiment_session.experiment_channel.platform == ChannelPlatform.WEB:
@@ -281,6 +300,7 @@ TOOL_CLASS_MAP = {
     AgentTools.RECURRING_REMINDER: RecurringReminderTool,
     AgentTools.DELETE_REMINDER: DeleteReminderTool,
     AgentTools.UPDATE_PARTICIPANT_DATA: UpdateParticipantDataTool,
+    AgentTools.ATTACH_MEDIA: AttachMediaTool,
 }
 
 
@@ -298,25 +318,29 @@ def get_assistant_tools(assistant, experiment_session: ExperimentSession | None 
 
 
 def get_node_tools(
-    node: Node, experiment_session: ExperimentSession | None = None, attachment_callback: Callable | None = None
+    node: Node, experiment_session: ExperimentSession | None = None, tool_callbacks: ToolCallbacks | None = None
 ) -> list[BaseTool]:
-    tools = get_tool_instances(node.params.get("tools") or [], experiment_session)
-    tools.extend(get_custom_action_tools(node))
+    tool_names = node.params.get("tools") or []
     if node.requires_attachment_tool():
-        tools.append(AttachMediaTool(experiment_session=experiment_session, callback=attachment_callback))
-
+        tool_names.append(AgentTools.ATTACH_MEDIA)
+    tools = get_tool_instances(tool_names, experiment_session, tool_callbacks)
+    tools.extend(get_custom_action_tools(node))
     return tools
 
 
-def get_tool_instances(tools_list, experiment_session: ExperimentSession | None = None) -> list[BaseTool]:
+def get_tool_instances(
+    tools_list, experiment_session: ExperimentSession | None = None, tool_callbacks=None
+) -> list[BaseTool]:
     tools = []
     for tool_name in tools_list:
         tool_cls = TOOL_CLASS_MAP[tool_name]
-        tools.append(tool_cls(experiment_session=experiment_session))
+        if tool_cls.requires_callbacks and not tool_callbacks:
+            raise ValueError(f"Tool {tool_name} requires callbacks but none were provided")
+        tools.append(tool_cls(experiment_session=experiment_session, tool_callbacks=tool_callbacks))
     return tools
 
 
-def get_custom_action_tools(action_holder: Union[Experiment, "OpenAiAssistant"]) -> list[BaseTool]:
+def get_custom_action_tools(action_holder: Union[Experiment, "OpenAiAssistant", "Node"]) -> list[BaseTool]:
     operations = action_holder.get_custom_action_operations().select_related("custom_action__auth_provider").all()
     return list(filter(None, [get_tool_for_custom_action_operation(operation) for operation in operations]))
 

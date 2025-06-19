@@ -44,6 +44,7 @@ from apps.pipelines.nodes.base import (
     Widgets,
     deprecated_node,
 )
+from apps.pipelines.nodes.tool_callbacks import ToolCallbacks
 from apps.pipelines.tasks import send_email_from_pipeline
 from apps.service_providers.exceptions import ServiceProviderConfigError
 from apps.service_providers.llm_service.adapters import AssistantAdapter, ChatAdapter
@@ -402,7 +403,8 @@ class LLMResponseWithPrompt(LLMResponse, HistoryMixin, OutputMessageTagMixin):
             max_token_limit=provider_model.max_token_limit,
             chat_model=chat_model,
         )
-        tools = get_node_tools(self.django_node, session, attachment_callback=history_manager.attach_file_id)
+        tool_callbacks = ToolCallbacks()
+        tools = get_node_tools(self.django_node, session, tool_callbacks=tool_callbacks)
         built_in_tools = self.built_in_tools
         tools.extend(self.get_llm_service().attach_built_in_tools(built_in_tools, self.tool_config))
         if self.collection_index_id:
@@ -436,7 +438,10 @@ class LLMResponseWithPrompt(LLMResponse, HistoryMixin, OutputMessageTagMixin):
             node_name=self.name,
             node_id=self.node_id,
             output=result.output,
-            output_message_metadata=history_manager.output_message_metadata,
+            output_message_metadata={
+                **history_manager.output_message_metadata,
+                **tool_callbacks.output_message_metadata,
+            },
         )
 
 

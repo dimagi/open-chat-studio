@@ -64,6 +64,12 @@ def merge_dicts(left: dict, right: dict):
     return output
 
 
+class Intents(StrEnum):
+    """Intents capture actions which should be taken after the pipeline has run."""
+
+    END_SESSION = "end_session"
+
+
 class TempState(TypedDict):
     user_input: str
     outputs: dict
