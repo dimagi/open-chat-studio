@@ -21,7 +21,7 @@ from apps.pipelines.exceptions import PipelineBuildError
 from apps.pipelines.executor import patch_executor
 from apps.pipelines.flow import Flow, FlowNode, FlowNodeData
 from apps.pipelines.helper import duplicate_pipeline_with_new_ids
-from apps.pipelines.nodes.base import PipelineState
+from apps.pipelines.nodes.base import Intents, PipelineState
 from apps.pipelines.nodes.helpers import temporary_session
 from apps.teams.models import BaseTeamModel
 from apps.utils.models import BaseModel
@@ -363,9 +363,17 @@ class Pipeline(BaseTeamModel, VersionsMixin):
                 tags=output.get("output_message_tags"),
             )
             ai_message.add_version_tag(version_number=experiment.version_number, is_a_version=experiment.is_a_version)
+            self._process_intents(output, session)
             return ai_message
         else:
+            self._process_intents(output, session)
             return ChatMessage(content=output)
+
+    def _process_intents(self, pipeline_output: dict, session: ExperimentSession):
+        for intent in pipeline_output.get("intents", []):
+            match intent:
+                case Intents.END_SESSION:
+                    session.end()
 
     def _save_message_to_history(
         self,
