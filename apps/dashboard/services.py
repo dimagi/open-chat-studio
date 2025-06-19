@@ -23,7 +23,7 @@ class DashboardService:
         start_date: datetime | None = None,
         end_date: datetime | None = None,
         experiment_ids: list[int] | None = None,
-        channel_ids: list[int] | None = None,
+        platform_names: list[str] | None = None,
     ) -> dict[str, Any]:
         """Get base querysets with common filters applied"""
 
@@ -47,10 +47,10 @@ class DashboardService:
             sessions = sessions.filter(experiment_id__in=experiment_ids)
             messages = messages.filter(chat__experiment_session__experiment_id__in=experiment_ids)
 
-        # Apply channel filter
-        if channel_ids:
-            sessions = sessions.filter(experiment_channel_id__in=channel_ids)
-            messages = messages.filter(chat__experiment_session__experiment_channel_id__in=channel_ids)
+        # Apply platform filter
+        if platform_names:
+            sessions = sessions.filter(experiment_channel__platform__in=platform_names)
+            messages = messages.filter(chat__experiment_session__experiment_channel__platform__in=platform_names)
 
         return {
             "experiments": experiments,
@@ -345,7 +345,7 @@ class DashboardService:
         return data
 
     def get_channel_breakdown_data(self, **filters) -> dict[str, Any]:
-        """Get channel breakdown statistics"""
+        """Get channel breakdown statistics by platform"""
         cache_key = f"channel_breakdown_{hash(str(sorted(filters.items())))}"
         cached_data = DashboardCache.get_cached_data(self.team, cache_key)
         if cached_data:
@@ -353,34 +353,47 @@ class DashboardService:
 
         querysets = self.get_filtered_queryset_base(**filters)
 
-        # Get channel statistics
-        channels = ExperimentChannel.objects.filter(team=self.team, deleted=False)
-        channel_data = []
+        # Get platform statistics by aggregating all channels per platform
 
-        for channel in channels:
-            channel_sessions = querysets["sessions"].filter(experiment_channel=channel)
-            channel_messages = querysets["messages"].filter(chat__experiment_session__experiment_channel=channel)
-            channel_participants = channel_sessions.values("participant").distinct().count()
+        from apps.channels.models import ChannelPlatform
 
-            channel_data.append(
+        platform_data = []
+
+        # Get all platforms that have channels in this team
+        platforms_in_use = (
+            ExperimentChannel.objects.filter(team=self.team, deleted=False)
+            .values_list("platform", flat=True)
+            .distinct()
+        )
+
+        for platform in platforms_in_use:
+            platform_sessions = querysets["sessions"].filter(experiment_channel__platform=platform)
+            platform_messages = querysets["messages"].filter(
+                chat__experiment_session__experiment_channel__platform=platform
+            )
+            platform_participants = platform_sessions.values("participant").distinct().count()
+
+            # Get human-readable platform name
+            platform_label = dict(ChannelPlatform.choices).get(platform, platform.title())
+
+            platform_data.append(
                 {
-                    "channel_id": channel.id,
-                    "channel_name": channel.name,
-                    "platform": channel.platform,
-                    "sessions": channel_sessions.count(),
-                    "messages": channel_messages.count(),
-                    "participants": channel_participants,
-                    "human_messages": channel_messages.filter(message_type=ChatMessageType.HUMAN).count(),
-                    "ai_messages": channel_messages.filter(message_type=ChatMessageType.AI).count(),
+                    "platform": platform,
+                    "platform_name": platform_label,
+                    "sessions": platform_sessions.count(),
+                    "messages": platform_messages.count(),
+                    "participants": platform_participants,
+                    "human_messages": platform_messages.filter(message_type=ChatMessageType.HUMAN).count(),
+                    "ai_messages": platform_messages.filter(message_type=ChatMessageType.AI).count(),
                 }
             )
 
         # Calculate totals and percentages
-        total_sessions = sum(item["sessions"] for item in channel_data)
-        total_messages = sum(item["messages"] for item in channel_data)
-        total_participants = sum(item["participants"] for item in channel_data)
+        total_sessions = sum(item["sessions"] for item in platform_data)
+        total_messages = sum(item["messages"] for item in platform_data)
+        total_participants = sum(item["participants"] for item in platform_data)
 
-        for item in channel_data:
+        for item in platform_data:
             item["session_percentage"] = (item["sessions"] / total_sessions * 100) if total_sessions > 0 else 0
             item["message_percentage"] = (item["messages"] / total_messages * 100) if total_messages > 0 else 0
             item["participant_percentage"] = (
@@ -388,7 +401,7 @@ class DashboardService:
             )
 
         data = {
-            "channels": channel_data,
+            "platforms": platform_data,
             "totals": {"sessions": total_sessions, "messages": total_messages, "participants": total_participants},
         }
 

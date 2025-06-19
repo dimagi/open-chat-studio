@@ -75,6 +75,23 @@ function dashboard() {
                     }
                 });
             }
+            
+            // Initialize TomSelect for channels field
+            const channelsSelect = document.getElementById('id_channels');
+            if (channelsSelect && !channelsSelect.tomselect) {
+                new TomSelect(channelsSelect, {
+                    plugins: ["remove_button", "caret_position"],
+                    maxItems: null,
+                    searchField: ['text', 'value'],
+                    allowEmptyOption: true,
+                    hideSelected: true,
+                    closeAfterSelect: true,
+                    placeholder: 'Select channels...',
+                    onChange: () => {
+                        this.handleFilterChange();
+                    }
+                });
+            }
         },
         
         setupFilterWatchers() {
@@ -142,6 +159,17 @@ function dashboard() {
                 
                 const granularitySelect = form.querySelector('[data-filter-type="granularity"]');
                 if (granularitySelect) granularitySelect.value = 'daily';
+                
+                // Clear TomSelect instances
+                const experimentsSelect = document.getElementById('id_experiments');
+                if (experimentsSelect && experimentsSelect.tomselect) {
+                    experimentsSelect.tomselect.clear();
+                }
+                
+                const channelsSelect = document.getElementById('id_channels');
+                if (channelsSelect && channelsSelect.tomselect) {
+                    channelsSelect.tomselect.clear();
+                }
             }
             
             // Reset reactive data
@@ -391,7 +419,15 @@ function dashboard() {
             for (const [key, value] of Object.entries(filterData)) {
                 const element = form.querySelector(`[name="${key}"]`);
                 if (element) {
-                    if (element.type === 'select-multiple') {
+                    // Handle TomSelect instances
+                    if (element.tomselect) {
+                        element.tomselect.clear();
+                        if (Array.isArray(value)) {
+                            value.forEach(v => element.tomselect.addItem(v, true));
+                        } else if (value) {
+                            element.tomselect.addItem(value, true);
+                        }
+                    } else if (element.type === 'select-multiple') {
                         Array.from(element.options).forEach(option => {
                             option.selected = Array.isArray(value) 
                                 ? value.includes(option.value) 

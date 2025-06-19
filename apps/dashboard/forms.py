@@ -4,7 +4,7 @@ from django import forms
 from django.utils import timezone
 from django.utils.translation import gettext_lazy as _
 
-from apps.channels.models import ExperimentChannel
+from apps.channels.models import ChannelPlatform
 from apps.experiments.models import Experiment
 
 
@@ -68,11 +68,16 @@ class DashboardFilterForm(forms.Form):
         ),
     )
 
-    channels = forms.ModelMultipleChoiceField(
-        queryset=ExperimentChannel.objects.none(),
+    channels = forms.MultipleChoiceField(
+        choices=[],  # Will be set dynamically in __init__
         required=False,
         widget=forms.SelectMultiple(
-            attrs={"class": "form-select form-select-sm", "multiple": True, "data-filter-type": "channels", "size": "4"}
+            attrs={
+                "class": "form-select form-select-sm tom-select-channels",
+                "multiple": True,
+                "data-filter-type": "channels",
+                "id": "id_channels",
+            }
         ),
     )
 
@@ -85,9 +90,15 @@ class DashboardFilterForm(forms.Form):
                 team=team, is_archived=False, working_version=None
             ).order_by("name")
 
-            self.fields["channels"].queryset = ExperimentChannel.objects.filter(team=team, deleted=False).order_by(
-                "name"
-            )
+            # Set channel choices using ChannelPlatform.for_filter
+            available_platform_labels = ChannelPlatform.for_filter(team)
+            # Create a mapping from label to value for available platforms
+            label_to_value = {choice[1]: choice[0] for choice in ChannelPlatform.choices}
+            # Build choices list using only available platforms
+            platform_choices = [
+                (label_to_value[label], label) for label in available_platform_labels if label in label_to_value
+            ]
+            self.fields["channels"].choices = platform_choices
 
         # Set default dates if not provided
         if not self.data.get("start_date") and not self.data.get("end_date"):
@@ -149,7 +160,7 @@ class DashboardFilterForm(forms.Form):
             params["experiment_ids"] = [exp.id for exp in data["experiments"]]
 
         if data.get("channels"):
-            params["channel_ids"] = [ch.id for ch in data["channels"]]
+            params["platform_names"] = data["channels"]
 
         return params
 
