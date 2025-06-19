@@ -34,7 +34,7 @@ def translate_messages_with_llm(messages, target_language, llm_provider, llm_pro
     """
     messages_to_translate = []
 
-    for i, msg in enumerate(messages):
+    for msg in messages:
         if not msg.translations:
             msg.translations = {}
 
