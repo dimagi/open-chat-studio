@@ -33,7 +33,6 @@ def translate_messages_with_llm(messages, target_language, llm_provider, llm_pro
     Only translates messages that don't already have the target language translation.
     """
     messages_to_translate = []
-    message_indices = []
 
     for i, msg in enumerate(messages):
         if not msg.translations:
@@ -41,7 +40,6 @@ def translate_messages_with_llm(messages, target_language, llm_provider, llm_pro
 
         if target_language not in msg.translations:
             messages_to_translate.append(msg)
-            message_indices.append(i)
 
     if not messages_to_translate:
         return messages
