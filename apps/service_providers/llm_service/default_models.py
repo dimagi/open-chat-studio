@@ -137,6 +137,7 @@ def _update_llm_provider_models(LlmProviderModel):
     for m in existing_custom_by_team.values():
         existing_custom_global[(m.type, m.name)].append(m)
 
+    created_models = dict()
     for provider_type, provider_models in DEFAULT_LLM_PROVIDER_MODELS.items():
         for model in provider_models:
             key = (provider_type, model.name)
@@ -147,7 +148,7 @@ def _update_llm_provider_models(LlmProviderModel):
                     existing_global_model.max_token_limit = model.token_limit
                     existing_global_model.save()
             else:
-                LlmProviderModel.objects.create(
+                created_models[(provider_type, model.name)] = LlmProviderModel.objects.create(
                     team=None,
                     type=provider_type,
                     name=model.name,
@@ -169,6 +170,22 @@ def _update_llm_provider_models(LlmProviderModel):
             _update_pipeline_node_param(node.pipeline, node, "llm_provider_model_id", custom_model.id)
 
         provider_model.delete()
+
+    # replace existing custom models with the new global model and delete the custom models
+    for key, model in created_models.items():
+        if key in existing_custom_global:
+            for custom_model in existing_custom_global[key]:
+                related_objects = get_related_objects(custom_model)
+                for obj in related_objects:
+                    field = [f for f in obj._meta.fields if f.related_model == LlmProviderModel][0]
+                    setattr(obj, field.attname, model.id)
+                    obj.save(update_fields=[field.name])
+
+                related_pipeline_nodes = get_related_pipelines_queryset(custom_model, "llm_provider_model_id")
+                for node in related_pipeline_nodes.select_related("pipeline").all():
+                    _update_pipeline_node_param(node.pipeline, node, "llm_provider_model_id", model.id)
+
+                custom_model.delete()
 
 
 def _get_or_create_custom_model(team_object, key, global_model, existing_custom_by_team):
