@@ -37,7 +37,7 @@ class CustomBaseTool(BaseTool):
     experiment_session: ExperimentSession | None = None
     # Some tools like the reminder requires a chat session id in order to get back to the user later
     requires_session: bool = False
-    callbacks: ToolCallbacks = None
+    tool_callbacks: ToolCallbacks = None
 
     def _run(self, *args, **kwargs):
         if self.requires_session and not self.experiment_session:
@@ -199,7 +199,8 @@ class EndSessionTool(CustomBaseTool):
     def action(self):
         from apps.pipelines.nodes.base import Intents
 
-        self.callbacks.register_intent(Intents.END_SESSION)
+        self.tool_callbacks.register_intent(Intents.END_SESSION)
+        return "Your intent to end the session has been registered."
 
 
 class AttachMediaTool(CustomBaseTool):
@@ -223,7 +224,7 @@ class AttachMediaTool(CustomBaseTool):
         try:
             file = File.objects.get(id=file_id)
             self.chat_attachment.files.add(file_id)
-            self.callbacks.attach_file(file_id)
+            self.tool_callbacks.attach_file(file_id)
             response = SUCCESSFUL_ATTACHMENT_MESSAGE.format(file_id=file_id, name=file.name)
 
             if self.experiment_session.experiment_channel.platform == ChannelPlatform.WEB:
