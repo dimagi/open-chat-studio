@@ -376,6 +376,27 @@ class PipelineBot:
         return chat_message
 
 
+class PipelineTestBot:
+    """Invoke the pipeline with a temporary session or the ability to save the run to history"""
+
+    def __init__(self, pipeline, user_id: int):
+        self.pipeline = pipeline
+        self.user_id = user_id
+
+    def process_input(self, input: str) -> PipelineState:
+        from apps.pipelines.executor import patch_executor
+        from apps.pipelines.graph import PipelineGraph
+        from apps.pipelines.nodes.helpers import temporary_session
+
+        with temporary_session(self.pipeline.team, self.user_id) as session:
+            runnable = PipelineGraph.build_runnable_from_pipeline(self.pipeline)
+            input = PipelineState(messages=[input], experiment_session=session)
+            with patch_executor():
+                output = runnable.invoke(input, config={"max_concurrency": 1})
+            output = PipelineState(**output).json_safe()
+        return output
+
+
 class EventBot:
     SYSTEM_PROMPT = textwrap.dedent(
         """

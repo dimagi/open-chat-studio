@@ -18,11 +18,8 @@ from apps.custom_actions.mixins import CustomActionOperationMixin
 from apps.experiments.models import ExperimentSession, SourceMaterial
 from apps.experiments.versioning import VersionDetails, VersionField, VersionsMixin, VersionsObjectManagerMixin
 from apps.pipelines.exceptions import PipelineBuildError
-from apps.pipelines.executor import patch_executor
 from apps.pipelines.flow import Flow, FlowNode, FlowNodeData
 from apps.pipelines.helper import duplicate_pipeline_with_new_ids
-from apps.pipelines.nodes.base import PipelineState
-from apps.pipelines.nodes.helpers import temporary_session
 from apps.teams.models import BaseTeamModel
 from apps.utils.models import BaseModel
 
@@ -306,18 +303,6 @@ class Pipeline(BaseTeamModel, VersionsMixin):
     @property
     def node_ids(self):
         return self.node_set.order_by("created_at").values_list("flow_id", flat=True).all()
-
-    def simple_invoke(self, input: str, user_id: int) -> PipelineState:
-        """Invoke the pipeline without a session or the ability to save the run to history"""
-        from apps.pipelines.graph import PipelineGraph
-
-        with temporary_session(self.team, user_id) as session:
-            runnable = PipelineGraph.build_runnable_from_pipeline(self)
-            input = PipelineState(messages=[input], experiment_session=session)
-            with patch_executor():
-                output = runnable.invoke(input, config={"max_concurrency": 1})
-            output = PipelineState(**output).json_safe()
-        return output
 
     @transaction.atomic()
     def create_new_version(self, is_copy: bool = False):
