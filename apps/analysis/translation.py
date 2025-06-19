@@ -10,7 +10,7 @@ Translate chat messages to {target_lang_name}. Return a JSON array where each ob
 - id: The ID of the message (must match the ID of of the input message)
 - translation: The translated text
 <example>
-[{"id": "4", "translation": "Hello"}, {"id": "9", "translation": "Hi, how can I help?"}]
+[{{"id": "4", "translation": "Hello"}}, {{"id": "9", "translation": "Hi, how can I help?"}}]
 </example>
 **Translation rules:**
 - If the text is already in {target_lang_name}, return the original text unchanged

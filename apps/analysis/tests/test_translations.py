@@ -69,13 +69,12 @@ class TestTranslateMessagesWithLLM(TestCase):
         self.mock_llm_provider.get_llm_service.return_value = mock_llm_service
 
         messages = [self.mock_message1, self.mock_message2]
-        translate_messages_with_llm(messages, "spa", self.mock_llm_provider, self.mock_llm_provider_model)
+        with patch("apps.chat.models.ChatMessage.objects.bulk_update") as mock_bulk_update:
+            translate_messages_with_llm(messages, "spa", self.mock_llm_provider, self.mock_llm_provider_model)
+            mock_bulk_update.assert_called_once()
 
         assert self.mock_message1.translations["spa"] == "Hola, ¿cómo estás?"
         assert self.mock_message2.translations["spa"] == "¡Estoy bien, gracias!"
-
-        self.mock_message1.save.assert_called_once_with(update_fields=["translations"])
-        self.mock_message2.save.assert_called_once_with(update_fields=["translations"])
 
         assert "spa" in self.mock_chat.translated_languages
         self.mock_chat.save.assert_called_once_with(update_fields=["translated_languages"])
@@ -94,14 +93,13 @@ class TestTranslateMessagesWithLLM(TestCase):
         self.mock_llm_provider.get_llm_service.return_value = mock_llm_service
 
         messages = [self.mock_message1, self.mock_message2]
-        translate_messages_with_llm(messages, "spa", self.mock_llm_provider, self.mock_llm_provider_model)
+
+        with patch("apps.chat.models.ChatMessage.objects.bulk_update") as mock_bulk_update:
+            translate_messages_with_llm(messages, "spa", self.mock_llm_provider, self.mock_llm_provider_model)
+            mock_bulk_update.assert_called_once()
 
         assert self.mock_message1.translations["spa"] == "Hola, ¿cómo estás?"
         assert self.mock_message2.translations["spa"] == "¡Estoy bien, gracias!"
-
-        # Verify only message 2 was saved
-        self.mock_message1.save.assert_not_called()
-        self.mock_message2.save.assert_called_once()
 
 
 class TestGetMessageContent(TestCase):
