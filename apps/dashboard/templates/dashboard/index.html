@@ -94,7 +94,7 @@
               <div class="stat-value" x-text="formatNumber(stat.value)"></div>
               <div class="stat-label" x-text="stat.label"></div>
             </div>
-            <div class="text-2xl" :class="`text-${stat.color}-500`">
+            <div class="text-2xl" :class="stat.color">
               <i :class="stat.icon"></i>
             </div>
           </div>

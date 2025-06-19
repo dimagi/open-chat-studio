@@ -230,25 +230,25 @@ function dashboard() {
                         label: 'Total Chatbots',
                         value: data.total_Chatbots || 0,
                         icon: 'fas fa-robot',
-                        color: 'blue'
+                        color: 'text-blue-500'
                     },
                     {
                         label: 'Active Participants',
                         value: data.active_participants || 0,
                         icon: 'fas fa-users',
-                        color: 'green'
+                        color: 'text-green-500'
                     },
                     {
                         label: 'Total Sessions',
                         value: data.total_sessions || 0,
                         icon: 'fas fa-comments',
-                        color: 'purple'
+                        color: 'text-purple-500'
                     },
                     {
                         label: 'Total Messages',
                         value: data.total_messages || 0,
                         icon: 'fas fa-envelope',
-                        color: 'orange'
+                        color: 'text-orange-500'
                     }
                 ];
             } catch (error) {
