@@ -2,6 +2,7 @@
  * Dashboard Charts JavaScript
  * Handles Chart.js chart creation and management
  */
+import Chart from "chart.js/auto";
 
 class ChartManager {
     constructor() {

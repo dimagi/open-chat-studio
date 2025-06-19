@@ -23,7 +23,7 @@
 
 /* Stats cards */
 .stat-card {
-  @apply bg-white dark:bg-gray-800 rounded-lg shadow-sm border border-gray-200 dark:border-gray-700 p-6;
+  @apply bg-base dark:bg-gray-800 rounded-lg shadow-sm border border-gray-200 dark:border-gray-700 p-6;
   transition: all 0.3s ease;
 }
 

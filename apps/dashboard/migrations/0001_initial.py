@@ -83,7 +83,7 @@ class Migration(migrations.Migration):
             },
         ),
         migrations.AddConstraint(
-            model_name='dashboardmetricsnapshot',
+            model_name='dashboardmetricssnapshot',
             constraint=models.UniqueConstraint(fields=('team', 'date'), name='unique_snapshot_per_team_date'),
         ),
         migrations.AddConstraint(
