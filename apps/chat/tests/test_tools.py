@@ -1,9 +1,10 @@
+import json
+import os
 from datetime import datetime
 from unittest import mock
 
 import pytest
 import pytz
-from django.conf import settings
 from django.utils import timezone
 from freezegun import freeze_time
 
@@ -387,16 +388,24 @@ class TestUpdateParticipantDataTool:
 
 @pytest.mark.django_db()
 class TestSearchIndexTool:
+    def load_vector_data(self):
+        current_directory = os.path.dirname(os.path.abspath(__file__))
+        vector_data_file = os.path.join(current_directory, "data/vector_data.json")
+        with open(vector_data_file) as json_file:
+            return json.load(json_file)
+
     def test_action_returns_relevant_chunks(self, team, local_index_manager_mock):
         collection = CollectionFactory(team=team)
         file = FileFactory(team=team, name="the_greatness_of_fruit.txt")
+        vector_data = self.load_vector_data()
+
         file_chunk_embedding = FileChunkEmbedding.objects.create(
             team=team,
             file=file,
             collection=collection,
             chunk_number=1,
             text="Oranges are nice",
-            embedding=[0.1] * settings.EMBEDDING_VECTOR_SIZE,
+            embedding=vector_data["Oranges are nice"],
             page_number=0,
         )
         file_chunk_embedding = FileChunkEmbedding.objects.create(
@@ -405,7 +414,7 @@ class TestSearchIndexTool:
             collection=collection,
             chunk_number=2,
             text="Apples are great",
-            embedding=[0.5] * settings.EMBEDDING_VECTOR_SIZE,
+            embedding=vector_data["Apples are great"],
             page_number=0,
         )
         file_chunk_embedding = FileChunkEmbedding.objects.create(
@@ -414,13 +423,13 @@ class TestSearchIndexTool:
             collection=collection,
             chunk_number=3,
             text="Greatness is subjective",
-            embedding=[0.9] * settings.EMBEDDING_VECTOR_SIZE,
+            embedding=vector_data["Greatness is subjective"],
             page_number=0,
         )
         collection = file_chunk_embedding.collection
 
         # The return value of get_embedding_vector is what determines the search results.
-        local_index_manager_mock.get_embedding_vector.return_value = [1.1] * settings.EMBEDDING_VECTOR_SIZE
+        local_index_manager_mock.get_embedding_vector.return_value = vector_data["What are great fruit?"]
         search_config = SearchToolConfig(index_id=collection.id, max_results=2)
         result = SearchIndexTool(search_config=search_config).action(query="What are great fruit?")
         expected_result = """
@@ -430,7 +439,7 @@ Apples are great
 
 # File: the_greatness_of_fruit.txt
 ## Content
-Greatness is subjective
+Oranges are nice
 """
         assert result == expected_result
 
