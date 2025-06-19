@@ -27,7 +27,7 @@ def _populate_max_results_for_llm_nodes(apps, schema_editor):
 
     def _add_max_results_param(param):
         if 'max_results' not in param:
-            param['max_results'] = 10
+            param['max_results'] = 20
         return param
 
     _batched_param_update(Node, update_func=_add_max_results_param)

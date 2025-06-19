@@ -330,7 +330,7 @@ class LLMResponseWithPrompt(LLMResponse, HistoryMixin, OutputMessageTagMixin):
         ),
     )
     max_results: OptionalInt = Field(
-        default=10,
+        default=20,
         ge=1,
         le=100,
         description="The maximum number of results to retrieve from the index",
