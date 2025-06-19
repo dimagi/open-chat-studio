@@ -261,7 +261,7 @@ class LLMResponse(PipelineNode, LLMResponseMixin):
 
     model_config = ConfigDict(json_schema_extra=NodeSchema(label="LLM response"))
 
-    def _process(self, input, **kwargs) -> PipelineState:
+    def _process(self, input: str, state: PipelineState) -> PipelineState:
         llm = self.get_chat_model()
         output = llm.invoke(input, config=self._config)
         return PipelineState.from_node_output(node_name=self.name, node_id=self.node_id, output=output.content)
@@ -442,6 +442,7 @@ class LLMResponseWithPrompt(LLMResponse, HistoryMixin, OutputMessageTagMixin):
                 **history_manager.output_message_metadata,
                 **tool_callbacks.output_message_metadata,
             },
+            intents=tool_callbacks.intents,
         )
 
 

@@ -93,6 +93,8 @@ class PipelineState(dict):
     # source node for the current node
     node_source: str
 
+    intents: Annotated[list[Intents], operator.add]
+
     def json_safe(self):
         # We need to make a copy of `self` to not change the actual value of `experiment_session` forever
         copy = self.copy()
