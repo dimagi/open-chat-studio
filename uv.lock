@@ -2171,6 +2171,7 @@ source = { virtual = "." }
 dependencies = [
     { name = "anthropic" },
     { name = "azure-cognitiveservices-speech" },
+    { name = "backoff" },
     { name = "boto3" },
     { name = "celery", extra = ["redis"] },
     { name = "celery-progress" },
@@ -2268,6 +2269,7 @@ prod = [
 requires-dist = [
     { name = "anthropic" },
     { name = "azure-cognitiveservices-speech" },
+    { name = "backoff" },
     { name = "boto3" },
     { name = "celery" },
     { name = "celery", extras = ["redis"] },
