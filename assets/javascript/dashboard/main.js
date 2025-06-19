@@ -483,6 +483,41 @@ function dashboard() {
             }
         },
         
+        async deleteSavedFilter(filterId, filterName) {
+            if (!confirm(`Are you sure you want to delete the filter "${filterName}"?`)) {
+                return;
+            }
+            
+            try {
+                const response = await fetch(`filters/delete/${filterId}/`, {
+                    method: 'DELETE',
+                    headers: {
+                        'X-CSRFToken': this.getCSRFToken(),
+                        'Content-Type': 'application/json'
+                    }
+                });
+                
+                const data = await response.json();
+                
+                if (data.success) {
+                    this.showNotification('Filter deleted successfully', 'success');
+                    
+                    // Clear active filter if it was the one deleted
+                    if (this.activeFilterId === filterId) {
+                        this.activeFilterId = null;
+                    }
+                    
+                    // Refresh page to update saved filters list
+                    setTimeout(() => window.location.reload(), 1000);
+                } else {
+                    this.showNotification('Failed to delete filter', 'error');
+                }
+            } catch (error) {
+                console.error('Delete filter error:', error);
+                this.showNotification('Failed to delete filter', 'error');
+            }
+        },
+        
         // Modal management
         openModal(modalId) {
             if (modalId === 'filtersModal') {

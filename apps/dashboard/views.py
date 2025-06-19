@@ -203,3 +203,18 @@ class LoadFilterView(LoginAndTeamRequiredMixin, TemplateView):
 
         except DashboardFilter.DoesNotExist:
             return JsonResponse({"success": False, "error": "Filter not found"})
+
+
+@method_decorator(login_and_team_required, name="dispatch")
+class DeleteFilterView(LoginAndTeamRequiredMixin, TemplateView):
+    """Delete saved filter preset"""
+
+    def delete(self, request, filter_id, *args, **kwargs):
+        try:
+            filter_obj = DashboardFilter.objects.get(id=filter_id, team=request.team, user=request.user)
+            filter_obj.delete()
+
+            return JsonResponse({"success": True, "message": "Filter deleted successfully"})
+
+        except DashboardFilter.DoesNotExist:
+            return JsonResponse({"success": False, "error": "Filter not found"})

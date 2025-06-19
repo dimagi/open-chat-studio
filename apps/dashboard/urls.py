@@ -18,4 +18,5 @@ urlpatterns = [
     # Filter management
     path("filters/save/", views.SaveFilterView.as_view(), name="save_filter"),
     path("filters/load/<int:filter_id>/", views.LoadFilterView.as_view(), name="load_filter"),
+    path("filters/delete/<int:filter_id>/", views.DeleteFilterView.as_view(), name="delete_filter"),
 ]

@@ -72,12 +72,19 @@
             <h3 class="text-sm font-medium mb-2">{% trans "Saved Filters" %}</h3>
             <div class="flex flex-wrap gap-2">
               {% for filter in saved_filters %}
-                <button type="button" class="btn btn-xs btn-outline"
-                        @click="loadSavedFilter({{ filter.id }})"
-                        :class="{ 'btn-active': activeFilterId === {{ filter.id }} }">
-                  {{ filter.filter_name }}
-                  {% if filter.is_default %}<i class="fas fa-star ml-1 text-yellow-500"></i>{% endif %}
-                </button>
+                <div class="flex items-center gap-1">
+                  <button type="button" class="btn btn-xs btn-outline"
+                          @click="loadSavedFilter({{ filter.id }})"
+                          :class="{ 'btn-active': activeFilterId === {{ filter.id }} }">
+                    {{ filter.filter_name }}
+                    {% if filter.is_default %}<i class="fas fa-star ml-1 text-yellow-500"></i>{% endif %}
+                  </button>
+                  <button type="button" class="btn btn-xs btn-circle btn-ghost text-red-500"
+                          @click="deleteSavedFilter({{ filter.id }}, '{{ filter.filter_name }}')"
+                          title="{% trans 'Delete filter' %}">
+                    <i class="fas fa-times"></i>
+                  </button>
+                </div>
               {% endfor %}
             </div>
           </div>
