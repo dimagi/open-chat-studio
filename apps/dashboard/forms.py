@@ -61,7 +61,6 @@ class DashboardFilterForm(forms.Form):
         required=False,
         widget=forms.SelectMultiple(
             attrs={
-                "class": "form-select form-select-sm experiment-multiselect",
                 "multiple": True,
                 "data-filter-type": "experiments",
                 "id": "id_experiments",
@@ -82,9 +81,9 @@ class DashboardFilterForm(forms.Form):
 
         if team:
             # Filter experiments and channels by team
-            self.fields["experiments"].queryset = Experiment.objects.filter(team=team, is_archived=False).order_by(
-                "name"
-            )
+            self.fields["experiments"].queryset = Experiment.objects.filter(
+                team=team, is_archived=False, working_version=None
+            ).order_by("name")
 
             self.fields["channels"].queryset = ExperimentChannel.objects.filter(team=team, deleted=False).order_by(
                 "name"

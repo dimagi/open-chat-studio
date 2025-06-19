@@ -11,7 +11,7 @@
       <div>
         <h1 class="text-3xl font-bold text-gray-900 dark:text-gray-100">{% trans "Team Dashboard" %}</h1>
         <p class="mt-1 text-sm text-gray-600 dark:text-gray-400">
-          {% trans "Comprehensive analytics for your chatbots and experiments" %}
+          {% trans "Comprehensive analytics for your chatbots" %}
         </p>
       </div>
 
@@ -56,13 +56,13 @@
           </div>
 
           <div class="form-control">
-            <label class="label label-text">{% trans "Experiments" %}</label>
-            {{ filter_form.experiments }}
-          </div>
-
-          <div class="form-control">
             <label class="label label-text">{% trans "Channels" %}</label>
             {{ filter_form.channels }}
+          </div>
+
+          <div class="form-control col-span-2">
+            <label class="label label-text">{% trans "Chatbots" %}</label>
+            {{ filter_form.experiments }}
           </div>
         </form>
 
@@ -169,7 +169,7 @@
           <table class="table table-zebra w-full" id="botPerformanceTable">
             <thead>
               <tr>
-                <th>{% trans "Experiment" %}</th>
+                <th>{% trans "Chatbot" %}</th>
                 <th>{% trans "Participants" %}</th>
                 <th>{% trans "Sessions" %}</th>
                 <th>{% trans "Messages" %}</th>

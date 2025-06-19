@@ -56,8 +56,10 @@ function dashboard() {
                     plugins: ["remove_button", "caret_position"],
                     maxItems: null,
                     searchField: ['text', 'value'],
-                    placeholder: 'Select experiments...',
                     allowEmptyOption: true,
+                    hideSelected: true,
+                    closeAfterSelect: true,
+                    loadThrottle: 200,
                     onChange: () => {
                         this.handleFilterChange();
                     }
@@ -184,8 +186,8 @@ function dashboard() {
                 const data = await this.apiRequest('api/overview/');
                 this.overviewStats = [
                     {
-                        label: 'Total Experiments',
-                        value: data.total_experiments || 0,
+                        label: 'Total Chatbots',
+                        value: data.total_Chatbots || 0,
                         icon: 'fas fa-robot',
                         color: 'blue'
                     },
