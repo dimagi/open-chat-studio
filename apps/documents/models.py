@@ -290,7 +290,7 @@ class Collection(BaseTeamModel, VersionsMixin):
     def get_query_vector(self, query: str) -> list[float]:
         """Get the embedding vector for a query using the embedding provider model"""
         if not self.embedding_provider_model:
-            raise IndexConfigurationException("Embedding provider model is not set for this collection")
+            raise IndexConfigurationException("Embedding provider model is missing this collection")
 
         index_manager = self.get_index_manager()
         return index_manager.get_embedding_vector(query)
@@ -301,7 +301,7 @@ class Collection(BaseTeamModel, VersionsMixin):
         tool, otherwise it returns a SearchIndexTool.
         """
         if not self.is_index:
-            raise IndexConfigurationException("Non indexed collections do not have search tools")
+            raise IndexConfigurationException("Non-indexed collections do not have search tools")
 
         if self.is_remote_index:
             return OpenAIBuiltinTool(
@@ -309,18 +309,9 @@ class Collection(BaseTeamModel, VersionsMixin):
                 vector_store_ids=[self.openai_vector_store_id],
                 max_num_results=max_results,
             )
-        else:
-            search_config = SearchToolConfig(index_id=self.id, max_results=max_results)
-            return SearchIndexTool(search_config=search_config)
 
-    def _remove_remote_index(self, remote_files_to_remove: list[File]):
-        """Remove the index backend"""
-        manager = self.get_index_manager()
-        manager.delete_remote_index()
-        manager.delete_files(remote_files_to_remove)
-
-        self.openai_vector_store_id = ""
-        self.save(update_fields=["openai_vector_store_id"])
+        search_config = SearchToolConfig(index_id=self.id, max_results=max_results)
+        return SearchIndexTool(search_config=search_config)
 
     def add_files_to_index(
         self,
