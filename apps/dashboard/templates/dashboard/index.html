@@ -1,0 +1,307 @@
+{% extends "web/app/app_base.html" %}
+{% load i18n %}
+{% load static %}
+
+{% block title %}{% trans "Dashboard" %} - {{ block.super }}{% endblock title %}
+
+{% block page_head %}
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/chartjs-adapter-date-fns@3.0.0/dist/chartjs-adapter-date-fns.bundle.min.js"></script>
+{% endblock page_head %}
+
+{% block content %}
+<div class="container mx-auto px-4 py-6">
+  <!-- Dashboard Header -->
+  <div class="flex flex-col lg:flex-row lg:items-center lg:justify-between mb-8">
+    <div>
+      <h1 class="text-3xl font-bold text-gray-900 dark:text-gray-100">{% trans "Team Dashboard" %}</h1>
+      <p class="mt-1 text-sm text-gray-600 dark:text-gray-400">
+        {% trans "Comprehensive analytics for your chatbots and experiments" %}
+      </p>
+    </div>
+    
+    <!-- Export Actions -->
+    <div class="mt-4 lg:mt-0 flex gap-2">
+      <button type="button" class="btn btn-outline btn-sm" data-bs-toggle="modal" data-bs-target="#exportModal">
+        <i class="fas fa-download me-1"></i>
+        {% trans "Export" %}
+      </button>
+      <button type="button" class="btn btn-outline btn-sm" data-bs-toggle="modal" data-bs-target="#filtersModal">
+        <i class="fas fa-bookmark me-1"></i>
+        {% trans "Save Filters" %}
+      </button>
+    </div>
+  </div>
+
+  <!-- Filters Section -->
+  <div class="card bg-base-100 shadow-xl mb-8">
+    <div class="card-body">
+      <div class="card-title flex items-center justify-between">
+        <span>{% trans "Filters" %}</span>
+        <button type="button" class="btn btn-xs btn-outline" id="resetFilters">
+          {% trans "Reset" %}
+        </button>
+      </div>
+      
+      <form id="filterForm" class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 xl:grid-cols-6 gap-4">
+        <div class="form-control">
+          <label class="label label-text">{% trans "Date Range" %}</label>
+          {{ filter_form.date_range }}
+        </div>
+        
+        <div class="form-control" id="customDateRange" style="display: none;">
+          <label class="label label-text">{% trans "Start Date" %}</label>
+          {{ filter_form.start_date }}
+        </div>
+        
+        <div class="form-control" id="customDateRangeEnd" style="display: none;">
+          <label class="label label-text">{% trans "End Date" %}</label>
+          {{ filter_form.end_date }}
+        </div>
+        
+        <div class="form-control">
+          <label class="label label-text">{% trans "Granularity" %}</label>
+          {{ filter_form.granularity }}
+        </div>
+        
+        <div class="form-control">
+          <label class="label label-text">{% trans "Experiments" %}</label>
+          {{ filter_form.experiments }}
+        </div>
+        
+        <div class="form-control">
+          <label class="label label-text">{% trans "Channels" %}</label>
+          {{ filter_form.channels }}
+        </div>
+      </form>
+      
+      <!-- Saved Filters -->
+      {% if saved_filters %}
+      <div class="mt-4">
+        <h3 class="text-sm font-medium mb-2">{% trans "Saved Filters" %}</h3>
+        <div class="flex flex-wrap gap-2">
+          {% for filter in saved_filters %}
+          <button type="button" class="btn btn-xs btn-outline saved-filter-btn" data-filter-id="{{ filter.id }}">
+            {{ filter.filter_name }}
+            {% if filter.is_default %}<i class="fas fa-star ml-1 text-yellow-500"></i>{% endif %}
+          </button>
+          {% endfor %}
+        </div>
+      </div>
+      {% endif %}
+    </div>
+  </div>
+
+  <!-- Overview Stats Cards -->
+  <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 mb-8" id="overviewStats">
+    <!-- Stats cards will be populated via JavaScript -->
+  </div>
+
+  <!-- Charts Grid -->
+  <div class="grid grid-cols-1 lg:grid-cols-2 gap-8 mb-8">
+    
+    <!-- Active Participants Chart -->
+    <div class="card bg-base-100 shadow-xl">
+      <div class="card-body">
+        <div class="card-title flex items-center justify-between">
+          <span>{% trans "Active Participants" %}</span>
+          <div class="loading loading-spinner loading-sm" id="activeParticipantsLoading"></div>
+        </div>
+        <div class="h-80">
+          <canvas id="activeParticipantsChart"></canvas>
+        </div>
+      </div>
+    </div>
+
+    <!-- Session Analytics Chart -->
+    <div class="card bg-base-100 shadow-xl">
+      <div class="card-body">
+        <div class="card-title flex items-center justify-between">
+          <span>{% trans "Session Analytics" %}</span>
+          <div class="loading loading-spinner loading-sm" id="sessionAnalyticsLoading"></div>
+        </div>
+        <div class="h-80">
+          <canvas id="sessionAnalyticsChart"></canvas>
+        </div>
+      </div>
+    </div>
+
+    <!-- Message Volume Chart -->
+    <div class="card bg-base-100 shadow-xl">
+      <div class="card-body">
+        <div class="card-title flex items-center justify-between">
+          <span>{% trans "Message Volume Trends" %}</span>
+          <div class="loading loading-spinner loading-sm" id="messageVolumeLoading"></div>
+        </div>
+        <div class="h-80">
+          <canvas id="messageVolumeChart"></canvas>
+        </div>
+      </div>
+    </div>
+
+    <!-- Channel Breakdown Chart -->
+    <div class="card bg-base-100 shadow-xl">
+      <div class="card-body">
+        <div class="card-title flex items-center justify-between">
+          <span>{% trans "Channel Breakdown" %}</span>
+          <div class="loading loading-spinner loading-sm" id="channelBreakdownLoading"></div>
+        </div>
+        <div class="h-80">
+          <canvas id="channelBreakdownChart"></canvas>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Bot Performance Table -->
+  <div class="card bg-base-100 shadow-xl mb-8">
+    <div class="card-body">
+      <div class="card-title flex items-center justify-between">
+        <span>{% trans "Bot Performance Summary" %}</span>
+        <div class="loading loading-spinner loading-sm" id="botPerformanceLoading"></div>
+      </div>
+      <div class="overflow-x-auto">
+        <table class="table table-zebra w-full" id="botPerformanceTable">
+          <thead>
+            <tr>
+              <th>{% trans "Experiment" %}</th>
+              <th>{% trans "Participants" %}</th>
+              <th>{% trans "Sessions" %}</th>
+              <th>{% trans "Messages" %}</th>
+              <th>{% trans "Avg Duration" %}</th>
+              <th>{% trans "Completion Rate" %}</th>
+            </tr>
+          </thead>
+          <tbody>
+            <!-- Table content will be populated via JavaScript -->
+          </tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+
+  <!-- User Engagement Section -->
+  <div class="grid grid-cols-1 lg:grid-cols-2 gap-8 mb-8">
+    
+    <!-- Most Active Participants -->
+    <div class="card bg-base-100 shadow-xl">
+      <div class="card-body">
+        <div class="card-title flex items-center justify-between">
+          <span>{% trans "Most Active Participants" %}</span>
+          <div class="loading loading-spinner loading-sm" id="userEngagementLoading"></div>
+        </div>
+        <div class="overflow-x-auto">
+          <table class="table table-sm" id="mostActiveTable">
+            <thead>
+              <tr>
+                <th>{% trans "Participant" %}</th>
+                <th>{% trans "Messages" %}</th>
+                <th>{% trans "Sessions" %}</th>
+              </tr>
+            </thead>
+            <tbody>
+              <!-- Content populated via JavaScript -->
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+
+    <!-- Session Length Distribution -->
+    <div class="card bg-base-100 shadow-xl">
+      <div class="card-body">
+        <div class="card-title">{% trans "Session Length Distribution" %}</div>
+        <div class="h-64">
+          <canvas id="sessionLengthChart"></canvas>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Tag Analytics (if applicable) -->
+  <div class="card bg-base-100 shadow-xl" id="tagAnalyticsSection" style="display: none;">
+    <div class="card-body">
+      <div class="card-title flex items-center justify-between">
+        <span>{% trans "Tag Analytics" %}</span>
+        <div class="loading loading-spinner loading-sm" id="tagAnalyticsLoading"></div>
+      </div>
+      <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4" id="tagAnalyticsContent">
+        <!-- Tag analytics content will be populated via JavaScript -->
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- Export Modal -->
+<div class="modal" id="exportModal">
+  <div class="modal-box">
+    <h3 class="font-bold text-lg">{% trans "Export Dashboard Data" %}</h3>
+    <form id="exportForm" class="py-4">
+      {% csrf_token %}
+      <div class="form-control mb-4">
+        <label class="label">{% trans "Chart Type" %}</label>
+        {{ export_form.chart_type }}
+      </div>
+      
+      <div class="form-control mb-4">
+        <label class="label">{% trans "Export Format" %}</label>
+        {{ export_form.export_format }}
+      </div>
+      
+      <div class="form-control mb-4">
+        <label class="label cursor-pointer">
+          {{ export_form.include_filters }}
+          <span class="label-text ml-2">{% trans "Include current filters" %}</span>
+        </label>
+      </div>
+      
+      {{ export_form.filter_data }}
+    </form>
+    
+    <div class="modal-action">
+      <button type="button" class="btn btn-outline" onclick="document.getElementById('exportModal').close()">
+        {% trans "Cancel" %}
+      </button>
+      <button type="submit" form="exportForm" class="btn btn-primary">
+        {% trans "Export" %}
+      </button>
+    </div>
+  </div>
+</div>
+
+<!-- Save Filters Modal -->
+<div class="modal" id="filtersModal">
+  <div class="modal-box">
+    <h3 class="font-bold text-lg">{% trans "Save Filter Preset" %}</h3>
+    <form id="saveFilterForm" class="py-4">
+      {% csrf_token %}
+      <div class="form-control mb-4">
+        <label class="label">{% trans "Preset Name" %}</label>
+        {{ saved_filter_form.name }}
+      </div>
+      
+      <div class="form-control mb-4">
+        <label class="label cursor-pointer">
+          {{ saved_filter_form.is_default }}
+          <span class="label-text ml-2">{% trans "Set as default" %}</span>
+        </label>
+      </div>
+      
+      {{ saved_filter_form.filter_data }}
+    </form>
+    
+    <div class="modal-action">
+      <button type="button" class="btn btn-outline" onclick="document.getElementById('filtersModal').close()">
+        {% trans "Cancel" %}
+      </button>
+      <button type="submit" form="saveFilterForm" class="btn btn-primary">
+        {% trans "Save" %}
+      </button>
+    </div>
+  </div>
+</div>
+{% endblock content %}
+
+{% block page_js %}
+<script src="{% static 'js/dashboard-bundle.js' %}"></script>
+{% endblock page_js %}
