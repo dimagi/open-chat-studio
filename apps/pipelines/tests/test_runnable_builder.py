@@ -5,14 +5,14 @@ from unittest.mock import Mock, patch
 import pytest
 from django.core import mail
 from django.test import override_settings
-from langchain_core.messages import AIMessage, ToolCall
+from langchain_core.messages import AIMessage, AIMessageChunk, ToolCall, ToolCallChunk
 from langchain_openai.chat_models.base import OpenAIRefusalError
 
 from apps.annotations.models import TagCategories
 from apps.channels.datamodels import Attachment
-from apps.experiments.models import ParticipantData
+from apps.experiments.models import AgentTools, ParticipantData
 from apps.pipelines.exceptions import PipelineBuildError, PipelineNodeBuildError
-from apps.pipelines.nodes.base import PipelineState, merge_dicts
+from apps.pipelines.nodes.base import Intents, PipelineState, merge_dicts
 from apps.pipelines.nodes.nodes import EndNode, Passthrough, RouterNode, StartNode, StaticRouterNode
 from apps.pipelines.tests.utils import (
     assistant_node,
@@ -1350,3 +1350,31 @@ def test_router_node_openai_refusal_uses_default_keyword(get_llm_service, provid
     keyword, is_default_keyword = node._process_conditional(state)
     assert keyword == "DEFAULT"
     assert is_default_keyword
+
+
+@django_db_with_data(available_apps=("apps.service_providers",))
+@mock.patch("apps.service_providers.models.LlmProvider.get_llm_service")
+def test_end_session_tool(get_llm_service, provider, provider_model, pipeline, experiment_session):
+    def _tool_call():
+        return AIMessageChunk(
+            tool_call_chunks=[ToolCallChunk(name=AgentTools.END_SESSION, id="123", args="")], content=""
+        )
+
+    service = build_fake_llm_service(
+        responses=[_tool_call(), "Done"],
+        token_counts=[0],
+    )
+    get_llm_service.return_value = service
+    start = start_node()
+    llm = llm_response_with_prompt_node(str(provider.id), str(provider_model.id), tools=[AgentTools.END_SESSION])
+    end = end_node()
+    nodes = [start, llm, end]
+    edges = [
+        {"id": "start -> llm", "source": start["id"], "target": llm["id"]},
+        {"id": "llm -> end", "source": llm["id"], "target": end["id"]},
+    ]
+    runnable = create_runnable(pipeline, nodes, edges)
+
+    output = runnable.invoke(PipelineState(messages=["a"], experiment_session=experiment_session))
+    print(output)
+    assert output["intents"] == [Intents.END_SESSION]
