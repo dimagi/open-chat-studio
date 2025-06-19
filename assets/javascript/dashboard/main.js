@@ -46,16 +46,17 @@ function dashboard() {
         saving: false,
         
         autoRefreshInterval: null,
+        initialLoad: true,
         
         // Initialization
         init() {
+            this.updateFiltersFromForm();
             this.loadInitialData();
             this.setupFilterWatchers();
             this.setupAutoRefresh();
             this.setupTomSelect();
             
-            // Initialize form data
-            this.updateFiltersFromForm();
+            this.initialLoad = false;
         },
         
         setupTomSelect() {
@@ -97,7 +98,9 @@ function dashboard() {
         setupFilterWatchers() {
             // Watch for filter changes to auto-refresh
             this.$watch('filters', () => {
-                this.debounceRefresh();
+                if (!this.initialLoad) {
+                    this.debounceRefresh();
+                }
             }, { deep: true });
         },
         

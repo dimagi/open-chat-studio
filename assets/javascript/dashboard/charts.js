@@ -252,7 +252,7 @@ class ChartManager {
         
         this.destroyChart('channelBreakdown');
         
-        const channels = data.channels || [];
+        const channels = data.platforms || [];
         const totalSessions = data.totals?.sessions || 1;
         
         const chartData = {
