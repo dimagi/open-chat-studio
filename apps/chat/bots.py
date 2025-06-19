@@ -14,7 +14,7 @@ from apps.events.models import StaticTriggerType
 from apps.events.tasks import enqueue_static_triggers
 from apps.experiments.models import Experiment, ExperimentRoute, ExperimentSession, SafetyLayer
 from apps.files.models import File
-from apps.pipelines.nodes.base import PipelineState
+from apps.pipelines.nodes.base import Intents, PipelineState
 from apps.service_providers.llm_service.default_models import get_default_model
 from apps.service_providers.llm_service.prompt_context import PromptTemplateContext
 from apps.service_providers.llm_service.runnables import create_experiment_runnable
@@ -289,19 +289,91 @@ class PipelineBot:
         input_message_metadata = {}
         if incoming_file_ids:
             input_message_metadata["ocs_attachment_file_ids"] = incoming_file_ids
-        return self.experiment.pipeline.invoke(
-            PipelineState(
-                messages=[user_input],
-                experiment_session=self.session,
-                attachments=serializable_attachments,
-                input_message_metadata=input_message_metadata,
-            ),
-            self.session,
-            self.experiment,
-            self.trace_service,
-            save_input_to_history=save_input_to_history,
-            disable_reminder_tools=self.disable_reminder_tools,
+
+        input_state = PipelineState(
+            messages=[user_input],
+            experiment_session=self.session,
+            attachments=serializable_attachments,
+            input_message_metadata=input_message_metadata,
         )
+
+        return self.invoke_pipeline(
+            input_state,
+            save_run_to_history=True,
+            save_input_to_history=save_input_to_history,
+        )
+
+    def invoke_pipeline(
+        self,
+        input_state: PipelineState,
+        save_run_to_history=True,
+        save_input_to_history=True,
+        pipeline=None,
+    ) -> ChatMessage:
+        from apps.experiments.models import AgentTools
+        from apps.pipelines.graph import PipelineGraph
+
+        pipeline_to_use = pipeline or self.experiment.pipeline
+        graph = PipelineGraph.build_from_pipeline(pipeline_to_use)
+        config = self.trace_service.get_langchain_config(
+            configurable={
+                "disabled_tools": AgentTools.reminder_tools() if self.disable_reminder_tools else [],
+            },
+            run_name_map=graph.node_id_to_name_mapping,
+            filter_patterns=graph.filter_patterns,
+        )
+        runnable = graph.build_runnable()
+        raw_output = runnable.invoke(input_state, config=config)
+        output = PipelineState(**raw_output).json_safe()
+
+        if save_run_to_history and self.session is not None:
+            input_metadata = output.get("input_message_metadata", {})
+            output_metadata = output.get("output_message_metadata", {})
+            trace_metadata = self.trace_service.get_trace_metadata() if self.trace_service else None
+            if trace_metadata:
+                input_metadata.update(trace_metadata)
+                output_metadata.update(trace_metadata)
+
+            if save_input_to_history:
+                self._save_message_to_history(
+                    input_state["messages"][-1], ChatMessageType.HUMAN, metadata=input_metadata
+                )
+            ai_message = self._save_message_to_history(
+                output["messages"][-1],
+                ChatMessageType.AI,
+                metadata=output_metadata,
+                tags=output.get("output_message_tags"),
+            )
+            ai_message.add_version_tag(
+                version_number=self.experiment.version_number, is_a_version=self.experiment.is_a_version
+            )
+            self._process_intents(output)
+            return ai_message
+        else:
+            self._process_intents(output)
+            return ChatMessage(content=output)
+
+    def _process_intents(self, pipeline_output: dict):
+        for intent in pipeline_output.get("intents", []):
+            match intent:
+                case Intents.END_SESSION:
+                    self.session.end()
+
+    def _save_message_to_history(
+        self,
+        message: str,
+        type_: ChatMessageType,
+        metadata: dict,
+        tags: list[tuple] = None,
+    ) -> ChatMessage:
+        chat_message = ChatMessage.objects.create(
+            chat=self.session.chat, message_type=type_.value, content=message, metadata=metadata
+        )
+
+        if tags:
+            for tag_value, category in tags:
+                chat_message.create_and_add_tag(tag_value, category or "")
+        return chat_message
 
 
 class EventBot:
