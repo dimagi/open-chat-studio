@@ -53,6 +53,27 @@ class Dashboard {
         if (saveFilterForm) {
             saveFilterForm.addEventListener('submit', (e) => this.handleSaveFilter(e));
         }
+        
+        // Modal trigger buttons
+        const exportBtn = document.getElementById('exportBtn');
+        if (exportBtn) {
+            exportBtn.addEventListener('click', () => {
+                const modal = document.getElementById('exportModal');
+                if (modal) {
+                    modal.classList.add('modal-open');
+                }
+            });
+        }
+        
+        const saveFiltersBtn = document.getElementById('saveFiltersBtn');
+        if (saveFiltersBtn) {
+            saveFiltersBtn.addEventListener('click', () => {
+                const modal = document.getElementById('filtersModal');
+                if (modal) {
+                    modal.classList.add('modal-open');
+                }
+            });
+        }
     }
     
     handleFilterChange() {
@@ -478,7 +499,7 @@ class Dashboard {
                     document.body.removeChild(a);
                     
                     this.showNotification('Export completed successfully', 'success');
-                    document.getElementById('exportModal').close();
+                    document.getElementById('exportModal').classList.remove('modal-open');
                 }
             } else {
                 this.showNotification('Export failed', 'error');
@@ -509,7 +530,7 @@ class Dashboard {
             
             if (data.success) {
                 this.showNotification('Filter saved successfully', 'success');
-                document.getElementById('filtersModal').close();
+                document.getElementById('filtersModal').classList.remove('modal-open');
                 // Refresh saved filters list
                 setTimeout(() => window.location.reload(), 1000);
             } else {
@@ -609,14 +630,6 @@ class Dashboard {
         return document.querySelector('[name=csrfmiddlewaretoken]')?.value || '';
     }
     
-    getFilenameFromResponse(response) {
-        const disposition = response.headers.get('Content-Disposition');
-        if (disposition) {
-            const match = disposition.match(/filename="(.+)"/);
-            return match ? match[1] : null;
-        }
-        return null;
-    }
 }
 
 // Initialize dashboard when DOM is loaded

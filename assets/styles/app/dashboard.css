@@ -181,22 +181,6 @@
   @apply flex justify-end gap-3;
 }
 
-/* Export form styles */
-.export-form-group {
-  @apply space-y-4;
-}
-
-.export-option {
-  @apply flex items-center space-x-3;
-}
-
-.export-option input[type="radio"] {
-  @apply h-4 w-4 text-blue-600 focus:ring-blue-500 border-gray-300;
-}
-
-.export-option label {
-  @apply text-sm font-medium text-gray-700 dark:text-gray-300;
-}
 
 /* Button styles */
 .btn-dashboard {

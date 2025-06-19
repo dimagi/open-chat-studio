@@ -15,13 +15,9 @@
         </p>
       </div>
 
-    <!-- Export Actions -->
+    <!-- Actions -->
       <div class="mt-4 lg:mt-0 flex gap-2">
-        <button type="button" class="btn btn-outline btn-sm" data-bs-toggle="modal" data-bs-target="#exportModal">
-          <i class="fas fa-download me-1"></i>
-          {% trans "Export" %}
-        </button>
-        <button type="button" class="btn btn-outline btn-sm" data-bs-toggle="modal" data-bs-target="#filtersModal">
+        <button type="button" class="btn btn-outline btn-sm" id="saveFiltersBtn">
           <i class="fas fa-bookmark me-1"></i>
           {% trans "Save Filters" %}
         </button>
@@ -227,43 +223,6 @@
     </div>
   </div>
 
-<!-- Export Modal -->
-  <div class="modal" id="exportModal">
-    <div class="modal-box">
-      <h3 class="font-bold text-lg">{% trans "Export Dashboard Data" %}</h3>
-      <form id="exportForm" class="py-4">
-        {% csrf_token %}
-        <div class="form-control mb-4">
-          <label class="label">{% trans "Chart Type" %}</label>
-          {{ export_form.chart_type }}
-        </div>
-
-        <div class="form-control mb-4">
-          <label class="label">{% trans "Export Format" %}</label>
-          {{ export_form.export_format }}
-        </div>
-
-        <div class="form-control mb-4">
-          <label class="label cursor-pointer">
-            {{ export_form.include_filters }}
-            <span class="label-text ml-2">{% trans "Include current filters" %}</span>
-          </label>
-        </div>
-
-        {{ export_form.filter_data }}
-      </form>
-
-      <div class="modal-action">
-        <button type="button" class="btn btn-outline" onclick="document.getElementById('exportModal').close()">
-          {% trans "Cancel" %}
-        </button>
-        <button type="submit" form="exportForm" class="btn btn-primary">
-          {% trans "Export" %}
-        </button>
-      </div>
-    </div>
-  </div>
-
 <!-- Save Filters Modal -->
   <div class="modal" id="filtersModal">
     <div class="modal-box">
@@ -286,7 +245,7 @@
       </form>
 
       <div class="modal-action">
-        <button type="button" class="btn btn-outline" onclick="document.getElementById('filtersModal').close()">
+        <button type="button" class="btn btn-outline" onclick="document.getElementById('filtersModal').classList.remove('modal-open')">
           {% trans "Cancel" %}
         </button>
         <button type="submit" form="saveFilterForm" class="btn btn-primary">

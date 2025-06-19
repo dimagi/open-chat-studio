@@ -79,7 +79,6 @@ class FilterManager {
     
     setupModalEventListeners() {
         // Save filter modal
-        const saveFilterModal = document.getElementById('filtersModal');
         const saveFilterForm = document.getElementById('saveFilterForm');
         
         if (saveFilterForm) {
@@ -409,25 +408,7 @@ class FilterManager {
         }
     }
     
-    downloadBlob(blob, response) {
-        const url = window.URL.createObjectURL(blob);
-        const a = document.createElement('a');
-        a.href = url;
-        a.download = this.getFilenameFromResponse(response) || 'dashboard_export';
-        document.body.appendChild(a);
-        a.click();
-        window.URL.revokeObjectURL(url);
-        document.body.removeChild(a);
-    }
     
-    getFilenameFromResponse(response) {
-        const disposition = response.headers.get('Content-Disposition');
-        if (disposition) {
-            const match = disposition.match(/filename="(.+)"/);
-            return match ? match[1] : null;
-        }
-        return null;
-    }
     
     openModal(modalId) {
         const modal = document.getElementById(modalId);
