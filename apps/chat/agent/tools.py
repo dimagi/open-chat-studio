@@ -33,15 +33,9 @@ CREATE_LINK_TEXT = """You can use this markdown link to reference it in your res
 """
 
 CHUNK_RESULT_TEMPLATE = """
-<chunk>
-    <chunk_file_details>
-    From '{file_name}'
-    </chunk_file_details>
-
-    <file_content>
-    {chunk}
-    </file_content>
-</chunk>
+# File: {file_name}
+## Content
+{chunk}
 """
 
 
@@ -280,9 +274,7 @@ class SearchIndexTool(CustomBaseTool):
         """
         Format the result from the search index into a more structured format.
         """
-        return CHUNK_RESULT_TEMPLATE.format(
-            file_name=embedding.file.name, file_id=embedding.file_id, chunk=embedding.text
-        )
+        return CHUNK_RESULT_TEMPLATE.format(file_name=embedding.file.name, chunk=embedding.text)
 
 
 def _move_datetime_to_new_weekday_and_time(date: datetime, new_weekday: int, new_hour: int, new_minute: int):

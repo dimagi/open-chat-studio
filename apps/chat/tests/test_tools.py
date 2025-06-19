@@ -421,28 +421,16 @@ class TestSearchIndexTool:
 
         # The return value of get_embedding_vector is what determines the search results.
         local_index_manager_mock.get_embedding_vector.return_value = [1.1] * settings.EMBEDDING_VECTOR_SIZE
-        search_config = SearchToolConfig(index_id=collection.id, query="What are great fruit?", max_results=2)
-        result = SearchIndexTool(search_config=search_config).action()
+        search_config = SearchToolConfig(index_id=collection.id, max_results=2)
+        result = SearchIndexTool(search_config=search_config).action(query="What are great fruit?")
         expected_result = """
-<chunk>
-    <chunk_file_details>
-    From 'the_greatness_of_fruit.txt'
-    </chunk_file_details>
+# File: the_greatness_of_fruit.txt
+## Content
+Apples are great
 
-    <file_content>
-    Greatness is subjective
-    </file_content>
-</chunk>
-
-<chunk>
-    <chunk_file_details>
-    From 'the_greatness_of_fruit.txt'
-    </chunk_file_details>
-
-    <file_content>
-    Apples are great
-    </file_content>
-</chunk>
+# File: the_greatness_of_fruit.txt
+## Content
+Greatness is subjective
 """
         assert result == expected_result
 
