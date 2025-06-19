@@ -271,8 +271,8 @@ class SearchIndexTool(CustomBaseTool):
             FileChunkEmbedding.objects.annotate(distance=CosineDistance("embedding", query_vector))
             .filter(collection_id=index.id)
             .order_by("distance")
-            .prefetch_related("file")
-            .distinct()[:max_results]
+            .select_related("file")
+            .only("text", "file__name")[:max_results]
         )
         return "".join([self._format_result(embedding) for embedding in embeddings])
 
