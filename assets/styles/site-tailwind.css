@@ -19,6 +19,7 @@
 @import './app/alertify.css';
 @import './app/pg-components.css';
 @import './app/prompt-builder.css' layer(components);
+@import './app/dashboard.css' layer(components);
 
 
 
