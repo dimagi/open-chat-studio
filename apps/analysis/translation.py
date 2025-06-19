@@ -9,15 +9,17 @@ TRANSLATION_PROMPT_TEMPLATE = """### Instructions
 Translate chat messages to {target_lang_name}. Return a JSON array where each object has the following fields:
 - id: The ID of the message (must match the ID of of the input message)
 - translation: The translated text
-**Response format:** Each object should have:
-- "translation": the {target_lang_name} translation of the message content
+<example>
+[{"id": "4", "translation": "Hello"}, {"id": "9", "translation": "Hi, how can I help?"}]
+</example>
 **Translation rules:**
 - If the text is already in {target_lang_name}, return the original text unchanged
 - Preserve the order, meaning, and tone of the original messages
 ### Messages to translate:
-```json
+<messages>
 {message_data}
-Final instructions
+</messages>
+Final instructions:
 Output only the JSON array with translations, without any additional text or explanation."""
 
 
