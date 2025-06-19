@@ -17,6 +17,16 @@ function dashboard() {
         
         overviewStats: [],
         botPerformanceData: [],
+        botPerformancePagination: {
+            page: 1,
+            page_size: 10,
+            total_count: 0,
+            total_pages: 0,
+            has_next: false,
+            has_previous: false,
+            order_by: 'messages',
+            order_dir: 'desc'
+        },
         userEngagementData: [],
         tagAnalyticsData: {},
         
@@ -282,12 +292,36 @@ function dashboard() {
             }
         },
         
-        async loadBotPerformanceData() {
+        async loadBotPerformanceData(page = null, order_by = null, order_dir = null) {
             this.setLoadingState('botPerformance', true);
             
             try {
-                const data = await this.apiRequest('api/bot-performance/');
-                this.botPerformanceData = data;
+                // Use provided parameters or current pagination state
+                const currentPage = page || this.botPerformancePagination.page;
+                const currentOrderBy = order_by || this.botPerformancePagination.order_by;
+                const currentOrderDir = order_dir || this.botPerformancePagination.order_dir;
+                
+                // Pass pagination/sorting params to apiRequest which will merge with filters
+                const params = {
+                    page: currentPage,
+                    page_size: this.botPerformancePagination.page_size,
+                    order_by: currentOrderBy,
+                    order_dir: currentOrderDir
+                };
+                
+                const data = await this.apiRequest('api/bot-performance/', params);
+                
+                this.botPerformanceData = data.results || [];
+                this.botPerformancePagination = {
+                    page: data.page || 1,
+                    page_size: data.page_size || 10,
+                    total_count: data.total_count || 0,
+                    total_pages: data.total_pages || 0,
+                    has_next: data.has_next || false,
+                    has_previous: data.has_previous || false,
+                    order_by: data.order_by || 'messages',
+                    order_dir: data.order_dir || 'desc'
+                };
             } catch (error) {
                 console.error('Error loading bot performance data:', error);
                 this.showNotification('Failed to load bot performance data', 'error');
@@ -483,6 +517,45 @@ function dashboard() {
         
         getCSRFToken() {
             return document.querySelector('[name=csrfmiddlewaretoken]')?.value || '';
+        },
+        
+        // Bot Performance Pagination and Sorting Methods
+        changeBotPerformancePage(page) {
+            this.loadBotPerformanceData(page);
+        },
+        
+        sortBotPerformance(column) {
+            let order_dir = 'desc';
+            if (this.botPerformancePagination.order_by === column && this.botPerformancePagination.order_dir === 'desc') {
+                order_dir = 'asc';
+            }
+            this.loadBotPerformanceData(1, column, order_dir);
+        },
+        
+        getBotPerformancePageNumbers() {
+            const pages = [];
+            const current = this.botPerformancePagination.page;
+            const total = this.botPerformancePagination.total_pages;
+            
+            // Always show first page
+            if (total > 0) pages.push(1);
+            
+            // Add pages around current page
+            for (let i = Math.max(2, current - 1); i <= Math.min(total - 1, current + 1); i++) {
+                if (!pages.includes(i)) pages.push(i);
+            }
+            
+            // Always show last page
+            if (total > 1 && !pages.includes(total)) pages.push(total);
+            
+            return pages;
+        },
+        
+        getSortIcon(column) {
+            if (this.botPerformancePagination.order_by !== column) {
+                return 'fas fa-sort';
+            }
+            return this.botPerformancePagination.order_dir === 'asc' ? 'fas fa-sort-up' : 'fas fa-sort-down';
         },
         
         // Cleanup

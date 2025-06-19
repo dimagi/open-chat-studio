@@ -115,7 +115,15 @@ class BotPerformanceApiView(DashboardApiView):
         service = self.get_dashboard_service()
         filter_params = self.get_filter_params()
 
-        data = service.get_bot_performance_summary(**filter_params)
+        # Get pagination parameters
+        page = int(request.GET.get("page", 1))
+        page_size = int(request.GET.get("page_size", 10))
+        order_by = request.GET.get("order_by", "messages")
+        order_dir = request.GET.get("order_dir", "desc")
+
+        data = service.get_bot_performance_summary(
+            page=page, page_size=page_size, order_by=order_by, order_dir=order_dir, **filter_params
+        )
         return self.json_response(data)
 
 

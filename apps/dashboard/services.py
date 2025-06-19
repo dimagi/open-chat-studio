@@ -169,58 +169,92 @@ class DashboardService:
         DashboardCache.set_cached_data(self.team, cache_key, data)
         return data
 
-    def get_bot_performance_summary(self, **filters) -> list[dict[str, Any]]:
-        """Get bot performance summary with rankings"""
-        cache_key = f"bot_performance_{hash(str(sorted(filters.items())))}"
+    def get_bot_performance_summary(
+        self, page: int = 1, page_size: int = 10, order_by: str = "messages", order_dir: str = "desc", **filters
+    ) -> dict[str, Any]:
+        """Get bot performance summary with rankings, pagination, and ordering"""
+
+        # Extract pagination/ordering from filters for cache key
+        cache_filters = {k: v for k, v in filters.items() if k not in ["page", "page_size", "order_by", "order_dir"]}
+        cache_key = f"bot_performance_{hash(str(sorted(cache_filters.items())))}"
         cached_data = DashboardCache.get_cached_data(self.team, cache_key)
-        if cached_data:
-            return cached_data
 
-        querysets = self.get_filtered_queryset_base(**filters)
-        experiments = querysets["experiments"]
+        if not cached_data:
+            querysets = self.get_filtered_queryset_base(**cache_filters)
+            experiments = querysets["experiments"]
 
-        # Get performance metrics for each experiment
-        performance_data = []
-        for experiment in experiments:
-            exp_sessions = querysets["sessions"].filter(experiment=experiment)
-            exp_messages = querysets["messages"].filter(chat__experiment_session__experiment=experiment)
+            # Get performance metrics for each experiment
+            performance_data = []
+            for experiment in experiments:
+                exp_sessions = querysets["sessions"].filter(experiment=experiment)
+                exp_messages = querysets["messages"].filter(chat__experiment_session__experiment=experiment)
 
-            participants_count = exp_sessions.values("participant").distinct().count()
-            sessions_count = exp_sessions.count()
-            messages_count = exp_messages.count()
+                participants_count = exp_sessions.values("participant").distinct().count()
+                sessions_count = exp_sessions.count()
+                messages_count = exp_messages.count()
 
-            # Calculate average session duration
-            completed_sessions = exp_sessions.filter(ended_at__isnull=False)
-            avg_duration = None
-            if completed_sessions.exists():
-                durations = []
-                for session in completed_sessions:
-                    if session.ended_at and session.created_at:
-                        duration = session.ended_at - session.created_at
-                        durations.append(duration.total_seconds() / 60)
-                avg_duration = sum(durations) / len(durations) if durations else 0
+                # Calculate average session duration
+                completed_sessions = exp_sessions.filter(ended_at__isnull=False)
+                avg_duration = None
+                if completed_sessions.exists():
+                    durations = []
+                    for session in completed_sessions:
+                        if session.ended_at and session.created_at:
+                            duration = session.ended_at - session.created_at
+                            durations.append(duration.total_seconds() / 60)
+                    avg_duration = sum(durations) / len(durations) if durations else 0
 
-            # Completion rate
-            completion_rate = (completed_sessions.count() / sessions_count) if sessions_count > 0 else 0
+                # Completion rate
+                completion_rate = (completed_sessions.count() / sessions_count) if sessions_count > 0 else 0
 
-            performance_data.append(
-                {
-                    "experiment_id": experiment.id,
-                    "experiment_name": experiment.name,
-                    "participants": participants_count,
-                    "sessions": sessions_count,
-                    "messages": messages_count,
-                    "avg_session_duration": avg_duration,
-                    "completion_rate": completion_rate,
-                    "avg_messages_per_session": messages_count / sessions_count if sessions_count > 0 else 0,
-                }
-            )
+                performance_data.append(
+                    {
+                        "experiment_id": experiment.id,
+                        "experiment_name": experiment.name,
+                        "participants": participants_count,
+                        "sessions": sessions_count,
+                        "messages": messages_count,
+                        "avg_session_duration": avg_duration,
+                        "completion_rate": completion_rate,
+                        "avg_messages_per_session": messages_count / sessions_count if sessions_count > 0 else 0,
+                    }
+                )
 
-        # Sort by participants (most active bots first)
-        performance_data.sort(key=lambda x: x["participants"], reverse=True)
+            DashboardCache.set_cached_data(self.team, cache_key, performance_data)
+            cached_data = performance_data
 
-        DashboardCache.set_cached_data(self.team, cache_key, performance_data)
-        return performance_data
+        # Apply ordering
+        reverse_order = order_dir.lower() == "desc"
+        if order_by in [
+            "participants",
+            "sessions",
+            "messages",
+            "completion_rate",
+            "avg_session_duration",
+            "avg_messages_per_session",
+        ]:
+            cached_data.sort(key=lambda x: x[order_by] or 0, reverse=reverse_order)
+        else:
+            # Default to messages if invalid order_by
+            cached_data.sort(key=lambda x: x["messages"], reverse=True)
+
+        # Apply pagination
+        total_count = len(cached_data)
+        start_idx = (page - 1) * page_size
+        end_idx = start_idx + page_size
+        paginated_data = cached_data[start_idx:end_idx]
+
+        return {
+            "results": paginated_data,
+            "total_count": total_count,
+            "page": page,
+            "page_size": page_size,
+            "total_pages": (total_count + page_size - 1) // page_size,
+            "has_next": end_idx < total_count,
+            "has_previous": page > 1,
+            "order_by": order_by,
+            "order_dir": order_dir,
+        }
 
     def get_user_engagement_data(self, limit: int = 10, **filters) -> dict[str, Any]:
         """Get user engagement analysis data"""

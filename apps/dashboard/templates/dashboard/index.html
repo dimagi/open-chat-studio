@@ -163,18 +163,46 @@
       <div class="card-body">
         <div class="card-title flex items-center justify-between">
           <span>{% trans "Bot Performance Summary" %}</span>
-          <div class="loading loading-spinner loading-sm" x-show="loadingStates.botPerformance"></div>
+          <div class="flex items-center gap-2">
+            <span class="text-sm text-gray-500" x-text="`${botPerformancePagination.total_count} total bots`"></span>
+            <div class="loading loading-spinner loading-sm" x-show="loadingStates.botPerformance"></div>
+          </div>
         </div>
         <div class="overflow-x-auto">
           <table class="table table-zebra w-full" id="botPerformanceTable">
             <thead>
               <tr>
                 <th>{% trans "Chatbot" %}</th>
-                <th>{% trans "Participants" %}</th>
-                <th>{% trans "Sessions" %}</th>
-                <th>{% trans "Messages" %}</th>
-                <th>{% trans "Avg Duration" %}</th>
-                <th>{% trans "Completion Rate" %}</th>
+                <th class="cursor-pointer hover:bg-gray-100 dark:hover:bg-gray-700" @click="sortBotPerformance('participants')">
+                  <div class="flex items-center gap-1">
+                    {% trans "Participants" %}
+                    <i :class="getSortIcon('participants')" class="text-xs"></i>
+                  </div>
+                </th>
+                <th class="cursor-pointer hover:bg-gray-100 dark:hover:bg-gray-700" @click="sortBotPerformance('sessions')">
+                  <div class="flex items-center gap-1">
+                    {% trans "Sessions" %}
+                    <i :class="getSortIcon('sessions')" class="text-xs"></i>
+                  </div>
+                </th>
+                <th class="cursor-pointer hover:bg-gray-100 dark:hover:bg-gray-700" @click="sortBotPerformance('messages')">
+                  <div class="flex items-center gap-1">
+                    {% trans "Messages" %}
+                    <i :class="getSortIcon('messages')" class="text-xs"></i>
+                  </div>
+                </th>
+                <th class="cursor-pointer hover:bg-gray-100 dark:hover:bg-gray-700" @click="sortBotPerformance('avg_session_duration')">
+                  <div class="flex items-center gap-1">
+                    {% trans "Avg Duration" %}
+                    <i :class="getSortIcon('avg_session_duration')" class="text-xs"></i>
+                  </div>
+                </th>
+                <th class="cursor-pointer hover:bg-gray-100 dark:hover:bg-gray-700" @click="sortBotPerformance('completion_rate')">
+                  <div class="flex items-center gap-1">
+                    {% trans "Completion Rate" %}
+                    <i :class="getSortIcon('completion_rate')" class="text-xs"></i>
+                  </div>
+                </th>
               </tr>
             </thead>
             <tbody>
@@ -197,6 +225,32 @@
               </template>
             </tbody>
           </table>
+        </div>
+
+        <!-- Pagination Controls -->
+        <div class="flex justify-between items-center mt-4" x-show="botPerformancePagination.total_pages > 1">
+          <div class="text-sm text-gray-500">
+            <span x-text="`Showing ${((botPerformancePagination.page - 1) * botPerformancePagination.page_size) + 1}-${Math.min(botPerformancePagination.page * botPerformancePagination.page_size, botPerformancePagination.total_count)} of ${botPerformancePagination.total_count} bots`"></span>
+          </div>
+          <div class="join">
+            <button class="join-item btn btn-sm"
+                    :disabled="!botPerformancePagination.has_previous"
+                    @click="changeBotPerformancePage(botPerformancePagination.page - 1)">
+              <i class="fas fa-chevron-left"></i>
+            </button>
+            <template x-for="pageNum in getBotPerformancePageNumbers()" :key="pageNum">
+              <button class="join-item btn btn-sm"
+                      :class="{ 'btn-active': pageNum === botPerformancePagination.page }"
+                      @click="changeBotPerformancePage(pageNum)"
+                      x-text="pageNum">
+              </button>
+            </template>
+            <button class="join-item btn btn-sm"
+                    :disabled="!botPerformancePagination.has_next"
+                    @click="changeBotPerformancePage(botPerformancePagination.page + 1)">
+              <i class="fas fa-chevron-right"></i>
+            </button>
+          </div>
         </div>
       </div>
     </div>
