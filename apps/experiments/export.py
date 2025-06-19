@@ -62,6 +62,7 @@ def filtered_export_to_csv(experiment, sessions_queryset, translation_language=N
     ]
     if translation_language:
         header.append("Message Language")
+        header.append("Original Message")
 
     writer.writerow(header)
 
@@ -93,6 +94,7 @@ def filtered_export_to_csv(experiment, sessions_queryset, translation_language=N
             ]
             if translation_language:
                 row.append(translation_language)
+                row.append(message.content)
             writer.writerow(row)
     return csv_in_memory
 
