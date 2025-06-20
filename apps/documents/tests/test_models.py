@@ -53,7 +53,7 @@ class TestCollection:
         # Vector store ID should be None for non-indexed collections
         assert new_version.openai_vector_store_id == ""
 
-    @pytest.mark.usefixtures("index_manager_mock")
+    @pytest.mark.usefixtures("remote_index_manager_mock")
     @mock.patch("apps.documents.tasks.index_collection_files")
     @mock.patch("apps.service_providers.models.LlmProvider.create_remote_index")
     def test_create_new_version_of_a_collection_index(self, create_remote_index, index_collection_files):
@@ -177,7 +177,7 @@ class TestCollection:
         file.refresh_from_db()
         assert file.is_archived is False
 
-    def test_remove_remote_index(self, index_manager_mock):
+    def test_remove_remote_index(self, remote_index_manager_mock):
         """Test that the index can be removed"""
         collection = CollectionFactory(
             is_index=True, is_remote_index=True, openai_vector_store_id="vs-123", llm_provider=LlmProviderFactory()
@@ -191,8 +191,8 @@ class TestCollection:
         # Check that the vector store ID is cleared and the index is removed
         assert collection.openai_vector_store_id == ""
         file.refresh_from_db()
-        index_manager_mock.delete_remote_index.assert_called_once_with()
-        index_manager_mock.delete_files.assert_called_once()
+        remote_index_manager_mock.delete_remote_index.assert_called_once()
+        remote_index_manager_mock.delete_files.assert_called_once()
 
     def test_get_index_manager_returns_correct_manager(self):
         """Remote indexes should return a remote index manager whereas local indexes should return a local one"""

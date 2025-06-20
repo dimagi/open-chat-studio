@@ -15,7 +15,6 @@ from apps.pipelines.tests.utils import (
     render_template_node,
     start_node,
 )
-from apps.service_providers.llm_service.index_managers import RemoteIndexManager
 from apps.utils.factories.assistants import OpenAiAssistantFactory
 from apps.utils.factories.documents import CollectionFactory
 from apps.utils.factories.events import EventActionFactory, ExperimentFactory, StaticTriggerFactory
@@ -31,14 +30,6 @@ from apps.utils.langchain import (
     build_fake_llm_service,
 )
 from apps.utils.pytest import django_db_with_data
-
-
-@pytest.fixture()
-def index_manager_mock():
-    index_manager = Mock(spec=RemoteIndexManager)
-    with patch("apps.service_providers.models.LlmProvider.get_remote_index_manager") as get_index_manager:
-        get_index_manager.return_value = index_manager
-        yield index_manager
 
 
 @pytest.mark.django_db()
@@ -113,7 +104,12 @@ class TestVersioningNodes:
         assert node_version.params["source_material_id"] == str(source_material_version.id)
 
     def test_version_llm_with_prompt_node_with_multiple_dependencies(self):
-        """Test that LLMResponseWithPrompt node properly handles versioning of multiple dependent resources"""
+        """
+        Test that LLMResponseWithPrompt node properly handles versioning of multiple dependent resources.
+
+        When a resource is versioned, it should create versions of only those dependencies that have changed.
+        If a dependency has not changed, it should attach the latest version of that dependency to the new node version.
+        """
         node_type = LLMResponseWithPrompt.__name__
         collection = CollectionFactory()
         collection_index = CollectionFactory(is_index=True)

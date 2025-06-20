@@ -55,3 +55,7 @@ class UpdateUserDataSchema(BaseModel):
 
 class AttachMediaSchema(BaseModel):
     file_id: int = Field(description="The file id of the media to attach")
+
+
+class SearchIndexSchema(BaseModel):
+    query: str = Field(description="The search query to use. Keep this query as close to the user's query as possible")
