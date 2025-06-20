@@ -29,7 +29,6 @@ def deprecate_specific_models(apps, schema_editor):
 
     for name, type_ in models_to_deprecate:
         updated = LlmProviderModel.objects.filter(name=name, type=type_).update(deprecated=True)
-        print(f"Deprecated {updated} model(s) with name='{name}' and type='{type_}'")
 
 class Migration(migrations.Migration):
 
