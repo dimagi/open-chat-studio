@@ -7,7 +7,7 @@
 {% block app %}
   <div class="container mx-auto px-4 py-6" x-data="dashboard()">
   <!-- Dashboard Header -->
-    <div class="flex flex-col lg:flex-row lg:items-center lg:justify-between mb-8">
+    <div class="flex flex-col lg:flex-row lg:items-center lg:justify-between">
       <div>
         <h1 class="text-3xl font-bold text-gray-900 dark:text-gray-100">{% trans "Team Dashboard" %}</h1>
         <p class="mt-1 text-sm text-gray-600 dark:text-gray-400">
@@ -73,17 +73,17 @@
             <div class="flex flex-wrap gap-2">
               {% for filter in saved_filters %}
                 <div class="flex items-center gap-1">
-                  <button type="button" class="btn btn-xs btn-outline"
-                          @click="loadSavedFilter({{ filter.id }})"
-                          :class="{ 'btn-active': activeFilterId === {{ filter.id }} }">
+                  <div class="hover:bg-base-300 hover:cursor-pointer border rounded pl-2 py-1"
+                       @click="loadSavedFilter({{ filter.id }})"
+                       :class="{ 'btn-active': activeFilterId === {{ filter.id }} }">
                     {{ filter.filter_name }}
                     {% if filter.is_default %}<i class="fas fa-star ml-1 text-yellow-500"></i>{% endif %}
-                  </button>
-                  <button type="button" class="btn btn-xs btn-circle btn-ghost text-red-500"
-                          @click="deleteSavedFilter({{ filter.id }}, '{{ filter.filter_name }}')"
-                          title="{% trans 'Delete filter' %}">
-                    <i class="fas fa-times"></i>
-                  </button>
+                    <button type="button" class="btn btn-xs btn-ghost hover:text-red-500 ml-1"
+                            @click="deleteSavedFilter({{ filter.id }}, '{{ filter.filter_name }}')"
+                            title="{% trans 'Delete filter' %}">
+                      <i class="fas fa-times"></i>
+                    </button>
+                  </div>
                 </div>
               {% endfor %}
             </div>
