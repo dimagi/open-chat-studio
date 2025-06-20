@@ -564,6 +564,13 @@ function CodeNodeEditor(
       type: "function",
       detail: "Adds the tag to the output message",
       boost: 1
+    }),
+
+    add_session_tag: snip("add_session_tag(\"${tag_name}\")", {
+      label: "add_session_tag",
+      type: "function",
+      detail: "Adds the tag to the chat session",
+      boost: 1
     })
   }
 

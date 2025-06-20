@@ -63,6 +63,8 @@ def code_completion(user_query, current_code, error=None, iteration_count=0) -> 
             - `upload_to_assistant`: Whether the file should be sent to the LLM as an attachment.
             - `read_bytes()`: Reads the attachment content as bytes.
             - `read_text()`: Reads the attachment content as text.
+        - Tags: Tags can be attached to individual messages or to the chat session. Tags are used by bot
+            administrators to analyse bot usage.
 
         The available methods you can use are listed below:
         ```
@@ -104,7 +106,10 @@ def code_completion(user_query, current_code, error=None, iteration_count=0) -> 
             The keys are the node names and the values are the routes chosen by each node.
             
         def add_message_tag(tag_name: str):
-            Adds a tag to the output message. Tags are used by administrators to analyse bot usage.
+            Adds a tag to the output message.
+            
+        def add_session_tag(tag_name: str):
+            Adds the tag to the chat session.
         ```
 
         Return only the Python code and nothing else. Do not enclose it in triple quotes or have any other

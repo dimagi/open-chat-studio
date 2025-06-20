@@ -85,6 +85,7 @@ class PipelineState(dict):
     output_message_metadata: Annotated[dict, merge_dicts]
     attachments: list = Field(default=[])
     output_message_tags: Annotated[list[str], operator.add]
+    session_tags: Annotated[list[str], operator.add]
 
     # List of (previous, current, next) tuples used for aiding in routing decisions.
     path: Annotated[Sequence[tuple[str | None, str, list[str]]], operator.add]
@@ -115,7 +116,10 @@ class PipelineState(dict):
         return cls(**kwargs)
 
     def add_message_tag(self, tag: str):
-        self.setdefault("output_message_tags", []).append((None, tag))
+        self.setdefault("output_message_tags", []).append((tag, None))
+
+    def add_session_tag(self, tag: str):
+        self.setdefault("session_tags", []).append((tag, None))
 
     def get_node_id(self, node_name: str):
         """

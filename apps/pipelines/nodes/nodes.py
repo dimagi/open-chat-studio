@@ -1130,6 +1130,7 @@ class CodeNode(PipelineNode, OutputMessageTagMixin):
                 "get_node_path": pipeline_state.get_node_path,
                 "get_all_routes": pipeline_state.get_all_routes,
                 "add_message_tag": pipeline_state.add_message_tag,
+                "add_session_tag": pipeline_state.add_session_tag,
             }
         )
         return custom_globals

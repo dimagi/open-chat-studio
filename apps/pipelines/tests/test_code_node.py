@@ -505,9 +505,27 @@ def main(input, **kwargs):
         code_node(code_set),
         end_node(),
     ]
-    create_runnable(pipeline, nodes).invoke(PipelineState(experiment_session=experiment_session, messages=[input]))[
-        "messages"
-    ][-1]
+    create_runnable(pipeline, nodes).invoke(PipelineState(experiment_session=experiment_session, messages=[input]))
 
     experiment_session.refresh_from_db()
     assert experiment_session.state["message_count"] == 2
+
+
+@django_db_with_data(available_apps=("apps.service_providers",))
+def test_tags(pipeline, experiment_session):
+    code_set = """
+def main(input, **kwargs):
+    add_session_tag("session-tag")
+    add_message_tag("message-tag")
+    return input
+    """
+    nodes = [
+        start_node(),
+        code_node(code_set),
+        end_node(),
+    ]
+    output = create_runnable(pipeline, nodes).invoke(
+        PipelineState(experiment_session=experiment_session, messages=["hi"])
+    )
+    assert output["output_message_tags"] == [("message-tag", None)]
+    assert output["session_tags"] == [("session-tag", None)]
