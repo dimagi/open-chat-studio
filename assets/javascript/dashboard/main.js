@@ -447,14 +447,20 @@ function dashboard() {
         },
         
         async handleSaveFilter() {
+            console.log('handleSaveFilter called');
             const form = document.getElementById('saveFilterForm');
-            if (!form) return;
+            if (!form) {
+                console.error('saveFilterForm not found');
+                return;
+            }
             
             this.saving = true;
+            console.log('Current filters:', this.filters);
             
             try {
                 const formData = new FormData(form);
                 formData.set('filter_data', JSON.stringify(this.filters));
+                console.log('FormData prepared with filter_data:', JSON.stringify(this.filters));
                 
                 const response = await fetch('filters/save/', {
                     method: 'POST',
@@ -463,6 +469,7 @@ function dashboard() {
                         'X-CSRFToken': this.getCSRFToken()
                     }
                 });
+                console.log('Response status:', response.status);
                 
                 const data = await response.json();
                 
@@ -520,8 +527,10 @@ function dashboard() {
         
         // Modal management
         openModal(modalId) {
+            console.log('openModal called with:', modalId);
             if (modalId === 'filtersModal') {
                 this.showFiltersModal = true;
+                console.log('showFiltersModal set to true');
             }
         },
         
