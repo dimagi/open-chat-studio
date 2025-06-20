@@ -128,6 +128,7 @@ class Collection(BaseTeamModel, VersionsMixin):
         name = f"collection-{self.team.slug}-{slugify(self.name)}-{self.id}"
         if self.is_a_version:
             return f"{name} v{self.version_number}"
+        return name
 
     @property
     def size(self) -> float:
