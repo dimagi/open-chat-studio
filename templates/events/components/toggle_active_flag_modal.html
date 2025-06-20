@@ -1,0 +1,17 @@
+<dialog id="toggleEventModal-{{ event.id }}" class="modal">
+  <form method="dialog" class="modal-box">
+    <h3 class="font-bold text-lg">Confirm Toggle</h3>
+    <p class="py-2">
+      Enabling or disabling an event will affect ALL versions of the chatbot, not just the working version.
+    </p>
+    {% if event.action.action_type == "schedule_trigger" %}
+      <p class="text-sm text-gray-600">
+        Changing this will have no effect on existing message schedules created by this event trigger. It will only prevent new schedules from being created.
+      </p>
+    {% endif %}
+    <div class="modal-action">
+      <button type="button" class="btn btn-sm" onclick="document.getElementById('toggleEventModal-{{ event.id }}').close()">Cancel</button>
+      <a href="{{ toggle_active_flag_url }}" class="btn btn-sm btn-primary">Confirm</a>
+    </div>
+  </form>
+</dialog>

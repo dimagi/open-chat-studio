@@ -11,6 +11,7 @@ from typing import TYPE_CHECKING, ClassVar
 
 import emoji
 import requests
+from django.conf import settings
 from django.db import transaction
 from django.http import Http404
 from telebot import TeleBot
@@ -975,7 +976,7 @@ class WhatsappChannel(ChannelBase):
             from_=from_number,
             to=to_number,
             platform=ChannelPlatform.WHATSAPP,
-            file_name=file.name,
+            file=file,
             download_link=file.download_link(experiment_session_id=self.experiment_session.id),
         )
 
@@ -1059,33 +1060,30 @@ class ApiChannel(ChannelBase):
 class SlackChannel(ChannelBase):
     voice_replies_supported = False
     supported_message_types = [MESSAGE_TYPES.TEXT]
+    supports_multimedia = True
 
     def __init__(
         self,
         experiment: Experiment,
         experiment_channel: ExperimentChannel,
         experiment_session: ExperimentSession,
-        send_response_to_user: bool = True,
+        messaging_service=None,
     ):
-        """
-        Args:
-            send_response_to_user: A boolean indicating whether the handler should send the response to the user.
-                This is useful when the message sending happens as part of the slack event handler
-                (e.g., in a slack event listener)
-        """
         super().__init__(experiment, experiment_channel, experiment_session)
-        self.send_response_to_user = send_response_to_user
+        self._messaging_service = messaging_service
+
+    @property
+    def messaging_service(self):
+        if not self._messaging_service:
+            self._messaging_service = self.experiment_channel.messaging_provider.get_messaging_service()
+        return self._messaging_service
 
     def send_text_to_user(self, text: str):
-        if not self.send_response_to_user:
-            return
-
         if not self.message:
             channel_id, thread_ts = parse_session_external_id(self.experiment_session.external_id)
         else:
             channel_id = self.message.channel_id
             thread_ts = self.message.thread_ts
-
         self.messaging_service.send_text_message(
             text,
             from_="",
@@ -1097,6 +1095,25 @@ class SlackChannel(ChannelBase):
     def _ensure_sessions_exists(self):
         if not self.experiment_session:
             raise ChannelException("WebChannel requires an existing session")
+
+    def _can_send_file(self, file: File) -> bool:
+        mime = file.content_type
+        size = file.content_size or 0
+        # slack allows 1 GB, but keeping it to 50MB as we can only upload file upto 50MB in collections
+        max_size = settings.MAX_FILE_SIZE_MB * 1024 * 1024
+        return mime.startswith(("image/", "video/", "audio/", "application/")) and size <= max_size
+
+    def send_file_to_user(self, file: File):
+        if not self.message:
+            channel_id, thread_ts = parse_session_external_id(self.experiment_session.external_id)
+        else:
+            channel_id = self.message.channel_id
+            thread_ts = self.message.thread_ts
+        self.messaging_service.send_file_message(
+            file=file,
+            to=channel_id,
+            thread_ts=thread_ts,
+        )
 
 
 class CommCareConnectChannel(ChannelBase):
@@ -1177,14 +1194,16 @@ def _start_experiment_session(
             metadata=metadata or {},
         )
 
-        session = ExperimentSession.objects.create(
-            team=team,
-            experiment=working_experiment,
-            experiment_channel=experiment_channel,
-            status=session_status,
-            participant=participant,
+        session, _ = ExperimentSession.objects.get_or_create(
             external_id=session_external_id,
-            chat=chat,
+            defaults={
+                "team": team,
+                "experiment": working_experiment,
+                "experiment_channel": experiment_channel,
+                "status": session_status,
+                "participant": participant,
+                "chat": chat,
+            },
         )
 
         # Record the participant's timezone

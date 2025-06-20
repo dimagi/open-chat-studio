@@ -143,8 +143,17 @@ class PipelineStartAction(EventActionHandlerBase):
             inputs={"input": input},
             metadata={"action_type": action.action_type, "action_id": action.id, "params": action.params},
         ):
-            output = pipeline.invoke(
-                state, session, session.experiment_version, trace_service, save_run_to_history=False
+            from apps.chat.bots import PipelineBot
+
+            bot = PipelineBot(
+                session=session,
+                experiment=session.experiment_version,
+                trace_service=trace_service,
+            )
+            output = bot.invoke_pipeline(
+                input_state=state,
+                pipeline=pipeline,
+                save_run_to_history=False,
             )
             trace_service.set_current_span_outputs({"response": output.content})
         return output.content

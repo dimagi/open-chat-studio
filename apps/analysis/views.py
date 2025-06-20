@@ -150,8 +150,9 @@ def download_analysis_results(request, team_slug, pk):
 def export_sessions(request, team_slug, pk):
     analysis = get_object_or_404(TranscriptAnalysis, id=pk, team__slug=team_slug)
     sessions = analysis.sessions.all()
-
-    csv_content = filtered_export_to_csv(analysis.experiment, sessions)
+    csv_content = filtered_export_to_csv(
+        analysis.experiment, sessions, translation_language=analysis.translation_language
+    )
 
     response = HttpResponse(csv_content.getvalue(), content_type="text/csv")
     response["Content-Disposition"] = f'attachment; filename="{analysis.name}_sessions_export.csv"'

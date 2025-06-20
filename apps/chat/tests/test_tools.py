@@ -380,8 +380,5 @@ class TestUpdateParticipantDataTool:
 
 
 def test_tools_present():
-    non_user_facing_tools = [AgentTools.ATTACH_MEDIA]
     for tool in AgentTools.values:
-        if tool in non_user_facing_tools:
-            continue
         assert tool in TOOL_CLASS_MAP

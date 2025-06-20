@@ -74,5 +74,6 @@ def test_end_conversation_runs_pipeline(session, pipeline):
             "output_message_metadata": {},
             "output_message_tags": [],
             "path": [(None, "start", ["end"]), ("start", "end", [])],
+            "intents": [],
         }
     )

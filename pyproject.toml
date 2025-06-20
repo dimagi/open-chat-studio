@@ -63,7 +63,7 @@ dependencies = [
     "tenacity",
     "tiktoken",
     "transformers>=4.48.0", # this is required by the tokenizer that langchain uses
-    "turn-python>=0.2.0",
+    "turn-python>=1.0.0",
     "twilio",
     "whitenoise[brotli]",
     "phonenumberslite",
@@ -74,7 +74,8 @@ dependencies = [
     "pycryptodome",
     "python-docx",
     "django-pydantic-field",
-    "pgvector"
+    "pgvector",
+    "backoff"
 ]
 
 [project.urls]
@@ -137,6 +138,7 @@ dev = [
     "pytest-httpx",
     "pytest-cov",
     "pytest-xdist",
+    "django-debug-toolbar>=5.2.0",
 ]
 docs = [
     "mkdocs-material>=9.6.12",

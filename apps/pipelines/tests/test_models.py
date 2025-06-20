@@ -4,6 +4,7 @@ from unittest.mock import Mock, patch
 import pytest
 
 from apps.channels.models import ExperimentChannel
+from apps.chat.bots import PipelineTestBot
 from apps.events.models import EventActionType
 from apps.experiments.models import Experiment, ExperimentSession, Participant
 from apps.pipelines.nodes.nodes import AssistantNode, LLMResponseWithPrompt
@@ -237,7 +238,8 @@ class TestPipeline:
         for model in temporary_instance_models:
             assert model.objects.count() == 0
 
-        pipeline.simple_invoke("test", requesting_user.id)
+        bot = PipelineTestBot(pipeline=pipeline, user_id=requesting_user.id)
+        bot.process_input("test")
 
         for model in temporary_instance_models:
             assert model.objects.count() == 0
@@ -269,7 +271,8 @@ class TestPipeline:
 
         user_input = "The User Input"
         user = UserFactory()
-        pipeline.simple_invoke(user_input, user.id)["messages"][-1]
+        bot = PipelineTestBot(pipeline=pipeline, user_id=user.id)
+        bot.process_input(user_input)
         expected_call_messages = [
             [("system", "Help the user. User data: {'name': 'Anonymous'}. Source material: "), ("human", user_input)],
         ]

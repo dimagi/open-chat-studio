@@ -2,6 +2,7 @@ import logging
 import unicodedata
 import uuid
 from datetime import datetime
+from functools import cached_property
 from typing import cast
 from urllib.parse import parse_qs, urlparse
 
@@ -26,6 +27,7 @@ from django.views.decorators.clickjacking import xframe_options_exempt
 from django.views.decorators.csrf import csrf_exempt
 from django.views.decorators.http import require_GET, require_POST
 from django.views.generic import CreateView, UpdateView
+from django.views.generic.edit import FormView
 from django_tables2 import SingleTableView
 from field_audit.models import AuditAction
 from waffle import flag_is_active
@@ -81,11 +83,13 @@ from apps.experiments.tables import (
     ParentExperimentRoutesTable,
     TerminalBotsTable,
 )
-from apps.experiments.tasks import async_create_experiment_version, async_export_chat, get_response_for_webchat_task
+from apps.experiments.tasks import (
+    async_create_experiment_version,
+    async_export_chat,
+    get_response_for_webchat_task,
+)
 from apps.experiments.views.prompt import PROMPT_DATA_SESSION_KEY
-from apps.files.forms import get_file_formset
 from apps.files.models import File
-from apps.files.views import BaseAddFileHtmxView, BaseDeleteFileView
 from apps.generics.chips import Chip
 from apps.generics.views import generic_home, paginate_session, render_session_details
 from apps.service_providers.utils import get_llm_provider_choices
@@ -132,7 +136,8 @@ class ExperimentSessionsTableView(LoginAndTeamRequiredMixin, SingleTableView, Pe
             .filter(team=self.request.team, experiment__id=self.kwargs["experiment_id"])
             .select_related("participant__user")
         )
-        query_set = apply_dynamic_filters(query_set, self.request)
+        timezone = self.request.session.get("detected_tz", None)
+        query_set = apply_dynamic_filters(query_set, self.request.GET, timezone)
         return query_set
 
 
@@ -228,16 +233,6 @@ class CreateExperiment(BaseExperimentView, CreateView):
     button_title = "Create"
     permission_required = "experiments.add_experiment"
 
-    def get_context_data(self, **kwargs):
-        context = super().get_context_data(**kwargs)
-        if "file_formset" not in context:
-            context["file_formset"] = self._get_file_formset()
-        return context
-
-    def _get_file_formset(self):
-        if flag_is_active(self.request, "flag_experiment_rag"):
-            return get_file_formset(self.request)
-
     def get_initial(self):
         initial = super().get_initial()
         long_data = self.request.session.pop(PROMPT_DATA_SESSION_KEY, None)
@@ -245,22 +240,10 @@ class CreateExperiment(BaseExperimentView, CreateView):
             initial.update(long_data)
         return initial
 
-    def post(self, request, *args, **kwargs):
-        self.object = None
-        form = self.get_form()
-        file_formset = self._get_file_formset()
-        if form.is_valid() and (not file_formset or file_formset.is_valid()):
-            return self.form_valid(form, file_formset)
-        else:
-            return self.form_invalid(form, file_formset)
-
-    def form_valid(self, form, file_formset):
+    def form_valid(self, form):
         with transaction.atomic():
             form.instance.name = unicodedata.normalize("NFC", form.instance.name)
             self.object = form.save()
-            if file_formset:
-                files = file_formset.save(self.request)
-                self.object.files.set(files)
 
         task_id = async_create_experiment_version.delay(
             experiment_id=self.object.id, version_description="", make_default=True
@@ -270,8 +253,8 @@ class CreateExperiment(BaseExperimentView, CreateView):
 
         return HttpResponseRedirect(self.get_success_url())
 
-    def form_invalid(self, form, file_formset):
-        return self.render_to_response(self.get_context_data(form=form, file_formset=file_formset))
+    def form_invalid(self, form):
+        return self.render_to_response(self.get_context_data(form=form))
 
     def dispatch(self, request, *args, **kwargs):
         is_chatbot = kwargs.get("new_chatbot", False)
@@ -341,54 +324,45 @@ def delete_experiment(request, team_slug: str, pk: int):
     return redirect("experiments:experiments_home", team_slug=team_slug)
 
 
-class AddFileToExperiment(BaseAddFileHtmxView):
-    @transaction.atomic()
-    def form_valid(self, form):
-        experiment = get_object_or_404(Experiment, team=self.request.team, pk=self.kwargs["pk"])
-        file = super().form_valid(form)
-        experiment.files.add(file)
-        return file
-
-    def get_delete_url(self, file):
-        return reverse("experiments:remove_file", args=[self.request.team.slug, self.kwargs["pk"], file.pk])
-
-
-class DeleteFileFromExperiment(BaseDeleteFileView):
-    pass
-
-
-class CreateExperimentVersion(LoginAndTeamRequiredMixin, CreateView):
+class CreateExperimentVersion(LoginAndTeamRequiredMixin, FormView, PermissionRequiredMixin):
     model = Experiment
     form_class = ExperimentVersionForm
     template_name = "experiments/create_version_form.html"
     title = "Create Experiment Version"
     button_title = "Create"
     permission_required = "experiments.add_experiment"
-    pk_url_kwarg = "experiment_id"
+
+    @cached_property
+    def object(self):
+        return get_object_or_404(Experiment, pk=self.kwargs["experiment_id"], team=self.request.team)
+
+    @cached_property
+    def latest_version(self):
+        return self.object.latest_version
 
     def get_form_kwargs(self) -> dict:
         form_kwargs = super().get_form_kwargs()
-        experiment = self.get_object()
-        if not experiment.has_versions:
+        if not self.latest_version:
             form_kwargs["initial"] = {"is_default_version": True}
         return form_kwargs
 
-    def get_context_data(self, *args, **kwargs):
-        context = super().get_context_data(*args, **kwargs)
-        working_experiment = self.get_object()
+    def get_context_data(self, **kwargs):
+        context = super().get_context_data(**kwargs)
+        working_experiment = self.object
         version = working_experiment.version_details
-        if prev_version := working_experiment.latest_version:
+        if self.latest_version:
             # Populate diffs
-            version.compare(prev_version.version_details)
+            version.compare(self.latest_version.version_details)
 
         context["version_details"] = version
+        context["has_versions"] = self.latest_version is not None
         context["experiment"] = working_experiment
         return context
 
     def form_valid(self, form):
         description = form.cleaned_data["version_description"]
         is_default = form.cleaned_data["is_default_version"]
-        working_version = Experiment.objects.get(id=self.kwargs["experiment_id"])
+        working_version = self.object
 
         if working_version.is_archived:
             raise PermissionDenied("Unable to version an archived experiment.")
@@ -414,7 +388,7 @@ class CreateExperimentVersion(LoginAndTeamRequiredMixin, CreateView):
 
     def _check_pipleline_and_assistant_for_errors(self) -> str:
         """Checks if the pipeline or assistant has errors before creating a new version."""
-        experiment = self.get_object()
+        experiment = self.object
 
         try:
             if self._is_assistant_out_of_sync(experiment):
@@ -536,7 +510,7 @@ def _get_events_context(experiment: Experiment, team_slug: str, origin=None):
                 Case(When(event_logs__status=EventLogStatusChoices.FAILURE, then=1), output_field=IntegerField())
             )
         )
-        .values("id", "experiment_id", "type", "action__action_type", "action__params", "failure_count")
+        .values("id", "experiment_id", "type", "action__action_type", "action__params", "failure_count", "is_active")
         .all()
     )
     timeout_events = (
@@ -554,6 +528,7 @@ def _get_events_context(experiment: Experiment, team_slug: str, origin=None):
             "action__params",
             "total_num_triggers",
             "failure_count",
+            "is_active",
         )
         .all()
     )
@@ -1292,6 +1267,11 @@ def experiment_session_messages_view(request, team_slug: str, experiment_id: uui
     start_idx = (page - 1) * page_size
     end_idx = start_idx + page_size
     paginated_messages = messages_queryset[start_idx:end_idx]
+    for message in paginated_messages:
+        message.attached_files = []
+        for file in message.get_attached_files():
+            file.download_url = file.download_link(session.id)
+            message.attached_files.append(file)
     context = {
         "experiment_session": session,
         "experiment": experiment,
@@ -1488,3 +1468,29 @@ def get_release_status_badge(request, team_slug: str, experiment_id: int):
     experiment = get_object_or_404(Experiment, id=experiment_id, team=request.team)
     context = {"has_changes": experiment.compare_with_latest(), "experiment": experiment}
     return render(request, "experiments/components/unreleased_badge.html", context)
+
+
+@login_and_team_required
+@permission_required(("experiments.change_experiment", "pipelines.add_pipeline"))
+def migrate_experiment_view(request, team_slug, experiment_id):
+    from apps.pipelines.helper import convert_non_pipeline_experiment_to_pipeline
+
+    experiment = get_object_or_404(Experiment, id=experiment_id, team__slug=team_slug)
+    failed_url = reverse(
+        "experiments:single_experiment_home",
+        kwargs={"team_slug": team_slug, "experiment_id": experiment_id},
+    )
+    try:
+        with transaction.atomic():
+            experiment = Experiment.objects.get(id=experiment_id)
+            convert_non_pipeline_experiment_to_pipeline(experiment)
+        messages.success(request, f'Successfully migrated experiment "{experiment.name}" to chatbot!')
+        return redirect("chatbots:single_chatbot_home", team_slug=team_slug, experiment_id=experiment_id)
+    except Exception:
+        logging.exception(
+            "Failed to migrate experiment to chatbot", details={"team_slug": team_slug, "experiment_id": experiment_id}
+        )
+        messages.error(request, "There was an error during the migration. Please try again later.")
+        return redirect(failed_url)
+
+    return redirect(failed_url)

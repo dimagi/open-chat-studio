@@ -652,7 +652,9 @@ class TestCreateExperimentVersionView:
     def test_create_version_with_assistant(self, delay, messages, in_sync_with_openai, client):
         delay.return_value = "a7a82d12-0abe-4466-92c7-95e4ed8eaf5c"
         team = TeamWithUsersFactory()
-        experiment = ExperimentFactory(assistant=OpenAiAssistantFactory(), owner=team.members.first(), team=team)
+        experiment = ExperimentFactory(
+            assistant=OpenAiAssistantFactory(team=team), owner=team.members.first(), team=team
+        )
         client.force_login(experiment.owner)
         post_data = {"version_description": "Some description", "is_default_version": True}
         url = reverse("experiments:create_version", args=[experiment.team.slug, experiment.id])

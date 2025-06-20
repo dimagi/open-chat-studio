@@ -12,16 +12,20 @@ from openai.pagination import SyncCursorPage
 from apps.assistants.models import ToolResources
 from apps.assistants.sync import (
     OpenAiSyncError,
+    _get_files_to_delete,
     _update_or_create_vector_store,
     delete_openai_assistant,
     get_out_of_sync_files,
     import_openai_assistant,
     push_assistant_to_openai,
+    remove_files_from_tool,
     sync_from_openai,
 )
-from apps.chat.agent import tools
+from apps.chat.agent.tools import TOOL_CLASS_MAP
+from apps.experiments.models import AgentTools
 from apps.service_providers.llm_service.index_managers import OpenAIVectorStoreManager
 from apps.utils.factories.assistants import OpenAiAssistantFactory
+from apps.utils.factories.documents import CollectionFactory
 from apps.utils.factories.files import FileFactory
 from apps.utils.factories.openai import AssistantFactory, FileObjectFactory
 from apps.utils.factories.service_provider_factories import LlmProviderFactory
@@ -30,6 +34,9 @@ from apps.utils.factories.service_provider_factories import LlmProviderFactory
 @dataclasses.dataclass
 class ObjectWithId:
     id: str
+
+
+LEGACY_EXPERIMENT_TOOLS = AgentTools.reminder_tools() + [AgentTools.UPDATE_PARTICIPANT_DATA]
 
 
 @pytest.mark.django_db()
@@ -92,7 +99,7 @@ def test_push_assistant_to_openai_update(mock_update, vs_retrieve, vs_files_list
 
     openai_files = FileObjectFactory.create_batch(2)
 
-    internal_tools = [tool_cls(experiment_session=None) for tool_cls in tools.TOOL_CLASS_MAP.values()]
+    internal_tools = [TOOL_CLASS_MAP[tool](experiment_session=None) for tool in LEGACY_EXPERIMENT_TOOLS]
     with patch("openai.resources.Files.create", side_effect=openai_files) as mock_file_create:
         push_assistant_to_openai(local_assistant, internal_tools=internal_tools)
     assert mock_update.called
@@ -102,7 +109,7 @@ def test_push_assistant_to_openai_update(mock_update, vs_retrieve, vs_files_list
     # Make sure that all tools in TOOL_CLASS_MAP was speceified
     tool_specs = mock_update.call_args_list[0].kwargs.get("tools")
     tool_names = set([tool_spec["function"]["name"] for tool_spec in tool_specs if "function" in tool_spec])
-    expected_tools = set(tools.TOOL_CLASS_MAP.keys())
+    expected_tools = set(LEGACY_EXPERIMENT_TOOLS)
     assert expected_tools - tool_names == set()
 
     assert file_batches.call_args_list == [
@@ -348,6 +355,44 @@ def test_vector_store_create_batch_files(create_file_batch, create_vector_store,
         assert len(create_file_batch.call_args_list[1][1]["file_ids"]) == 180
     else:
         assert create_file_batch.call_count == 0
+
+
+@pytest.mark.django_db()
+@patch("apps.assistants.sync.delete_file_from_openai")
+@patch("apps.assistants.sync.OpenAIVectorStoreManager.delete_file")
+def test_remove_files_from_tool(delete_file, delete_file_from_openai):
+    collection = CollectionFactory()
+    resource = ToolResources.objects.create(
+        tool_type="file_search", assistant=OpenAiAssistantFactory(), extra={"vector_store_id": "vs-123"}
+    )
+    file1 = FileFactory(external_id="file1")
+    collection.files.add(file1)
+
+    file2 = FileFactory(external_id="file2")
+    resource.files.add(*[file1.id, file2.id])
+
+    remove_files_from_tool(resource, files=[file1, file2])
+    delete_file_from_openai.assert_called_once()
+    assert delete_file_from_openai.mock_calls[0].args[1].external_id == "file2"
+    delete_file.assert_called_once_with(vector_store_id="vs-123", file_id="file1")
+
+
+@pytest.mark.django_db()
+def test_get_files_to_delete():
+    collection = CollectionFactory()
+    team = collection.team
+    resource = ToolResources.objects.create(
+        tool_type="file_search", assistant=OpenAiAssistantFactory(team=team), extra={"vector_store_id": "vs-123"}
+    )
+    file = FileFactory(external_id="file1")
+    collection.files.add(file)
+    resource.files.add(file)
+
+    assert len(list(_get_files_to_delete(team, resource.id))) == 0
+
+    collection.files.through.objects.all().delete()  # Clear the collection files
+
+    assert len(list(_get_files_to_delete(team, resource.id))) == 1
 
 
 class TestVectorStoreManager:

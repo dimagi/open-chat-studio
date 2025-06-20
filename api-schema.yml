@@ -396,6 +396,10 @@ paths:
                   experiment: exp1
                   platform: connect_messaging
                   prompt_text: Tell the user to do something
+                  session_data:
+                    key: value
+                  participant_data:
+                    key: value
                 summary: Generates a bot message and sends it to the user
               ParticipantNotFound:
                 value:
@@ -989,6 +993,16 @@ components:
           type: boolean
           default: false
           title: Starts a new session
+        session_data:
+          type: object
+          additionalProperties: {}
+          description: Update session data. This will be merged with existing session
+            data
+        participant_data:
+          type: object
+          additionalProperties: {}
+          description: Update Participant data. This will be merged with existing
+            participant data
       required:
       - experiment
       - identifier

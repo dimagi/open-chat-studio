@@ -68,8 +68,6 @@ urlpatterns = [
     path("e/<int:experiment_id>/versions/status", views.version_create_status, name="check_version_creation_status"),
     path("e/<int:pk>/edit/", views.EditExperiment.as_view(), name="edit"),
     path("e/<int:pk>/delete/", views.delete_experiment, name="delete"),
-    path("e/<int:pk>/add_file/", views.AddFileToExperiment.as_view(), name="add_file"),
-    path("e/<int:pk>/delete_file/<int:file_id>/", views.DeleteFileFromExperiment.as_view(), name="remove_file"),
     path(
         "e/<int:experiment_id>/v/<int:version_number>/start_authed_web_session/",
         views.start_authed_web_session,
@@ -203,6 +201,11 @@ urlpatterns = [
         "e/<int:experiment_id>/release_status_badge",
         views.get_release_status_badge,
         name="get_release_status_badge",
+    ),
+    path(
+        "e/<int:experiment_id>/migrate/",
+        views.migrate_experiment_view,
+        name="migrate_experiment",
     ),
 ]
 

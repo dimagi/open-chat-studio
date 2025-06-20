@@ -404,6 +404,44 @@ class TestExperimentSession:
         else:
             _test()
 
+    @patch("apps.chat.channels.ChannelBase.from_experiment_session")
+    @patch("apps.chat.bots.EventBot.get_user_message")
+    def test_ad_hoc_message_transaction_rollback(self, get_user_message, from_experiment_session, experiment_session):
+        """Test that the @transaction.atomic() decorator on ad_hoc_bot_message
+        rolls back database changes when an exception occurs."""
+
+        # Set up initial state
+        initial_message_count = ChatMessage.objects.filter(chat=experiment_session.chat).count()
+
+        # Mock the bot to return a message
+        get_user_message.return_value = "Test message"
+
+        # Mock channel to create a message then raise an exception on send
+        mock_channel = Mock()
+        from_experiment_session.return_value = mock_channel
+
+        def mock_send_with_db_change(message):
+            # Simulate creating a chat message before the exception
+            # This should be rolled back due to the transaction decorator
+            ChatMessage.objects.create(
+                message_type=ChatMessageType.AI,
+                content="Message created before exception",
+                chat=experiment_session.chat,
+            )
+            raise Exception("Send failed - should rollback")
+
+        mock_channel.send_message_to_user = mock_send_with_db_change
+
+        # Call ad_hoc_bot_message with fail_silently=False so exception propagates
+        with pytest.raises(Exception, match="Send failed - should rollback"):
+            experiment_session.ad_hoc_bot_message(
+                "Tell the user we're testing", TraceInfo(name="test"), fail_silently=False
+            )
+
+        # Verify that the database changes were rolled back
+        final_message_count = ChatMessage.objects.filter(chat=experiment_session.chat).count()
+        assert final_message_count == initial_message_count, "Transaction should have rolled back the message creation"
+
     @pytest.mark.parametrize(
         ("versions_chatted_to", "expected_display_val"),
         [
@@ -676,9 +714,6 @@ class TestExperimentModel:
         working_child = ExperimentFactory(team=team)
         ExperimentRoute(team=team, parent=experiment, child=working_child, keyword="working")
 
-        # Setup Files
-        experiment.files.set(FileFactory.create_batch(3))
-
         # Setup Static Trigger
         StaticTriggerFactory(experiment=experiment)
 
@@ -753,7 +788,6 @@ class TestExperimentModel:
         self._assert_safety_layers_are_duplicated(original_experiment, new_version)
         self._assert_source_material_is_duplicated(original_experiment, new_version)
         self._assert_routes_are_duplicated(original_experiment, new_version)
-        self._assert_files_are_duplicated(original_experiment, new_version)
         self._assert_triggers_are_duplicated("static", original_experiment, new_version)
         self._assert_triggers_are_duplicated("timeout", original_experiment, new_version)
         self._assert_attribute_duplicated("source_material", original_experiment, new_version)
@@ -846,11 +880,6 @@ class TestExperimentModel:
             assert route.parent.working_version == original_experiment
             assert route.working_version.parent == original_experiment
             assert route.child.is_a_version is True
-
-    def _assert_files_are_duplicated(self, original_experiment, new_version):
-        new_version_file_ids = set(new_version.files.all().values_list("id", flat=True))
-        original_experiment = set(original_experiment.files.all().values_list("id", flat=True))
-        assert new_version_file_ids - original_experiment == set()
 
     def _assert_triggers_are_duplicated(self, trigger_type, original_experiment, new_version):
         assert trigger_type in ["static", "timeout"], "Unknown trigger type"

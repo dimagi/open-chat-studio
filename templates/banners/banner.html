@@ -2,16 +2,16 @@
 {% if banners %}
     <div class="banners-container">
         {% for banner in banners %}
-            <div class="alert alert-{{ banner.type }} alert-vertical sm:alert-horizontal" role="alert" data-banner-id="{{ banner.id }}">
-                {% if banner.title %}
-                    <strong>{{ banner.title }}</strong>:
-                {% endif %}
-                {{ banner.message|render_markdown }}
-                <div>
-                    <button class="btn btn-sm btn-ghost dismiss-banner"
-                            data-banner-id="{{ banner.id }}"
-                            aria-label="Close">x</button>
+            <div class="alert alert-{{ banner.type }} alert-vertical sm:alert-horizontal w-full flex items-center justify-between" role="alert" data-banner-id="{{ banner.id }}">
+                <div class="flex-1">
+                    {% if banner.title %}
+                        <strong>{{ banner.title }}</strong>:
+                    {% endif %}
+                    {{ banner.message|render_markdown }}
                 </div>
+                <button class="btn btn-sm btn-ghost dismiss-banner ml-4"
+                        data-banner-id="{{ banner.id }}"
+                        aria-label="Close">×</button>
             </div>
         {% endfor %}
     </div>
@@ -21,10 +21,7 @@
                 const dismissed = JSON.parse(SiteJS.app.Cookies.get('dismissed_banners') || '[]');
                 if (!dismissed.includes(bannerId)) {
                     dismissed.push(bannerId);
-                    SiteJS.app.Cookies.set('dismissed_banners', JSON.stringify(dismissed), {
-                        path: '/',
-                        maxAge: 31536000
-                    });
+                    SiteJS.app.Cookies.set('dismissed_banners', JSON.stringify(dismissed));
                 }
             }
             document.querySelectorAll('.dismiss-banner').forEach(button => {

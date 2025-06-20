@@ -5,14 +5,14 @@ from unittest.mock import Mock, patch
 import pytest
 from django.core import mail
 from django.test import override_settings
-from langchain_core.messages import AIMessage, ToolCall
+from langchain_core.messages import AIMessage, AIMessageChunk, ToolCall, ToolCallChunk
 from langchain_openai.chat_models.base import OpenAIRefusalError
 
 from apps.annotations.models import TagCategories
 from apps.channels.datamodels import Attachment
-from apps.experiments.models import ParticipantData
+from apps.experiments.models import AgentTools, ParticipantData
 from apps.pipelines.exceptions import PipelineBuildError, PipelineNodeBuildError
-from apps.pipelines.nodes.base import PipelineState, merge_dicts
+from apps.pipelines.nodes.base import Intents, PipelineState, merge_dicts
 from apps.pipelines.nodes.nodes import EndNode, Passthrough, RouterNode, StartNode, StaticRouterNode
 from apps.pipelines.tests.utils import (
     assistant_node,
@@ -156,17 +156,19 @@ def test_llm_with_prompt_response(
         llm_response_with_prompt_node(
             str(provider.id),
             str(provider_model.id),
-            source_material_id=str(source_material.id),
-            prompt="Node 2: {source_material}",
+            prompt="Node 2: {temp_state.temp_key} {session_state.session_key}",
             name="llm2",
         ),
         end_node(),
     ]
+    experiment_session.state = {"session_key": "session_value"}
     output = create_runnable(pipeline, nodes).invoke(
-        PipelineState(messages=[user_input], experiment_session=experiment_session)
+        PipelineState(
+            messages=[user_input], experiment_session=experiment_session, temp_state={"temp_key": "temp_value"}
+        )
     )["messages"][-1]
     expected_output = (
-        f"Node 2: {source_material.material} Node 1: Use this {source_material.material} to answer questions "
+        f"Node 2: temp_value session_value Node 1: Use this {source_material.material} to answer questions "
         f"about {participant_data.data}. {user_input}"
     )
     assert output == expected_output
@@ -1258,3 +1260,31 @@ def test_router_node_openai_refusal_uses_default_keyword(get_llm_service, provid
     keyword, is_default_keyword = node._process_conditional(state)
     assert keyword == "DEFAULT"
     assert is_default_keyword
+
+
+@django_db_with_data(available_apps=("apps.service_providers",))
+@mock.patch("apps.service_providers.models.LlmProvider.get_llm_service")
+def test_end_session_tool(get_llm_service, provider, provider_model, pipeline, experiment_session):
+    def _tool_call():
+        return AIMessageChunk(
+            tool_call_chunks=[ToolCallChunk(name=AgentTools.END_SESSION, id="123", args="")], content=""
+        )
+
+    service = build_fake_llm_service(
+        responses=[_tool_call(), "Done"],
+        token_counts=[0],
+    )
+    get_llm_service.return_value = service
+    start = start_node()
+    llm = llm_response_with_prompt_node(str(provider.id), str(provider_model.id), tools=[AgentTools.END_SESSION])
+    end = end_node()
+    nodes = [start, llm, end]
+    edges = [
+        {"id": "start -> llm", "source": start["id"], "target": llm["id"]},
+        {"id": "llm -> end", "source": llm["id"], "target": end["id"]},
+    ]
+    runnable = create_runnable(pipeline, nodes, edges)
+
+    output = runnable.invoke(PipelineState(messages=["a"], experiment_session=experiment_session))
+    print(output)
+    assert output["intents"] == [Intents.END_SESSION]
