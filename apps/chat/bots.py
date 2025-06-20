@@ -294,7 +294,9 @@ class PipelineBot:
     ) -> ChatMessage:
         pipeline_to_use = pipeline or self.experiment.pipeline
         output = self._run_pipeline(input_state, pipeline_to_use)
+
         if save_run_to_history and self.session is not None:
+            output = self._process_interrupts(output)
             result = self._save_messages(input_state, output, save_input_to_history)
         else:
             result = ChatMessage(content=output)
@@ -336,7 +338,22 @@ class PipelineBot:
         output = PipelineState(**raw_output).json_safe()
         return output
 
-    def _save_messages(self, input_state, output, save_input_to_history):
+    def _process_interrupts(self, output):
+        if interrupt := output.get("interrupt"):
+            trace_info = TraceInfo(name="interrupt", metadata={"interrupt": interrupt})
+            output_message = EventBot(
+                session=self.session,
+                experiment=self.experiment,
+                trace_info=trace_info,
+                trace_service=self.trace_service,
+            ).get_user_message(interrupt["message"])
+            output["messages"].append(output_message)
+            if tag_name := interrupt["tag_name"]:
+                tags = output.setdefault("output_message_tags", [])
+                tags.append((TagCategories.SAFETY_LAYER_RESPONSE, tag_name))
+        return output
+
+    def _save_messages(self, input_state, output, save_input_to_history, extra_tags=None):
         input_metadata = output.get("input_message_metadata", {})
         output_metadata = output.get("output_message_metadata", {})
         trace_metadata = self.trace_service.get_trace_metadata() if self.trace_service else None
@@ -405,8 +422,21 @@ class EventBot:
     SYSTEM_PROMPT = textwrap.dedent(
         """
         Your role is to generate messages to send to users. These could be reminders
-        or prompts to help them complete their tasks. The text that you generate will be sent
+        or prompts to help them complete their tasks or error messages. The text that you generate will be sent
         to the user in a chat message.
+        
+        <example>
+        Input: Remember to brush your teeth.
+        Output: Don't forget to brush your teeth.
+        </example>
+        <example>
+        Input: Remind me about my appointment with Dr Niel at 5pm.
+        Output: Here is your reminder for your appointment with Dr Niel at 5pm.
+        </example>
+        <example>
+        Input: The message was inappropriate.
+        Output: Unfortunately I can't respond to your last message because it goes against my usage policy.
+        </example>
     
         You should generate the message in same language as the recent conversation history shown below.
         If there is no history use English.
@@ -419,6 +449,8 @@ class EventBot:
     
         #### Current date and time
         {current_datetime}
+        
+        Output only the final message, no additional text. Do not put the message in quotes.
         """
     )
 
