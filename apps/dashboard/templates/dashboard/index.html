@@ -40,12 +40,12 @@
             {{ filter_form.date_range }}
           </div>
 
-          <div class="form-control" x-show="filters.date_range === 'custom'" x-transition>
+          <div class="form-control" x-show="filters.date_range === 'custom'" x-transition x-cloak="">
             <label class="label label-text">{% trans "Start Date" %}</label>
             {{ filter_form.start_date }}
           </div>
 
-          <div class="form-control" x-show="filters.date_range === 'custom'" x-transition>
+          <div class="form-control" x-show="filters.date_range === 'custom'" x-transition x-cloak="">
             <label class="label label-text">{% trans "End Date" %}</label>
             {{ filter_form.end_date }}
           </div>
