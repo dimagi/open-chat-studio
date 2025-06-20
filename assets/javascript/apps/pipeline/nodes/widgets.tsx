@@ -568,7 +568,7 @@ function CodeNodeEditor(
     get_node_output: snip("get_node_output(\"${node_name}\")", {
       label: "get_node_output",
       type: "function",
-      detail: "Returns the output of the specified node if it has been executed. If the node has not been executed, it returns `None.",
+      detail: "Returns the output of the specified node if it has been executed. If the node has not been executed, it returns `None`.",
       boost: 1,
       section: "Node Outputs"
     }),

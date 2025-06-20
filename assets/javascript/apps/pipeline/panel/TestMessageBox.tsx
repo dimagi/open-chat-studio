@@ -168,7 +168,7 @@ export default function TestMessageBox({
                       <span className="loading loading-dots loading-sm"></span>
                     </div>
                   ) : (
-                    responseMessage && (
+                    responseMessage?.message && (
                       <div className={`mt-2 p-2 border rounded-sm ${responseMessage.className || ""}`}>
                         <strong>{responseMessage.prefix}</strong> {responseMessage.message}
                       </div>

@@ -56,7 +56,7 @@ def _edges_from_strings(edge_strings: list[str], nodes: list[dict]) -> list[dict
 def create_runnable(pipeline: Pipeline, nodes: list[dict], edges: list[dict | str] | None = None) -> CompiledStateGraph:
     if edges is None:
         edges = _make_edges(nodes)
-    if isinstance(edges[0], str):
+    if edges and isinstance(edges[0], str):
         edges = _edges_from_strings(edges, nodes)
     flow_nodes = []
     for node in nodes:
@@ -82,7 +82,7 @@ def email_node(name: str | None = None):
         "label": "Send an email",
         "type": "SendEmail",
         "params": {
-            "name": name or "send email" + node_id[-4:],
+            "name": name or f"send email-{node_id[-4:]}",
             "recipient_list": "test@example.com",
             "subject": "This is an interesting email",
         },
