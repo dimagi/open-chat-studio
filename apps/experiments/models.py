@@ -543,15 +543,16 @@ class BuiltInTools(models.TextChoices):
                         "name": "allowed_domains",
                         "type": "expandable_text",
                         "label": "Allowed Domains",
-                        "helpText": "Add domains without https from which you want the search results. "
-                        "Use space to add multiple domains",
+                        "helpText": (
+                            "Only search these domains (e.g. example.com or example.com/blog). "
+                            "Separate entries with newlines."
+                        ),
                     },
                     {
                         "name": "blocked_domains",
                         "type": "expandable_text",
                         "label": "Blocked Domains",
-                        "helpText": "Add domains without https from which you don't want the search results."
-                        " Use space to add multiple domains",
+                        "helpText": "Exclude these domains from search. Separate entries with newlines.",
                     },
                 ],
             }
@@ -565,6 +566,7 @@ class AgentTools(models.TextChoices):
     MOVE_SCHEDULED_MESSAGE_DATE = "move-scheduled-message-date", gettext("Move Reminder Date")
     UPDATE_PARTICIPANT_DATA = "update-user-data", gettext("Update Participant Data")
     ATTACH_MEDIA = "attach-media", gettext("Attach Media")
+    END_SESSION = "end-session", gettext("End Session")
     SEARCH_INDEX = "search-index", gettext("Search Index")
 
     @classmethod
@@ -572,7 +574,7 @@ class AgentTools(models.TextChoices):
         return [cls.RECURRING_REMINDER, cls.ONE_OFF_REMINDER, cls.DELETE_REMINDER, cls.MOVE_SCHEDULED_MESSAGE_DATE]
 
     @staticmethod
-    def user_tool_choices() -> list["AgentTools"]:
+    def user_tool_choices() -> list[tuple]:
         """Returns the set of tools that a user should be able to attach to the bot"""
         return [
             (tool.value, tool.label)
@@ -1663,6 +1665,7 @@ class ExperimentSession(BaseTeamModel):
 
             enqueue_static_triggers.delay(self.id, StaticTriggerType.CONVERSATION_END)
 
+    @transaction.atomic()
     def ad_hoc_bot_message(
         self,
         instruction_prompt: str,
@@ -1680,9 +1683,14 @@ class ExperimentSession(BaseTeamModel):
             use_experiment: The experiment whose data to use. This is useful for multi-bot setups where we want a
             specific child bot to handle the check-in.
         """
-        with current_team(self.team):
-            bot_message = self._bot_prompt_for_user(instruction_prompt, trace_info, use_experiment=use_experiment)
-            self.try_send_message(message=bot_message, fail_silently=fail_silently)
+        try:
+            with current_team(self.team):
+                bot_message = self._bot_prompt_for_user(instruction_prompt, trace_info, use_experiment=use_experiment)
+                self.try_send_message(message=bot_message)
+        except Exception as e:
+            log.exception(f"Could not send message to experiment session {self.id}. Reason: {e}")
+            if not fail_silently:
+                raise e
 
     def _bot_prompt_for_user(
         self,
@@ -1702,19 +1710,14 @@ class ExperimentSession(BaseTeamModel):
         bot = EventBot(self, experiment, trace_info, history_manager)
         return bot.get_user_message(instruction_prompt)
 
-    def try_send_message(self, message: str, fail_silently=True):
+    def try_send_message(self, message: str):
         """Tries to send a message to this user session as the bot. Note that `message` will be send to the user
         directly. This is not an instruction to the bot.
         """
         from apps.chat.channels import ChannelBase
 
-        try:
-            channel = ChannelBase.from_experiment_session(self)
-            channel.send_message_to_user(message)
-        except Exception as e:
-            log.exception(f"Could not send message to experiment session {self.id}. Reason: {e}")
-            if not fail_silently:
-                raise e
+        channel = ChannelBase.from_experiment_session(self)
+        channel.send_message_to_user(message)
 
     @cached_property
     def participant_data_from_experiment(self) -> dict:

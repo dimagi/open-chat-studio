@@ -64,6 +64,12 @@ def merge_dicts(left: dict, right: dict):
     return output
 
 
+class Intents(StrEnum):
+    """Intents capture actions which should be taken after the pipeline has run."""
+
+    END_SESSION = "end_session"
+
+
 class TempState(TypedDict):
     user_input: str
     outputs: dict
@@ -86,6 +92,8 @@ class PipelineState(dict):
     node_input: str
     # source node for the current node
     node_source: str
+
+    intents: Annotated[list[Intents], operator.add]
 
     def json_safe(self):
         # We need to make a copy of `self` to not change the actual value of `experiment_session` forever

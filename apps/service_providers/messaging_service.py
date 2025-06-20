@@ -5,6 +5,7 @@ from io import BytesIO
 from typing import ClassVar
 from urllib.parse import urljoin
 
+import backoff
 import boto3
 import pydantic
 import requests
@@ -15,6 +16,7 @@ from slack_sdk.errors import SlackApiError
 from telebot.util import smart_split
 from turn import TurnClient
 from twilio.rest import Client
+from twilio.rest.api.v2010.account.message import MessageContext, MessageInstance
 
 from apps.channels import audio
 from apps.channels.datamodels import TurnWhatsappMessage, TwilioMessage
@@ -116,11 +118,43 @@ class TwilioService(MessagingService):
         prefix = self.TWILIO_CHANNEL_PREFIXES[platform]
         return f"{prefix}:{from_}", f"{prefix}:{to}"
 
+    @backoff.on_predicate(
+        backoff.constant,
+        lambda status: status not in [MessageInstance.Status.DELIVERED, MessageInstance.Status.READ],
+        max_time=10,
+        interval=2,
+        jitter=None,
+    )
+    def block_until_delivered(self, current_chunk_sid: str) -> bool:
+        """
+        Checks if the current message chunk has been delivered.
+
+        See https://shorturl.at/EZocp for a list of possible statuses.
+        """
+        message_context: MessageContext = self.client.messages.get(current_chunk_sid)
+        message = message_context.fetch()
+        return message.status
+
     def send_text_message(self, message: str, from_: str, to: str, platform: ChannelPlatform, **kwargs):
+        """
+        Sends a text message to the user. If the message is too long, it will be split into chunks of
+        `MESSAGE_CHARACTER_LIMIT` characters and sent as multiple messages. Sending chunks is done sequentially,
+        waiting for the previous chunk to be delivered before sending the next one.
+
+        See https://shorturl.at/valat for more information.
+        """
         from_, to = self._parse_addressing_params(platform, from_=from_, to=to)
 
-        for message_text in smart_split(message, chars_per_string=self.MESSAGE_CHARACTER_LIMIT):
-            self.client.messages.create(from_=from_, body=message_text, to=to)
+        chunks = smart_split(message, chars_per_string=self.MESSAGE_CHARACTER_LIMIT)
+        num_chunks = len(chunks)
+        for message_text in chunks:
+            response: MessageInstance = self.client.messages.create(from_=from_, body=message_text, to=to)
+            message_id = response.sid
+
+            if num_chunks == 1:
+                return
+
+            self.block_until_delivered(message_id)
 
     def send_voice_message(
         self,

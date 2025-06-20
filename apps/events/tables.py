@@ -41,11 +41,21 @@ class ActionsColumn(tables.Column):
                 "team_slug": record["team_slug"],
             },
         )
+        toggle_active_flag_url = reverse(
+            f"{namespace}:events:{trigger_type}_event_toggle",
+            kwargs={
+                "trigger_id": record["id"],
+                "experiment_id": record["experiment_id"],
+                "team_slug": record["team_slug"],
+            },
+        )
         return get_template("events/events_actions_column_buttons.html").render(
             {
                 "view_log_url": view_log_url,
                 "edit_url": edit_url,
                 "delete_url": delete_url,
+                "toggle_active_flag_url": toggle_active_flag_url,
+                "event": record,
             }
         )
 
