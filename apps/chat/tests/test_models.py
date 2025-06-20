@@ -44,7 +44,7 @@ class TestChatMessage:
         ai_message_with_tag = ChatMessage.objects.create(
             chat=session.chat, message_type=ChatMessageType.AI, content="Hi"
         )
-        ai_message_with_tag.create_and_add_tag(tag="some-bot", tag_category=TagCategories.BOT_RESPONSE)
+        ai_message_with_tag.create_and_add_tag("some-bot", session.team, tag_category=TagCategories.BOT_RESPONSE)
 
         assert human_message.get_processor_bot_tag_name() is None
         assert ai_message_wo_tag.get_processor_bot_tag_name() is None
