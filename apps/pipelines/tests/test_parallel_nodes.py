@@ -32,6 +32,12 @@ def experiment_session(experiment):
 
 @django_db_with_data(available_apps=("apps.service_providers",))
 def test_parallel_branch_pipeline(pipeline, experiment_session):
+    """
+    Illustrate and validate what happens with parallel branches.
+
+    start -> A -----> end
+          -> B -> C --^
+    """
     start = start_node()
     template_a = render_template_node("A ({{ input }})", name="A")
     template_b = render_template_node("B ({{ input }})", name="B")
@@ -58,7 +64,11 @@ def test_parallel_branch_pipeline(pipeline, experiment_session):
 
 @django_db_with_data(available_apps=("apps.service_providers",))
 def test_parallel_branch_with_dangling_node(pipeline, experiment_session):
-    """Node A does not connect to the end node, but it is still executed."""
+    """Node A does not connect to the end node, but it is still executed.
+
+    start -> B -> end
+          -> A
+    """
     start = start_node()
     template_a = render_template_node("A ({{ input }})", name="A")
     template_b = render_template_node("B ({{ input }})", name="B")
@@ -81,6 +91,12 @@ def test_parallel_branch_with_dangling_node(pipeline, experiment_session):
 @pytest.mark.django_db()
 @pytest.mark.parametrize("safety_check", ["safe", "unsafe"])
 def test_code_node_abort(pipeline, experiment_session, safety_check):
+    """
+    Test that aborting in a code node prevents future node execution
+
+    start -> B ------------> Code -> C -> end
+          -> safety_check ---^
+    """
     start = start_node()
     node_a = static_output(safety_check, "safety_check")
     node_b = static_output("B", "B")
@@ -119,7 +135,11 @@ def test_code_node_wait_for_inputs(pipeline, experiment_session):
     """In this test the branches are of unequal length, so the code node will get called twice,
     once when A and C are done, and once when B is done.
 
-    We want the code node to wait until all branches have completed before returning a result."""
+    We want the code node to wait until all branches have completed before returning a result.
+
+    start -> A -> B -> Code -> end
+          -> C --------^
+    """
     start = start_node()
     node_a = render_template_node("A: {{ input }}", "A")
     node_b = render_template_node("B: {{ input }}", "B")
