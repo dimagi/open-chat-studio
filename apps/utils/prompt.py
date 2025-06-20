@@ -82,7 +82,8 @@ def _ensure_tool_variables_are_present(prompt_text, prompt_variables, tools, pro
 
     required_prompt_variables = []
     for tool_name in tools:
-        required_prompt_variables.extend(PROMPT_VARS_REQUIRED_BY_TOOL[AgentTools(tool_name)])
+        tool_vars = PROMPT_VARS_REQUIRED_BY_TOOL.get(AgentTools(tool_name)) or {}
+        required_prompt_variables.extend(tool_vars)
     missing_vars = set(required_prompt_variables) - prompt_variables
     if missing_vars:
         raise ValidationError(

@@ -166,13 +166,6 @@ class PipelineHistoryManager(BaseHistoryManager):
         self.output_message_metadata = {}
         self.history_mode = history_mode
 
-    def attach_file_id(self, file_id: str):
-        """Callback method used by a tool to attach a file id to the output message"""
-        if "ocs_attachment_file_ids" not in self.output_message_metadata:
-            self.output_message_metadata["ocs_attachment_file_ids"] = []
-
-        self.output_message_metadata["ocs_attachment_file_ids"].append(file_id)
-
     @classmethod
     def for_llm_chat(
         cls,
