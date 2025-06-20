@@ -178,12 +178,13 @@ def _update_llm_provider_models(LlmProviderModel):
                     existing_global_model.deprecated = model.deprecated
                     existing_global_model.save()
             else:
-                created_models[(provider_type, model.name)] = LlmProviderModel.objects.create(
-                    team=None,
-                    type=provider_type,
-                    name=model.name,
-                    max_token_limit=model.token_limit,
-                )
+                if not model.deprecated:
+                    created_models[(provider_type, model.name)] = LlmProviderModel.objects.create(
+                        team=None,
+                        type=provider_type,
+                        name=model.name,
+                        max_token_limit=model.token_limit,
+                    )
 
     # move any that are no longer in the list to be custom models
     for key, provider_model in existing.items():
