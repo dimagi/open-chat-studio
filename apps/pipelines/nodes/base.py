@@ -3,9 +3,10 @@ import operator
 from abc import ABC
 from collections.abc import Callable, Sequence
 from enum import StrEnum
-from typing import Annotated, Any, Literal, Self
+from typing import Annotated, Any, Literal, Self, cast
 
 from langchain_core.runnables import RunnableConfig
+from langgraph.constants import END
 from langgraph.types import Command
 from pydantic import BaseModel, ConfigDict, Field, model_validator
 from pydantic.config import JsonDict
@@ -276,8 +277,9 @@ class BasePipelineNode(BaseModel, ABC):
                     {
                         "node_name": self.name,
                         "node_id": node_id,
-                        "edge_ids": incoming_nodes,
+                        "incoming_node_ids": incoming_nodes,
                         "state_outputs": state["outputs"],
+                        "pipeline_path": state["path"],
                     },
                 )
         return state
@@ -324,9 +326,14 @@ class PipelineNode(BasePipelineNode, ABC):
         state = PipelineState(state)
         state = self._prepare_state(self.node_id, incoming_nodes, state)
         output = self._process(input=state["node_input"], state=state)
+        if isinstance(output, Command) and output.goto != END:
+            return Command(goto=output.goto, update=self._augment_output(state, cast(PipelineState, output.update)))
         if not isinstance(output, dict):
             return output
-        output["path"] = [(state["node_source"], self.node_id, outgoing_nodes)]
+        return self._augment_output(state, output)
+
+    def _augment_output(self, state, output: PipelineState) -> PipelineState:
+        output["path"] = [(state["node_source"], self.node_id, self._outgoing_nodes)]
         get_output_tags_fn = getattr(self, "get_output_tags", None)
         if callable(get_output_tags_fn):
             output["output_message_tags"] = get_output_tags_fn()
