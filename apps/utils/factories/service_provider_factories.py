@@ -39,6 +39,7 @@ class LlmProviderModelFactory(factory.django.DjangoModelFactory):
     team = factory.SubFactory(TeamFactory)
     type = str(LlmProviderTypes.openai)
     name = factory.Faker("name")
+    deprecated = False
 
 
 class VoiceProviderFactory(factory.django.DjangoModelFactory):
