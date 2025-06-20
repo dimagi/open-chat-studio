@@ -41,7 +41,6 @@ function dashboard() {
             tagAnalytics: false
         },
         
-        showFiltersModal: false,
         activeFilterId: null,
         saving: false,
         
@@ -447,7 +446,6 @@ function dashboard() {
         },
         
         async handleSaveFilter() {
-            console.log('handleSaveFilter called');
             const form = document.getElementById('saveFilterForm');
             if (!form) {
                 console.error('saveFilterForm not found');
@@ -455,13 +453,11 @@ function dashboard() {
             }
             
             this.saving = true;
-            console.log('Current filters:', this.filters);
-            
+
             try {
                 const formData = new FormData(form);
                 formData.set('filter_data', JSON.stringify(this.filters));
-                console.log('FormData prepared with filter_data:', JSON.stringify(this.filters));
-                
+
                 const response = await fetch('filters/save/', {
                     method: 'POST',
                     body: formData,
@@ -469,14 +465,12 @@ function dashboard() {
                         'X-CSRFToken': this.getCSRFToken()
                     }
                 });
-                console.log('Response status:', response.status);
-                
+
                 const data = await response.json();
-                
+
                 if (data.success) {
                     this.showNotification('Filter saved successfully', 'success');
-                    this.closeModal('filtersModal');
-                    
+
                     // Refresh page to show new saved filter
                     setTimeout(() => window.location.reload(), 1000);
                 } else {
@@ -522,21 +516,6 @@ function dashboard() {
             } catch (error) {
                 console.error('Delete filter error:', error);
                 this.showNotification('Failed to delete filter', 'error');
-            }
-        },
-        
-        // Modal management
-        openModal(modalId) {
-            console.log('openModal called with:', modalId);
-            if (modalId === 'filtersModal') {
-                this.showFiltersModal = true;
-                console.log('showFiltersModal set to true');
-            }
-        },
-        
-        closeModal(modalId) {
-            if (modalId === 'filtersModal') {
-                this.showFiltersModal = false;
             }
         },
         

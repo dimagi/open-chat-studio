@@ -17,7 +17,7 @@
 
     <!-- Actions -->
       <div class="mt-4 lg:mt-0 flex gap-2">
-        <button type="button" class="btn btn-outline btn-sm" @click="openModal('filtersModal')">
+        <button type="button" class="btn btn-outline btn-sm" @click="document.getElementById('filtersModal').showModal()">
           <i class="fas fa-bookmark me-1"></i>
           {% trans "Save Filters" %}
         </button>
@@ -330,39 +330,43 @@
         </div>
       </div>
     </div>
-  </div>
+
 
 <!-- Save Filters Modal -->
-  <div class="modal" :class="{ 'modal-open': showFiltersModal }" @click.self="closeModal('filtersModal')">
-    <div class="modal-box">
-      <h3 class="font-bold text-lg">{% trans "Save Filter Preset" %}</h3>
-      <form id="saveFilterForm" class="py-4" @submit.prevent="handleSaveFilter()">
-        {% csrf_token %}
-        <div class="form-control mb-4">
-          <label class="label">{% trans "Preset Name" %}</label>
-          {{ saved_filter_form.name }}
+    <dialog class="modal" id="filtersModal">
+      <div class="modal-box">
+        <h3 class="font-bold text-lg">{% trans "Save Filter Preset" %}</h3>
+        <form id="saveFilterForm" class="py-4" @submit.prevent="handleSaveFilter()">
+          {% csrf_token %}
+          <div class="form-control mb-4">
+            <label class="label">{% trans "Preset Name" %}<span x-text="saving"></span></label>
+            {{ saved_filter_form.name }}
+          </div>
+
+          <div class="form-control mb-4">
+            <label class="label cursor-pointer">
+              {{ saved_filter_form.is_default }}
+              <span class="label-text ml-2">{% trans "Set as default" %}</span>
+            </label>
+          </div>
+
+          {{ saved_filter_form.filter_data }}
+        </form>
+
+        <div class="modal-action">
+          <form method="dialog">
+            <button class="btn btn-outline">
+              {% trans "Cancel" %}
+            </button>
+          </form>
+          <button type="submit" form="saveFilterForm" class="btn btn-primary" :disabled="saving">
+            <span x-show="!saving">{% trans "Save" %}</span>
+            <span x-show="saving" x-cloak class="loading loading-spinner loading-xs"></span>
+          </button>
         </div>
-
-        <div class="form-control mb-4">
-          <label class="label cursor-pointer">
-            {{ saved_filter_form.is_default }}
-            <span class="label-text ml-2">{% trans "Set as default" %}</span>
-          </label>
-        </div>
-
-        {{ saved_filter_form.filter_data }}
-      </form>
-
-      <div class="modal-action">
-        <button type="button" class="btn btn-outline" @click="closeModal('filtersModal')">
-          {% trans "Cancel" %}
-        </button>
-        <button type="submit" form="saveFilterForm" class="btn btn-primary" :disabled="saving">
-          <span x-show="!saving">{% trans "Save" %}</span>
-          <span x-show="saving" class="loading loading-spinner loading-xs"></span>
-        </button>
       </div>
-    </div>
+    </dialog>
+
   </div>
 {% endblock app %}
 
