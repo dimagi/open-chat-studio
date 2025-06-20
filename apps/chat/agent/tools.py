@@ -1,4 +1,5 @@
 import logging
+from dataclasses import dataclass
 from datetime import datetime, timedelta
 from functools import cached_property
 from typing import TYPE_CHECKING, Any, ClassVar, Union
@@ -6,6 +7,7 @@ from typing import TYPE_CHECKING, Any, ClassVar, Union
 from django.db import transaction, utils
 from langchain_community.utilities.openapi import OpenAPISpec
 from langchain_core.tools import BaseTool
+from pgvector.django import CosineDistance
 
 from apps.channels.models import ChannelPlatform
 from apps.chat.agent import schemas
@@ -14,6 +16,7 @@ from apps.chat.models import ChatAttachment
 from apps.events.forms import ScheduledMessageConfigForm
 from apps.events.models import ScheduledMessage, TimePeriod
 from apps.experiments.models import AgentTools, Experiment, ExperimentSession, ParticipantData
+from apps.files.models import FileChunkEmbedding
 from apps.pipelines.models import Node
 from apps.pipelines.nodes.tool_callbacks import ToolCallbacks
 from apps.utils.time import pretty_date
@@ -29,6 +32,23 @@ CREATE_LINK_TEXT = """You can use this markdown link to reference it in your res
     `[{name}](file:{team_slug}:{session_id}:{file_id})` or `![](file:{team_slug}:{session_id}:{file_id})`
     if it is an image.
 """
+
+CHUNK_RESULT_TEMPLATE = """
+# File: {file_name}
+## Content
+{chunk}
+"""
+
+
+@dataclass
+class SearchToolConfig:
+    index_id: int
+    max_results: int = 5
+
+    def get_index(self):
+        from apps.documents.models import Collection
+
+        return Collection.objects.get(id=self.index_id)
 
 
 class CustomBaseTool(BaseTool):
@@ -242,6 +262,41 @@ class AttachMediaTool(CustomBaseTool):
             return f"Unable to attach file '{file_id}' to the message"
 
 
+class SearchIndexTool(CustomBaseTool):
+    name: str = AgentTools.SEARCH_INDEX
+    description: str = "Search files / source material for relevant information pertaining to the user's query"
+    requires_session: bool = False
+    args_schema: type[schemas.SearchIndexSchema] = schemas.SearchIndexSchema
+    search_config: SearchToolConfig
+
+    @transaction.atomic
+    def action(self, query: str) -> str:
+        """
+        Do a simple search for the top most relevant file chunks based on the query provided by the user. A little query
+        rewriting is automatically done by the LLM, since it decides what query to use when invoking this tool.
+        """
+        # - [ ] Generate references
+        index = self.search_config.get_index()
+        max_results = self.search_config.max_results
+
+        query_vector = index.get_query_vector(query)
+        # This query is automatically team scoped
+        embeddings = (
+            FileChunkEmbedding.objects.annotate(distance=CosineDistance("embedding", query_vector))
+            .filter(collection_id=index.id)
+            .order_by("distance")
+            .select_related("file")
+            .only("text", "file__name")[:max_results]
+        )
+        return "".join([self._format_result(embedding) for embedding in embeddings])
+
+    def _format_result(self, embedding: FileChunkEmbedding) -> str:
+        """
+        Format the result from the search index into a more structured format.
+        """
+        return CHUNK_RESULT_TEMPLATE.format(file_name=embedding.file.name, chunk=embedding.text)
+
+
 def _move_datetime_to_new_weekday_and_time(date: datetime, new_weekday: int, new_hour: int, new_minute: int):
     current_weekday = date.weekday()
     day_diff = new_weekday - current_weekday
@@ -303,6 +358,7 @@ TOOL_CLASS_MAP = {
     AgentTools.UPDATE_PARTICIPANT_DATA: UpdateParticipantDataTool,
     AgentTools.END_SESSION: EndSessionTool,
     AgentTools.ATTACH_MEDIA: AttachMediaTool,
+    AgentTools.SEARCH_INDEX: SearchIndexTool,
 }
 
 

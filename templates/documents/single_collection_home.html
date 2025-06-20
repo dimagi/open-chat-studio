@@ -20,7 +20,7 @@
         <div>
           <h1 class="pg-title">{{ collection.name }} {% if collection.is_index %}<span class="badge badge-sm badge-ghost">Collection Index</span>{% endif %}</h1>
           <div class="text-sm text-base-content/60 mt-1">
-            {% if collection.is_index %}
+            {% if collection.is_remote_index %}
               <span class="pg-text-muted">OpenAI vector store id: {% include "generic/copy_chip.html" with copy_element_id="copy_vector_store_id" copy_value=collection.openai_vector_store_id extra_styles="btn-ghost" %}</span>
 
             {% endif %}
@@ -94,6 +94,11 @@
                 <div class="text-xs badge badge-ghost">{{ collection_file.file_size_mb }} MB</div>
               </div>
               {% if collection.is_index %}
+                {% if not collection.is_remote_index %}
+                  <div class="flex flex-row items-center gap-2">
+                    <span class="text-xs text-base-content/70">{{ collection_file.chunk_count }} chunks</span>
+                  </div>
+                {% endif %}
                 <div class="flex flex-row items-center gap-2">
                   <span class="text-xs text-base-content/70">Chunking Strategy:</span>
                   <div class="badge badge-sm badge-ghost">Size: {{ collection_file.chunking_strategy.chunk_size }} tokens</div>

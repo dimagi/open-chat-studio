@@ -71,3 +71,4 @@ nav:
     - Changelog: developer_guides/changelog.md
     - Feature Flags: developer_guides/feature_flags.md
     - Slack Channel Integration: developer_guides/slack_channel_integration.md
+    - Index Managers: developer_guides/index_managers.md

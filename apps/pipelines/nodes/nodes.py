@@ -17,6 +17,7 @@ from jinja2.sandbox import SandboxedEnvironment
 from langchain_core.messages import BaseMessage
 from langchain_core.prompts import MessagesPlaceholder, PromptTemplate
 from langchain_core.runnables import RunnableLambda, RunnablePassthrough
+from langchain_core.tools import BaseTool
 from langchain_openai.chat_models.base import OpenAIRefusalError
 from langchain_text_splitters import RecursiveCharacterTextSplitter
 from pydantic import BaseModel, BeforeValidator, Field, create_model, field_serializer, field_validator, model_validator
@@ -49,7 +50,6 @@ from apps.pipelines.tasks import send_email_from_pipeline
 from apps.service_providers.exceptions import ServiceProviderConfigError
 from apps.service_providers.llm_service.adapters import AssistantAdapter, ChatAdapter
 from apps.service_providers.llm_service.history_managers import PipelineHistoryManager
-from apps.service_providers.llm_service.main import OpenAIBuiltinTool
 from apps.service_providers.llm_service.prompt_context import PromptTemplateContext
 from apps.service_providers.llm_service.runnables import (
     AgentAssistantChat,
@@ -330,6 +330,14 @@ class LLMResponseWithPrompt(LLMResponse, HistoryMixin, OutputMessageTagMixin):
             widget=Widgets.select, options_source=OptionsSource.collection_index, flag_required="flag_pipelines-v2"
         ),
     )
+    max_results: OptionalInt = Field(
+        default=20,
+        ge=1,
+        le=100,
+        description="The maximum number of results to retrieve from the index",
+        json_schema_extra=UiSchema(widget=Widgets.range),
+    )
+
     tools: list[str] = Field(
         default_factory=list,
         description="The tools to enable for the bot",
@@ -406,14 +414,11 @@ class LLMResponseWithPrompt(LLMResponse, HistoryMixin, OutputMessageTagMixin):
             chat_model=chat_model,
         )
         tool_callbacks = ToolCallbacks()
-        tools = get_node_tools(self.django_node, session, tool_callbacks=tool_callbacks)
-        built_in_tools = self.built_in_tools
-        tools.extend(self.get_llm_service().attach_built_in_tools(built_in_tools, self.tool_config))
-        if self.collection_index_id:
-            collection = Collection.objects.get(id=self.collection_index_id)
-            builtin_tools = OpenAIBuiltinTool(type="file_search", vector_store_ids=[collection.openai_vector_store_id])
-            tools.append(builtin_tools)
 
+        # Tools setup
+        tools = self._get_configured_tools(session=session, tool_callbacks=tool_callbacks)
+
+        # Chat setup
         chat_adapter = ChatAdapter.for_pipeline(
             session=session,
             node=self,
@@ -447,6 +452,18 @@ class LLMResponseWithPrompt(LLMResponse, HistoryMixin, OutputMessageTagMixin):
             },
             intents=tool_callbacks.intents,
         )
+
+    def _get_configured_tools(
+        self, session: ExperimentSession | None, tool_callbacks: ToolCallbacks
+    ) -> list[dict | BaseTool]:
+        """Get instantiated tools for the given node configuration."""
+        tools = get_node_tools(self.django_node, session, tool_callbacks=tool_callbacks)
+        tools.extend(self.get_llm_service().attach_built_in_tools(self.built_in_tools, self.tool_config))
+        if self.collection_index_id:
+            collection = Collection.objects.get(id=self.collection_index_id)
+            tools.append(collection.get_search_tool(max_results=self.max_results))
+
+        return tools
 
 
 class SendEmail(PipelineNode, OutputMessageTagMixin):

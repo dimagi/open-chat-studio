@@ -17,13 +17,16 @@
   </div>
 {% endblock %}
 {% block form %}
-  <div x-data="{isIndex: {% if form.instance.is_index %}true{% else %}false{% endif %}, currentProvider: '{{ form.instance.llm_provider_id }}', llmProvider: '{{ form.instance.llm_provider_id }}'}">
+  <div x-data="collection">
     {% render_form_fields form "name" "is_index" %}
 
     <div x-cloak x-show="isIndex">
-      {% render_field form.llm_provider xmodel="llmProvider" %}
+      {% render_field form.llm_provider %}
+      {% render_field form.embedding_provider_model xshow="!isRemoteIndex" %}
+      {% render_field form.is_remote_index xshow="showIndexingBackendChoice" %}
+
       {% if form.instance.id %}
-        <div role="alert" class="bg-base-200 rounded-lg alert alert-warning alert-soft flex flex-col" x-cloak x-show="currentProvider !== llmProvider">
+        <div role="alert" class="bg-base-200 rounded-lg alert alert-warning alert-soft flex flex-col" x-cloak x-show="initialProviderId !== selectedLlmProviderId">
           <h3 class="font-semibold mb-2">Continue with caution! Changing the LLM provider will</h3>
           <ul class="w-full list-disc list-inside space-y-1 text-sm">
             <li>Remove the current vector store</li>
@@ -35,4 +38,53 @@
       {% endif %}
     </div>
   </div>
+
+  {{ embedding_model_options|json_script:"embeddingModelOptions" }}
+  {{ provider_types|json_script:"providerTypes" }}
+  {{ open_ai_provider_ids|json_script:"openAIProviderIds" }}
+  <script>
+    document.addEventListener('alpine:init', () => {
+      const embeddingModelOptions = JSON.parse(document.getElementById("embeddingModelOptions").textContent);
+      const providerTypes = JSON.parse(document.getElementById("providerTypes").textContent);
+
+      Alpine.data('collection', () => ({
+        isIndex: {% if form.instance.is_index %}true{% else %}false{% endif %},
+        initialProviderId: {{ form.instance.llm_provider_id|default:'null' }},
+        selectedLlmProviderId: {{ form.instance.llm_provider_id|default:'null' }},
+        embedding_provider_model: '{{ form.instance.embedding_provider_model_id|default:form.embedding_provider_model.value|default:'null' }}',
+        embedding_provider_model_options: [],
+        openAIProviderIds: JSON.parse(document.getElementById("openAIProviderIds").textContent),
+        showIndexingBackendChoice: false,
+        isRemoteIndex: {% if form.instance.is_remote_index %}true{% else %}false{% endif %},
+        init() {
+          this.updateEmbeddingModels();
+
+          this.$watch('selectedLlmProviderId', () => {
+            this.updateEmbeddingModels();
+          });
+        },
+        updateEmbeddingModels() {
+          this.showIndexingBackendChoice = this.openAIProviderIds.includes(this.selectedLlmProviderId);
+          if (this.selectedLlmProviderId && this.getProviderType()) {
+            const providerType = this.getProviderType();
+            this.embedding_provider_model_options = embeddingModelOptions[providerType] || [];
+
+            // Reset selection if current model is not available for new provider type
+            const currentModelValid = this.embedding_provider_model_options.some(
+              option => option.value == this.embedding_provider_model
+            );
+            if (!currentModelValid) {
+              this.embedding_provider_model = '';
+            }
+          } else {
+            this.embedding_provider_model_options = [];
+            this.embedding_provider_model = '';
+          }
+        },
+        getProviderType() {
+          return providerTypes[this.selectedLlmProviderId];
+        }
+      }));
+    });
+  </script>
 {% endblock form %}

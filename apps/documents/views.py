@@ -5,6 +5,7 @@ from django.contrib import messages
 from django.contrib.auth.decorators import permission_required
 from django.contrib.auth.mixins import PermissionRequiredMixin
 from django.db import transaction
+from django.db.models import Count, IntegerField, OuterRef, Subquery
 from django.http import HttpResponse, HttpResponseRedirect
 from django.shortcuts import get_object_or_404, redirect, render
 from django.template.loader import render_to_string
@@ -14,15 +15,16 @@ from django.views.decorators.http import require_POST
 from django.views.generic import CreateView, FormView, TemplateView, UpdateView
 from django_tables2 import SingleTableView
 
-from apps.assistants.sync import delete_file_from_openai
 from apps.documents import tasks
 from apps.documents.forms import CollectionForm, CreateCollectionFromAssistantForm
 from apps.documents.models import ChunkingStrategy, Collection, CollectionFile, CollectionFileMetadata, FileStatus
 from apps.documents.tables import CollectionsTable
-from apps.files.models import File
+from apps.files.models import File, FileChunkEmbedding
 from apps.generics import actions
 from apps.generics.chips import Chip
 from apps.generics.help import render_help_with_link
+from apps.service_providers.models import LlmProviderTypes
+from apps.service_providers.utils import get_embedding_provider_choices
 from apps.teams.decorators import login_and_team_required
 from apps.teams.mixins import LoginAndTeamRequiredMixin
 from apps.utils.search import similarity_search
@@ -60,8 +62,16 @@ class CollectionHome(LoginAndTeamRequiredMixin, TemplateView, PermissionRequired
 def single_collection_home(request, team_slug: str, pk: int):
     collection = get_object_or_404(Collection.objects.select_related("team"), id=pk, team__slug=team_slug)
 
-    collection_files = CollectionFile.objects.filter(collection=collection)
-    # Load the labels for the file statuses
+    chunk_count_query = (
+        FileChunkEmbedding.objects.filter(collection_id=OuterRef("collection_id"), file_id=OuterRef("file_id"))
+        .values("collection_id", "file_id")
+        .annotate(count=Count("id"))
+        .values_list("count")
+    )
+
+    collection_files = CollectionFile.objects.filter(collection=collection).annotate(
+        chunk_count=Subquery(chunk_count_query, output_field=IntegerField())
+    )
 
     collection_files_count = collection_files.count()
     context = {
@@ -133,14 +143,13 @@ def delete_collection_file(request, team_slug: str, pk: int, file_id: int):
     if file.is_used():
         if collection.is_index:
             # Remove it from the index only
-            index_manager = collection.llm_provider.get_index_manager()
-            index_manager.delete_file(collection.openai_vector_store_id, file_id=file.external_id)
+            index_manager = collection.get_index_manager()
+            index_manager.delete_file_from_index(file_id=file.external_id)
     else:
         # Nothing else is using it
         if collection.is_index:
-            # Remove it from the remote service altogether
-            client = collection.llm_provider.get_llm_service().get_raw_client()
-            delete_file_from_openai(client, file)
+            index_manager = collection.get_index_manager()
+            index_manager.delete_files(files=[file])
 
         collection_file.file.delete_or_archive()
 
@@ -168,6 +177,21 @@ class CollectionFormMixin:
         kwargs["request"] = self.request
         return kwargs
 
+    def get_context_data(self, **kwargs):
+        context = super().get_context_data(**kwargs)
+
+        # Create a mapping of provider ID to provider type for JavaScript
+        provider_types = {}
+        for provider in self.request.team.llmprovider_set.all():
+            provider_types[provider.id] = provider.type
+
+        context["provider_types"] = provider_types
+        context["embedding_model_options"] = get_embedding_provider_choices(self.request.team)
+        context["open_ai_provider_ids"] = list(
+            self.request.team.llmprovider_set.filter(type=LlmProviderTypes.openai).values_list("id", flat=True)
+        )
+        return context
+
 
 class CreateCollection(LoginAndTeamRequiredMixin, CollectionFormMixin, CreateView, PermissionRequiredMixin):
     model = Collection
@@ -187,11 +211,10 @@ class CreateCollection(LoginAndTeamRequiredMixin, CollectionFormMixin, CreateVie
     def form_valid(self, form):
         form.instance.team = self.request.team
         response = super().form_valid(form)
+        collection = form.instance
         if form.instance.is_index:
-            collection = form.instance
-            manager = collection.llm_provider.get_index_manager()
-            collection.openai_vector_store_id = manager.create_vector_store(name=collection.index_name)
-            collection.save(update_fields=["openai_vector_store_id"])
+            if form.cleaned_data["is_remote_index"]:
+                collection.ensure_remote_index_created()
 
         return response
 
@@ -219,18 +242,18 @@ class EditCollection(LoginAndTeamRequiredMixin, CollectionFormMixin, UpdateView,
         collection = form.instance
         old_vector_store_id = collection.openai_vector_store_id
 
-        if form.instance.is_index and "llm_provider" in form.changed_data:
+        if form.instance.is_index and form.instance.is_remote_index and "llm_provider" in form.changed_data:
             with transaction.atomic():
-                new_manager = collection.llm_provider.get_index_manager()
-                collection.openai_vector_store_id = new_manager.create_vector_store(collection.index_name)
-                collection.save(update_fields=["openai_vector_store_id"])
+                collection.openai_vector_store_id = None  # Reset the vector store ID
+                collection.ensure_remote_index_created()
+                CollectionFile.objects.filter(collection_id=collection.id).update(status=FileStatus.PENDING)
 
-            CollectionFile.objects.filter(collection_id=collection.id).update(status=FileStatus.PENDING)
             tasks.migrate_vector_stores.delay(
                 collection_id=form.instance.id,
                 from_vector_store_id=old_vector_store_id,
                 from_llm_provider_id=form.initial["llm_provider"],
             )
+
         return response
 
 
@@ -317,6 +340,7 @@ class CreateCollectionFromAssistant(LoginAndTeamRequiredMixin, FormView, Permiss
                 team=self.request.team,
                 name=collection_name,
                 is_index=True,
+                is_remote_index=True,
                 llm_provider=assistant.llm_provider,
             )
             self.object = collection
