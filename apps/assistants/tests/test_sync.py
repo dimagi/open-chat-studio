@@ -21,7 +21,8 @@ from apps.assistants.sync import (
     remove_files_from_tool,
     sync_from_openai,
 )
-from apps.chat.agent import tools
+from apps.chat.agent.tools import TOOL_CLASS_MAP
+from apps.experiments.models import AgentTools
 from apps.service_providers.llm_service.index_managers import OpenAIVectorStoreManager
 from apps.utils.factories.assistants import OpenAiAssistantFactory
 from apps.utils.factories.documents import CollectionFactory
@@ -33,6 +34,9 @@ from apps.utils.factories.service_provider_factories import LlmProviderFactory
 @dataclasses.dataclass
 class ObjectWithId:
     id: str
+
+
+LEGACY_EXPERIMENT_TOOLS = AgentTools.reminder_tools() + [AgentTools.UPDATE_PARTICIPANT_DATA]
 
 
 @pytest.mark.django_db()
@@ -95,7 +99,7 @@ def test_push_assistant_to_openai_update(mock_update, vs_retrieve, vs_files_list
 
     openai_files = FileObjectFactory.create_batch(2)
 
-    internal_tools = [tool_cls(experiment_session=None) for tool_cls in tools.TOOL_CLASS_MAP.values()]
+    internal_tools = [TOOL_CLASS_MAP[tool](experiment_session=None) for tool in LEGACY_EXPERIMENT_TOOLS]
     with patch("openai.resources.Files.create", side_effect=openai_files) as mock_file_create:
         push_assistant_to_openai(local_assistant, internal_tools=internal_tools)
     assert mock_update.called
@@ -105,7 +109,7 @@ def test_push_assistant_to_openai_update(mock_update, vs_retrieve, vs_files_list
     # Make sure that all tools in TOOL_CLASS_MAP was speceified
     tool_specs = mock_update.call_args_list[0].kwargs.get("tools")
     tool_names = set([tool_spec["function"]["name"] for tool_spec in tool_specs if "function" in tool_spec])
-    expected_tools = set(tools.TOOL_CLASS_MAP.keys())
+    expected_tools = set(LEGACY_EXPERIMENT_TOOLS)
     assert expected_tools - tool_names == set()
 
     assert file_batches.call_args_list == [

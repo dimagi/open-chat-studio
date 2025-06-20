@@ -12,17 +12,14 @@ from django.db import models, transaction
 from django.urls import reverse
 from langchain_core.messages import AIMessage, BaseMessage, HumanMessage, SystemMessage
 
-from apps.chat.models import ChatMessage, ChatMessageType
+from apps.chat.models import ChatMessageType
 from apps.custom_actions.form_utils import set_custom_actions
 from apps.custom_actions.mixins import CustomActionOperationMixin
-from apps.experiments.models import Experiment, ExperimentSession, SourceMaterial
+from apps.experiments.models import ExperimentSession, SourceMaterial
 from apps.experiments.versioning import VersionDetails, VersionField, VersionsMixin, VersionsObjectManagerMixin
 from apps.pipelines.exceptions import PipelineBuildError
-from apps.pipelines.executor import patch_executor
 from apps.pipelines.flow import Flow, FlowNode, FlowNodeData
 from apps.pipelines.helper import duplicate_pipeline_with_new_ids
-from apps.pipelines.nodes.base import PipelineState
-from apps.pipelines.nodes.helpers import temporary_session
 from apps.teams.models import BaseTeamModel
 from apps.utils.models import BaseModel
 
@@ -306,83 +303,6 @@ class Pipeline(BaseTeamModel, VersionsMixin):
     @property
     def node_ids(self):
         return self.node_set.order_by("created_at").values_list("flow_id", flat=True).all()
-
-    def simple_invoke(self, input: str, user_id: int) -> PipelineState:
-        """Invoke the pipeline without a session or the ability to save the run to history"""
-        from apps.pipelines.graph import PipelineGraph
-
-        with temporary_session(self.team, user_id) as session:
-            runnable = PipelineGraph.build_runnable_from_pipeline(self)
-            input = PipelineState(messages=[input], experiment_session=session)
-            with patch_executor():
-                output = runnable.invoke(input, config={"max_concurrency": 1})
-            output = PipelineState(**output).json_safe()
-        return output
-
-    def invoke(
-        self,
-        input: PipelineState,
-        session: ExperimentSession,
-        experiment: Experiment,
-        trace_service,
-        save_run_to_history=True,
-        save_input_to_history=True,
-        disable_reminder_tools=False,
-    ) -> ChatMessage:
-        from apps.experiments.models import AgentTools
-        from apps.pipelines.graph import PipelineGraph
-
-        graph = PipelineGraph.build_from_pipeline(self)
-        config = trace_service.get_langchain_config(
-            configurable={
-                "disabled_tools": AgentTools.reminder_tools() if disable_reminder_tools else [],
-            },
-            run_name_map=graph.node_id_to_name_mapping,
-            filter_patterns=graph.filter_patterns,
-        )
-        runnable = graph.build_runnable()
-        raw_output = runnable.invoke(input, config=config)
-        output = PipelineState(**raw_output).json_safe()
-        if save_run_to_history and session is not None:
-            input_metadata = output.get("input_message_metadata", {})
-            output_metadata = output.get("output_message_metadata", {})
-            trace_metadata = trace_service.get_trace_metadata() if trace_service else None
-            if trace_metadata:
-                input_metadata.update(trace_metadata)
-                output_metadata.update(trace_metadata)
-
-            if save_input_to_history:
-                self._save_message_to_history(
-                    session, input["messages"][-1], ChatMessageType.HUMAN, metadata=input_metadata
-                )
-            ai_message = self._save_message_to_history(
-                session,
-                output["messages"][-1],
-                ChatMessageType.AI,
-                metadata=output_metadata,
-                tags=output.get("output_message_tags"),
-            )
-            ai_message.add_version_tag(version_number=experiment.version_number, is_a_version=experiment.is_a_version)
-            return ai_message
-        else:
-            return ChatMessage(content=output)
-
-    def _save_message_to_history(
-        self,
-        session: ExperimentSession,
-        message: str,
-        type_: ChatMessageType,
-        metadata: dict,
-        tags: list[tuple] = None,
-    ) -> ChatMessage:
-        chat_message = ChatMessage.objects.create(
-            chat=session.chat, message_type=type_.value, content=message, metadata=metadata
-        )
-
-        if tags:
-            for tag_value, category in tags:
-                chat_message.create_and_add_tag(tag_value, category or "")
-        return chat_message
 
     @transaction.atomic()
     def create_new_version(self, is_copy: bool = False):
