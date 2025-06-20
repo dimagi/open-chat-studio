@@ -5,6 +5,7 @@ import logging
 import random
 import time
 import unicodedata
+from copy import deepcopy
 from typing import Annotated, Literal, Self
 
 import tiktoken
@@ -1088,17 +1089,24 @@ class CodeNode(PipelineNode, OutputMessageTagMixin):
         )
 
         custom_locals = {}
-        custom_globals = self._get_custom_globals(self.node_id, state)
-        # TODO: tracing {"logger": self.logger}
+        output_state = PipelineState()
+        custom_globals = self._get_custom_globals(self.node_id, state, output_state)
         kwargs = {}
         try:
             exec(byte_code, custom_globals, custom_locals)
             result = str(custom_locals[function_name](input, **kwargs))
         except Exception as exc:
             raise PipelineNodeRunError(exc) from exc
-        return PipelineState.from_node_output(node_name=self.name, node_id=self.node_id, output=result)
 
-    def _get_custom_globals(self, node_id, state: PipelineState):
+        return PipelineState.from_node_output(node_name=self.name, node_id=self.node_id, output=result, **output_state)
+
+    def _get_custom_globals(self, node_id, state: PipelineState, output_state: PipelineState) -> dict:
+        """
+        Args:
+            node_id: This node's ID
+            state: The input state. Do not modify this state.
+            output_state: An empty state dict to which state modifications should be made.
+        """
         from RestrictedPython.Eval import (
             default_guarded_getitem,
             default_guarded_getiter,
@@ -1107,7 +1115,11 @@ class CodeNode(PipelineNode, OutputMessageTagMixin):
         custom_globals = safe_globals.copy()
 
         participant_data_proxy = self.get_participant_data_proxy(state)
-        pipeline_state = PipelineState(state.copy())
+        pipeline_state = PipelineState(deepcopy(state))
+
+        # copy this from input to output to create a consistent view within the code execution
+        output_state["temp_state"] = pipeline_state.get("temp_state") or {}
+
         # add this node into the state so that we can trace the path
         pipeline_state["outputs"] = {**state["outputs"], self.name: {"node_id": node_id}}
         custom_globals.update(
@@ -1122,15 +1134,15 @@ class CodeNode(PipelineNode, OutputMessageTagMixin):
                 "get_participant_data": participant_data_proxy.get,
                 "set_participant_data": participant_data_proxy.set,
                 "get_participant_schedules": participant_data_proxy.get_schedules,
-                "get_temp_state_key": self._get_temp_state_key(state),
-                "set_temp_state_key": self._set_temp_state_key(state),
+                "get_temp_state_key": self._get_temp_state_key(output_state),
+                "set_temp_state_key": self._set_temp_state_key(output_state),
                 "get_session_state_key": self._get_session_state_key(state["experiment_session"]),
                 "set_session_state_key": self._set_session_state_key(state["experiment_session"]),
                 "get_selected_route": pipeline_state.get_selected_route,
                 "get_node_path": pipeline_state.get_node_path,
                 "get_all_routes": pipeline_state.get_all_routes,
-                "add_message_tag": pipeline_state.add_message_tag,
-                "add_session_tag": pipeline_state.add_session_tag,
+                "add_message_tag": output_state.add_message_tag,
+                "add_session_tag": output_state.add_session_tag,
             }
         )
         return custom_globals
