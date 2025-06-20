@@ -14,6 +14,10 @@ class PromptVars(models.TextChoices):
     CURRENT_DATETIME = "current_datetime"
     MEDIA = "media"
 
+    @staticmethod
+    def pipeline_extra_known_vars() -> set[str]:
+        return {"temp_state", "session_state"}
+
 
 PROMPT_VARS_REQUIRED_BY_TOOL = {
     AgentTools.DELETE_REMINDER: [PromptVars.PARTICIPANT_DATA],
@@ -107,11 +111,11 @@ def _ensure_variable_components_are_present(context: dict, prompt_variables: set
 
 def get_root_var(var: str) -> str:
     """Returns the root variable name from a nested variable name.
-    Only `participant_data` is supported.
 
     See `apps.service_providers.llm_service.prompt_context.SafeAccessWrapper`
     """
-    if not var.startswith(PromptVars.PARTICIPANT_DATA.value):
+    vars_with_nested_data = {PromptVars.PARTICIPANT_DATA.value, "temp_state", "session_state"}
+    if not any(var.startswith(nested) for nested in vars_with_nested_data):
         return var
 
     var_root = var.split(".")[0]

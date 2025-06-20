@@ -193,7 +193,7 @@ class EndSessionTool(CustomBaseTool):
     description: str = (
         "End the current chat session. "
         "This will mark the session as completed. "
-        "New messages will result in a new session being createed."
+        "New messages will result in a new session being created."
     )
 
     def action(self):

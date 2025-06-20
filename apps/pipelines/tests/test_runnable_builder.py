@@ -156,17 +156,19 @@ def test_llm_with_prompt_response(
         llm_response_with_prompt_node(
             str(provider.id),
             str(provider_model.id),
-            source_material_id=str(source_material.id),
-            prompt="Node 2: {source_material}",
+            prompt="Node 2: {temp_state.temp_key} {session_state.session_key}",
             name="llm2",
         ),
         end_node(),
     ]
+    experiment_session.state = {"session_key": "session_value"}
     output = create_runnable(pipeline, nodes).invoke(
-        PipelineState(messages=[user_input], experiment_session=experiment_session)
+        PipelineState(
+            messages=[user_input], experiment_session=experiment_session, temp_state={"temp_key": "temp_value"}
+        )
     )["messages"][-1]
     expected_output = (
-        f"Node 2: {source_material.material} Node 1: Use this {source_material.material} to answer questions "
+        f"Node 2: temp_value session_value Node 1: Use this {source_material.material} to answer questions "
         f"about {participant_data.data}. {user_input}"
     )
     assert output == expected_output

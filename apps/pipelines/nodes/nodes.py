@@ -360,7 +360,9 @@ class LLMResponseWithPrompt(LLMResponse, HistoryMixin, OutputMessageTagMixin):
             "media": self.collection_id,
         }
         try:
-            validate_prompt_variables(context=context, prompt_key="prompt", known_vars=set(PromptVars.values))
+            # FUTURE TODO: add temp_state and session_state to PromptVars
+            known_vars = set(PromptVars.values) | PromptVars.pipeline_extra_known_vars()
+            validate_prompt_variables(context=context, prompt_key="prompt", known_vars=known_vars)
             return self
         except ValidationError as e:
             raise PydanticCustomError(
@@ -418,6 +420,7 @@ class LLMResponseWithPrompt(LLMResponse, HistoryMixin, OutputMessageTagMixin):
             llm_service=self.get_llm_service(),
             provider_model=provider_model,
             tools=tools,
+            pipeline_state=state,
             disabled_tools=self.disabled_tools,
         )
         allowed_tools = chat_adapter.get_allowed_tools()
@@ -601,9 +604,8 @@ class RouterNode(RouterMixin, PipelineRouterNode, HistoryMixin):
             "prompt": self.prompt,
         }
         try:
-            validate_prompt_variables(
-                context=context, prompt_key="prompt", known_vars=set([PromptVars.PARTICIPANT_DATA])
-            )
+            known_vars = {PromptVars.PARTICIPANT_DATA.value} | PromptVars.pipeline_extra_known_vars()
+            validate_prompt_variables(context=context, prompt_key="prompt", known_vars=known_vars)
             return self
         except ValidationError as e:
             raise PydanticCustomError(
@@ -623,7 +625,11 @@ class RouterNode(RouterMixin, PipelineRouterNode, HistoryMixin):
         node_input = state["messages"][-1]
 
         context = {"input": node_input}
-        context.update(PromptTemplateContext(session).get_context(prompt.input_variables))
+        extra_prompt_context = {
+            "temp_state": state.get("temp_state", {}),
+            "session_state": session.state or {},
+        }
+        context.update(PromptTemplateContext(session, extra=extra_prompt_context).get_context(prompt.input_variables))
 
         if self.history_type != PipelineChatHistoryTypes.NONE and session:
             input_messages = prompt.format_messages(**context)
