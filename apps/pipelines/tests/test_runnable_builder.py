@@ -187,9 +187,9 @@ def test_render_template(pipeline):
 @django_db_with_data(available_apps=("apps.service_providers",))
 def test_conditional_node(pipeline, experiment_session):
     start = start_node()
-    boolean = boolean_node()
-    template_true = render_template_node("said hello")
-    template_false = render_template_node("didn't say hello, said {{ input }}")
+    boolean = boolean_node(name="boolean")
+    template_true = render_template_node("said hello", name="T-true")
+    template_false = render_template_node("didn't say hello, said {{ input }}", name="T-false")
     end = end_node()
     nodes = [
         start,
@@ -229,7 +229,7 @@ def test_conditional_node(pipeline, experiment_session):
     assert output["outputs"] == {
         "start": {"message": "hello", "node_id": start["id"]},
         "boolean": {"route": "true", "message": "hello", "output_handle": "output_0", "node_id": boolean["id"]},
-        template_true["params"]["name"]: {"message": "said hello", "node_id": template_true["id"]},
+        "T-true": {"message": "said hello", "node_id": template_true["id"]},
         "end": {"message": "said hello", "node_id": end["id"]},
     }
 
@@ -238,7 +238,7 @@ def test_conditional_node(pipeline, experiment_session):
     assert output["outputs"] == {
         "start": {"message": "bad", "node_id": start["id"]},
         "boolean": {"route": "false", "message": "bad", "output_handle": "output_1", "node_id": boolean["id"]},
-        template_false["params"]["name"]: {"message": "didn't say hello, said bad", "node_id": template_false["id"]},
+        "T-false": {"message": "didn't say hello, said bad", "node_id": template_false["id"]},
         "end": {"message": "didn't say hello, said bad", "node_id": end["id"]},
     }
 
@@ -260,9 +260,7 @@ def test_router_node_prompt(get_llm_service, provider, provider_model, pipeline,
     )
     node._process_conditional(
         PipelineState(
-            outputs={"123": {"message": "a"}},
-            messages=["a"],
-            experiment_session=experiment_session,
+            outputs={"123": {"message": "a"}}, messages=["a"], experiment_session=experiment_session, node_input="a"
         ),
     )
 
@@ -374,7 +372,11 @@ def test_static_router_case_sensitive(pipeline, experiment_session):
 def test_router_sets_tags_correctly(pipeline, experiment_session):
     start = start_node()
     router = state_key_router_node(
-        "route_to", ["first", "second"], data_source=StaticRouterNode.DataSource.temp_state, tag_output=True
+        "route_to",
+        ["first", "second"],
+        data_source=StaticRouterNode.DataSource.temp_state,
+        tag_output=True,
+        name="static router",
     )
     template_a = render_template_node("A")
     template_b = render_template_node("B")
@@ -952,6 +954,9 @@ def test_multiple_valid_inputs(pipeline):
         experiment_session=experiment_session,
     )
     output = create_runnable(pipeline, nodes, edges).invoke(state)
+    import pprint
+
+    pprint.pprint(output)
     assert output["messages"][-1] == "T: not hello"
 
 
@@ -1137,6 +1142,7 @@ def test_router_node_output_structure(provider, provider_model, pipeline, experi
             experiment_session=experiment_session,
             temp_state={"user_input": "hello world", "outputs": {}},
             path=[],
+            node_input="hello world",
         )
         with mock.patch.object(node, "_process_conditional", return_value=("A", True)):
             edge_map = {"A": "next_node_a", "B": "next_node_b"}
@@ -1151,7 +1157,7 @@ def test_router_node_output_structure(provider, provider_model, pipeline, experi
             assert "message" in output_state["outputs"][node.name]
             assert output_state["outputs"][node.name]["route"] == "A"
             assert output_state["outputs"][node.name]["message"] == state["node_input"]
-            assert command.goto == "next_node_a"
+            assert command.goto == ["next_node_a"]
 
 
 def test_get_selected_route():
@@ -1250,9 +1256,7 @@ def test_router_node_openai_refusal_uses_default_keyword(get_llm_service, provid
     )
     node.default_keyword_index = 0
     state = PipelineState(
-        outputs={"123": {"message": "a"}},
-        messages=["a"],
-        experiment_session=experiment_session,
+        outputs={"123": {"message": "a"}}, messages=["a"], experiment_session=experiment_session, node_input="a"
     )
 
     keyword, is_default_keyword = node._process_conditional(state)
