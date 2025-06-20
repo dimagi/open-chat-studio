@@ -122,6 +122,8 @@ class TwilioService(MessagingService):
         backoff.constant,
         lambda status: status not in [MessageInstance.Status.DELIVERED, MessageInstance.Status.READ],
         max_time=10,
+        interval=2,
+        jitter=None,
     )
     def block_until_delivered(self, current_chunk_sid: str) -> bool:
         """
