@@ -55,17 +55,29 @@ class CollectionForm(forms.ModelForm):
             return self.instance.is_remote_index
         return self.cleaned_data["is_remote_index"]
 
-    def clean_llm_provider(self):
-        if self.cleaned_data["is_index"] and not self.cleaned_data["llm_provider"]:
-            raise forms.ValidationError("This field is required when creating an index.")
-        return self.cleaned_data["llm_provider"]
-
     def clean(self):
         cleaned_data = super().clean()
+        is_index = self.cleaned_data["is_index"]
+        llm_provider = self.cleaned_data["llm_provider"]
         is_remote_index = self.cleaned_data["is_remote_index"]
         embedding_provider_model = self.cleaned_data["embedding_provider_model"]
-        if is_remote_index is False and not embedding_provider_model:
-            raise forms.ValidationError("An embedding model is required for local indexes.")
+
+        if is_index:
+            if not llm_provider:
+                raise forms.ValidationError({"llm_provider": "This field is required when creating an index."})
+
+            if is_remote_index:
+                self.cleaned_data["embedding_provider_model"] = None
+            elif not embedding_provider_model:
+                raise forms.ValidationError(
+                    {"embedding_provider_model": "Local indexes require an embedding model to be selected."}
+                )
+        else:
+            # Clear these fields incase they were selected
+            self.cleaned_data["llm_provider"] = None
+            self.cleaned_data["embedding_provider_model"] = None
+            self.cleaned_data["is_remote_index"] = False
+
         return cleaned_data
 
 
