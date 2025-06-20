@@ -198,15 +198,24 @@ class PipelineState(dict):
                 return output["message"]
         return None
 
-    def get_node_inputs(self, incoming_nodes: list[str]) -> dict[str, Any]:
+    def get_node_inputs(self, node_id: str, incoming_nodes: list[str]) -> dict[str, Any]:
         """
-        Get the inputs for the given incoming nodes from the state.
+        Get the inputs for the given node based on the node's incoming edges.
 
         Returns:
             A dictionary mapping incoming node IDs to their respective outputs in the state.
-            If a node ID is not found in the state, it's value in the dictionary will be None.
+            If there is no output for an incoming edge or if that edge was not targeted,
+            the value in the output will be None.
         """
-        return {incoming_node_id: self.get_node_output(incoming_node_id) for incoming_node_id in incoming_nodes}
+        inputs = {}
+        for incoming_node_id in incoming_nodes:
+            targets = [step[2] for step in self["path"] if step[1] == incoming_node_id]
+            if targets and node_id in targets[0]:
+                # only include outputs from nodes that targeted the current node
+                inputs[incoming_node_id] = self.get_node_output(incoming_node_id)
+            else:
+                inputs[incoming_node_id] = None
+        return inputs
 
     @classmethod
     def from_router_output(
@@ -256,7 +265,7 @@ class BasePipelineNode(BaseModel, ABC):
                 Attachment.model_validate(att) for att in state.get("attachments", [])
             ]
         else:
-            for incoming_node_id, output in reversed(state.get_node_inputs(incoming_nodes).items()):
+            for incoming_node_id, output in reversed(state.get_node_inputs(node_id, incoming_nodes).items()):
                 if output is not None:
                     state["node_input"] = output
                     state["node_source"] = incoming_node_id

@@ -957,6 +957,7 @@ def test_multiple_valid_inputs(pipeline):
     import pprint
 
     pprint.pprint(output)
+    print(PipelineState(output).get_execution_flow())
     assert output["messages"][-1] == "T: not hello"
 
 
