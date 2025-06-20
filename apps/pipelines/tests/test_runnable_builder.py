@@ -1134,16 +1134,15 @@ def test_router_node_output_structure(provider, provider_model, pipeline, experi
             llm_provider_model_id=provider_model.id,
         )
         state = PipelineState(
-            outputs={"test_router": {"message": "hello world", "node_id": "123"}},
+            outputs={"prev_node": {"message": "hello world", "node_id": "prev_node"}},
             messages=["hello world"],
             experiment_session=experiment_session,
             temp_state={"user_input": "hello world", "outputs": {}},
-            path=[],
-            node_input="hello world",
+            path=[("", "prev_node", [node_id])],
         )
         with mock.patch.object(node, "_process_conditional", return_value=("A", True)):
             edge_map = {"A": "next_node_a", "B": "next_node_b"}
-            incoming_edges = ["123"]
+            incoming_edges = ["prev_node"]
             router_func = node.build_router_function(edge_map, incoming_edges)
             command = router_func(state, {})
 
@@ -1153,7 +1152,7 @@ def test_router_node_output_structure(provider, provider_model, pipeline, experi
             assert "route" in output_state["outputs"][node.name]
             assert "message" in output_state["outputs"][node.name]
             assert output_state["outputs"][node.name]["route"] == "A"
-            assert output_state["outputs"][node.name]["message"] == state["node_input"]
+            assert output_state["outputs"][node.name]["message"] == "hello world"
             assert command.goto == ["next_node_a"]
 
 

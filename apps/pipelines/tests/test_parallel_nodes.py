@@ -169,6 +169,7 @@ def main(input, **kwargs):
             ("start", "C", ["Code"]),
             ("start", "A", ["B"]),
             ("A", "B", ["Code"]),
+            ("C", "Code", ["end"]),
             ("Code", "end", []),
         ],
         [
@@ -176,6 +177,7 @@ def main(input, **kwargs):
             ("start", "A", ["B"]),
             ("start", "C", ["Code"]),
             ("A", "B", ["Code"]),
+            ("C", "Code", ["end"]),
             ("Code", "end", []),
         ],
     ]
