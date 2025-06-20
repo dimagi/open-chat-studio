@@ -257,7 +257,7 @@ class BasePipelineNode(BaseModel, ABC):
             ]
         else:
             for incoming_node_id, output in reversed(state.get_node_inputs(incoming_nodes).items()):
-                if output:
+                if output is not None:
                     state["node_input"] = output
                     state["node_source"] = incoming_node_id
                     break
