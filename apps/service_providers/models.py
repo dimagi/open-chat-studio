@@ -139,8 +139,21 @@ class LlmProvider(BaseTeamModel, ProviderMixin):
         config = {k: v for k, v in self.config.items() if v}
         return self.type_enum.get_llm_service(config)
 
-    def get_index_manager(self):
-        return self.get_llm_service().get_index_manager()
+    def get_remote_index_manager(self, index_id: str):
+        return self.get_llm_service().get_remote_index_manager(index_id)
+
+    def get_local_index_manager(self, embedding_model_name: str):
+        """
+        Returns a LocalIndexManager for the given embedding model.
+        """
+        return self.get_llm_service().get_local_index_manager(embedding_model_name)
+
+    def create_remote_index(self, name: str, file_ids: list = None) -> str:
+        """
+        Creates a remote index with the given name and returns its ID.
+        If file_ids are provided, they will be linked to the index.
+        """
+        return self.get_llm_service().create_remote_index(name, file_ids)
 
 
 class LlmProviderModelManager(models.Manager):
@@ -491,6 +504,11 @@ class TraceProvider(BaseTeamModel):
         return self.type_enum.get_service(self.config)
 
 
+class EmbeddingProviderModelManager(models.Manager):
+    def for_team(self, team):
+        return super().get_queryset().filter(models.Q(team=team) | models.Q(team__isnull=True))
+
+
 class EmbeddingProviderModel(BaseTeamModel):
     type = models.CharField(max_length=255, choices=LlmProviderTypes.choices)
     name = models.CharField(max_length=128, help_text="The name of the model. e.g. 'text-embedding-3-small'")
@@ -502,7 +520,16 @@ class EmbeddingProviderModel(BaseTeamModel):
         blank=True,
     )
 
+    objects = EmbeddingProviderModelManager()
+
     class Meta:
         constraints = [
             models.UniqueConstraint(fields=("team", "name", "type"), name="unique_team_name_type"),
         ]
+
+    @property
+    def type_enum(self):
+        return LlmProviderTypes[str(self.type)]
+
+    def __str__(self):
+        return f"{self.name}"

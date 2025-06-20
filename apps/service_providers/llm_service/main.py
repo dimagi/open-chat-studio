@@ -1,7 +1,7 @@
 import contextlib
 from io import BytesIO
 from time import sleep
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
 import pydantic
 from langchain.agents.openai_assistant import OpenAIAssistantRunnable as BrokenOpenAIAssistantRunnable
@@ -25,6 +25,9 @@ from apps.service_providers.llm_service.token_counters import (
     GeminiTokenCounter,
     OpenAITokenCounter,
 )
+
+if TYPE_CHECKING:
+    from apps.service_providers.llm_service.index_managers import IndexManager
 
 
 class OpenAIBuiltinTool(dict):
@@ -165,7 +168,23 @@ class LlmService(pydantic.BaseModel):
                     remote_file_ids.extend([entry["file_id"] for entry in annotation_entries if "file_id" in entry])
         return File.objects.filter(external_id__in=remote_file_ids).all()
 
-    def get_index_manager(self):
+    def get_remote_index_manager(self, index_id: str = None) -> "IndexManager":
+        raise NotImplementedError
+
+    def get_local_index_manager(self, embedding_model_name: str) -> "IndexManager":
+        raise NotImplementedError
+
+    def create_remote_index(self, name: str, file_ids: list = None) -> str:
+        """
+        Create a new vector store at the remote index service.
+
+        Args:
+            name: The name to assign to the new vector store.
+            file_ids: Optional list of remote file IDs to initially associate with the vector store.
+
+        Returns:
+            str: The unique identifier of the newly created vector store.
+        """
         raise NotImplementedError
 
 
@@ -236,10 +255,20 @@ class OpenAILlmService(OpenAIGenericService):
                 raise ValueError(f"Unsupported built-in tool for openai: '{tool_name}'")
         return tools
 
-    def get_index_manager(self):
-        from apps.service_providers.llm_service.index_managers import OpenAIVectorStoreManager
+    def get_remote_index_manager(self, index_id: str = None) -> "IndexManager":
+        from apps.service_providers.llm_service.index_managers import OpenAIRemoteIndexManager
 
-        return OpenAIVectorStoreManager(self.get_raw_client())
+        return OpenAIRemoteIndexManager(client=self.get_raw_client(), index_id=index_id)
+
+    def get_local_index_manager(self, embedding_model_name: str) -> "IndexManager":
+        from apps.service_providers.llm_service.index_managers import OpenAILocalIndexManager
+
+        return OpenAILocalIndexManager(client=self.get_raw_client(), embedding_model_name=embedding_model_name)
+
+    def create_remote_index(self, name: str, file_ids: list = None) -> str:
+        file_ids = file_ids or []
+        vector_store = self.get_raw_client().vector_stores.create(name=name, file_ids=file_ids)
+        return vector_store.id
 
 
 class AzureLlmService(LlmService):

@@ -7,7 +7,7 @@ from django.conf import settings
 from django.core.files.base import ContentFile
 from django.db import models
 from django.urls import reverse
-from pgvector.django import HnswIndex, VectorField
+from pgvector.django import HalfVectorField
 
 from apps.experiments.versioning import VersionDetails, VersionField, VersionsMixin, VersionsObjectManagerMixin
 from apps.generics.chips import Chip
@@ -160,20 +160,36 @@ class File(BaseTeamModel, VersionsMixin):
         else:
             self.delete()
 
+    def read_content(self) -> str:
+        from apps.documents.readers import Document
+
+        document = Document.from_file(self)
+        return document.get_contents_as_string()
+
     def is_used(self) -> bool:
         # get_related_m2m_objects returns a dictionary with the file instance as the key if there are related objects
         return self in get_related_m2m_objects([self])
 
 
-class FileChunkEmbedding(BaseTeamModel):
+class FileChunkEmbeddingObjectManager(VersionsObjectManagerMixin):
+    pass
+
+
+class FileChunkEmbedding(BaseTeamModel, VersionsMixin):
+    # See 0009_remove_filechunkembedding_embedding_index_and_more.py migration for the index
     file = models.ForeignKey(File, on_delete=models.CASCADE)
     collection = models.ForeignKey("documents.Collection", on_delete=models.CASCADE)
     chunk_number = models.PositiveIntegerField()
     text = models.TextField()
     page_number = models.PositiveIntegerField(blank=True)
-    embedding = VectorField(dimensions=1024)
+    embedding = HalfVectorField(dimensions=settings.EMBEDDING_VECTOR_SIZE)
+    working_version = models.ForeignKey(
+        "self",
+        on_delete=models.CASCADE,
+        null=True,
+        blank=True,
+        related_name="versions",
+    )
+    is_archived = models.BooleanField(default=False)
 
-    class Meta:
-        indexes = [
-            HnswIndex(name="embedding_index", fields=["embedding"], opclasses=["vector_cosine_ops"]),
-        ]
+    objects = FileChunkEmbeddingObjectManager()
