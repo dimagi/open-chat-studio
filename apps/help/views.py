@@ -102,6 +102,9 @@ def code_completion(user_query, current_code, error=None, iteration_count=0) -> 
         def get_all_routes() -> dict:
             Returns a dictionary containing all routing decisions in the pipeline.
             The keys are the node names and the values are the routes chosen by each node.
+            
+        def add_message_tag(tag_name: str):
+            Adds a tag to the output message. Tags are used by administrators to analyse bot usage.
         ```
 
         Return only the Python code and nothing else. Do not enclose it in triple quotes or have any other

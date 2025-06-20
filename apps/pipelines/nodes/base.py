@@ -114,6 +114,9 @@ class PipelineState(dict):
 
         return cls(**kwargs)
 
+    def add_message_tag(self, tag: str):
+        self.setdefault("output_message_tags", []).append((None, tag))
+
     def get_node_id(self, node_name: str):
         """
         Helper method to get a node ID from a node name.
