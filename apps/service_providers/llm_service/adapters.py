@@ -10,6 +10,8 @@ Usage:
     Use the `for_experiment` or `for_pipeline` class methods to instantiate `ChatAdapter` or `AssistantAdapter`.
 """
 
+from __future__ import annotations
+
 from functools import cached_property
 from typing import TYPE_CHECKING, Self
 
@@ -26,6 +28,7 @@ from apps.service_providers.llm_service.main import LlmService, OpenAIAssistantR
 from apps.service_providers.llm_service.prompt_context import PromptTemplateContext
 
 if TYPE_CHECKING:
+    from apps.pipelines.nodes.base import PipelineState
     from apps.pipelines.nodes.nodes import AssistantNode, LLMResponseWithPrompt
     from apps.service_providers.models import LlmProviderModel
 
@@ -65,12 +68,11 @@ class ChatAdapter(BaseAdapter):
         temperature: float,
         prompt_text: str,
         max_token_limit: int,
+        template_context: PromptTemplateContext,
         tools: list[BaseTool] = None,
         disabled_tools: set[str] = None,
         input_formatter: str | None = None,
-        source_material_id: int | None = None,
         save_message_metadata_only=False,
-        collection_id: int | None = None,
     ):
         self.session = session
         self.provider_model_name = provider_model_name
@@ -81,10 +83,9 @@ class ChatAdapter(BaseAdapter):
         self.tools = tools or []
         self.disabled_tools = disabled_tools
         self.input_formatter = input_formatter
-        self.source_material_id = source_material_id
 
         self.team = session.team
-        self.template_context = PromptTemplateContext(session, source_material_id, collection_id)
+        self.template_context = template_context
         self.save_message_metadata_only = save_message_metadata_only
 
     @classmethod
@@ -96,22 +97,27 @@ class ChatAdapter(BaseAdapter):
             temperature=experiment.temperature,
             prompt_text=experiment.prompt_text,
             max_token_limit=experiment.max_token_limit,
+            template_context=PromptTemplateContext(session, experiment.source_material_id, None),
             tools=get_tools(session, experiment=experiment),
             disabled_tools=None,  # not supported for simple experiments
             input_formatter=experiment.input_formatter,
-            source_material_id=experiment.source_material_id,
         )
 
     @classmethod
     def for_pipeline(
         cls,
         session: ExperimentSession,
-        node: "LLMResponseWithPrompt",
+        node: LLMResponseWithPrompt,
         llm_service: LlmService,
-        provider_model: "LlmProviderModel",
+        provider_model: LlmProviderModel,
         tools: list[BaseTool],
+        pipeline_state: PipelineState,
         disabled_tools: set[str] = None,
     ) -> Self:
+        extra_prompt_context = {
+            "temp_state": pipeline_state.get("temp_state", {}),
+            "session_state": session.state or {},
+        }
         return cls(
             session=session,
             provider_model_name=provider_model.name,
@@ -119,12 +125,16 @@ class ChatAdapter(BaseAdapter):
             temperature=node.llm_temperature,
             prompt_text=node.prompt,
             max_token_limit=provider_model.max_token_limit,
+            template_context=PromptTemplateContext(
+                session,
+                source_material_id=node.source_material_id,
+                collection_id=node.collection_id,
+                extra=extra_prompt_context,
+            ),
             tools=tools,
             disabled_tools=disabled_tools,
             input_formatter="{input}",
-            source_material_id=node.source_material_id,
             save_message_metadata_only=True,
-            collection_id=node.collection_id,
         )
 
     def get_chat_model(self):
@@ -186,7 +196,7 @@ class AssistantAdapter(BaseAdapter):
         )
 
     @classmethod
-    def for_pipeline(cls, session: ExperimentSession, node: "AssistantNode", disabled_tools: set[str] = None) -> Self:
+    def for_pipeline(cls, session: ExperimentSession, node: AssistantNode, disabled_tools: set[str] = None) -> Self:
         assistant = OpenAiAssistant.objects.get(id=node.assistant_id)
         return cls(
             session=session,
