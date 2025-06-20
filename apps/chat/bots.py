@@ -14,7 +14,7 @@ from apps.events.models import StaticTriggerType
 from apps.events.tasks import enqueue_static_triggers
 from apps.experiments.models import Experiment, ExperimentRoute, ExperimentSession, SafetyLayer
 from apps.files.models import File
-from apps.pipelines.nodes.base import PipelineState
+from apps.pipelines.nodes.base import Intents, PipelineState
 from apps.service_providers.llm_service.default_models import get_default_model
 from apps.service_providers.llm_service.prompt_context import PromptTemplateContext
 from apps.service_providers.llm_service.runnables import create_experiment_runnable
@@ -278,6 +278,30 @@ class PipelineBot:
     def process_input(
         self, user_input: str, save_input_to_history=True, attachments: list["Attachment"] | None = None
     ) -> ChatMessage:
+        input_state = self._get_input_state(attachments, user_input)
+        return self.invoke_pipeline(
+            input_state,
+            save_run_to_history=True,
+            save_input_to_history=save_input_to_history,
+        )
+
+    def invoke_pipeline(
+        self,
+        input_state: PipelineState,
+        save_run_to_history=True,
+        save_input_to_history=True,
+        pipeline=None,
+    ) -> ChatMessage:
+        pipeline_to_use = pipeline or self.experiment.pipeline
+        output = self._run_pipeline(input_state, pipeline_to_use)
+        if save_run_to_history and self.session is not None:
+            result = self._save_messages(input_state, output, save_input_to_history)
+        else:
+            result = ChatMessage(content=output)
+        self._process_intents(output)
+        return result
+
+    def _get_input_state(self, attachments, user_input):
         attachments = attachments or []
         serializable_attachments = [attachment.model_dump() for attachment in attachments]
         incoming_file_ids = []
@@ -285,23 +309,96 @@ class PipelineBot:
             file = File.objects.get(id=attachment.id)
             ChatAttachment.objects.create(chat=self.session.chat, tool_type="ocs_attachments")
             incoming_file_ids.append(file.id)
-
         input_message_metadata = {}
         if incoming_file_ids:
             input_message_metadata["ocs_attachment_file_ids"] = incoming_file_ids
-        return self.experiment.pipeline.invoke(
-            PipelineState(
-                messages=[user_input],
-                experiment_session=self.session,
-                attachments=serializable_attachments,
-                input_message_metadata=input_message_metadata,
-            ),
-            self.session,
-            self.experiment,
-            self.trace_service,
-            save_input_to_history=save_input_to_history,
-            disable_reminder_tools=self.disable_reminder_tools,
+        return PipelineState(
+            messages=[user_input],
+            experiment_session=self.session,
+            attachments=serializable_attachments,
+            input_message_metadata=input_message_metadata,
         )
+
+    def _run_pipeline(self, input_state, pipeline_to_use):
+        from apps.experiments.models import AgentTools
+        from apps.pipelines.graph import PipelineGraph
+
+        graph = PipelineGraph.build_from_pipeline(pipeline_to_use)
+        config = self.trace_service.get_langchain_config(
+            configurable={
+                "disabled_tools": AgentTools.reminder_tools() if self.disable_reminder_tools else [],
+            },
+            run_name_map=graph.node_id_to_name_mapping,
+            filter_patterns=graph.filter_patterns,
+        )
+        runnable = graph.build_runnable()
+        raw_output = runnable.invoke(input_state, config=config)
+        output = PipelineState(**raw_output).json_safe()
+        return output
+
+    def _save_messages(self, input_state, output, save_input_to_history):
+        input_metadata = output.get("input_message_metadata", {})
+        output_metadata = output.get("output_message_metadata", {})
+        trace_metadata = self.trace_service.get_trace_metadata() if self.trace_service else None
+        if trace_metadata:
+            input_metadata.update(trace_metadata)
+            output_metadata.update(trace_metadata)
+
+        if save_input_to_history:
+            self._save_message_to_history(input_state["messages"][-1], ChatMessageType.HUMAN, metadata=input_metadata)
+        ai_message = self._save_message_to_history(
+            output["messages"][-1],
+            ChatMessageType.AI,
+            metadata=output_metadata,
+            tags=output.get("output_message_tags"),
+        )
+        ai_message.add_version_tag(
+            version_number=self.experiment.version_number, is_a_version=self.experiment.is_a_version
+        )
+        return ai_message
+
+    def _process_intents(self, pipeline_output: dict):
+        for intent in pipeline_output.get("intents", []):
+            match intent:
+                case Intents.END_SESSION:
+                    self.session.end()
+
+    def _save_message_to_history(
+        self,
+        message: str,
+        type_: ChatMessageType,
+        metadata: dict,
+        tags: list[tuple] = None,
+    ) -> ChatMessage:
+        chat_message = ChatMessage.objects.create(
+            chat=self.session.chat, message_type=type_.value, content=message, metadata=metadata
+        )
+
+        if tags:
+            for tag_value, category in tags:
+                chat_message.create_and_add_tag(tag_value, category or "")
+        return chat_message
+
+
+class PipelineTestBot:
+    """Invoke the pipeline with a temporary session or the ability to save the run to history"""
+
+    def __init__(self, pipeline, user_id: int):
+        self.pipeline = pipeline
+        self.user_id = user_id
+
+    def process_input(self, input: str) -> PipelineState:
+        from apps.pipelines.executor import patch_executor
+        from apps.pipelines.graph import PipelineGraph
+        from apps.pipelines.nodes.helpers import temporary_session
+
+        with temporary_session(self.pipeline.team, self.user_id) as session:
+            runnable = PipelineGraph.build_runnable_from_pipeline(self.pipeline)
+            input = PipelineState(messages=[input], experiment_session=session)
+            with patch_executor():
+                output = runnable.invoke(input, config={"max_concurrency": 1})
+            output = PipelineState(**output).json_safe()
+        return output
 
 
 class EventBot:
