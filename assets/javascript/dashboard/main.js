@@ -44,7 +44,6 @@ function dashboard() {
         activeFilterId: null,
         saving: false,
         
-        autoRefreshInterval: null,
         initialLoad: true,
         
         // Initialization
@@ -52,7 +51,6 @@ function dashboard() {
             this.updateFiltersFromForm();
             this.loadInitialData();
             this.setupFilterWatchers();
-            this.setupAutoRefresh();
             this.setupTomSelect();
             
             this.initialLoad = false;
@@ -101,19 +99,6 @@ function dashboard() {
                     this.debounceRefresh();
                 }
             }, { deep: true });
-        },
-        
-        setupAutoRefresh() {
-            // Auto-refresh every 5 minutes
-            this.autoRefreshInterval = setInterval(() => {
-                if (document.visibilityState === 'visible' && !this.hasLoadingStates()) {
-                    this.refreshAllCharts();
-                }
-            }, 5 * 60 * 1000);
-        },
-        
-        hasLoadingStates() {
-            return Object.values(this.loadingStates).some(state => state);
         },
         
         // Filter management
@@ -622,9 +607,6 @@ function dashboard() {
         
         // Cleanup
         destroy() {
-            if (this.autoRefreshInterval) {
-                clearInterval(this.autoRefreshInterval);
-            }
             if (this.refreshTimeout) {
                 clearTimeout(this.refreshTimeout);
             }
