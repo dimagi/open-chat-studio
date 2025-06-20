@@ -2,6 +2,7 @@ import logging
 import operator
 from abc import ABC
 from collections.abc import Callable, Sequence
+from copy import deepcopy
 from enum import StrEnum
 from typing import Annotated, Any, Literal, Self
 
@@ -107,9 +108,19 @@ class PipelineState(dict):
         return copy
 
     @classmethod
+    def clone(cls, state):
+        """Make a copy of the state."""
+        copied = state.copy()
+        # Don't deepcopy Django models
+        session = copied.pop("experiment_session")
+        copied = deepcopy(copied)
+        copied["experiment_session"] = session
+        return PipelineState(copied)
+
+    @classmethod
     def from_node_output(cls, node_name: str, node_id: str, output: Any = None, **kwargs) -> Self:
         kwargs["outputs"] = {node_name: {"message": output, "node_id": node_id}}
-        kwargs["temp_state"] = {"outputs": {node_name: output}}
+        kwargs.setdefault("temp_state", {}).update({"outputs": {node_name: output}})
         if output is not None:
             kwargs["messages"] = [output]
 

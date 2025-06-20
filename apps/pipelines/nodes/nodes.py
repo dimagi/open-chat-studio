@@ -5,7 +5,6 @@ import logging
 import random
 import time
 import unicodedata
-from copy import deepcopy
 from typing import Annotated, Literal, Self
 
 import tiktoken
@@ -1115,7 +1114,7 @@ class CodeNode(PipelineNode, OutputMessageTagMixin):
         custom_globals = safe_globals.copy()
 
         participant_data_proxy = self.get_participant_data_proxy(state)
-        pipeline_state = PipelineState(deepcopy(state))
+        pipeline_state = PipelineState.clone(state)
 
         # copy this from input to output to create a consistent view within the code execution
         output_state["temp_state"] = pipeline_state.get("temp_state") or {}
