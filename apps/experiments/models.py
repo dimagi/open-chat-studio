@@ -572,6 +572,10 @@ class AgentTools(models.TextChoices):
     def reminder_tools(cls) -> list[Self]:
         return [cls.RECURRING_REMINDER, cls.ONE_OFF_REMINDER, cls.DELETE_REMINDER, cls.MOVE_SCHEDULED_MESSAGE_DATE]
 
+    @classmethod
+    def legacy_experiment_tools(cls):
+        return cls.reminder_tools() + [cls.UPDATE_PARTICIPANT_DATA]
+
     @staticmethod
     def user_tool_choices() -> list[tuple]:
         """Returns the set of tools that a user should be able to attach to the bot"""

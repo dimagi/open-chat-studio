@@ -37,7 +37,7 @@ class CustomBaseTool(BaseTool):
     experiment_session: ExperimentSession | None = None
     # Some tools like the reminder requires a chat session id in order to get back to the user later
     requires_session: bool = False
-    tool_callbacks: ToolCallbacks = None
+    tool_callbacks: ToolCallbacks | None = None
 
     def _run(self, *args, **kwargs):
         if self.requires_session and not self.experiment_session:
