@@ -27,3 +27,29 @@ class PipelineNodeBuildError(Exception):
 
 class PipelineNodeRunError(Exception):
     pass
+
+
+class WaitForNextInput(Exception):
+    """Exception to raise when a node is waiting for input from a specific node or set of nodes.
+
+    This exception is handled by the node and used to alter the pipeline execution flow.
+    """
+
+
+class AbortPipeline(Exception):
+    """Exception to raise when the pipeline should be aborted.
+
+    This exception is used to stop the pipeline execution and can be caught by the pipeline runner.
+    """
+
+    def __init__(self, message: str, tag_name: str = None):
+        """
+        Parameters:
+            message (str): A descriptive error message explaining the reason for the abortion.
+        """
+        super().__init__(message)
+        self.message = message
+        self.tag_name = tag_name
+
+    def to_json(self):
+        return {"message": self.message, "tag_name": self.tag_name}

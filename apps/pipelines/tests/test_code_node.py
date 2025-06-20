@@ -226,10 +226,10 @@ def test_temp_state_get_outputs(pipeline, experiment_session):
 def main(input, **kwargs):
     return str(get_temp_state_key("outputs"))
 """
-    template_node = render_template_node("<b>The input is: {{ input }}</b>")
+    template_node = render_template_node("<b>The input is: {{ input }}</b>", name="template")
     nodes = [
         start_node(),
-        passthrough_node(),
+        passthrough_node(name="passthrough"),
         template_node,
         code_node(code_get),
         end_node(),
@@ -240,7 +240,7 @@ def main(input, **kwargs):
         {
             "start": input,
             "passthrough": input,
-            template_node["params"]["name"]: f"<b>The input is: {input}</b>",
+            "template": f"<b>The input is: {input}</b>",
         }
     )
 
