@@ -16,7 +16,7 @@ def confirm_no_langsmith_providers(apps, schema_editor):
 class Migration(migrations.Migration):
 
     dependencies = [
-        ('service_providers', '0026_add_google_gemini_models'),
+        ('service_providers', '0025_alter_llmprovider_type_alter_llmprovidermodel_type'),
     ]
 
     operations = [
