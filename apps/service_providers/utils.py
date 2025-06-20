@@ -126,7 +126,7 @@ def get_llm_provider_choices(team) -> dict[int, dict[str, list[dict[str, Any]]]]
         provider_models_by_type[provider_model.type].append(
             {
                 "value": provider_model.id,
-                "text": provider_model.display_name,
+                "text": str(provider_model),
             }
         )
 

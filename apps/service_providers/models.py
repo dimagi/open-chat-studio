@@ -195,7 +195,7 @@ class LlmProviderModel(BaseTeamModel):
         ]
 
     def __str__(self):
-        label = f"{LlmProviderTypes[self.type].label}: {self.name}"
+        label = f"{LlmProviderTypes[self.type].label}: {self.display_name}"
         if self.is_custom():
             label = f"{label} (custom for {self.team.name})"
         return label

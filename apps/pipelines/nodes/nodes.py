@@ -142,15 +142,22 @@ class LLMResponseMixin(BaseModel):
     )
 
     @model_validator(mode="after")
-    def validate_llm_model_deprecation(cls, values):
-        model = LlmProviderModel.objects.get(id=values.llm_provider_model_id)
+    def validate_llm_model_deprecation(self):
+        try:
+            model = self.get_llm_provider_model()
+        except PipelineNodeBuildError as e:
+            raise PydanticCustomError(
+                "invalid_model",
+                str(e),
+                {"field": "llm_provider_id"},
+            ) from None
         if model.deprecated:
             raise PydanticCustomError(
                 "deprecated_model",
                 f"LLM provider model '{model.name}' is deprecated.",
                 {"field": "llm_provider_id"},
             )
-        return values
+        return self
 
     def get_llm_service(self):
         from apps.service_providers.models import LlmProvider
