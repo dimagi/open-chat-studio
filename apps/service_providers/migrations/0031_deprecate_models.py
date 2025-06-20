@@ -1,3 +1,6 @@
+import logging
+from django.db import migrations
+
 logger = logging.getLogger(__name__)
 
 def deprecate_models(apps, schema_editor):
