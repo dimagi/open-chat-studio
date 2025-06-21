@@ -142,6 +142,24 @@ class LLMResponseMixin(BaseModel):
         default=0.7, ge=0.0, le=2.0, title="Temperature", json_schema_extra=UiSchema(widget=Widgets.range)
     )
 
+    @model_validator(mode="after")
+    def validate_llm_model_deprecation(self):
+        try:
+            model = self.get_llm_provider_model()
+        except PipelineNodeBuildError as e:
+            raise PydanticCustomError(
+                "invalid_model",
+                str(e),
+                {"field": "llm_provider_id"},
+            ) from None
+        if model.deprecated:
+            raise PydanticCustomError(
+                "deprecated_model",
+                f"LLM provider model '{model.name}' is deprecated.",
+                {"field": "llm_provider_id"},
+            )
+        return self
+
     def get_llm_service(self):
         from apps.service_providers.models import LlmProvider
 

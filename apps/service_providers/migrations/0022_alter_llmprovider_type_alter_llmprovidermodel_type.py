@@ -5,7 +5,7 @@ from django.db import migrations, models
 
 class Migration(migrations.Migration):
     dependencies = [
-        ("service_providers", "0021_migrate_llm_models"),
+        ("service_providers", "0020_auto_20241111_1113"),
     ]
 
     operations = [

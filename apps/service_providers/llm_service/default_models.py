@@ -11,6 +11,7 @@ class Model:
     name: str
     token_limit: int
     is_default: bool = False
+    deprecated: bool = False
 
 
 def k(n: int) -> int:
@@ -27,10 +28,10 @@ DEFAULT_LLM_PROVIDER_MODELS = {
         Model("gpt-4.1-nano", 1000000),
         Model("gpt-4o-mini", 128000),
         Model("gpt-4o", 128000),
-        Model("gpt-4", k(8)),
-        Model("gpt-4-32k", 32768),
+        Model("gpt-4", k(8), deprecated=True),
+        Model("gpt-4-32k", 32768, deprecated=True),
         Model("gpt-35-turbo", 16385),
-        Model("gpt-35-turbo-16k", 16384),
+        Model("gpt-35-turbo-16k", 16384, deprecated=True),
     ],
     "anthropic": [
         Model("claude-sonnet-4-20250514", k(200)),
@@ -39,9 +40,9 @@ DEFAULT_LLM_PROVIDER_MODELS = {
         Model("claude-3-5-sonnet-latest", k(200)),
         Model("claude-3-5-haiku-latest", k(200), is_default=True),
         Model("claude-3-opus-latest", k(200)),
-        Model("claude-2.0", k(100)),
-        Model("claude-2.1", k(200)),
-        Model("claude-instant-1.2", k(100)),
+        Model("claude-2.0", k(100), deprecated=True),
+        Model("claude-2.1", k(200), deprecated=True),
+        Model("claude-instant-1.2", k(100), deprecated=True),
     ],
     "openai": [
         Model("o4-mini", 200000),
@@ -59,9 +60,9 @@ DEFAULT_LLM_PROVIDER_MODELS = {
         Model("gpt-4", k(8)),
         Model("gpt-4-turbo", 128000),
         Model("gpt-4-turbo-preview", 128000),
-        Model("gpt-4-0125-preview", 128000),
-        Model("gpt-4-1106-preview", 128000),
-        Model("gpt-4-0613", k(8)),
+        Model("gpt-4-0125-preview", 128000, deprecated=True),
+        Model("gpt-4-1106-preview", 128000, deprecated=True),
+        Model("gpt-4-0613", k(8), deprecated=True),
         Model("gpt-3.5-turbo", k(16)),
         Model("gpt-3.5-turbo-1106", k(16)),
     ],
@@ -69,15 +70,15 @@ DEFAULT_LLM_PROVIDER_MODELS = {
         Model("whisper-large-v3", k(8)),
         Model("whisper-large-v3-turbo", k(8)),
         Model("gemma2-9b-it", k(8)),
-        Model("gemma-7b-it", k(8)),
-        Model("llama3-groq-70b-8192-tool-use-preview", k(8)),
-        Model("llama3-groq-8b-8192-tool-use-preview", k(8)),
+        Model("gemma-7b-it", k(8), deprecated=True),
+        Model("llama3-groq-70b-8192-tool-use-preview", k(8), deprecated=True),
+        Model("llama3-groq-8b-8192-tool-use-preview", k(8), deprecated=True),
         Model("llama-3.1-70b-versatile", k(128), is_default=True),
         Model("llama-3.1-8b-instant", k(128)),
-        Model("llama-3.2-1b-preview", k(128)),
-        Model("llama-3.2-3b-preview", k(128)),
-        Model("llama-3.2-11b-vision-preview", k(128)),
-        Model("llama-3.2-90b-vision-preview", k(128)),
+        Model("llama-3.2-1b-preview", k(128), deprecated=True),
+        Model("llama-3.2-3b-preview", k(128), deprecated=True),
+        Model("llama-3.2-11b-vision-preview", k(128), deprecated=True),
+        Model("llama-3.2-90b-vision-preview", k(128), deprecated=True),
         Model("llama-guard-3-8b", k(8)),
         Model("llama3-70b-8192", k(8)),
         Model("llama3-8b-8192", k(8)),
@@ -89,9 +90,9 @@ DEFAULT_LLM_PROVIDER_MODELS = {
         Model("sonar-reasoning", 128000),
         Model("sonar-reasoning-pro", 128000),
         Model("sonar-deep-research", 128000),
-        Model("llama-3.1-sonar-small-128k-online", 127072, is_default=True),
-        Model("llama-3.1-sonar-large-128k-online", 127072),
-        Model("llama-3.1-sonar-huge-128k-online", 127072),
+        Model("llama-3.1-sonar-small-128k-online", 127072, is_default=True, deprecated=True),
+        Model("llama-3.1-sonar-large-128k-online", 127072, deprecated=True),
+        Model("llama-3.1-sonar-huge-128k-online", 127072, deprecated=True),
         Model("llama-3.1-sonar-small-128k-chat", 127072),
         Model("llama-3.1-sonar-large-128k-chat", 127072),
         Model("llama-3.1-8b-instruct", 131072),
@@ -169,16 +170,21 @@ def _update_llm_provider_models(LlmProviderModel):
             if key in existing:
                 # update existing global models
                 existing_global_model = existing.pop(key)
-                if existing_global_model.max_token_limit != model.token_limit:
+                if (
+                    existing_global_model.max_token_limit != model.token_limit
+                    or existing_global_model.deprecated != model.deprecated
+                ):
                     existing_global_model.max_token_limit = model.token_limit
+                    existing_global_model.deprecated = model.deprecated
                     existing_global_model.save()
             else:
-                created_models[(provider_type, model.name)] = LlmProviderModel.objects.create(
-                    team=None,
-                    type=provider_type,
-                    name=model.name,
-                    max_token_limit=model.token_limit,
-                )
+                if not model.deprecated:
+                    created_models[(provider_type, model.name)] = LlmProviderModel.objects.create(
+                        team=None,
+                        type=provider_type,
+                        name=model.name,
+                        max_token_limit=model.token_limit,
+                    )
 
     # move any that are no longer in the list to be custom models
     for key, provider_model in existing.items():
