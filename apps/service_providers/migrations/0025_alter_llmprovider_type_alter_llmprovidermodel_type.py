@@ -6,7 +6,7 @@ from django.db import migrations, models
 class Migration(migrations.Migration):
 
     dependencies = [
-        ('service_providers', '0023_remove_llmprovider_llm_models'),
+        ('service_providers', '0024_add_deepseek_models'),
     ]
 
     operations = [
