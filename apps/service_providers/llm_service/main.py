@@ -54,7 +54,7 @@ def detangle_file_ids(file_ids: str) -> list[str]:
     """
     detangled_file_ids = []
     for file_id in file_ids:
-        detangled_file_ids.extend(re.findall(r"file-[A-Za-z0-9]+(?=file-|$)", file_id))
+        detangled_file_ids.extend(re.findall(r"file-.+(?=file-|$)", file_id))
     return detangled_file_ids
 
 
