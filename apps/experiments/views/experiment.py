@@ -739,6 +739,12 @@ def _experiment_session_message(request, version_number: int, embedded=False):
 
         tool_resource.files.add(*created_files)
 
+    if "experiment_files" in uploaded_files:
+        for uploaded_file in uploaded_files.getlist("experiment_files"):
+            new_file = File.objects.create(name=uploaded_file.name, file=uploaded_file, team=request.team)
+            attachments.append(Attachment.from_file(new_file, "file_search"))
+            created_files.append(new_file)
+
     if attachments and not message_text:
         message_text = "Please look at the attachments and respond appropriately"
 
