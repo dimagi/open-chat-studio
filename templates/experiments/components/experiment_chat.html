@@ -30,6 +30,33 @@
           {% endif %}
         </div>
       {% endif %}
+      # TODO visibility conditions
+      # TODO request
+      <div class="tooltip" data-tip="Messages translated from orginal langage">
+        <a class="badge badge-sm" aria-label="Messages translated from original language">
+          Translated
+        </a>
+      </div>
+      <button
+        class="btn btn-primary"
+        aria-label="Translate all remaining untranslated messages"
+        hx-post="{% url 'experiments:experiment_session_messages_view' request.team.slug experiment.public_id experiment_session.external_id %}"
+        hx-vals='{"translate_remaining_messages": "true"}'
+        hx-target="#messages-container"
+        hx-indicator=".htmx-indicator"
+      >
+        Translate Remaining Messages
+      </button>
+      <div class="flex items-center gap-2">
+        <label class="label cursor-pointer flex items-center space-x-2">
+          Show Original Translation
+          <input type="checkbox"
+                 name="show_original_translation"
+                 class="toggle"
+                 aria-label="Show original translation alongside translated text"
+                 {% if request.GET.show_original_translation == "on" %}checked{% else %}unchecked{% endif %}>
+        </label>
+      </div>
 
       {% if total_pages > 1 %}
         <div class="px-1">
