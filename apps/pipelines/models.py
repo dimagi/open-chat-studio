@@ -406,6 +406,10 @@ class Node(BaseModel, VersionsMixin, CustomActionOperationMixin):
     def __str__(self):
         return self.flow_id
 
+    @property
+    def name(self):
+        return self.params.get("name", None)
+
     def create_new_version(self, is_copy=False, new_flow_id=None):
         """
         Create a new version of the node and if the node is an assistant node, create a new version of the assistant
