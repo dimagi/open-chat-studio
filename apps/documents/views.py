@@ -366,7 +366,7 @@ class FileChunkEmbeddingListView(LoginAndTeamRequiredMixin, ListView, Permission
 
         # Get chunks for this file in this collection, ordered by chunk number
         return FileChunkEmbedding.objects.filter(
-            collection_id=collection_id, file_id=file_id, is_archived=False
+            collection_id=collection_id, file_id=file_id, is_archived=False, team__slug=self.kwargs["team_slug"]
         ).order_by("chunk_number")
 
     def get_context_data(self, **kwargs):
