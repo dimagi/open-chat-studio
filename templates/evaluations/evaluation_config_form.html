@@ -1,0 +1,110 @@
+{% extends "generic/object_form.html" %}
+{% load form_tags i18n %}
+
+{% block form %}
+  <div x-data="evaluationConfigForm">
+    {{ form.non_field_errors }}
+
+    {% render_form_fields form "name" %}
+    {% render_form_fields form "dataset" %}
+    {% render_form_fields form "message_type" %}
+
+    <!-- Evaluators Selection Table -->
+    <div class="fieldset w-full">
+      <label class="label font-bold">
+        <div>{% translate "Evaluators" %}</div>
+      </label>
+
+      {% if available_evaluators %}
+        <div class="overflow-x-auto">
+          <table class="table table-zebra">
+            <thead>
+              <tr>
+                <th>
+                  <label class="cursor-pointer label">
+                    <input type="checkbox"
+                           class="checkbox checkbox-primary"
+                           @change="toggleAll($event.target.checked)">
+                    <span class="label-text ml-2">{% translate "Select All" %}</span>
+                  </label>
+                </th>
+                <th>{% translate "Name" %}</th>
+                <th>{% translate "Type" %}</th>
+              </tr>
+            </thead>
+            <tbody>
+              {% for evaluator in available_evaluators %}
+                <tr>
+                  <td>
+                    <label class="cursor-pointer label">
+                      <input type="checkbox"
+                             class="checkbox checkbox-primary evaluator-checkbox"
+                             value="{{ evaluator.id }}"
+                             :checked="selectedEvaluators.includes('{{ evaluator.id }}')"
+                             @change="toggleEvaluator('{{ evaluator.id }}', $event.target.checked)">
+                    </label>
+                  </td>
+                  <td>
+                    <div class="font-medium">{{ evaluator.name }}</div>
+                  </td>
+                  <td>
+                    <div class="flex items-center">
+                      {% if evaluator.icon %}
+                        <i class="fa {{ evaluator.icon }} mr-2"></i>
+                      {% endif %}
+                      {{ evaluator.label }}
+                    </div>
+                  </td>
+                </tr>
+              {% endfor %}
+            </tbody>
+          </table>
+        </div>
+      {% else %}
+        <div class="alert alert-info">
+          <i class="fa fa-info-circle"></i>
+          {% translate "No evaluators available. Please create evaluators first." %}
+        </div>
+      {% endif %}
+    </div>
+
+    <!-- Hidden inputs for selected evaluators -->
+    <template x-for="evaluatorId in selectedEvaluators" :key="evaluatorId">
+      <input type="hidden" name="evaluators" :value="evaluatorId">
+    </template>
+  </div>
+{% endblock form %}
+
+{% block page_js %}
+  <script>
+    document.addEventListener('alpine:init', () => {
+      Alpine.data('evaluationConfigForm', () => ({
+        selectedEvaluators: [
+          {% if object.evaluators.all %}
+            {% for evaluator in object.evaluators.all %}
+              '{{ evaluator.id }}'{% if not forloop.last %},{% endif %}
+            {% endfor %}
+          {% endif %}
+        ],
+
+        toggleEvaluator(evaluatorId, checked) {
+          if (checked) {
+            if (!this.selectedEvaluators.includes(evaluatorId)) {
+              this.selectedEvaluators.push(evaluatorId);
+            }
+          } else {
+            this.selectedEvaluators = this.selectedEvaluators.filter(id => id !== evaluatorId);
+          }
+        },
+
+        toggleAll(checked) {
+          const checkboxes = document.querySelectorAll('.evaluator-checkbox');
+          checkboxes.forEach(checkbox => {
+            checkbox.checked = checked;
+            this.toggleEvaluator(checkbox.value, checked);
+          });
+        }
+      }));
+    });
+  </script>
+{% endblock page_js %}

@@ -40,9 +40,9 @@ class CreateParticipant(LoginAndTeamRequiredMixin, CreateView, PermissionRequire
     form_class = ParticipantForm
     template_name = "generic/object_form.html"
     extra_context = {
-        "title": "Create Tag",
+        "title": "Create Participant",
         "button_text": "Create",
-        "active_tab": "tags",
+        "active_tab": "participants",
     }
 
     def get_success_url(self):
