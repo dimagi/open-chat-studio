@@ -349,3 +349,31 @@ class CreateCollectionFromAssistant(LoginAndTeamRequiredMixin, FormView, Permiss
             assistant_id=assistant.id,
         )
         return HttpResponseRedirect(self.get_success_url())
+
+
+@login_and_team_required
+@permission_required("documents.view_collection", raise_exception=True)
+def file_chunks_view(request, team_slug: str, collection_id: int, file_id: int):
+    """View to display file chunks for a specific file in a collection"""
+    collection = get_object_or_404(Collection.objects.select_related("team"), id=collection_id, team__slug=team_slug)
+    file = get_object_or_404(File.objects.select_related("team"), id=file_id, team__slug=team_slug)
+    
+    # Ensure the file belongs to the collection
+    if not CollectionFile.objects.filter(collection=collection, file=file).exists():
+        messages.error(request, "File not found in this collection")
+        return redirect("documents:single_collection_home", team_slug=team_slug, pk=collection_id)
+    
+    # Get chunks for this file in this collection, ordered by chunk number
+    chunks = FileChunkEmbedding.objects.filter(
+        collection=collection, 
+        file=file,
+        is_archived=False
+    ).order_by('chunk_number')
+    
+    context = {
+        "collection": collection,
+        "file": file,
+        "chunks": chunks,
+        "chunks_count": chunks.count(),
+    }
+    return render(request, "documents/file_chunks.html", context)

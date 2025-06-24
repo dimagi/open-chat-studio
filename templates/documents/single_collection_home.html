@@ -109,9 +109,18 @@
               {% endif %}
             </div>
             <div class="flex items-center gap-2 ml-4">
-              <a href="{% url 'files:base' team.slug collection_file.file.id %}" class="btn btn-sm">
-                <i class="fa-solid fa-eye"></i>
-              </a>
+              {% if collection.is_index and not collection.is_remote_index and collection_file.chunk_count %}
+                <div class="tooltip" data-tip="View chunks">
+                  <a href="{% url 'documents:file_chunks' team.slug collection.id collection_file.file.id %}" class="btn btn-sm">
+                    <i class="fa-solid fa-cube"></i>
+                  </a>
+                </div>
+              {% endif %}
+              <div class="tooltip" data-tip="View file">
+                <a href="{% url 'files:base' team.slug collection_file.file.id %}" class="btn btn-sm">
+                  <i class="fa-solid fa-eye"></i>
+                </a>
+              </div>
               <form action="{% url 'documents:delete_collection_file' team.slug collection.id collection_file.file.id %}" method="POST" class="inline">
                 {% csrf_token %}
                 <button type="submit" class="btn btn-sm">
