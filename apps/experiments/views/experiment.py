@@ -1286,6 +1286,7 @@ def experiment_session_messages_view(request, team_slug: str, experiment_id: uui
     page_size = 100
     messages_queryset = ChatMessage.objects.filter(chat=session.chat).all().order_by("created_at")
     available_languages = _get_available_languages_for_chat(session.chat.id)
+    has_missing_translations = False
 
     if search:
         messages_queryset = messages_queryset.filter(tags__name__icontains=search).distinct()
@@ -1298,6 +1299,8 @@ def experiment_session_messages_view(request, team_slug: str, experiment_id: uui
                 output_field=CharField(),
             )
         )
+        missing_count = messages_queryset.exclude(**{f"translations__{language}__isnull": False}).count()
+        has_missing_translations = missing_count > 0
 
     total_messages = messages_queryset.count()
     total_pages = max(1, (total_messages + page_size - 1) // page_size)
@@ -1325,6 +1328,7 @@ def experiment_session_messages_view(request, team_slug: str, experiment_id: uui
         "language": language,
         "available_languages": available_languages,
         "available_tags": [t.name for t in Tag.objects.filter(team__slug=team_slug, is_system_tag=False).all()],
+        "has_missing_translations": has_missing_translations,
     }
 
     return TemplateResponse(
