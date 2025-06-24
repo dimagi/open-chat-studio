@@ -20,7 +20,7 @@
           <div class="text-sm text-base-content/60 mt-1">
             <span>
               <i class="fa fa-file-o" aria-hidden="true"></i>
-              <span class="font-bold">{{ chunks_count }}</span> chunks from
+              <span class="font-bold">{{ page_obj.paginator.count }}</span> chunks from
               <span class="font-bold">{{ file.name }}</span> in
               <span class="font-bold">{{ collection.name }}</span>
             </span>
@@ -57,7 +57,7 @@
       <div class="flex justify-between items-center">
         <h2 class="text-lg font-semibold">File Chunks</h2>
         <div class="text-sm text-base-content/60">
-          <span>{{ chunks_count }} total chunks</span>
+          <span>{{ page_obj.paginator.count }} total chunks</span>
         </div>
       </div>
 
@@ -96,4 +96,53 @@
       </div>
     </div>
   </div>
+
+  <!-- Pagination -->
+  {% if page_obj and page_obj.paginator.num_pages > 1 %}
+    <div class="app-card">
+      <div class="flex justify-start">
+        <div class="join">
+          <!-- Previous Page Button -->
+          {% if page_obj.has_previous %}
+            <a class="join-item btn"
+               href="?page={{ page_obj.previous_page_number }}">
+              <i class="fa-solid fa-chevron-left"></i>
+              <span class="hidden sm:inline">Previous</span>
+            </a>
+          {% else %}
+            <button class="join-item btn btn-disabled" disabled>
+              <i class="fa-solid fa-chevron-left"></i>
+              <span class="hidden sm:inline">Previous</span>
+            </button>
+          {% endif %}
+
+          <!-- Page Info -->
+          <div class="join-item btn btn-ghost">
+            <span class="text-sm">
+              Page {{ page_obj.number }} of {{ page_obj.paginator.num_pages }}
+            </span>
+          </div>
+
+          <!-- Next Page Button -->
+          {% if page_obj.has_next %}
+            <a class="join-item btn"
+               href="?page={{ page_obj.next_page_number }}">
+              <span class="hidden sm:inline">Next</span>
+              <i class="fa-solid fa-chevron-right"></i>
+            </a>
+          {% else %}
+            <button class="join-item btn btn-disabled" disabled>
+              <span class="hidden sm:inline">Next</span>
+              <i class="fa-solid fa-chevron-right"></i>
+            </button>
+          {% endif %}
+        </div>
+      </div>
+
+      <!-- Results summary -->
+      <div class="text-center text-sm text-base-content/60 mt-3">
+        Showing {{ page_obj.start_index }} to {{ page_obj.end_index }} of {{ page_obj.paginator.count }} chunks
+      </div>
+    </div>
+  {% endif %}
 {% endblock %}

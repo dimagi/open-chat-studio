@@ -12,7 +12,7 @@ from django.template.loader import render_to_string
 from django.urls import reverse
 from django.views import View
 from django.views.decorators.http import require_POST
-from django.views.generic import CreateView, FormView, TemplateView, UpdateView
+from django.views.generic import CreateView, FormView, ListView, TemplateView, UpdateView
 from django_tables2 import SingleTableView
 
 from apps.documents import tasks
@@ -351,30 +351,47 @@ class CreateCollectionFromAssistant(LoginAndTeamRequiredMixin, FormView, Permiss
         return HttpResponseRedirect(self.get_success_url())
 
 
-@login_and_team_required
-@permission_required(("documents.view_collection", "files.view_file"), raise_exception=True)
-def file_chunks_view(request, team_slug: str, collection_id: int, file_id: int):
-    """View to display file chunks for a specific file in a collection"""
-    collection_file = get_object_or_404(
-        CollectionFile.objects.select_related("file", "collection"),
-        collection__team__slug=team_slug,
-        file_id=file_id,
-        collection_id=collection_id,
-    )
+class FileChunkEmbeddingListView(LoginAndTeamRequiredMixin, ListView, PermissionRequiredMixin):
+    """View to display file chunks for a specific file in a collection with pagination"""
 
-    chunking_strategy = collection_file.metadata.chunking_strategy
+    model = FileChunkEmbedding
+    template_name = "documents/file_chunks.html"
+    context_object_name = "chunks"
+    paginate_by = 10
+    permission_required = ("documents.view_collection", "files.view_file")
 
-    # Get chunks for this file in this collection, ordered by chunk number
-    chunks = FileChunkEmbedding.objects.filter(
-        collection_id=collection_id, file_id=file_id, is_archived=False
-    ).order_by("chunk_number")
+    def get_queryset(self):
+        collection_id = self.kwargs["collection_id"]
+        file_id = self.kwargs["file_id"]
 
-    context = {
-        "chunk_size": chunking_strategy.chunk_size,
-        "chunk_overlap": chunking_strategy.chunk_overlap,
-        "collection": collection_file.collection,
-        "file": collection_file.file,
-        "chunks": chunks,
-        "chunks_count": chunks.count(),
-    }
-    return render(request, "documents/file_chunks.html", context)
+        # Get chunks for this file in this collection, ordered by chunk number
+        return FileChunkEmbedding.objects.filter(
+            collection_id=collection_id, file_id=file_id, is_archived=False
+        ).order_by("chunk_number")
+
+    def get_context_data(self, **kwargs):
+        context = super().get_context_data(**kwargs)
+
+        team_slug = self.kwargs["team_slug"]
+        collection_id = self.kwargs["collection_id"]
+        file_id = self.kwargs["file_id"]
+
+        collection_file = get_object_or_404(
+            CollectionFile.objects.select_related("file", "collection"),
+            collection__team__slug=team_slug,
+            file_id=file_id,
+            collection_id=collection_id,
+        )
+
+        chunking_strategy = collection_file.metadata.chunking_strategy
+
+        context.update(
+            {
+                "chunk_size": chunking_strategy.chunk_size,
+                "chunk_overlap": chunking_strategy.chunk_overlap,
+                "collection": collection_file.collection,
+                "file": collection_file.file,
+            }
+        )
+
+        return context
