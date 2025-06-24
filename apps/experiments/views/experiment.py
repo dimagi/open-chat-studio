@@ -1481,7 +1481,7 @@ def migrate_experiment_view(request, team_slug, experiment_id):
         "experiments:single_experiment_home",
         kwargs={"team_slug": team_slug, "experiment_id": experiment_id},
     )
-    if experiment.parent_links:
+    if experiment.parent_links.exists():
         messages.error(
             request, "Child experiments will be migrated along with their 'parent'. Please migrate the parent."
         )
