@@ -75,7 +75,7 @@ def create_pipeline_with_node(experiment, node_type, node_label, node_params):
             params=node_params,
         ),
     )
-    return Pipeline._create_pipeline_with_nodes(team=experiment.team, name=pipeline_name, middle_node=node)
+    return create_pipeline_with_nodes(team=experiment.team, name=pipeline_name, middle_node=node)
 
 
 # TODO: function is temporary and can be deleted after the exp -> chatbot transition is complete
@@ -126,3 +126,58 @@ def create_assistant_pipeline(experiment):
         node_label="OpenAI Assistant",
         node_params=assistant_params,
     )
+
+
+def create_pipeline_with_nodes(team, name, middle_node=None):
+    """
+    Create a pipeline with start -> middle node -> end structure.
+    """
+    from apps.pipelines.models import Pipeline
+    from apps.pipelines.nodes.nodes import EndNode, StartNode
+
+    start_node_id = str(uuid4())
+    end_node_id = str(uuid4())
+    start_node = FlowNode(
+        id=start_node_id,
+        type="startNode",
+        position={"x": 100, "y": 200},
+        data=FlowNodeData(
+            id=start_node_id,
+            type=StartNode.__name__,
+            label="",
+            params={"name": "start"},
+        ),
+    )
+    end_node = FlowNode(
+        id=end_node_id,
+        type="endNode",
+        position={"x": 800, "y": 200},
+        data=FlowNodeData(
+            id=end_node_id,
+            type=EndNode.__name__,
+            label="",
+            params={"name": "end"},
+        ),
+    )
+    all_flow_nodes = [start_node]
+    if middle_node:
+        all_flow_nodes.append(middle_node)
+    all_flow_nodes.append(end_node)
+    edges = []
+    if middle_node:
+        for i in range(len(all_flow_nodes) - 1):
+            current_node = all_flow_nodes[i]
+            next_node = all_flow_nodes[i + 1]
+            edge = {
+                "id": f"edge-{current_node.id}-{next_node.id}",
+                "source": current_node.id,
+                "target": next_node.id,
+                "sourceHandle": "output",
+                "targetHandle": "input",
+            }
+            edges.append(edge)
+    pipeline = Pipeline.objects.create(
+        team=team, name=name, data={"nodes": [node.model_dump() for node in all_flow_nodes], "edges": edges}
+    )
+    pipeline.update_nodes_from_data()
+    return pipeline

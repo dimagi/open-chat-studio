@@ -19,7 +19,7 @@ from apps.experiments.models import ExperimentSession, SourceMaterial
 from apps.experiments.versioning import VersionDetails, VersionField, VersionsMixin, VersionsObjectManagerMixin
 from apps.pipelines.exceptions import PipelineBuildError
 from apps.pipelines.flow import Flow, FlowNode, FlowNodeData
-from apps.pipelines.helper import duplicate_pipeline_with_new_ids
+from apps.pipelines.helper import create_pipeline_with_nodes, duplicate_pipeline_with_new_ids
 from apps.teams.models import BaseTeamModel
 from apps.utils.models import BaseModel
 
@@ -112,60 +112,6 @@ class Pipeline(BaseTeamModel, VersionsMixin):
         return f"v{self.version_number}"
 
     @classmethod
-    def _create_pipeline_with_nodes(cls, team, name, middle_node=None):
-        """
-        Create a pipeline with start -> middle node -> end structure.
-        """
-        from apps.pipelines.nodes.nodes import EndNode, StartNode
-
-        start_node_id = str(uuid4())
-        end_node_id = str(uuid4())
-        start_node = FlowNode(
-            id=start_node_id,
-            type="startNode",
-            position={"x": 100, "y": 200},
-            data=FlowNodeData(
-                id=start_node_id,
-                type=StartNode.__name__,
-                label="",
-                params={"name": "start"},
-            ),
-        )
-        end_node = FlowNode(
-            id=end_node_id,
-            type="endNode",
-            position={"x": 800, "y": 200},
-            data=FlowNodeData(
-                id=end_node_id,
-                type=EndNode.__name__,
-                label="",
-                params={"name": "end"},
-            ),
-        )
-        all_flow_nodes = [start_node]
-        if middle_node:
-            all_flow_nodes.append(middle_node)
-        all_flow_nodes.append(end_node)
-        edges = []
-        if middle_node:
-            for i in range(len(all_flow_nodes) - 1):
-                current_node = all_flow_nodes[i]
-                next_node = all_flow_nodes[i + 1]
-                edge = {
-                    "id": f"edge-{current_node.id}-{next_node.id}",
-                    "source": current_node.id,
-                    "target": next_node.id,
-                    "sourceHandle": "output",
-                    "targetHandle": "input",
-                }
-                edges.append(edge)
-        pipeline = cls.objects.create(
-            team=team, name=name, data={"nodes": [node.model_dump() for node in all_flow_nodes], "edges": edges}
-        )
-        pipeline.update_nodes_from_data()
-        return pipeline
-
-    @classmethod
     def create_default_pipeline_with_name(cls, team, name, llm_provider_id=None, llm_provider_model=None):
         return cls.create_default(team, name, llm_provider_id, llm_provider_model)
 
@@ -205,7 +151,7 @@ class Pipeline(BaseTeamModel, VersionsMixin):
             )
 
         final_name = default_name if name else f"New Pipeline {existing_pipeline_count + 1}"
-        return cls._create_pipeline_with_nodes(team=team, name=final_name, middle_node=node)
+        return create_pipeline_with_nodes(team=team, name=final_name, middle_node=node)
 
     def get_absolute_url(self):
         return reverse("pipelines:edit", args=[self.team.slug, self.id])
