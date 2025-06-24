@@ -17,7 +17,7 @@
             hx-get="{% url 'experiments:experiment_session_messages_view' request.team.slug experiment.public_id experiment_session.external_id %}"
             hx-trigger="keyup changed delay:500ms"
             hx-target="#messages-container"
-            hx-include="[name='search']"
+            hx-include="[name='search']" # TODO modifiy
           >
           {% if search %}
             <button
@@ -32,6 +32,26 @@
       {% endif %}
       # TODO visibility conditions
       # TODO request
+      <div class="flex items-center gap-2">
+        <label class="label">
+          <span class="label-text">(Original Language)</span>
+        </label>
+        <select
+          name="language"
+          class="select select-sm select-bordered w-48"
+          hx-get="{% url 'experiments:experiment_session_messages_view' request.team.slug experiment.public_id experiment_session.external_id %}"
+          hx-target="#messages-container"
+          hx-include="[name='search'], [name='show_original_translation']" # TODO modifiy
+          hx-trigger="change"
+        >
+          <option value="">translation</option>
+          {% for lang_code, lang_name in available_languages %}
+            <option value="{{ lang_code }}" {% if request.GET.language == lang_code %}selected{% endif %}>
+              {{ lang_name }}
+            </option>
+          {% endfor %}
+        </select>
+      </div>
       <div class="tooltip" data-tip="Messages translated from orginal langage">
         <a class="badge badge-sm" aria-label="Messages translated from original language">
           Translated

@@ -32,6 +32,7 @@ from django_tables2 import SingleTableView
 from field_audit.models import AuditAction
 from waffle import flag_is_active
 
+from apps.analysis.const import LANGUAGE_CHOICES
 from apps.annotations.models import Tag
 from apps.assistants.sync import OpenAiSyncError, get_diff_with_openai_assistant, get_out_of_sync_files
 from apps.channels.datamodels import Attachment, AttachmentType
@@ -1257,9 +1258,19 @@ def experiment_session_messages_view(request, team_slug: str, experiment_id: uui
     page = int(request.GET.get("page", 1))
     search = request.GET.get("search", "")
     language = request.GET.get("language", "")
-    translations = {}  # key: orginal, value: translation in language var above
+    translations = {}  # key: original, value: translation in language var above
     page_size = 100
     messages_queryset = ChatMessage.objects.filter(chat=session.chat).all().order_by("created_at")
+
+    available_language_codes = set()  # TODO: way todo without itrating each time??
+    for message in messages_queryset:
+        if message.translations:
+            available_language_codes.update(message.translations.keys())
+
+    available_languages = [
+        choice for choice in LANGUAGE_CHOICES if choice[0] == "" or choice[0] in available_language_codes
+    ]
+
     if search:
         messages_queryset = messages_queryset.filter(tags__name__icontains=search).distinct()
 
@@ -1277,11 +1288,13 @@ def experiment_session_messages_view(request, team_slug: str, experiment_id: uui
     end_idx = start_idx + page_size
     paginated_messages = messages_queryset[start_idx:end_idx]
     paginated_translations = []  # TODO
+
     for message in paginated_messages:
         message.attached_files = []
         for file in message.get_attached_files():
             file.download_url = file.download_link(session.id)
             message.attached_files.append(file)
+
     context = {
         "experiment_session": session,
         "experiment": experiment,
@@ -1292,6 +1305,8 @@ def experiment_session_messages_view(request, team_slug: str, experiment_id: uui
         "page_size": page_size,
         "page_start_index": start_idx,
         "search": search,
+        "language": language,
+        "available_languages": available_languages,
         "available_tags": [t.name for t in Tag.objects.filter(team__slug=team_slug, is_system_tag=False).all()],
         "translations": paginated_translations,
     }
