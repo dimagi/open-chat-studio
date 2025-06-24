@@ -723,6 +723,8 @@ class Experiment(BaseTeamModel, VersionsMixin, CustomActionOperationMixin):
     debug_mode_enabled = models.BooleanField(default=False)
     citations_enabled = models.BooleanField(default=True)
     create_version_task_id = models.CharField(max_length=128, blank=True)
+    file_uploads_enabled = models.BooleanField(default=False, help_text="Enables file attachments in the web chat interface.",
+)
     objects = ExperimentObjectManager()
 
     class Meta:

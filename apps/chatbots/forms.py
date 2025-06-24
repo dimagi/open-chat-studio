@@ -63,6 +63,7 @@ class ChatbotSettingsForm(forms.ModelForm):
             "post_survey",
             "participant_allowlist",
             "seed_message",
+            "file_uploads_enabled"
         ]
         labels = {"participant_allowlist": "Participant allowlist"}
         help_texts = {
