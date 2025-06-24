@@ -31,6 +31,8 @@ from django.views.generic.edit import FormView
 from django_tables2 import SingleTableView
 from field_audit.models import AuditAction
 from waffle import flag_is_active
+from waffle.models import CACHE_EMPTY
+from waffle.utils import get_cache, keyfmt
 
 from apps.analysis.const import LANGUAGE_CHOICES
 from apps.annotations.models import Tag
@@ -107,6 +109,8 @@ CUSTOM_ERROR_MESSAGE = (
     "The chatbot is currently unavailable. We are working hard to resolve the issue as quickly"
     " as possible and apologize for any inconvenience. Thank you for your patience."
 )
+
+AVAILABLE_LANGUAGES_CACHE_KEY = "available_languages_chat:%s"
 
 
 @login_and_team_required
@@ -1249,6 +1253,25 @@ def _experiment_chat_ui(request, embedded=False):
     )
 
 
+def _get_available_languages_for_chat(chat_id, clear_cache=False):
+    cache = get_cache()
+    cache_key = keyfmt(AVAILABLE_LANGUAGES_CACHE_KEY, chat_id)
+    if clear_cache:
+        cache.delete(cache_key)
+    cached = cache.get(cache_key)
+    if cached == CACHE_EMPTY:
+        return []
+    if cached:
+        return cached
+    translations_data = ChatMessage.objects.filter(chat_id=chat_id).values_list("translations", flat=True)
+    available_language_codes = {key for translation_dict in translations_data for key in translation_dict}
+    available_languages = [
+        choice for choice in LANGUAGE_CHOICES if choice[0] == "" or choice[0] in available_language_codes
+    ]
+    cache.add(cache_key, available_languages or CACHE_EMPTY)
+    return available_languages
+
+
 @experiment_session_view()
 @verify_session_access_cookie
 def experiment_session_messages_view(request, team_slug: str, experiment_id: uuid.UUID, session_id: str):
@@ -1261,13 +1284,7 @@ def experiment_session_messages_view(request, team_slug: str, experiment_id: uui
     translations = {}  # key: original, value: translation in language var above
     page_size = 100
     messages_queryset = ChatMessage.objects.filter(chat=session.chat).all().order_by("created_at")
-    translations_data = ChatMessage.objects.filter(chat=session.chat).values_list("translations", flat=True)
-
-    available_language_codes = {key for translation_dict in translations_data for key in translation_dict}
-
-    available_languages = [
-        choice for choice in LANGUAGE_CHOICES if choice[0] == "" or choice[0] in available_language_codes
-    ]
+    available_languages = _get_available_languages_for_chat(session.chat.id)
 
     if search:
         messages_queryset = messages_queryset.filter(tags__name__icontains=search).distinct()
