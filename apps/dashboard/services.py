@@ -9,6 +9,7 @@ from apps.channels.models import ExperimentChannel
 from apps.chat.models import ChatMessage, ChatMessageType
 from apps.experiments.models import Experiment, ExperimentSession, Participant
 
+from ..annotations.models import TagCategories
 from .models import DashboardCache
 
 
@@ -425,15 +426,17 @@ class DashboardService:
         message_ct = ContentType.objects.get_for_model(ChatMessage)
 
         # Get tagged messages
-        tagged_messages = CustomTaggedItem.objects.filter(
-            content_type=message_ct, object_id__in=querysets["messages"].values_list("id", flat=True)
-        ).select_related("tag")
+        tagged_messages = (
+            CustomTaggedItem.objects.exclude(tag__category=TagCategories.EXPERIMENT_VERSION)
+            .filter(content_type=message_ct, object_id__in=querysets["messages"].values_list("id", flat=True))
+            .select_related("tag")
+        )
 
         # Count tags by category
         tag_stats = {}
         for tagged_item in tagged_messages:
             tag = tagged_item.tag
-            category = tag.category
+            category = str(tag.label)
 
             if category not in tag_stats:
                 tag_stats[category] = {}
@@ -497,8 +500,6 @@ class DashboardService:
             .distinct()
             .count(),
             "active_participants": querysets["sessions"].values("participant").distinct().count(),
-            "human_messages": querysets["messages"].filter(message_type=ChatMessageType.HUMAN).count(),
-            "ai_messages": querysets["messages"].filter(message_type=ChatMessageType.AI).count(),
             "completed_sessions": querysets["sessions"].filter(ended_at__isnull=False).count(),
         }
 

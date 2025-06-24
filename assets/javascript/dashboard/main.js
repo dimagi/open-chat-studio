@@ -211,29 +211,32 @@ function dashboard() {
                 const data = await this.apiRequest('api/overview/');
                 this.overviewStats = [
                     {
-                        label: 'Total Chatbots',
-                        value: data.total_Chatbots || 0,
+                        label: 'Active Chatbots',
+                        numerator: data.active_experiments || 0,
+                        denominator: data.total_experiments || 0,
                         icon: 'fas fa-robot',
                         color: 'text-blue-500'
                     },
                     {
                         label: 'Active Participants',
-                        value: data.active_participants || 0,
+                        numerator: data.active_participants || 0,
+                        denominator: data.total_participants || 0,
                         icon: 'fas fa-users',
                         color: 'text-green-500'
                     },
                     {
-                        label: 'Total Sessions',
-                        value: data.total_sessions || 0,
+                        label: 'Completed Sessions',
+                        numerator: data.completed_sessions || 0,
+                        denominator: data.total_sessions || 0,
                         icon: 'fas fa-comments',
                         color: 'text-purple-500'
                     },
                     {
                         label: 'Total Messages',
-                        value: data.total_messages || 0,
+                        numerator: data.total_messages || 0,
                         icon: 'fas fa-envelope',
                         color: 'text-orange-500'
-                    }
+                    },
                 ];
             } catch (error) {
                 console.error('Error loading overview stats:', error);
