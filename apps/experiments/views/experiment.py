@@ -15,7 +15,9 @@ from django.contrib.auth.decorators import permission_required
 from django.contrib.auth.mixins import PermissionRequiredMixin
 from django.core.exceptions import PermissionDenied, ValidationError
 from django.db import transaction
-from django.db.models import Case, Count, IntegerField, When
+from django.db.models import Case, CharField, Count, IntegerField, Value, When
+from django.db.models.fields.json import KeyTextTransform
+from django.db.models.functions import Coalesce
 from django.http import FileResponse, Http404, HttpResponse, HttpResponseForbidden, HttpResponseRedirect
 from django.shortcuts import get_object_or_404, redirect, render
 from django.template.response import TemplateResponse
@@ -1281,7 +1283,6 @@ def experiment_session_messages_view(request, team_slug: str, experiment_id: uui
     page = int(request.GET.get("page", 1))
     search = request.GET.get("search", "")
     language = request.GET.get("language", "")
-    translations = {}  # key: original, value: translation in language var above
     page_size = 100
     messages_queryset = ChatMessage.objects.filter(chat=session.chat).all().order_by("created_at")
     available_languages = _get_available_languages_for_chat(session.chat.id)
@@ -1290,11 +1291,13 @@ def experiment_session_messages_view(request, team_slug: str, experiment_id: uui
         messages_queryset = messages_queryset.filter(tags__name__icontains=search).distinct()
 
     if language:
-        for message in messages_queryset:
-            translation = "(message generated after last translation)"
-            if language in message.translations:
-                translation = message.translations[language]
-            translations[message] = translation  # TODO make new queryset to make pagination easier
+        messages_queryset = messages_queryset.annotate(
+            translation=Coalesce(
+                KeyTextTransform(language, "translations"),
+                Value("(message generated after last translation)"),
+                output_field=CharField(),
+            )
+        )
 
     total_messages = messages_queryset.count()
     total_pages = max(1, (total_messages + page_size - 1) // page_size)
@@ -1302,7 +1305,6 @@ def experiment_session_messages_view(request, team_slug: str, experiment_id: uui
     start_idx = (page - 1) * page_size
     end_idx = start_idx + page_size
     paginated_messages = messages_queryset[start_idx:end_idx]
-    paginated_translations = []  # TODO
 
     for message in paginated_messages:
         message.attached_files = []
@@ -1313,7 +1315,7 @@ def experiment_session_messages_view(request, team_slug: str, experiment_id: uui
     context = {
         "experiment_session": session,
         "experiment": experiment,
-        "messages": paginated_translations if language else paginated_messages,
+        "messages": paginated_messages,
         "page": page,
         "total_pages": total_pages,
         "total_messages": total_messages,
@@ -1323,7 +1325,6 @@ def experiment_session_messages_view(request, team_slug: str, experiment_id: uui
         "language": language,
         "available_languages": available_languages,
         "available_tags": [t.name for t in Tag.objects.filter(team__slug=team_slug, is_system_tag=False).all()],
-        "translations": paginated_translations,
     }
 
     return TemplateResponse(
