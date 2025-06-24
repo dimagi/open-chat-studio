@@ -112,7 +112,7 @@
               {% if collection.is_index and not collection.is_remote_index and collection_file.chunk_count %}
                 <div class="tooltip" data-tip="View chunks">
                   <a href="{% url 'documents:file_chunks' team.slug collection.id collection_file.file.id %}" class="btn btn-sm">
-                    <i class="fa-solid fa-cube"></i>
+                    <i class="fa fa-puzzle-piece" aria-hidden="true"></i>
                   </a>
                 </div>
               {% endif %}
