@@ -62,7 +62,7 @@ def test_save_metadata_and_tagging(pipeline: Pipeline, session: ExperimentSessio
         bot = PipelineBot(session=session, experiment=session.experiment, trace_service=TracingService.empty())
         bot.invoke_pipeline(input_state=pipeline_state, pipeline=pipeline)
         for tag_value, category in output_message_tags:
-            mock_add_system_tag.assert_any_call(tag_value, category or "")
+            mock_add_system_tag.assert_any_call(tag_value, session.team, category or "")
 
         # add version tag also calls add system tag
         assert mock_add_system_tag.call_count == len(output_message_tags) + 1
