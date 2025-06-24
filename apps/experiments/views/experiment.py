@@ -1261,11 +1261,9 @@ def experiment_session_messages_view(request, team_slug: str, experiment_id: uui
     translations = {}  # key: original, value: translation in language var above
     page_size = 100
     messages_queryset = ChatMessage.objects.filter(chat=session.chat).all().order_by("created_at")
+    translations_data = ChatMessage.objects.filter(chat=session.chat).values_list("translations", flat=True)
 
-    available_language_codes = set()  # TODO: way todo without itrating each time??
-    for message in messages_queryset:
-        if message.translations:
-            available_language_codes.update(message.translations.keys())
+    available_language_codes = {key for translation_dict in translations_data for key in translation_dict}
 
     available_languages = [
         choice for choice in LANGUAGE_CHOICES if choice[0] == "" or choice[0] in available_language_codes
