@@ -32,10 +32,7 @@
       {% endif %}
       # TODO visibility conditions
       # TODO request
-      <div class="flex items-center gap-2">
-        <label class="label">
-          <span class="label-text">(Original Language)</span>
-        </label>
+      <div class="flex items-center">
         <select
           name="language"
           class="select select-sm select-bordered w-48"
@@ -44,38 +41,37 @@
           hx-include="[name='search'], [name='show_original_translation']" # TODO modifiy
           hx-trigger="change"
         >
-          <option value="">translation</option>
           {% for lang_code, lang_name in available_languages %}
             <option value="{{ lang_code }}" {% if request.GET.language == lang_code %}selected{% endif %}>
               {{ lang_name }}
             </option>
           {% endfor %}
         </select>
-      </div>
-      <div class="tooltip" data-tip="Messages translated from orginal langage">
-        <a class="badge badge-sm" aria-label="Messages translated from original language">
-          Translated
-        </a>
-      </div>
-      <button
-        class="btn btn-primary"
-        aria-label="Translate all remaining untranslated messages"
-        hx-post="{% url 'experiments:experiment_session_messages_view' request.team.slug experiment.public_id experiment_session.external_id %}"
-        hx-vals='{"translate_remaining_messages": "true"}'
-        hx-target="#messages-container"
-        hx-indicator=".htmx-indicator"
-      >
-        Translate Remaining Messages
-      </button>
-      <div class="flex items-center gap-2">
-        <label class="label cursor-pointer flex items-center space-x-2">
-          Show Original Translation
-          <input type="checkbox"
-                 name="show_original_translation"
-                 class="toggle"
-                 aria-label="Show original translation alongside translated text"
-                 {% if request.GET.show_original_translation == "on" %}checked{% else %}unchecked{% endif %}>
-        </label>
+        <div class="tooltip px-2" data-tip="Messages translated from original langage">
+          <a class="badge badge-info badge-sm" aria-label="Messages translated from original language">
+            Translated
+          </a>
+        </div>
+        <div class="my-2 px-2">
+          <label class="label cursor-pointer space-x-2 text-xs">
+            Show Original Messages
+            <input type="checkbox"
+                   name="show_original_translation"
+                   class="toggle"
+                   aria-label="Show original translation alongside translated text"
+                   {% if request.GET.show_original_translation == "on" %}checked{% else %}unchecked{% endif %}>
+          </label>
+        </div>
+        <button
+          class="btn btn-primary btn-sm px-2"
+          aria-label="Translate all remaining untranslated messages"
+          hx-post="{% url 'experiments:experiment_session_messages_view' request.team.slug experiment.public_id experiment_session.external_id %}"
+          hx-vals='{"translate_remaining_messages": "true"}'
+          hx-target="#messages-container"
+          hx-indicator=".htmx-indicator"
+        >
+          Translate Remaining Messages
+        </button>
       </div>
 
       {% if total_pages > 1 %}
