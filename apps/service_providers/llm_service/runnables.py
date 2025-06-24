@@ -1,3 +1,4 @@
+import base64
 import logging
 import re
 import time
@@ -5,6 +6,7 @@ from dataclasses import dataclass
 from typing import TYPE_CHECKING, Any, Literal
 
 import openai
+from django.core.exceptions import ObjectDoesNotExist
 from django.db import transaction
 from google.ai.generativelanguage_v1beta.types import Tool as GenAITool
 from langchain.agents import AgentExecutor, create_tool_calling_agent
@@ -132,7 +134,9 @@ class LLMChat(RunnableSerializable[str, ChainOutput]):
     def is_lc_serializable(cls) -> bool:
         return False
 
-    def invoke(self, input: str, config: RunnableConfig | None = None, *args, **kwargs) -> ChainOutput:
+    def invoke(
+        self, input: str, config: RunnableConfig | None = None, attachments: list = None, *args, **kwargs
+    ) -> ChainOutput:
         ai_message = None
         ai_message_metadata = {}
         callback = self.adapter.callback_handler
@@ -145,6 +149,7 @@ class LLMChat(RunnableSerializable[str, ChainOutput]):
         experiment_tag = configurable.get("experiment_tag")
 
         try:
+            self._format_multimodal_input(input=input, attachments=attachments)
             if include_conversation_history:
                 self._populate_memory(input)
 
@@ -169,6 +174,32 @@ class LLMChat(RunnableSerializable[str, ChainOutput]):
             )
 
         return result
+
+    def _format_multimodal_input(self, input: str, attachments: list, session_id) -> list[dict]:
+        parts = [{"type": "text", "text": input}]
+
+        for att in attachments:
+            try:
+                file = File.objects.get(id=att.file_id)
+            except ObjectDoesNotExist:
+                continue
+
+            mime_type = file.content_type or ""
+            try:
+                with file.file.open("rb") as f:
+                    encoded = base64.b64encode(f.read()).decode("utf-8")
+            except Exception:
+                continue
+
+            parts.append(
+                {
+                    "type": "image" if mime_type.startswith("image/") else "file",
+                    "source_type": "base64",
+                    "data": encoded,
+                    "mime_type": mime_type,
+                }
+            )
+        return parts
 
     def _get_input(self, input: str):
         return {self.input_key: self.adapter.format_input(input)}
