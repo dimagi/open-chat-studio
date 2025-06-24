@@ -24,6 +24,7 @@ class Migration(migrations.Migration):
     dependencies = [
         ('documents', '0002_remove_collection_unique_collection_per_team_and_more'),
         ('files', '0006_remove_file_schema_file_metadata'),
+        ('service_providers', '0026_add_google_gemini_models'),
     ]
 
     operations = [
