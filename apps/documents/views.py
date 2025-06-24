@@ -352,27 +352,28 @@ class CreateCollectionFromAssistant(LoginAndTeamRequiredMixin, FormView, Permiss
 
 
 @login_and_team_required
-@permission_required("documents.view_collection", raise_exception=True)
+@permission_required(("documents.view_collection", "files.view_file"), raise_exception=True)
 def file_chunks_view(request, team_slug: str, collection_id: int, file_id: int):
     """View to display file chunks for a specific file in a collection"""
-    collection = get_object_or_404(Collection.objects.select_related("team"), id=collection_id, team__slug=team_slug)
-    file = get_object_or_404(File.objects.select_related("team"), id=file_id, team__slug=team_slug)
-    
-    # Ensure the file belongs to the collection
-    if not CollectionFile.objects.filter(collection=collection, file=file).exists():
-        messages.error(request, "File not found in this collection")
-        return redirect("documents:single_collection_home", team_slug=team_slug, pk=collection_id)
-    
+    collection_file = get_object_or_404(
+        CollectionFile.objects.select_related("file", "collection"),
+        collection__team__slug=team_slug,
+        file_id=file_id,
+        collection_id=collection_id,
+    )
+
+    chunking_strategy = collection_file.metadata.chunking_strategy
+
     # Get chunks for this file in this collection, ordered by chunk number
     chunks = FileChunkEmbedding.objects.filter(
-        collection=collection, 
-        file=file,
-        is_archived=False
-    ).order_by('chunk_number')
-    
+        collection_id=collection_id, file_id=file_id, is_archived=False
+    ).order_by("chunk_number")
+
     context = {
-        "collection": collection,
-        "file": file,
+        "chunk_size": chunking_strategy.chunk_size,
+        "chunk_overlap": chunking_strategy.chunk_overlap,
+        "collection": collection_file.collection,
+        "file": collection_file.file,
         "chunks": chunks,
         "chunks_count": chunks.count(),
     }

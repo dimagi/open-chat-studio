@@ -19,12 +19,26 @@
           <h1 class="pg-title">{{ file.name }} Chunks</h1>
           <div class="text-sm text-base-content/60 mt-1">
             <span>
-              <i class="fa fa-file-o" aria-hidden="true"></i> 
-              <span class="font-bold">{{ chunks_count }}</span> chunks from 
-              <span class="font-bold">{{ file.name }}</span> in 
+              <i class="fa fa-file-o" aria-hidden="true"></i>
+              <span class="font-bold">{{ chunks_count }}</span> chunks from
+              <span class="font-bold">{{ file.name }}</span> in
               <span class="font-bold">{{ collection.name }}</span>
             </span>
           </div>
+          {% if chunk_size or chunk_overlap %}
+            <div class="text-sm text-base-content/60 mt-2 flex flex-wrap gap-4">
+              {% if chunk_size %}
+                <span>
+                  <span class="font-medium">Chunk Size:</span> {{ chunk_size }} tokens
+                </span>
+              {% endif %}
+              {% if chunk_overlap %}
+                <span>
+                  <span class="font-medium">Overlap:</span> {{ chunk_overlap }}
+                </span>
+              {% endif %}
+            </div>
+          {% endif %}
         </div>
         <div class="join flex items-center">
           <div class="tooltip" data-tip="Back to Collection">
@@ -62,7 +76,7 @@
                   {{ chunk.text|length }} characters
                 </div>
               </div>
-              
+
               <div class="prose prose-sm max-w-none">
                 <div class="text-sm leading-relaxed whitespace-pre-wrap">{{ chunk.text }}</div>
               </div>
