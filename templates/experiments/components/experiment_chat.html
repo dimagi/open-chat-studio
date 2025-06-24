@@ -17,7 +17,7 @@
             hx-get="{% url 'experiments:experiment_session_messages_view' request.team.slug experiment.public_id experiment_session.external_id %}"
             hx-trigger="keyup changed delay:500ms"
             hx-target="#messages-container"
-            hx-include="[name='search']" # TODO modifiy
+            hx-include="[name='search'], [name='language'], [name='show_original_translation']"
           >
           {% if search %}
             <button
@@ -38,7 +38,7 @@
             class="select select-sm select-bordered w-48"
             hx-get="{% url 'experiments:experiment_session_messages_view' request.team.slug experiment.public_id experiment_session.external_id %}"
             hx-target="#messages-container"
-            hx-include="[name='search'], [name='show_original_translation']" # TODO modifiy
+            hx-include="[name='search'], [name='show_original_translation']"
             hx-trigger="change"
           >
             {% for lang_code, lang_name in available_languages %}
@@ -62,6 +62,10 @@
                          name="show_original_translation"
                          class="toggle"
                          aria-label="Show original translation alongside translated text"
+                         hx-get="{% url 'experiments:experiment_session_messages_view' request.team.slug experiment.public_id experiment_session.external_id %}"
+                         hx-target="#messages-container"
+                         hx-include="[name='search'], [name='language']"
+                         hx-trigger="change"
                          {% if request.GET.show_original_translation == "on" %}checked{% else %}unchecked{% endif %}>
                 </label>
               </div>
@@ -121,8 +125,17 @@
                     {% endif %}
                     <div class="grow">
                       <div class="message-contents">
-                        <p>{{ message.content|render_markdown }}</p>
+                        {% if message.translation %}
+                          <p>{{ message.translation|render_markdown }}</p>
+                        {% else %}
+                          <p>{{ message.content|render_markdown }}</p>
+                        {% endif %}
                       </div>
+                      {% if show_original_translation %}
+                        <div class="pg-text-muted">
+                          <p><strong>Original Message: </strong><p>{{ message.content|render_markdown }}</p>
+                          </div>
+                      {% endif %}
                       <div class="flex flex-col">
                         {% for file in message.get_attached_files %}
                           <div class="inline text-sm p-1">

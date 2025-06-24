@@ -1283,6 +1283,7 @@ def experiment_session_messages_view(request, team_slug: str, experiment_id: uui
     page = int(request.GET.get("page", 1))
     search = request.GET.get("search", "")
     language = request.GET.get("language", "")
+    show_original_translation = request.GET.get("show_original_translation") == "on"
     page_size = 100
     messages_queryset = ChatMessage.objects.filter(chat=session.chat).all().order_by("created_at")
     available_languages = _get_available_languages_for_chat(session.chat.id)
@@ -1329,6 +1330,7 @@ def experiment_session_messages_view(request, team_slug: str, experiment_id: uui
         "available_languages": available_languages,
         "available_tags": [t.name for t in Tag.objects.filter(team__slug=team_slug, is_system_tag=False).all()],
         "has_missing_translations": has_missing_translations,
+        "show_original_translation": show_original_translation,
     }
 
     return TemplateResponse(
