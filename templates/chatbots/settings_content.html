@@ -222,18 +222,18 @@
   </div>
 
   <div class="mb-6" id="webchat-section">
-  <h4 class="text-md font-bold mb-2">Web Chat Features</h4>
-  <div class="p-4 bg-base-200 rounded-md">
-    {% if edit_mode %}
-      {% render_form_fields form "file_uploads_enabled" %}
-    {% else %}
-      <div>
-        <span class="font-semibold">Allow File Uploads:</span>
-        <span id="allow_file_uploads-content">{{ experiment.file_uploads_enabled|yesno:"Yes,No" }}</span>
-      </div>
-    {% endif %}
+    <h4 class="text-md font-bold mb-2">Web Chat Features</h4>
+    <div class="p-4 bg-base-200 rounded-md">
+      {% if edit_mode %}
+        {% render_form_fields form "file_uploads_enabled" %}
+      {% else %}
+        <div>
+          <span class="font-semibold">Allow File Uploads:</span>
+          <span id="allow_file_uploads-content">{{ experiment.file_uploads_enabled|yesno:"Yes,No" }}</span>
+        </div>
+      {% endif %}
+    </div>
   </div>
-</div>
 
   {% if edit_mode %}</form>{% endif %}
 </div>
