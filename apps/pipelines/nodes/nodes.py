@@ -1178,7 +1178,7 @@ class CodeNode(PipelineNode, OutputMessageTagMixin):
             if len(node_names) == 1 and isinstance(node_names[0], list):
                 node_names = node_names[0]
             if not all(isinstance(name, str) for name in node_names):
-                raise PipelineNodeRunError("node names pass to 'require_node_outputs' must be a string")
+                raise PipelineNodeRunError("Node names passed to 'require_node_outputs' must be a string")
             for node_name in node_names:
                 if node_name not in state["outputs"]:
                     raise WaitForNextInput(f"Node '{node_name}' has not produced any output yet")

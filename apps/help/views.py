@@ -116,7 +116,7 @@ def code_completion(user_query, current_code, error=None, iteration_count=0) -> 
             
         def require_node_outputs(*node_names):
             This function is used to ensure that the specified nodes have been executed and their outputs
-            are available in the pipelines state. If any of the specified nodes have not been executed,
+            are available in the pipeline's state. If any of the specified nodes have not been executed,
             the node will not execute and the pipeline will wait for the required nodes to complete.
             
             This should be called at the start of the main function.
