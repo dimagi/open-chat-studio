@@ -17,6 +17,7 @@ from apps.experiments.models import (
     SyntheticVoice,
 )
 from apps.generics.help import render_help_with_link
+from apps.service_providers.utils import get_dropdown_llm_model_choices
 from apps.utils.prompt import PromptVars, validate_prompt_variables
 
 
@@ -281,3 +282,20 @@ class ExperimentVersionForm(forms.Form):
     class Meta:
         fields = ["version_description", "is_default_version"]
         help_texts = {"version_description": "A description of this version, or what changed from the previous version"}
+
+
+class TranslateMessagesForm(forms.Form):
+    provider_model = forms.ChoiceField(
+        choices=[],
+        required=True,
+        label="Select LLM Provider Model",
+        help_text="Choose the LLM model to use for translation.",
+        widget=forms.Select(attrs={"class": "select select-bordered w-full", "id": "translation-provider-model"}),
+    )
+
+    def __init__(self, *args, team=None, **kwargs):
+        super().__init__(*args, **kwargs)
+        if team:
+            self.fields["provider_model"].choices = [
+                ("", "Choose a model for translation")
+            ] + get_dropdown_llm_model_choices(team)

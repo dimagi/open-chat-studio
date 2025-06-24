@@ -68,6 +68,7 @@ from apps.experiments.forms import (
     ExperimentInvitationForm,
     ExperimentVersionForm,
     SurveyCompletedForm,
+    TranslateMessagesForm,
 )
 from apps.experiments.helpers import get_real_user_or_none
 from apps.experiments.models import (
@@ -97,6 +98,7 @@ from apps.experiments.views.prompt import PROMPT_DATA_SESSION_KEY
 from apps.files.models import File
 from apps.generics.chips import Chip
 from apps.generics.views import generic_home, paginate_session, render_session_details
+from apps.service_providers.models import LlmProvider, LlmProviderModel
 from apps.service_providers.utils import get_llm_provider_choices
 from apps.teams.decorators import login_and_team_required, team_required
 from apps.teams.mixins import LoginAndTeamRequiredMixin
@@ -1288,6 +1290,8 @@ def experiment_session_messages_view(request, team_slug: str, experiment_id: uui
     messages_queryset = ChatMessage.objects.filter(chat=session.chat).all().order_by("created_at")
     available_languages = _get_available_languages_for_chat(session.chat.id)
     has_missing_translations = False
+    translate_form = TranslateMessagesForm(team=request.team)
+    default_message = "(message generated after last translation)"
 
     if search:
         messages_queryset = messages_queryset.filter(tags__name__icontains=search).distinct()
@@ -1296,7 +1300,7 @@ def experiment_session_messages_view(request, team_slug: str, experiment_id: uui
         messages_queryset = messages_queryset.annotate(
             translation=Coalesce(
                 KeyTextTransform(language, "translations"),
-                Value("(message generated after last translation)"),
+                Value(default_message),
                 output_field=CharField(),
             )
         )
@@ -1331,6 +1335,8 @@ def experiment_session_messages_view(request, team_slug: str, experiment_id: uui
         "available_tags": [t.name for t in Tag.objects.filter(team__slug=team_slug, is_system_tag=False).all()],
         "has_missing_translations": has_missing_translations,
         "show_original_translation": show_original_translation,
+        "translate_form": translate_form,
+        "default_message": default_message,
     }
 
     return TemplateResponse(
@@ -1338,6 +1344,58 @@ def experiment_session_messages_view(request, team_slug: str, experiment_id: uui
         "experiments/components/experiment_chat.html",
         context,
     )
+
+
+@experiment_session_view()
+@verify_session_access_cookie
+def translate_messages_view(request, team_slug: str, experiment_id: uuid.UUID, session_id: str):
+    from apps.analysis.translation import translate_messages_with_llm
+
+    session = request.experiment_session
+    language = request.POST.get("language")
+    provider_model = request.POST.get("provider_model", "")
+
+    if not language:
+        messages.error(request, "No language selected for translation.")
+        return redirect_to_messages_view(request, session)
+    if not provider_model:
+        messages.error(request, "No LLM provider model selected.")
+        return redirect_to_messages_view(request, session)
+    try:
+        provider_id, model_id = provider_model.split(":", 1)
+        llm_provider = LlmProvider.objects.get(id=provider_id, team=request.team)
+        llm_provider_model = LlmProviderModel.objects.get(id=model_id)
+
+        messages_to_translate = ChatMessage.objects.filter(chat=session.chat).exclude(
+            **{f"translations__{language}__isnull": False}
+        )
+
+        if not messages_to_translate.exists():
+            messages.info(request, "All messages already have translations for this language.")
+            return redirect_to_messages_view(request, session)
+
+        translate_messages_with_llm(
+            messages=list(messages_to_translate),
+            target_language=language,
+            llm_provider=llm_provider,
+            llm_provider_model=llm_provider_model,
+        )
+    except ValueError:
+        messages.error(request, "Invalid provider model format.")
+    except (LlmProvider.DoesNotExist, LlmProviderModel.DoesNotExist):
+        messages.error(request, "Selected provider or model not found.")
+    except Exception as e:
+        messages.error(request, f"Translation failed: {str(e)}")
+
+    return redirect_to_messages_view(request, session)
+
+
+def redirect_to_messages_view(request, session):  # TODO preserve params from experiment_session_messages_view
+    url = reverse(
+        "experiments:experiment_session_messages_view",
+        args=[request.team.slug, session.experiment.public_id, session.external_id],
+    )
+    return HttpResponseRedirect(url)
 
 
 @experiment_session_view(allowed_states=[SessionStatus.ACTIVE, SessionStatus.SETUP])
