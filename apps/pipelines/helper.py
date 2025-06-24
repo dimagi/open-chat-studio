@@ -189,7 +189,7 @@ def create_router_pipeline(experiment):
             "LLM",
             _get_params_generic(child_link.child, name=child_link.child.name),
             x=700,
-            y=(-800 + 600 * i),
+            y=(-200 + 400 * i),
         )
         for i, child_link in enumerate(child_links)
     ]
@@ -214,8 +214,8 @@ def create_router_pipeline(experiment):
             "id": f"edge-{from_node.id}-{to_node.id}",
             "source": from_node.id,
             "target": to_node.id,
-            "sourceHandle": "output",
-            "targetHandle": source_handle,
+            "sourceHandle": source_handle,
+            "targetHandle": "input",
         }
 
     edges = [
