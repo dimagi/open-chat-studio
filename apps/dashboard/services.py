@@ -342,10 +342,10 @@ class DashboardService:
         # Get all platforms that have channels in this team
         platforms_in_use = (
             ExperimentChannel.objects.filter(team=self.team, deleted=False)
+            .order_by()
             .values_list("platform", flat=True)
             .distinct()
         )
-
         for platform in platforms_in_use:
             platform_sessions = querysets["sessions"].filter(experiment_channel__platform=platform)
             platform_messages = querysets["messages"].filter(
