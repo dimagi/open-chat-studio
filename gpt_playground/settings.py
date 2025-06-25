@@ -691,3 +691,7 @@ SUPPORTED_FILE_TYPES = {
     ),
     "collections": ".txt,.pdf,.doc,.docx,.xls,.xlsx,.csv,.jpg,.jpeg,.png,.gif,.bmp,.webp,.svg,.mp4,.mov,.avi,.mp3,.wav",
 }
+
+# MCP Gateway
+MCP_GATEWAY_HOST = env("MCP_GATEWAY_HOST", default="")
+MCP_GATEWAY_BEARER_TOKEN = env("MCP_GATEWAY_BEARER_TOKEN", default="")
