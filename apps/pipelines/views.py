@@ -133,6 +133,7 @@ def _pipeline_node_parameter_values(team, llm_providers, llm_provider_models):
     collections = (
         Collection.objects.working_versions_queryset().filter(team=team, is_index=False).values("id", "name").all()
     )
+    # Until OCS fully supports RAG, we can only use remote indexes
     collection_indexes = (
         Collection.objects.working_versions_queryset().filter(team=team, is_index=True).values("id", "name").all()
     )

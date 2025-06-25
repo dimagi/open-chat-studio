@@ -157,3 +157,14 @@ def test_invalid_conversion_and_specifier_caught():
 
     with pytest.raises(ValidationError, match="Invalid prompt variable '{var!r:xyz}'. Remove the '!r:xyz'."):
         validate_prompt_variables(form_data, prompt_key, known_vars)
+
+
+def test_extra_context_is_included(mock_session):
+    extra_context = {"custom_var": "custom_value"}
+    context = PromptTemplateContext(mock_session, extra=extra_context)
+    result = context.get_context(["custom_var"])
+    assert result == {"custom_var": "custom_value"}
+
+    # Ensure other context variables are still available
+    result = context.get_context(["participant_data"])
+    assert "participant_data" in result

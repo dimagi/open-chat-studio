@@ -2,6 +2,7 @@ import logging
 import operator
 from abc import ABC
 from collections.abc import Callable, Sequence
+from copy import deepcopy
 from enum import StrEnum
 from typing import Annotated, Any, Literal, Self
 
@@ -64,6 +65,12 @@ def merge_dicts(left: dict, right: dict):
     return output
 
 
+class Intents(StrEnum):
+    """Intents capture actions which should be taken after the pipeline has run."""
+
+    END_SESSION = "end_session"
+
+
 class TempState(TypedDict):
     user_input: str
     outputs: dict
@@ -79,6 +86,7 @@ class PipelineState(dict):
     output_message_metadata: Annotated[dict, merge_dicts]
     attachments: list = Field(default=[])
     output_message_tags: Annotated[list[str], operator.add]
+    session_tags: Annotated[list[str], operator.add]
 
     # List of (previous, current, next) tuples used for aiding in routing decisions.
     path: Annotated[Sequence[tuple[str | None, str, list[str]]], operator.add]
@@ -86,6 +94,8 @@ class PipelineState(dict):
     node_input: str
     # source node for the current node
     node_source: str
+
+    intents: Annotated[list[Intents], operator.add]
 
     def json_safe(self):
         # We need to make a copy of `self` to not change the actual value of `experiment_session` forever
@@ -98,13 +108,29 @@ class PipelineState(dict):
         return copy
 
     @classmethod
+    def clone(cls, state):
+        """Make a copy of the state."""
+        copied = state.copy()
+        # Don't deepcopy Django models
+        session = copied.pop("experiment_session")
+        copied = deepcopy(copied)
+        copied["experiment_session"] = session
+        return PipelineState(copied)
+
+    @classmethod
     def from_node_output(cls, node_name: str, node_id: str, output: Any = None, **kwargs) -> Self:
         kwargs["outputs"] = {node_name: {"message": output, "node_id": node_id}}
-        kwargs["temp_state"] = {"outputs": {node_name: output}}
+        kwargs.setdefault("temp_state", {}).update({"outputs": {node_name: output}})
         if output is not None:
             kwargs["messages"] = [output]
 
         return cls(**kwargs)
+
+    def add_message_tag(self, tag: str):
+        self.setdefault("output_message_tags", []).append((tag, None))
+
+    def add_session_tag(self, tag: str):
+        self.setdefault("session_tags", []).append((tag, None))
 
     def get_node_id(self, node_name: str):
         """
@@ -296,10 +322,9 @@ class PipelineNode(BasePipelineNode, ABC):
         output = self._process(input=state["node_input"], state=state)
         output["path"] = [(state["node_source"], self.node_id, outgoing_edges)]
         get_output_tags_fn = getattr(self, "get_output_tags", None)
+        output.setdefault("output_message_tags", [])
         if callable(get_output_tags_fn):
-            output["output_message_tags"] = get_output_tags_fn()
-        else:
-            output["output_message_tags"] = []
+            output["output_message_tags"].extend(get_output_tags_fn())
         return output
 
     def _process(self, input: str, state: PipelineState) -> PipelineState:

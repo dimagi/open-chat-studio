@@ -3,6 +3,7 @@ import factory
 from apps.service_providers.models import (
     AuthProvider,
     AuthProviderType,
+    EmbeddingProviderModel,
     LlmProvider,
     LlmProviderModel,
     LlmProviderTypes,
@@ -39,6 +40,16 @@ class LlmProviderModelFactory(factory.django.DjangoModelFactory):
     team = factory.SubFactory(TeamFactory)
     type = str(LlmProviderTypes.openai)
     name = factory.Faker("name")
+    deprecated = False
+
+
+class EmbeddingProviderModelFactory(factory.django.DjangoModelFactory):
+    class Meta:
+        model = EmbeddingProviderModel
+
+    team = factory.SubFactory(TeamFactory)
+    type = str(LlmProviderTypes.openai)
+    name = "text-embedding-3-small"
 
 
 class VoiceProviderFactory(factory.django.DjangoModelFactory):

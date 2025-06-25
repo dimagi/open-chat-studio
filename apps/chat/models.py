@@ -1,6 +1,7 @@
 from enum import StrEnum
 from urllib.parse import quote
 
+from django.contrib.postgres.fields import ArrayField
 from django.db import models
 from django.db.models import Q
 from django.utils.functional import classproperty
@@ -24,6 +25,13 @@ class Chat(BaseTeamModel, TaggedModelMixin, UserCommentsMixin):
 
     # must match or be greater than experiment name field
     name = models.CharField(max_length=128, default="Unnamed Chat")
+    translated_languages = ArrayField(
+        models.CharField(max_length=3),
+        default=list,
+        blank=True,
+        null=True,
+        help_text="List of language codes for which translated text is available",
+    )
     metadata = models.JSONField(default=dict)
 
     @property
@@ -118,6 +126,7 @@ class ChatMessage(BaseModel, TaggedModelMixin, UserCommentsMixin):
     summary = models.TextField(  # noqa DJ001
         null=True, blank=True, help_text="The summary of the conversation up to this point (not including this message)"
     )
+    translations = models.JSONField(default=dict, help_text="Dictionary of translated text keyed by the language code")
     metadata = models.JSONField(default=dict)
 
     class Meta:
@@ -230,20 +239,11 @@ class ChatMessage(BaseModel, TaggedModelMixin, UserCommentsMixin):
     def get_metadata(self, key: str):
         return self.metadata.get(key, None)
 
-    def create_and_add_tag(self, tag: str, tag_category: TagCategories):
-        tag, _ = Tag.objects.get_or_create(
-            name=tag,
-            team=self.chat.team,
-            is_system_tag=bool(tag_category),
-            category=tag_category,
-        )
-        self.add_tag(tag, team=self.chat.team, added_by=None)
-
     def add_version_tag(self, version_number: int, is_a_version: bool):
         tag = f"v{version_number}"
         if not is_a_version:
             tag = f"{tag}-unreleased"
-        self.create_and_add_tag(tag=tag, tag_category=TagCategories.EXPERIMENT_VERSION)
+        self.create_and_add_tag(tag, self.chat.team, TagCategories.EXPERIMENT_VERSION)
 
     def add_rating(self, tag: str):
         tag, _ = Tag.objects.get_or_create(

@@ -74,7 +74,8 @@ dependencies = [
     "pycryptodome",
     "python-docx",
     "django-pydantic-field",
-    "pgvector"
+    "pgvector",
+    "backoff"
 ]
 
 [project.urls]
