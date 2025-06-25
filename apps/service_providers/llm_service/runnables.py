@@ -177,28 +177,28 @@ class LLMChat(RunnableSerializable[str, ChainOutput]):
 
     def _format_multimodal_input(self, input: str, attachments: list) -> list[dict]:
         parts = [{"type": "text", "text": input}]
+        if attachments:
+            for att in attachments:
+                try:
+                    file = File.objects.get(id=att.file_id)
+                except ObjectDoesNotExist:
+                    continue
 
-        for att in attachments:
-            try:
-                file = File.objects.get(id=att.file_id)
-            except ObjectDoesNotExist:
-                continue
+                mime_type = file.content_type or ""
+                try:
+                    with file.file.open("rb") as f:
+                        encoded = base64.b64encode(f.read()).decode("utf-8")
+                except Exception:
+                    continue
 
-            mime_type = file.content_type or ""
-            try:
-                with file.file.open("rb") as f:
-                    encoded = base64.b64encode(f.read()).decode("utf-8")
-            except Exception:
-                continue
-
-            parts.append(
-                {
-                    "type": "image" if mime_type.startswith("image/") else "file",
-                    "source_type": "base64",
-                    "data": encoded,
-                    "mime_type": mime_type,
-                }
-            )
+                parts.append(
+                    {
+                        "type": "image" if mime_type.startswith("image/") else "file",
+                        "source_type": "base64",
+                        "data": encoded,
+                        "mime_type": mime_type,
+                    }
+                )
         return parts
 
     def _get_input(self, input: str):
