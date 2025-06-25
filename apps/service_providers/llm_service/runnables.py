@@ -6,7 +6,6 @@ from dataclasses import dataclass
 from typing import TYPE_CHECKING, Any, Literal
 
 import openai
-from django.core.exceptions import ObjectDoesNotExist
 from django.db import transaction
 from google.ai.generativelanguage_v1beta.types import Tool as GenAITool
 from langchain.agents import AgentExecutor, create_tool_calling_agent
@@ -181,7 +180,7 @@ class LLMChat(RunnableSerializable[str, ChainOutput]):
             for att in attachments:
                 try:
                     file = File.objects.get(id=att.file_id)
-                except ObjectDoesNotExist:
+                except File.DoesNotExist:
                     continue
 
                 mime_type = file.content_type or ""
