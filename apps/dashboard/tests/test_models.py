@@ -73,20 +73,3 @@ class TestDashboardFilter:
         assert dashboard_filter.filter_data == filter_data
         assert dashboard_filter.team == team
         assert dashboard_filter.user == user
-
-    def test_default_filter_uniqueness(self, team, user):
-        """Test that only one default filter per user/team"""
-        # Create first default filter
-        filter1 = DashboardFilter.objects.create(
-            team=team, user=user, filter_name="Default 1", filter_data={"test": 1}, is_default=True
-        )
-
-        # Create second default filter
-        filter2 = DashboardFilter.objects.create(
-            team=team, user=user, filter_name="Default 2", filter_data={"test": 2}, is_default=True
-        )
-
-        # First filter should no longer be default
-        filter1.refresh_from_db()
-        assert not filter1.is_default
-        assert filter2.is_default

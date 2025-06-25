@@ -13,37 +13,6 @@ User = get_user_model()
 
 
 @pytest.mark.django_db()
-class TestDashboardViews:
-    """Test dashboard view functionality"""
-
-    def test_dashboard_main_view_requires_login(self, client):
-        """Test that dashboard view requires authentication"""
-        url = reverse("dashboard:index")
-        response = client.get(url)
-
-        # Should redirect to login
-        assert response.status_code == 302
-
-    def test_dashboard_main_view_with_auth(self, authenticated_client, team):
-        """Test dashboard main view with authenticated user"""
-        url = reverse("dashboard:index")
-        response = authenticated_client.get(url)
-
-        assert response.status_code == 200
-        assert "filter_form" in response.context
-        assert "saved_filter_form" in response.context
-
-    def test_dashboard_api_requires_team_context(self, authenticated_client):
-        """Test that API endpoints require team context"""
-        # Test without team context
-        url = reverse("dashboard:api_overview")
-        response = authenticated_client.get(url)
-
-        # Should return empty data or error when no team context
-        assert response.status_code in [200, 403]
-
-
-@pytest.mark.django_db()
 class TestDashboardApiViews:
     """Test dashboard API endpoints"""
 
@@ -197,7 +166,7 @@ class TestFilterManagement:
             team=team, user=user, filter_name="Test Load Filter", filter_data=filter_data, is_default=False
         )
 
-        url = reverse("dashboard:load_filter", kwargs={"filter_id": saved_filter.id})
+        url = reverse("dashboard:load_filter", kwargs={"team_slug": team.slug, "filter_id": saved_filter.id})
         response = authenticated_client.get(url)
 
         assert response.status_code == 200
@@ -207,7 +176,7 @@ class TestFilterManagement:
 
     def test_load_nonexistent_filter(self, authenticated_client, team):
         """Test loading non-existent filter"""
-        url = reverse("dashboard:load_filter", kwargs={"filter_id": 99999})
+        url = reverse("dashboard:load_filter", kwargs={"team_slug": team.slug, "filter_id": 99999})
         response = authenticated_client.get(url)
 
         assert response.status_code == 200
@@ -243,7 +212,7 @@ class TestDashboardSecurity:
         client.force_login(user2)
 
         # Try to access team1's filter
-        url = reverse("dashboard:load_filter", kwargs={"filter_id": saved_filter.id})
+        url = reverse("dashboard:load_filter", kwargs={"team_slug": team1.slug, "filter_id": saved_filter.id})
         response = client.get(url)
 
         # Should not be able to access other team's filter

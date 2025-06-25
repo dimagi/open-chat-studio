@@ -6,7 +6,8 @@ from django.utils import timezone
 from apps.channels.models import ExperimentChannel
 from apps.chat.models import Chat, ChatMessage, ChatMessageType
 from apps.experiments.models import Experiment, ExperimentSession, Participant
-from apps.teams.models import Membership, Team
+from apps.utils.factories.team import MembershipFactory, TeamFactory, get_test_user_groups
+from apps.utils.factories.user import UserFactory
 
 User = get_user_model()
 
@@ -14,23 +15,21 @@ User = get_user_model()
 @pytest.fixture()
 def user():
     """Create a test user"""
-    return User.objects.create_user(
-        email="test@example.com", password="testpass123", first_name="Test", last_name="User"
-    )
+    return UserFactory()
 
 
 @pytest.fixture()
 def team(user):
     """Create a test team with the user as a member"""
-    team = Team.objects.create(name="Test Team", slug="test-team")
-    Membership.objects.create(team=team, user=user, role="admin")
+    team = TeamFactory()
+    MembershipFactory(team=team, user=user, groups=get_test_user_groups)
     return team
 
 
 @pytest.fixture()
 def experiment_team():
     """Create a separate team for multi-team testing"""
-    return Team.objects.create(name="Experiment Team", slug="experiment-team")
+    return TeamFactory(name="Test Experiment", slug="test-experiment")
 
 
 @pytest.fixture()
