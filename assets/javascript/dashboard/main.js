@@ -48,6 +48,7 @@ function dashboard() {
         
         // Initialization
         init() {
+            this.loadFiltersFromURL();
             this.updateFiltersFromForm();
             this.loadInitialData();
             this.setupFilterWatchers();
@@ -60,7 +61,7 @@ function dashboard() {
             // Initialize TomSelect for experiments field
             const experimentsSelect = document.getElementById('id_experiments');
             if (experimentsSelect && !experimentsSelect.tomselect) {
-                new TomSelect(experimentsSelect, {
+                const tomSelect = new TomSelect(experimentsSelect, {
                     plugins: ["remove_button", "caret_position"],
                     maxItems: null,
                     searchField: ['text', 'value'],
@@ -72,12 +73,19 @@ function dashboard() {
                         this.handleFilterChange();
                     }
                 });
+                
+                // Apply URL-loaded values to TomSelect
+                if (this.filters.experiments && Array.isArray(this.filters.experiments)) {
+                    this.filters.experiments.forEach(value => {
+                        tomSelect.addItem(value, true);
+                    });
+                }
             }
             
             // Initialize TomSelect for channels field
             const channelsSelect = document.getElementById('id_channels');
             if (channelsSelect && !channelsSelect.tomselect) {
-                new TomSelect(channelsSelect, {
+                const tomSelect = new TomSelect(channelsSelect, {
                     plugins: ["remove_button", "caret_position"],
                     maxItems: null,
                     searchField: ['text', 'value'],
@@ -89,13 +97,21 @@ function dashboard() {
                         this.handleFilterChange();
                     }
                 });
+                
+                // Apply URL-loaded values to TomSelect
+                if (this.filters.channels && Array.isArray(this.filters.channels)) {
+                    this.filters.channels.forEach(value => {
+                        tomSelect.addItem(value, true);
+                    });
+                }
             }
         },
         
         setupFilterWatchers() {
-            // Watch for filter changes to auto-refresh
+            // Watch for filter changes to auto-refresh and update URL
             this.$watch('filters', () => {
                 if (!this.initialLoad) {
+                    this.updateURL();
                     this.debounceRefresh();
                 }
             }, { deep: true });
@@ -125,6 +141,74 @@ function dashboard() {
         
         handleFilterChange() {
             this.updateFiltersFromForm();
+        },
+        
+        // URL synchronization methods
+        loadFiltersFromURL() {
+            const urlParams = new URLSearchParams(window.location.search);
+            const filtersFromURL = {};
+            
+            for (const [key, value] of urlParams.entries()) {
+                if (key === 'experiments' || key === 'channels') {
+                    // Handle multi-select fields
+                    if (filtersFromURL[key]) {
+                        if (!Array.isArray(filtersFromURL[key])) {
+                            filtersFromURL[key] = [filtersFromURL[key]];
+                        }
+                        filtersFromURL[key].push(value);
+                    } else {
+                        filtersFromURL[key] = [value];
+                    }
+                } else if (key === 'date_range' || key === 'granularity') {
+                    filtersFromURL[key] = value;
+                }
+            }
+            
+            // Apply URL filters to form and reactive state
+            if (Object.keys(filtersFromURL).length > 0) {
+                this.applyFiltersToForm(filtersFromURL);
+                this.filters = { ...this.filters, ...filtersFromURL };
+            }
+        },
+        
+        applyFiltersToForm(filterData) {
+            const form = document.getElementById('filterForm');
+            if (!form) return;
+            
+            for (const [key, value] of Object.entries(filterData)) {
+                const element = form.querySelector(`[name="${key}"]`);
+                if (element) {
+                    if (element.type === 'select-multiple') {
+                        Array.from(element.options).forEach(option => {
+                            option.selected = Array.isArray(value) 
+                                ? value.includes(option.value) 
+                                : value === option.value;
+                        });
+                    } else {
+                        element.value = Array.isArray(value) ? value[0] : value;
+                    }
+                }
+            }
+        },
+        
+        updateURL() {
+            const url = new URL(window.location);
+            const params = new URLSearchParams();
+
+            console.log(this.filters)
+            // Add filters to URL params
+            for (const [key, value] of Object.entries(this.filters)) {
+                if (value && value !== '' && !(Array.isArray(value) && value.length === 0)) {
+                    if (Array.isArray(value)) {
+                        value.forEach(v => params.append(key, v));
+                    } else {
+                        params.set(key, value);
+                    }
+                }
+            }
+            
+            url.search = params.toString();
+            window.history.replaceState({}, '', url);
         },
         
         debounceRefresh() {
@@ -168,6 +252,11 @@ function dashboard() {
             };
             
             this.activeFilterId = null;
+            
+            // Clear URL parameters
+            const url = new URL(window.location);
+            url.search = '';
+            window.history.replaceState({}, '', url);
         },
         
         // API helpers
