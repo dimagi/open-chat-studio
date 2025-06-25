@@ -57,12 +57,24 @@
 
           <div class="form-control">
             <label class="label label-text">{% trans "Channels" %}</label>
-            {{ filter_form.channels }}
+            {% with field=filter_form.channels %}
+              {% partialdef "select_filter" inline=True %}
+                <select x-cloak class="w-full h-10" id="{{ field.id_for_label }}" name="{{ field.name }}" multiple>
+                  {% if not field.field.required %}
+                    <option value="">---------</option>
+                  {% endif %}
+                  {% for option in field %}
+                    {{ option }}
+                  {% endfor %}
+                </select>
+              {% endpartialdef %}
+            {% endwith %}
           </div>
 
           <div class="form-control col-span-2">
             <label class="label label-text">{% trans "Chatbots" %}</label>
-            {{ filter_form.experiments }}
+            {% with field=filter_form.experiments %}{% partial "select_filter" %}
+            {% endwith %}
           </div>
         </form>
 

@@ -32,53 +32,36 @@ class DashboardFilterForm(forms.Form):
         choices=DATE_RANGE_CHOICES,
         initial="30",
         required=False,
-        widget=forms.Select(attrs={"class": "form-select form-select-sm", "data-filter-type": "date_range"}),
+        widget=forms.Select(attrs={"data-filter-type": "date_range"}),
     )
 
     start_date = forms.DateField(
         required=False,
-        widget=forms.DateInput(
-            attrs={"type": "date", "class": "form-control form-control-sm", "data-filter-type": "start_date"}
-        ),
+        widget=forms.DateInput(attrs={"type": "date", "data-filter-type": "start_date"}),
     )
 
     end_date = forms.DateField(
         required=False,
-        widget=forms.DateInput(
-            attrs={"type": "date", "class": "form-control form-control-sm", "data-filter-type": "end_date"}
-        ),
+        widget=forms.DateInput(attrs={"type": "date", "data-filter-type": "end_date"}),
     )
 
     granularity = forms.ChoiceField(
         choices=GRANULARITY_CHOICES,
         initial="daily",
         required=False,
-        widget=forms.Select(attrs={"class": "form-select form-select-sm", "data-filter-type": "granularity"}),
+        widget=forms.Select(attrs={"data-filter-type": "granularity"}),
     )
 
     experiments = forms.ModelMultipleChoiceField(
         queryset=Experiment.objects.none(),
         required=False,
-        widget=forms.SelectMultiple(
-            attrs={
-                "multiple": True,
-                "data-filter-type": "experiments",
-                "id": "id_experiments",
-            }
-        ),
+        widget=forms.SelectMultiple(),
     )
 
     channels = forms.MultipleChoiceField(
         choices=[],  # Will be set dynamically in __init__
         required=False,
-        widget=forms.SelectMultiple(
-            attrs={
-                "class": "form-select form-select-sm tom-select-channels",
-                "multiple": True,
-                "data-filter-type": "channels",
-                "id": "id_channels",
-            }
-        ),
+        widget=forms.SelectMultiple(),
     )
 
     def __init__(self, *args, team=None, **kwargs):
