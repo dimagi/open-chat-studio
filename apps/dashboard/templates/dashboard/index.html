@@ -287,9 +287,14 @@
                 </tr>
               </thead>
               <tbody>
-                <template x-for="participant in userEngagementData" :key="participant.participant_name">
+                <template x-for="participant in userEngagementData" :key="participant.participant_id">
                   <tr>
-                    <td class="font-medium" x-text="participant.participant_name"></td>
+                    <td class="font-medium">
+                      <a :href="participant.participant_url" class="btn btn-sm">
+                        <span x-text="participant.participant_name"></span>
+                        <i class="fa-solid fa-external-link"></i>
+                      </a>
+                    </td>
                     <td x-text="formatNumber(participant.total_messages)"></td>
                     <td x-text="formatNumber(participant.total_sessions)"></td>
                   </tr>

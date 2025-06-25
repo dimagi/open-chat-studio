@@ -3,6 +3,7 @@ from typing import Any
 
 from django.db.models import Count, Max, Q
 from django.db.models.functions import TruncDate, TruncHour, TruncMonth, TruncWeek
+from django.urls import reverse
 from django.utils import timezone
 
 from apps.channels.models import ExperimentChannel
@@ -466,9 +467,14 @@ class DashboardService:
         avg_messages_per_session = (
             participant.total_messages / participant.total_sessions if participant.total_sessions > 0 else 0
         )
+        participant_url = reverse(
+            "participants:single-participant-home",
+            kwargs={"team_slug": self.team.slug, "participant_id": participant.id},
+        )
         return {
             "participant_id": participant.id,
             "participant_name": participant.name or participant.identifier,
+            "participant_url": participant_url,
             "total_messages": participant.total_messages,
             "total_sessions": participant.total_sessions,
             "avg_messages_per_session": avg_messages_per_session,
