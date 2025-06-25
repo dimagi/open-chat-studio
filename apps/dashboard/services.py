@@ -16,6 +16,22 @@ from .models import DashboardCache
 class DashboardService:
     """Service class for dashboard analytics operations"""
 
+    GRANULARITY_TRUNC_MAP = {
+        "hourly": TruncHour,
+        "daily": TruncDate,
+        "weekly": TruncWeek,
+        "monthly": TruncMonth,
+    }
+
+    VALID_ORDER_FIELDS = [
+        "participants",
+        "sessions",
+        "messages",
+        "completion_rate",
+        "avg_session_duration",
+        "avg_messages_per_session",
+    ]
+
     def __init__(self, team):
         self.team = team
 
@@ -72,10 +88,7 @@ class DashboardService:
         querysets = self.get_filtered_queryset_base(**filters)
         messages = querysets["messages"].filter(message_type=ChatMessageType.HUMAN)
 
-        # Choose truncation based on granularity
-        trunc_func = {"hourly": TruncHour, "daily": TruncDate, "weekly": TruncWeek, "monthly": TruncMonth}.get(
-            granularity, TruncDate
-        )
+        trunc_func = self._get_trunc_function(granularity)
 
         # Group by time period and count unique participants
         participant_stats = (
@@ -87,7 +100,7 @@ class DashboardService:
 
         data = [
             {
-                "date": stat["period"].isoformat() if hasattr(stat["period"], "isoformat") else str(stat["period"]),
+                "date": self._format_period(stat["period"]),
                 "active_participants": stat["active_participants"],
             }
             for stat in participant_stats
@@ -106,9 +119,7 @@ class DashboardService:
         querysets = self.get_filtered_queryset_base(**filters)
         sessions = querysets["sessions"]
 
-        trunc_func = {"hourly": TruncHour, "daily": TruncDate, "weekly": TruncWeek, "monthly": TruncMonth}.get(
-            granularity, TruncDate
-        )
+        trunc_func = self._get_trunc_function(granularity)
 
         session_stats = (
             sessions.annotate(period=trunc_func("created_at"))
@@ -120,7 +131,7 @@ class DashboardService:
         data = {"sessions": [], "participants": []}
 
         for stat in session_stats:
-            period_str = stat["period"].isoformat() if hasattr(stat["period"], "isoformat") else str(stat["period"])
+            period_str = self._format_period(stat["period"])
             data["sessions"].append({"date": period_str, "total_sessions": stat["total_sessions"]})
             data["participants"].append({"date": period_str, "unique_participants": stat["unique_participants"]})
 
@@ -137,9 +148,7 @@ class DashboardService:
         querysets = self.get_filtered_queryset_base(**filters)
         messages = querysets["messages"]
 
-        trunc_func = {"hourly": TruncHour, "daily": TruncDate, "weekly": TruncWeek, "monthly": TruncMonth}.get(
-            granularity, TruncDate
-        )
+        trunc_func = self._get_trunc_function(granularity)
 
         message_stats = (
             messages.annotate(period=trunc_func("created_at"))
@@ -155,7 +164,7 @@ class DashboardService:
         data = {"human_messages": [], "ai_messages": [], "totals": []}
 
         for stat in message_stats:
-            period_str = stat["period"].isoformat() if hasattr(stat["period"], "isoformat") else str(stat["period"])
+            period_str = self._format_period(stat["period"])
             data["human_messages"].append({"date": period_str, "count": stat["human_messages"]})
             data["ai_messages"].append({"date": period_str, "count": stat["ai_messages"]})
             data["totals"].append(
@@ -226,14 +235,7 @@ class DashboardService:
 
         # Apply ordering
         reverse_order = order_dir.lower() == "desc"
-        if order_by in [
-            "participants",
-            "sessions",
-            "messages",
-            "completion_rate",
-            "avg_session_duration",
-            "avg_messages_per_session",
-        ]:
+        if order_by in self.VALID_ORDER_FIELDS:
             cached_data.sort(key=lambda x: x[order_by] or 0, reverse=reverse_order)
         else:
             # Default to messages if invalid order_by
@@ -268,19 +270,20 @@ class DashboardService:
         participants = querysets["participants"]
 
         # Get participant engagement stats
+        date_filter = Q(experimentsession__chat__messages__created_at__gte=querysets["start_date"]) & Q(
+            experimentsession__chat__messages__created_at__lte=querysets["end_date"]
+        )
+        session_filter = Q(experimentsession__created_at__gte=querysets["start_date"]) & Q(
+            experimentsession__created_at__lte=querysets["end_date"]
+        )
+
         participant_stats = (
             participants.annotate(
                 total_messages=Count(
                     "experimentsession__chat__messages",
-                    filter=Q(experimentsession__chat__messages__message_type=ChatMessageType.HUMAN)
-                    & Q(experimentsession__chat__messages__created_at__gte=querysets["start_date"])
-                    & Q(experimentsession__chat__messages__created_at__lte=querysets["end_date"]),
+                    filter=Q(experimentsession__chat__messages__message_type=ChatMessageType.HUMAN) & date_filter,
                 ),
-                total_sessions=Count(
-                    "experimentsession",
-                    filter=Q(experimentsession__created_at__gte=querysets["start_date"])
-                    & Q(experimentsession__created_at__lte=querysets["end_date"]),
-                ),
+                total_sessions=Count("experimentsession", filter=session_filter),
                 last_activity=Max("experimentsession__chat__messages__created_at"),
                 experiments_count=Count("experimentsession__experiment", distinct=True),
             )
@@ -289,40 +292,10 @@ class DashboardService:
         )
 
         # Most active participants
-        most_active = []
-        for participant in participant_stats[:limit]:
-            avg_messages_per_session = (
-                participant.total_messages / participant.total_sessions if participant.total_sessions > 0 else 0
-            )
-            most_active.append(
-                {
-                    "participant_id": participant.id,
-                    "participant_name": participant.name or participant.identifier,
-                    "total_messages": participant.total_messages,
-                    "total_sessions": participant.total_sessions,
-                    "avg_messages_per_session": avg_messages_per_session,
-                    "last_activity": participant.last_activity.isoformat() if participant.last_activity else None,
-                    "experiments_count": participant.experiments_count,
-                }
-            )
+        most_active = [self._format_participant_data(p) for p in participant_stats[:limit]]
 
         # Least active participants (but with at least some activity)
-        least_active = []
-        for participant in participant_stats.order_by("total_messages")[:limit]:
-            avg_messages_per_session = (
-                participant.total_messages / participant.total_sessions if participant.total_sessions > 0 else 0
-            )
-            least_active.append(
-                {
-                    "participant_id": participant.id,
-                    "participant_name": participant.name or participant.identifier,
-                    "total_messages": participant.total_messages,
-                    "total_sessions": participant.total_sessions,
-                    "avg_messages_per_session": avg_messages_per_session,
-                    "last_activity": participant.last_activity.isoformat() if participant.last_activity else None,
-                    "experiments_count": participant.experiments_count,
-                }
-            )
+        least_active = [self._format_participant_data(p) for p in participant_stats.order_by("total_messages")[:limit]]
 
         # Session length distribution
         sessions = querysets["sessions"].filter(ended_at__isnull=False)
@@ -479,6 +452,29 @@ class DashboardService:
             )
 
         return histogram
+
+    def _get_trunc_function(self, granularity: str):
+        """Get the appropriate truncation function for the given granularity"""
+        return self.GRANULARITY_TRUNC_MAP.get(granularity, TruncDate)
+
+    def _format_period(self, period):
+        """Format a period object to ISO string"""
+        return period.isoformat() if hasattr(period, "isoformat") else str(period)
+
+    def _format_participant_data(self, participant) -> dict[str, Any]:
+        """Format participant data for engagement analysis"""
+        avg_messages_per_session = (
+            participant.total_messages / participant.total_sessions if participant.total_sessions > 0 else 0
+        )
+        return {
+            "participant_id": participant.id,
+            "participant_name": participant.name or participant.identifier,
+            "total_messages": participant.total_messages,
+            "total_sessions": participant.total_sessions,
+            "avg_messages_per_session": avg_messages_per_session,
+            "last_activity": participant.last_activity.isoformat() if participant.last_activity else None,
+            "experiments_count": participant.experiments_count,
+        }
 
     def get_overview_stats(self, **filters) -> dict[str, Any]:
         """Get dashboard overview statistics"""
