@@ -75,7 +75,8 @@ dependencies = [
     "python-docx",
     "django-pydantic-field",
     "pgvector",
-    "backoff"
+    "backoff",
+    "langchain-mcp-adapters"
 ]
 
 [project.urls]
