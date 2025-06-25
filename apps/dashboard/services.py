@@ -218,10 +218,14 @@ class DashboardService:
                 # Completion rate
                 completion_rate = (completed_sessions.count() / sessions_count) if sessions_count > 0 else 0
 
+                experiment_url = reverse(
+                    "chatbots:single_chatbot_home", kwargs={"team_slug": self.team.slug, "experiment_id": experiment.id}
+                )
                 performance_data.append(
                     {
                         "experiment_id": experiment.id,
                         "experiment_name": experiment.name,
+                        "experiment_url": experiment_url,
                         "participants": participants_count,
                         "sessions": sessions_count,
                         "messages": messages_count,
