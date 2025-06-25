@@ -155,7 +155,13 @@
                     <div class="grow">
                       <div class="message-contents">
                         {% if message.translation %}
-                          <p>{{ message.translation|render_markdown }}</p>
+                          {% if message.translation == default_message %}
+                            <div class="chat-message-untranslated">
+                              <p>{{ message.translation|render_markdown }}</p>
+                            </div>
+                          {% else %}
+                            <p>{{ message.translation|render_markdown }}</p>
+                          {% endif %}
                         {% else %}
                           <p>{{ message.content|render_markdown }}</p>
                         {% endif %}
