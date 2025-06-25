@@ -137,7 +137,6 @@ class LLMChat(RunnableSerializable[str, ChainOutput]):
         input: str,
         config: RunnableConfig | None = None,
         attachments: list = None,
-        session_id: int = None,
         *args,
         **kwargs,
     ) -> ChainOutput:
@@ -154,7 +153,9 @@ class LLMChat(RunnableSerializable[str, ChainOutput]):
 
         try:
             if attachments:
-                input = self._format_multimodal_input(input=input, attachments=attachments, session_id=session_id)
+                input = self._format_multimodal_input(
+                    input=input, attachments=attachments, session_id=self.adapter.session.id
+                )
             if include_conversation_history:
                 self._populate_memory(input)
 

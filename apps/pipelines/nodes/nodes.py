@@ -440,7 +440,7 @@ class LLMResponseWithPrompt(LLMResponse, HistoryMixin, OutputMessageTagMixin):
         else:
             chat = SimpleLLMChat(adapter=chat_adapter, history_manager=history_manager)
         # Invoke runnable
-        result = chat.invoke(input=input, attachments=attachments, session_id=session.id)
+        result = chat.invoke(input=input, attachments=attachments)
         return PipelineState.from_node_output(
             node_name=self.name,
             node_id=self.node_id,
