@@ -102,9 +102,8 @@
                         hx-include="[name='search'], [name='language'], [name='show_original_translation'], #translation-provider-model"
                         hx-target="#messages-container"
                         hx-indicator=".htmx-indicator"
-                        onclick="document.getElementById('translate-messages-modal').checked = false"
-                      >Translate Messages
-                      </button>
+                        onclick="document.getElementById('translate-messages-modal').checked = false; showTranslationSpinners();"
+                      >Translate Messages</button>
                       <label for="translate-messages-modal" class="btn">Cancel</label>
                     </div>
                   </div>
@@ -157,6 +156,10 @@
                         {% if message.translation %}
                           {% if message.translation == default_message %}
                             <div class="chat-message-untranslated">
+                              <div class="htmx-indicator htmx-indicator-{{ message.id }}">
+                                <span class="loading loading-spinner loading-sm"></span>
+                                <span class="ml-2">Translating...</span>
+                              </div>
                               <p>{{ message.translation|render_markdown }}</p>
                             </div>
                           {% else %}
@@ -252,3 +255,13 @@
     </div>
   </div>
 </div>
+
+
+<script>
+  function showTranslationSpinners() {
+    document.querySelectorAll('.chat-message-untranslated .htmx-indicator').forEach(indicator => {
+      indicator.style.display = 'flex';
+      indicator.style.alignItems = 'center';
+    });
+  }
+</script>
