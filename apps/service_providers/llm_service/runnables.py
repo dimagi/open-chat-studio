@@ -149,7 +149,7 @@ class LLMChat(RunnableSerializable[str, ChainOutput]):
         experiment_tag = configurable.get("experiment_tag")
 
         try:
-            self._format_multimodal_input(input=input, attachments=attachments)
+            input = self._format_multimodal_input(input=input, attachments=attachments)
             if include_conversation_history:
                 self._populate_memory(input)
 
@@ -175,7 +175,7 @@ class LLMChat(RunnableSerializable[str, ChainOutput]):
 
         return result
 
-    def _format_multimodal_input(self, input: str, attachments: list, session_id) -> list[dict]:
+    def _format_multimodal_input(self, input: str, attachments: list) -> list[dict]:
         parts = [{"type": "text", "text": input}]
 
         for att in attachments:
