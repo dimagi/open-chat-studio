@@ -244,7 +244,7 @@
                   <td x-text="item.avg_session_duration ? formatDuration(item.avg_session_duration) : '-'"></td>
                   <td>
                     <div class="flex items-center gap-2">
-                      <div class="progress-bar flex-1">
+                      <div class="dashboard-progress-bar flex-1">
                         <div class="progress-bar-fill success" :style="`width: ${(item.completion_rate * 100).toFixed(1)}%`"></div>
                       </div>
                       <span class="text-xs" x-text="`${(item.completion_rate * 100).toFixed(1)}%`"></span>
