@@ -78,7 +78,7 @@ function dashboard() {
         },
         
         setupTomSelect() {
-            this.initializeTomSelect('id_experiments', 'experiments');
+            this.initializeTomSelect('id_experiments', 'experiments', 'Select chatbots...');
             this.initializeTomSelect('id_channels', 'channels', 'Select channels...');
         },
         
