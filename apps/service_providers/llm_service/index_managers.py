@@ -271,7 +271,7 @@ class LocalIndexManager(metaclass=ABCMeta):
                         team_id=file.team_id,
                         file=file,
                         collection_id=collection_file.collection_id,
-                        chunk_number=idx,
+                        chunk_number=idx + 1,  # Start chunk numbering from 1
                         text=chunk,
                         embedding=embedding_vector,
                         # TODO: Get the page number if possible. Also, what file types are supported?
