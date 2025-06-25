@@ -151,12 +151,15 @@
       total_upload_size_bytes: 0,
       disableCodeInterpreterUpload: false,
       init() {
-        let fieldsToWatch = ['message', 'experiment_files'];
+        let fieldsToWatch = ['message'];
         if (this.$refs.fileSearch) {
           fieldsToWatch.push('file_search_files');
         }
         if (this.$refs.codeInterpreter) {
           fieldsToWatch.push('code_interpreter_files');
+        }
+        if (this.$refs.experimentUpload) {
+          fieldsToWatch.push('experiment_files');
         }
         this.$watchMany(fieldsToWatch, (message, experimentFiles, cfiles = [], ffiles = []) => {
           const submitButton = document.getElementById('message-submit');
