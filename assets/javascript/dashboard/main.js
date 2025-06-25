@@ -161,6 +161,11 @@ function dashboard() {
                     }
                 } else if (key === 'date_range' || key === 'granularity') {
                     filtersFromURL[key] = value;
+                } else if (key === 'start_date' || key === 'end_date') {
+                    // Only load start_date and end_date if date_range is 'custom'
+                    if (urlParams.get('date_range') === 'custom') {
+                        filtersFromURL[key] = value;
+                    }
                 }
             }
             
@@ -195,10 +200,14 @@ function dashboard() {
             const url = new URL(window.location);
             const params = new URLSearchParams();
 
-            console.log(this.filters)
             // Add filters to URL params
             for (const [key, value] of Object.entries(this.filters)) {
                 if (value && value !== '' && !(Array.isArray(value) && value.length === 0)) {
+                    // Only include start_date and end_date if date_range is 'custom'
+                    if ((key === 'start_date' || key === 'end_date') && this.filters.date_range !== 'custom') {
+                        continue;
+                    }
+                    
                     if (Array.isArray(value)) {
                         value.forEach(v => params.append(key, v));
                     } else {
