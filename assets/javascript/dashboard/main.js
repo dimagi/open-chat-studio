@@ -5,12 +5,32 @@
 
 import TomSelect from "tom-select";
 
+// Constants
+const DEFAULTS = {
+    DATE_RANGE: '30',
+    GRANULARITY: 'daily',
+    PAGE_SIZE: 10,
+    DEBOUNCE_DELAY: 500,
+    NOTIFICATION_TIMEOUT: 5000,
+    RELOAD_DELAY: 1000
+};
+
+const TOM_SELECT_CONFIG = {
+    plugins: ["remove_button", "caret_position"],
+    maxItems: null,
+    searchField: ['text', 'value'],
+    allowEmptyOption: true,
+    hideSelected: true,
+    closeAfterSelect: true,
+    loadThrottle: 200
+};
+
 function dashboard() {
     return {
         // Reactive data
         filters: {
-            date_range: '30',
-            granularity: 'daily',
+            date_range: DEFAULTS.DATE_RANGE,
+            granularity: DEFAULTS.GRANULARITY,
             experiments: [],
             channels: []
         },
@@ -19,7 +39,7 @@ function dashboard() {
         botPerformanceData: [],
         botPerformancePagination: {
             page: 1,
-            page_size: 10,
+            page_size: DEFAULTS.PAGE_SIZE,
             total_count: 0,
             total_pages: 0,
             has_next: false,
@@ -58,52 +78,31 @@ function dashboard() {
         },
         
         setupTomSelect() {
-            // Initialize TomSelect for experiments field
-            const experimentsSelect = document.getElementById('id_experiments');
-            if (experimentsSelect && !experimentsSelect.tomselect) {
-                const tomSelect = new TomSelect(experimentsSelect, {
-                    plugins: ["remove_button", "caret_position"],
-                    maxItems: null,
-                    searchField: ['text', 'value'],
-                    allowEmptyOption: true,
-                    hideSelected: true,
-                    closeAfterSelect: true,
-                    loadThrottle: 200,
-                    onChange: () => {
-                        this.handleFilterChange();
-                    }
-                });
-                
-                // Apply URL-loaded values to TomSelect
-                if (this.filters.experiments && Array.isArray(this.filters.experiments)) {
-                    this.filters.experiments.forEach(value => {
-                        tomSelect.addItem(value, true);
-                    });
-                }
+            this.initializeTomSelect('id_experiments', 'experiments');
+            this.initializeTomSelect('id_channels', 'channels', 'Select channels...');
+        },
+        
+        initializeTomSelect(elementId, filterKey, placeholder = null) {
+            const selectElement = document.getElementById(elementId);
+            if (!selectElement || selectElement.tomselect) return;
+            
+            const config = {
+                ...TOM_SELECT_CONFIG,
+                onChange: () => this.handleFilterChange()
+            };
+            
+            if (placeholder) {
+                config.placeholder = placeholder;
             }
             
-            // Initialize TomSelect for channels field
-            const channelsSelect = document.getElementById('id_channels');
-            if (channelsSelect && !channelsSelect.tomselect) {
-                const tomSelect = new TomSelect(channelsSelect, {
-                    plugins: ["remove_button", "caret_position"],
-                    maxItems: null,
-                    searchField: ['text', 'value'],
-                    allowEmptyOption: true,
-                    hideSelected: true,
-                    closeAfterSelect: true,
-                    placeholder: 'Select channels...',
-                    onChange: () => {
-                        this.handleFilterChange();
-                    }
+            const tomSelect = new TomSelect(selectElement, config);
+            
+            // Apply URL-loaded values
+            const filterValues = this.filters[filterKey];
+            if (filterValues && Array.isArray(filterValues)) {
+                filterValues.forEach(value => {
+                    tomSelect.addItem(value, true);
                 });
-                
-                // Apply URL-loaded values to TomSelect
-                if (this.filters.channels && Array.isArray(this.filters.channels)) {
-                    this.filters.channels.forEach(value => {
-                        tomSelect.addItem(value, true);
-                    });
-                }
             }
         },
         
@@ -224,7 +223,7 @@ function dashboard() {
             clearTimeout(this.refreshTimeout);
             this.refreshTimeout = setTimeout(() => {
                 this.refreshAllCharts();
-            }, 500);
+            }, DEFAULTS.DEBOUNCE_DELAY);
         },
         
         resetFilters() {
@@ -235,27 +234,19 @@ function dashboard() {
                 
                 // Set default values
                 const dateRangeSelect = form.querySelector('[data-filter-type="date_range"]');
-                if (dateRangeSelect) dateRangeSelect.value = '30';
+                if (dateRangeSelect) dateRangeSelect.value = DEFAULTS.DATE_RANGE;
                 
                 const granularitySelect = form.querySelector('[data-filter-type="granularity"]');
-                if (granularitySelect) granularitySelect.value = 'daily';
+                if (granularitySelect) granularitySelect.value = DEFAULTS.GRANULARITY;
                 
                 // Clear TomSelect instances
-                const experimentsSelect = document.getElementById('id_experiments');
-                if (experimentsSelect && experimentsSelect.tomselect) {
-                    experimentsSelect.tomselect.clear();
-                }
-                
-                const channelsSelect = document.getElementById('id_channels');
-                if (channelsSelect && channelsSelect.tomselect) {
-                    channelsSelect.tomselect.clear();
-                }
+                this.clearTomSelectInstances();
             }
             
             // Reset reactive data
             this.filters = {
-                date_range: '30',
-                granularity: 'daily',
+                date_range: DEFAULTS.DATE_RANGE,
+                granularity: DEFAULTS.GRANULARITY,
                 experiments: [],
                 channels: []
             };
@@ -270,14 +261,44 @@ function dashboard() {
         
         // API helpers
         async apiRequest(endpoint, params = {}) {
-            const urlParams = new URLSearchParams({...this.filters, ...params});
-            const response = await fetch(`${endpoint}?${urlParams}`);
-            
-            if (!response.ok) {
-                throw new Error(`API request failed: ${response.statusText}`);
+            if (!endpoint || typeof endpoint !== 'string') {
+                throw new Error('Invalid endpoint provided');
             }
             
-            return response.json();
+            const sanitizedParams = this.sanitizeParams({...this.filters, ...params});
+            const urlParams = new URLSearchParams(sanitizedParams);
+            
+            try {
+                const response = await fetch(`${endpoint}?${urlParams}`);
+                
+                if (!response.ok) {
+                    throw new Error(`API request failed: ${response.status} ${response.statusText}`);
+                }
+                
+                return await response.json();
+            } catch (error) {
+                console.error(`API request to ${endpoint} failed:`, error);
+                throw error;
+            }
+        },
+        
+        sanitizeParams(params) {
+            const sanitized = {};
+            
+            for (const [key, value] of Object.entries(params)) {
+                if (value !== null && value !== undefined && value !== '') {
+                    if (Array.isArray(value)) {
+                        const validValues = value.filter(v => v !== null && v !== undefined && v !== '');
+                        if (validValues.length > 0) {
+                            sanitized[key] = validValues;
+                        }
+                    } else {
+                        sanitized[key] = value;
+                    }
+                }
+            }
+            
+            return sanitized;
         },
         
         setLoadingState(key, loading) {
@@ -558,7 +579,7 @@ function dashboard() {
                     this.showNotification('Filter saved successfully', 'success');
 
                     // Refresh page to show new saved filter
-                    setTimeout(() => window.location.reload(), 1000);
+                    setTimeout(() => window.location.reload(), DEFAULTS.RELOAD_DELAY);
                 } else {
                     this.showNotification('Failed to save filter', 'error');
                 }
@@ -595,7 +616,7 @@ function dashboard() {
                     }
                     
                     // Refresh page to update saved filters list
-                    setTimeout(() => window.location.reload(), 1000);
+                    setTimeout(() => window.location.reload(), DEFAULTS.RELOAD_DELAY);
                 } else {
                     this.showNotification('Failed to delete filter', 'error');
                 }
@@ -635,12 +656,12 @@ function dashboard() {
             
             document.body.appendChild(notification);
             
-            // Auto-remove after 5 seconds
+            // Auto-remove after timeout
             setTimeout(() => {
                 if (notification.parentElement) {
                     notification.remove();
                 }
-            }, 5000);
+            }, DEFAULTS.NOTIFICATION_TIMEOUT);
         },
         
         // Utility methods
@@ -704,6 +725,15 @@ function dashboard() {
                 return 'fas fa-sort';
             }
             return this.botPerformancePagination.order_dir === 'asc' ? 'fas fa-sort-up' : 'fas fa-sort-down';
+        },
+        
+        clearTomSelectInstances() {
+            ['id_experiments', 'id_channels'].forEach(id => {
+                const element = document.getElementById(id);
+                if (element && element.tomselect) {
+                    element.tomselect.clear();
+                }
+            });
         },
         
         // Cleanup
