@@ -1382,19 +1382,37 @@ def translate_messages_view(request, team_slug: str, experiment_id: uuid.UUID, s
         )
     except ValueError:
         messages.error(request, "Invalid provider model format.")
+        return redirect_to_messages_view(request, session)
     except (LlmProvider.DoesNotExist, LlmProviderModel.DoesNotExist):
         messages.error(request, "Selected provider or model not found.")
+        return redirect_to_messages_view(request, session)
     except Exception as e:
+        print(e)
         messages.error(request, f"Translation failed: {str(e)}")
+        return redirect_to_messages_view(request, session)
 
     return redirect_to_messages_view(request, session)
 
 
-def redirect_to_messages_view(request, session):  # TODO preserve params from experiment_session_messages_view
+def redirect_to_messages_view(request, session):
     url = reverse(
         "experiments:experiment_session_messages_view",
         args=[request.team.slug, session.experiment.public_id, session.external_id],
     )
+    params = {}
+    search = request.POST.get("search", "").strip()
+    show_original_translation = request.POST.get("show_original_translation", "")
+    params["language"] = request.POST.get("language", "")
+    if search:
+        params["search"] = search
+    if show_original_translation:
+        params["show_original_translation"] = show_original_translation
+
+    if params:
+        from urllib.parse import urlencode
+
+        url += "?" + urlencode(params)
+
     return HttpResponseRedirect(url)
 
 
