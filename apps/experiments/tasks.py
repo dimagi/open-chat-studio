@@ -75,6 +75,8 @@ def get_response_for_webchat_task(
         )
         update_taskbadger_data(self, web_channel, message)
         chat_message = web_channel.new_user_message(message)
+        # In some instances, the ChatMessage is not saved to the DB e.g. errors
+        # so add the response here as well as the message ID
         response["response"] = chat_message.content
         response["message_id"] = chat_message.id
     except Exception as e:

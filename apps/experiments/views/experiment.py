@@ -83,6 +83,7 @@ from apps.experiments.tables import (
     ParentExperimentRoutesTable,
     TerminalBotsTable,
 )
+from apps.experiments.task_utils import get_message_task_response
 from apps.experiments.tasks import (
     async_create_experiment_version,
     async_export_chat,
@@ -96,16 +97,6 @@ from apps.service_providers.utils import get_llm_provider_choices
 from apps.teams.decorators import login_and_team_required, team_required
 from apps.teams.mixins import LoginAndTeamRequiredMixin
 from apps.utils.base_experiment_table_view import BaseExperimentTableView
-
-DEFAULT_ERROR_MESSAGE = (
-    "Sorry something went wrong. This was likely an intermittent error related to load."
-    "Please try again, and wait a few minutes if this keeps happening."
-)
-
-CUSTOM_ERROR_MESSAGE = (
-    "The chatbot is currently unavailable. We are working hard to resolve the issue as quickly"
-    " as possible and apologize for any inconvenience. Thank you for your patience."
-)
 
 
 @login_and_team_required
@@ -772,35 +763,12 @@ def get_message_response(request, team_slug: str, experiment_id: uuid.UUID, sess
     experiment = request.experiment
     session = request.experiment_session
     last_message = ChatMessage.objects.filter(chat=session.chat).order_by("-created_at").first()
-    progress = Progress(AsyncResult(task_id)).get_info()
-    # don't render empty messages
-    skip_render = progress["complete"] and progress["success"] and not progress["result"]
-    if skip_render:
+    message_details = get_message_task_response(experiment, task_id)
+    if not message_details:
+        # don't render empty messages
         return HttpResponse()
 
-    message_details = {"message": None, "error_msg": False, "complete": progress["complete"]}
-    if progress["complete"] and progress["success"]:
-        result = progress["result"]
-        if message_id := result.get("message_id"):
-            message_details["message"] = ChatMessage.objects.get(id=message_id)
-        elif response := result.get("response"):
-            message_details["message"] = {"content": response}
-        if error := result.get("error"):
-            if not experiment.debug_mode_enabled:
-                if "Invalid parameter" in error:  # TODO: temporary
-                    message_details["error_msg"] = CUSTOM_ERROR_MESSAGE
-                else:
-                    message_details["error_msg"] = DEFAULT_ERROR_MESSAGE
-            else:
-                message_details["error_msg"] = error
-    elif progress["complete"]:
-        message_details["error_msg"] = DEFAULT_ERROR_MESSAGE
-
-    attached_files = []
-    message = message_details.get("message")
-    if isinstance(message, ChatMessage):
-        attached_files = message.get_attached_files()
-
+    attachments = message_details.pop("attachments", [])
     return TemplateResponse(
         request,
         "experiments/chat/chat_message_response.html",
@@ -809,9 +777,8 @@ def get_message_response(request, team_slug: str, experiment_id: uuid.UUID, sess
             "session": session,
             "task_id": task_id,
             "message_details": message_details,
-            "skip_render": skip_render,
             "last_message_datetime": last_message and last_message.created_at,
-            "attachments": attached_files,
+            "attachments": attachments,
         },
     )
 
