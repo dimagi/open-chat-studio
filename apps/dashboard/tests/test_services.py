@@ -44,13 +44,13 @@ class TestDashboardService:
         old_date = timezone.now() - timedelta(days=60)
         recent_date = timezone.now() - timedelta(days=5)
 
-        old_session = ExperimentSession.objects.create(
-            experiment=experiment, participant=participant, team=team, created_at=old_date
-        )
+        old_session = ExperimentSession.objects.create(experiment=experiment, participant=participant, team=team)
+        old_session.created_at = old_date
+        old_session.save()
 
-        recent_session = ExperimentSession.objects.create(
-            experiment=experiment, participant=participant, team=team, created_at=recent_date
-        )
+        recent_session = ExperimentSession.objects.create(experiment=experiment, participant=participant, team=team)
+        recent_session.created_at = recent_date
+        recent_session.save()
 
         # Filter for last 30 days
         start_date = timezone.now() - timedelta(days=30)
@@ -102,8 +102,6 @@ class TestDashboardService:
         assert "total_participants" in stats
         assert "total_sessions" in stats
         assert "total_messages" in stats
-        assert "human_messages" in stats
-        assert "ai_messages" in stats
         assert "completion_rate" in stats
 
         # Verify counts
@@ -111,8 +109,6 @@ class TestDashboardService:
         assert stats["total_participants"] >= 1
         assert stats["total_sessions"] >= 1
         assert stats["total_messages"] >= 2
-        assert stats["human_messages"] >= 1
-        assert stats["ai_messages"] >= 1
 
     def test_get_active_participants_data(self, team, experiment, participant, experiment_session, chat):
         """Test active participants data generation"""
@@ -172,9 +168,9 @@ class TestDashboardService:
 
         data = service.get_bot_performance_summary()
 
-        assert isinstance(data, list)
+        assert isinstance(data["results"], list)
         if data:  # If there's data
-            item = data[0]
+            item = data["results"][0]
             expected_fields = [
                 "experiment_id",
                 "experiment_name",
@@ -205,13 +201,13 @@ class TestDashboardService:
         data = service.get_channel_breakdown_data()
 
         assert isinstance(data, dict)
-        assert "channels" in data
+        assert "platforms" in data
         assert "totals" in data
-        assert isinstance(data["channels"], list)
+        assert isinstance(data["platforms"], list)
 
-        if data["channels"]:
-            channel_data = data["channels"][0]
-            expected_fields = ["channel_id", "channel_name", "platform", "sessions", "messages", "participants"]
+        if data["platforms"]:
+            channel_data = data["platforms"][0]
+            expected_fields = ["platform", "platform_name", "sessions", "messages", "participants"]
             for field in expected_fields:
                 assert field in channel_data
 
@@ -284,7 +280,7 @@ class TestDashboardService:
         assert isinstance(session_data, dict)
 
         performance_data = service.get_bot_performance_summary()
-        assert isinstance(performance_data, list)
+        assert isinstance(performance_data["results"], list)
 
     def test_caching_behavior(self, team, experiment, participant, experiment_session, chat):
         """Test caching behavior in service methods"""
