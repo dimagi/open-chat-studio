@@ -35,6 +35,7 @@ class DashboardView(LoginAndTeamRequiredMixin, TemplateView):
                 "filter_form": filter_form,
                 "saved_filters": saved_filters,
                 "saved_filter_form": SavedFilterForm(),
+                "active_tab": "dashboard",
             }
         )
 
