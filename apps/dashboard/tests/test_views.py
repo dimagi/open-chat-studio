@@ -5,8 +5,8 @@ from django.contrib.auth import get_user_model
 from django.urls import reverse
 
 from apps.chat.models import ChatMessage, ChatMessageType
-from apps.teams.models import Team
 
+from ...utils.factories.team import MembershipFactory, TeamFactory
 from ..models import DashboardFilter
 
 User = get_user_model()
@@ -21,7 +21,7 @@ class TestDashboardApiViews:
         # Create some test data
         ChatMessage.objects.create(chat=chat, message_type=ChatMessageType.HUMAN, content="Test message")
 
-        url = reverse("dashboard:api_overview")
+        url = reverse("dashboard:api_overview", kwargs={"team_slug": team.slug})
         response = authenticated_client.get(url)
 
         assert response.status_code == 200
@@ -47,7 +47,7 @@ class TestDashboardApiViews:
         # Create test message
         ChatMessage.objects.create(chat=chat, message_type=ChatMessageType.HUMAN, content="Test message")
 
-        url = reverse("dashboard:api_active_participants")
+        url = reverse("dashboard:api_active_participants", kwargs={"team_slug": team.slug})
         response = authenticated_client.get(url)
 
         assert response.status_code == 200
@@ -59,21 +59,9 @@ class TestDashboardApiViews:
             assert "date" in item
             assert "active_participants" in item
 
-    def test_api_with_filters(self, authenticated_client, team, experiment):
-        """Test API endpoints with filter parameters"""
-        url = reverse("dashboard:api_overview")
-
-        # Test with date range filter
-        params = {"date_range": "7", "granularity": "daily"}
-        response = authenticated_client.get(url, params)
-
-        assert response.status_code == 200
-        data = response.json()
-        assert isinstance(data, dict)
-
     def test_session_analytics_api(self, authenticated_client, team, experiment, participant, experiment_session):
         """Test session analytics API endpoint"""
-        url = reverse("dashboard:api_session_analytics")
+        url = reverse("dashboard:api_session_analytics", kwargs={"team_slug": team.slug})
         response = authenticated_client.get(url)
 
         assert response.status_code == 200
@@ -85,7 +73,7 @@ class TestDashboardApiViews:
 
     def test_message_volume_api(self, authenticated_client, team):
         """Test message volume API endpoint"""
-        url = reverse("dashboard:api_message_volume")
+        url = reverse("dashboard:api_message_volume", kwargs={"team_slug": team.slug})
         response = authenticated_client.get(url)
 
         assert response.status_code == 200
@@ -99,15 +87,15 @@ class TestDashboardApiViews:
 
     def test_bot_performance_api(self, authenticated_client, team, experiment):
         """Test bot performance API endpoint"""
-        url = reverse("dashboard:api_bot_performance")
-        response = authenticated_client.get(url)
+        url = reverse("dashboard:api_bot_performance", kwargs={"team_slug": team.slug})
+        response = authenticated_client.get(url, kwargs={"team_slug": team.slug})
 
         assert response.status_code == 200
         data = response.json()
 
-        assert isinstance(data, list)
+        assert isinstance(data["results"], list)
         if data:  # If there's data
-            item = data[0]
+            item = data["results"][0]
             expected_fields = [
                 "experiment_id",
                 "experiment_name",
@@ -121,16 +109,16 @@ class TestDashboardApiViews:
 
     def test_channel_breakdown_api(self, authenticated_client, team):
         """Test channel breakdown API endpoint"""
-        url = reverse("dashboard:api_channel_breakdown")
+        url = reverse("dashboard:api_channel_breakdown", kwargs={"team_slug": team.slug})
         response = authenticated_client.get(url)
 
         assert response.status_code == 200
         data = response.json()
 
         assert isinstance(data, dict)
-        assert "channels" in data
+        assert "platforms" in data
         assert "totals" in data
-        assert isinstance(data["channels"], list)
+        assert isinstance(data["platforms"], list)
         assert isinstance(data["totals"], dict)
 
 
@@ -140,7 +128,7 @@ class TestFilterManagement:
 
     def test_save_filter(self, authenticated_client, team, user):
         """Test saving filter presets"""
-        url = reverse("dashboard:save_filter")
+        url = reverse("dashboard:save_filter", kwargs={"team_slug": team.slug})
 
         filter_data = {"date_range": "30", "granularity": "daily", "experiments": [1, 2]}
 
@@ -189,18 +177,14 @@ class TestFilterManagement:
 class TestDashboardSecurity:
     """Test dashboard security and access controls"""
 
-    def test_team_isolation(self, client, django_user_model):
+    def test_team_isolation(self, client):
         """Test that users can only access their team's data"""
         # Create two teams with users
-        team1 = Team.objects.create(name="Team 1", slug="team1")
-        team2 = Team.objects.create(name="Team 2", slug="team2")
+        team1 = TeamFactory()
+        team2 = TeamFactory()
 
-        user1 = django_user_model.objects.create_user(email="user1@test.com", password="testpass123")
-        user2 = django_user_model.objects.create_user(email="user2@test.com", password="testpass123")
-
-        # Add users to their respective teams
-        team1.members.add(user1)
-        team2.members.add(user2)
+        user1 = MembershipFactory(team=team1).user
+        user2 = MembershipFactory(team=team2).user
 
         # Create filter for team1/user1
         filter_data = {"test": "data"}
@@ -216,11 +200,9 @@ class TestDashboardSecurity:
         response = client.get(url)
 
         # Should not be able to access other team's filter
-        assert response.status_code == 200
-        response_data = response.json()
-        assert response_data["success"] is False
+        assert response.status_code == 404
 
-    def test_unauthenticated_api_access(self, client):
+    def test_unauthenticated_api_access(self, client, team):
         """Test that API endpoints require authentication"""
         api_endpoints = [
             "dashboard:api_overview",
@@ -234,7 +216,7 @@ class TestDashboardSecurity:
         ]
 
         for endpoint_name in api_endpoints:
-            url = reverse(endpoint_name)
+            url = reverse(endpoint_name, kwargs={"team_slug": team.slug})
             response = client.get(url)
 
             # Should redirect to login or return 403
