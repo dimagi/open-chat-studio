@@ -439,9 +439,8 @@ class LLMResponseWithPrompt(LLMResponse, HistoryMixin, OutputMessageTagMixin):
             chat = AgentLLMChat(adapter=chat_adapter, history_manager=history_manager)
         else:
             chat = SimpleLLMChat(adapter=chat_adapter, history_manager=history_manager)
-
         # Invoke runnable
-        result = chat.invoke(input=input, attachments=attachments)
+        result = chat.invoke(input=input, attachments=attachments, session_id=session.id)
         return PipelineState.from_node_output(
             node_name=self.name,
             node_id=self.node_id,

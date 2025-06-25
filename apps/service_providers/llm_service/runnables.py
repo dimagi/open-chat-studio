@@ -1,4 +1,3 @@
-import base64
 import logging
 import re
 import time
@@ -134,7 +133,13 @@ class LLMChat(RunnableSerializable[str, ChainOutput]):
         return False
 
     def invoke(
-        self, input: str, config: RunnableConfig | None = None, attachments: list = None, *args, **kwargs
+        self,
+        input: str,
+        config: RunnableConfig | None = None,
+        attachments: list = None,
+        session_id: int = None,
+        *args,
+        **kwargs,
     ) -> ChainOutput:
         ai_message = None
         ai_message_metadata = {}
@@ -149,7 +154,7 @@ class LLMChat(RunnableSerializable[str, ChainOutput]):
 
         try:
             if attachments:
-                input = self._format_multimodal_input(input=input, attachments=attachments)
+                input = self._format_multimodal_input(input=input, attachments=attachments, session_id=session_id)
             if include_conversation_history:
                 self._populate_memory(input)
 
@@ -175,30 +180,23 @@ class LLMChat(RunnableSerializable[str, ChainOutput]):
 
         return result
 
-    def _format_multimodal_input(self, input: str, attachments: list) -> list[dict]:
+    def _format_multimodal_input(self, input: str, attachments: list, session_id: int) -> list[dict]:
         parts = [{"type": "text", "text": input}]
         for att in attachments:
             try:
                 file = File.objects.get(id=att.file_id)
             except File.DoesNotExist:
                 continue
-
+            download_url = file.download_link(session_id)
             mime_type = file.content_type or ""
-            try:
-                with file.file.open("rb") as f:
-                    encoded = base64.b64encode(f.read()).decode("utf-8")
-            except Exception:
-                continue
-
             parts.append(
                 {
                     "type": "image" if mime_type.startswith("image/") else "file",
-                    "source_type": "base64",
-                    "data": encoded,
+                    "source_type": "url",
+                    "url": download_url,
                     "mime_type": mime_type,
                 }
             )
-
         return parts
 
     def _get_input(self, input: str):
