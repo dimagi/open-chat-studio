@@ -102,7 +102,7 @@
                         hx-include="[name='search'], [name='language'], [name='show_original_translation'], #translation-provider-model"
                         hx-target="#messages-container"
                         hx-indicator=".htmx-indicator"
-                        onclick="document.getElementById('translate-messages-modal').checked = false; showTranslationSpinners();"
+                        onclick="document.getElementById('translate-messages-modal').checked = false;"
                       >Translate Messages
                       </button>
                       <label for="translate-messages-modal" class="btn">Cancel</label>
@@ -170,8 +170,14 @@
                           <p>{{ message.content|render_markdown }}</p>
                         {% endif %}
                       </div>
-                      {% if show_original_translation or message.translation == default_message %}
+                      {% if show_original_translation and not message.translation == default_message %}
                         <div class="pg-text-muted">
+                          <p><strong>Original Message: </strong><p>{{ message.content|render_markdown }}</p>
+                          </div>
+                      {% endif %}
+                      {% if message.translation == default_message %}
+                        {# hidden when loading spinners are shown #}
+                        <div class="pg-text-muted chat-message-untranslated">
                           <p><strong>Original Message: </strong><p>{{ message.content|render_markdown }}</p>
                           </div>
                       {% endif %}
@@ -259,10 +265,19 @@
 
 
 <script>
-  function showTranslationSpinners() {
-    document.querySelectorAll('.chat-message-untranslated .htmx-indicator').forEach(indicator => {
-      indicator.style.display = 'flex';
-      indicator.style.alignItems = 'center';
-    });
-  }
+  document.body.addEventListener('htmx:beforeRequest', function (evt) {
+    const sourceEl = evt.detail.elt;
+    if ( //ensure it's only for this request
+      sourceEl?.tagName === 'BUTTON' &&
+      sourceEl?.textContent?.trim() === 'Translate Messages'
+    ) {
+      document.querySelectorAll('.chat-message-untranslated .htmx-indicator').forEach(indicator => {
+        indicator.style.display = 'flex';
+        indicator.style.alignItems = 'center';
+      });
+      document.querySelectorAll('.chat-message-untranslated p').forEach(p => {
+        p.classList.add('hidden');
+      });
+    }
+  });
 </script>
