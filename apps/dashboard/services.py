@@ -64,6 +64,7 @@ class DashboardService:
             experiments = experiments.filter(id__in=experiment_ids)
             sessions = sessions.filter(experiment_id__in=experiment_ids)
             messages = messages.filter(chat__experiment_session__experiment_id__in=experiment_ids)
+            participants = participants.filter(experimentsession__experiment_id__in=experiment_ids).distinct()
 
         # Apply platform filter
         if platform_names:
