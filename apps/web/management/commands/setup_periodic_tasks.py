@@ -6,7 +6,6 @@ from django_celery_beat.models import PeriodicTask
 from django_celery_beat.schedulers import ModelEntry
 
 
-# from https://github.com/celery/django-celery-beat/blob/master/django_celery_beat/management/commands/celery_beat.py
 class Command(BaseCommand):
     """
     Command to create, update and remove celery periodic tasks based on the SCHEDULED_TASKS setting
