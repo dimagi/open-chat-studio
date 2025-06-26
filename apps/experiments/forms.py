@@ -289,7 +289,6 @@ class TranslateMessagesForm(forms.Form):
         choices=[],
         required=True,
         label="Select LLM Provider Model",
-        help_text="Choose the LLM model to use for translation.",
         widget=forms.Select(attrs={"class": "select select-bordered w-full", "id": "translation-provider-model"}),
     )
 
