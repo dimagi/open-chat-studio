@@ -6,7 +6,7 @@ from django.utils import timezone
 logger = logging.getLogger(__name__)
 
 
-@shared_task
+@shared_task(ignore_result=True)
 def cleanup_expired_cache_entries():
     """
     Clean up expired cache entries to prevent database bloat.
@@ -17,5 +17,3 @@ def cleanup_expired_cache_entries():
     expired_count = DashboardCache.objects.filter(expires_at__lt=timezone.now()).delete()[0]
 
     logger.info(f"Cleaned up {expired_count} expired cache entries")
-
-    return {"expired_entries_deleted": expired_count, "timestamp": timezone.now().isoformat()}
