@@ -46,12 +46,23 @@ CHUNK_RESULT_TEMPLATE = """
 # Retrieved chunks
 {retrieved_chunks}
 
-# Citing instructions
-DO NOT generate a response without citing the relevant chunks from the retrieved files. When citing, you should use the
-following format to reference the chunks: <CIT file_id=the-file-id />. Place the citation at the end of the sentence
-or paragraph that references the chunk.
+**CRITICAL REQUIREMENT - MANDATORY CITATIONS:**
 
-For instance, if you use a chunk from file "example.txt" with id 123, you should reference it as: <CIT file_id=123 />.
+You MUST cite all information using this exact format: <CIT file_id=the-file-id />
+
+**Citation Rules:**
+- Place citations immediately after each sentence or claim that references retrieved content
+- Use the specific file ID from the source document
+- Example: "The revenue increased by 15% last quarter <CIT file_id=123 />."
+- NEVER provide information from retrieved files without proper citations
+
+**Response Structure:**
+1. Answer the user's question thoroughly
+2. Support each claim with evidence from the files
+3. Ensure every factual statement includes a citation
+4. If no relevant information exists in the files, explicitly state this
+
+Failure to include proper citations will result in an incomplete response.
 """
 
 
