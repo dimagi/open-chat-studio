@@ -1373,8 +1373,9 @@ def translate_messages_view(request, team_slug: str, experiment_id: uuid.UUID, s
     session = request.experiment_session
     language = request.POST.get("language")
     provider_model = request.POST.get("provider_model", "")
+    valid_languages = [choice[0] for choice in LANGUAGE_CHOICES if choice[0]]
 
-    if not language:
+    if not language or language not in valid_languages:
         messages.error(request, "No language selected for translation.")
         return redirect_to_messages_view(request, session)
     if not provider_model:
