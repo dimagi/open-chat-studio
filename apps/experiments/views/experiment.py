@@ -1323,8 +1323,7 @@ def experiment_session_messages_view(request, team_slug: str, experiment_id: uui
                 output_field=CharField(),
             )
         )
-        missing_count = messages_queryset.exclude(**{f"translations__{language}__isnull": False}).count()
-        has_missing_translations = missing_count > 0
+        has_missing_translations = messages_queryset.exclude(**{f"translations__{language}__isnull": False}).exists()
 
     total_messages = messages_queryset.count()
     total_pages = max(1, (total_messages + page_size - 1) // page_size)
