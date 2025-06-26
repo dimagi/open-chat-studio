@@ -399,7 +399,7 @@ class TestSearchIndexTool:
         file = FileFactory(team=team, name="the_greatness_of_fruit.txt")
         vector_data = self.load_vector_data()
 
-        file_chunk_embedding = FileChunkEmbedding.objects.create(
+        oranges_chunk = FileChunkEmbedding.objects.create(
             team=team,
             file=file,
             collection=collection,
@@ -408,7 +408,7 @@ class TestSearchIndexTool:
             embedding=vector_data["Oranges are nice"],
             page_number=0,
         )
-        file_chunk_embedding = FileChunkEmbedding.objects.create(
+        apples_chunk = FileChunkEmbedding.objects.create(
             team=team,
             file=file,
             collection=collection,
@@ -417,7 +417,7 @@ class TestSearchIndexTool:
             embedding=vector_data["Apples are great"],
             page_number=0,
         )
-        file_chunk_embedding = FileChunkEmbedding.objects.create(
+        FileChunkEmbedding.objects.create(
             team=team,
             file=file,
             collection=collection,
@@ -426,20 +426,42 @@ class TestSearchIndexTool:
             embedding=vector_data["Greatness is subjective"],
             page_number=0,
         )
-        collection = file_chunk_embedding.collection
 
         # The return value of get_embedding_vector is what determines the search results.
         local_index_manager_mock.get_embedding_vector.return_value = vector_data["What are great fruit?"]
         search_config = SearchToolConfig(index_id=collection.id, max_results=2)
         result = SearchIndexTool(search_config=search_config).action(query="What are great fruit?")
-        expected_result = """
-# File: the_greatness_of_fruit.txt
-## Content
+        expected_result = f"""
+# Retrieved chunks
+
+## Chunk: {apples_chunk.id}
+### File name: the_greatness_of_fruit.txt, file_id={file.id}
+### Content
 Apples are great
 
-# File: the_greatness_of_fruit.txt
-## Content
+## Chunk: {oranges_chunk.id}
+### File name: the_greatness_of_fruit.txt, file_id={file.id}
+### Content
 Oranges are nice
+
+
+**CRITICAL REQUIREMENT - MANDATORY CITATIONS:**
+
+You MUST cite all information using this exact format: <CIT file_id=the-file-id />
+
+**Citation Rules:**
+- Place citations immediately after each sentence or claim that references retrieved content
+- Use the specific file ID from the source document
+- Example: "The revenue increased by 15% last quarter <CIT file_id=123 />."
+- NEVER provide information from retrieved files without proper citations
+
+**Response Structure:**
+1. Answer the user's question thoroughly
+2. Support each claim with evidence from the files
+3. Ensure every factual statement includes a citation
+4. If no relevant information exists in the files, explicitly state this
+
+Failure to include proper citations will result in an incomplete response.
 """
         assert result == expected_result
 

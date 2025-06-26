@@ -36,9 +36,9 @@ CREATE_LINK_TEXT = """You can use this markdown link to reference it in your res
 """
 
 CHUNK_TEMPLATE = """
-# Chunk: {chunk_id}
-## File name: {file_name}, file_id={file_id}
-## Content
+## Chunk: {chunk_id}
+### File name: {file_name}, file_id={file_id}
+### Content
 {chunk}
 """
 
