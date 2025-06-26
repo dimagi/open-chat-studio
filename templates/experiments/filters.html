@@ -78,7 +78,7 @@
           <!-- Value Input (Choice, String, Timestamp) -->
           <template x-if="filter.operator">
             <div class="relative">
-              <template x-if="filterData.columns[filter.column]?.type === 'choice' && ['any of', 'all of', 'excludes'].includes(filter.operator)">
+              <template x-if="['choice', 'string'].includes(filterData.columns[filter.column]?.type) && ['any of', 'all of', 'excludes'].includes(filter.operator)">
                 <div class="relative">
                   <div @click="filter.showOptions = !filter.showOptions" class="w-40 px-3 border border-base-200 rounded-lg bg-base-100 text-sm cursor-pointer flex justify-between items-center" style="height: 2rem;">
                     <span x-text="filter.selectedValues.length ? (filter.selectedValues.join(', ').length > 18 ? filter.selectedValues.join(', ').substring(0, 18) + '...' : filter.selectedValues.join(', ')) : 'Select'"></span>
@@ -105,7 +105,7 @@
                 </div>
               </template>
 
-              <template x-if="filterData.columns[filter.column]?.type === 'string'">
+              <template x-if="filterData.columns[filter.column]?.type === 'string' && filter.operator !== 'any of'">
                 <input type="text" x-model="filter.value" @input.debounce="triggerFilterChange()" class="w-40 block px-3 border border-base-200 rounded-lg bg-base-100 text-sm" style="height: 2rem;" placeholder="Enter value...">
               </template>
 
@@ -172,12 +172,14 @@
 
 {{ field_type_filters|json_script:"field-type-filters" }}
 {{ date_range_options|json_script:"date-range-options" }}
+{{participant_list| json_script:"participant-list"}}
 <script>
   const tags = JSON.parse(document.getElementById('available-tags-data').textContent);
   const versionsList = JSON.parse(document.getElementById('experiment-versions-data').textContent);
   const fieldTypeFilters = JSON.parse(document.getElementById('field-type-filters').textContent);
   const channelsList = JSON.parse(document.getElementById('channel-list-data').textContent);
   const dateRangeOptions = JSON.parse(document.getElementById('date-range-options').textContent);
+  const participantList = JSON.parse(document.getElementById('participant-list').textContent);
   document.addEventListener('alpine:init', () => {
     Alpine.data('filterComponent', () => ({
       dateRangeOptions,
@@ -186,7 +188,7 @@
         filters: [],
         loading: false,
         columns: {
-          'participant': {type: 'string', operators: fieldTypeFilters.string, label: 'Participant'},
+          'participant': {type: 'string', operators: fieldTypeFilters.string, options: participantList, label: 'Participant'},
           'first_message': {type: 'timestamp', operators: fieldTypeFilters.timestamp, label: 'First Message',  options: dateRangeOptions},
           'last_message': {type: 'timestamp', operators: fieldTypeFilters.timestamp, label: 'Last Message',  options: dateRangeOptions},
           'tags': {type: 'choice', operators: fieldTypeFilters.choice, options: tags, label: 'Tags' },
@@ -262,7 +264,7 @@
           filter.value = '';
           filter.selectedValues = [];
           filter.searchQuery = '';
-          if (this.filterData.columns[column].type === 'choice') {
+          if (['choice', 'string'].includes(this.filterData.columns[column].type)) {
             filter.filteredOptions = [...this.filterData.columns[column].options || []];
           } else {
             filter.filteredOptions = [];
