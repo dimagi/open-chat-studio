@@ -12,6 +12,7 @@ https://docs.djangoproject.com/en/3.2/ref/settings/
 
 import os
 import sys
+from datetime import timedelta
 from pathlib import Path
 
 import environ
@@ -420,7 +421,20 @@ if REDIS_URL.startswith("rediss"):
 CELERY_BROKER_URL = CELERY_RESULT_BACKEND = REDIS_URL
 CELERY_BEAT_SCHEDULER = "django_celery_beat.schedulers:DatabaseScheduler"
 
-SCHEDULED_TASKS = {}
+SCHEDULED_TASKS = {
+    "files.tasks.clean_up_expired_files": {
+        "task": "apps.files.tasks.clean_up_expired_files",
+        "schedule": timedelta(days=1),
+    },
+    "events.tasks.poll_scheduled_messages": {
+        "task": "apps.events.tasks.poll_scheduled_messages",
+        "schedule": 60,
+    },
+    "events.tasks.enqueue_timed_out_events": {
+        "task": "apps.events.tasks.enqueue_timed_out_events",
+        "schedule": 10,
+    },
+}
 
 CACHES = {
     "default": {
