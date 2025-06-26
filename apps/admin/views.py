@@ -127,8 +127,6 @@ def flags_home(request):
 @user_passes_test(lambda u: u.is_staff, login_url="/404")
 def flag_detail(request, flag_id):
     flag = get_object_or_404(Flag, id=flag_id)
-    teams = Team.objects.all().order_by("name")
-    users = User.objects.all().order_by("username")
 
     return TemplateResponse(
         request,
@@ -136,10 +134,36 @@ def flag_detail(request, flag_id):
         context={
             "active_tab": "flags",
             "flag": flag,
-            "teams": teams,
-            "users": users,
         },
     )
+
+
+@user_passes_test(lambda u: u.is_staff, login_url="/404")
+def teams_api(request):
+    query = request.GET.get("q", "").strip()
+    teams = Team.objects.all()
+
+    if query:
+        teams = teams.filter(name__icontains=query)
+
+    teams = teams.order_by("name")[:20]  # Limit to 20 results
+
+    data = [{"value": team.id, "text": team.name} for team in teams]
+    return JsonResponse(data, safe=False)
+
+
+@user_passes_test(lambda u: u.is_staff, login_url="/404")
+def users_api(request):
+    query = request.GET.get("q", "").strip()
+    users = User.objects.all()
+
+    if query:
+        users = users.filter(username__icontains=query)
+
+    users = users.order_by("username")[:20]  # Limit to 20 results
+
+    data = [{"value": user.id, "text": user.username} for user in users]
+    return JsonResponse(data, safe=False)
 
 
 @user_passes_test(lambda u: u.is_staff, login_url="/404")
