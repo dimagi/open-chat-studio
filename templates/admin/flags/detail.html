@@ -228,80 +228,51 @@
         usersSelect: null,
 
         init() {
-          // Convert arrays to numbers for proper comparison
-          this.formData.teams = this.formData.teams.map(id => parseInt(id));
-          this.formData.users = this.formData.users.map(id => parseInt(id));
-          this.originalData.teams = this.originalData.teams.map(id => parseInt(id));
-          this.originalData.users = this.originalData.users.map(id => parseInt(id));
+          this.normalizeFormData();
+          this.$nextTick(() => this.initTomSelect());
+        },
 
-          // Initialize TomSelect after DOM is ready
-          this.$nextTick(() => {
-            this.initTomSelect();
+        normalizeFormData() {
+          ['teams', 'users'].forEach(field => {
+            this.formData[field] = this.formData[field].map(id => parseInt(id));
+            this.originalData[field] = this.originalData[field].map(id => parseInt(id));
           });
         },
 
         initTomSelect() {
-          // Initialize Teams TomSelect
-          this.teamsSelect = new TomSelect(this.$refs.teamsSelect, {
-            plugins: ['remove_button'],
-            maxItems: null,
-            valueField: 'value',
-            labelField: 'text',
-            searchField: 'text',
-            load: (query, callback) => {
-              if (!query.length) {
-                callback();
-                return;
-              }
-              fetch(`/admin/api/teams/?q=${encodeURIComponent(query)}`)
-                .then(response => response.json())
-                .then(data => {
-                  callback(data);
-                })
-                .catch(() => {
-                  callback();
-                });
-            },
-            render: {
-              option: function(data, escape) {
-                return '<div>' + escape(data.text) + '</div>';
-              }
-            },
-            onChange: (values) => {
-              this.formData.teams = values.map(id => parseInt(id));
-            }
-          });
+          this.teamsSelect = this.createTomSelect(this.$refs.teamsSelect, 'teams', '/admin/api/teams/');
+          this.usersSelect = this.createTomSelect(this.$refs.usersSelect, 'users', '/admin/api/users/');
+        },
 
-          // Initialize Users TomSelect
-          this.usersSelect = new TomSelect(this.$refs.usersSelect, {
+        createTomSelect(element, field, apiUrl) {
+          return new TomSelect(element, {
             plugins: ['remove_button'],
             maxItems: null,
             valueField: 'value',
             labelField: 'text',
             searchField: 'text',
-            load: (query, callback) => {
-              if (!query.length) {
-                callback();
-                return;
-              }
-              fetch(`/admin/api/users/?q=${encodeURIComponent(query)}`)
-                .then(response => response.json())
-                .then(data => {
-                  callback(data);
-                })
-                .catch(() => {
-                  callback();
-                });
-            },
+            load: this.loadOptions(apiUrl),
             render: {
-              option: function(data, escape) {
-                return '<div>' + escape(data.text) + '</div>';
-              }
+              option: (data, escape) => `<div>${escape(data.text)}</div>`
             },
             onChange: (values) => {
-              this.formData.users = values.map(id => parseInt(id));
+              this.formData[field] = values.map(id => parseInt(id));
             }
           });
+        },
+
+        loadOptions(apiUrl) {
+          return (query, callback) => {
+            if (!query.length) {
+              callback();
+              return;
+            }
+
+            fetch(`${apiUrl}?q=${encodeURIComponent(query)}`)
+              .then(response => response.json())
+              .then(callback)
+              .catch(() => callback());
+          };
         },
 
         hasChanges() {
@@ -314,44 +285,50 @@
           this.success = false;
 
           try {
-            const formData = new FormData();
-            formData.append('csrfmiddlewaretoken', document.querySelector('[name=csrfmiddlewaretoken]').value);
-
-            if (this.formData.everyone) formData.append('everyone', 'on');
-            if (this.formData.testing) formData.append('testing', 'on');
-            if (this.formData.superusers) formData.append('superusers', 'on');
-            if (this.formData.rollout) formData.append('rollout', 'on');
-
-            if (this.formData.percent !== null && this.formData.percent !== '') {
-              formData.append('percent', this.formData.percent);
-            }
-
-            this.formData.teams.forEach(teamId => {
-              formData.append('teams', teamId);
-            });
-
-            this.formData.users.forEach(userId => {
-              formData.append('users', userId);
-            });
-
+            const formData = this.buildFormData();
             const response = await fetch(`/admin/flags/${this.flagId}/update/`, {
               method: 'POST',
               body: formData
             });
 
             const data = await response.json();
-
-            if (data.success) {
-              this.success = true;
-              this.originalData = { ...this.formData };
-              setTimeout(() => this.success = false, 3000);
-            } else {
-              this.error = data.error || 'An error occurred';
-            }
+            this.handleResponse(data);
           } catch (err) {
             this.error = 'Network error occurred';
           } finally {
             this.loading = false;
+          }
+        },
+
+        buildFormData() {
+          const formData = new FormData();
+          formData.append('csrfmiddlewaretoken', document.querySelector('[name=csrfmiddlewaretoken]').value);
+
+          // Add boolean flags
+          ['everyone', 'testing', 'superusers', 'rollout'].forEach(field => {
+            if (this.formData[field]) formData.append(field, 'on');
+          });
+
+          // Add percentage if set
+          if (this.formData.percent !== null && this.formData.percent !== '') {
+            formData.append('percent', this.formData.percent);
+          }
+
+          // Add arrays
+          ['teams', 'users'].forEach(field => {
+            this.formData[field].forEach(id => formData.append(field, id));
+          });
+
+          return formData;
+        },
+
+        handleResponse(data) {
+          if (data.success) {
+            this.success = true;
+            this.originalData = { ...this.formData };
+            setTimeout(() => this.success = false, 3000);
+          } else {
+            this.error = data.error || 'An error occurred';
           }
         }
       };
