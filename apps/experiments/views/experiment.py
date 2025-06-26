@@ -734,7 +734,7 @@ def _experiment_session_message(request, version_number: int, embedded=False):
         )
         for uploaded_file in uploaded_files.getlist(resource_type):
             new_file = File.objects.create(name=uploaded_file.name, file=uploaded_file, team=request.team)
-            attachments.append(Attachment.from_file(new_file, cast(AttachmentType, resource_type)))
+            attachments.append(Attachment.from_file(new_file, cast(AttachmentType, resource_type), session.id))
             created_files.append(new_file)
 
         tool_resource.files.add(*created_files)
