@@ -225,7 +225,7 @@ class TopicBot:
 
         if self.generator_chain and self.generator_chain.history_manager.ai_message:
             self.generator_chain.history_manager.ai_message.create_and_add_tag(
-                safety_layer.name, tag_category=TagCategories.SAFETY_LAYER_RESPONSE
+                safety_layer.name, self.experiment.team, TagCategories.SAFETY_LAYER_RESPONSE
             )
         return self.generator_chain.history_manager.ai_message
 
@@ -297,7 +297,7 @@ class PipelineBot:
 
         if save_run_to_history and self.session is not None:
             output = self._process_interrupts(output)
-            result = self._save_messages(input_state, output, save_input_to_history)
+            result = self._save_outputs(input_state, output, save_input_to_history)
         else:
             result = ChatMessage(content=output)
         self._process_intents(output)
@@ -353,7 +353,7 @@ class PipelineBot:
                 tags.append((TagCategories.SAFETY_LAYER_RESPONSE, tag_name))
         return output
 
-    def _save_messages(self, input_state, output, save_input_to_history, extra_tags=None):
+    def _save_outputs(self, input_state, output, save_input_to_history, extra_tags=None):
         input_metadata = output.get("input_message_metadata", {})
         output_metadata = output.get("output_message_metadata", {})
         trace_metadata = self.trace_service.get_trace_metadata() if self.trace_service else None
@@ -363,6 +363,7 @@ class PipelineBot:
 
         if save_input_to_history:
             self._save_message_to_history(input_state["messages"][-1], ChatMessageType.HUMAN, metadata=input_metadata)
+
         ai_message = self._save_message_to_history(
             output["messages"][-1],
             ChatMessageType.AI,
@@ -372,6 +373,10 @@ class PipelineBot:
         ai_message.add_version_tag(
             version_number=self.experiment.version_number, is_a_version=self.experiment.is_a_version
         )
+
+        if session_tags := output.get("session_tags"):
+            for tag, category in session_tags:
+                self.session.chat.create_and_add_tag(tag, self.session.team, tag_category=category)
         return ai_message
 
     def _process_intents(self, pipeline_output: dict):
@@ -393,7 +398,7 @@ class PipelineBot:
 
         if tags:
             for tag_value, category in tags:
-                chat_message.create_and_add_tag(tag_value, category or "")
+                chat_message.create_and_add_tag(tag_value, self.session.team, category or "")
         return chat_message
 
 

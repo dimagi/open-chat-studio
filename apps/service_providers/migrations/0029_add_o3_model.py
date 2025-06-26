@@ -17,6 +17,3 @@ class Migration(migrations.Migration):
     dependencies = [
         ('service_providers', '0028_embeddingprovidermodel'),
     ]
-    operations = [
-        migrations.RunPython(add_o3_model),
-    ]

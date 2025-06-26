@@ -192,6 +192,11 @@ class LlmProviderModel(BaseTeamModel):
         help_text="When the message history for a session exceeds this limit (in tokens), it will be compressed. "
         "If 0, compression will be disabled which may result in errors or high LLM costs.",
     )
+    deprecated = models.BooleanField(default=False)
+
+    @property
+    def display_name(self):
+        return f"{self.name} (Deprecated)" if self.deprecated else self.name
 
     objects = LlmProviderModelManager()
 
@@ -203,7 +208,7 @@ class LlmProviderModel(BaseTeamModel):
         ]
 
     def __str__(self):
-        label = f"{LlmProviderTypes[self.type].label}: {self.name}"
+        label = f"{LlmProviderTypes[self.type].label}: {self.display_name}"
         if self.is_custom():
             label = f"{label} (custom for {self.team.name})"
         return label
