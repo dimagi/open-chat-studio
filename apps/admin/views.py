@@ -1,17 +1,24 @@
 from datetime import datetime, time, timedelta
 from urllib.parse import urlencode
 
+from django.contrib.auth import get_user_model
 from django.contrib.auth.decorators import user_passes_test
-from django.http import HttpResponse
-from django.shortcuts import redirect
+from django.core.exceptions import ValidationError
+from django.db import transaction
+from django.http import HttpResponse, JsonResponse
+from django.shortcuts import get_object_or_404, redirect
 from django.template.response import TemplateResponse
 from django.urls import reverse
 from django.utils import timezone
+from django.views.decorators.http import require_http_methods
 
 from apps.admin.forms import DateRangeForm, DateRanges
 from apps.admin.queries import get_message_stats, get_participant_stats, get_whatsapp_numbers, usage_to_csv
 from apps.admin.serializers import StatsSerializer
 from apps.experiments.models import Participant
+from apps.teams.models import Flag, Team
+
+User = get_user_model()
 
 
 @user_passes_test(lambda u: u.is_staff, login_url="/404")
@@ -102,3 +109,73 @@ def _get_date_param(request, param_name, default):
 def _string_to_date(date_str: str) -> datetime.date:
     date_format = "%Y-%m-%d"
     return datetime.strptime(date_str, date_format).date()
+
+
+@user_passes_test(lambda u: u.is_staff, login_url="/404")
+def flags_home(request):
+    flags = Flag.objects.all().order_by("name")
+    return TemplateResponse(
+        request,
+        "admin/flags/home.html",
+        context={
+            "active_tab": "flags",
+            "flags": flags,
+        },
+    )
+
+
+@user_passes_test(lambda u: u.is_staff, login_url="/404")
+def flag_detail(request, flag_id):
+    flag = get_object_or_404(Flag, id=flag_id)
+    teams = Team.objects.all().order_by("name")
+    users = User.objects.all().order_by("username")
+
+    return TemplateResponse(
+        request,
+        "admin/flags/detail.html",
+        context={
+            "active_tab": "flags",
+            "flag": flag,
+            "teams": teams,
+            "users": users,
+        },
+    )
+
+
+@user_passes_test(lambda u: u.is_staff, login_url="/404")
+@require_http_methods(["POST"])
+def update_flag(request, flag_id):
+    flag = get_object_or_404(Flag, id=flag_id)
+
+    try:
+        with transaction.atomic():
+            flag.everyone = request.POST.get("everyone") == "on"
+            flag.testing = request.POST.get("testing") == "on"
+            flag.superusers = request.POST.get("superusers") == "on"
+            flag.rollout = request.POST.get("rollout") == "on"
+
+            percent_str = request.POST.get("percent", "").strip()
+            if percent_str:
+                try:
+                    percent = max(0, min(100, int(float(percent_str))))
+                    flag.percent = percent
+                except (ValueError, TypeError):
+                    flag.percent = None
+            else:
+                flag.percent = None
+
+            team_ids = request.POST.getlist("teams")
+            teams = Team.objects.filter(id__in=team_ids)
+            flag.teams.set(teams)
+
+            user_ids = request.POST.getlist("users")
+            users = User.objects.filter(id__in=user_ids)
+            flag.users.set(users)
+
+            flag.save()
+
+        return JsonResponse({"success": True})
+    except ValidationError as e:
+        return JsonResponse({"error": str(e)}, status=400)
+    except Exception:
+        return JsonResponse({"error": "Failed to update flag"}, status=500)

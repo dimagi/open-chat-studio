@@ -1,0 +1,355 @@
+{% extends "web/app/app_base.html" %}
+{% load i18n %}
+
+{% block app %}
+  <section class="app-card">
+    <div class="flex justify-between items-center mb-6">
+      <div>
+        <a href="{% url 'ocs_admin:flags_home' %}" class="text-sm text-gray-500 hover:text-gray-700 mb-2 inline-block">
+          ← {% translate "Back to Flags" %}
+        </a>
+        <h1 class="pg-title">{{ flag.name }}</h1>
+      </div>
+    </div>
+
+    <div
+      x-data="flagManager({
+              flagId: {{ flag.id }},
+              initialData: {
+              everyone: {{ flag.everyone|yesno:'true,false' }},
+              testing: {{ flag.testing|yesno:'true,false' }},
+              superusers: {{ flag.superusers|yesno:'true,false' }},
+              rollout: {{ flag.rollout|yesno:'true,false' }},
+              percent: {{ flag.percent|default:'null' }},
+              teams: [{% for team in flag.teams.all %}{{ team.id }}{% if not forloop.last %},{% endif %}{% endfor %}],
+              users: [{% for user in flag.users.all %}{{ user.id }}{% if not forloop.last %},{% endif %}{% endfor %}]
+              }
+              })"
+    >
+      <form @submit.prevent="save()" class="space-y-6">
+        {% csrf_token %}
+
+      <!-- Basic Flags Section -->
+        <div class="bg-white shadow sm:rounded-lg">
+          <div class="px-4 py-5 sm:p-6">
+            <h3 class="text-lg leading-6 font-medium text-gray-900 mb-4">
+              {% translate "Basic Settings" %}
+            </h3>
+
+            <div class="grid grid-cols-1 gap-4 sm:grid-cols-2">
+              <label class="flex items-center">
+                <input
+                  type="checkbox"
+                  x-model="formData.everyone"
+                  class="rounded border-gray-300 text-indigo-600 shadow-sm focus:border-indigo-300 focus:ring focus:ring-indigo-200 focus:ring-opacity-50"
+                />
+                <span class="ml-2 text-sm text-gray-900">
+                  {% translate "Everyone" %}
+                  <span class="block text-xs text-gray-500">{% translate "Enable for all users" %}</span>
+                </span>
+              </label>
+
+              <label class="flex items-center">
+                <input
+                  type="checkbox"
+                  x-model="formData.testing"
+                  class="rounded border-gray-300 text-indigo-600 shadow-sm focus:border-indigo-300 focus:ring focus:ring-indigo-200 focus:ring-opacity-50"
+                />
+                <span class="ml-2 text-sm text-gray-900">
+                  {% translate "Testing" %}
+                  <span class="block text-xs text-gray-500">{% translate "Enable for testing" %}</span>
+                </span>
+              </label>
+
+              <label class="flex items-center">
+                <input
+                  type="checkbox"
+                  x-model="formData.superusers"
+                  class="rounded border-gray-300 text-indigo-600 shadow-sm focus:border-indigo-300 focus:ring focus:ring-indigo-200 focus:ring-opacity-50"
+                />
+                <span class="ml-2 text-sm text-gray-900">
+                  {% translate "Superusers" %}
+                  <span class="block text-xs text-gray-500">{% translate "Enable for superusers" %}</span>
+                </span>
+              </label>
+
+              <label class="flex items-center">
+                <input
+                  type="checkbox"
+                  x-model="formData.rollout"
+                  class="rounded border-gray-300 text-indigo-600 shadow-sm focus:border-indigo-300 focus:ring focus:ring-indigo-200 focus:ring-opacity-50"
+                />
+                <span class="ml-2 text-sm text-gray-900">
+                  {% translate "Rollout" %}
+                  <span class="block text-xs text-gray-500">{% translate "Enable rollout mode" %}</span>
+                </span>
+              </label>
+            </div>
+          </div>
+        </div>
+
+      <!-- Percentage Section -->
+        <div class="bg-white shadow sm:rounded-lg">
+          <div class="px-4 py-5 sm:p-6">
+            <h3 class="text-lg leading-6 font-medium text-gray-900 mb-4">
+              {% translate "Percentage Rollout" %}
+            </h3>
+
+            <div class="flex items-center space-x-4">
+              <div class="flex-1">
+                <label for="percent" class="block text-sm font-medium text-gray-700 mb-1">
+                  {% translate "Percentage" %}
+                </label>
+                <div class="relative">
+                  <input
+                    type="number"
+                    id="percent"
+                    x-model="formData.percent"
+                    min="0"
+                    max="100"
+                    class="block w-full pr-12 border-gray-300 rounded-md shadow-sm focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm"
+                    placeholder="0"
+                  />
+                  <div class="absolute inset-y-0 right-0 pr-3 flex items-center pointer-events-none">
+                    <span class="text-gray-500 sm:text-sm">%</span>
+                  </div>
+                </div>
+                <p class="mt-1 text-xs text-gray-500">
+                  {% translate "Leave empty to disable percentage rollout" %}
+                </p>
+              </div>
+              <div class="flex-shrink-0" x-show="formData.percent">
+                <div class="w-16 h-16 relative">
+                  <svg class="w-16 h-16 transform -rotate-90" viewBox="0 0 36 36">
+                    <path
+                      class="text-gray-300"
+                      stroke="currentColor"
+                      stroke-width="3"
+                      fill="transparent"
+                      d="M18 2.0845 a 15.9155 15.9155 0 0 1 0 31.831 a 15.9155 15.9155 0 0 1 0 -31.831"
+                    />
+                    <path
+                      class="text-indigo-600"
+                      stroke="currentColor"
+                      stroke-width="3"
+                      fill="transparent"
+                      :stroke-dasharray="formData.percent + ', 100'"
+                      d="M18 2.0845 a 15.9155 15.9155 0 0 1 0 31.831 a 15.9155 15.9155 0 0 1 0 -31.831"
+                    />
+                  </svg>
+                  <div class="absolute inset-0 flex items-center justify-center">
+                    <span class="text-xs font-medium text-gray-900" x-text="formData.percent + '%'"></span>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+
+      <!-- Teams Section -->
+        <div class="bg-white shadow sm:rounded-lg">
+          <div class="px-4 py-5 sm:p-6">
+            <h3 class="text-lg leading-6 font-medium text-gray-900 mb-4">
+              {% translate "Teams" %}
+            </h3>
+
+            <div class="max-h-64 overflow-y-auto border border-gray-200 rounded-md">
+              <div class="divide-y divide-gray-200">
+                {% for team in teams %}
+                  <label class="flex items-center px-4 py-3 hover:bg-gray-50 cursor-pointer">
+                    <input
+                      type="checkbox"
+                      value="{{ team.id }}"
+                      x-model="formData.teams"
+                      class="rounded border-gray-300 text-indigo-600 shadow-sm focus:border-indigo-300 focus:ring focus:ring-indigo-200 focus:ring-opacity-50"
+                    />
+                    <span class="ml-3 text-sm text-gray-900">{{ team.name }}</span>
+                    <span class="ml-auto text-xs text-gray-500">{{ team.slug }}</span>
+                  </label>
+                {% empty %}
+                  <div class="px-4 py-8 text-center text-gray-500">
+                    {% translate "No teams available" %}
+                  </div>
+                {% endfor %}
+              </div>
+            </div>
+
+            <div x-show="formData.teams.length > 0" class="mt-3">
+              <p class="text-sm text-gray-500">
+                <span x-text="formData.teams.length"></span>
+                {% translate "team(s) selected" %}
+              </p>
+            </div>
+          </div>
+        </div>
+
+      <!-- Users Section -->
+        <div class="bg-white shadow sm:rounded-lg">
+          <div class="px-4 py-5 sm:p-6">
+            <h3 class="text-lg leading-6 font-medium text-gray-900 mb-4">
+              {% translate "Users" %}
+            </h3>
+
+            <div class="mb-4">
+              <input
+                type="text"
+                x-model="userSearch"
+                @input="filterUsers()"
+                class="block w-full border-gray-300 rounded-md shadow-sm focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm"
+                placeholder="{% translate 'Search users...' %}"
+              />
+            </div>
+
+            <div class="max-h-64 overflow-y-auto border border-gray-200 rounded-md">
+              <div class="divide-y divide-gray-200">
+                <template x-for="user in filteredUsers" :key="user.id">
+                  <label class="flex items-center px-4 py-3 hover:bg-gray-50 cursor-pointer">
+                    <input
+                      type="checkbox"
+                      :value="user.id"
+                      x-model="formData.users"
+                      class="rounded border-gray-300 text-indigo-600 shadow-sm focus:border-indigo-300 focus:ring focus:ring-indigo-200 focus:ring-opacity-50"
+                    />
+                    <span class="ml-3 text-sm text-gray-900" x-text="user.display_name"></span>
+                    <span class="ml-auto text-xs text-gray-500" x-text="user.email || user.username"></span>
+                  </label>
+                </template>
+
+                <div x-show="filteredUsers.length === 0" class="px-4 py-8 text-center text-gray-500">
+                  {% translate "No users found" %}
+                </div>
+              </div>
+            </div>
+
+            <div x-show="formData.users.length > 0" class="mt-3">
+              <p class="text-sm text-gray-500">
+                <span x-text="formData.users.length"></span>
+                {% translate "user(s) selected" %}
+              </p>
+            </div>
+          </div>
+        </div>
+
+      <!-- Save Button -->
+        <div class="flex justify-end">
+          <button
+            type="submit"
+            class="btn btn-primary"
+            :disabled="loading || !hasChanges()"
+            :class="{ 'opacity-50': loading || !hasChanges() }"
+          >
+            <span x-show="!loading">{% translate "Save Changes" %}</span>
+            <span x-show="loading">{% translate "Saving..." %}</span>
+          </button>
+        </div>
+
+      <!-- Error Display -->
+        <div x-show="error" class="p-4 bg-red-50 border border-red-200 rounded-md">
+          <p class="text-sm text-red-600" x-text="error"></p>
+        </div>
+
+      <!-- Success Display -->
+        <div x-show="success" class="p-4 bg-green-50 border border-green-200 rounded-md">
+          <p class="text-sm text-green-600">{% translate "Flag updated successfully!" %}</p>
+        </div>
+      </form>
+    </div>
+  </section>
+
+{% endblock %}
+
+{% block page_js %}
+  <script>
+    function flagManager(config) {
+      return {
+        flagId: config.flagId,
+        formData: { ...config.initialData },
+        originalData: { ...config.initialData },
+        loading: false,
+        error: null,
+        success: false,
+        userSearch: '',
+        allUsers: [
+          {% for user in users %}
+            {
+              id: {{ user.id }},
+              username: '{{ user.username|escapejs }}',
+              email: '{{ user.email|escapejs }}',
+              display_name: '{{ user.get_display_name|escapejs }}'
+            }{% if not forloop.last %},{% endif %}
+          {% endfor %}
+        ],
+        filteredUsers: [],
+
+        init() {
+          this.filteredUsers = [...this.allUsers];
+            // Convert arrays to numbers for proper comparison
+          this.formData.teams = this.formData.teams.map(id => parseInt(id));
+          this.formData.users = this.formData.users.map(id => parseInt(id));
+          this.originalData.teams = this.originalData.teams.map(id => parseInt(id));
+          this.originalData.users = this.originalData.users.map(id => parseInt(id));
+        },
+
+        filterUsers() {
+          const search = this.userSearch.toLowerCase();
+          this.filteredUsers = this.allUsers.filter(user =>
+            user.username.toLowerCase().includes(search) ||
+            user.email.toLowerCase().includes(search) ||
+            user.display_name.toLowerCase().includes(search)
+          );
+        },
+
+        hasChanges() {
+          return JSON.stringify(this.formData) !== JSON.stringify(this.originalData);
+        },
+
+        async save() {
+          this.loading = true;
+          this.error = null;
+          this.success = false;
+
+          try {
+            const formData = new FormData();
+            formData.append('csrfmiddlewaretoken', document.querySelector('[name=csrfmiddlewaretoken]').value);
+
+            if (this.formData.everyone) formData.append('everyone', 'on');
+            if (this.formData.testing) formData.append('testing', 'on');
+            if (this.formData.superusers) formData.append('superusers', 'on');
+            if (this.formData.rollout) formData.append('rollout', 'on');
+
+            if (this.formData.percent !== null && this.formData.percent !== '') {
+              formData.append('percent', this.formData.percent);
+            }
+
+            this.formData.teams.forEach(teamId => {
+              formData.append('teams', teamId);
+            });
+
+            this.formData.users.forEach(userId => {
+              formData.append('users', userId);
+            });
+
+            const response = await fetch(`/admin/flags/${this.flagId}/update/`, {
+              method: 'POST',
+              body: formData
+            });
+
+            const data = await response.json();
+
+            if (data.success) {
+              this.success = true;
+              this.originalData = { ...this.formData };
+              setTimeout(() => this.success = false, 3000);
+            } else {
+              this.error = data.error || 'An error occurred';
+            }
+          } catch (err) {
+            this.error = 'Network error occurred';
+          } finally {
+            this.loading = false;
+          }
+        }
+      };
+    }
+  </script>
+{% endblock %}
