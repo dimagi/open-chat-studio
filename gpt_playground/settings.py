@@ -434,6 +434,10 @@ SCHEDULED_TASKS = {
         "task": "apps.events.tasks.enqueue_timed_out_events",
         "schedule": 10,
     },
+    "dashboard.tasks.cleanup_expired_cache_entries": {
+        "task": "apps.dashboard.tasks.cleanup_expired_cache_entries",
+        "schedule": timedelta(days=1),
+    },
 }
 
 CACHES = {
