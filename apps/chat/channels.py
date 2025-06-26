@@ -709,7 +709,7 @@ class ChannelBase(ABC):
         chat_message = ChatMessage.objects.create(
             chat=self.experiment_session.chat, message_type=ChatMessageType.AI, content=self.message.message_text
         )
-        chat_message.create_and_add_tag("unsupported_message_type", TagCategories.ERROR)
+        chat_message.create_and_add_tag("unsupported_message_type", self.experiment.team, TagCategories.ERROR)
         return EventBot(self.experiment_session, self.experiment, trace_info, history_manager).get_user_message(
             UNSUPPORTED_MESSAGE_BOT_PROMPT.format(supported_types=self.supported_message_types)
         )

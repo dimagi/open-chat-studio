@@ -3,7 +3,9 @@ from django.db import transaction
 from django.db.models import Q
 
 from apps.experiments.models import Experiment
-from apps.pipelines.helper import create_assistant_pipeline, create_llm_pipeline
+from apps.pipelines.helper import (
+    convert_non_pipeline_experiment_to_pipeline,
+)
 from apps.teams.models import Flag
 
 
@@ -124,16 +126,16 @@ class Command(BaseCommand):
             )
         else:
             for experiment in experiments_to_convert.iterator(20):
-                converted_count, failed_count = self._process_expriment(experiment, converted_count, failed_count)
+                converted_count, failed_count = self._process_experiment(experiment, converted_count, failed_count)
         self.stdout.write(
             self.style.SUCCESS(f"\nMigration is complete!: {converted_count} succeeded, {failed_count} failed")
         )
 
-    def _process_expriment(self, experiment, converted_count, failed_count):
+    def _process_experiment(self, experiment, converted_count, failed_count):
         self._log_experiment_info(experiment)
         try:
             with transaction.atomic():
-                self._convert_experiment(experiment)
+                convert_non_pipeline_experiment_to_pipeline(experiment)
                 converted_count += 1
                 self.stdout.write(self.style.SUCCESS(f"Success: {experiment.name}"))
         except Exception as e:
@@ -145,21 +147,6 @@ class Command(BaseCommand):
         experiment_type = "Assistant" if experiment.assistant else "LLM" if experiment.llm_provider else "Unknown"
         team_info = f"{experiment.team.name} ({experiment.team.slug})"
         self.stdout.write(f"{experiment.name} (ID: {experiment.id}) - Type: {experiment_type} - Team: {team_info}")
-
-    def _convert_experiment(self, experiment):
-        if experiment.assistant:
-            pipeline = create_assistant_pipeline(experiment)
-        elif experiment.llm_provider:
-            pipeline = create_llm_pipeline(experiment)
-        else:
-            raise ValueError(f"Unknown experiment type for experiment {experiment.id}")
-
-        experiment.pipeline = pipeline
-        experiment.assistant = None
-        experiment.llm_provider = None
-        experiment.llm_provider_model = None
-
-        experiment.save()
 
     def _get_chatbots_flag_team_ids(self):
         chatbots_flag = Flag.objects.get(name="flag_chatbots")

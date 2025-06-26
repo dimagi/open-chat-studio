@@ -24,15 +24,24 @@
       <div>
         <div class="alert alert-info alert-vertical sm:alert-horizontal w-full flex items-center justify-between" role="alert">
           <div>
-            Your experiment is ready to migrate to a chatbot! Chatbots is a new interface for a more streamlined bot building experience. This is a safe operation that will not change the existing functionality. <a href="https://docs.openchatstudio.com/concepts/chatbots/" class="italic" target="_blank" rel="noopener noreferrer">Learn More →</a>
+            <p>Your experiment is ready to migrate to a chatbot! Chatbots is a new interface for a more streamlined bot building experience. This is a safe operation that will not change the existing functionality. <a href="https://docs.openchatstudio.com/concepts/chatbots/" class="italic" target="_blank" rel="noopener noreferrer">Learn More →</a></p>
+            {% if first_parent_id %}
+              <p><br/>However, since this is a 'child' of another experiment, you must migrate the parent which will migrate all the children.</p>
+            {% endif %}
           </div>
           <div>
-            <form method="post" action="{% url 'experiments:migrate_experiment' request.team.slug experiment.id %}" style="display: inline;">
-              {% csrf_token %}
-              <button type="submit" class="btn btn-primary">
-                Migrate Experiment
-              </button>
-            </form>
+            {% if first_parent_id %}
+              <a class="btn btn-primary" href="{% url 'experiments:single_experiment_home' request.team.slug first_parent_id %}">
+                Go to Parent
+              </a>
+            {% else %}
+              <form method="post" action="{% url 'experiments:migrate_experiment' request.team.slug experiment.id %}" style="display: inline;">
+                {% csrf_token %}
+                <button type="submit" class="btn btn-primary">
+                  Migrate Experiment
+                </button>
+              </form>
+            {% endif %}
           </div>
         </div>
       </div>

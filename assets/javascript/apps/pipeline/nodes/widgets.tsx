@@ -558,6 +558,20 @@ function CodeNodeEditor(
       detail: "Gets all routing decisions in the pipeline",
       boost: 1
     }),
+
+    add_message_tag: snip("add_message_tag(\"${tag_name}\")", {
+      label: "add_message_tag",
+      type: "function",
+      detail: "Adds the tag to the output message",
+      boost: 1
+    }),
+
+    add_session_tag: snip("add_session_tag(\"${tag_name}\")", {
+      label: "add_session_tag",
+      type: "function",
+      detail: "Adds the tag to the chat session",
+      boost: 1
+    })
   }
 
   function pythonCompletions(context: CompletionContext) {
@@ -1037,7 +1051,7 @@ function BuiltInToolsWidget(props: WidgetParams) {
         const trimmedUrl = url.trim();
         // Strip http:// or https:// prefixes
         return trimmedUrl.replace(/^https?:\/\//, '');
-      }).filter(url => url.length > 0);
+      });
     }))
   }
   return (

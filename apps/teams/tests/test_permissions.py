@@ -41,6 +41,7 @@ IGNORE_APPS = {
     "django_otp",
     "django_tables2",
     "documents",  # ignore for now - may be added later
+    "dashboard",
     "drf_spectacular",
     "field_audit",
     "forms",

@@ -19,7 +19,7 @@ class VersionedModelAdminMixin:
         return ""
 
     def _get_working_version_label(self, working_version):
-        return working_version.name
+        return getattr(working_version, "name", "")
 
     def _get_object_link(self, obj, link_text=None):
         """Copied from django.contrib.admin"""

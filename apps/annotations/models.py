@@ -44,6 +44,10 @@ class Tag(TagBase, BaseTeamModel):
     def get_absolute_url(self):
         return reverse("annotations:tag_edit", args=[self.team.slug, self.id])
 
+    @property
+    def label(self):
+        return TagCategories(self.category).label if self.category else "User Defined"
+
 
 @audit_fields(
     "user",
@@ -91,12 +95,21 @@ class TaggedModelMixin(models.Model, AnnotationMixin):
 
     tags = TaggableManager(through=CustomTaggedItem)
 
-    def add_tags(self, tags: list[str], team: Team, added_by: CustomUser):
+    def add_tags(self, tags: list[str], team: Team, added_by: CustomUser = None):
         tag_objs = Tag.objects.filter(team=team, name__in=tags)
         for tag in tag_objs:
             self.add_tag(tag, team, added_by)
 
-    def add_tag(self, tag: Tag, team: Team, added_by: CustomUser):
+    def create_and_add_tag(self, tag: str, team: Team, tag_category: TagCategories, added_by: CustomUser = None):
+        tag, _ = Tag.objects.get_or_create(
+            name=tag,
+            team=team,
+            is_system_tag=bool(tag_category),
+            category=tag_category,
+        )
+        self.add_tag(tag, team=team, added_by=added_by)
+
+    def add_tag(self, tag: Tag, team: Team, added_by: CustomUser = None):
         self.tags.add(tag, through_defaults={"team": team, "user": added_by})
 
     def user_tag_names(self):

@@ -554,6 +554,7 @@ def _get_routes_context(experiment: Experiment, team_slug: str):
     return {
         "child_routes_table": ChildExperimentRoutesTable(experiment.child_links.filter(type=route_type).all()),
         "parent_routes_table": ParentExperimentRoutesTable(parent_links),
+        "first_parent_id": parent_links[0].parent_id if parent_links else None,
         "can_make_child_routes": len(parent_links) == 0,
     }
 
@@ -1604,6 +1605,12 @@ def migrate_experiment_view(request, team_slug, experiment_id):
         "experiments:single_experiment_home",
         kwargs={"team_slug": team_slug, "experiment_id": experiment_id},
     )
+    if experiment.parent_links.exists():
+        messages.error(
+            request, "Child experiments will be migrated along with their 'parent'. Please migrate the parent."
+        )
+        return redirect(failed_url)
+
     try:
         with transaction.atomic():
             experiment = Experiment.objects.get(id=experiment_id)

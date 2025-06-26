@@ -2,6 +2,7 @@ import pytest
 from langchain_core.messages import HumanMessage
 
 from apps.service_providers.llm_service import AnthropicLlmService, AzureLlmService, OpenAILlmService
+from apps.service_providers.llm_service.main import detangle_file_ids
 from apps.service_providers.models import LlmProviderTypes
 
 
@@ -33,3 +34,13 @@ def test_openai_service_get_num_tokens(model):
     # fine-tuned model
     llm = service.get_chat_model(model, 0.5)
     assert llm.get_num_tokens_from_messages([HumanMessage("Hello")]) > 0
+
+
+def test_detangle_file_ids():
+    assert detangle_file_ids(["file-092e", "file-123Abcfile-123Abc", "file-123Abcfile-456Bca"]) == [
+        "file-092e",
+        "file-123Abc",
+        "file-123Abc",
+        "file-123Abc",
+        "file-456Bca",
+    ]

@@ -1,4 +1,5 @@
 import contextlib
+import re
 from io import BytesIO
 from time import sleep
 from typing import TYPE_CHECKING, Any
@@ -40,6 +41,21 @@ class AnthropicBuiltinTool(dict):
     """A simple wrapper for Anthorpic's builtin tools. This is used to easily distinquish Anthorpic tools from dicts"""
 
     pass
+
+
+def detangle_file_ids(file_ids: str) -> list[str]:
+    """
+    There is a bug in the OpenAI API where separate file ids are sometimes returned concatenated together.
+
+    Example:
+        file-123Abcfile-123Def
+    Should be parsed as:
+        ['file-123Abc', 'file-123Def']
+    """
+    detangled_file_ids = []
+    for file_id in file_ids:
+        detangled_file_ids.extend(re.findall(r"file-(?:.*?)(?=file-|$)", file_id))
+    return detangled_file_ids
 
 
 class OpenAIAssistantRunnable(BrokenOpenAIAssistantRunnable):
@@ -165,7 +181,9 @@ class LlmService(pydantic.BaseModel):
             if isinstance(outputs, list):
                 for output in outputs:
                     annotation_entries = output.get("annotations", [])
-                    remote_file_ids.extend([entry["file_id"] for entry in annotation_entries if "file_id" in entry])
+                    file_ids = [entry["file_id"] for entry in annotation_entries if "file_id" in entry]
+                    file_ids = detangle_file_ids(file_ids)
+                    remote_file_ids.extend(file_ids)
         return File.objects.filter(external_id__in=remote_file_ids).all()
 
     def get_remote_index_manager(self, index_id: str = None) -> "IndexManager":
