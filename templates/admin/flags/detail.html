@@ -73,78 +73,53 @@
                 </span>
               </label>
 
-              <label class="flex items-center">
-                <input
-                  type="checkbox"
-                  x-model="formData.rollout"
-                  class="rounded border-gray-300 text-indigo-600 shadow-sm focus:border-indigo-300 focus:ring focus:ring-indigo-200 focus:ring-opacity-50"
-                />
-                <span class="ml-2 text-sm text-gray-900">
-                  {% translate "Rollout" %}
-                  <span class="block text-xs text-gray-500">{% translate "Enable rollout mode" %}</span>
-                </span>
-              </label>
-            </div>
-          </div>
-        </div>
-
-      <!-- Percentage Section -->
-        <div class="bg-white shadow sm:rounded-lg">
-          <div class="px-4 py-5 sm:p-6">
-            <h3 class="text-lg leading-6 font-medium text-gray-900 mb-4">
-              {% translate "Percentage Rollout" %}
-            </h3>
-
-            <div class="flex items-center space-x-4">
-              <div class="flex-1">
-                <label for="percent" class="block text-sm font-medium text-gray-700 mb-1">
-                  {% translate "Percentage" %}
-                </label>
-                <div class="relative">
+              <div class="space-y-3">
+                <label class="flex items-center">
                   <input
-                    type="number"
-                    id="percent"
-                    x-model="formData.percent"
+                    type="checkbox"
+                    x-model="formData.rollout"
+                    class="rounded border-gray-300 text-indigo-600 shadow-sm focus:border-indigo-300 focus:ring focus:ring-indigo-200 focus:ring-opacity-50"
+                  />
+                  <span class="ml-2 text-sm text-gray-900">
+                    {% translate "Rollout" %}
+                    <span class="block text-xs text-gray-500">{% translate "Enable rollout mode" %}</span>
+                  </span>
+                </label>
+
+                <div x-show="formData.rollout" class="ml-6 space-y-2 mt-2">
+                  <div class="flex items-center justify-between">
+                    <label class="block text-sm font-medium text-gray-700">
+                      {% translate "Percentage" %}
+                    </label>
+                    <span class="text-sm font-medium text-gray-900" x-text="(formData.percent || 0) + '%'"></span>
+                  </div>
+
+                  <input
+                    type="range"
                     min="0"
                     max="100"
-                    class="block w-full pr-12 border-gray-300 rounded-md shadow-sm focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm"
-                    placeholder="0"
+                    x-model="formData.percent"
+                    class="range range-primary w-full"
+                    step="1"
                   />
-                  <div class="absolute inset-y-0 right-0 pr-3 flex items-center pointer-events-none">
-                    <span class="text-gray-500 sm:text-sm">%</span>
+
+                  <div class="flex justify-between text-xs text-gray-500">
+                    <span>0%</span>
+                    <span>25%</span>
+                    <span>50%</span>
+                    <span>75%</span>
+                    <span>100%</span>
                   </div>
-                </div>
-                <p class="mt-1 text-xs text-gray-500">
-                  {% translate "Leave empty to disable percentage rollout" %}
-                </p>
-              </div>
-              <div class="flex-shrink-0" x-show="formData.percent">
-                <div class="w-16 h-16 relative">
-                  <svg class="w-16 h-16 transform -rotate-90" viewBox="0 0 36 36">
-                    <path
-                      class="text-gray-300"
-                      stroke="currentColor"
-                      stroke-width="3"
-                      fill="transparent"
-                      d="M18 2.0845 a 15.9155 15.9155 0 0 1 0 31.831 a 15.9155 15.9155 0 0 1 0 -31.831"
-                    />
-                    <path
-                      class="text-indigo-600"
-                      stroke="currentColor"
-                      stroke-width="3"
-                      fill="transparent"
-                      :stroke-dasharray="formData.percent + ', 100'"
-                      d="M18 2.0845 a 15.9155 15.9155 0 0 1 0 31.831 a 15.9155 15.9155 0 0 1 0 -31.831"
-                    />
-                  </svg>
-                  <div class="absolute inset-0 flex items-center justify-center">
-                    <span class="text-xs font-medium text-gray-900" x-text="formData.percent + '%'"></span>
-                  </div>
+
+                  <p class="text-xs text-gray-500">
+                    {% translate "Adjust the slider to set the percentage of users who will see this flag" %}
+                  </p>
                 </div>
               </div>
             </div>
           </div>
         </div>
+
 
       <!-- Teams Section -->
         <div class="bg-white shadow sm:rounded-lg">
