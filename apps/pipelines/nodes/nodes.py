@@ -1142,7 +1142,7 @@ class CodeNode(PipelineNode, OutputMessageTagMixin):
         return Command(
             goto=self._outgoing_nodes,
             update=PipelineState.from_node_output(
-                node_name=self.name, node_id=self.node_id, output=result, **output_state
+                node_name=self.name, node_id=self.node_id, output=str(result), **output_state
             ),
         )
 
