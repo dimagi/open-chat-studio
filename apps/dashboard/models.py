@@ -3,18 +3,15 @@ from datetime import timedelta
 from django.db import models
 from django.utils import timezone
 
-from apps.teams.models import Team
+from apps.teams.models import BaseTeamModel
 
 
-class DashboardCache(models.Model):
+class DashboardCache(BaseTeamModel):
     """Cache computed dashboard metrics to improve performance"""
 
-    team = models.ForeignKey(Team, on_delete=models.CASCADE)
     cache_key = models.CharField(max_length=255)
     data = models.JSONField()
     expires_at = models.DateTimeField()
-    created_at = models.DateTimeField(auto_now_add=True)
-    updated_at = models.DateTimeField(auto_now=True)
 
     class Meta:
         unique_together = ("team", "cache_key")
@@ -49,16 +46,13 @@ class DashboardCache(models.Model):
         return cache_entry
 
 
-class DashboardFilter(models.Model):
+class DashboardFilter(BaseTeamModel):
     """Store user's dashboard filter preferences"""
 
-    team = models.ForeignKey(Team, on_delete=models.CASCADE)
     user = models.ForeignKey("users.CustomUser", on_delete=models.CASCADE)
     filter_name = models.CharField(max_length=100)  # e.g., 'date_range', 'experiments', 'channels'
     filter_data = models.JSONField()  # Store filter parameters
     is_default = models.BooleanField(default=False)
-    created_at = models.DateTimeField(auto_now_add=True)
-    updated_at = models.DateTimeField(auto_now=True)
 
     class Meta:
         unique_together = ("team", "user", "filter_name")
