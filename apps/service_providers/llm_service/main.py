@@ -1,10 +1,10 @@
 import contextlib
-import re
 from io import BytesIO
 from time import sleep
 from typing import TYPE_CHECKING, Any
 
 import pydantic
+from django.db.models import Q
 from langchain.agents.openai_assistant import OpenAIAssistantRunnable as BrokenOpenAIAssistantRunnable
 from langchain_anthropic import ChatAnthropic
 from langchain_core.callbacks import BaseCallbackHandler, CallbackManager, dispatch_custom_event
@@ -26,6 +26,7 @@ from apps.service_providers.llm_service.token_counters import (
     GeminiTokenCounter,
     OpenAITokenCounter,
 )
+from apps.service_providers.llm_service.utils import detangle_file_ids, extract_file_ids_from_ocs_citations
 
 if TYPE_CHECKING:
     from apps.service_providers.llm_service.index_managers import IndexManager
@@ -41,21 +42,6 @@ class AnthropicBuiltinTool(dict):
     """A simple wrapper for Anthorpic's builtin tools. This is used to easily distinquish Anthorpic tools from dicts"""
 
     pass
-
-
-def detangle_file_ids(file_ids: str) -> list[str]:
-    """
-    There is a bug in the OpenAI API where separate file ids are sometimes returned concatenated together.
-
-    Example:
-        file-123Abcfile-123Def
-    Should be parsed as:
-        ['file-123Abc', 'file-123Def']
-    """
-    detangled_file_ids = []
-    for file_id in file_ids:
-        detangled_file_ids.extend(re.findall(r"file-(?:.*?)(?=file-|$)", file_id))
-    return detangled_file_ids
 
 
 class OpenAIAssistantRunnable(BrokenOpenAIAssistantRunnable):
@@ -169,22 +155,27 @@ class LlmService(pydantic.BaseModel):
         output = output.get("output", "")
         if isinstance(output, list):
             return "\n".join([o["text"] for o in output])
+
         return output or ""
 
-    def get_cited_files_parser(self):
+    def get_cited_files_parser(self, using_ocs_search_tool: bool = False):
         return self._default_cited_files_parser
 
     def _default_cited_files_parser(self, token: str | dict) -> list[File]:
         remote_file_ids = []
+        file_ids = []
         if isinstance(token, dict):
             outputs = token.get("output", "")
             if isinstance(outputs, list):
                 for output in outputs:
                     annotation_entries = output.get("annotations", [])
-                    file_ids = [entry["file_id"] for entry in annotation_entries if "file_id" in entry]
-                    file_ids = detangle_file_ids(file_ids)
-                    remote_file_ids.extend(file_ids)
-        return File.objects.filter(external_id__in=remote_file_ids).all()
+                    external_ids = [entry["file_id"] for entry in annotation_entries if "file_id" in entry]
+                    external_ids = detangle_file_ids(external_ids)
+                    remote_file_ids.extend(external_ids)
+            else:
+                file_ids.extend(extract_file_ids_from_ocs_citations(outputs))
+
+        return File.objects.filter(Q(external_id__in=remote_file_ids) | Q(id__in=file_ids)).all()
 
     def get_remote_index_manager(self, index_id: str = None) -> "IndexManager":
         raise NotImplementedError

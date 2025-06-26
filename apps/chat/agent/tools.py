@@ -26,6 +26,8 @@ if TYPE_CHECKING:
     from apps.pipelines.models import Node
 
 
+OCS_CITATION_PATTERN = r"<CIT\s+file_id=(?P<file_id>\d+)\s*/>"
+
 SUCCESSFUL_ATTACHMENT_MESSAGE: str = "File {file_id} ({name}) is attached to your response"
 
 CREATE_LINK_TEXT = """You can use this markdown link to reference it in your response:
@@ -33,10 +35,23 @@ CREATE_LINK_TEXT = """You can use this markdown link to reference it in your res
     if it is an image.
 """
 
-CHUNK_RESULT_TEMPLATE = """
-# File: {file_name}
+CHUNK_TEMPLATE = """
+# Chunk: {chunk_id}
+## File name: {file_name}, file_id={file_id}
 ## Content
 {chunk}
+"""
+
+CHUNK_RESULT_TEMPLATE = """
+# Retrieved chunks
+{retrieved_chunks}
+
+# Citing instructions
+DO NOT generate a response without citing the relevant chunks from the retrieved files. When citing, you should use the
+following format to reference the chunks: <CIT file_id=the-file-id />. Place the citation at the end of the sentence
+or paragraph that references the chunk.
+
+For instance, if you use a chunk from file "example.txt" with id 123, you should reference it as: <CIT file_id=123 />.
 """
 
 
@@ -288,13 +303,17 @@ class SearchIndexTool(CustomBaseTool):
             .select_related("file")
             .only("text", "file__name")[:max_results]
         )
-        return "".join([self._format_result(embedding) for embedding in embeddings])
+        retrieved_chunks = "".join([self._format_result(embedding) for embedding in embeddings])
+        return CHUNK_RESULT_TEMPLATE.format(retrieved_chunks=retrieved_chunks)
 
     def _format_result(self, embedding: FileChunkEmbedding) -> str:
         """
         Format the result from the search index into a more structured format.
         """
-        return CHUNK_RESULT_TEMPLATE.format(file_name=embedding.file.name, chunk=embedding.text)
+
+        return CHUNK_TEMPLATE.format(
+            chunk_id=embedding.id, file_name=embedding.file.name, file_id=embedding.file_id, chunk=embedding.text
+        )
 
 
 def _move_datetime_to_new_weekday_and_time(date: datetime, new_weekday: int, new_hour: int, new_minute: int):
