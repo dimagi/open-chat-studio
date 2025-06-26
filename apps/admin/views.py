@@ -20,8 +20,11 @@ from apps.teams.models import Flag, Team
 
 User = get_user_model()
 
+is_staff = user_passes_test(lambda u: u.is_staff, login_url="/404")
+is_superuser = user_passes_test(lambda u: u.is_superuser, login_url="/404")
 
-@user_passes_test(lambda u: u.is_staff, login_url="/404")
+
+@is_staff
 def admin_home(request):
     return TemplateResponse(
         request,
@@ -43,7 +46,7 @@ def _get_form(request):
     return DateRangeForm(initial={"range_type": DateRanges.LAST_30_DAYS, "start": start, "end": end})
 
 
-@user_passes_test(lambda u: u.is_staff, login_url="/404")
+@is_staff
 def usage_chart(request):
     form = _get_form(request)
     if not form.is_valid():
@@ -77,7 +80,7 @@ def usage_chart(request):
     )
 
 
-@user_passes_test(lambda u: u.is_staff, login_url="/404")
+@is_staff
 def export_usage(request):
     form = _get_form(request)
     if not form.is_valid():
@@ -92,7 +95,7 @@ def export_usage(request):
     return response
 
 
-@user_passes_test(lambda u: u.is_staff, login_url="/404")
+@is_staff
 def export_whatsapp(request):
     response = HttpResponse(get_whatsapp_numbers(), content_type="text/csv")
     response["Content-Disposition"] = 'attachment; filename="whatsapp_numbers.csv"'
@@ -111,7 +114,7 @@ def _string_to_date(date_str: str) -> datetime.date:
     return datetime.strptime(date_str, date_format).date()
 
 
-@user_passes_test(lambda u: u.is_staff, login_url="/404")
+@is_superuser
 def flags_home(request):
     flags = Flag.objects.all().order_by("name")
     return TemplateResponse(
@@ -124,7 +127,7 @@ def flags_home(request):
     )
 
 
-@user_passes_test(lambda u: u.is_staff, login_url="/404")
+@is_superuser
 def flag_detail(request, flag_id):
     flag = get_object_or_404(Flag, id=flag_id)
 
@@ -138,7 +141,7 @@ def flag_detail(request, flag_id):
     )
 
 
-@user_passes_test(lambda u: u.is_staff, login_url="/404")
+@is_superuser
 def teams_api(request):
     query = request.GET.get("q", "").strip()
     teams = Team.objects.all()
@@ -152,7 +155,7 @@ def teams_api(request):
     return JsonResponse(data, safe=False)
 
 
-@user_passes_test(lambda u: u.is_staff, login_url="/404")
+@is_superuser
 def users_api(request):
     query = request.GET.get("q", "").strip()
     users = User.objects.all()
@@ -166,7 +169,7 @@ def users_api(request):
     return JsonResponse(data, safe=False)
 
 
-@user_passes_test(lambda u: u.is_staff, login_url="/404")
+@is_superuser
 @require_http_methods(["POST"])
 def update_flag(request, flag_id):
     flag = get_object_or_404(Flag, id=flag_id)
