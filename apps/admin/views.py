@@ -158,7 +158,7 @@ def users_api(request):
     users = User.objects.all()
 
     if query:
-        users = users.filter(username__icontains=query)
+        users = users.filter(email__icontains=query)
 
     users = users.order_by("username")[:20]  # Limit to 20 results
 
