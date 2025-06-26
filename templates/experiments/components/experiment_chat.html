@@ -96,6 +96,7 @@
                     <p class="pb-4">This action may take a few moments to complete.</p>
                     <div class="modal-action">
                       <button
+                        data-action="translate-messages"
                         class="btn btn-primary"
                         hx-post="{% url 'experiments:translate_messages' request.team.slug experiment.public_id experiment_session.external_id %}"
                         hx-vals='{"language": "{{ language }}"}'
@@ -267,10 +268,7 @@
 <script>
   document.body.addEventListener('htmx:beforeRequest', function (evt) {
     const sourceEl = evt.detail.elt;
-    if ( //ensure it's only for this request
-      sourceEl?.tagName === 'BUTTON' &&
-      sourceEl?.textContent?.trim() === 'Translate Messages'
-    ) {
+    if (sourceEl?.dataset?.action === 'translate-messages') { //ensure it's only for this request
       document.querySelectorAll('.chat-message-untranslated .htmx-indicator').forEach(indicator => {
         indicator.style.display = 'flex';
         indicator.style.alignItems = 'center';
