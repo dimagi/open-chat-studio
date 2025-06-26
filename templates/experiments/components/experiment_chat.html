@@ -172,14 +172,14 @@
                       </div>
                       {% if show_original_translation and not message.translation == default_message %}
                         <div class="pg-text-muted">
-                          <p><strong>Original Message: </strong><p>{{ message.content|render_markdown }}</p>
-                          </div>
+                          <p><strong>Original Message: </strong>{{ message.content|render_markdown }}</p>
+                        </div>
                       {% endif %}
                       {% if message.translation == default_message %}
                         {# hidden when loading spinners are shown #}
                         <div class="pg-text-muted chat-message-untranslated">
-                          <p><strong>Original Message: </strong><p>{{ message.content|render_markdown }}</p>
-                          </div>
+                          <p><strong>Original Message: </strong>{{ message.content|render_markdown }}</p>
+                        </div>
                       {% endif %}
                       <div class="flex flex-col">
                         {% for file in message.get_attached_files %}
