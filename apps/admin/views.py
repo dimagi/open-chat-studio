@@ -116,7 +116,7 @@ def _string_to_date(date_str: str) -> datetime.date:
 
 @is_superuser
 def flags_home(request):
-    flags = Flag.objects.all().order_by("name")
+    flags = Flag.objects.prefetch_related("teams", "users").all().order_by("name")
     return TemplateResponse(
         request,
         "admin/flags/home.html",
