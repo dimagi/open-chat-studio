@@ -2,31 +2,6 @@
 
 from django.db import migrations
 
-def update_periodic_task(apps, schema_editor):
-    """Change from 60s interval to 10s interval for enqueue_timed_out_events task."""
-    IntervalSchedule = apps.get_model("django_celery_beat", "IntervalSchedule")
-    PeriodicTask = apps.get_model("django_celery_beat", "PeriodicTask")
-
-    task = PeriodicTask.objects.filter(
-        name="events.tasks.enqueue_timed_out_events",
-        task="apps.events.tasks.enqueue_timed_out_events",
-    ).first()
-    if not task:
-        return
-
-    interval, _ = IntervalSchedule.objects.get_or_create(every=10, period="seconds")
-    task.interval = interval
-    task.save()
-
-    # delete old interval if no tasks are using it
-    try:
-        old_interval = IntervalSchedule.objects.get(every=60, period="seconds")
-    except IntervalSchedule.DoesNotExist:
-        return
-
-    if not old_interval.periodictask_set.count():
-        old_interval.delete()
-
 
 class Migration(migrations.Migration):
 
@@ -34,4 +9,3 @@ class Migration(migrations.Migration):
         ('events', '0017_statictrigger_working_version_and_more'),
     ]
 
-    operations = [migrations.RunPython(update_periodic_task, migrations.RunPython.noop)]
