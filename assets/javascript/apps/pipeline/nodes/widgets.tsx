@@ -1051,7 +1051,7 @@ function BuiltInToolsWidget(props: WidgetParams) {
         const trimmedUrl = url.trim();
         // Strip http:// or https:// prefixes
         return trimmedUrl.replace(/^https?:\/\//, '');
-      }).filter(url => url.length > 0);
+      });
     }))
   }
   return (
