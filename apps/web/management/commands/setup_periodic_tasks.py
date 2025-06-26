@@ -1,4 +1,3 @@
-from celery import current_app
 from django.conf import settings
 from django.core.management.base import BaseCommand
 from django.db import transaction
@@ -30,7 +29,6 @@ class Command(BaseCommand):
         # remove tasks that are not in the settings anymore
         PeriodicTask.objects.exclude(name__in=tasks).delete()
 
-        app = current_app._get_current_object()
         for name, config in scheduled_tasks.items():
             self.stdout.write(f"Updating periodic task {name}")
-            ModelEntry.from_entry(name, app=app, **config)
+            ModelEntry.from_entry(name, app=None, **config)
