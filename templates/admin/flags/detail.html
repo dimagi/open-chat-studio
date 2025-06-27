@@ -21,6 +21,7 @@
               superusers: {{ flag.superusers|yesno:'true,false' }},
               rollout: {{ flag.rollout|yesno:'true,false' }},
               percent: {{ flag.percent|default:'null' }},
+              note: '{{ flag.note|default:''|escapejs }}',
               teams: [{% for team in flag.teams.all %}{{ team.id }}{% if not forloop.last %},{% endif %}{% endfor %}],
               users: [{% for user in flag.users.all %}{{ user.id }}{% if not forloop.last %},{% endif %}{% endfor %}]
               }
@@ -86,7 +87,7 @@
                   </span>
                 </label>
 
-                <div x-show="formData.rollout" class="ml-6 space-y-2 mt-2">
+                <div x-show="formData.rollout" class="ml-6 space-y-2 mt-2" x-cloak>
                   <div class="flex items-center justify-between">
                     <label class="block text-sm font-medium text-gray-700">
                       {% translate "Percentage" %}
@@ -120,6 +121,30 @@
           </div>
         </div>
 
+      <!-- Note Section -->
+        <div class="bg-white shadow sm:rounded-lg">
+          <div class="px-4 py-5 sm:p-6">
+            <h3 class="text-lg leading-6 font-medium text-gray-900 mb-4">
+              {% translate "Note" %}
+            </h3>
+
+            <div>
+              <label for="note" class="block text-sm font-medium text-gray-700 mb-2">
+                {% translate "Description" %}
+              </label>
+              <textarea
+                id="note"
+                x-model="formData.note"
+                rows="3"
+                class="shadow-sm focus:ring-indigo-500 focus:border-indigo-500 block w-full sm:text-sm border-gray-300 rounded-md"
+                placeholder="{% translate 'Note where this Flag is used...' %}"
+              ></textarea>
+              <p class="mt-2 text-sm text-gray-500">
+                {% translate "Add a note describing where this flag is used or what it controls." %}
+              </p>
+            </div>
+          </div>
+        </div>
 
       <!-- Teams Section -->
         <div class="bg-white shadow sm:rounded-lg">
@@ -172,6 +197,28 @@
             <span x-show="!loading">{% translate "Save Changes" %}</span>
             <span x-show="loading">{% translate "Saving..." %}</span>
           </button>
+        </div>
+
+      <!-- Change History Section -->
+        <div class="bg-white shadow sm:rounded-lg">
+          <div class="px-4 py-5 sm:p-6">
+            <h3 class="text-lg leading-6 font-medium text-gray-900 mb-4">
+              {% translate "Change History" %}
+            </h3>
+
+            <div
+              id="flag-history-section"
+              hx-get="{% url 'ocs_admin:flag_history' flag.id %}"
+              hx-trigger="load, refreshHistory from:body"
+              hx-swap="innerHTML"
+            >
+              <!-- History table will be loaded here -->
+              <div class="text-center py-4">
+                <div class="animate-spin rounded-full h-8 w-8 border-b-2 border-indigo-600 mx-auto"></div>
+                <p class="text-sm text-gray-500 mt-2">{% translate "Loading history..." %}</p>
+              </div>
+            </div>
+          </div>
         </div>
 
       <!-- Error Display -->
@@ -308,6 +355,11 @@
             formData.append('percent', this.formData.percent);
           }
 
+          // Add note if set
+          if (this.formData.note !== null && this.formData.note !== '') {
+            formData.append('note', this.formData.note);
+          }
+
           // Add arrays
           ['teams', 'users'].forEach(field => {
             this.formData[field].forEach(id => formData.append(field, id));
@@ -320,6 +372,8 @@
           if (data.success) {
             this.success = true;
             this.originalData = { ...this.formData };
+            // Trigger HTMX to refresh the history section
+            htmx.trigger(document.body, 'refreshHistory');
             setTimeout(() => this.success = false, 3000);
           } else {
             this.error = data.error || 'An error occurred';

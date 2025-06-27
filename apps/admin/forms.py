@@ -53,6 +53,11 @@ class FlagUpdateForm(forms.Form):
         validators=[MinValueValidator(0), MaxValueValidator(100)],
         help_text="Percentage for rollout (0-100)",
     )
+    note = forms.CharField(
+        required=False,
+        widget=forms.Textarea(attrs={"rows": 3}),
+        help_text="Note where this Flag is used",
+    )
     teams = forms.ModelMultipleChoiceField(
         queryset=Team.objects.all(), required=False, widget=forms.MultipleHiddenInput()
     )
