@@ -280,6 +280,18 @@ class SafetyLayer(BaseTeamModel, VersionsMixin):
     def get_absolute_url(self):
         return reverse("experiments:safety_edit", args=[self.team.slug, self.id])
 
+    def _get_version_details(self) -> VersionDetails:
+        return VersionDetails(
+            instance=self,
+            fields=[
+                VersionField(name="name", raw_value=self.name),
+                VersionField(name="prompt_text", raw_value=self.prompt_text),
+                VersionField(name="messages_to_review", raw_value=self.messages_to_review),
+                VersionField(name="default_response_to_user", raw_value=self.default_response_to_user),
+                VersionField(name="prompt_to_bot", raw_value=self.prompt_to_bot),
+            ],
+        )
+
 
 class SurveyObjectManager(VersionsObjectManagerMixin, models.Manager):
     def get_queryset(self) -> models.QuerySet:
