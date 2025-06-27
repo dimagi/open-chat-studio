@@ -110,9 +110,12 @@ def add_collection_files(request, team_slug: str, pk: int):
         status = FileStatus.PENDING if collection.is_index else ""
         metadata = None
         if collection.is_index:
+            chunk_size = request.POST.get("chunk_size")
+            chunk_overlap = request.POST.get("chunk_overlap")
             metadata = CollectionFileMetadata(
                 chunking_strategy=ChunkingStrategy(
-                    chunk_size=int(request.POST.get("chunk_size")), chunk_overlap=int(request.POST.get("chunk_overlap"))
+                    chunk_size=int(chunk_size) if chunk_size else 800,
+                    chunk_overlap=int(chunk_overlap) if chunk_overlap else 400,
                 )
             )
 
