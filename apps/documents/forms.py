@@ -29,25 +29,19 @@ class CollectionForm(forms.ModelForm):
             "x-model.number.fill": "selectedLlmProviderId",
         }
 
-        if self.instance.id:
-            # Changing the collection type is not allowed
-            self.fields["is_index"].widget.attrs["disabled"] = True
+        if self.instance.id and self.instance.is_index:
+            # Changing the index location is not allowed
+            self.fields["is_remote_index"].widget.attrs["disabled"] = True
 
-            if self.instance.is_index:
-                # Changing the index location is not allowed
-                self.fields["is_remote_index"].widget.attrs["disabled"] = True
+            if self.instance.has_pending_index_uploads():
+                self.fields["llm_provider"].widget.attrs["disabled"] = True
 
-                if self.instance.has_pending_index_uploads():
-                    self.fields["llm_provider"].widget.attrs["disabled"] = True
-
-                if not self.instance.is_remote_index:
-                    # We don't yet support changing the embedding model or llm provider for local indexes
-                    self.fields["embedding_provider_model"].widget.attrs["disabled"] = True
-                    self.fields["llm_provider"].widget.attrs["disabled"] = True
+            if not self.instance.is_remote_index:
+                # We don't yet support changing the embedding model or llm provider for local indexes
+                self.fields["embedding_provider_model"].widget.attrs["disabled"] = True
+                self.fields["llm_provider"].widget.attrs["disabled"] = True
 
     def clean_is_index(self):
-        if self.instance.id:
-            return self.instance.is_index
         return self.cleaned_data["is_index"]
 
     def clean_is_remote_index(self):
