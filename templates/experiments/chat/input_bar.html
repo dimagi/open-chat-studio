@@ -161,14 +161,14 @@
         if (this.$refs.experimentUpload) {
           fieldsToWatch.push('ocs_attachments');
         }
-        this.$watchMany(fieldsToWatch, (message, experimentFiles, cfiles = [], ffiles = []) => {
-          const submitButton = document.getElementById('message-submit');
-          if (message || experimentFiles.length || cfiles.length || ffiles.length) {
-            submitButton.removeAttribute('disabled');
-          } else {
-            submitButton.setAttribute('disabled', 'disabled');
-          }
-        });
+       this.$watchMany(fieldsToWatch, (...args) => {
+        const submitButton = document.getElementById('message-submit');
+        if (args.some(Boolean)) {
+          submitButton.removeAttribute('disabled');
+        } else {
+          submitButton.setAttribute('disabled', 'disabled');
+        }
+      });
       },
       $watchMany(fields, handler) {
         fields.forEach((field, idx) => {
