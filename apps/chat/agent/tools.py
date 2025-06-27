@@ -26,6 +26,8 @@ if TYPE_CHECKING:
     from apps.pipelines.models import Node
 
 
+OCS_CITATION_PATTERN = r"<CIT\s+file_id=(?P<file_id>\d+)\s*/>"
+
 SUCCESSFUL_ATTACHMENT_MESSAGE: str = "File {file_id} ({name}) is attached to your response"
 
 CREATE_LINK_TEXT = """You can use this markdown link to reference it in your response:
@@ -33,10 +35,34 @@ CREATE_LINK_TEXT = """You can use this markdown link to reference it in your res
     if it is an image.
 """
 
-CHUNK_RESULT_TEMPLATE = """
-# File: {file_name}
-## Content
+CHUNK_TEMPLATE = """
+## Chunk: {chunk_id}
+### File name: {file_name}, file_id={file_id}
+### Content
 {chunk}
+"""
+
+CHUNK_RESULT_TEMPLATE = """
+# Retrieved chunks
+{retrieved_chunks}
+
+**CRITICAL REQUIREMENT - MANDATORY CITATIONS:**
+
+You MUST cite all information using this exact format: <CIT file_id=the-file-id />
+
+**Citation Rules:**
+- Place citations immediately after each sentence or claim that references retrieved content
+- Use the specific file ID from the source document
+- Example: "The revenue increased by 15% last quarter <CIT file_id=123 />."
+- NEVER provide information from retrieved files without proper citations
+
+**Response Structure:**
+1. Answer the user's question thoroughly
+2. Support each claim with evidence from the files
+3. Ensure every factual statement includes a citation
+4. If no relevant information exists in the files, explicitly state this
+
+Failure to include proper citations will result in an incomplete response.
 """
 
 
@@ -288,13 +314,17 @@ class SearchIndexTool(CustomBaseTool):
             .select_related("file")
             .only("text", "file__name")[:max_results]
         )
-        return "".join([self._format_result(embedding) for embedding in embeddings])
+        retrieved_chunks = "".join([self._format_result(embedding) for embedding in embeddings])
+        return CHUNK_RESULT_TEMPLATE.format(retrieved_chunks=retrieved_chunks)
 
     def _format_result(self, embedding: FileChunkEmbedding) -> str:
         """
         Format the result from the search index into a more structured format.
         """
-        return CHUNK_RESULT_TEMPLATE.format(file_name=embedding.file.name, chunk=embedding.text)
+
+        return CHUNK_TEMPLATE.format(
+            chunk_id=embedding.id, file_name=embedding.file.name, file_id=embedding.file_id, chunk=embedding.text
+        )
 
 
 def _move_datetime_to_new_weekday_and_time(date: datetime, new_weekday: int, new_hour: int, new_minute: int):
