@@ -25,29 +25,31 @@ from apps.experiments.tasks import get_response_for_webchat_task
 AUTH_CLASSES = [ApiKeyAuthentication, BearerTokenAuthentication, AnonymousAuthentication]
 
 
-def check_experiment_access(experiment, request):
+def check_experiment_access(request, experiment, participant_id):
     """
     Check if the request has access to the experiment based on public API settings.
 
     Returns:
         Response object if access denied, None if access allowed
     """
-    if not experiment.allow_public_access:
-        if not hasattr(request, "team") or not request.team:
-            return Response({"error": "Authentication required"}, status=status.HTTP_401_UNAUTHORIZED)
-        if experiment.team != request.team:
-            return Response({"error": "Access denied"}, status=status.HTTP_403_FORBIDDEN)
-    return None
+    if request.team and experiment.team != request.team:
+        # Authenticated requests must be constrained to their team
+        return Response({"error": "Access denied"}, status=status.HTTP_403_FORBIDDEN)
+
+    if experiment.is_public:
+        return True
+
+    return experiment.is_participant_allowed(participant_id)
 
 
-def check_session_access(session, request):
+def check_session_access(request, session):
     """
     Check if the request has access to the session based on experiment's public API settings.
 
     Returns:
         Response object if access denied, None if access allowed
     """
-    return check_experiment_access(session.experiment, request)
+    return check_experiment_access(request, session.experiment, session.participant.identifier)
 
 
 @extend_schema(
@@ -84,9 +86,10 @@ def chat_start_session(request):
 
     # First, check if this is a public experiment
     experiment = get_object_or_404(Experiment, public_id=experiment_id)
-    assert experiment.is_working_version
+    if not experiment.is_working_version:
+        return Response({"error": "Chatbot ID must be for a working version"}, status=status.HTTP_400_BAD_REQUEST)
 
-    access_response = check_experiment_access(experiment, request)
+    access_response = check_experiment_access(request, experiment, participant_id)
     if access_response:
         return access_response
 
@@ -173,7 +176,7 @@ def chat_send_message(request, session_id):
 
     session = get_object_or_404(ExperimentSession, external_id=session_id)
 
-    access_response = check_session_access(session, request)
+    access_response = check_session_access(request, session)
     if access_response:
         return access_response
 
@@ -230,7 +233,7 @@ def chat_send_message(request, session_id):
 def chat_poll_task_response(request, session_id, task_id):
     session = get_object_or_404(ExperimentSession, external_id=session_id)
 
-    access_response = check_session_access(session, request)
+    access_response = check_session_access(request, session)
     if access_response:
         return access_response
     task_details = get_message_task_response(session, task_id)
@@ -289,7 +292,7 @@ def chat_poll_response(request, session_id):
     """
     session = get_object_or_404(ExperimentSession, external_id=session_id)
 
-    access_response = check_session_access(session, request)
+    access_response = check_session_access(request, session)
     if access_response:
         return access_response
     since_param = request.query_params.get("since")
