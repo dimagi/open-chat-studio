@@ -1,18 +1,17 @@
-from collections import Counter, defaultdict
+from collections import defaultdict
 from functools import cached_property, partial
 from typing import Any, Self
 
 import pydantic
 from langgraph.graph import StateGraph
 from langgraph.graph.state import CompiledStateGraph
-from pydantic import Field
 from pydantic_core import ValidationError
 
 from apps.pipelines.const import STANDARD_OUTPUT_NAME
 from apps.pipelines.exceptions import PipelineBuildError, PipelineNodeBuildError
 from apps.pipelines.models import Pipeline
 from apps.pipelines.nodes.base import PipelineRouterNode
-from apps.pipelines.nodes.nodes import EndNode, StartNode
+from apps.pipelines.nodes.nodes import CodeNode, EndNode, StartNode
 
 
 class Node(pydantic.BaseModel):
@@ -54,7 +53,6 @@ class Edge(pydantic.BaseModel):
 class PipelineGraph(pydantic.BaseModel):
     nodes: list[Node]
     edges: list[Edge]
-    lenient_validation: bool = Field(default=False, description="Skip some validation checks. Used in tests.")
 
     @property
     def node_id_to_name_mapping(self):
@@ -128,8 +126,6 @@ class PipelineGraph(pydantic.BaseModel):
             raise PipelineBuildError("There are no nodes in the graph")
 
         self._validate_start_end_nodes()
-        if not self.lenient_validation:
-            self._validate_no_parallel_nodes()
         if self._check_for_cycles():
             raise PipelineBuildError("A cycle was detected")
 
@@ -147,22 +143,6 @@ class PipelineGraph(pydantic.BaseModel):
         except ValueError as e:
             raise PipelineBuildError(str(e)) from e
         return compiled_graph
-
-    def _validate_no_parallel_nodes(self):
-        """This is a simple check to ensure that no two edges are connected to the same output
-        which serves as a proxy for parallel nodes."""
-        outgoing_edges = defaultdict(list)
-        for edge in self.edges:
-            outgoing_edges[edge.source].append(edge)
-
-        for source, edges in outgoing_edges.items():
-            handles = Counter(edge.sourceHandle for edge in edges)
-            handle, count = handles.most_common(1)[0]
-            if count > 1:
-                edge_ids = [edge.id for edge in edges if edge.sourceHandle == handle]
-                raise PipelineBuildError(
-                    "Multiple edges connected to the same output", node_id=source, edge_ids=edge_ids
-                )
 
     def _check_for_cycles(self):
         """Detect cycles in a directed graph."""
@@ -213,19 +193,25 @@ class PipelineGraph(pydantic.BaseModel):
         for node in nodes:
             try:
                 node_instance = node.pipeline_node_instance
-                incoming_edges = [edge.source for edge in self.edges if edge.target == node.id]
+                incoming_nodes = [edge.source for edge in self.edges if edge.target == node.id]
                 if isinstance(node_instance, PipelineRouterNode):
                     edge_map = self.conditional_edge_map[node.id]
-                    router_function = node_instance.build_router_function(edge_map, incoming_edges)
+                    router_function = node_instance.build_router_function(edge_map, incoming_nodes)
                     state_graph.add_node(node.id, router_function)
                 else:
-                    outgoing_edges = [edge.target for edge in self.edges if edge.source == node.id]
-                    state_graph.add_node(node.id, partial(node_instance.process, incoming_edges, outgoing_edges))
+                    outgoing_nodes = [edge.target for edge in self.edges if edge.source == node.id]
+                    state_graph.add_node(
+                        node.id,
+                        partial(node_instance.process, incoming_nodes, outgoing_nodes),
+                    )
             except ValidationError as ex:
                 raise PipelineNodeBuildError(ex) from ex
 
     def _add_edges_to_graph(self, state_graph: StateGraph, reachable_nodes: list[Node]):
         for node in reachable_nodes:
+            if node.type == CodeNode.__name__:
+                # CodeNode manages its own routing similar to conditional nodes
+                continue
             for edge in self.edges_by_source[node.id]:
                 if not edge.is_conditional():
                     # conditional edges are handled by router node outputs
