@@ -28,12 +28,13 @@ class PipelineNodeBuildError(Exception):
 class PipelineNodeRunError(Exception):
     pass
 
+
 class WaitForNextInput(Exception):
     """Exception to raise when a node is waiting for input from specific upstream nodes.
 
     This exception is handled by the pipeline execution framework to pause execution
     until required dependencies (other nodes) have completed their execution.
-    
+
     Example:
         raise WaitForNextInput() when a node requires outputs from specific upstream nodes
         that haven't executed yet.
