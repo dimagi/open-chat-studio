@@ -179,7 +179,6 @@
   const fieldTypeFilters = JSON.parse(document.getElementById('field-type-filters').textContent);
   const channelsList = JSON.parse(document.getElementById('channel-list-data').textContent);
   const dateRangeOptions = JSON.parse(document.getElementById('date-range-options').textContent);
-  const participantList = JSON.parse(document.getElementById('participant-list').textContent);
   document.addEventListener('alpine:init', () => {
     Alpine.data('filterComponent', () => ({
       dateRangeOptions,
@@ -188,7 +187,7 @@
         filters: [],
         loading: false,
         columns: {
-          'participant': {type: 'string', operators: fieldTypeFilters.string, options: participantList, label: 'Participant'},
+          'participant': {type: 'string', operators: fieldTypeFilters.string, label: 'Participant'},
           'first_message': {type: 'timestamp', operators: fieldTypeFilters.timestamp, label: 'First Message',  options: dateRangeOptions},
           'last_message': {type: 'timestamp', operators: fieldTypeFilters.timestamp, label: 'Last Message',  options: dateRangeOptions},
           'tags': {type: 'choice', operators: fieldTypeFilters.choice, options: tags, label: 'Tags' },
@@ -198,8 +197,10 @@
       },
 
       init() {
+        const App = SiteJS.app;
         this.loadFiltersFromUrl();
         let defaultFilterApplied = false;
+
         // set default filter to exclude API sessions
         if (this.filterData.filters.length === 1 && !this.filterData.filters[0].column) {
           this.filterData.filters = [{
@@ -233,6 +234,24 @@
         window.addEventListener('popstate', () => {
           this.setLabelFromURL();
         });
+        fetch("{% url 'participants:participant_identifier' team.slug experiment.id %}", {
+          method: 'GET',
+          credentials: 'same-origin',
+          headers: {
+            'X-CSRFToken': App.Cookies.get('csrftoken'),
+            'Accept': 'application/json'
+          }
+        })
+          .then(res => res.json())
+          .then(data => {
+            this.filterData.columns.participant.options = data;
+            this.filterData.filters.forEach(filter => {
+              if (filter.column === 'participant') {
+                filter.filteredOptions = [...data];
+              }
+            });
+          })
+          .catch(err => console.error("Failed to load participants", err));
       },
 
       toggleFilters() {

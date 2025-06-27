@@ -469,11 +469,6 @@ def base_single_experiment_view(request, team_slug, experiment_id, template_name
             bot_type_chip = Chip(label=f"Assistant: {assistant.name}", url=assistant.get_absolute_url())
 
     channel_list = ChannelPlatform.for_filter(experiment.team)
-    participants = list(
-        Participant.objects.filter(experimentsession__experiment=experiment)
-        .values_list("identifier", flat=True)
-        .distinct()
-    )
     context = {
         "active_tab": active_tab,
         "bot_type_chip": bot_type_chip,
@@ -489,7 +484,6 @@ def base_single_experiment_view(request, team_slug, experiment_id, template_name
         "channel_list": channel_list,
         "allow_copy": not experiment.child_links.exists(),
         "date_range_options": DATE_RANGE_OPTIONS,
-        "participant_list": participants,
         **_get_events_context(experiment, team_slug, request.origin),
     }
     if active_tab != "chatbots":
