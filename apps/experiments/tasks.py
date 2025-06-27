@@ -82,6 +82,9 @@ def get_response_for_webchat_task(
     except Exception as e:
         logger.exception(e)
         response["error"] = str(e)
+    finally:
+        experiment_session.seed_task_id = None
+        experiment_session.save(update_fields=["seed_task_id"])
 
     return response
 
