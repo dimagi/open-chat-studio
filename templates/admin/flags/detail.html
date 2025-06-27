@@ -244,7 +244,12 @@
             }
 
             fetch(`${apiUrl}?q=${encodeURIComponent(query)}`)
-              .then(response => response.json())
+              .then(response => {
+                if (!response.ok) {
+                  throw new Error(`HTTP error! status: ${response.status}`);
+                }
+                return response.json();
+              })
               .then(callback)
               .catch(() => callback());
           };
@@ -266,10 +271,20 @@
               body: formData
             });
 
-            const data = await response.json();
+            if (!response.ok) {
+              throw new Error(`HTTP error! status: ${response.status}`);
+            }
+
+            let data;
+            try {
+              data = await response.json();
+            } catch (jsonErr) {
+              throw new Error('Invalid JSON response from server');
+            }
+
             this.handleResponse(data);
           } catch (err) {
-            this.error = 'Network error occurred';
+            this.error = err.message || 'Network error occurred';
           } finally {
             this.loading = false;
           }
@@ -277,7 +292,11 @@
 
         buildFormData() {
           const formData = new FormData();
-          formData.append('csrfmiddlewaretoken', document.querySelector('[name=csrfmiddlewaretoken]').value);
+          const csrfToken = document.querySelector('[name=csrfmiddlewaretoken]');
+          if (!csrfToken) {
+            throw new Error('CSRF token not found');
+          }
+          formData.append('csrfmiddlewaretoken', csrfToken.value);
 
           // Add boolean flags
           ['everyone', 'testing', 'superusers', 'rollout'].forEach(field => {

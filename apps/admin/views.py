@@ -12,7 +12,7 @@ from django.urls import reverse
 from django.utils import timezone
 from django.views.decorators.http import require_http_methods
 
-from apps.admin.forms import DateRangeForm, DateRanges
+from apps.admin.forms import DateRangeForm, DateRanges, FlagUpdateForm
 from apps.admin.queries import get_message_stats, get_participant_stats, get_whatsapp_numbers, usage_to_csv
 from apps.admin.serializers import StatsSerializer
 from apps.experiments.models import Participant
@@ -144,6 +144,11 @@ def flag_detail(request, flag_id):
 @is_superuser
 def teams_api(request):
     query = request.GET.get("q", "").strip()
+
+    # Input validation for query parameter
+    if len(query) > 100:  # Prevent excessively long queries
+        return JsonResponse({"error": "Query too long"}, status=400)
+
     teams = Team.objects.all()
 
     if query:
@@ -158,6 +163,11 @@ def teams_api(request):
 @is_superuser
 def users_api(request):
     query = request.GET.get("q", "").strip()
+
+    # Input validation for query parameter
+    if len(query) > 100:  # Prevent excessively long queries
+        return JsonResponse({"error": "Query too long"}, status=400)
+
     users = User.objects.all()
 
     if query:
@@ -174,30 +184,20 @@ def users_api(request):
 def update_flag(request, flag_id):
     flag = get_object_or_404(Flag, id=flag_id)
 
+    form = FlagUpdateForm(request.POST)
+    if not form.is_valid():
+        return JsonResponse({"error": "Invalid form data", "details": form.errors}, status=400)
+
     try:
         with transaction.atomic():
-            flag.everyone = request.POST.get("everyone") == "on"
-            flag.testing = request.POST.get("testing") == "on"
-            flag.superusers = request.POST.get("superusers") == "on"
-            flag.rollout = request.POST.get("rollout") == "on"
+            flag.everyone = form.cleaned_data["everyone"]
+            flag.testing = form.cleaned_data["testing"]
+            flag.superusers = form.cleaned_data["superusers"]
+            flag.rollout = form.cleaned_data["rollout"]
+            flag.percent = form.cleaned_data["percent"]
 
-            percent_str = request.POST.get("percent", "").strip()
-            if percent_str:
-                try:
-                    percent = max(0, min(100, int(float(percent_str))))
-                    flag.percent = percent
-                except (ValueError, TypeError):
-                    flag.percent = None
-            else:
-                flag.percent = None
-
-            team_ids = request.POST.getlist("teams")
-            teams = Team.objects.filter(id__in=team_ids)
-            flag.teams.set(teams)
-
-            user_ids = request.POST.getlist("users")
-            users = User.objects.filter(id__in=user_ids)
-            flag.users.set(users)
+            flag.teams.set(form.cleaned_data["teams"])
+            flag.users.set(form.cleaned_data["users"])
 
             flag.save()
 
