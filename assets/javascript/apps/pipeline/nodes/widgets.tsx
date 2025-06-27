@@ -2,7 +2,7 @@ import React, {ChangeEvent, ChangeEventHandler, ReactNode, useEffect, useId, use
 import CodeMirror from '@uiw/react-codemirror';
 import {python} from "@codemirror/lang-python";
 import {githubDark, githubLight} from "@uiw/codemirror-theme-github";
-import {CompletionContext, snippetCompletion as snip} from '@codemirror/autocomplete'
+import {CompletionContext, snippetCompletion as snip, autocompletion} from '@codemirror/autocomplete'
 import {TypedOption, LlmProviderModel} from "../types/nodeParameterValues";
 import usePipelineStore from "../stores/pipelineStore";
 import {classNames, concatenate, getCachedData, getDocumentationLink, getSelectOptions} from "../utils";
@@ -11,6 +11,7 @@ import {Node, useUpdateNodeInternals} from "reactflow";
 import DOMPurify from 'dompurify';
 import {apiClient} from "../api/api";
 import { produce } from "immer";
+import { EditorView } from '@codemirror/view';
 
 export function getWidget(name: string, params: PropertySchema) {
   switch (name) {
@@ -40,6 +41,8 @@ export function getWidget(name: string, params: PropertySchema) {
       return NodeNameWidget
     case "built_in_tools":
         return BuiltInToolsWidget
+    case "prompt_editor":
+        return PromptEditorWidget
     default:
       if (params.enum) {
         return SelectWidget
@@ -1100,4 +1103,151 @@ function BuiltInToolsWidget(props: WidgetParams) {
     })}
     </InputField>
   );
+}
+
+export function PromptEditorWidget(props: WidgetParams) {
+  const modalId = useId();
+  const [isDarkMode, setIsDarkMode] = useState(false);
+
+  const openModal = () =>
+    (document.getElementById(modalId) as HTMLDialogElement)?.showModal();
+
+  useEffect(() => {
+    setIsDarkMode(document.body.getAttribute("data-theme") === "dark");
+    const observer = new MutationObserver(function (mutations) {
+      mutations.forEach(function (mutation) {
+        if (mutation.type === "attributes") {
+          setIsDarkMode(document.body.getAttribute("data-theme") === "dark");
+        }
+      });
+    });
+    observer.observe(document.body, { attributes: true });
+    return () => observer.disconnect();
+  }, []);
+
+  const label = (
+    <>
+      {props.label}
+        <div className="tooltip tooltip-left" data-tip={`Expand ${props.label}`}>
+        <button className="btn btn-xs btn-ghost float-right" onClick={openModal}>
+          <i className="fa-solid fa-expand-alt"></i>
+        </button>
+      </div>
+    </>
+  );
+
+  return (
+    <>
+      <InputField
+        label={label}
+        help_text={props.helpText}
+        inputError={props.inputError}
+      >
+        <div className="relative w-full">
+          <textarea
+            className="textarea textarea-bordered resize-none textarea-sm w-full"
+            disabled={true}
+            rows={3}
+            value={props.paramValue}
+            name={props.name}
+          ></textarea>
+          <div className="absolute inset-0 cursor-pointer" onClick={openModal}></div>
+        </div>
+      </InputField>
+      <PromptEditorModal
+        modalId={modalId}
+        name={props.name}
+        value={props.paramValue}
+        onChange={props.updateParamValue}
+        isDarkMode={isDarkMode}
+        label={props.label}
+        inputError={props.inputError}
+      />
+    </>
+  );
+}
+function PromptEditorModal({
+  modalId,
+  name,
+  value,
+  onChange,
+  isDarkMode,
+  label,
+  inputError,
+}: {
+  modalId: string;
+  name: string;
+  value: string;
+  onChange: (e: React.ChangeEvent<HTMLTextAreaElement> | string) => void;
+  isDarkMode: boolean;
+  label: string;
+  inputError?: string;
+}) {
+  const handleChange = (val: string) => {
+    onChange(typeof val === "string" ? val : "");
+  };
+
+  return (
+    <dialog id={modalId} className="modal nopan nodelete nodrag noflow nowheel">
+      <div className="modal-box min-w-[85vw] h-[80vh] flex flex-col">
+        <form method="dialog">
+          <button className="btn btn-sm btn-circle btn-ghost absolute right-2 top-2">
+            ✕
+          </button>
+        </form>
+        <div className="grow h-full w-full flex flex-col">
+          <h4 className="mb-4 font-bold text-lg capitalize">{label}</h4>
+          <CodeMirror
+            value={value}
+            onChange={handleChange}
+            height="100%"
+            theme={isDarkMode ? githubDark : githubLight}
+            extensions={[
+              autocompletion({ override: [promptVarCompletions], activateOnTyping: true }),
+              EditorView.lineWrapping,
+            ]}
+            basicSetup={{
+              lineNumbers: true,
+              tabSize: 2,
+              indentOnInput: true,
+            }}
+          />
+        </div>
+        {inputError && <div className="text-red-500">{inputError}</div>}
+      </div>
+      <form method="dialog" className="modal-backdrop">
+        <button>close</button>
+      </form>
+    </dialog>
+  );
+}
+function promptVarCompletions(context: CompletionContext) {
+  const word = context.matchBefore(/[a-zA-Z0-9._\[\]"]*$/);
+  if (!word || (word.from === word.to && !context.explicit)) return null;
+
+  const vars = [
+    "participant_data",
+    "source_material",
+    "current_datetime",
+    "media",
+    "temp_state",
+    "session_state",
+  ];
+
+  return {
+    from: word.from,
+    options: vars.map((v) => ({
+      label: v,
+      type: "variable",
+      info: `Insert {${v}}`,
+      apply: (view, completion, from, to) => {
+  const beforeText = view.state.doc.sliceString(from - 1, from); //
+  const insertText = beforeText === '{' ? `${completion.label}` : `{${completion.label}}`;
+
+  view.dispatch({
+    changes: { from, to, insert: insertText }
+  });
+      }
+    })),
+  };
 }
