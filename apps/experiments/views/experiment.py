@@ -1268,11 +1268,6 @@ def experiment_session_messages_view(request, team_slug: str, experiment_id: uui
     start_idx = (page - 1) * page_size
     end_idx = start_idx + page_size
     paginated_messages = messages_queryset[start_idx:end_idx]
-    for message in paginated_messages:
-        message.attached_files = []
-        for file in message.get_attached_files():
-            file.download_url = file.download_link(session.id)
-            message.attached_files.append(file)
     context = {
         "experiment_session": session,
         "experiment": experiment,
@@ -1391,6 +1386,27 @@ def download_file(request, team_slug: str, session_id: int, pk: int):
         return FileResponse(file, as_attachment=True, filename=resource.file.name)
     except FileNotFoundError:
         raise Http404() from None
+
+
+@team_required
+def get_image_html(request, team_slug: str, session_id: int, pk: int):
+    """Return HTML for displaying an image attachment."""
+    resource = get_object_or_404(
+        File, id=pk, team__slug=team_slug, chatattachment__chat__experiment_session__id=session_id
+    )
+
+    if not resource.is_image:
+        raise Http404("File is not an image")
+
+    # Generate the image URL
+    image_url = reverse("experiments:download_file", args=[team_slug, session_id, pk])
+
+    # Return HTML for the image
+    html = format_html(
+        '<img src="{}" alt="{}" class="max-w-md max-h-64 rounded border shadow-sm mt-2">', image_url, resource.name
+    )
+
+    return HttpResponse(html)
 
 
 @require_POST
