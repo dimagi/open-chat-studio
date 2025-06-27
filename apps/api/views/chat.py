@@ -101,15 +101,19 @@ def chat_start_session(request):
         user = None
 
     # Create or get participant
-    if participant_id and user is not None:
-        # only allow setting participant ID if the request is authenticated
+    if user is not None:
+        participant_id = participant_id or user.email
+        if participant_id != user.email:
+            return Response(
+                {"error": "Participant ID must match your email address"}, status=status.HTTP_400_BAD_REQUEST
+            )
+
         participant, created = Participant.objects.get_or_create(
             identifier=participant_id, team=team, platform=ChannelPlatform.API, defaults={"user": user}
         )
     else:
         participant = Participant.create_anonymous(team, ChannelPlatform.API)
 
-    # Get or create API channel for the experiment
     api_channel = ExperimentChannel.objects.get_team_api_channel(team)
 
     session = ApiChannel.start_new_session(
