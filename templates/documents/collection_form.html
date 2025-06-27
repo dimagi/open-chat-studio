@@ -20,6 +20,28 @@
   <div x-data="collection">
     {% render_form_fields form "name" "is_index" %}
 
+    {% if form.instance.id %}
+      <div role="alert" class="bg-base-200 rounded-lg alert alert-warning alert-soft flex flex-col" x-cloak x-show="initialIsIndex !== isIndex">
+        <h3 class="font-semibold mb-2">Warning: Changing index settings will affect your collection!</h3>
+        <div x-show="initialIsIndex && !isIndex">
+          <p class="text-sm mb-2">Disabling indexing will:</p>
+          <ul class="w-full list-disc list-inside space-y-1 text-sm">
+            <li>Delete all indexed data (embeddings and vector store)</li>
+            <li>Make this collection no longer searchable for RAG</li>
+            <li>This action cannot be undone</li>
+          </ul>
+        </div>
+        <div x-show="!initialIsIndex && isIndex">
+          <p class="text-sm mb-2">Enabling indexing will:</p>
+          <ul class="w-full list-disc list-inside space-y-1 text-sm">
+            <li>Process and index all files in the collection</li>
+            <li>Create embeddings for searchability</li>
+            <li>This may take some time depending on file count and size</li>
+          </ul>
+        </div>
+      </div>
+    {% endif %}
+
     <div x-cloak x-show="isIndex">
       {% render_field form.llm_provider %}
       {% render_field form.embedding_provider_model xshow="!isRemoteIndex" %}
@@ -49,6 +71,7 @@
 
       Alpine.data('collection', () => ({
         isIndex: {% if form.instance.is_index %}true{% else %}false{% endif %},
+        initialIsIndex: {% if form.instance.is_index %}true{% else %}false{% endif %},
         initialProviderId: {{ form.instance.llm_provider_id|default:'null' }},
         selectedLlmProviderId: {{ form.instance.llm_provider_id|default:'null' }},
         embedding_provider_model: '{{ form.instance.embedding_provider_model_id|default:form.embedding_provider_model.value|default:'null' }}',

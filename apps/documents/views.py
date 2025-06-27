@@ -237,24 +237,74 @@ class EditCollection(LoginAndTeamRequiredMixin, CollectionFormMixin, UpdateView,
         return reverse("documents:single_collection_home", args=[self.request.team.slug, self.object.id])
 
     def form_valid(self, form):
-        response = super().form_valid(form)
+        with transaction.atomic():
+            collection = form.instance
+            old_is_index = form.initial.get("is_index", False)
+            new_is_index = form.cleaned_data.get("is_index", False)
+            old_vector_store_id = collection.openai_vector_store_id
 
-        collection = form.instance
-        old_vector_store_id = collection.openai_vector_store_id
+            # Handle is_index field changes
+            if "is_index" in form.changed_data:
+                if old_is_index and not new_is_index:
+                    # Changing from indexed to non-indexed - delete indexed data
+                    self._delete_indexed_data(collection)
+                    messages.success(self.request, "Collection index data has been deleted")
+                elif not old_is_index and new_is_index:
+                    # Changing from non-indexed to indexed - index files
+                    self._setup_indexing(collection, form)
+                    messages.success(
+                        self.request, "Collection indexing has been enabled. Files will be indexed in the background."
+                    )
 
-        if form.instance.is_index and form.instance.is_remote_index and "llm_provider" in form.changed_data:
-            with transaction.atomic():
+            response = super().form_valid(form)
+
+            # Handle LLM provider changes for existing indexed collections
+            if form.instance.is_index and form.instance.is_remote_index and "llm_provider" in form.changed_data:
                 collection.openai_vector_store_id = None  # Reset the vector store ID
                 collection.ensure_remote_index_created()
                 CollectionFile.objects.filter(collection_id=collection.id).update(status=FileStatus.PENDING)
 
-            tasks.migrate_vector_stores.delay(
-                collection_id=form.instance.id,
-                from_vector_store_id=old_vector_store_id,
-                from_llm_provider_id=form.initial["llm_provider"],
-            )
+                tasks.migrate_vector_stores.delay(
+                    collection_id=form.instance.id,
+                    from_vector_store_id=old_vector_store_id,
+                    from_llm_provider_id=form.initial["llm_provider"],
+                )
 
         return response
+
+    def _delete_indexed_data(self, collection):
+        """Delete all indexed data for a collection"""
+        if collection.is_remote_index and collection.openai_vector_store_id:
+            # Delete remote index
+            index_manager = collection.get_index_manager()
+            index_manager.delete_remote_index()
+            collection.openai_vector_store_id = ""
+            collection.save(update_fields=["openai_vector_store_id"])
+        else:
+            # Delete local index data
+            from apps.files.models import FileChunkEmbedding
+
+            FileChunkEmbedding.objects.filter(collection_id=collection.id).delete()
+
+        # Reset collection file statuses
+        CollectionFile.objects.filter(collection_id=collection.id).update(status="")
+
+    def _setup_indexing(self, collection, form):
+        """Setup indexing for a collection that's being converted to indexed"""
+        if form.cleaned_data.get("is_remote_index", False):
+            collection.ensure_remote_index_created()
+
+        # Set up collection files for indexing
+        collection_files = CollectionFile.objects.filter(collection_id=collection.id)
+        if collection_files.exists():
+            # Update metadata and status for existing files
+            chunking_strategy = ChunkingStrategy(chunk_size=800, chunk_overlap=400)
+            metadata = CollectionFileMetadata(chunking_strategy=chunking_strategy)
+
+            collection_files.update(status=FileStatus.PENDING, metadata=metadata)
+
+            # Start indexing task
+            tasks.index_collection_files_task.delay(list(collection_files.values_list("id", flat=True)))
 
 
 class DeleteCollection(LoginAndTeamRequiredMixin, View, PermissionRequiredMixin):
