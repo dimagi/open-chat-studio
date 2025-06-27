@@ -99,6 +99,10 @@ class File(BaseTeamModel, VersionsMixin):
             return "application/octet-stream"
 
     @property
+    def is_image(self):
+        return self.content_type.startswith("image/")
+
+    @property
     def display_size(self):
         return humanize_bytes(self.content_size)
 

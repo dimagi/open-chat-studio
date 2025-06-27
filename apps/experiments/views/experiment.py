@@ -1388,6 +1388,27 @@ def download_file(request, team_slug: str, session_id: int, pk: int):
         raise Http404() from None
 
 
+@team_required
+def get_image_html(request, team_slug: str, session_id: int, pk: int):
+    """Return HTML for displaying an image attachment."""
+    resource = get_object_or_404(
+        File, id=pk, team__slug=team_slug, chatattachment__chat__experiment_session__id=session_id
+    )
+
+    if not resource.is_image:
+        raise Http404("File is not an image")
+
+    # Generate the image URL
+    image_url = reverse("experiments:download_file", args=[team_slug, session_id, pk])
+
+    # Return HTML for the image
+    html = format_html(
+        '<img src="{}" alt="{}" class="max-w-md max-h-64 rounded border shadow-sm mt-2">', image_url, resource.name
+    )
+
+    return HttpResponse(html)
+
+
 @require_POST
 @transaction.atomic
 @login_and_team_required
