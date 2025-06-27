@@ -27,6 +27,7 @@ def test_serialize_trace_data():
             "size": 100,
             "type": "file_search",
             "upload_to_assistant": False,
+            "download_link": "https://localhost:8000",
         },
         "key3": [{"session": str(session)}],
     }
