@@ -16,8 +16,15 @@ from django.views.generic import CreateView, FormView, ListView, TemplateView, U
 from django_tables2 import SingleTableView
 
 from apps.documents import tasks
-from apps.documents.forms import CollectionForm, CreateCollectionFromAssistantForm
-from apps.documents.models import ChunkingStrategy, Collection, CollectionFile, CollectionFileMetadata, FileStatus
+from apps.documents.forms import CollectionForm, CreateCollectionFromAssistantForm, DocumentSourceForm
+from apps.documents.models import (
+    ChunkingStrategy,
+    Collection,
+    CollectionFile,
+    CollectionFileMetadata,
+    DocumentSource,
+    FileStatus,
+)
 from apps.documents.tables import CollectionsTable
 from apps.files.models import File, FileChunkEmbedding
 from apps.generics import actions
@@ -86,6 +93,72 @@ def single_collection_home(request, team_slug: str, pk: int):
         "max_file_size_mb": settings.MAX_FILE_SIZE_MB,
     }
     return render(request, "documents/single_collection_home.html", context)
+
+
+@login_and_team_required
+@permission_required("documents.change_collection")
+def manage_document_source(request, team_slug: str, pk: int):
+    """View for managing document source for a collection"""
+    collection = get_object_or_404(Collection.objects.select_related("team"), id=pk, team__slug=team_slug)
+
+    # Only allow document sources for indexed collections
+    if not collection.is_index:
+        messages.error(request, "Document sources can only be configured for indexed collections.")
+        return redirect("documents:single_collection_home", team_slug=team_slug, pk=pk)
+
+    # Get or create document source
+    document_source, created = DocumentSource.objects.get_or_create(
+        collection=collection,
+        defaults={
+            "team": collection.team,
+            "source_type": "github",  # Default to GitHub
+            "config": {"github": None, "confluence": None},
+            "auto_sync_enabled": False,
+        },
+    )
+
+    if request.method == "POST":
+        form = DocumentSourceForm(collection, request.POST, instance=document_source)
+        if form.is_valid():
+            form.save()
+            messages.success(request, "Document source configuration saved successfully.")
+            return redirect("documents:single_collection_home", team_slug=team_slug, pk=pk)
+    else:
+        form = DocumentSourceForm(collection, instance=document_source)
+
+    context = {
+        "collection": collection,
+        "document_source": document_source,
+        "form": form,
+        "created": created,
+    }
+    return render(request, "documents/manage_document_source.html", context)
+
+
+@require_POST
+@login_and_team_required
+@permission_required("documents.change_collection")
+def sync_document_source(request, team_slug: str, pk: int):
+    """Trigger manual sync of a document source"""
+    collection = get_object_or_404(Collection.objects.select_related("team"), id=pk, team__slug=team_slug)
+
+    try:
+        document_source = collection.document_source
+
+        # Trigger sync task
+        from apps.documents.tasks import sync_document_source_task
+
+        sync_document_source_task.delay(document_source.id)
+
+        messages.success(request, "Document source sync has been queued. This may take a few minutes.")
+
+    except DocumentSource.DoesNotExist:
+        messages.error(request, "No document source configured for this collection.")
+    except Exception as e:
+        logger.error(f"Error triggering document source sync: {str(e)}")
+        messages.error(request, "Failed to trigger sync. Please try again.")
+
+    return redirect("documents:single_collection_home", team_slug=team_slug, pk=pk)
 
 
 @require_POST

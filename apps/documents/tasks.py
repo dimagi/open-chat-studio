@@ -146,3 +146,45 @@ def create_collection_from_assistant_task(collection_id: int, assistant_id: int)
             CollectionFile.objects.filter(file__in=file_without_remote_ids).values_list("id", flat=True)
         )
         index_collection_files_task(collection_file_ids=file_ids_to_index)
+
+
+@shared_task(base=TaskbadgerTask, ignore_result=True)
+def sync_document_source_task(document_source_id: int):
+    """Sync a specific document source"""
+    from apps.documents.document_source_service import sync_document_source
+    from apps.documents.models import DocumentSource
+
+    try:
+        document_source = DocumentSource.objects.get(id=document_source_id)
+        result = sync_document_source(document_source)
+
+        if result.success:
+            logger.info(
+                f"Document source sync completed for {document_source}: "
+                f"{result.files_added} added, {result.files_updated} updated, "
+                f"{result.files_removed} removed"
+            )
+        else:
+            logger.error(f"Document source sync failed for {document_source}: {result.error_message}")
+
+    except DocumentSource.DoesNotExist:
+        logger.error(f"Document source {document_source_id} does not exist")
+    except Exception as e:
+        logger.error(f"Unexpected error syncing document source {document_source_id}: {str(e)}")
+
+
+@shared_task(base=TaskbadgerTask, ignore_result=True)
+def sync_all_document_sources_task():
+    """Sync all document sources that have auto_sync_enabled=True"""
+    from apps.documents.document_source_service import sync_all_auto_enabled_sources
+
+    try:
+        results = sync_all_auto_enabled_sources()
+
+        successful_syncs = sum(1 for r in results if r.success)
+        failed_syncs = len(results) - successful_syncs
+
+        logger.info(f"Auto-sync completed: {successful_syncs} successful, {failed_syncs} failed")
+
+    except Exception as e:
+        logger.error(f"Unexpected error during auto-sync: {str(e)}")
