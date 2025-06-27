@@ -246,7 +246,7 @@ def main(input, **kwargs):
         outputs={},
         experiment_session=experiment_session,
         messages=["hi"],
-        attachments=[Attachment.from_file(file, "code_interpreter")],
+        attachments=[Attachment.from_file(file, "code_interpreter", experiment_session.id)],
         temp_state={},
     )
     node_output = node.process(incoming_edges=[], outgoing_edges=[], state=state, config={})

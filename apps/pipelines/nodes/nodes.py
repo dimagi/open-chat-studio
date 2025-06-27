@@ -435,7 +435,7 @@ class LLMResponseWithPrompt(LLMResponse, HistoryMixin, OutputMessageTagMixin):
 
         # Tools setup
         tools = self._get_configured_tools(session=session, tool_callbacks=tool_callbacks)
-
+        attachments = self._get_attachments(state)
         # Chat setup
         chat_adapter = ChatAdapter.for_pipeline(
             session=session,
@@ -457,9 +457,8 @@ class LLMResponseWithPrompt(LLMResponse, HistoryMixin, OutputMessageTagMixin):
             chat = AgentLLMChat(adapter=chat_adapter, history_manager=history_manager)
         else:
             chat = SimpleLLMChat(adapter=chat_adapter, history_manager=history_manager)
-
         # Invoke runnable
-        result = chat.invoke(input=input)
+        result = chat.invoke(input=input, attachments=attachments)
         return PipelineState.from_node_output(
             node_name=self.name,
             node_id=self.node_id,
@@ -470,6 +469,9 @@ class LLMResponseWithPrompt(LLMResponse, HistoryMixin, OutputMessageTagMixin):
             },
             intents=tool_callbacks.intents,
         )
+
+    def _get_attachments(self, state: PipelineState) -> list:
+        return [att for att in state.get("temp_state", {}).get("attachments", [])]
 
     def _get_configured_tools(
         self, session: ExperimentSession | None, tool_callbacks: ToolCallbacks

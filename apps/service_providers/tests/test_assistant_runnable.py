@@ -323,8 +323,8 @@ def test_assistant_uploads_new_file(create_and_run, retrieve_run, list_messages,
 
     assistant = create_experiment_runnable(session.experiment, session, TracingService.empty())
     attachments = [
-        Attachment.from_file(files[0], "code_interpreter"),
-        Attachment.from_file(files[1], "file_search"),
+        Attachment.from_file(files[0], "code_interpreter", session.id),
+        Attachment.from_file(files[1], "file_search", session.id),
     ]
 
     result = assistant.invoke("test", attachments=attachments)
