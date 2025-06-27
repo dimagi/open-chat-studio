@@ -78,6 +78,7 @@
                             <a href="{% url "experiments:download_file" request.team.slug experiment_session.id file.id %}" target="_blank" class="link link-primary">
                               <i class="fa-solid fa-file fa-sm mr-1"></i>{{ file.name }}
                             </a>
+                            ({{ file.display_size }})
                           </div>
                         {% endfor %}
                       </div>

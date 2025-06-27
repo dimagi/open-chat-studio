@@ -12,7 +12,7 @@ from pgvector.django import HalfVectorField
 from apps.experiments.versioning import VersionDetails, VersionField, VersionsMixin, VersionsObjectManagerMixin
 from apps.generics.chips import Chip
 from apps.teams.models import BaseTeamModel
-from apps.utils.conversions import bytes_to_megabytes
+from apps.utils.conversions import bytes_to_megabytes, humanize_bytes
 from apps.utils.deletion import get_related_m2m_objects
 from apps.web.meta import absolute_url
 
@@ -97,6 +97,10 @@ class File(BaseTeamModel, VersionsMixin):
             return mimetypes.guess_type(filename)[0] or "application/octet-stream"
         except Exception:
             return "application/octet-stream"
+
+    @property
+    def display_size(self):
+        return humanize_bytes(self.content_size)
 
     @property
     def size_mb(self) -> float:
