@@ -44,6 +44,10 @@ class Tag(TagBase, BaseTeamModel):
     def get_absolute_url(self):
         return reverse("annotations:tag_edit", args=[self.team.slug, self.id])
 
+    @property
+    def label(self):
+        return TagCategories(self.category).label if self.category else "User Defined"
+
 
 @audit_fields(
     "user",

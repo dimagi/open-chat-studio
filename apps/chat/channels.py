@@ -586,7 +586,7 @@ class ChannelBase(ABC):
 
     def _transcribe_audio(self, audio: BytesIO) -> str:
         llm_service = self.experiment.get_llm_service()
-        if llm_service.supports_transcription:
+        if llm_service and llm_service.supports_transcription:
             return llm_service.transcribe_audio(audio)
         elif self.experiment.voice_provider:
             speech_service = self.experiment.voice_provider.get_speech_service()
