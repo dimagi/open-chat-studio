@@ -1,3 +1,4 @@
+import logging
 from datetime import datetime, time, timedelta
 from urllib.parse import urlencode
 
@@ -11,12 +12,15 @@ from django.template.response import TemplateResponse
 from django.urls import reverse
 from django.utils import timezone
 from django.views.decorators.http import require_http_methods
+from field_audit.models import AuditEvent
 
 from apps.admin.forms import DateRangeForm, DateRanges, FlagUpdateForm
 from apps.admin.queries import get_message_stats, get_participant_stats, get_whatsapp_numbers, usage_to_csv
 from apps.admin.serializers import StatsSerializer
 from apps.experiments.models import Participant
 from apps.teams.models import Flag, Team
+
+logger = logging.getLogger("ocs.admin")
 
 User = get_user_model()
 
@@ -131,12 +135,35 @@ def flags_home(request):
 def flag_detail(request, flag_id):
     flag = get_object_or_404(Flag, id=flag_id)
 
+    audit_events = AuditEvent.objects.filter(object_class_path="apps.teams.models.Flag", object_pk=flag.pk).order_by(
+        "-event_date"
+    )[:50]  # Last 50 changes
+
     return TemplateResponse(
         request,
         "admin/flags/detail.html",
         context={
             "active_tab": "flags",
             "flag": flag,
+            "audit_events": audit_events,
+        },
+    )
+
+
+@is_superuser
+def flag_history(request, flag_id):
+    flag = get_object_or_404(Flag, id=flag_id)
+
+    audit_events = AuditEvent.objects.filter(object_class_path="apps.teams.models.Flag", object_pk=flag.pk).order_by(
+        "-event_date"
+    )[:50]  # Last 50 changes
+
+    return TemplateResponse(
+        request,
+        "admin/flags/history_fragment.html",
+        context={
+            "flag": flag,
+            "audit_events": audit_events,
         },
     )
 
@@ -205,4 +232,5 @@ def update_flag(request, flag_id):
     except ValidationError as e:
         return JsonResponse({"error": str(e)}, status=400)
     except Exception:
+        logger.exception("Failed to update flag")
         return JsonResponse({"error": "Failed to update flag"}, status=500)
