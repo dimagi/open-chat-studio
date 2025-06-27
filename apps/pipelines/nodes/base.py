@@ -385,6 +385,7 @@ class Widgets(StrEnum):
     keywords = "keywords"
     history_mode = "history_mode"
     built_in_tools = "built_in_tools"
+    prompt_editor = "prompt_editor"
 
 
 class OptionsSource(StrEnum):
