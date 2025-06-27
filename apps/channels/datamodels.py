@@ -10,7 +10,7 @@ from apps.chat.channels import MESSAGE_TYPES
 
 logger = logging.getLogger("ocs.channels")
 
-AttachmentType = Literal["code_interpreter", "file_search", "experiment_files"]
+AttachmentType = Literal["code_interpreter", "file_search", "ocs_attachments"]
 
 
 class Attachment(BaseModel):

@@ -724,7 +724,7 @@ def _experiment_session_message(request, version_number: int, embedded=False):
     uploaded_files = request.FILES
     attachments = []
     created_files = []
-    for resource_type in ["code_interpreter", "file_search", "experiment_files"]:
+    for resource_type in ["code_interpreter", "file_search", "ocs_attachments"]:
         if resource_type not in uploaded_files:
             continue
 
