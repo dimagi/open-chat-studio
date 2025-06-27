@@ -36,10 +36,10 @@ def check_experiment_access(request, experiment, participant_id):
         # Authenticated requests must be constrained to their team
         return Response({"error": "Access denied"}, status=status.HTTP_403_FORBIDDEN)
 
-    if experiment.is_public:
-        return True
+    if not experiment.is_public and not experiment.is_participant_allowed(participant_id):
+        return Response({"error": "Access denied"}, status=status.HTTP_403_FORBIDDEN)
 
-    return experiment.is_participant_allowed(participant_id)
+    return None
 
 
 def check_session_access(request, session):
