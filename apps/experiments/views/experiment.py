@@ -1268,11 +1268,6 @@ def experiment_session_messages_view(request, team_slug: str, experiment_id: uui
     start_idx = (page - 1) * page_size
     end_idx = start_idx + page_size
     paginated_messages = messages_queryset[start_idx:end_idx]
-    for message in paginated_messages:
-        message.attached_files = []
-        for file in message.get_attached_files():
-            file.download_url = file.download_link(session.id)
-            message.attached_files.append(file)
     context = {
         "experiment_session": session,
         "experiment": experiment,
