@@ -35,6 +35,7 @@ FIELD_TYPE_FILTERS = {
         Operators.DOES_NOT_CONTAIN,
         Operators.STARTS_WITH,
         Operators.ENDS_WITH,
+        Operators.ANY_OF,
     ],
     "timestamp": [Operators.ON, Operators.BEFORE, Operators.AFTER, Operators.RANGE],
     "choice": [Operators.ANY_OF, Operators.ALL_OF, Operators.EXCLUDES],
@@ -131,6 +132,9 @@ def build_participant_filter(operator, value):
         return Q(participant__identifier__istartswith=value)
     elif operator == Operators.ENDS_WITH:
         return Q(participant__identifier__iendswith=value)
+    elif operator == Operators.ANY_OF:
+        value = json.loads(value)
+        return Q(participant__identifier__in=value)
     return None
 
 

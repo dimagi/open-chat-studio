@@ -116,6 +116,13 @@ class TestDynamicFilters:
         filtered = apply_dynamic_filters(session.experiment.sessions.all(), params, timezone)
         assert filtered.count() == 1
 
+        # Test ANY_OF
+        params["filter_0_operator"] = Operators.ANY_OF
+        params["filter_0_value"] = json.dumps(["test.user@example.com", "another@example.com"])
+        filtered = apply_dynamic_filters(session.experiment.sessions.all(), params, timezone)
+        assert filtered.count() == 1
+        assert filtered.first() == session
+
     @freeze_time("2025-01-03 10:00:00")
     def test_message_timestamp_filters(self):
         """Test message timestamp filtering"""

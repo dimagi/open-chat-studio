@@ -3,6 +3,7 @@ import json
 from django.contrib.auth.decorators import permission_required
 from django.contrib.auth.mixins import PermissionRequiredMixin
 from django.db.models import Q
+from django.http import JsonResponse
 from django.shortcuts import get_object_or_404, render
 from django.urls import reverse
 from django.views.decorators.http import require_POST
@@ -163,3 +164,14 @@ def cancel_schedule(request, team_slug: str, participant_id: int, schedule_id: s
         "participants/partials/participant_schedule_single.html",
         {"schedule": schedule.as_dict(), "participant_id": participant_id},
     )
+
+
+@permission_required("experiments.view_participant")
+@login_and_team_required
+def participant_identifiers(request, team_slug: str, experiment_id: int):
+    identifiers = list(
+        Participant.objects.filter(experimentsession__experiment_id=experiment_id)
+        .values_list("identifier", flat=True)
+        .distinct()
+    )
+    return JsonResponse(identifiers, safe=False)
