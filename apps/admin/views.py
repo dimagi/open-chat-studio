@@ -18,6 +18,7 @@ from apps.admin.forms import DateRangeForm, DateRanges, FlagUpdateForm
 from apps.admin.queries import get_message_stats, get_participant_stats, get_whatsapp_numbers, usage_to_csv
 from apps.admin.serializers import StatsSerializer
 from apps.experiments.models import Participant
+from apps.teams.flags import get_all_flag_info
 from apps.teams.models import Flag, Team
 
 logger = logging.getLogger("ocs.admin")
@@ -121,12 +122,15 @@ def _string_to_date(date_str: str) -> datetime.date:
 @is_superuser
 def flags_home(request):
     flags = Flag.objects.prefetch_related("teams", "users").all().order_by("name")
+    flag_info_map = get_all_flag_info()
+
     return TemplateResponse(
         request,
         "admin/flags/home.html",
         context={
             "active_tab": "flags",
             "flags": flags,
+            "flag_info_map": flag_info_map,
         },
     )
 
@@ -134,6 +138,7 @@ def flags_home(request):
 @is_superuser
 def flag_detail(request, flag_id):
     flag = get_object_or_404(Flag, id=flag_id)
+    flag_info_map = get_all_flag_info()
 
     audit_events = AuditEvent.objects.filter(object_class_path="apps.teams.models.Flag", object_pk=flag.pk).order_by(
         "-event_date"
@@ -145,6 +150,7 @@ def flag_detail(request, flag_id):
         context={
             "active_tab": "flags",
             "flag": flag,
+            "flag_info": flag_info_map.get(flag.name),
             "audit_events": audit_events,
         },
     )
@@ -222,7 +228,6 @@ def update_flag(request, flag_id):
             flag.superusers = form.cleaned_data["superusers"]
             flag.rollout = form.cleaned_data["rollout"]
             flag.percent = form.cleaned_data["percent"]
-            flag.note = form.cleaned_data["note"]
 
             flag.teams.set(form.cleaned_data["teams"])
             flag.users.set(form.cleaned_data["users"])
