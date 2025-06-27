@@ -543,8 +543,10 @@ def main(input, **kwargs):
     nodes = [start, code, end]
     runnable = create_runnable(pipeline, nodes)
     attachments = [
-        Attachment(file_id=123, type="code_interpreter", name="test.py", size=10),
-        Attachment(file_id=456, type="file_search", name="blog.md", size=20),
+        Attachment(
+            file_id=123, type="code_interpreter", name="test.py", size=10, download_link="http://localhost:8000"
+        ),
+        Attachment(file_id=456, type="file_search", name="blog.md", size=20, download_link="http://localhost:8000"),
     ]
     serialized_attachments = [att.model_dump() for att in attachments]
     output = runnable.invoke(
@@ -784,8 +786,17 @@ def test_assistant_node_attachments(get_assistant_runnable):
     nodes = [start_node(), assistant_node(str(assistant.id)), end_node()]
     runnable = create_runnable(pipeline, nodes)
     attachments = [
-        Attachment(file_id=123, type="code_interpreter", name="test.py", size=10),
-        Attachment(file_id=456, type="code_interpreter", name="demo.py", size=10, upload_to_assistant=True),
+        Attachment(
+            file_id=123, type="code_interpreter", name="test.py", size=10, download_link="http://localhost:8000"
+        ),
+        Attachment(
+            file_id=456,
+            type="code_interpreter",
+            name="demo.py",
+            size=10,
+            upload_to_assistant=True,
+            download_link="http://localhost:8000",
+        ),
     ]
     state = PipelineState(
         messages=["Hi there bot"],
