@@ -80,7 +80,7 @@ def chat_start_session(request):
     serializer.is_valid(raise_exception=True)
 
     data = serializer.validated_data
-    experiment_id = data["experiment_id"]
+    experiment_id = data["chatbot_id"]
     participant_id = data.get("participant_id")
     session_data = data.get("session_data", {})
 
@@ -129,7 +129,7 @@ def chat_start_session(request):
     # Prepare response data
     response_data = {
         "session_id": session.external_id,
-        "experiment": experiment,
+        "chatbot": experiment,
         "participant": participant,
     }
     if session.seed_task_id:

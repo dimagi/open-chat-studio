@@ -192,7 +192,7 @@ class ParticipantDataUpdateRequest(serializers.Serializer):
 
 
 class ChatStartSessionRequest(serializers.Serializer):
-    experiment_id = serializers.UUIDField(label="Experiment ID")
+    chatbot_id = serializers.UUIDField(label="Chatbot ID")
     participant_id = serializers.CharField(
         label="Participant ID",
         required=False,
@@ -206,7 +206,7 @@ class ChatStartSessionRequest(serializers.Serializer):
 
 class ChatStartSessionResponse(serializers.Serializer):
     session_id = serializers.UUIDField(label="Session ID")
-    experiment = ExperimentSerializer(read_only=True)
+    chatbot = ExperimentSerializer(read_only=True)
     participant = ParticipantSerializer(read_only=True)
     seed_message_task_id = serializers.CharField(required=False, read_only=True)
 
