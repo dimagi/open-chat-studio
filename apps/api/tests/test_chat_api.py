@@ -24,22 +24,15 @@ def authed_client(team_with_users):
 
 @pytest.fixture()
 def session(experiment):
-    _allow_public_access(experiment)
     return ExperimentSessionFactory(experiment=experiment)
-
-
-def _allow_public_access(experiment):
-    experiment.allow_public_access = True
-    experiment.save(update_fields=["allow_public_access"])
 
 
 @pytest.mark.django_db()
 def test_start_chat_session(team_with_users, api_client, experiment):
-    _allow_public_access(experiment)
     url = reverse("api:chat:start-session")
     session_state = {"source": "widget", "page_url": "https://example.com"}
     data = {
-        "experiment_id": experiment.public_id,
+        "chatbot_id": experiment.public_id,
         "session_data": session_state,
     }
     response = api_client.post(url, data=data, format="json")
@@ -47,7 +40,7 @@ def test_start_chat_session(team_with_users, api_client, experiment):
     response_json = response.json()
     assert response_json == {
         "session_id": mock.ANY,
-        "experiment": {
+        "chatbot": {
             "id": experiment.public_id,
             "name": experiment.name,
             "url": f"http://testserver/api/experiments/{experiment.public_id}/",
@@ -64,10 +57,9 @@ def test_start_chat_session(team_with_users, api_client, experiment):
 
 @pytest.mark.django_db()
 def test_start_chat_session_with_participant_id_without_auth(team_with_users, api_client, experiment):
-    _allow_public_access(experiment)
     url = reverse("api:chat:start-session")
     session_state = {"source": "widget", "page_url": "https://example.com"}
-    data = {"experiment_id": experiment.public_id, "session_data": session_state, "participant_id": "123"}
+    data = {"chatbot_id": experiment.public_id, "session_data": session_state, "participant_id": "123"}
     response = api_client.post(url, data=data, format="json")
     assert response.status_code == 201
     assert response.json()["participant"]["identifier"].startswith("anon:")
@@ -75,13 +67,22 @@ def test_start_chat_session_with_participant_id_without_auth(team_with_users, ap
 
 @pytest.mark.django_db()
 def test_start_chat_session_with_participant_id_with_auth(team_with_users, authed_client, experiment):
-    _allow_public_access(experiment)
     url = reverse("api:chat:start-session")
-    data = {"experiment_id": experiment.public_id, "participant_id": "123"}
+    data = {"chatbot_id": experiment.public_id, "participant_id": authed_client.user.email}
     response = authed_client.post(url, data=data, format="json")
     assert response.status_code == 201
     response_json = response.json()
-    assert response_json["participant"]["identifier"] == "123"
+    assert response_json["participant"]["identifier"] == authed_client.user.email
+
+
+@pytest.mark.django_db()
+def test_start_chat_session_without_participant_id_with_auth(team_with_users, authed_client, experiment):
+    url = reverse("api:chat:start-session")
+    data = {"chatbot_id": experiment.public_id}
+    response = authed_client.post(url, data=data, format="json")
+    assert response.status_code == 201
+    response_json = response.json()
+    assert response_json["participant"]["identifier"] == authed_client.user.email
 
 
 @pytest.mark.django_db()
@@ -164,16 +165,23 @@ def test_session_poll_with_messages(api_client, session):
 
 
 @pytest.mark.django_db()
-def test_start_chat_session_requires_auth_when_not_public(team_with_users, api_client, experiment):
+@pytest.mark.parametrize(("participant_id", "status_code"), [(None, 403), ("", 400), ("123", 403), ("a", 201)])
+def test_start_chat_session_requires_auth_when_not_public(
+    team_with_users, api_client, experiment, participant_id, status_code
+):
     url = reverse("api:chat:start-session")
-    data = {"experiment_id": experiment.public_id}
+    experiment.participant_allowlist = ["a", "b"]
+    experiment.save()
+    data = {"chatbot_id": experiment.public_id}
+    if participant_id is not None:
+        data["participant_id"] = participant_id
     response = api_client.post(url, data=data, format="json")
-    assert response.status_code == 401
+    assert response.status_code == status_code
 
 
 @pytest.mark.django_db()
 def test_start_chat_session_with_auth(team_with_users, authed_client, experiment):
     url = reverse("api:chat:start-session")
-    data = {"experiment_id": experiment.public_id}
+    data = {"chatbot_id": experiment.public_id}
     response = authed_client.post(url, data=data, format="json")
     assert response.status_code == 201
