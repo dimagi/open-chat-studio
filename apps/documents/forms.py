@@ -1,7 +1,7 @@
 from django import forms
 
 from apps.assistants.models import OpenAiAssistant, ToolResources
-from apps.documents.models import Collection
+from apps.documents.models import Collection, DocumentSource, DocumentSourceConfig, GitHubSourceConfig, SourceType
 
 
 class CollectionForm(forms.ModelForm):
@@ -79,6 +79,97 @@ class CollectionForm(forms.ModelForm):
             self.cleaned_data["is_remote_index"] = False
 
         return cleaned_data
+
+
+class DocumentSourceForm(forms.ModelForm):
+    # GitHub configuration fields
+    github_repo_url = forms.URLField(
+        required=False,
+        label="Repository URL",
+        help_text="GitHub repository URL (e.g., https://github.com/user/repo)",
+        widget=forms.URLInput(attrs={"placeholder": "https://github.com/user/repo"}),
+    )
+    github_branch = forms.CharField(
+        required=False,
+        initial="main",
+        label="Branch",
+        help_text="Git branch to sync from",
+        widget=forms.TextInput(attrs={"placeholder": "main"}),
+    )
+    github_file_pattern = forms.CharField(
+        required=False,
+        initial="*.md",
+        label="File Pattern",
+        help_text="File patterns to include (comma-separated, e.g., *.md, *.txt)",
+        widget=forms.TextInput(attrs={"placeholder": "*.md, *.txt"}),
+    )
+    github_path_filter = forms.CharField(
+        required=False,
+        label="Path Filter",
+        help_text="Optional path prefix to filter files (e.g., docs/)",
+        widget=forms.TextInput(attrs={"placeholder": "docs/"}),
+    )
+
+    class Meta:
+        model = DocumentSource
+        fields = ["source_type", "auto_sync_enabled"]
+        labels = {
+            "source_type": "Source Type",
+            "auto_sync_enabled": "Auto Sync",
+        }
+        help_texts = {
+            "source_type": "Type of document source to configure",
+            "auto_sync_enabled": "Automatically sync this source on a schedule",
+        }
+
+    def __init__(self, collection, *args, **kwargs):
+        self.collection = collection
+        super().__init__(*args, **kwargs)
+
+        # Set up form attributes for JavaScript
+        self.fields["source_type"].widget.attrs = {"x-model": "sourceType", "x-on:change": "sourceTypeChanged"}
+
+        # Initialize form with existing data if editing
+        if self.instance.pk and self.instance.source_config:
+            if self.instance.source_type == SourceType.GITHUB and self.instance.config.github:
+                github_config = self.instance.config.github
+                self.fields["github_repo_url"].initial = github_config.repo_url
+                self.fields["github_branch"].initial = github_config.branch
+                self.fields["github_file_pattern"].initial = github_config.file_pattern
+                self.fields["github_path_filter"].initial = github_config.path_filter
+
+    def clean(self):
+        cleaned_data = super().clean()
+        source_type = cleaned_data.get("source_type")
+
+        if source_type == SourceType.GITHUB:
+            # Validate GitHub fields
+            repo_url = cleaned_data.get("github_repo_url")
+            if not repo_url:
+                raise forms.ValidationError({"github_repo_url": "Repository URL is required for GitHub sources."})
+
+            branch = cleaned_data.get("github_branch", "main")
+            file_pattern = cleaned_data.get("github_file_pattern", "*.md")
+            path_filter = cleaned_data.get("github_path_filter", "")
+
+            # Create GitHub config
+            github_config = GitHubSourceConfig(
+                repo_url=repo_url, branch=branch, file_pattern=file_pattern, path_filter=path_filter
+            )
+
+            # Store in config field
+            cleaned_data["config"] = DocumentSourceConfig(github=github_config)
+
+        return cleaned_data
+
+    def save(self, commit=True):
+        instance = super().save(commit=False)
+        instance.collection = self.collection
+        instance.team = self.collection.team
+
+        if commit:
+            instance.save()
+        return instance
 
 
 class CreateCollectionFromAssistantForm(forms.Form):
