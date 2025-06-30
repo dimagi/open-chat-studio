@@ -2,7 +2,7 @@ import React, {ChangeEvent, ChangeEventHandler, ReactNode, useEffect, useId, use
 import CodeMirror from '@uiw/react-codemirror';
 import {python} from "@codemirror/lang-python";
 import {githubDark, githubLight} from "@uiw/codemirror-theme-github";
-import {CompletionContext, snippetCompletion as snip, autocompletion} from '@codemirror/autocomplete'
+import {CompletionContext, snippetCompletion as snip, autocompletion, Completion} from '@codemirror/autocomplete'
 import {TypedOption, LlmProviderModel} from "../types/nodeParameterValues";
 import usePipelineStore from "../stores/pipelineStore";
 import {classNames, concatenate, getCachedData, getDocumentationLink, getSelectOptions} from "../utils";
@@ -1115,17 +1115,13 @@ export function TextEditorWidget(props: WidgetParams) {
   const setNode = usePipelineStore((state) => state.setNode);
 
   const onChangeCallback = (value: string) => {
-    setNode(props.nodeId, (old) => ({
-      ...old,
-      data: {
-        ...old.data,
-        params: {
-          ...old.data.params,
-          [props.name]: value,
-        },
-      },
-    }));
-  };
+  setNode(
+    props.nodeId,
+    produce((draft) => {
+      draft.data.params[props.name] = value;
+    })
+  );
+};
 
   const openModal = () =>
     (document.getElementById(modalId) as HTMLDialogElement)?.showModal();
