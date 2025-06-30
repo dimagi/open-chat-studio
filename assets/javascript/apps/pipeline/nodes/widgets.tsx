@@ -1107,8 +1107,8 @@ function BuiltInToolsWidget(props: WidgetParams) {
 
 export function TextEditorWidget(props: WidgetParams) {
   const { parameterValues } = getCachedData();
-  const autocomplete_vars_list: string[] =  Array.isArray(parameterValues.text_editor_autocomplete_vars)
-  ? parameterValues.text_editor_autocomplete_vars : [];
+ const autocomplete_vars_list: string[] = Array.isArray(parameterValues.text_editor_autocomplete_vars)
+  ? parameterValues.text_editor_autocomplete_vars.map((v: Option) => v.value) : [];
 
   const modalId = useId();
   const [isDarkMode, setIsDarkMode] = useState(false);
