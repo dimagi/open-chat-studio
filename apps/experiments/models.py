@@ -1753,16 +1753,23 @@ class ExperimentSession(BaseTeamModel):
 
     @property
     def experiment_version_for_display(self):
-        version_tags = list(
-            Tag.objects.filter(chatmessage__chat=self.chat, category=Chat.MetadataKeys.EXPERIMENT_VERSION)
-            .order_by("name")
-            .values_list("name", flat=True)
-            .distinct()
-        )
-        if not version_tags:
-            return ""
+        version_tags = set()
 
-        return ", ".join(version_tags)
+        if hasattr(self.chat, "messages"):
+            for message in self.chat.messages.all():
+                version_tags.update(
+                    tag.name for tag in message.tags.all() if tag.category == Chat.MetadataKeys.EXPERIMENT_VERSION
+                )
+
+        if not version_tags:
+            version_tags = set(
+                Tag.objects.filter(chatmessage__chat=self.chat, category=Chat.MetadataKeys.EXPERIMENT_VERSION)
+                .order_by("name")
+                .values_list("name", flat=True)
+                .distinct()
+            )
+
+        return ", ".join(sorted(version_tags)) if version_tags else ""
 
     def get_experiment_version_number(self) -> int:
         """

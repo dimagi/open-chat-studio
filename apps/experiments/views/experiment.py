@@ -125,7 +125,11 @@ class ExperimentSessionsTableView(LoginAndTeamRequiredMixin, SingleTableView, Pe
         query_set = (
             ExperimentSession.objects.with_last_message_created_at()
             .filter(team=self.request.team, experiment__id=self.kwargs["experiment_id"])
-            .select_related("participant__user")
+            .select_related("participant__user", "chat")
+            .prefetch_related(
+                "chat__tags",
+                "chat__messages__tags",
+            )
         )
         timezone = self.request.session.get("detected_tz", None)
         query_set = apply_dynamic_filters(query_set, self.request.GET, timezone)
