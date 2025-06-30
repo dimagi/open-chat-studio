@@ -26,7 +26,7 @@ if TYPE_CHECKING:
     from apps.pipelines.models import Node
 
 
-OCS_CITATION_PATTERN = r"<CIT\s+file_id=(?P<file_id>\d+)\s*/>"
+OCS_CITATION_PATTERN = r"<CIT\s+(?P<file_id>\d+)\s*/>"
 
 SUCCESSFUL_ATTACHMENT_MESSAGE: str = "File {file_id} ({name}) is attached to your response"
 
@@ -48,12 +48,12 @@ CHUNK_RESULT_TEMPLATE = """
 
 **CRITICAL REQUIREMENT - MANDATORY CITATIONS:**
 
-You MUST cite all information using this exact format: <CIT file_id=the-file-id />
+You MUST cite all information using this exact format: <CIT the-file-id />
 
 **Citation Rules:**
 - Place citations immediately after each sentence or claim that references retrieved content
 - Use the specific file ID from the source document
-- Example: "The revenue increased by 15% last quarter <CIT file_id=123 />."
+- Example: "The revenue increased by 15% last quarter <CIT 123 />."
 - NEVER provide information from retrieved files without proper citations
 
 **Response Structure:**

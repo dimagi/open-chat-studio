@@ -36,8 +36,14 @@ def test_extract_file_ids_from_ocs_citations(input_text, expected_file_ids):
     [
         ("", ""),
         ("No citations here", "No citations here"),
-        ("<CIT file_id=123 />", ""),
-        ("Text with citation<CIT file_id=123 />.", "Text with citation."),
+        ("<CIT 123 />", ""),
+        ("Text with citation<CIT 123 />.", "Text with citation."),
+        ('<xml something="123" />\n.\t<CIT 123 />', '<xml something="123" />\n.\t'),
+        ("\n<a href=''></a>", "\n<a href=''></a>"),
+        ("Text with multiple<CIT 123 /> citations<CIT 456 />.", "Text with multiple citations."),
+        ("Citation with extra space <CIT 123  />.", "Citation with extra space ."),
+        ("<div><p>Some text</p><CIT 123 /></div>", "<div><p>Some text</p></div>"),
+        ("<CIT 123 /><CIT 456 />", ""),
     ],
 )
 def test_remove_ocs_citations(input_text, expected_output):
