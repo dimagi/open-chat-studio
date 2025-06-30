@@ -49,7 +49,7 @@ class SpeechService(pydantic.BaseModel):
 
     def transcribe_audio(self, audio: BytesIO) -> str:
         try:
-            self._transcribe_audio(audio)
+            return self._transcribe_audio(audio)
         except Exception as e:
             log.exception(e)
             raise AudioTranscriptionException(f"Unable to transcribe audio. Error: {e}") from e
