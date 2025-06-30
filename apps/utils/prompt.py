@@ -1,5 +1,5 @@
 from string import Formatter
-from typing import Any
+from typing import Any, List
 
 from django.db import models
 from django.forms import ValidationError
@@ -17,6 +17,11 @@ class PromptVars(models.TextChoices):
     @staticmethod
     def pipeline_extra_known_vars() -> set[str]:
         return {"temp_state", "session_state"}
+
+    @staticmethod
+    def get_all_prompt_vars() -> List[str]:
+        base_vars = [v.value for v in PromptVars]
+        return base_vars + list(PromptVars.pipeline_extra_known_vars())
 
 
 PROMPT_VARS_REQUIRED_BY_TOOL = {
