@@ -207,6 +207,14 @@ def _pipeline_node_parameter_values(team, llm_providers, llm_provider_models):
             if provider.get("type")
         },
         OptionsSource.built_in_tools_config: BuiltInTools.get_tool_configs_by_provider(),
+        OptionsSource.text_editor_autocomplete_vars: [
+            "participant_data",
+            "media",
+            "source_material",
+            "current_datetime",
+            "session_state",
+            "temp_state",
+        ],
     }
 
 
