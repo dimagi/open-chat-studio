@@ -370,7 +370,8 @@ def get_tools(experiment_session, experiment) -> list[BaseTool]:
 
 
 def get_assistant_tools(assistant, experiment_session: ExperimentSession | None = None) -> list[BaseTool]:
-    tools = get_tool_instances(assistant.tools, experiment_session)
+    tool_callbacks = ToolCallbacks()
+    tools = get_tool_instances(assistant.tools, experiment_session, tool_callbacks)
     tools.extend(get_custom_action_tools(assistant))
     return tools
 
