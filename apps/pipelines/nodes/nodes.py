@@ -20,6 +20,8 @@ from langchain_core.runnables import RunnableLambda, RunnablePassthrough
 from langchain_core.tools import BaseTool
 from langchain_openai.chat_models.base import OpenAIRefusalError
 from langchain_text_splitters import RecursiveCharacterTextSplitter
+from langgraph.constants import END
+from langgraph.types import Command, interrupt
 from pydantic import BaseModel, BeforeValidator, Field, create_model, field_serializer, field_validator, model_validator
 from pydantic import ValidationError as PydanticValidationError
 from pydantic.config import ConfigDict
@@ -33,7 +35,7 @@ from apps.chat.agent.tools import get_node_tools
 from apps.chat.conversation import compress_chat_history, compress_pipeline_chat_history
 from apps.documents.models import Collection
 from apps.experiments.models import BuiltInTools, ExperimentSession, ParticipantData
-from apps.pipelines.exceptions import PipelineNodeBuildError, PipelineNodeRunError
+from apps.pipelines.exceptions import AbortPipeline, PipelineNodeBuildError, PipelineNodeRunError, WaitForNextInput
 from apps.pipelines.models import PipelineChatHistory, PipelineChatHistoryModes, PipelineChatHistoryTypes
 from apps.pipelines.nodes.base import (
     NodeSchema,
@@ -554,7 +556,7 @@ class BooleanNode(PipelineRouterNode):
     )
 
     def _process_conditional(self, state: PipelineState) -> tuple[Literal["true", "false"], bool]:
-        if self.input_equals == state["messages"][-1]:
+        if self.input_equals == state["node_input"]:
             return "true", False
         return "false", False
 
@@ -659,8 +661,7 @@ class RouterNode(RouterMixin, PipelineRouterNode, HistoryMixin):
             ]
         )
         session: ExperimentSession = state["experiment_session"]
-        node_input = state["messages"][-1]
-
+        node_input = state["node_input"]
         context = {"input": node_input}
         extra_prompt_context = {
             "temp_state": state.get("temp_state", {}),
@@ -1116,7 +1117,7 @@ class CodeNode(PipelineNode, OutputMessageTagMixin):
             raise PydanticCustomError("invalid_code", "{error}", {"error": exc.msg}) from None
         return value
 
-    def _process(self, input: str, state: PipelineState) -> PipelineState:
+    def _process(self, input: str, state: PipelineState) -> PipelineState | Command:
         function_name = "main"
         byte_code = compile_restricted(
             self.code,
@@ -1130,11 +1131,22 @@ class CodeNode(PipelineNode, OutputMessageTagMixin):
         kwargs = {}
         try:
             exec(byte_code, custom_globals, custom_locals)
-            result = str(custom_locals[function_name](input, **kwargs))
+            result = custom_locals[function_name](input, **kwargs)
+        except WaitForNextInput:
+            return Command(goto=END)
+        except AbortPipeline as abort:
+            return interrupt(abort.to_json())
         except Exception as exc:
             raise PipelineNodeRunError(exc) from exc
 
-        return PipelineState.from_node_output(node_name=self.name, node_id=self.node_id, output=result, **output_state)
+        if isinstance(result, Command):
+            return result
+        return Command(
+            goto=self._outgoing_nodes,
+            update=PipelineState.from_node_output(
+                node_name=self.name, node_id=self.node_id, output=str(result), **output_state
+            ),
+        )
 
     def _get_custom_globals(self, node_id, state: PipelineState, output_state: PipelineState) -> dict:
         """
@@ -1179,9 +1191,33 @@ class CodeNode(PipelineNode, OutputMessageTagMixin):
                 "get_all_routes": pipeline_state.get_all_routes,
                 "add_message_tag": output_state.add_message_tag,
                 "add_session_tag": output_state.add_session_tag,
+                "get_node_output": pipeline_state.get_node_output_by_name,
+                # control flow
+                "abort_with_message": self._abort_pipeline(),
+                "require_node_outputs": self._require_node_outputs(state),
             }
         )
         return custom_globals
+
+    def _abort_pipeline(self):
+        def abort_pipeline(message, tag_name: str = None):
+            raise AbortPipeline(message, tag_name)
+
+        return abort_pipeline
+
+    def _require_node_outputs(self, state: PipelineState):
+        """A helper function to require inputs from a specific node"""
+
+        def require_node_outputs(*node_names):
+            if len(node_names) == 1 and isinstance(node_names[0], list):
+                node_names = node_names[0]
+            if not all(isinstance(name, str) for name in node_names):
+                raise PipelineNodeRunError("Node names passed to 'require_node_outputs' must be a string")
+            for node_name in node_names:
+                if node_name not in state["outputs"]:
+                    raise WaitForNextInput(f"Node '{node_name}' has not produced any output yet")
+
+        return require_node_outputs
 
     def _get_session_state_key(self, session: ExperimentSession):
         def get_session_state_key(key_name: str):
