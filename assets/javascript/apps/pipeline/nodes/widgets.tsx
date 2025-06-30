@@ -11,7 +11,7 @@ import {Node, useUpdateNodeInternals} from "reactflow";
 import DOMPurify from 'dompurify';
 import {apiClient} from "../api/api";
 import { produce } from "immer";
-import { EditorView } from '@codemirror/view';
+import { EditorView,ViewPlugin, Decoration, ViewUpdate } from '@codemirror/view';
 
 export function getWidget(name: string, params: PropertySchema) {
   switch (name) {
@@ -41,8 +41,8 @@ export function getWidget(name: string, params: PropertySchema) {
       return NodeNameWidget
     case "built_in_tools":
         return BuiltInToolsWidget
-    case "prompt_editor":
-        return PromptEditorWidget
+    case "text_editor_widget":
+        return TextEditorWidget
     default:
       if (params.enum) {
         return SelectWidget
@@ -1105,22 +1105,35 @@ function BuiltInToolsWidget(props: WidgetParams) {
   );
 }
 
-export function PromptEditorWidget(props: WidgetParams) {
+export function TextEditorWidget(props: WidgetParams) {
+  const { parameterValues } = getCachedData();
+  const autocomplete_vars_list = parameterValues.text_editor_autocomplete_vars || [];
+
   const modalId = useId();
   const [isDarkMode, setIsDarkMode] = useState(false);
+  const setNode = usePipelineStore((state) => state.setNode);
+
+  const onChangeCallback = (value: string) => {
+    setNode(props.nodeId, (old) => ({
+      ...old,
+      data: {
+        ...old.data,
+        params: {
+          ...old.data.params,
+          [props.name]: value,
+        },
+      },
+    }));
+  };
 
   const openModal = () =>
     (document.getElementById(modalId) as HTMLDialogElement)?.showModal();
 
   useEffect(() => {
-    setIsDarkMode(document.body.getAttribute("data-theme") === "dark");
-    const observer = new MutationObserver(function (mutations) {
-      mutations.forEach(function (mutation) {
-        if (mutation.type === "attributes") {
-          setIsDarkMode(document.body.getAttribute("data-theme") === "dark");
-        }
-      });
-    });
+    const updateTheme = () =>
+      setIsDarkMode(document.body.getAttribute("data-theme") === "dark");
+    updateTheme();
+    const observer = new MutationObserver(updateTheme);
     observer.observe(document.body, { attributes: true });
     return () => observer.disconnect();
   }, []);
@@ -1129,7 +1142,11 @@ export function PromptEditorWidget(props: WidgetParams) {
     <>
       {props.label}
         <div className="tooltip tooltip-left" data-tip={`Expand ${props.label}`}>
-        <button className="btn btn-xs btn-ghost float-right" onClick={openModal}>
+        <button
+          type="button"
+          className="btn btn-xs btn-ghost float-right"
+          onClick={openModal}
+        >
           <i className="fa-solid fa-expand-alt"></i>
         </button>
       </div>
@@ -1145,65 +1162,73 @@ export function PromptEditorWidget(props: WidgetParams) {
       >
         <div className="relative w-full">
           <textarea
-            className="textarea textarea-bordered resize-none textarea-sm w-full"
+            className="textarea textarea-bordered resize-none textarea-sm w-full !bg-white !text-black"
             disabled={true}
             rows={3}
             value={props.paramValue}
             name={props.name}
           ></textarea>
-          <div className="absolute inset-0 cursor-pointer" onClick={openModal}></div>
+          <div
+            className="absolute inset-0 cursor-pointer"
+            onClick={openModal}
+          ></div>
         </div>
       </InputField>
-      <PromptEditorModal
+
+      <TextEditorModal
         modalId={modalId}
-        name={props.name}
         value={props.paramValue}
-        onChange={props.updateParamValue}
+        onChange={onChangeCallback}
         isDarkMode={isDarkMode}
         label={props.label}
         inputError={props.inputError}
+        autocomplete_vars_list={autocomplete_vars_list}
       />
     </>
   );
 }
-function PromptEditorModal({
+
+function TextEditorModal({
   modalId,
-  name,
   value,
   onChange,
   isDarkMode,
   label,
   inputError,
+  autocomplete_vars_list,
 }: {
   modalId: string;
-  name: string;
   value: string;
-  onChange: (e: React.ChangeEvent<HTMLTextAreaElement> | string) => void;
+  onChange: (val: string) => void;
   isDarkMode: boolean;
   label: string;
   inputError?: string;
+  autocomplete_vars_list: string[];
 }) {
-  const handleChange = (val: string) => {
-    onChange(typeof val === "string" ? val : "");
-  };
-
   return (
-    <dialog id={modalId} className="modal nopan nodelete nodrag noflow nowheel">
+    <dialog id={modalId} className="modal">
       <div className="modal-box min-w-[85vw] h-[80vh] flex flex-col">
         <form method="dialog">
           <button className="btn btn-sm btn-circle btn-ghost absolute right-2 top-2">
             ✕
           </button>
         </form>
+
         <div className="grow h-full w-full flex flex-col">
           <h4 className="mb-4 font-bold text-lg capitalize">{label}</h4>
+
           <CodeMirror
             value={value}
-            onChange={handleChange}
+            onChange={onChange}
             height="100%"
             theme={isDarkMode ? githubDark : githubLight}
             extensions={[
-              autocompletion({ override: [promptVarCompletions], activateOnTyping: true }),
+              autocompletion({
+                override: [textEditorVarCompletions(autocomplete_vars_list)],
+                activateOnTyping: true,
+              }),
+              highlightAutoCompleteVars(autocomplete_vars_list),
+              autocompleteVarTheme,
               EditorView.lineWrapping,
             ]}
             basicSetup={{
@@ -1213,6 +1238,7 @@ function PromptEditorModal({
             }}
           />
         </div>
+
         {inputError && <div className="text-red-500">{inputError}</div>}
       </div>
       <form method="dialog" className="modal-backdrop">
@@ -1221,33 +1247,79 @@ function PromptEditorModal({
     </dialog>
   );
 }
-function promptVarCompletions(context: CompletionContext) {
-  const word = context.matchBefore(/[a-zA-Z0-9._\[\]"]*$/);
-  if (!word || (word.from === word.to && !context.explicit)) return null;
 
-  const vars = [
-    "participant_data",
-    "source_material",
-    "current_datetime",
-    "media",
-    "temp_state",
-    "session_state",
-  ];
+function textEditorVarCompletions(autocomplete_vars_list: string[]) {
+  return (context: CompletionContext) => {
+    const word = context.matchBefore(/[a-zA-Z0-9._\[\]"]*$/);
+    if (!word || (word.from === word.to && !context.explicit)) return null;
 
-  return {
-    from: word.from,
-    options: vars.map((v) => ({
-      label: v,
-      type: "variable",
-      info: `Insert {${v}}`,
-      apply: (view, completion, from, to) => {
-  const beforeText = view.state.doc.sliceString(from - 1, from); //
-  const insertText = beforeText === '{' ? `${completion.label}` : `{${completion.label}}`;
-
-  view.dispatch({
-    changes: { from, to, insert: insertText }
-  });
-      }
-    })),
+    return {
+      from: word.from,
+      options: autocomplete_vars_list.map((v) => ({
+        label: v,
+        type: "variable",
+        info: `Insert {${v}}`,
+        apply: (view, completion, from, to) => {
+          const beforeText = view.state.doc.sliceString(from - 1, from);
+          const insertText =
+            beforeText === "{" ? `${completion.label}` : `{${completion.label}}`;
+          view.dispatch({
+            changes: { from, to, insert: insertText },
+          });
+        },
+      })),
+    };
   };
 }
+// highlight auto complete words. valid - blue, invalid - red
+function highlightAutoCompleteVars(autocomplete_vars_list: string[]) {
+  return ViewPlugin.fromClass(
+    class {
+      decorations: DecorationSet;
+
+      constructor(view: EditorView) {
+        this.decorations = this.buildDecorations(view);
+      }
+
+      update(update: ViewUpdate) {
+        if (update.docChanged || update.viewportChanged) {
+          this.decorations = this.buildDecorations(update.view);
+        }
+      }
+
+      buildDecorations(view: EditorView) {
+        const widgets: any[] = [];
+        const text = view.state.doc.toString();
+        const regex = /\{([a-zA-Z0-9._\[\]"]+)\}/g;
+        let match;
+        while ((match = regex.exec(text)) !== null) {
+          const varName = match[1];
+          const from = match.index;
+          const to = from + match[0].length;
+
+          const deco = Decoration.mark({
+            class: autocomplete_vars_list.includes(varName)
+              ? "autocomplete-var-valid"
+              : "autocomplete-var-invalid",
+          });
+          widgets.push(deco.range(from, to));
+        }
+        return Decoration.set(widgets);
+      }
+    },
+    {
+      decorations: (v) => v.decorations,
+    }
+  );
+}
+
+const autocompleteVarTheme = EditorView.theme({
+  ".cm-content .autocomplete-var-valid": {
+    color: "navy",
+    fontWeight: "bold",
+  },
+  ".cm-content .autocomplete-var-invalid": {
+    color: "red",
+    fontWeight: "bold",
+  },
+});
