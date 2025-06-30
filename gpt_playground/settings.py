@@ -109,6 +109,7 @@ PROJECT_APPS = [
     "apps.chatbots",
     "apps.banners",
     "apps.dashboard",
+    "apps.evaluations",
 ]
 
 SPECIAL_APPS = ["debug_toolbar"] if USE_DEBUG_TOOLBAR else []

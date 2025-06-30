@@ -49,6 +49,7 @@ team_urlpatterns = [
     path("chatbots/", include("apps.chatbots.urls")),
     path("dashboard/", include("apps.dashboard.urls", namespace="dashboard")),
     path("analysis/", include("apps.analysis.urls", namespace="analysis")),
+    path("evaluations/", include("apps.evaluations.urls")),
 ]
 
 urlpatterns = [
