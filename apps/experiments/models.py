@@ -586,13 +586,12 @@ class AgentTools(models.TextChoices):
         return [cls.RECURRING_REMINDER, cls.ONE_OFF_REMINDER, cls.DELETE_REMINDER, cls.MOVE_SCHEDULED_MESSAGE_DATE]
 
     @staticmethod
-    def user_tool_choices() -> list[tuple]:
+    def user_tool_choices(include_end_session: bool = True) -> list[tuple]:
         """Returns the set of tools that a user should be able to attach to the bot"""
-        return [
-            (tool.value, tool.label)
-            for tool in AgentTools
-            if tool not in [AgentTools.ATTACH_MEDIA, AgentTools.SEARCH_INDEX]
-        ]
+        excluded_tools = [AgentTools.ATTACH_MEDIA, AgentTools.SEARCH_INDEX]
+        if not include_end_session:
+            excluded_tools.append(AgentTools.END_SESSION)
+        return [(tool.value, tool.label) for tool in AgentTools if tool not in excluded_tools]
 
 
 @audit_fields(*model_audit_fields.EXPERIMENT_FIELDS, audit_special_queryset_writes=True)
