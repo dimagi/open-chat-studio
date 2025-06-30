@@ -3,7 +3,7 @@ import CodeMirror from '@uiw/react-codemirror';
 import {python} from "@codemirror/lang-python";
 import {githubDark, githubLight} from "@uiw/codemirror-theme-github";
 import {CompletionContext, snippetCompletion as snip, autocompletion, Completion} from '@codemirror/autocomplete'
-import {TypedOption, LlmProviderModel} from "../types/nodeParameterValues";
+import {TypedOption, LlmProviderModel, Option} from "../types/nodeParameterValues";
 import usePipelineStore from "../stores/pipelineStore";
 import {classNames, concatenate, getCachedData, getDocumentationLink, getSelectOptions} from "../utils";
 import {JsonSchema, NodeParams, PropertySchema} from "../types/nodeParams";
@@ -1107,8 +1107,8 @@ function BuiltInToolsWidget(props: WidgetParams) {
 
 export function TextEditorWidget(props: WidgetParams) {
   const { parameterValues } = getCachedData();
- const autocomplete_vars_list: string[] = Array.isArray(parameterValues.text_editor_autocomplete_vars)
-  ? parameterValues.text_editor_autocomplete_vars.map((v: TypedOption) => v.value) : [];
+  const autocomplete_vars_list: string[] = Array.isArray(parameterValues.text_editor_autocomplete_vars)
+  ? parameterValues.text_editor_autocomplete_vars.map((v: Option) => v.value) : [];
 
   const modalId = useId();
   const [isDarkMode, setIsDarkMode] = useState(false);
