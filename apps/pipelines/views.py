@@ -183,6 +183,9 @@ def _pipeline_node_parameter_values(team, llm_providers, llm_provider_models):
                 _option(
                     value=collection["id"],
                     label=collection["name"],
+                    edit_url=reverse(
+                        "documents:single_collection_home", kwargs={"team_slug": team.slug, "pk": collection["id"]}
+                    ),
                 )
                 for collection in collections
             ]
@@ -193,6 +196,9 @@ def _pipeline_node_parameter_values(team, llm_providers, llm_provider_models):
                 _option(
                     value=index["id"],
                     label=index["name"],
+                    edit_url=reverse(
+                        "documents:single_collection_home", kwargs={"team_slug": team.slug, "pk": index["id"]}
+                    ),
                 )
                 for index in collection_indexes
             ]
