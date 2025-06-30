@@ -11,7 +11,7 @@ import {Node, useUpdateNodeInternals} from "reactflow";
 import DOMPurify from 'dompurify';
 import {apiClient} from "../api/api";
 import { produce } from "immer";
-import { EditorView,ViewPlugin, Decoration, ViewUpdate } from '@codemirror/view';
+import { EditorView,ViewPlugin, Decoration, ViewUpdate, DecorationSet } from '@codemirror/view';
 
 export function getWidget(name: string, params: PropertySchema) {
   switch (name) {
@@ -1107,7 +1107,8 @@ function BuiltInToolsWidget(props: WidgetParams) {
 
 export function TextEditorWidget(props: WidgetParams) {
   const { parameterValues } = getCachedData();
-  const autocomplete_vars_list = parameterValues.text_editor_autocomplete_vars || [];
+  const autocomplete_vars_list =  Array.isArray(parameterValues.text_editor_autocomplete_vars)
+  ? parameterValues.text_editor_autocomplete_vars : [];
 
   const modalId = useId();
   const [isDarkMode, setIsDarkMode] = useState(false);
@@ -1259,7 +1260,7 @@ function textEditorVarCompletions(autocomplete_vars_list: string[]) {
         label: v,
         type: "variable",
         info: `Insert {${v}}`,
-        apply: (view, completion, from, to) => {
+        apply: (view: EditorView, completion: Completion, from: number, to: number) => {
           const beforeText = view.state.doc.sliceString(from - 1, from);
           const insertText =
             beforeText === "{" ? `${completion.label}` : `{${completion.label}}`;
