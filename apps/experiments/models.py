@@ -1751,23 +1751,24 @@ class ExperimentSession(BaseTeamModel):
         """Returns the default experiment, or if there is none, the working experiment"""
         return self.experiment.get_working_version()
 
+    def _get_version_tags_from_prefetch(self):
+        if not hasattr(self.chat, "messages"):
+            return set()
+
+        return {
+            tag.name
+            for message in self.chat.messages.all()
+            for tag in message.tags.all()
+            if tag.category == Chat.MetadataKeys.EXPERIMENT_VERSION
+        }
+
     @property
     def experiment_version_for_display(self):
-        version_tags = set()
-
-        if hasattr(self.chat, "messages"):
-            for message in self.chat.messages.all():
-                version_tags.update(
-                    tag.name for tag in message.tags.all() if tag.category == Chat.MetadataKeys.EXPERIMENT_VERSION
-                )
-
-        if not version_tags:
-            version_tags = set(
-                Tag.objects.filter(chatmessage__chat=self.chat, category=Chat.MetadataKeys.EXPERIMENT_VERSION)
-                .order_by("name")
-                .values_list("name", flat=True)
-                .distinct()
-            )
+        version_tags = self._get_version_tags_from_prefetch() or set(
+            Tag.objects.filter(chatmessage__chat=self.chat, category=Chat.MetadataKeys.EXPERIMENT_VERSION)
+            .values_list("name", flat=True)
+            .distinct()
+        )
 
         return ", ".join(sorted(version_tags)) if version_tags else ""
 
