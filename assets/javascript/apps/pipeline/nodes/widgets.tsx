@@ -1250,7 +1250,7 @@ function TextEditorModal({
 
 function textEditorVarCompletions(autocomplete_vars_list: string[]) {
   return (context: CompletionContext) => {
-    const word = context.matchBefore(/[a-zA-Z0-9._\[\]"]*$/);
+    const word = context.matchBefore(/[a-zA-Z0-9._[\]"]*$/);
     if (!word || (word.from === word.to && !context.explicit)) return null;
 
     return {
@@ -1290,7 +1290,7 @@ function highlightAutoCompleteVars(autocomplete_vars_list: string[]) {
       buildDecorations(view: EditorView) {
         const widgets: any[] = [];
         const text = view.state.doc.toString();
-        const regex = /\{([a-zA-Z0-9._\[\]"]+)\}/g;
+        const regex = /\{([a-zA-Z0-9._[\]"]+)\}/g;
         let match;
         while ((match = regex.exec(text)) !== null) {
           const varName = match[1];

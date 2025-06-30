@@ -208,7 +208,7 @@ def _pipeline_node_parameter_values(team, llm_providers, llm_provider_models):
             if provider.get("type")
         },
         OptionsSource.built_in_tools_config: BuiltInTools.get_tool_configs_by_provider(),
-        OptionsSource.text_editor_autocomplete_vars: PromptVars.get_all_prompt_vars()
+        OptionsSource.text_editor_autocomplete_vars: PromptVars.get_all_prompt_vars(),
     }
 
 
