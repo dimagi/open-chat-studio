@@ -42,11 +42,7 @@ CHUNK_TEMPLATE = """
 {chunk}
 """
 
-CHUNK_RESULT_TEMPLATE = """
-# Retrieved chunks
-{retrieved_chunks}
-
-**CRITICAL REQUIREMENT - MANDATORY CITATIONS:**
+CITATION_PROMPT = """**CRITICAL REQUIREMENT - MANDATORY CITATIONS:**
 
 You MUST cite all information using this exact format: <CIT the-file-id />
 
@@ -315,7 +311,11 @@ class SearchIndexTool(CustomBaseTool):
             .only("text", "file__name")[:max_results]
         )
         retrieved_chunks = "".join([self._format_result(embedding) for embedding in embeddings])
-        return CHUNK_RESULT_TEMPLATE.format(retrieved_chunks=retrieved_chunks)
+        return f"""
+# Retrieved chunks
+{retrieved_chunks}
+{CITATION_PROMPT}
+"""
 
     def _format_result(self, embedding: FileChunkEmbedding) -> str:
         """

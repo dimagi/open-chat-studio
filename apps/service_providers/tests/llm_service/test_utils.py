@@ -22,8 +22,8 @@ def test_detangle_file_ids():
     [
         ("", []),
         ("No citations here", []),
-        ("<CIT file_id=123 />", ["123"]),
-        ("A citation <CIT file_id=123 />. Another one<CIT file_id=456 />.", ["123", "456"]),
+        ("<CIT 123 />", ["123"]),
+        ("A citation <CIT 123 />. Another one<CIT 456 />.", ["123", "456"]),
     ],
 )
 def test_extract_file_ids_from_ocs_citations(input_text, expected_file_ids):

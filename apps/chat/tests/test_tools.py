@@ -11,6 +11,7 @@ from freezegun import freeze_time
 from apps.chat.agent import tools
 from apps.chat.agent.schemas import WeekdaysEnum
 from apps.chat.agent.tools import (
+    CITATION_PROMPT,
     TOOL_CLASS_MAP,
     DeleteReminderTool,
     SearchIndexTool,
@@ -444,24 +445,7 @@ Apples are great
 ### Content
 Oranges are nice
 
-
-**CRITICAL REQUIREMENT - MANDATORY CITATIONS:**
-
-You MUST cite all information using this exact format: <CIT file_id=the-file-id />
-
-**Citation Rules:**
-- Place citations immediately after each sentence or claim that references retrieved content
-- Use the specific file ID from the source document
-- Example: "The revenue increased by 15% last quarter <CIT file_id=123 />."
-- NEVER provide information from retrieved files without proper citations
-
-**Response Structure:**
-1. Answer the user's question thoroughly
-2. Support each claim with evidence from the files
-3. Ensure every factual statement includes a citation
-4. If no relevant information exists in the files, explicitly state this
-
-Failure to include proper citations will result in an incomplete response.
+{CITATION_PROMPT}
 """
         assert result == expected_result
 
