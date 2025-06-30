@@ -9,6 +9,137 @@ from apps.experiments.models import ExperimentSession
 from apps.generics import actions
 
 
+class EvaluationConfigTable(tables.Table):
+    name = columns.Column(
+        linkify=True,
+        attrs={
+            "a": {"class": "link"},
+        },
+        orderable=True,
+    )
+    actions = actions.ActionsColumn(
+        actions=[
+            actions.edit_action(url_name="evaluations:edit"),
+            actions.Action(
+                url_name="evaluations:create_evaluation_run",
+                url_factory=lambda url_name, request, record, value: reverse(
+                    url_name, args=[request.team.slug, record.id]
+                ),
+                icon_class="fa-solid fa-play",
+                title="Run",
+            ),
+        ]
+    )
+
+    def render_evaluators(self, value, record):
+        """Render the evaluators column with icons and labels in an unordered list."""
+        from apps.evaluations.utils import get_evaluator_type_display
+
+        if not value.exists():
+            return "—"
+
+        items = []
+        for evaluator in value.all():
+            type_info = get_evaluator_type_display(evaluator.type)
+            icon_html = f'<i class="fa {type_info["icon"]}"></i> ' if type_info["icon"] else ""
+            items.append(f"<li>{icon_html}{evaluator.name} ({type_info['label']})</li>")
+
+        return mark_safe(f'<ul class="list-disc list-inside">{"".join(items)}</ul>')
+
+    class Meta:
+        model = EvaluationConfig
+        fields = (
+            "name",
+            "evaluators",
+            "dataset",
+            "actions",
+        )
+        row_attrs = settings.DJANGO_TABLES2_ROW_ATTRS
+        orderable = False
+        empty_text = "No evaluation configurations found."
+
+
+class EvaluationRunTable(tables.Table):
+    created_at = columns.DateTimeColumn(
+        verbose_name="Created",
+        linkify=True,
+        attrs={
+            "a": {"class": "link"},
+        },
+        orderable=True,
+    )
+
+    status = TemplateColumn(
+        template_name="evaluations/evaluation_run_status_column.html", verbose_name="Status", orderable=False
+    )
+
+    results = columns.Column(accessor="results.count", verbose_name="Result count", orderable=False)
+
+    actions = actions.ActionsColumn(
+        actions=[
+            actions.Action(
+                url_name="evaluations:evaluation_run_download",
+                url_factory=lambda url_name, request, record, _: reverse(
+                    url_name, args=[request.team.slug, record.config_id, record.id]
+                ),
+                icon_class="fa-solid fa-download",
+                title="Download CSV",
+                enabled_condition=lambda _, record: record.status == "completed",
+            ),
+        ]
+    )
+
+    class Meta:
+        model = EvaluationRun
+        fields = ("created_at", "status", "finished_at", "results", "actions")
+        row_attrs = settings.DJANGO_TABLES2_ROW_ATTRS
+        orderable = False
+        empty_text = "No runs found."
+
+
+class EvaluatorTable(tables.Table):
+    name = columns.Column(
+        linkify=True,
+        attrs={
+            "a": {"class": "link"},
+        },
+        orderable=True,
+    )
+    type = columns.Column(
+        verbose_name="Type",
+        orderable=True,
+    )
+    actions = actions.ActionsColumn(
+        actions=[
+            actions.edit_action(url_name="evaluations:evaluator_edit"),
+            actions.AjaxAction(
+                "evaluations:evaluator_delete",
+                title="Delete",
+                icon_class="fa-solid fa-trash",
+                confirm_message="This will permanently delete the evaluator. Are you sure?",
+                hx_method="delete",
+            ),
+        ]
+    )
+
+    def render_type(self, value, record):
+        """Render the type column with icon and label."""
+        type_info = get_evaluator_type_display(value)
+        icon_html = f'<i class="fa {type_info["icon"]}"></i> ' if type_info["icon"] else ""
+        return mark_safe(f"{icon_html}{type_info['label']}")
+
+    class Meta:
+        model = Evaluator
+        fields = (
+            "name",
+            "type",
+            "actions",
+        )
+        row_attrs = settings.DJANGO_TABLES2_ROW_ATTRS
+        orderable = False
+        empty_text = "No evaluators found."
+
+
 class EvaluationDatasetTable(tables.Table):
     name = columns.Column(
         linkify=True,
