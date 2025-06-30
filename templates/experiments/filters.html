@@ -172,7 +172,6 @@
 
 {{ field_type_filters|json_script:"field-type-filters" }}
 {{ date_range_options|json_script:"date-range-options" }}
-{{participant_list| json_script:"participant-list"}}
 <script>
   const tags = JSON.parse(document.getElementById('available-tags-data').textContent);
   const versionsList = JSON.parse(document.getElementById('experiment-versions-data').textContent);
