@@ -1181,8 +1181,7 @@ export function TextEditorWidget(props: WidgetParams) {
         inputError={props.inputError}
       >
         <div className="relative w-full">
-          <textarea className={`textarea textarea-bordered resize-none textarea-sm w-full ${
-            isDarkMode ? '!bg-black !text-white' : '!bg-white !text-black'}`}
+          <textarea className="textarea textarea-bordered resize-none textarea-sm w-full"
             disabled={true}
             rows={3}
             value={props.paramValue}
@@ -1248,7 +1247,7 @@ function TextEditorModal({
                 activateOnTyping: true,
               }),
               highlightAutoCompleteVars(autocomplete_vars_list),
-              autocompleteVarTheme,
+              autocompleteVarTheme(isDarkMode),
               EditorView.lineWrapping,
             ]}
             basicSetup={{
@@ -1333,13 +1332,14 @@ function highlightAutoCompleteVars(autocomplete_vars_list: string[]) {
   );
 }
 
-const autocompleteVarTheme = EditorView.theme({
-  ".cm-content .autocomplete-var-valid": {
-    color: "navy",
-    fontWeight: "bold",
-  },
-  ".cm-content .autocomplete-var-invalid": {
-    color: "red",
-    fontWeight: "bold",
-  },
-});
+const autocompleteVarTheme = (isDarkMode: boolean) =>
+  EditorView.theme({
+    ".cm-content .autocomplete-var-valid": {
+      color: isDarkMode ? "#93c5fd" : "navy",
+      fontWeight: "bold",
+    },
+    ".cm-content .autocomplete-var-invalid": {
+      color: isDarkMode ? "#f87171" : "red",
+      fontWeight: "bold",
+    },
+  });
