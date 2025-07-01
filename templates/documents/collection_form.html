@@ -22,6 +22,7 @@
     <div class="mb-6">
       <p class="text-base-content/70 text-sm">
         Collections help your bot work with files. Choose the type that matches what you want to accomplish.
+        Once you create a collection, you can enable your bot to use it by adding it to an LLM node.
       </p>
     </div>
 
@@ -167,8 +168,8 @@
 
         {% render_field form.is_index %}
         {% render_field form.llm_provider %}
-        {% render_field form.embedding_provider_model xshow="!isRemoteIndex" %}
         {% render_field form.is_remote_index xshow="showIndexingBackendChoice" %}
+        {% render_field form.embedding_provider_model xshow="!isRemoteIndex" %}
 
         {% if form.instance.id %}
           <div role="alert" class="bg-base-200 rounded-lg alert alert-warning alert-soft flex flex-col" x-cloak x-show="initialProviderId !== selectedLlmProviderId">
