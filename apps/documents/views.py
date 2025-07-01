@@ -1,4 +1,5 @@
 import logging
+from pathlib import Path
 
 from django.conf import settings
 from django.contrib import messages
@@ -10,6 +11,7 @@ from django.http import HttpResponse, HttpResponseRedirect
 from django.shortcuts import get_object_or_404, redirect, render
 from django.template.loader import render_to_string
 from django.urls import reverse
+from django.utils.translation import gettext as _
 from django.views import View
 from django.views.decorators.http import require_POST
 from django.views.generic import CreateView, FormView, ListView, TemplateView, UpdateView
@@ -93,11 +95,33 @@ def single_collection_home(request, team_slug: str, pk: int):
 @permission_required("documents.change_collection")
 def add_collection_files(request, team_slug: str, pk: int):
     collection = get_object_or_404(Collection, id=pk, team__slug=team_slug)
-    # Create files
+
+    supported_extensions = (
+        settings.SUPPORTED_FILE_TYPES["file_search"]
+        if collection.is_index
+        else settings.SUPPORTED_FILE_TYPES["collections"]
+    )
+    files = []
+    invalid_files = []
+
+    # Validate extensions
+    for uploaded_file in request.FILES.getlist("files"):
+        ext = Path(uploaded_file.name).suffix.lower()
+        if not ext or ext not in supported_extensions:
+            invalid_files.append(uploaded_file.name)
+        else:
+            files.append(uploaded_file)
+
+    # All files are unsupported
+    if not files:
+        messages.error(request, _("All selected files are invalid. Unsupported: ") + ", ".join(invalid_files))
+        return redirect("documents:single_collection_home", team_slug=team_slug, pk=pk)
+
     with transaction.atomic():
-        files = []
-        for uploaded_file in request.FILES.getlist("files"):
-            files.append(
+        # Create File objects
+        created_files = []
+        for uploaded_file in files:
+            created_files.append(
                 File.objects.create(
                     team=request.team,
                     name=uploaded_file.name,
@@ -110,20 +134,33 @@ def add_collection_files(request, team_slug: str, pk: int):
         status = FileStatus.PENDING if collection.is_index else ""
         metadata = None
         if collection.is_index:
+            chunk_size = request.POST.get("chunk_size")
+            chunk_overlap = request.POST.get("chunk_overlap")
             metadata = CollectionFileMetadata(
                 chunking_strategy=ChunkingStrategy(
-                    chunk_size=int(request.POST.get("chunk_size")), chunk_overlap=int(request.POST.get("chunk_overlap"))
+                    chunk_size=int(chunk_size) if chunk_size else 800,
+                    chunk_overlap=int(chunk_overlap) if chunk_overlap else 400,
                 )
             )
 
         collection_files = CollectionFile.objects.bulk_create(
-            [CollectionFile(collection=collection, file=file, status=status, metadata=metadata) for file in files]
+            [
+                CollectionFile(collection=collection, file=file, status=status, metadata=metadata)
+                for file in created_files
+            ]
         )
 
     if collection.is_index:
         tasks.index_collection_files_task.delay([cf.id for cf in collection_files])
 
-    messages.success(request, f"Added {len(files)} files to collection")
+    # Notify on UI about unsupported files
+    if invalid_files:
+        messages.warning(
+            request, _("Some files were skipped because of unsupported extensions: ") + ", ".join(invalid_files)
+        )
+
+    messages.success(request, _(f"Added {len(created_files)} files to collection."))
+
     return redirect("documents:single_collection_home", team_slug=team_slug, pk=pk)
 
 

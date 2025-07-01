@@ -83,6 +83,7 @@ from apps.experiments.tables import (
     ParentExperimentRoutesTable,
     TerminalBotsTable,
 )
+from apps.experiments.task_utils import get_message_task_response
 from apps.experiments.tasks import (
     async_create_experiment_version,
     async_export_chat,
@@ -96,16 +97,6 @@ from apps.service_providers.utils import get_llm_provider_choices
 from apps.teams.decorators import login_and_team_required, team_required
 from apps.teams.mixins import LoginAndTeamRequiredMixin
 from apps.utils.base_experiment_table_view import BaseExperimentTableView
-
-DEFAULT_ERROR_MESSAGE = (
-    "Sorry something went wrong. This was likely an intermittent error related to load."
-    "Please try again, and wait a few minutes if this keeps happening."
-)
-
-CUSTOM_ERROR_MESSAGE = (
-    "The chatbot is currently unavailable. We are working hard to resolve the issue as quickly"
-    " as possible and apologize for any inconvenience. Thank you for your patience."
-)
 
 
 @login_and_team_required
@@ -724,7 +715,7 @@ def _experiment_session_message(request, version_number: int, embedded=False):
     uploaded_files = request.FILES
     attachments = []
     created_files = []
-    for resource_type in ["code_interpreter", "file_search"]:
+    for resource_type in ["code_interpreter", "file_search", "ocs_attachments"]:
         if resource_type not in uploaded_files:
             continue
 
@@ -734,7 +725,7 @@ def _experiment_session_message(request, version_number: int, embedded=False):
         )
         for uploaded_file in uploaded_files.getlist(resource_type):
             new_file = File.objects.create(name=uploaded_file.name, file=uploaded_file, team=request.team)
-            attachments.append(Attachment.from_file(new_file, cast(AttachmentType, resource_type)))
+            attachments.append(Attachment.from_file(new_file, cast(AttachmentType, resource_type), session.id))
             created_files.append(new_file)
 
         tool_resource.files.add(*created_files)
@@ -772,35 +763,12 @@ def get_message_response(request, team_slug: str, experiment_id: uuid.UUID, sess
     experiment = request.experiment
     session = request.experiment_session
     last_message = ChatMessage.objects.filter(chat=session.chat).order_by("-created_at").first()
-    progress = Progress(AsyncResult(task_id)).get_info()
-    # don't render empty messages
-    skip_render = progress["complete"] and progress["success"] and not progress["result"]
-    if skip_render:
+    message_details = get_message_task_response(experiment, task_id)
+    if not message_details:
+        # don't render empty messages
         return HttpResponse()
 
-    message_details = {"message": None, "error_msg": False, "complete": progress["complete"]}
-    if progress["complete"] and progress["success"]:
-        result = progress["result"]
-        if message_id := result.get("message_id"):
-            message_details["message"] = ChatMessage.objects.get(id=message_id)
-        elif response := result.get("response"):
-            message_details["message"] = {"content": response}
-        if error := result.get("error"):
-            if not experiment.debug_mode_enabled:
-                if "Invalid parameter" in error:  # TODO: temporary
-                    message_details["error_msg"] = CUSTOM_ERROR_MESSAGE
-                else:
-                    message_details["error_msg"] = DEFAULT_ERROR_MESSAGE
-            else:
-                message_details["error_msg"] = error
-    elif progress["complete"]:
-        message_details["error_msg"] = DEFAULT_ERROR_MESSAGE
-
-    attached_files = []
-    message = message_details.get("message")
-    if isinstance(message, ChatMessage):
-        attached_files = message.get_attached_files()
-
+    attachments = message_details.pop("attachments", [])
     return TemplateResponse(
         request,
         "experiments/chat/chat_message_response.html",
@@ -809,9 +777,8 @@ def get_message_response(request, team_slug: str, experiment_id: uuid.UUID, sess
             "session": session,
             "task_id": task_id,
             "message_details": message_details,
-            "skip_render": skip_render,
             "last_message_datetime": last_message and last_message.created_at,
-            "attachments": attached_files,
+            "attachments": attachments,
         },
     )
 
@@ -1268,11 +1235,6 @@ def experiment_session_messages_view(request, team_slug: str, experiment_id: uui
     start_idx = (page - 1) * page_size
     end_idx = start_idx + page_size
     paginated_messages = messages_queryset[start_idx:end_idx]
-    for message in paginated_messages:
-        message.attached_files = []
-        for file in message.get_attached_files():
-            file.download_url = file.download_link(session.id)
-            message.attached_files.append(file)
     context = {
         "experiment_session": session,
         "experiment": experiment,
@@ -1391,6 +1353,27 @@ def download_file(request, team_slug: str, session_id: int, pk: int):
         return FileResponse(file, as_attachment=True, filename=resource.file.name)
     except FileNotFoundError:
         raise Http404() from None
+
+
+@team_required
+def get_image_html(request, team_slug: str, session_id: int, pk: int):
+    """Return HTML for displaying an image attachment."""
+    resource = get_object_or_404(
+        File, id=pk, team__slug=team_slug, chatattachment__chat__experiment_session__id=session_id
+    )
+
+    if not resource.is_image:
+        raise Http404("File is not an image")
+
+    # Generate the image URL
+    image_url = reverse("experiments:download_file", args=[team_slug, session_id, pk])
+
+    # Return HTML for the image
+    html = format_html(
+        '<img src="{}" alt="{}" class="max-w-md max-h-64 rounded border shadow-sm mt-2">', image_url, resource.name
+    )
+
+    return HttpResponse(html)
 
 
 @require_POST

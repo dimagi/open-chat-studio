@@ -1,4 +1,11 @@
-@import "tailwindcss" source("../../");
+@import "tailwindcss";
+@import './app/chat.css';
+@import './app/table.css' layer(components);
+@import './app/alertify.css';
+@import './app/pg-components.css';
+@import './app/prompt-builder.css' layer(components);
+@import './app/dashboard.css' layer(components);
+
 @config '../../tailwind.config.js';
 @plugin "@tailwindcss/typography";
 @source inline("alert-success", "alert-info", "alert-error", "alert-warning", "alertify-notifier");
@@ -12,14 +19,6 @@
   name: "dark";
   --color-base-content: oklch(0.746477 0.0216 264.436);
 }
-
-
-@import './app/chat.css';
-@import './app/table.css' layer(components);
-@import './app/alertify.css';
-@import './app/pg-components.css';
-@import './app/prompt-builder.css' layer(components);
-
 
 
 /*

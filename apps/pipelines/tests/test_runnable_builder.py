@@ -187,69 +187,11 @@ def test_render_template(pipeline):
 
 
 @django_db_with_data(available_apps=("apps.service_providers",))
-def test_branching_pipeline(pipeline, experiment_session):
-    start = start_node()
-    template_a = render_template_node("A ({{input }})")
-    template_b = render_template_node("B ({{ input}})")
-    template_c = render_template_node("C ({{input }})")
-    end = end_node()
-    nodes = [
-        start,
-        template_a,
-        template_b,
-        template_c,
-        end,
-    ]
-    edges = [
-        {
-            "id": "start -> RenderTemplate-A",
-            "source": start["id"],
-            "target": template_a["id"],
-        },
-        {
-            "id": "start -> RenderTemplate-B",
-            "source": start["id"],
-            "target": template_b["id"],
-        },
-        {
-            "id": "RenderTemplate-B -> RenderTemplate-C",
-            "source": template_b["id"],
-            "target": template_c["id"],
-        },
-        {
-            "id": "RenderTemplate-A -> END",
-            "source": template_a["id"],
-            "target": end["id"],
-        },
-        {
-            "id": "RenderTemplate-C -> END",
-            "source": template_c["id"],
-            "target": end["id"],
-        },
-    ]
-    user_input = "The Input"
-    output = create_runnable(pipeline, nodes, edges, lenient=True).invoke(
-        PipelineState(messages=[user_input], experiment_session=experiment_session)
-    )["outputs"]
-    expected_output = {
-        "start": {"message": user_input, "node_id": start["id"]},
-        template_a["params"]["name"]: {"message": f"A ({user_input})", "node_id": template_a["id"]},
-        template_b["params"]["name"]: {"message": f"B ({user_input})", "node_id": template_b["id"]},
-        template_c["params"]["name"]: {"message": f"C (B ({user_input}))", "node_id": template_c["id"]},
-        "end": [
-            {"message": f"A ({user_input})", "node_id": end["id"]},
-            {"message": f"C (B ({user_input}))", "node_id": end["id"]},
-        ],
-    }
-    assert output == expected_output
-
-
-@django_db_with_data(available_apps=("apps.service_providers",))
 def test_conditional_node(pipeline, experiment_session):
     start = start_node()
-    boolean = boolean_node()
-    template_true = render_template_node("said hello")
-    template_false = render_template_node("didn't say hello, said {{ input }}")
+    boolean = boolean_node(name="boolean")
+    template_true = render_template_node("said hello", name="T-true")
+    template_false = render_template_node("didn't say hello, said {{ input }}", name="T-false")
     end = end_node()
     nodes = [
         start,
@@ -289,7 +231,7 @@ def test_conditional_node(pipeline, experiment_session):
     assert output["outputs"] == {
         "start": {"message": "hello", "node_id": start["id"]},
         "boolean": {"route": "true", "message": "hello", "output_handle": "output_0", "node_id": boolean["id"]},
-        template_true["params"]["name"]: {"message": "said hello", "node_id": template_true["id"]},
+        "T-true": {"message": "said hello", "node_id": template_true["id"]},
         "end": {"message": "said hello", "node_id": end["id"]},
     }
 
@@ -298,7 +240,7 @@ def test_conditional_node(pipeline, experiment_session):
     assert output["outputs"] == {
         "start": {"message": "bad", "node_id": start["id"]},
         "boolean": {"route": "false", "message": "bad", "output_handle": "output_1", "node_id": boolean["id"]},
-        template_false["params"]["name"]: {"message": "didn't say hello, said bad", "node_id": template_false["id"]},
+        "T-false": {"message": "didn't say hello, said bad", "node_id": template_false["id"]},
         "end": {"message": "didn't say hello, said bad", "node_id": end["id"]},
     }
 
@@ -320,9 +262,7 @@ def test_router_node_prompt(get_llm_service, provider, provider_model, pipeline,
     )
     node._process_conditional(
         PipelineState(
-            outputs={"123": {"message": "a"}},
-            messages=["a"],
-            experiment_session=experiment_session,
+            outputs={"123": {"message": "a"}}, messages=["a"], experiment_session=experiment_session, node_input="a"
         ),
     )
 
@@ -434,7 +374,11 @@ def test_static_router_case_sensitive(pipeline, experiment_session):
 def test_router_sets_tags_correctly(pipeline, experiment_session):
     start = start_node()
     router = state_key_router_node(
-        "route_to", ["first", "second"], data_source=StaticRouterNode.DataSource.temp_state, tag_output=True
+        "route_to",
+        ["first", "second"],
+        data_source=StaticRouterNode.DataSource.temp_state,
+        tag_output=True,
+        name="static router",
     )
     template_a = render_template_node("A")
     template_b = render_template_node("B")
@@ -543,8 +487,10 @@ def main(input, **kwargs):
     nodes = [start, code, end]
     runnable = create_runnable(pipeline, nodes)
     attachments = [
-        Attachment(file_id=123, type="code_interpreter", name="test.py", size=10),
-        Attachment(file_id=456, type="file_search", name="blog.md", size=20),
+        Attachment(
+            file_id=123, type="code_interpreter", name="test.py", size=10, download_link="http://localhost:8000"
+        ),
+        Attachment(file_id=456, type="file_search", name="blog.md", size=20, download_link="http://localhost:8000"),
     ]
     serialized_attachments = [att.model_dump() for att in attachments]
     output = runnable.invoke(
@@ -784,8 +730,17 @@ def test_assistant_node_attachments(get_assistant_runnable):
     nodes = [start_node(), assistant_node(str(assistant.id)), end_node()]
     runnable = create_runnable(pipeline, nodes)
     attachments = [
-        Attachment(file_id=123, type="code_interpreter", name="test.py", size=10),
-        Attachment(file_id=456, type="code_interpreter", name="demo.py", size=10, upload_to_assistant=True),
+        Attachment(
+            file_id=123, type="code_interpreter", name="test.py", size=10, download_link="http://localhost:8000"
+        ),
+        Attachment(
+            file_id=456,
+            type="code_interpreter",
+            name="demo.py",
+            size=10,
+            upload_to_assistant=True,
+            download_link="http://localhost:8000",
+        ),
     ]
     state = PipelineState(
         messages=["Hi there bot"],
@@ -962,41 +917,7 @@ def test_cyclical_graph(pipeline):
     ]
 
     with pytest.raises(PipelineBuildError, match="A cycle was detected"):
-        create_runnable(pipeline, nodes, edges, lenient=True)
-
-
-@django_db_with_data(available_apps=("apps.service_providers",))
-def test_parallel_nodes(pipeline):
-    start = start_node()
-    passthrough_1 = passthrough_node()
-    passthrough_2 = passthrough_node()
-    end = end_node()
-    nodes = [start, passthrough_1, passthrough_2, end]
-    edges = [
-        {
-            "id": "start -> passthrough 1",
-            "source": start["id"],
-            "target": passthrough_1["id"],
-        },
-        {
-            "id": "start -> passthrough 2",
-            "source": start["id"],
-            "target": passthrough_2["id"],
-        },
-        {
-            "id": "passthrough 1 -> end",
-            "source": passthrough_1["id"],
-            "target": end["id"],
-        },
-        {
-            "id": "passthrough 2 -> end",
-            "source": passthrough_2["id"],
-            "target": end["id"],
-        },
-    ]
-
-    with pytest.raises(PipelineBuildError, match="Multiple edges connected to the same output"):
-        create_runnable(pipeline, nodes, edges, lenient=False)
+        create_runnable(pipeline, nodes, edges)
 
 
 @django_db_with_data(available_apps=("apps.service_providers",))
@@ -1045,7 +966,7 @@ def test_multiple_valid_inputs(pipeline):
         messages=["not hello"],
         experiment_session=experiment_session,
     )
-    output = create_runnable(pipeline, nodes, edges, lenient=False).invoke(state)
+    output = create_runnable(pipeline, nodes, edges).invoke(state)
     assert output["messages"][-1] == "T: not hello"
 
 
@@ -1226,15 +1147,15 @@ def test_router_node_output_structure(provider, provider_model, pipeline, experi
             llm_provider_model_id=provider_model.id,
         )
         state = PipelineState(
-            outputs={"test_router": {"message": "hello world", "node_id": "123"}},
+            outputs={"prev_node": {"message": "hello world", "node_id": "prev_node"}},
             messages=["hello world"],
             experiment_session=experiment_session,
             temp_state={"user_input": "hello world", "outputs": {}},
-            path=[],
+            path=[("", "prev_node", [node_id])],
         )
         with mock.patch.object(node, "_process_conditional", return_value=("A", True)):
             edge_map = {"A": "next_node_a", "B": "next_node_b"}
-            incoming_edges = ["123"]
+            incoming_edges = ["prev_node"]
             router_func = node.build_router_function(edge_map, incoming_edges)
             command = router_func(state, {})
 
@@ -1244,8 +1165,8 @@ def test_router_node_output_structure(provider, provider_model, pipeline, experi
             assert "route" in output_state["outputs"][node.name]
             assert "message" in output_state["outputs"][node.name]
             assert output_state["outputs"][node.name]["route"] == "A"
-            assert output_state["outputs"][node.name]["message"] == state["node_input"]
-            assert command.goto == "next_node_a"
+            assert output_state["outputs"][node.name]["message"] == "hello world"
+            assert command.goto == ["next_node_a"]
 
 
 def test_get_selected_route():
@@ -1344,9 +1265,7 @@ def test_router_node_openai_refusal_uses_default_keyword(get_llm_service, provid
     )
     node.default_keyword_index = 0
     state = PipelineState(
-        outputs={"123": {"message": "a"}},
-        messages=["a"],
-        experiment_session=experiment_session,
+        outputs={"123": {"message": "a"}}, messages=["a"], experiment_session=experiment_session, node_input="a"
     )
 
     keyword, is_default_keyword = node._process_conditional(state)

@@ -280,6 +280,18 @@ class SafetyLayer(BaseTeamModel, VersionsMixin):
     def get_absolute_url(self):
         return reverse("experiments:safety_edit", args=[self.team.slug, self.id])
 
+    def _get_version_details(self) -> VersionDetails:
+        return VersionDetails(
+            instance=self,
+            fields=[
+                VersionField(name="name", raw_value=self.name),
+                VersionField(name="prompt_text", raw_value=self.prompt_text),
+                VersionField(name="messages_to_review", raw_value=self.messages_to_review),
+                VersionField(name="default_response_to_user", raw_value=self.default_response_to_user),
+                VersionField(name="prompt_to_bot", raw_value=self.prompt_to_bot),
+            ],
+        )
+
 
 class SurveyObjectManager(VersionsObjectManagerMixin, models.Manager):
     def get_queryset(self) -> models.QuerySet:
@@ -574,13 +586,12 @@ class AgentTools(models.TextChoices):
         return [cls.RECURRING_REMINDER, cls.ONE_OFF_REMINDER, cls.DELETE_REMINDER, cls.MOVE_SCHEDULED_MESSAGE_DATE]
 
     @staticmethod
-    def user_tool_choices() -> list[tuple]:
+    def user_tool_choices(include_end_session: bool = True) -> list[tuple]:
         """Returns the set of tools that a user should be able to attach to the bot"""
-        return [
-            (tool.value, tool.label)
-            for tool in AgentTools
-            if tool not in [AgentTools.ATTACH_MEDIA, AgentTools.SEARCH_INDEX]
-        ]
+        excluded_tools = [AgentTools.ATTACH_MEDIA, AgentTools.SEARCH_INDEX]
+        if not include_end_session:
+            excluded_tools.append(AgentTools.END_SESSION)
+        return [(tool.value, tool.label) for tool in AgentTools if tool not in excluded_tools]
 
 
 @audit_fields(*model_audit_fields.EXPERIMENT_FIELDS, audit_special_queryset_writes=True)
@@ -723,6 +734,10 @@ class Experiment(BaseTeamModel, VersionsMixin, CustomActionOperationMixin):
     debug_mode_enabled = models.BooleanField(default=False)
     citations_enabled = models.BooleanField(default=True)
     create_version_task_id = models.CharField(max_length=128, blank=True)
+    file_uploads_enabled = models.BooleanField(
+        default=False,
+        help_text="Enables file attachments in the web chat interface.",
+    )
     objects = ExperimentObjectManager()
 
     class Meta:
