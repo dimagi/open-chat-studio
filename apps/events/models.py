@@ -626,6 +626,17 @@ class ScheduledMessage(BaseTeamModel):
             "triggers_remaining": self.remaining_triggers,
             "is_complete": self.is_complete,
             "is_cancelled": self.is_cancelled,
+            "attempts": [
+                {
+                    "attempted_at": a.attempted_at,
+                    "trigger_number": a.trigger_number,
+                    "attempt_number": a.attempt_number,
+                    "attempt_result": a.attempt_result,
+                    "log_message": a.log_message,
+                    "trace_info": a.trace_info,
+                }
+                for a in self.attempts.all()
+            ],
         }
 
 
@@ -638,9 +649,14 @@ class ScheduledMessageAttempt(models.Model):
     trigger_number = models.IntegerField()
     attempt_number = models.IntegerField()
     attempt_result = models.CharField(max_length=10, choices=EventLogStatusChoices.choices)
-    log_message = models.TextField(blank=True, null=True)
+    log_message = models.TextField(blank=True)
     trace_info = models.JSONField(blank=True, null=True)
     attempted_at = models.DateTimeField(auto_now_add=True)
 
     class Meta:
         unique_together = ("scheduled_message", "trigger_number", "attempt_number")
+
+    def __str__(self):
+        return (
+            f"Attempt #{self.attempt_number} (Trigger {self.trigger_number}) for Schedule {self.scheduled_message_id}"
+        )

@@ -1437,6 +1437,7 @@ class Participant(BaseTeamModel):
                 team=self.team,
             )
             .select_related("action")
+            .prefetch_related("attempts")
             .order_by("created_at")
         )
         if not include_inactive:
