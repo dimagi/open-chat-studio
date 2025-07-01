@@ -1138,10 +1138,10 @@ export function TextEditorWidget(props: WidgetParams) {
 
   useEffect(() => {
     const updateTheme = () =>
-      setIsDarkMode(document.body.getAttribute("data-theme") === "dark");
+      setIsDarkMode(document.documentElement.getAttribute("data-theme") === "dark");
     updateTheme();
     const observer = new MutationObserver(updateTheme);
-    observer.observe(document.body, { attributes: true });
+    observer.observe(document.documentElement, { attributes: true });
     return () => observer.disconnect();
   }, []);
 
@@ -1181,8 +1181,8 @@ export function TextEditorWidget(props: WidgetParams) {
         inputError={props.inputError}
       >
         <div className="relative w-full">
-          <textarea
-            className="textarea textarea-bordered resize-none textarea-sm w-full !bg-white !text-black"
+          <textarea className={`textarea textarea-bordered resize-none textarea-sm w-full ${
+            isDarkMode ? '!bg-black !text-white' : '!bg-white !text-black'}`}
             disabled={true}
             rows={3}
             value={props.paramValue}
