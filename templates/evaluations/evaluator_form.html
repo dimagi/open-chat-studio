@@ -235,6 +235,7 @@
   {{ evaluator_schemas|json_script:"evaluator-schemas" }}
   {{ parameter_values|json_script:"parameter-values" }}
   {{ default_values|json_script:"default-values" }}
+  {% if object.params %}{{ object.params|json_script:"existing-params" }}{% elif form.params.value %}{{ form.params.value|json_script:"existing-params" }}{% endif %}
   <script>
     document.addEventListener('alpine:init', () => {
       Alpine.data('evaluatorForm', () => ({
@@ -247,8 +248,7 @@
         keyValuePairs: {},
 
         init() {
-          // Initialize with existing data if editing
-          const existingParams = {% if object.params %}{{ object.params|safe }}{% elif form.params.value %}{{ form.params.value|safe }}{% else %}null{% endif %};
+          const existingParams = document.getElementById("existing-params") ? JSON.parse(document.getElementById("existing-params").textContent) : null;
 
           this.$nextTick(() => {
             this.updateTypeAndSchema();

@@ -38,9 +38,9 @@
                     <label class="cursor-pointer label">
                       <input type="checkbox"
                              class="checkbox checkbox-primary evaluator-checkbox"
-                             value="{{ evaluator.id }}"
-                             :checked="selectedEvaluators.includes('{{ evaluator.id }}')"
-                             @change="toggleEvaluator('{{ evaluator.id }}', $event.target.checked)">
+                             value="{{ evaluator.id|escapejs }}"
+                             :checked="selectedEvaluators.includes('{{ evaluator.id|escapejs }}')"
+                             @change="toggleEvaluator('{{ evaluator.id|escapejs }}', $event.target.checked)">
                     </label>
                   </td>
                   <td>
