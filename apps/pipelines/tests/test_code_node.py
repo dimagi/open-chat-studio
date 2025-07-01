@@ -55,7 +55,7 @@ def main(input, **kwargs):
 def test_code_node(code, input, output):
     node = CodeNode(name="test", node_id="123", django_node=None, code=code)
     node_output = node._process(input, PipelineState(outputs={}, experiment_session=None))
-    assert node_output["messages"][-1] == output
+    assert node_output.update["messages"][-1] == output
 
 
 EXTRA_FUNCTION = """
@@ -130,7 +130,7 @@ def main(input, **kwargs):
 """
     node = CodeNode(name="test", node_id="123", django_node=None, code=code)
     node_output = node._process("hi", PipelineState(outputs={}, experiment_session=experiment_session))
-    assert node_output["messages"][-1] == "robot"
+    assert node_output.update["messages"][-1] == "robot"
 
 
 @pytest.mark.django_db()
@@ -152,7 +152,7 @@ def main(input, **kwargs):
 """
     node = CodeNode(name="test", node_id="123", django_node=None, code=code)
     node_output = node._process(input, PipelineState(outputs={}, experiment_session=experiment_session))
-    assert node_output["messages"][-1] == output
+    assert node_output.update["messages"][-1] == output
     participant_data.refresh_from_db()
     assert participant_data.data["fun_facts"]["personality"] == output
 
@@ -162,7 +162,8 @@ def test_temp_state_across_multiple_nodes(pipeline, experiment_session):
     output = "['fun loving', 'likes puppies']"
     code_set = f"""
 def main(input, **kwargs):
-    return set_temp_state_key("fun_facts", {output})
+    set_temp_state_key("fun_facts", {output})
+    return input
 """
     code_get = """
 def main(input, **kwargs):
@@ -189,10 +190,10 @@ def test_temp_state_get_outputs(pipeline, experiment_session):
 def main(input, **kwargs):
     return str(get_temp_state_key("outputs"))
 """
-    template_node = render_template_node("<b>The input is: {{ input }}</b>")
+    template_node = render_template_node("<b>The input is: {{ input }}</b>", name="template")
     nodes = [
         start_node(),
-        passthrough_node(),
+        passthrough_node(name="passthrough"),
         template_node,
         code_node(code_get),
         end_node(),
@@ -203,7 +204,7 @@ def main(input, **kwargs):
         {
             "start": input,
             "passthrough": input,
-            template_node["params"]["name"]: f"<b>The input is: {input}</b>",
+            "template": f"<b>The input is: {input}</b>",
         }
     )
 
@@ -229,8 +230,8 @@ def main(input, **kwargs):
 """
     node = CodeNode(name="test", node_id="123", django_node=None, code=code_get)
     state = PipelineState(messages=[user_input], outputs={}, experiment_session=None, temp_state={})
-    node_output = node.process(incoming_edges=[], outgoing_edges=[], state=state, config={})
-    assert node_output["messages"][-1] == user_input
+    node_output = node.process(incoming_nodes=[], outgoing_nodes=[], state=state, config={})
+    assert node_output.update["messages"][-1] == user_input
 
 
 @pytest.mark.django_db()
@@ -246,11 +247,11 @@ def main(input, **kwargs):
         outputs={},
         experiment_session=experiment_session,
         messages=["hi"],
-        attachments=[Attachment.from_file(file, "code_interpreter")],
+        attachments=[Attachment.from_file(file, "code_interpreter", experiment_session.id)],
         temp_state={},
     )
-    node_output = node.process(incoming_edges=[], outgoing_edges=[], state=state, config={})
-    assert node_output["messages"][-1] == "content from file"
+    node_output = node.process(incoming_nodes=[], outgoing_nodes=[], state=state, config={})
+    assert node_output.update["messages"][-1] == "content from file"
 
 
 @pytest.mark.django_db()
@@ -275,8 +276,8 @@ def main(input, **kwargs):
     """
     node = CodeNode(name="test", node_id="123", django_node=None, code=code)
     state = PipelineState(messages=["hi"], outputs={}, experiment_session=experiment_session, temp_state={})
-    node_output = node.process(incoming_edges=[], outgoing_edges=[], state=state, config={})
-    assert node_output["messages"][-1] == "Name: Dimagi, Color: green"
+    node_output = node.process(incoming_nodes=[], outgoing_nodes=[], state=state, config={})
+    assert node_output.update["messages"][-1] == "Name: Dimagi, Color: green"
 
 
 @pytest.mark.django_db()
@@ -299,8 +300,8 @@ def main(input, **kwargs):
     """
     node = CodeNode(name="test", node_id="123", django_node=None, code=code)
     state = PipelineState(messages=["hi"], outputs={}, experiment_session=experiment_session, temp_state={})
-    node_output = node.process(incoming_edges=[], outgoing_edges=[], state=state, config={})
-    assert node_output["messages"][-1] == "Name: Updated Exciting Name"
+    node_output = node.process(incoming_nodes=[], outgoing_nodes=[], state=state, config={})
+    assert node_output.update["messages"][-1] == "Name: Updated Exciting Name"
     experiment_session.participant.refresh_from_db()
     assert experiment_session.participant.name == "Updated Exciting Name"
 
@@ -332,7 +333,7 @@ def test_render_template_with_context_keys(pipeline, experiment_session):
         "participant_data: {{participant_data.custom_key}}"
     )
     node = RenderTemplate(name="test", node_id="123", django_node=None, template_string=template)
-    node_output = node.process(incoming_edges=[], outgoing_edges=[], state=state, config={})
+    node_output = node.process(incoming_nodes=[], outgoing_nodes=[], state=state, config={})
     assert node_output["messages"][-1] == (
         "input: Cycling, temp_state.my_key: example_key, "
         "participant_id: participant_123, "
@@ -377,8 +378,8 @@ def main(input, **kwargs):
 """
     node = CodeNode(name="test", node_id="123", django_node=None, code=code)
     state = PipelineState(messages=["hi"], outputs={}, experiment_session=experiment_session, temp_state={})
-    node_output = node.process(incoming_edges=[], outgoing_edges=[], state=state, config={})
-    assert node_output["messages"][-1] == "Number of schedules: 1"
+    node_output = node.process(incoming_nodes=[], outgoing_nodes=[], state=state, config={})
+    assert node_output.update["messages"][-1] == "Number of schedules: 1"
 
 
 @pytest.mark.django_db()
@@ -394,8 +395,8 @@ def main(input, **kwargs):
 """
     node = CodeNode(name="test", node_id="123", django_node=None, code=code)
     state = PipelineState(messages=["hi"], outputs={}, experiment_session=experiment_session, temp_state={})
-    node_output = node.process(incoming_edges=[], outgoing_edges=[], state=state, config={})
-    assert node_output["messages"][-1] == "Number of schedules: 0, Empty list: True"
+    node_output = node.process(incoming_nodes=[], outgoing_nodes=[], state=state, config={})
+    assert node_output.update["messages"][-1] == "Number of schedules: 0, Empty list: True"
 
 
 @pytest.mark.django_db()
@@ -409,7 +410,7 @@ def main(input, **kwargs):
     """
     node = CodeNode(name="test", node_id="123", django_node=None, code=code)
     state = PipelineState(messages=["hi"], outputs={}, experiment_session=experiment_session, temp_state={})
-    node.process(incoming_edges=[], outgoing_edges=[], state=state, config={})
+    node.process(incoming_nodes=[], outgoing_nodes=[], state=state, config={})
     experiment_session.refresh_from_db()
     assert experiment_session.state["message_count"] == 2
 
@@ -423,5 +424,5 @@ def main(input, **kwargs):
     """
     node = CodeNode(name="test", node_id="123", django_node=None, code=code_set)
     output = node._process("hi", PipelineState(outputs={}, experiment_session=None))
-    assert output["output_message_tags"] == [("message-tag", None)]
-    assert output["session_tags"] == [("session-tag", None)]
+    assert output.update["output_message_tags"] == [("message-tag", None)]
+    assert output.update["session_tags"] == [("session-tag", None)]

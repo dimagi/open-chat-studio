@@ -185,9 +185,33 @@
                       <div class="flex flex-col">
                         {% for file in message.get_attached_files %}
                           <div class="inline text-sm p-1">
-                            <a href="{{ file.download_url }}" target="_blank" class="text-blue-600 underline">
+                            <a href="{% url "experiments:download_file" request.team.slug experiment_session.id file.id %}" target="_blank" class="link link-primary">
                               <i class="fa-solid fa-file fa-sm mr-1"></i>{{ file.name }}
                             </a>
+                            ({{ file.display_size }})
+                            {% if file.is_image %}
+                              <div class="mt-1" x-data="{ showImage: false }">
+                                <button
+                                  @click="showImage = !showImage"
+                                  class="btn btn-ghost btn-xs"
+                                  :class="showImage ? 'text-primary' : 'text-gray-500'">
+                                  <i class="fa-solid fa-image fa-sm mr-1"></i>
+                                  <span x-text="showImage ? 'Hide Image' : 'Show Image'"></span>
+                                </button>
+                                <div
+                                  x-show="showImage"
+                                  x-transition
+                                  class="mt-2"
+                                  hx-get="{% url 'experiments:get_image_html' request.team.slug experiment_session.id file.id %}"
+                                  hx-trigger="intersect once"
+                                  hx-swap="innerHTML">
+                                  <div class="flex items-center gap-2 text-xs text-gray-500">
+                                    <i class="fa-solid fa-spinner fa-spin"></i>
+                                    Loading image...
+                                  </div>
+                                </div>
+                              </div>
+                            {% endif %}
                           </div>
                         {% endfor %}
                       </div>

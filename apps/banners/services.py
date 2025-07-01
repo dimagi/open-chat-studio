@@ -1,4 +1,5 @@
 import json
+from urllib.parse import unquote
 
 from django.db.models import Q, QuerySet
 from django.utils import timezone
@@ -22,7 +23,8 @@ class BannerService:
             query = query.filter(combined_filter)
         try:
             dismissed_list = json.loads(dismissed_ids)
-            if isinstance(dismissed_list, list) and all(isinstance(x, int) and x > 0 for x in dismissed_list):
+            dismissed_list = [int(x) for x in dismissed_list if str(x).isdigit()]
+            if dismissed_list:
                 query = query.exclude(id__in=dismissed_list)
         except (json.JSONDecodeError, ValueError):
             pass
@@ -30,7 +32,8 @@ class BannerService:
 
     @staticmethod
     def get_banner_context(request, location):
-        dismissed_ids = request.COOKIES.get("dismissed_banners", "[]")
+        dismissed_ids_raw = request.COOKIES.get("dismissed_banners", "[]")
+        dismissed_ids = unquote(dismissed_ids_raw)
         team = getattr(request, "team", None)
         banners = BannerService.get_active_banners(dismissed_ids, location, team)
         return {

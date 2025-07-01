@@ -12,7 +12,9 @@ def test_serialize_trace_data():
     output = serialize_input_output_dict(
         {
             "key1": session,
-            "key2": Attachment(file_id=123, type="file_search", name="file.txt", size=100),
+            "key2": Attachment(
+                file_id=123, type="file_search", name="file.txt", size=100, download_link="https://localhost:8000"
+            ),
             "key3": [{"session": session}],
         }
     )
@@ -25,6 +27,7 @@ def test_serialize_trace_data():
             "size": 100,
             "type": "file_search",
             "upload_to_assistant": False,
+            "download_link": "https://localhost:8000",
         },
         "key3": [{"session": str(session)}],
     }

@@ -132,7 +132,14 @@ class LLMChat(RunnableSerializable[str, ChainOutput]):
     def is_lc_serializable(cls) -> bool:
         return False
 
-    def invoke(self, input: str, config: RunnableConfig | None = None, *args, **kwargs) -> ChainOutput:
+    def invoke(
+        self,
+        input: str,
+        config: RunnableConfig | None = None,
+        attachments: list = None,
+        *args,
+        **kwargs,
+    ) -> ChainOutput:
         ai_message = None
         ai_message_metadata = {}
         callback = self.adapter.callback_handler
@@ -145,6 +152,10 @@ class LLMChat(RunnableSerializable[str, ChainOutput]):
         experiment_tag = configurable.get("experiment_tag")
 
         try:
+            if attachments:
+                input = self._format_multimodal_input(
+                    input=input, attachments=attachments, session_id=self.adapter.session.id
+                )
             if include_conversation_history:
                 self._populate_memory(input)
 
@@ -169,6 +180,21 @@ class LLMChat(RunnableSerializable[str, ChainOutput]):
             )
 
         return result
+
+    def _format_multimodal_input(self, input: str, attachments: list, session_id: int) -> list[dict]:
+        parts = [{"type": "text", "text": input}]
+        for att in attachments:
+            download_url = att.download_link
+            mime_type = att.content_type or ""
+            parts.append(
+                {
+                    "type": "image" if mime_type.startswith("image/") else "file",
+                    "source_type": "url",
+                    "url": download_url,
+                    "mime_type": mime_type,
+                }
+            )
+        return parts
 
     def _get_input(self, input: str):
         return {self.input_key: self.adapter.format_input(input)}
