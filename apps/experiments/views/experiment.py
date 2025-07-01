@@ -33,8 +33,6 @@ from django.views.generic.edit import FormView
 from django_tables2 import SingleTableView
 from field_audit.models import AuditAction
 from waffle import flag_is_active
-from waffle.models import CACHE_EMPTY
-from waffle.utils import get_cache, keyfmt
 
 from apps.analysis.const import LANGUAGE_CHOICES
 from apps.annotations.models import Tag
@@ -104,8 +102,6 @@ from apps.service_providers.utils import get_llm_provider_choices
 from apps.teams.decorators import login_and_team_required, team_required
 from apps.teams.mixins import LoginAndTeamRequiredMixin
 from apps.utils.base_experiment_table_view import BaseExperimentTableView
-
-AVAILABLE_LANGUAGES_CACHE_KEY = "available_languages_chat:%s"
 
 
 @login_and_team_required
@@ -1225,41 +1221,12 @@ def _experiment_chat_ui(request, embedded=False):
     )
 
 
-def _get_available_languages_for_chat(chat_id, clear_cache=False):
-    cache_key = keyfmt(AVAILABLE_LANGUAGES_CACHE_KEY, chat_id)
-    cache = None
-    try:
-        cache = get_cache()
-        if clear_cache:
-            cache.delete(cache_key)
-        cached = cache.get(cache_key)
-        if cached == CACHE_EMPTY:
-            return []
-        if cached:
-            return cached
-    except Exception as e:
-        logging.warning("Cache operation failed for chat %s: %s", chat_id, str(e))
-    try:
-        translations_data = (
-            ChatMessage.objects.filter(chat_id=chat_id)
-            .exclude(translations__isnull=True)
-            .exclude(translations__exact={})
-            .values_list("translations", flat=True)
-        )
-        available_language_codes = {key for translation_dict in translations_data for key in translation_dict}
-        available_languages = [
-            choice for choice in LANGUAGE_CHOICES if choice[0] == "" or choice[0] in available_language_codes
-        ]
-        if cache is not None:
-            try:
-                cache.add(cache_key, available_languages or CACHE_EMPTY)
-            except Exception as cache_error:
-                logging.warning("Failed to cache languages for chat %s: %s", chat_id, str(cache_error))
-        return available_languages
-
-    except Exception as e:
-        logging.error("Failed to get available languages for chat %s: %s", chat_id, str(e))
-        return []
+def _get_available_languages_for_chat(session):
+    available_language_codes = session.chat.translated_languages
+    available_languages = [
+        choice for choice in LANGUAGE_CHOICES if choice[0] == "" or choice[0] in available_language_codes
+    ]
+    return available_languages
 
 
 @experiment_session_view()
@@ -1274,7 +1241,7 @@ def experiment_session_messages_view(request, team_slug: str, experiment_id: uui
     show_original_translation = request.GET.get("show_original_translation") == "on"
     page_size = 100
     messages_queryset = ChatMessage.objects.filter(chat=session.chat).all().order_by("created_at")
-    available_languages = _get_available_languages_for_chat(session.chat.id)
+    available_languages = _get_available_languages_for_chat(session)
     has_missing_translations = False
     translate_form = TranslateMessagesForm(team=request.team)
     default_message = "(message generated after last translation)"
