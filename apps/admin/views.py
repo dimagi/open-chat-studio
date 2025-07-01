@@ -144,6 +144,10 @@ def flag_detail(request, flag_id):
         "-event_date"
     )[:50]  # Last 50 changes
 
+    audit_events = AuditEvent.objects.filter(object_class_path="apps.teams.models.Flag", object_pk=flag.pk).order_by(
+        "-event_date"
+    )[:50]  # Last 50 changes
+
     return TemplateResponse(
         request,
         "admin/flags/detail.html",
@@ -236,7 +240,7 @@ def update_flag(request, flag_id):
 
         return JsonResponse({"success": True})
     except ValidationError as e:
-        return JsonResponse({"error": str(e)}, status=400)
+        return JsonResponse({"error": e.messages}, status=400)
     except Exception:
         logger.exception("Failed to update flag")
         return JsonResponse({"error": "Failed to update flag"}, status=500)
