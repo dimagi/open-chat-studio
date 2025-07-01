@@ -54,7 +54,6 @@ class CreateEvaluation(LoginAndTeamRequiredMixin, CreateView, PermissionRequired
     extra_context = {
         "title": "Create Evaluation",
         "button_text": "Create",
-        # "active_tab": "tags",
     }
 
     def get_context_data(self, **kwargs):

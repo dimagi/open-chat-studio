@@ -27,7 +27,11 @@ class Evaluator(BaseTeamModel):
     )  # This is different for each evaluator. Usage is similar to how we define Nodes in pipelines
 
     def __str__(self):
-        return f"{self.name} ({self.type})"
+        try:
+            label = self.evaluator.model_config["evaluator_schema"].label
+        except KeyError:
+            label = self.type
+        return f"{self.name} ({label})"
 
     @cached_property
     def evaluator(self):

@@ -19,7 +19,7 @@ class EvaluationConfigForm(forms.ModelForm):
         model = EvaluationConfig
         fields = ("name", "dataset", "evaluators")
         widgets = {
-            "evaluators": forms.MultipleHiddenInput(),
+            "evaluators": forms.CheckboxSelectMultiple(),
         }
 
     def __init__(self, team, *args, **kwargs):
