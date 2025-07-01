@@ -209,7 +209,7 @@ class EvaluationRun(BaseTeamModel):
         return reverse("evaluations:evaluation_results_home", args=[self.team.slug, self.config_id, self.pk])
 
     def get_table_data(self):
-        results = self.results.all()
+        results = self.results.select_related("message", "evaluator").all()
         table_by_message = defaultdict(dict)
         for result in results:
             table_by_message[result.message.id].update(

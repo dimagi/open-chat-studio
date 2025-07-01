@@ -18,7 +18,11 @@ def run_evaluation_task(self, evaluation_run_id):
     progress_recorder = ProgressRecorder(self)
 
     try:
-        evaluation_run = EvaluationRun.objects.select_related("config", "team").get(id=evaluation_run_id)
+        evaluation_run = (
+            EvaluationRun.objects.select_related("config", "team")
+            .prefetch_related("config__evaluators", "config__dataset__messages")
+            .get(id=evaluation_run_id)
+        )
 
         evaluation_run.status = EvaluationRunStatus.PROCESSING
         evaluation_run.save(update_fields=["status"])
