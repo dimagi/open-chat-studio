@@ -1315,9 +1315,11 @@ function highlightAutoCompleteVars(autocomplete_vars_list: string[]) {
           const varName = match[1];
           const from = match.index;
           const to = from + match[0].length;
-
+          const isValidVar = autocomplete_vars_list.some(
+            v => varName === v || varName.startsWith(v + ".") || varName.startsWith(v + "[")
+        );
           const deco = Decoration.mark({
-            class: autocomplete_vars_list.includes(varName)
+            class: isValidVar
               ? "autocomplete-var-valid"
               : "autocomplete-var-invalid",
           });
