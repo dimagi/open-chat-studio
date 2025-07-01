@@ -112,6 +112,13 @@ class EvaluationDatasetForm(forms.ModelForm):
         super().__init__(*args, **kwargs)
         self.team = team
 
+    def clean_name(self):
+        name = self.cleaned_data.get("name")
+        if name and EvaluationDataset.objects.filter(name=name, team=self.team).exists():
+            raise forms.ValidationError("A dataset with this name already exists in your team.")
+
+        return name
+
     def clean(self):
         cleaned_data = super().clean()
         mode = cleaned_data.get("mode")
@@ -220,3 +227,15 @@ class EvaluationDatasetEditForm(forms.ModelForm):
     def __init__(self, team, *args, **kwargs):
         super().__init__(*args, **kwargs)
         self.team = team
+
+    def clean_name(self):
+        name = self.cleaned_data.get("name")
+        if name:
+            duplicate_query = EvaluationDataset.objects.filter(name=name, team=self.team)
+            if self.instance.pk:
+                duplicate_query = duplicate_query.exclude(pk=self.instance.pk)
+
+            if duplicate_query.exists():
+                raise forms.ValidationError("A dataset with this name already exists in your team.")
+
+        return name

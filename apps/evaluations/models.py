@@ -156,6 +156,9 @@ class EvaluationDataset(BaseTeamModel):
     def get_absolute_url(self):
         return reverse("evaluations:dataset_edit", args=[self.team.slug, self.id])
 
+    class Meta:
+        unique_together = ("name", "team")
+
 
 class EvaluationConfig(BaseTeamModel):
     name = models.CharField(max_length=255)
