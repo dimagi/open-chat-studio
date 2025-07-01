@@ -35,10 +35,7 @@ class Evaluator(BaseTeamModel):
         return getattr(module, self.type)
 
     def run(self, message: EvaluationMessage) -> EvaluatorResult:
-        try:
-            return self.evaluator(**self.params).run(message)
-        except:
-            raise  # TODO
+        return self.evaluator(**self.params).run(message)
 
     def get_absolute_url(self):
         return reverse("evaluations:evaluator_edit", args=[self.team.slug, self.id])
