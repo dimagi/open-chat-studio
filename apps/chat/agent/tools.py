@@ -72,9 +72,10 @@ class CustomBaseTool(BaseTool):
             logging.exception(e)
             return "Something went wrong"
 
+    @async_to_sync
     async def _arun(self, *args, **kwargs) -> str:
         """Use the tool asynchronously."""
-        raise NotImplementedError("custom_search does not support async")
+        return self._run(*args, **kwargs)
 
     def action(self, *args, **kwargs):
         raise Exception("Not implemented")
@@ -387,7 +388,7 @@ def get_node_tools(
         tool_names.append(AgentTools.ATTACH_MEDIA)
     tools = get_tool_instances(tool_names, experiment_session, tool_callbacks)
     tools.extend(get_custom_action_tools(node))
-    tools.extend(get_mcp_tools())
+    # tools.extend(get_mcp_tools())
     return tools
 
 
