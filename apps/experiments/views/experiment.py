@@ -1309,30 +1309,28 @@ def translate_messages_view(request, team_slug: str, experiment_id: uuid.UUID, s
         return redirect_to_messages_view(request, session)
     try:
         provider_id, model_id = provider_model.split(":", 1)
-        llm_provider = LlmProvider.objects.get(id=provider_id, team=request.team)
-        llm_provider_model = LlmProviderModel.objects.get(id=model_id)
+
+        try:
+            llm_provider = LlmProvider.objects.get(id=provider_id, team=request.team)
+            llm_provider_model = LlmProviderModel.objects.get(id=model_id)
+        except (LlmProvider.DoesNotExist, LlmProviderModel.DoesNotExist):
+            messages.error(request, "Selected provider or model not found.")
+            return redirect_to_messages_view(request, session)
 
         messages_to_translate = ChatMessage.objects.filter(chat=session.chat).exclude(
             **{f"translations__{language}__isnull": False}
         )
-
         if not messages_to_translate.exists():
             messages.info(request, "All messages already have translations for this language.")
             return redirect_to_messages_view(request, session)
-
         translate_messages_with_llm(
             messages=list(messages_to_translate),
             target_language=language,
             llm_provider=llm_provider,
             llm_provider_model=llm_provider_model,
         )
-    except ValueError:
-        messages.error(request, "Invalid provider model format.")
-        return redirect_to_messages_view(request, session)
-    except (LlmProvider.DoesNotExist, LlmProviderModel.DoesNotExist):
-        messages.error(request, "Selected provider or model not found.")
-        return redirect_to_messages_view(request, session)
     except Exception as e:
+        logging.exception("Error translating messages")
         messages.error(request, f"Translation failed: {str(e)}")
         return redirect_to_messages_view(request, session)
 
