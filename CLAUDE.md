@@ -236,6 +236,18 @@ Key settings in `.env` file such as database connection strings, credentials for
 - **Templates**: Django templates with HTMX and Alpine.js for interactivity
 - **URLs**: App-specific URL configurations
 
+### UI/Frontend Guidelines
+- **Design System**: Use DaisyUI components and styling as the primary UI framework
+- **Fallback Styling**: Use TailwindCSS for custom styling when DaisyUI components don't meet requirements
+- **Theme Support**: All UI components must support both light and dark modes
+- **Component Priority**: Always prefer DaisyUI widgets over custom implementations
+
+### Git Usage Guidelines
+- **Logical Commits**: Break work into logical chunks and commit after completing each coherent piece of functionality
+- **Commit Messages**: Write concise commit messages that describe the change's purpose, not an exhaustive list of modifications
+- **Commit Frequency**: Commit regularly to create a clear development history and enable easy rollbacks
+- **Message Format**: Use imperative mood (e.g., "Add user authentication" not "Added user authentication")
+
 ## Development Patterns
 
 ### Model Architecture Patterns
