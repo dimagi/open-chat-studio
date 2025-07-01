@@ -14,7 +14,6 @@ from pytz.exceptions import UnknownTimeZoneError
 from apps.chat.models import ChatMessage, ChatMessageType
 from apps.events import actions
 from apps.events.const import TOTAL_FAILURES
-from apps.events.tasks import retry_scheduled_message
 from apps.experiments.models import Experiment, ExperimentSession
 from apps.experiments.versioning import VersionDetails, VersionField, VersionsMixin, VersionsObjectManagerMixin
 from apps.service_providers.tracing import TraceInfo
@@ -419,6 +418,8 @@ class ScheduledMessage(BaseTeamModel):
 
     def safe_trigger(self, attempt_number=1):
         """Wraps _trigger with attempt tracking and retry"""
+        from apps.events.tasks import retry_scheduled_message
+
         trigger_number = self.total_triggers
         trace_info = TraceInfo(
             name="scheduled message",
@@ -440,7 +441,7 @@ class ScheduledMessage(BaseTeamModel):
             )
 
         except Exception as e:
-            logger.exception(f"ScheduledMessage {self.id} failed: {e}")
+            logger.exception(f"An error occurred while trying to send scheduled message {self.id}. Error: {e}")
             ScheduledMessageAttempt.objects.create(
                 scheduled_message=self,
                 trigger_number=trigger_number,
@@ -451,7 +452,7 @@ class ScheduledMessage(BaseTeamModel):
             )
             if attempt_number < 3:
                 backoff_seconds = 2 ** (attempt_number - 1)
-                retry_scheduled_message().apply_async(args=[self.id, attempt_number + 1], countdown=backoff_seconds)
+                retry_scheduled_message.apply_async(args=[self.id, attempt_number + 1], countdown=backoff_seconds)
 
     def _trigger(self, trace_info=None):
         experiment_session = self.participant.get_latest_session(experiment=self.experiment)
