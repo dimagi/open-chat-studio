@@ -1,5 +1,6 @@
 {% load json_tags %}
 {% load chat_tags %}
+{% load form_tags %}
 {% load waffle_tags %}
 {% load pagination_tags %}
 
@@ -84,15 +85,7 @@
                       {% endfor %}</strong>
                     </p>
 
-                    <div class="form-control w-full mb-4">
-                      {{ translate_form.provider_model.label_tag }}
-                      {{ translate_form.provider_model }}
-                      {% if translate_form.provider_model.help_text %}
-                        <label class="label">
-                          <span class="label-text-alt">{{ translate_form.provider_model.help_text }}</span>
-                        </label>
-                      {% endif %}
-                    </div>
+                    {% render_form_fields translate_form %}
                     <p class="pb-4">This action may take a few moments to complete.</p>
                     <div class="modal-action">
                       <button
