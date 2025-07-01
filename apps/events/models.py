@@ -14,6 +14,7 @@ from pytz.exceptions import UnknownTimeZoneError
 from apps.chat.models import ChatMessage, ChatMessageType
 from apps.events import actions
 from apps.events.const import TOTAL_FAILURES
+from apps.events.tasks import retry_scheduled_message
 from apps.experiments.models import Experiment, ExperimentSession
 from apps.experiments.versioning import VersionDetails, VersionField, VersionsMixin, VersionsObjectManagerMixin
 from apps.service_providers.tracing import TraceInfo
@@ -416,26 +417,55 @@ class ScheduledMessage(BaseTeamModel):
         inputs = [name, experiment_id, participant_id]
         return get_next_unique_id(ScheduledMessage, inputs, "external_id", length=5, model_instance=instance)
 
-    def safe_trigger(self):
-        """This wraps a call to the _trigger method in a try-catch block"""
-        try:
-            self._trigger()
-        except Exception as e:
-            logger.exception(f"An error occurred while trying to send scheduled message {self.id}. Error: {e}")
-
-    def _trigger(self):
-        experiment_session = self.participant.get_latest_session(experiment=self.experiment)
-        if not experiment_session:
-            # Schedules probably created by the API
-            return
-
+    def safe_trigger(self, attempt_number=1):
+        """Wraps _trigger with attempt tracking and retry"""
+        trigger_number = self.total_triggers
         trace_info = TraceInfo(
             name="scheduled message",
             metadata={
                 "schedule_id": self.external_id,
-                "trigger_number": self.total_triggers,
+                "trigger_number": trigger_number,
             },
         )
+        trace_info_data = trace_info.as_dict()
+
+        try:
+            self._trigger(trace_info)
+            ScheduledMessageAttempt.objects.create(
+                scheduled_message=self,
+                trigger_number=trigger_number,
+                attempt_number=attempt_number,
+                attempt_result=EventLogStatusChoices.SUCCESS,
+                trace_info=trace_info_data,
+            )
+
+        except Exception as e:
+            logger.exception(f"ScheduledMessage {self.id} failed: {e}")
+            ScheduledMessageAttempt.objects.create(
+                scheduled_message=self,
+                trigger_number=trigger_number,
+                attempt_number=attempt_number,
+                attempt_result=EventLogStatusChoices.FAILURE,
+                log_message=str(e),
+                trace_info=trace_info_data,
+            )
+            if attempt_number < 3:
+                backoff_seconds = 2 ** (attempt_number - 1)
+                retry_scheduled_message().apply_async(args=[self.id, attempt_number + 1], countdown=backoff_seconds)
+
+    def _trigger(self, trace_info=None):
+        experiment_session = self.participant.get_latest_session(experiment=self.experiment)
+        if not experiment_session:
+            # Schedules probably created by the API
+            return
+        if trace_info is None:
+            trace_info = TraceInfo(
+                name="scheduled message",
+                metadata={
+                    "schedule_id": self.external_id,
+                    "trigger_number": self.total_triggers,
+                },
+            )
         experiment_session.ad_hoc_bot_message(
             self.params["prompt_text"],
             trace_info,
@@ -596,3 +626,20 @@ class ScheduledMessage(BaseTeamModel):
             "is_complete": self.is_complete,
             "is_cancelled": self.is_cancelled,
         }
+
+
+class ScheduledMessageAttempt(models.Model):
+    scheduled_message = models.ForeignKey(
+        "ScheduledMessage",
+        on_delete=models.CASCADE,
+        related_name="attempts",
+    )
+    trigger_number = models.IntegerField()
+    attempt_number = models.IntegerField()
+    attempt_result = models.CharField(max_length=10, choices=EventLogStatusChoices.choices)
+    log_message = models.TextField(blank=True, null=True)
+    trace_info = models.JSONField(blank=True, null=True)
+    attempted_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        unique_together = ("scheduled_message", "trigger_number", "attempt_number")
