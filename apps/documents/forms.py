@@ -16,6 +16,7 @@ class CollectionForm(forms.ModelForm):
             "llm_provider": "The provider whose embedding model will be used for indexing",
             "embedding_provider_model": "The model used to create embeddings",
         }
+        widgets = {"is_index": forms.HiddenInput()}
 
     def __init__(self, request, *args, **kwargs):
         super().__init__(*args, **kwargs)
