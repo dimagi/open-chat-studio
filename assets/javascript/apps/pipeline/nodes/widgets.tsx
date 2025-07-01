@@ -1123,8 +1123,18 @@ export function TextEditorWidget(props: WidgetParams) {
   );
 };
 
-  const openModal = () =>
+  const blockEvents = (e: Event) => {
+    e.stopPropagation();
+    e.preventDefault();
+  };
+  const openModal = () => {
     (document.getElementById(modalId) as HTMLDialogElement)?.showModal();
+    document.body.style.overflow = "hidden";
+    document.body.style.touchAction = "none";
+    document.body.style.pointerEvents = "none";
+    window.removeEventListener("pointermove", blockEvents, true);
+    window.removeEventListener("mousedown", blockEvents, true);
+    }
 
   useEffect(() => {
     const updateTheme = () =>
@@ -1134,6 +1144,19 @@ export function TextEditorWidget(props: WidgetParams) {
     observer.observe(document.body, { attributes: true });
     return () => observer.disconnect();
   }, []);
+
+  useEffect(() => {
+    const modalEl = document.getElementById(modalId) as HTMLDialogElement;
+    const handleClose = () => {
+      document.body.style.overflow = "";
+      document.body.style.touchAction = "";
+      document.body.style.pointerEvents = "";
+      window.removeEventListener("pointermove", blockEvents, true);
+      window.removeEventListener("mousedown", blockEvents, true);
+    };
+    modalEl?.addEventListener("close", handleClose);
+    return () => modalEl?.removeEventListener("close", handleClose);
+  }, [modalId]);
 
   const label = (
     <>
