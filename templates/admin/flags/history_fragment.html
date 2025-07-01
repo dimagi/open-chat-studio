@@ -38,7 +38,11 @@
                   {% for field_name, field_data in event.delta.items %}
                     <div class="text-xs">
                       <span class="font-medium">{{ field_name|capfirst }}:</span>
-                      {% if field_data.old != field_data.new %}
+                      {% if field_data.add %}
+                        + <span class="text-green-600">{{ field_data.add|join:", " }}</span>
+                      {% elif field_data.remove %}
+                        - <span class="text-red-600">{{ field_data.remove|join:", "  }}</span>
+                      {% elif field_data.old != field_data.new %}
                         <span class="text-red-600">{{ field_data.old|default_if_none:"None" }}</span>
                         →
                         <span class="text-green-600">{{ field_data.new|default_if_none:"None" }}</span>

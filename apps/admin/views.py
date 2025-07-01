@@ -168,6 +168,39 @@ def flag_history(request, flag_id):
         "-event_date"
     )[:50]  # Last 50 changes
 
+    # Collect all team and user IDs from audit event deltas
+    team_ids = set()
+    user_ids = set()
+
+    def _collect_ids(field, delta, id_set):
+        if field in delta:
+            for action in ["add", "remove"]:
+                if action in delta[field]:
+                    id_set.update(delta[field][action])
+
+    for event in audit_events:
+        if event.delta:
+            _collect_ids("teams", event.delta, team_ids)
+            _collect_ids("users", event.delta, user_ids)
+
+    # Bulk load teams and users to avoid N+1 queries
+    teams_map = {team.id: team.name for team in Team.objects.filter(id__in=team_ids)}
+    users_map = {user.id: user.get_display_name() for user in User.objects.filter(id__in=user_ids)}
+
+    # Transform audit event deltas to include names instead of IDs
+    def _update_delta(field, delta, display_map, default_template):
+        if field in delta:
+            for action in ["add", "remove"]:
+                if action in delta[field]:
+                    delta[field][action] = [
+                        display_map.get(obj_id, default_template.format(obj_id)) for obj_id in delta[field][action]
+                    ]
+
+    for event in audit_events:
+        if event.delta:
+            _update_delta("teams", event.delta, teams_map, "Team {}")
+            _update_delta("users", event.delta, users_map, "User {}")
+
     return TemplateResponse(
         request,
         "admin/flags/history_fragment.html",
