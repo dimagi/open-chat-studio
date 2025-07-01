@@ -767,11 +767,11 @@ wheels = [
 
 [[package]]
 name = "django-field-audit"
-version = "1.2.9"
+version = "1.3.0"
 source = { registry = "https://pypi.org/simple" }
-sdist = { url = "https://files.pythonhosted.org/packages/cb/46/e91cbd02932f1e83baf2256a82bb63d034bfd695787586fdf0a3c389cebd/django_field_audit-1.2.9.tar.gz", hash = "sha256:b91d0979b1b6912c3c7e11ecb1a44d93ecd03af4e1436f24292778f8d1b7a3fc", size = 33771, upload-time = "2025-02-21T14:34:03.843Z" }
+sdist = { url = "https://files.pythonhosted.org/packages/ce/74/2406310081cce35311905c05897af51a18f5434eda2b0fe257038e8a546c/django_field_audit-1.3.0.tar.gz", hash = "sha256:695be7fa38b8d15cc34ca2bd1f7422aeed1a32a50eb7adb8b6c60fcdeb301a97", size = 37298, upload-time = "2025-07-01T12:26:38.934Z" }
 wheels = [
-    { url = "https://files.pythonhosted.org/packages/dd/e1/d4a20a67c9ae634924e443c9d6579ca29a8ebe1b6dc291f0c172a2149108/django_field_audit-1.2.9-py2.py3-none-any.whl", hash = "sha256:84be69412db5d53c53ce1690083d43644da327ba951866aac5d0f859fb16a453", size = 23609, upload-time = "2025-02-21T14:34:00.621Z" },
+    { url = "https://files.pythonhosted.org/packages/c4/59/57fde008cab3aa7abe576c67d61f790fe4e53d45f7eca4cbd6e1d6de8d60/django_field_audit-1.3.0-py2.py3-none-any.whl", hash = "sha256:0bb0a03dbbdc45ea768e41ad402ed524abaecea82e9d8d2b9766027a48d4476d", size = 25762, upload-time = "2025-07-01T12:26:37.635Z" },
 ]
 
 [[package]]
