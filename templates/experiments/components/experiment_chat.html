@@ -102,7 +102,7 @@
                         hx-vals='{"language": "{{ language }}"}'
                         hx-include="[name='search'], [name='language'], [name='show_original_translation'], #translation-provider-model"
                         hx-target="#messages-container"
-                        hx-indicator=".htmx-indicator"
+                        hx-indicator="#chat-message-untranslated"
                         onclick="document.getElementById('translate-messages-modal').checked = false;"
                       >Translate Messages
                       </button>
@@ -157,12 +157,12 @@
                       <div class="message-contents">
                         {% if message.translation %}
                           {% if message.translation == default_message %}
-                            <div class="chat-message-untranslated">
-                              <div class="htmx-indicator htmx-indicator-{{ message.id }}">
+                            <div id="chat-message-untranslated">
+                              <div class="htmx-show">
                                 <span class="loading loading-spinner loading-sm"></span>
                                 <span class="ml-2">Translating...</span>
                               </div>
-                              <p>{{ message.translation|render_markdown }}</p>
+                              <div class="htmx-hide"><p>{{ message.translation|render_markdown }}</p></div>
                             </div>
                           {% else %}
                             <p>{{ message.translation|render_markdown }}</p>
@@ -178,7 +178,7 @@
                       {% endif %}
                       {% if message.translation == default_message %}
                         {# hidden when loading spinners are shown #}
-                        <div class="pg-text-muted chat-message-untranslated">
+                        <div id="chat-message-untranslated" class="pg-text-muted htmx-hide">
                           <p><strong>Original Message: </strong>{{ message.content|render_markdown }}</p>
                         </div>
                       {% endif %}
@@ -287,19 +287,3 @@
     </div>
   </div>
 </div>
-
-
-<script>
-  document.body.addEventListener('htmx:beforeRequest', function (evt) {
-    const sourceEl = evt.detail.elt;
-    if (sourceEl?.dataset?.action === 'translate-messages') { //ensure it's only for this request
-      document.querySelectorAll('.chat-message-untranslated .htmx-indicator').forEach(indicator => {
-        indicator.style.display = 'flex';
-        indicator.style.alignItems = 'center';
-      });
-      document.querySelectorAll('.chat-message-untranslated p').forEach(p => {
-        p.classList.add('hidden');
-      });
-    }
-  });
-</script>
