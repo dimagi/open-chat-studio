@@ -230,7 +230,7 @@ def update_flag(request, flag_id):
 
         return JsonResponse({"success": True})
     except ValidationError as e:
-        return JsonResponse({"error": str(e)}, status=400)
+        return JsonResponse({"error": e.messages}, status=400)
     except Exception:
         logger.exception("Failed to update flag")
         return JsonResponse({"error": "Failed to update flag"}, status=500)
