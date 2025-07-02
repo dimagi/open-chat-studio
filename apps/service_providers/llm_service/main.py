@@ -158,7 +158,7 @@ class LlmService(pydantic.BaseModel):
 
         return output or ""
 
-    def get_cited_files_parser(self, using_ocs_search_tool: bool = False):
+    def get_cited_files_parser(self):
         return self._default_cited_files_parser
 
     def _default_cited_files_parser(self, token: str | dict) -> list[File]:
