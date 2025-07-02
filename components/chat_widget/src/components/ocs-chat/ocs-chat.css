@@ -50,10 +50,7 @@
 
 /* Auto-resize textarea */
 textarea {
-  min-height: 40px;
-  max-height: 120px;
-  resize: none;
-  overflow-y: auto;
+  @apply min-h-10 max-h-32 resize-none overflow-y-auto;
 }
 
 /* Message bubbles responsive design */
@@ -65,32 +62,17 @@ textarea {
 
 /* Loading spinner */
 .loading-spinner {
-  width: 20px;
-  height: 20px;
-  border: 2px solid #f3f3f3;
-  border-top: 2px solid #3498db;
-  border-radius: 50%;
-  animation: spin 1s linear infinite;
+  @apply w-5 h-5 border-2 border-gray-200 border-t-blue-500 rounded-full animate-spin;
 }
 
-@keyframes spin {
-  0% { transform: rotate(0deg); }
-  100% { transform: rotate(360deg); }
-}
 
 /* Typing indicator */
 .typing-indicator {
-  display: flex;
-  align-items: center;
-  gap: 2px;
+  @apply flex items-center gap-0.5;
 }
 
 .typing-indicator span {
-  display: inline-block;
-  width: 6px;
-  height: 6px;
-  border-radius: 50%;
-  background-color: #9ca3af;
+  @apply inline-block w-1.5 h-1.5 rounded-full bg-gray-400;
   animation: typing 1.4s ease-in-out infinite;
 }
 
@@ -112,26 +94,24 @@ textarea {
     opacity: 0.5;
   }
   30% {
-    transform: translateY(-10px);
+    transform: translateY(-5px);
     opacity: 1;
   }
 }
 
 /* Custom scrollbar for message area */
 .overflow-y-auto::-webkit-scrollbar {
-  width: 6px;
+  @apply w-1.5;
 }
 
 .overflow-y-auto::-webkit-scrollbar-track {
-  background: #f1f1f1;
-  border-radius: 3px;
+  @apply bg-gray-100 rounded;
 }
 
 .overflow-y-auto::-webkit-scrollbar-thumb {
-  background: #c1c1c1;
-  border-radius: 3px;
+  @apply bg-gray-300 rounded;
 }
 
 .overflow-y-auto::-webkit-scrollbar-thumb:hover {
-  background: #a8a8a8;
+  @apply bg-gray-400;
 }
