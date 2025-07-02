@@ -5,7 +5,6 @@ import logging
 from functools import wraps
 
 from django.conf import settings
-from django.contrib.auth.models import AnonymousUser
 from django.http import HttpResponse
 from django.utils.translation import gettext as _
 from rest_framework import exceptions
@@ -19,11 +18,6 @@ from apps.teams.utils import set_current_team
 from .models import UserAPIKey
 
 logger = logging.getLogger("ocs.api")
-
-
-class AnonymousAuthentication(BaseAuthentication):
-    def authenticate(self, request):
-        return AnonymousUser(), None
 
 
 class BaseKeyAuthentication(BaseAuthentication):

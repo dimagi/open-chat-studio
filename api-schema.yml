@@ -23,12 +23,21 @@ paths:
         required: true
       tags:
       - Chat
+      security:
+      - apiKeyAuth: []
+      - tokenAuth: []
       responses:
         '200':
           content:
             application/json:
               schema:
                 $ref: '#/components/schemas/ChatTaskPoll'
+          description: ''
+        '500':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ChatTaskPollError'
           description: ''
   /api/chat/{session_id}/message/:
     post:
@@ -53,9 +62,11 @@ paths:
               SendMessage:
                 value:
                   message: Hello, how can you help me?
-                  attachments: []
                 summary: Send a message to the bot
         required: true
+      security:
+      - apiKeyAuth: []
+      - tokenAuth: []
       responses:
         '202':
           content:
@@ -89,6 +100,9 @@ paths:
         description: Only return messages after this timestamp
       tags:
       - Chat
+      security:
+      - apiKeyAuth: []
+      - tokenAuth: []
       responses:
         '200':
           content:
@@ -112,12 +126,14 @@ paths:
               StartChatSession:
                 value:
                   experiment_id: 123e4567-e89b-12d3-a456-426614174000
-                  participant_id: user123
                   session_data:
                     source: widget
                     page_url: https://example.com
                 summary: Start a new chat session for an experiment
         required: true
+      security:
+      - apiKeyAuth: []
+      - tokenAuth: []
       responses:
         '201':
           content:
@@ -128,7 +144,6 @@ paths:
                 StartChatSession:
                   value:
                     experiment_id: 123e4567-e89b-12d3-a456-426614174000
-                    participant_id: user123
                     session_data:
                       source: widget
                       page_url: https://example.com
@@ -746,7 +761,7 @@ components:
           description: The ID of the task that is processing the message
         status:
           allOf:
-          - $ref: '#/components/schemas/StatusEnum'
+          - $ref: '#/components/schemas/ChatSendMessageResponseStatusEnum'
           title: Processing status
         error:
           type: string
@@ -754,30 +769,42 @@ components:
       required:
       - status
       - task_id
+    ChatSendMessageResponseStatusEnum:
+      enum:
+      - processing
+      - completed
+      - error
+      type: string
+      description: |-
+        * `processing` - Processing
+        * `completed` - Completed
+        * `error` - Error
     ChatStartSessionRequest:
       type: object
       properties:
-        experiment_id:
+        chatbot_id:
           type: string
           format: uuid
         participant_id:
           type: string
           description: Optional participant identifier. If not provided, an anonymous
-            participant will be created.
+            participant will be created. This field will be ignored if the request
+            is not authenticated.
         session_data:
           type: object
           additionalProperties: {}
           title: Initial session data
-          description: Optional initial state data for the session
+          description: Optional initial state data for the session. This field will
+            be ignored if the request is not authenticated.
       required:
-      - experiment_id
+      - chatbot_id
     ChatStartSessionResponse:
       type: object
       properties:
         session_id:
           type: string
           format: uuid
-        experiment:
+        chatbot:
           allOf:
           - $ref: '#/components/schemas/Experiment'
           readOnly: true
@@ -789,7 +816,7 @@ components:
           type: string
           readOnly: true
       required:
-      - experiment
+      - chatbot
       - participant
       - seed_message_task_id
       - session_id
@@ -798,8 +825,21 @@ components:
       properties:
         message:
           $ref: '#/components/schemas/Message'
+        status:
+          $ref: '#/components/schemas/ChatTaskPollStatusEnum'
+    ChatTaskPollError:
+      type: object
+      properties:
         error:
           type: string
+    ChatTaskPollStatusEnum:
+      enum:
+      - processing
+      - complete
+      type: string
+      description: |-
+        * `processing` - processing
+        * `complete` - complete
     CreateChatCompletionRequest:
       type: object
       properties:
@@ -1186,16 +1226,6 @@ components:
       description: |-
         * `active` - Active
         * `ended` - Ended
-    StatusEnum:
-      enum:
-      - processing
-      - completed
-      - error
-      type: string
-      description: |-
-        * `processing` - Processing
-        * `completed` - Completed
-        * `error` - Error
     Team:
       type: object
       properties:
@@ -1264,3 +1294,7 @@ components:
     tokenAuth:
       type: http
       scheme: bearer
+tags:
+- name: Chat
+  description: "\n                The Chat API is designed to be used for integrating\
+    \ chatbots into external systems.\n            "
