@@ -1602,7 +1602,7 @@ wheels = [
 
 [[package]]
 name = "langchain-community"
-version = "0.3.24"
+version = "0.3.25"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
     { name = "aiohttp" },
@@ -1619,9 +1619,9 @@ dependencies = [
     { name = "sqlalchemy" },
     { name = "tenacity" },
 ]
-sdist = { url = "https://files.pythonhosted.org/packages/01/f6/4892d1f1cf6d3e89da6ee6cfb0eb82b908c706c58bde7df28367ee76a93f/langchain_community-0.3.24.tar.gz", hash = "sha256:62d9e8cf9aadf35182ec3925f9ec1c8e5e84fb4f199f67a01aee496d289dc264", size = 33233643, upload-time = "2025-05-12T13:26:39.222Z" }
+sdist = { url = "https://files.pythonhosted.org/packages/c0/9b/332e69933ce7d96153fe5468d5428052ae20b143fa0dba0c78eea8859f94/langchain_community-0.3.25.tar.gz", hash = "sha256:a536888a48b36184dee20df86d266827a01916397fb398af2088ab7c3dfee684", size = 33235586, upload-time = "2025-06-10T20:19:08.809Z" }
 wheels = [
-    { url = "https://files.pythonhosted.org/packages/d5/cb/582f22d74d69f4dbd41e98d361ee36922b79a245a9411383327bd4b63747/langchain_community-0.3.24-py3-none-any.whl", hash = "sha256:b6cdb376bf1c2f4d2503aca20f8f35f2d5b3d879c52848277f20ce1950e7afaf", size = 2528335, upload-time = "2025-05-12T13:26:37.375Z" },
+    { url = "https://files.pythonhosted.org/packages/5c/e1/975bcd11e86de74c10023d291879810d4eaffcfbb5d4c0d8fb6fb41b8247/langchain_community-0.3.25-py3-none-any.whl", hash = "sha256:0d7f673d463019ab1aca4e50e750048214a7772efd2c8e1d59256739b8318f97", size = 2529170, upload-time = "2025-06-10T20:19:06.775Z" },
 ]
 
 [[package]]
