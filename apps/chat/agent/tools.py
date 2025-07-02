@@ -36,7 +36,7 @@ CREATE_LINK_TEXT = """You can use this markdown link to reference it in your res
 """
 
 CHUNK_TEMPLATE = """
-## Chunk: {chunk_id}
+## Chunk
 ### File name: {file_name}, file_id={file_id}
 ### Content
 {chunk}
@@ -44,12 +44,13 @@ CHUNK_TEMPLATE = """
 
 CITATION_PROMPT = """**CRITICAL REQUIREMENT - MANDATORY CITATIONS:**
 
-You MUST cite all information using this exact format: <CIT the-file-id />
+You MUST cite all information using this exact format: <CIT file-id />
 
 **Citation Rules:**
 - Place citations immediately after each sentence or claim that references retrieved content
 - Use the specific file ID from the source document
-- Example: "The revenue increased by 15% last quarter <CIT 123 />."
+- Example: "The revenue increased by 15% last quarter <CIT 123 />.". In this example, "123" is the file ID of the
+source document.
 - NEVER provide information from retrieved files without proper citations
 
 **Response Structure:**
@@ -322,9 +323,7 @@ class SearchIndexTool(CustomBaseTool):
         Format the result from the search index into a more structured format.
         """
 
-        return CHUNK_TEMPLATE.format(
-            chunk_id=embedding.id, file_name=embedding.file.name, file_id=embedding.file_id, chunk=embedding.text
-        )
+        return CHUNK_TEMPLATE.format(file_name=embedding.file.name, file_id=embedding.file_id, chunk=embedding.text)
 
 
 def _move_datetime_to_new_weekday_and_time(date: datetime, new_weekday: int, new_hour: int, new_minute: int):

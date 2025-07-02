@@ -162,6 +162,9 @@ class LLMChat(RunnableSerializable[str, ChainOutput]):
             llm_response = self._get_output_check_cancellation(input, merged_config)
             ai_message = llm_response.text
             ai_message_metadata = self.adapter.get_output_message_metadata(llm_response.cited_files)
+            ai_message = self.adapter.add_citation_section_from_cited_files(
+                ai_message, cited_files=llm_response.cited_files
+            )
 
             result = ChainOutput(
                 output=ai_message, prompt_tokens=callback.prompt_tokens, completion_tokens=callback.completion_tokens
