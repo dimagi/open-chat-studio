@@ -249,7 +249,7 @@
         window.addEventListener('popstate', () => {
           this.setLabelFromURL();
         });
-        fetch("{% url 'participants:participant_identifier' team.slug experiment.id %}", {
+        fetch("{% if experiment.id %}{% url 'participants:participant_identifier' team.slug experiment.id %}{% else %}{% url 'participants:all_participant_identifiers' team.slug %}{% endif %}", {
           method: 'GET',
           credentials: 'same-origin',
           headers: {
