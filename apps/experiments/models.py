@@ -1689,7 +1689,8 @@ class ExperimentSession(BaseTeamModel):
         fail_silently=True,
         use_experiment: Experiment | None = None,
     ):
-        """Sends a bot message to this session and returns the trace data. The bot message will be crafted using `instruction_prompt` and
+        """Sends a bot message to this session and returns the trace data.
+        The bot message will be crafted using `instruction_prompt` and
         this session's history.
 
         Parameters:
