@@ -422,10 +422,7 @@ class ScheduledMessage(BaseTeamModel):
 
         trigger_number = self.total_triggers
         attempt = ScheduledMessageAttempt(
-            scheduled_message=self,
-            trigger_number=trigger_number,
-            attempt_number=attempt_number,
-            team=self.team
+            scheduled_message=self, trigger_number=trigger_number, attempt_number=attempt_number, team=self.team
         )
 
         try:

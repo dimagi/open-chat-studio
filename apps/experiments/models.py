@@ -1739,7 +1739,7 @@ class ExperimentSession(BaseTeamModel):
         experiment = use_experiment or self.experiment
         history_manager = ExperimentHistoryManager(session=self, experiment=experiment, trace_service=trace_service)
         bot = EventBot(self, experiment, trace_info, history_manager)
-        return bot.get_user_message(instruction_prompt, False)
+        return bot.get_user_message(instruction_prompt)
 
     def try_send_message(self, message: str):
         """Tries to send a message to this user session as the bot. Note that `message` will be send to the user

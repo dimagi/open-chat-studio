@@ -95,9 +95,3 @@ class Tracer(ABC):
 class TraceInfo:
     name: str
     metadata: dict[str, Any] = dataclasses.field(default_factory=dict)
-
-    def as_dict(self):
-        return {
-            "name": self.name,
-            "metadata": self.metadata,
-        }
