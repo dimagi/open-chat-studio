@@ -65,8 +65,9 @@ def get_response_for_webchat_task(
             experiment_session=experiment_session,
         )
         message_attachments = []
-        for file_entry in attachments:
-            message_attachments.append(Attachment.model_validate(file_entry))
+        if attachments:
+            for file_entry in attachments:
+                message_attachments.append(Attachment.model_validate(file_entry))
 
         message = BaseMessage(
             participant_id=experiment_session.participant.identifier,
@@ -83,7 +84,7 @@ def get_response_for_webchat_task(
         logger.exception(e)
         response["error"] = str(e)
     finally:
-        experiment_session.seed_task_id = None
+        experiment_session.seed_task_id = ""
         experiment_session.save(update_fields=["seed_task_id"])
 
     return response
