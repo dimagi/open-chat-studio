@@ -18,7 +18,7 @@ class Migration(migrations.Migration):
                 ('trigger_number', models.IntegerField()),
                 ('attempt_number', models.IntegerField()),
                 ('attempt_result', models.CharField(choices=[('success', 'Success'), ('failure', 'Failure')], max_length=10)),
-                ('log_message', models.TextField(blank=True, null=True)),
+                ('log_message', models.TextField(blank=True)),
                 ('trace_info', models.JSONField(blank=True, null=True)),
                 ('attempted_at', models.DateTimeField(auto_now_add=True)),
                 ('scheduled_message', models.ForeignKey(on_delete=django.db.models.deletion.CASCADE, related_name='attempts', to='events.scheduledmessage')),
