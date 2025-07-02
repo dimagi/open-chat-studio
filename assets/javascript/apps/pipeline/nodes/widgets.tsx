@@ -1315,11 +1315,19 @@ function highlightAutoCompleteVars(autocomplete_vars_list: string[]) {
 
 const autocompleteVarTheme = (isDarkMode: boolean) =>
   EditorView.theme({
-    ".cm-content .autocomplete-var-valid": {
+    ".cm-content": {
+      fontFamily:
+        'ui-sans-serif, system-ui, sans-serif, "Apple Color Emoji", "Segoe UI Emoji", "Segoe UI Symbol"',
+      backgroundColor: isDarkMode
+        ? "oklch(25.33% 0.016 252.42)"
+        : undefined,
+      color: isDarkMode ? "oklch(97.807% 0.029 256.847)" : undefined,
+    },
+    ".autocomplete-var-valid": {
       color: isDarkMode ? "#93c5fd" : "navy",
       fontWeight: "bold",
     },
-    ".cm-content .autocomplete-var-invalid": {
+    ".autocomplete-var-invalid": {
       color: isDarkMode ? "#f87171" : "red",
       fontWeight: "bold",
     },
