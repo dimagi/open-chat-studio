@@ -66,14 +66,64 @@
           {% endif %}
         {% endif %}
       </div>
+      {% if schedule.attempts %}
+        <details class="mt-2">
+          <summary class="cursor-pointer font-semibold">
+            Attempts ({{ schedule.attempts|length }})
+          </summary>
+          <div class="mt-2 border border-gray-200 rounded p-2 max-h-60 overflow-auto">
+            <table class="table-auto w-full text-sm">
+              <thead>
+                <tr>
+                  <th class="text-left p-1">Attempted At</th>
+                  <th class="text-left p-1">Trigger #</th>
+                  <th class="text-left p-1">Attempt #</th>
+                  <th class="text-left p-1">Result</th>
+                  <th class="text-left p-1">Log</th>
+                  <th class="text-left p-1">Trace</th>
+                </tr>
+              </thead>
+              <tbody>
+                {% for attempt in schedule.attempts %}
+                  <tr class="border-t border-gray-200">
+                    <td class="p-1">
+                      {{ attempt.attempted_at|date:"DATETIME_FORMAT" }}
+                    </td>
+                    <td class="p-1">{{ attempt.trigger_number }}</td>
+                    <td class="p-1">{{ attempt.attempt_number }}</td>
+                    <td class="p-1">{{ attempt.attempt_result }}</td>
+                    <td class="p-1">{{ attempt.log_message|default:"—" }}</td>
+                    <td class="p-1">
+                      {% if attempt.trace_info %}
+                            <pre class="whitespace-pre-wrap">{{ attempt.trace_info|json_script:"traceinfo" }}</pre>
+                      {% else %}
+                        —
+                      {% endif %}
+                    </td>
+                  </tr>
+                {% empty %}
+                  <tr>
+                    <td colspan="6" class="p-1">No attempts yet.</td>
+                  </tr>
+                {% endfor %}
+              </tbody>
+            </table>
+          </div>
+        </details>
+      {% endif %}
+
+          <!-- Cancel button -->
       {% if perms.experiments.change_participant %}
         <div>
-          <button class="btn btn-sm btn-ghost tooltip" data-tip="Cancel this schedule"
-                  {% if schedule.is_cancelled or schedule.is_complete %}disabled{% endif %}
-                  hx-post="{% url 'participants:cancel_schedule' request.team.slug participant_id schedule.external_id %}"
-                  hx-confirm="Are you sure you want to cancel this schedule?"
-                  hx-target="#schedule_{{ schedule.external_id }}"
-                  hx-swap="outerHTML">
+          <button
+            class="btn btn-sm btn-ghost tooltip"
+            data-tip="Cancel this schedule"
+            {% if schedule.is_cancelled or schedule.is_complete %}disabled{% endif %}
+            hx-post="{% url 'participants:cancel_schedule' request.team.slug participant_id schedule.external_id %}"
+            hx-confirm="Are you sure you want to cancel this schedule?"
+            hx-target="#schedule_{{ schedule.external_id }}"
+            hx-swap="outerHTML"
+          >
             <i class="fa-solid fa-ban"></i>
           </button>
         </div>
