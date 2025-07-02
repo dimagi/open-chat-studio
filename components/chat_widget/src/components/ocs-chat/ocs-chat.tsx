@@ -512,11 +512,11 @@ export class OcsChat {
                   {/* Typing Indicator */}
                   {this.isTyping && (
                     <div class="flex justify-start">
-                      <div class="bg-gray-200 text-gray-800 max-w-xs lg:max-w-md px-4 py-2 rounded-lg">
-                        <div class="typing-indicator">
-                          <span></span>
-                          <span></span>
-                          <span></span>
+                      <div class="bg-gray-200 text-gray-800 max-w-xs lg:max-w-md px-2 py-2 rounded-lg">
+                        <div class="flex items-center gap-0.5">
+                          <span class="inline-block w-2 h-2 rounded-full bg-gray-400 animate-bounce"></span>
+                          <span class="inline-block w-2 h-2 rounded-full bg-gray-400 animate-bounce" style={{animationDelay: '0.1s'}}></span>
+                          <span class="inline-block w-2 h-2 rounded-full bg-gray-400 animate-bounce" style={{animationDelay: '0.2s'}}></span>
                         </div>
                       </div>
                     </div>

@@ -65,40 +65,6 @@ textarea {
   @apply w-5 h-5 border-2 border-gray-200 border-t-blue-500 rounded-full animate-spin;
 }
 
-
-/* Typing indicator */
-.typing-indicator {
-  @apply flex items-center gap-0.5;
-}
-
-.typing-indicator span {
-  @apply inline-block w-1.5 h-1.5 rounded-full bg-gray-400;
-  animation: typing 1.4s ease-in-out infinite;
-}
-
-.typing-indicator span:nth-child(1) {
-  animation-delay: 0s;
-}
-
-.typing-indicator span:nth-child(2) {
-  animation-delay: 0.2s;
-}
-
-.typing-indicator span:nth-child(3) {
-  animation-delay: 0.4s;
-}
-
-@keyframes typing {
-  0%, 60%, 100% {
-    transform: translateY(0);
-    opacity: 0.5;
-  }
-  30% {
-    transform: translateY(-5px);
-    opacity: 1;
-  }
-}
-
 /* Custom scrollbar for message area */
 .overflow-y-auto::-webkit-scrollbar {
   @apply w-1.5;
