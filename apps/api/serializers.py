@@ -200,7 +200,10 @@ class ChatStartSessionRequest(serializers.Serializer):
         "This field will be ignored if the request is not authenticated.",
     )
     session_data = serializers.DictField(
-        label="Initial session data", required=False, help_text="Optional initial state data for the session"
+        label="Initial session data",
+        required=False,
+        help_text="Optional initial state data for the session. "
+        "This field will be ignored if the request is not authenticated.",
     )
 
 

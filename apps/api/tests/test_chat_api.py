@@ -52,14 +52,23 @@ def test_start_chat_session(team_with_users, api_client, experiment):
     assert response_json["participant"]["identifier"].startswith("anon:")
 
     session = ExperimentSession.objects.get(external_id=response_json["session_id"])
-    assert session.state == session_state
+    assert session.state == {}  # ignored for anonymous request
+
+
+@pytest.mark.django_db()
+def test_start_chat_session_with_session_state(team_with_users, authed_client, experiment):
+    url = reverse("api:chat:start-session")
+    data = {"chatbot_id": experiment.public_id, "session_state": {"ref": "123"}}
+    response = authed_client.post(url, data=data, format="json")
+    assert response.status_code == 201
+    session = ExperimentSession.objects.get(external_id=response.json()["session_id"])
+    assert session.state == {"ref": "123"}
 
 
 @pytest.mark.django_db()
 def test_start_chat_session_with_participant_id_without_auth(team_with_users, api_client, experiment):
     url = reverse("api:chat:start-session")
-    session_state = {"source": "widget", "page_url": "https://example.com"}
-    data = {"chatbot_id": experiment.public_id, "session_data": session_state, "participant_id": "123"}
+    data = {"chatbot_id": experiment.public_id, "participant_id": "123"}
     response = api_client.post(url, data=data, format="json")
     assert response.status_code == 201
     assert response.json()["participant"]["identifier"].startswith("anon:")

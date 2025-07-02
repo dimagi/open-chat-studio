@@ -124,7 +124,7 @@ def chat_start_session(request):
         # session_external_id
         metadata={Chat.MetadataKeys.EMBED_SOURCE: request.headers.get("referer", None)},
     )
-    if session_data:
+    if user is not None and session_data:
         session.state = session_data
         session.save(update_fields=["state"])
 
