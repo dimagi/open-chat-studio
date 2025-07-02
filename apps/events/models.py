@@ -616,7 +616,7 @@ class ScheduledMessage(BaseTeamModel):
             "is_cancelled": self.is_cancelled,
             "attempts": [
                 {
-                    "attempted_at": a.attempted_at,
+                    "updated_at": a.updated_at,
                     "trigger_number": a.trigger_number,
                     "attempt_number": a.attempt_number,
                     "attempt_result": a.attempt_result,

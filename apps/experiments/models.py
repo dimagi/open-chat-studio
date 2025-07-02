@@ -1712,7 +1712,7 @@ class ExperimentSession(BaseTeamModel):
                     metadata=trace_info.metadata,
                 ):
                     bot_message = self._bot_prompt_for_user(
-                        instruction_prompt, trace_info, use_experiment=use_experiment
+                        instruction_prompt, trace_info, use_experiment=use_experiment, trace_service=trace_service
                     )
                     self.try_send_message(message=bot_message)
                     trace_service.set_current_span_outputs({"response": bot_message})

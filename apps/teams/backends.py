@@ -53,7 +53,14 @@ CONTENT_TYPES = {
     "channels": ["experimentchannel"],
     "chat": ["chat", "chatmessage", "chatattachment"],
     "custom_actions": ["customaction", "customactionoperation"],
-    "events": ["eventaction", "statictrigger", "timeouttrigger", "eventlog", "scheduledmessage", "scheduledmessageattempt"],
+    "events": [
+        "eventaction",
+        "statictrigger",
+        "timeouttrigger",
+        "eventlog",
+        "scheduledmessage",
+        "scheduledmessageattempt",
+    ],
     "experiments": [
         "consentform",
         "experiment",

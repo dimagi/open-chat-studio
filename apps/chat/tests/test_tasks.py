@@ -14,7 +14,6 @@ from apps.service_providers.tracing import TraceInfo, TracingService
 from apps.teams.models import Team
 from apps.users.models import CustomUser
 from apps.utils.factories.experiment import ExperimentSessionFactory
-from apps.utils.factories.service_provider_factories import TraceProviderFactory
 from apps.utils.langchain import mock_llm
 
 
@@ -60,9 +59,12 @@ class TasksTest(TestCase):
         provider = TraceProvider()
         provider.get_service = Mock(return_value=MockTracer())
         self.experiment_session.experiment.trace_provider = provider
-        trace_service = TracingService.create_for_experiment(self.experiment_session.experiment)
+        trace_service = TracingService.empty()
+        trace_service.get_trace_metadata = lambda: {"trace_info": True}
         with mock_llm(responses=[expected_ping_message]):
-            response = self.experiment_session._bot_prompt_for_user("test", TraceInfo(name="Some message"), trace_service)
+            response = self.experiment_session._bot_prompt_for_user(
+                "test", TraceInfo(name="Some message"), trace_service
+            )
         messages = ChatMessage.objects.filter(chat=self.experiment_session.chat).all()
         # Only the AI message should be there
         assert len(messages) == 1
