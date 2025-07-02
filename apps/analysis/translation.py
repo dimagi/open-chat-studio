@@ -78,14 +78,11 @@ def translate_messages_with_llm(messages, target_language, llm_provider, llm_pro
                     updated_messages.append(message)
 
             if updated_messages:
-                from apps.experiments.views.experiment import _get_available_languages_for_chat
-
                 ChatMessage.objects.bulk_update(updated_messages, fields=["translations"])
                 chat = updated_messages[0].chat
                 if target_language not in chat.translated_languages:
                     chat.translated_languages.append(target_language)
                     chat.save(update_fields=["translated_languages"])
-                _get_available_languages_for_chat(chat.id, clear_cache=True)  # clear cache
 
             return messages
 
