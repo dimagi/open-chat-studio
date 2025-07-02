@@ -157,6 +157,7 @@ export class OcsChat {
 
       // Handle seed message if present
       if (data.seed_message_task_id) {
+        this.isTyping = true;  // Show typing indicator for seed message
         await this.pollTaskResponse(data.seed_message_task_id);
       }
 
@@ -184,6 +185,7 @@ export class OcsChat {
       this.messageInput = '';
       this.scrollToBottom();
 
+      // Start typing indicator - it will stay on during task polling
       this.isTyping = true;
 
       const response = await fetch(`${this.getApiBaseUrl()}/api/chat/${this.sessionId}/message/`, {
@@ -204,11 +206,11 @@ export class OcsChat {
         throw new Error(data.error || 'Failed to send message');
       }
 
-      // Poll for the response
+      // Poll for the response - typing indicator will be managed in pollTaskResponse
       await this.pollTaskResponse(data.task_id);
     } catch (error) {
       this.error = error instanceof Error ? error.message : 'Failed to send message';
-    } finally {
+      // Clear typing indicator on error
       this.isTyping = false;
     }
   }
@@ -241,7 +243,8 @@ export class OcsChat {
         if (data.status === 'complete' && data.message) {
           this.messages = [...this.messages, data.message];
           this.scrollToBottom();
-          // Task polling complete, resume message polling
+          // Task polling complete, clear typing indicator and resume message polling
+          this.isTyping = false;
           this.isTaskPolling = false;
           this.resumeMessagePolling();
           return;
@@ -251,13 +254,15 @@ export class OcsChat {
           attempts++;
           setTimeout(poll, 1000);
         } else if (attempts >= maxAttempts) {
-          // Task polling timed out, resume message polling
+          // Task polling timed out, clear typing indicator and resume message polling
+          this.isTyping = false;
           this.isTaskPolling = false;
           this.resumeMessagePolling();
         }
       } catch (error) {
         this.error = error instanceof Error ? error.message : 'Failed to get response';
-        // Error in task polling, resume message polling
+        // Error in task polling, clear typing indicator and resume message polling
+        this.isTyping = false;
         this.isTaskPolling = false;
         this.resumeMessagePolling();
       }
