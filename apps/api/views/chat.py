@@ -89,7 +89,10 @@ def chat_start_session(request):
     # First, check if this is a public experiment
     experiment = get_object_or_404(Experiment, public_id=experiment_id)
     if not experiment.is_working_version:
-        return Response({"error": "Chatbot ID must be for a working version"}, status=status.HTTP_400_BAD_REQUEST)
+        return Response(
+            {"error": "Chatbot ID must reference the working version of an chatbot"},
+            status=status.HTTP_400_BAD_REQUEST,
+        )
 
     access_response = check_experiment_access(request, experiment, participant_id)
     if access_response:
