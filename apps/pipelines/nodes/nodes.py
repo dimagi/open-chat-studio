@@ -61,6 +61,7 @@ from apps.service_providers.llm_service.runnables import (
     SimpleLLMChat,
 )
 from apps.service_providers.models import LlmProviderModel
+from apps.utils.langchain import dict_to_json_schema
 from apps.utils.prompt import OcsPromptTemplate, PromptVars, validate_prompt_variables
 
 OptionalInt = Annotated[int | None, BeforeValidator(lambda x: None if isinstance(x, str) and len(x) == 0 else x)]
@@ -838,32 +839,7 @@ class ExtractStructuredDataNodeMixin:
         return text_splitter.split_text(input)
 
     def get_tool_class(self, data: dict):
-        """Converts a dictionary to a JSON schema by first converting it to a Pydantic object and dumping it again.
-        The input should be in the format {"key": "description", "key2": [{"key": "description"}]}
-
-        Nested objects are not supported at the moment
-
-        Input example 1:
-        {"name": "the user's name", "surname": "the user's surname"}
-
-        Input example 2:
-        {"name": "the user's name", "pets": [{"name": "the pet's name": "type": "the type of animal"}]}
-
-        """
-
-        def _create_model_from_data(value_data, model_name: str):
-            pydantic_schema = {}
-            for key, value in value_data.items():
-                if isinstance(value, str):
-                    pydantic_schema[key] = (str | None, Field(description=value))
-                elif isinstance(value, list):
-                    model = _create_model_from_data(value[0], key.capitalize())
-                    pydantic_schema[key] = (list[model], Field(description=f"A list of {key}"))
-            return create_model(model_name, **pydantic_schema)
-
-        Model = _create_model_from_data(data, "CustomModel")
-        Model.description = ""
-        return Model
+        return dict_to_json_schema(data)
 
 
 class StructuredDataSchemaValidatorMixin:

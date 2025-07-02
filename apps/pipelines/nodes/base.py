@@ -426,6 +426,7 @@ class Widgets(StrEnum):
     keywords = "keywords"
     history_mode = "history_mode"
     built_in_tools = "built_in_tools"
+    key_value_pairs = "key_value_pairs"
     text_editor = "text_editor_widget"
 
 
