@@ -31,7 +31,6 @@ from apps.service_providers.llm_service.adapters import AssistantAdapter, ChatAd
 from apps.service_providers.llm_service.history_managers import ExperimentHistoryManager, PipelineHistoryManager
 from apps.service_providers.llm_service.main import AnthropicBuiltinTool, OpenAIAssistantRunnable, OpenAIBuiltinTool
 from apps.service_providers.llm_service.parsers import custom_parse_ai_message
-from apps.service_providers.llm_service.utils import remove_citation_tags
 from apps.utils.prompt import OcsPromptTemplate
 
 lc_tools_parser.parse_ai_message_to_tool_action = custom_parse_ai_message
@@ -212,10 +211,6 @@ class LLMChat(RunnableSerializable[str, ChainOutput]):
             cited_files.extend(self._get_cited_files(token))
             if self._chat_is_cancelled():
                 break
-
-        if self.adapter.ocs_search_tool_enabled:
-            # Remove citation tags from the output
-            output = remove_citation_tags(output)
 
         return LlmChatResponse(text=output, cited_files=cited_files)
 

@@ -22,6 +22,7 @@ from apps.annotations.models import TagCategories
 from apps.channels import audio
 from apps.channels.clients.connect_client import CommCareConnectClient
 from apps.channels.models import ChannelPlatform, ExperimentChannel
+from apps.chat.agent.tools import OCS_CITATION_PATTERN
 from apps.chat.bots import EventBot, get_bot
 from apps.chat.exceptions import (
     AudioSynthesizeException,
@@ -507,7 +508,10 @@ class ChannelBase(ABC):
             unsupported_files = files
 
         if reply_text:
-            bot_message = self.append_attachment_links(bot_message, linkify_files=unsupported_files)
+            bot_message, uncited_files = self._format_citations(bot_message, files=files)
+            # Links to cited files are already appended
+            unsupported_files = [file for file in unsupported_files if file in uncited_files]
+            bot_message = self.append_attachment_links(bot_message, linkify_files=uncited_files)
             self.send_text_to_user(bot_message)
         else:
             bot_message, extracted_urls = strip_urls_and_emojis(bot_message)
@@ -526,6 +530,74 @@ class ChannelBase(ABC):
         # Finally send the attachments that are supported by the channel
         if supported_files:
             self._send_files_to_user(supported_files)
+
+    def _format_citations(self, text: str, files: list[File]) -> tuple[str, list[File]]:
+        """
+        Formats the message text by replacing citation markers with sequential numbers. The citation markers are
+        file ids in the format [^file_id] and the citation definitions are in the format [^file_id]: file_name.
+
+        This method accepts as input the `text` to format and a dictionary of `file_links` which is a mapping of
+        `File` objects to their download links. It returns a tuple containing the formatted text and a dictionary of
+        uncited file links, which are files that were not cited in the text.
+
+        Example:
+        ```
+        This is a fact <CIT file_id=3>. This is another fact <CIT file_id=40>.
+        ```
+
+        Should become
+        ```
+        This is a fact [1]. This is another fact [2].
+
+        [1]: fact.pdf (http://example.com/face1.txt)
+        [2]: another-fact.pdf (http://example.com/fact2.txt)
+        ```
+        """
+
+        file_id_file_map = {str(file.id): file for file in files}
+        citation_pattern = re.compile(OCS_CITATION_PATTERN)
+        cited_file_ids = set([match.groupdict()["file_id"] for match in citation_pattern.finditer(text)])
+
+        if not cited_file_ids:
+            return text, []
+
+        # Cast the set to a list to so we can easily get get the index of a file_id from it
+        cited_file_ids = list(cited_file_ids)
+
+        def replace_inline_citation(match):
+            file_id = match.groupdict().get("file_id")
+            citation_index = cited_file_ids.index(file_id) + 1
+            if self.experiment_channel.platform == ChannelPlatform.WEB:
+                # For web, we use footnote style links
+                return f"[^{citation_index}]"
+            else:
+                return f"[{citation_index}]"
+
+        text = citation_pattern.sub(replace_inline_citation, text)
+
+        refs_section = ""
+        for file_id in cited_file_ids:
+            file = file_id_file_map.get(file_id)
+            if not file:
+                # The bot could have hallucinated a file id, so we log it and continue
+                logger.warning(f"File with id {file_id} not found in the provided files")
+                continue
+
+            file_citation_index = cited_file_ids.index(file_id) + 1
+
+            if self._can_send_file(file):
+                # Simply reference the file by its name
+                refs_section += f"[{file_citation_index}]: {file.name}\n"
+            else:
+                download_link = file.download_link(self.experiment_session.id)
+                if self.experiment_channel.platform == ChannelPlatform.WEB:
+                    # We can render markdown, so we can use footnote style links
+                    refs_section += f"[^{file_citation_index}]: [{file.name}]({download_link})\n"
+                else:
+                    refs_section += f"[{file_citation_index}]: {file.name} ({download_link})\n"
+
+        text += "\n\n" + refs_section
+        return text, [file for file in files if str(file.id) not in cited_file_ids]
 
     def _send_files_to_user(self, files: list[File]):
         """

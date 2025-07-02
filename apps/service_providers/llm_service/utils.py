@@ -23,12 +23,3 @@ def extract_file_ids_from_ocs_citations(text: str) -> list[int]:
     for match in re.finditer(OCS_CITATION_PATTERN, text):
         file_ids.append(match.group("file_id"))
     return file_ids
-
-
-def remove_citation_tags(text: str) -> str:
-    from apps.chat.agent.tools import OCS_CITATION_PATTERN
-
-    for match in re.finditer(OCS_CITATION_PATTERN, text):
-        citation_string = match.group()
-        text = text.replace(citation_string, "")
-    return text
