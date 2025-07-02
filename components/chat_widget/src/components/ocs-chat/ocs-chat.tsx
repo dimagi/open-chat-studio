@@ -228,7 +228,6 @@ export class OcsChat {
 
     const poll = async (): Promise<void> => {
       try {
-        console.log("polling for task", taskId);
         const response = await fetch(`${this.getApiBaseUrl()}/api/chat/${this.sessionId}/${taskId}/poll/`);
 
         if (!response.ok) {
@@ -302,7 +301,6 @@ export class OcsChat {
     try {
       const url = new URL(`${this.getApiBaseUrl()}/api/chat/${this.sessionId}/poll/`);
       if (this.messages) {
-        console.log(`Messages from ${JSON.stringify(this.messages)}`);
         url.searchParams.set('since', this.messages.at(-1).created_at);
       }
 
