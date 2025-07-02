@@ -300,7 +300,7 @@ export class OcsChat {
 
     try {
       const url = new URL(`${this.getApiBaseUrl()}/api/chat/${this.sessionId}/poll/`);
-      if (this.messages) {
+      if (this.messages && this.messages.length > 0) {
         url.searchParams.set('since', this.messages.at(-1).created_at);
       }
 
