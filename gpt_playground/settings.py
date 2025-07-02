@@ -402,6 +402,14 @@ SPECTACULAR_SETTINGS = {
     "SWAGGER_UI_SETTINGS": {
         "displayOperationId": True,
     },
+    "TAGS": [
+        {
+            "name": "Chat",
+            "description": """
+                The Chat API is designed to be used for integrating chatbots into external systems.
+            """,
+        },
+    ],
 }
 
 # Celery setup (using redis)
