@@ -287,7 +287,7 @@ class AgentLLMChat(LLMChat):
 
     def _get_cited_files(self, token: str | dict) -> list[File]:
         cited_files_parser = self.adapter.get_llm_service().get_cited_files_parser()
-        return cited_files_parser(token)
+        return cited_files_parser(token, team_id=self.adapter.session.team_id)
 
     def _build_chain(self) -> Runnable[dict[str, Any], dict]:
         tools = self.adapter.get_allowed_tools()

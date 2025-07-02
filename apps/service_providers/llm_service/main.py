@@ -161,7 +161,7 @@ class LlmService(pydantic.BaseModel):
     def get_cited_files_parser(self):
         return self._default_cited_files_parser
 
-    def _default_cited_files_parser(self, token: str | dict) -> list[File]:
+    def _default_cited_files_parser(self, token: str | dict, team_id: int) -> list[File]:
         remote_file_ids = []
         file_ids = []
         if isinstance(token, dict):
@@ -175,7 +175,7 @@ class LlmService(pydantic.BaseModel):
             else:
                 file_ids.extend(extract_file_ids_from_ocs_citations(outputs))
 
-        return File.objects.filter(Q(external_id__in=remote_file_ids) | Q(id__in=file_ids)).all()
+        return File.objects.filter(Q(external_id__in=remote_file_ids) | Q(id__in=file_ids), team_id=team_id).all()
 
     def get_remote_index_manager(self, index_id: str = None) -> "IndexManager":
         raise NotImplementedError
