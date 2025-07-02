@@ -1,3 +1,4 @@
+from django.http import Http404
 from django.shortcuts import get_object_or_404
 from django.utils import timezone
 from drf_spectacular.types import OpenApiTypes
@@ -244,12 +245,15 @@ def chat_send_message(request, session_id):
 @authentication_classes(AUTH_CLASSES)
 @permission_classes([])
 def chat_poll_task_response(request, session_id, task_id):
-    session = get_object_or_404(ExperimentSession, external_id=session_id)
+    try:
+        session = ExperimentSession.objects.select_related("experiment").get(external_id=session_id)
+    except ExperimentSession.DoesNotExist:
+        raise Http404() from None
 
     access_response = check_session_access(request, session)
     if access_response:
         return access_response
-    task_details = get_message_task_response(session, task_id)
+    task_details = get_message_task_response(session.experiment, task_id)
     if not task_details["complete"]:
         data = {"message": None, "status": "processing"}
         return Response(data, status=status.HTTP_200_OK)
