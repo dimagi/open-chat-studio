@@ -95,6 +95,7 @@ export class OcsChat {
   @State() messageInput: string = "";
   @State() pollingInterval?: any;
   @State() lastPollTime?: Date;
+  @State() isTaskPolling: boolean = false;
 
   private messageListRef?: HTMLDivElement;
 
@@ -121,6 +122,7 @@ export class OcsChat {
       clearInterval(this.pollingInterval);
       this.pollingInterval = undefined;
     }
+    this.isTaskPolling = false;
   }
 
   private getApiBaseUrl(): string {
@@ -214,6 +216,10 @@ export class OcsChat {
   private async pollTaskResponse(taskId: string): Promise<void> {
     if (!this.sessionId) return;
 
+    // Stop message polling while task polling is active
+    this.isTaskPolling = true;
+    this.pauseMessagePolling();
+
     const maxAttempts = 30; // 30 seconds max
     let attempts = 0;
 
@@ -235,15 +241,25 @@ export class OcsChat {
         if (data.status === 'complete' && data.message) {
           this.messages = [...this.messages, data.message];
           this.scrollToBottom();
+          // Task polling complete, resume message polling
+          this.isTaskPolling = false;
+          this.resumeMessagePolling();
           return;
         }
 
         if (data.status === 'processing' && attempts < maxAttempts) {
           attempts++;
           setTimeout(poll, 1000);
+        } else if (attempts >= maxAttempts) {
+          // Task polling timed out, resume message polling
+          this.isTaskPolling = false;
+          this.resumeMessagePolling();
         }
       } catch (error) {
         this.error = error instanceof Error ? error.message : 'Failed to get response';
+        // Error in task polling, resume message polling
+        this.isTaskPolling = false;
+        this.resumeMessagePolling();
       }
     };
 
@@ -254,8 +270,23 @@ export class OcsChat {
     if (this.pollingInterval) return;
 
     this.pollingInterval = setInterval(async () => {
-      await this.pollForMessages();
+      // Only poll for messages if not currently polling for a task
+      if (!this.isTaskPolling) {
+        await this.pollForMessages();
+      }
     }, 30000); // Poll every 30 seconds
+  }
+
+  private pauseMessagePolling(): void {
+    if (this.pollingInterval) {
+      clearInterval(this.pollingInterval);
+      this.pollingInterval = undefined;
+    }
+  }
+
+  private resumeMessagePolling(): void {
+    // Resume message polling after task polling is complete
+    this.startPolling();
   }
 
   private async pollForMessages(): Promise<void> {
