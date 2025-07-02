@@ -383,7 +383,6 @@ class TestExperimentSession:
     @pytest.mark.parametrize("fail_silently", [True, False])
     @patch("apps.chat.channels.ChannelBase.from_experiment_session")
     @patch("apps.chat.bots.EventBot.get_user_message")
-    @patch("apps.experiments.models.TracingService.create_for_experiment")
     def test_ad_hoc_message(self, get_user_message, from_experiment_session, fail_silently, experiment_session):
         mock_channel = Mock()
         mock_channel.send_message_to_user = Mock()
@@ -407,7 +406,6 @@ class TestExperimentSession:
 
     @patch("apps.chat.channels.ChannelBase.from_experiment_session")
     @patch("apps.chat.bots.EventBot.get_user_message")
-    @patch("apps.experiments.models.TracingService.create_for_experiment")
     def test_ad_hoc_message_transaction_rollback(self, get_user_message, from_experiment_session, experiment_session):
         """Test that the @transaction.atomic() decorator on ad_hoc_bot_message
         rolls back database changes when an exception occurs."""
