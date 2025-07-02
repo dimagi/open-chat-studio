@@ -17,3 +17,9 @@ def times(number):
 def absolute_url(context, relative_url):
     request = context["request"]
     return request.build_absolute_uri(relative_url)
+
+
+@register.filter
+def get_item(dictionary, key):
+    """Get an item from a dictionary by key."""
+    return dictionary.get(key)
