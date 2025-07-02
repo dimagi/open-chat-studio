@@ -69,7 +69,7 @@
       {% if schedule.attempts %}
         <details class="mt-2">
           <summary class="cursor-pointer font-semibold">
-            Attempts ({{ schedule.attempts|length }})
+            Message Logs ({{ schedule.attempts|length }})
           </summary>
           <div class="mt-2 border border-gray-200 rounded p-2 max-h-60 overflow-auto">
             <table class="table-auto w-full text-sm">
@@ -87,15 +87,29 @@
                 {% for attempt in schedule.attempts %}
                   <tr class="border-t border-gray-200">
                     <td class="p-1">
-                      {{ attempt.attempted_at|date:"DATETIME_FORMAT" }}
+                      {{ attempt.updated_at|date:"DATETIME_FORMAT" }}
                     </td>
                     <td class="p-1">{{ attempt.trigger_number }}</td>
                     <td class="p-1">{{ attempt.attempt_number }}</td>
                     <td class="p-1">{{ attempt.attempt_result }}</td>
-                    <td class="p-1">{{ attempt.log_message|default:"—" }}</td>
+                    <td class="p-1">
+                      {% if attempt.log_message %}
+                        <details class="group">
+                          <summary class="cursor-pointer text-blue-600 underline hover:text-blue-800 flex items-center">
+                            <svg class="w-4 h-4 mr-1 group-open:rotate-90 transition-transform" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
+                              <path stroke-linecap="round" stroke-linejoin="round" d="M9 5l7 7-7 7"/>
+                            </svg>
+                            View Log
+                          </summary>
+                        <pre class="mt-1 p-2 bg-gray-100 rounded text-xs whitespace-pre-wrap">{{ attempt.log_message }}</pre>
+                        </details>
+                      {% else %}
+                        —
+                      {% endif %}
+                    </td>
                     <td class="p-1">
                       {% if attempt.trace_info %}
-                            <pre class="whitespace-pre-wrap">{{ attempt.trace_info|json_script:"traceinfo" }}</pre>
+                        {% include "experiments/chat/components/trace_icons.html" with trace_infos=attempt.trace_info %}
                       {% else %}
                         —
                       {% endif %}
