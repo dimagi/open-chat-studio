@@ -75,7 +75,8 @@ dependencies = [
     "python-docx",
     "django-pydantic-field",
     "pgvector",
-    "backoff"
+    "backoff",
+    "django-cors-headers>=4.7.0",
 ]
 
 [project.urls]

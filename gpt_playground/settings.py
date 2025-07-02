@@ -55,6 +55,7 @@ DJANGO_APPS = [
 
 # Put your third-party apps here
 THIRD_PARTY_APPS = [
+    "corsheaders",
     "allauth",  # allauth account/registration management
     "allauth.account",
     "allauth.socialaccount",
@@ -119,6 +120,7 @@ MIDDLEWARE = list(
     filter(
         None,
         [
+            "corsheaders.middleware.CorsMiddleware",
             "django.middleware.security.SecurityMiddleware",
             "whitenoise.middleware.WhiteNoiseMiddleware",
             "debug_toolbar.middleware.DebugToolbarMiddleware" if USE_DEBUG_TOOLBAR else None,
@@ -699,3 +701,36 @@ SUPPORTED_FILE_TYPES = {
     ),
     "collections": ".txt,.pdf,.doc,.docx,.xls,.xlsx,.csv,.jpg,.jpeg,.png,.gif,.bmp,.webp,.svg,.mp4,.mov,.avi,.mp3,.wav",
 }
+
+# CORS configuration for chat widget
+# Use URL regex to allow CORS only for specific endpoints (chat API)
+CORS_URLS_REGEX = r"^/api/chat/.*$"
+
+# Allow all origins for chat API endpoints since we don't know which domains will embed the widget
+# This is secure because CORS_URLS_REGEX limits it to only chat API endpoints
+CORS_ALLOW_ALL_ORIGINS = True
+
+# CORS settings
+CORS_ALLOW_CREDENTIALS = False
+CORS_ALLOWED_HEADERS = [
+    "accept",
+    "accept-encoding",
+    "content-type",
+    "dnt",
+    "origin",
+    "user-agent",
+    # "x-csrftoken",
+    "x-requested-with",
+]
+
+CORS_ALLOWED_METHODS = [
+    "DELETE",
+    "GET",
+    "OPTIONS",
+    "PATCH",
+    "POST",
+    "PUT",
+]
+
+# Additional CORS settings for security
+CORS_PREFLIGHT_MAX_AGE = 86400  # Cache preflight for 24 hours
