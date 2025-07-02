@@ -426,6 +426,7 @@ class Widgets(StrEnum):
     keywords = "keywords"
     history_mode = "history_mode"
     built_in_tools = "built_in_tools"
+    text_editor = "text_editor_widget"
 
 
 class OptionsSource(StrEnum):
@@ -437,6 +438,7 @@ class OptionsSource(StrEnum):
     built_in_tools = "built_in_tools"
     collection_index = "collection_index"
     built_in_tools_config = "built_in_tools_config"
+    text_editor_autocomplete_vars = "text_editor_autocomplete_vars"
 
 
 class UiSchema(BaseModel):

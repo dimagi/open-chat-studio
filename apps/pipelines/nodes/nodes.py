@@ -334,7 +334,9 @@ class LLMResponseWithPrompt(LLMResponse, HistoryMixin, OutputMessageTagMixin):
     )
     prompt: str = Field(
         default="You are a helpful assistant. Answer the user's query as best you can",
-        json_schema_extra=UiSchema(widget=Widgets.expandable_text),
+        json_schema_extra=UiSchema(
+            widget=Widgets.text_editor, options_source=OptionsSource.text_editor_autocomplete_vars
+        ),
     )
     collection_id: OptionalInt = Field(
         None,
