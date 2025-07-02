@@ -9,13 +9,14 @@ For more information, see the [Open Chat Studio documentation](https://docs.open
 
 ## Properties
 
-| Property              | Attribute     | Description                                            | Type                            | Default     |
-| --------------------- | ------------- | ------------------------------------------------------ | ------------------------------- | ----------- |
-| `botUrl` _(required)_ | `bot-url`     | The URL of the bot to connect to.                      | `string`                        | `undefined` |
-| `buttonText`          | `button-text` | The text to display on the button.                     | `string`                        | `"Chat"`    |
-| `expanded`            | `expanded`    | Whether the chat widget is initially expanded.         | `boolean`                       | `false`     |
-| `position`            | `position`    | The initial position of the chat widget on the screen. | `"center" \| "left" \| "right"` | `'right'`   |
-| `visible`             | `visible`     | Whether the chat widget is visible on load.            | `boolean`                       | `false`     |
+| Property                 | Attribute      | Description                                          | Type                            | Default     |
+| ------------------------ | -------------- |------------------------------------------------------| ------------------------------- | ----------- |
+| `apiBaseUrl`             | `api-base-url` | The base URL for the API.                           | `string`                        | `undefined` |
+| `buttonText`             | `button-text`  | The text to display on the button.                   | `string`                        | `"Chat"`    |
+| `chatbotId` _(required)_ | `chatbot-id`   | The ID of the chatbot to connect to.                 | `string`                        | `undefined` |
+| `expanded`               | `expanded`     | Whether the chat widget is initially expanded.       | `boolean`                       | `false`     |
+| `position`               | `position`     | The initial position of the chat widget on the screen. | `"center" \| "left" \| "right"` | `'right'`   |
+| `visible`                | `visible`      | Whether the chat widget is visible on load.          | `boolean`                       | `false`     |
 
 
 ## CSS Custom Properties
