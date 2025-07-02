@@ -58,7 +58,7 @@ def test_start_chat_session(team_with_users, api_client, experiment):
 @pytest.mark.django_db()
 def test_start_chat_session_with_session_state(team_with_users, authed_client, experiment):
     url = reverse("api:chat:start-session")
-    data = {"chatbot_id": experiment.public_id, "session_state": {"ref": "123"}}
+    data = {"chatbot_id": experiment.public_id, "session_data": {"ref": "123"}}
     response = authed_client.post(url, data=data, format="json")
     assert response.status_code == 201
     session = ExperimentSession.objects.get(external_id=response.json()["session_id"])

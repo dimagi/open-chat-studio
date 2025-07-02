@@ -104,6 +104,7 @@ def chat_start_session(request):
     if user is not None:
         participant_id = participant_id or user.email
         if participant_id != user.email:
+            # TODO: re-evaluate this, it doesn't seem correct in this instance
             return Response(
                 {"error": "Participant ID must match your email address"}, status=status.HTTP_400_BAD_REQUEST
             )
@@ -161,7 +162,7 @@ def chat_start_session(request):
         OpenApiExample(
             name="SendMessage",
             summary="Send a message to the bot",
-            value={"message": "Hello, how can you help me?", "attachments": []},
+            value={"message": "Hello, how can you help me?"},
         ),
     ],
 )
@@ -211,9 +212,16 @@ def chat_send_message(request, session_id):
             "ChatTaskPoll",
             {
                 "message": MessageSerializer(required=False),
-                "error": serializers.CharField(required=False),
+                "status": serializers.ChoiceField(required=False, choices=("processing", "complete")),
             },
-        )
+        ),
+        500: inline_serializer(
+            "ChatTaskPollError",
+            {
+                "error": serializers.CharField(required=False),
+                "status": "error",
+            },
+        ),
     },
     parameters=[
         OpenApiParameter(
@@ -247,7 +255,7 @@ def chat_poll_task_response(request, session_id, task_id):
 
     if error := task_details["error_msg"]:
         data = {"error": error, "status": "error"}
-        return Response(data, status=status.HTTP_200_OK)
+        return Response(data, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
 
     if message := task_details["message"]:
         data = {
