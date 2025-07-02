@@ -52,6 +52,22 @@
     {% endif %}
   </div>
 
+  {% if show_modal_instead %}
+    <div>
+      <div class="alert alert-info alert-vertical sm:alert-horizontal w-full flex items-center justify-between" role="alert">
+        <div>
+          Your Pipeline Experiments have moved! You can access the new Chatbots section. <a href="https://docs.openchatstudio.com/concepts/chatbots/" class="italic" target="_blank" rel="noopener noreferrer">Learn More →</a>
+        </div>
+        <div>
+          <a href="{% url 'chatbots:chatbots_home' request.team.slug %}"
+             class="btn btn-primary">
+            Go to Chatbots
+          </a>
+        </div>
+      </div>
+    </div>
+  {% endif %}
+
   {% if enable_search and not toggle_archived %}
     <div class="my-2">
       <input class="input input-bordered" type="search"
