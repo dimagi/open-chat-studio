@@ -274,7 +274,7 @@ def chat_poll_task_response(request, session_id, task_id):
 
 @extend_schema(
     operation_id="chat_poll_response",
-    summary="Poll for new messages in a chat session. Do not poll more than once very 30 seconds",
+    summary="Poll for new messages in a chat session. Do not poll more than once every 30 seconds",
     tags=["Chat"],
     responses={200: ChatPollResponse},
     parameters=[
