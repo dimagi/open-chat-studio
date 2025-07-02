@@ -473,7 +473,7 @@ class EventBot:
         self.trace_info = trace_info
         self.trace_service = trace_service
 
-    def get_user_message(self, event_prompt: str) -> str:
+    def get_user_message(self, event_prompt: str, manage_span: bool = True) -> str:
         provider = self.llm_provider
         if not provider:
             raise Exception("No LLM provider found")
@@ -490,13 +490,7 @@ class EventBot:
                 else TracingService.create_for_experiment(self.experiment)
             )
 
-        with self.trace_service.trace_or_span(
-            name=f"{self.experiment.name} - {self.trace_info.name}",
-            session_id=str(self.session.external_id),
-            user_id=str(self.session.participant.identifier),
-            inputs={"input": event_prompt},
-            metadata=self.trace_info.metadata,
-        ):
+        def do_invoke():
             config = self.trace_service.get_langchain_config()
             response = llm.invoke(
                 [
@@ -506,11 +500,23 @@ class EventBot:
                 config=config,
             )
             self.trace_service.set_current_span_outputs({"response": response.content})
-
             message = response.content
+
             if self.history_manager:
                 self.history_manager.save_message_to_history(message, type_=ChatMessageType.AI)
-        return message
+            return message
+
+        if manage_span:
+            with self.trace_service.trace_or_span(
+                name=f"{self.experiment.name} - {self.trace_info.name}",
+                session_id=str(self.session.external_id),
+                user_id=str(self.session.participant.identifier),
+                inputs={"input": event_prompt},
+                metadata=self.trace_info.metadata,
+            ):
+                return do_invoke()
+        else:
+            return do_invoke()
 
     @property
     def llm_provider(self):

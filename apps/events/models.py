@@ -421,49 +421,42 @@ class ScheduledMessage(BaseTeamModel):
         from apps.events.tasks import retry_scheduled_message
 
         trigger_number = self.total_triggers
-        trace_info = TraceInfo(
-            name="scheduled message",
-            metadata={
-                "schedule_id": self.external_id,
-                "trigger_number": trigger_number,
-            },
-        )
-        trace_info_data = trace_info.as_dict()
         attempt = ScheduledMessageAttempt(
             scheduled_message=self,
             trigger_number=trigger_number,
             attempt_number=attempt_number,
-            trace_info=trace_info_data,
         )
 
         try:
-            self._trigger(trace_info)
+            trace_metadata = self._trigger()
             attempt.attempt_result = EventLogStatusChoices.SUCCESS
+            attempt.trace_info = trace_metadata
             attempt.save()
 
         except Exception as e:
             logger.exception(f"An error occurred while trying to send scheduled message {self.id}. Error: {e}")
+            trace_metadata = getattr(e, "trace_metadata", {})
             attempt.attempt_result = EventLogStatusChoices.FAILURE
             attempt.log_message = str(e)
+            attempt.trace_info = trace_metadata
             attempt.save()
             if attempt_number < 3:
                 backoff_seconds = 2 ** (attempt_number - 1)
                 retry_scheduled_message.apply_async(args=[self.id, attempt_number + 1], countdown=backoff_seconds)
 
-    def _trigger(self, trace_info=None):
+    def _trigger(self):
         experiment_session = self.participant.get_latest_session(experiment=self.experiment)
         if not experiment_session:
             # Schedules probably created by the API
             return
-        if trace_info is None:
-            trace_info = TraceInfo(
-                name="scheduled message",
-                metadata={
-                    "schedule_id": self.external_id,
-                    "trigger_number": self.total_triggers,
-                },
-            )
-        experiment_session.ad_hoc_bot_message(
+        trace_info = TraceInfo(
+            name="scheduled message",
+            metadata={
+                "schedule_id": self.external_id,
+                "trigger_number": self.total_triggers,
+            },
+        )
+        trace_metadata = experiment_session.ad_hoc_bot_message(
             self.params["prompt_text"],
             trace_info,
             fail_silently=True,
@@ -480,6 +473,7 @@ class ScheduledMessage(BaseTeamModel):
             self.next_trigger_date = utc_now + delta
 
         self.save()
+        return trace_metadata or {}
 
     def _get_experiment_to_generate_response(self) -> Experiment:
         """
