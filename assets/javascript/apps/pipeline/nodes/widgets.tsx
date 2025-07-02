@@ -1320,8 +1320,8 @@ const autocompleteVarTheme = (isDarkMode: boolean) =>
         'ui-sans-serif, system-ui, sans-serif, "Apple Color Emoji", "Segoe UI Emoji", "Segoe UI Symbol"',
       backgroundColor: isDarkMode
         ? "oklch(25.33% 0.016 252.42)"
-        : undefined,
-      color: isDarkMode ? "oklch(97.807% 0.029 256.847)" : undefined,
+        : null,
+      color: isDarkMode ? "oklch(97.807% 0.029 256.847)" : null,
     },
     ".autocomplete-var-valid": {
       color: isDarkMode ? "#93c5fd" : "navy",
