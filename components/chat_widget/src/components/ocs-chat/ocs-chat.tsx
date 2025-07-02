@@ -98,6 +98,7 @@ export class OcsChat {
   @State() isTaskPolling: boolean = false;
 
   private messageListRef?: HTMLDivElement;
+  private textareaRef?: HTMLTextAreaElement;
 
   componentWillLoad() {
     this.loaded = this.visible;
@@ -247,6 +248,7 @@ export class OcsChat {
           this.isTyping = false;
           this.isTaskPolling = false;
           this.resumeMessagePolling();
+          this.focusInput();
           return;
         }
 
@@ -313,6 +315,7 @@ export class OcsChat {
       if (data.messages.length > 0) {
         this.messages = [...this.messages, ...data.messages];
         this.scrollToBottom();
+        this.focusInput();
       }
 
       this.lastPollTime = new Date();
@@ -330,6 +333,14 @@ export class OcsChat {
     setTimeout(() => {
       if (this.messageListRef) {
         this.messageListRef.scrollTop = this.messageListRef.scrollHeight;
+      }
+    }, 100);
+  }
+
+  private focusInput(): void {
+    setTimeout(() => {
+      if (this.textareaRef && !this.isTyping) {
+        this.textareaRef.focus();
       }
     }, 100);
   }
@@ -529,6 +540,7 @@ export class OcsChat {
                 <div class="border-t border-gray-200 p-4">
                   <div class="flex gap-2">
                     <textarea
+                      ref={(el) => this.textareaRef = el}
                       class="flex-grow px-3 py-2 border border-gray-300 rounded-md resize-none focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
                       rows={1}
                       placeholder="Type your message..."
