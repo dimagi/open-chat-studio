@@ -429,27 +429,23 @@ class ScheduledMessage(BaseTeamModel):
             },
         )
         trace_info_data = trace_info.as_dict()
+        attempt = ScheduledMessageAttempt(
+            scheduled_message=self,
+            trigger_number=trigger_number,
+            attempt_number=attempt_number,
+            trace_info=trace_info_data,
+        )
 
         try:
             self._trigger(trace_info)
-            ScheduledMessageAttempt.objects.create(
-                scheduled_message=self,
-                trigger_number=trigger_number,
-                attempt_number=attempt_number,
-                attempt_result=EventLogStatusChoices.SUCCESS,
-                trace_info=trace_info_data,
-            )
+            attempt.attempt_result = EventLogStatusChoices.SUCCESS
+            attempt.save()
 
         except Exception as e:
             logger.exception(f"An error occurred while trying to send scheduled message {self.id}. Error: {e}")
-            ScheduledMessageAttempt.objects.create(
-                scheduled_message=self,
-                trigger_number=trigger_number,
-                attempt_number=attempt_number,
-                attempt_result=EventLogStatusChoices.FAILURE,
-                log_message=str(e),
-                trace_info=trace_info_data,
-            )
+            attempt.attempt_result = EventLogStatusChoices.FAILURE
+            attempt.log_message = str(e)
+            attempt.save()
             if attempt_number < 3:
                 backoff_seconds = 2 ** (attempt_number - 1)
                 retry_scheduled_message.apply_async(args=[self.id, attempt_number + 1], countdown=backoff_seconds)
