@@ -425,6 +425,7 @@ class ScheduledMessage(BaseTeamModel):
             scheduled_message=self,
             trigger_number=trigger_number,
             attempt_number=attempt_number,
+            team=self.team
         )
 
         try:

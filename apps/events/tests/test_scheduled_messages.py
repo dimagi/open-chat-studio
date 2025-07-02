@@ -111,6 +111,7 @@ def test_get_messages_to_fire_cancelled():
 @pytest.mark.parametrize("period", ["minutes", "hours", "days", "weeks", "months"])
 @patch("apps.experiments.models.ExperimentSession.ad_hoc_bot_message")
 def test_poll_scheduled_messages(ad_hoc_bot_message, period):
+    ad_hoc_bot_message.return_value = {"trace_id": "abc123", "trace_provider": "langfuse"}
     scheduled_message = None
     delta = None
 
@@ -398,6 +399,7 @@ def test_action_params_with_versioning():
 @patch("apps.experiments.models.ExperimentSession.ad_hoc_bot_message")
 def test_scheduled_message_attempts_success_and_failure(ad_hoc_bot_message, mock_retry_task):
     """Test ScheduledMessageAttempt creation for both success and failure with retry"""
+    ad_hoc_bot_message.return_value = {"trace_id": "abc123", "trace_provider": "langfuse"}
     session = ExperimentSessionFactory()
     event_action, params = _construct_event_action(
         frequency=1, time_period="minutes", repetitions=1, experiment_id=session.experiment.id
