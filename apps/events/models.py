@@ -640,7 +640,7 @@ class ScheduledMessage(BaseTeamModel):
         }
 
 
-class ScheduledMessageAttempt(models.Model):
+class ScheduledMessageAttempt(BaseTeamModel):
     scheduled_message = models.ForeignKey(
         "ScheduledMessage",
         on_delete=models.CASCADE,
@@ -651,7 +651,6 @@ class ScheduledMessageAttempt(models.Model):
     attempt_result = models.CharField(max_length=10, choices=EventLogStatusChoices.choices)
     log_message = models.TextField(blank=True)
     trace_info = models.JSONField(blank=True, null=True)
-    attempted_at = models.DateTimeField(auto_now_add=True)
 
     class Meta:
         unique_together = ("scheduled_message", "trigger_number", "attempt_number")
