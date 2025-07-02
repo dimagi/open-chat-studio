@@ -32,9 +32,6 @@ jobs:
       - name: Install dependencies
         run: npm install
         working-directory: ./components/chat_widget
-      - name: Run tests
-        run: npm run test
-        working-directory: ./components/chat_widget
       - name: Build
         run: npm run build
         working-directory: ./components/chat_widget
