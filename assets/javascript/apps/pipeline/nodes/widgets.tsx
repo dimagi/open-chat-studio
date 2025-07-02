@@ -1123,17 +1123,8 @@ export function TextEditorWidget(props: WidgetParams) {
   );
 };
 
-  const blockEvents = (e: Event) => {
-    e.stopPropagation();
-    e.preventDefault();
-  };
   const openModal = () => {
     (document.getElementById(modalId) as HTMLDialogElement)?.showModal();
-    document.body.style.overflow = "hidden";
-    document.body.style.touchAction = "none";
-    document.body.style.pointerEvents = "none";
-    window.removeEventListener("pointermove", blockEvents, true);
-    window.removeEventListener("mousedown", blockEvents, true);
     }
 
   useEffect(() => {
@@ -1144,19 +1135,6 @@ export function TextEditorWidget(props: WidgetParams) {
     observer.observe(document.documentElement, { attributes: true });
     return () => observer.disconnect();
   }, []);
-
-  useEffect(() => {
-    const modalEl = document.getElementById(modalId) as HTMLDialogElement;
-    const handleClose = () => {
-      document.body.style.overflow = "";
-      document.body.style.touchAction = "";
-      document.body.style.pointerEvents = "";
-      window.removeEventListener("pointermove", blockEvents, true);
-      window.removeEventListener("mousedown", blockEvents, true);
-    };
-    modalEl?.addEventListener("close", handleClose);
-    return () => modalEl?.removeEventListener("close", handleClose);
-  }, [modalId]);
 
   const label = (
     <>
@@ -1225,7 +1203,7 @@ function TextEditorModal({
   autocomplete_vars_list: string[];
 }) {
   return (
-    <dialog id={modalId} className="modal">
+    <dialog id={modalId} className="modal nopan nodelete nodrag noflow nowheel">
       <div className="modal-box min-w-[85vw] h-[80vh] flex flex-col">
         <form method="dialog">
           <button className="btn btn-sm btn-circle btn-ghost absolute right-2 top-2">
@@ -1249,6 +1227,7 @@ function TextEditorModal({
               highlightAutoCompleteVars(autocomplete_vars_list),
               autocompleteVarTheme(isDarkMode),
               EditorView.lineWrapping,
+              EditorView.editable.of(true)
             ]}
             basicSetup={{
               lineNumbers: true,
