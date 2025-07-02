@@ -79,7 +79,7 @@
           <!-- Value Input (Choice, String, Timestamp) -->
           <template x-if="filter.operator">
             <div class="relative">
-              <template x-if="filterData.columns[filter.column]?.type === 'choice' && ['any of', 'all of', 'excludes'].includes(filter.operator)">
+              <template x-if="['choice', 'string'].includes(filterData.columns[filter.column]?.type) && ['any of', 'all of', 'excludes'].includes(filter.operator)">
                 <div class="relative">
                   <div @click="filter.showOptions = !filter.showOptions" class="w-40 px-3 border border-base-200 rounded-lg bg-base-100 text-sm cursor-pointer flex justify-between items-center" style="height: 2rem;">
                     <span x-text="filter.selectedValues.length ? getSelectedDisplayText(filter) : 'Select'"></span>
@@ -106,7 +106,7 @@
                 </div>
               </template>
 
-              <template x-if="filterData.columns[filter.column]?.type === 'string'">
+              <template x-if="filterData.columns[filter.column]?.type === 'string' && filter.operator !== 'any of'">
                 <input type="text" x-model="filter.value" @input.debounce="triggerFilterChange()" class="w-40 block px-3 border border-base-200 rounded-lg bg-base-100 text-sm" style="height: 2rem;" placeholder="Enter value...">
               </template>
 
@@ -194,6 +194,7 @@
       },
 
       init() {
+        const App = SiteJS.app;
         // Build columns dynamically based on filter_columns context
         const allColumns = {
           'experiment': {type: 'choice', operators: fieldTypeFilters.choice.filter(op => op === 'any of' || op === 'excludes'), options: experimentList, label: 'Experiment'},
@@ -248,6 +249,24 @@
         window.addEventListener('popstate', () => {
           this.setLabelFromURL();
         });
+        fetch("{% url 'participants:participant_identifier' team.slug experiment.id %}", {
+          method: 'GET',
+          credentials: 'same-origin',
+          headers: {
+            'X-CSRFToken': App.Cookies.get('csrftoken'),
+            'Accept': 'application/json'
+          }
+        })
+          .then(res => res.json())
+          .then(data => {
+            this.filterData.columns.participant.options = data;
+            this.filterData.filters.forEach(filter => {
+              if (filter.column === 'participant') {
+                filter.filteredOptions = [...data];
+              }
+            });
+          })
+          .catch(err => console.error("Failed to load participants", err));
       },
 
       toggleFilters() {
@@ -279,7 +298,7 @@
           filter.value = '';
           filter.selectedValues = [];
           filter.searchQuery = '';
-          if (this.filterData.columns[column].type === 'choice') {
+          if (['choice', 'string'].includes(this.filterData.columns[column].type)) {
             filter.filteredOptions = [...this.filterData.columns[column].options || []];
           } else {
             filter.filteredOptions = [];
