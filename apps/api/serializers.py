@@ -227,14 +227,6 @@ class ChatSendMessageResponse(serializers.Serializer):
     error = serializers.CharField(label="Error message", required=False)
 
 
-class ChatTaskPollResponse(serializers.Serializer):
-    message = MessageSerializer(many=True, label="New messages since last poll")
-    has_more = serializers.BooleanField(label="Whether there are more messages to fetch")
-    session_status = serializers.ChoiceField(
-        choices=[("active", "Active"), ("ended", "Ended")], label="Current session status"
-    )
-
-
 class ChatPollResponse(serializers.Serializer):
     messages = MessageSerializer(many=True, label="New messages since last poll")
     has_more = serializers.BooleanField(label="Whether there are more messages to fetch")
