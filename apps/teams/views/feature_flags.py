@@ -78,8 +78,9 @@ class FeatureFlagForm(forms.Form):
 def feature_flags(request, team_slug):
     """Manage feature flags for the current team."""
     team = request.team
+    is_team_admin = request.team_membership.is_team_admin
 
-    if request.method == "POST":
+    if request.method == "POST" and is_team_admin:
         form = FeatureFlagForm(request.POST, team=team)
         if form.is_valid():
             form.save()
@@ -94,5 +95,6 @@ def feature_flags(request, team_slug):
         {
             "form": form,
             "team": team,
+            "is_team_admin": is_team_admin,
         },
     )
