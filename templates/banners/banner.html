@@ -9,7 +9,7 @@
                     {% endif %}
                     <div class="markdown">{{ banner.message|render_markdown }}</div>
                 </div>
-                <button class="btn btn-sm btn-ghost dismiss-banner ml-4"
+                <button class="btn btn-sm btn-ghost dismiss-banner ml-4" aria-label="Dismiss banner"
                         data-banner-id="{{ banner.id }}"
                         aria-label="Close">×</button>
             </div>
