@@ -449,7 +449,9 @@ class TestExperimentSession:
             ([1], "v1"),
         ],
     )
-    def test_experiment_version_for_display(self, versions_chatted_to, expected_display_val, experiment_session):
+    def test_experiment_versions_from_prefetched_data(
+        self, versions_chatted_to, expected_display_val, experiment_session
+    ):
         for version in versions_chatted_to:
             message = ChatMessage.objects.create(
                 message_type=ChatMessageType.AI, content="", chat=experiment_session.chat
@@ -458,7 +460,7 @@ class TestExperimentSession:
                 f"v{version}", experiment_session.team, tag_category=TagCategories.EXPERIMENT_VERSION
             )
 
-        assert experiment_session.experiment_version_for_display == expected_display_val
+        assert experiment_session.experiment_versions_from_prefetched_data == expected_display_val
 
     @pytest.mark.parametrize("participant_data_injected", [True, False])
     def test_requires_participant_data(self, participant_data_injected):
