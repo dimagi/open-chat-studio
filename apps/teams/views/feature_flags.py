@@ -57,20 +57,24 @@ class FeatureFlagForm(forms.Form):
         flag_infos = get_all_flag_info()
 
         for flag_name, is_enabled in self.cleaned_data.items():
-            flag = self._get_flag(flag_name)
+            flag_info = flag_infos.get(flag_name)
+            if not flag_info or not flag_info.teams_can_manage:
+                continue  # Skip flags that teams cannot manage
+
+            flag = self._get_or_create_flag(flag_name)
             if is_enabled:
                 flag.teams.add(self.team)
-                if (flag_info := flag_infos.get(flag_name)) and flag_info.requires:
-                    for required_flag_name in flag_info.requires:
-                        required_flag = self._get_flag(required_flag_name)
-                        required_flag.teams.add(self.team)
+                # Auto-enable required flags
+                for required_flag_name in flag_info.requires:
+                    required_flag = self._get_or_create_flag(required_flag_name)
+                    required_flag.teams.add(self.team)
             else:
                 flag.teams.remove(self.team)
 
             # Clear the cache to ensure the flag state is updated
             flag.flush()
 
-    def _get_flag(self, flag_name):
+    def _get_or_create_flag(self, flag_name):
         if not self._all_flags:
             self._all_flags = {flag.name: flag for flag in Flag.get_all()}
 
