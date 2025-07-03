@@ -202,7 +202,7 @@
 
             <div
               id="flag-history-section"
-              hx-get="{% url 'ocs_admin:flag_history' flag.id %}"
+              hx-get="{% url 'ocs_admin:flag_history' flag.name %}"
               hx-trigger="load, refreshHistory from:body"
               hx-swap="innerHTML"
             >

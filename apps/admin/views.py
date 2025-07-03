@@ -136,8 +136,8 @@ def flags_home(request):
 
 
 @is_superuser
-def flag_detail(request, flag_id):
-    flag = get_object_or_404(Flag, id=flag_id)
+def flag_detail(request, flag_name):
+    flag = get_object_or_404(Flag, name=flag_name)
     flag_info_map = get_all_flag_info()
 
     audit_events = AuditEvent.objects.filter(object_class_path="apps.teams.models.Flag", object_pk=flag.pk).order_by(
@@ -157,8 +157,8 @@ def flag_detail(request, flag_id):
 
 
 @is_superuser
-def flag_history(request, flag_id):
-    flag = get_object_or_404(Flag, id=flag_id)
+def flag_history(request, flag_name):
+    flag = get_object_or_404(Flag, name=flag_name)
 
     audit_events = AuditEvent.objects.filter(object_class_path="apps.teams.models.Flag", object_pk=flag.pk).order_by(
         "-event_date"
@@ -247,8 +247,8 @@ def users_api(request):
 
 @is_superuser
 @require_http_methods(["POST"])
-def update_flag(request, flag_id):
-    flag = get_object_or_404(Flag, id=flag_id)
+def update_flag(request, flag_name):
+    flag = get_object_or_404(Flag, name=flag_name)
 
     form = FlagUpdateForm(request.POST)
     if not form.is_valid():
