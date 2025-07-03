@@ -12,7 +12,6 @@ Usage:
 
 from __future__ import annotations
 
-import re
 from functools import cached_property
 from typing import TYPE_CHECKING, Self
 
@@ -21,12 +20,13 @@ from langchain_core.prompts import PromptTemplate, get_template_variables
 from langchain_core.tools import BaseTool
 
 from apps.assistants.models import OpenAiAssistant, ToolResources
-from apps.chat.agent.tools import OCS_CITATION_PATTERN, get_assistant_tools, get_tools
+from apps.chat.agent.tools import get_assistant_tools, get_tools
 from apps.chat.models import Chat
 from apps.experiments.models import Experiment, ExperimentSession
 from apps.files.models import File
 from apps.service_providers.llm_service.main import LlmService, OpenAIAssistantRunnable
 from apps.service_providers.llm_service.prompt_context import PromptTemplateContext
+from apps.service_providers.llm_service.utils import populate_reference_section_from_citations
 
 if TYPE_CHECKING:
     from apps.pipelines.nodes.base import PipelineState
@@ -162,66 +162,7 @@ class ChatAdapter(BaseAdapter):
         return {"cited_files": [file.id for file in cited_files]}
 
     def add_citation_section_from_cited_files(self, ai_message: str, cited_files: list[File]) -> str:
-        """
-        Parse the AI message for citations in the format <CIT the-file-id /> to build a reference section at the end.
-        Each citation is replaced with a footnote-style reference [^1], [^2], etc., and a reference section is
-        appended at the end of the message with download links for each cited file.
-
-        Example:
-
-        Input:
-        ```
-        Here is a fact <CIT 123 />. Here is another fact <CIT 456 />.
-        ```
-
-        Output:
-        ```
-        Here is a fact [^1]. Here is another fact [^2].
-
-        [^1]: [file_123.txt](http://example.com/file_123.txt)
-        [^2]: [file_456.pdf](http://example.com/file_456.pdf)
-        ```
-        """
-        files = {file.id: file for file in cited_files}
-        citation_pattern = re.compile(OCS_CITATION_PATTERN)
-        tracked_file_ids = []
-        file_references = {}  # Store references to avoid duplicates
-
-        def replace_citations(match):
-            """
-            Replace a citation match with a footnote-style reference.
-            The match is expected to be in the format <CIT 123 />
-            """
-            file_id = int(match.groupdict()["file_id"])
-            if file_id not in files:
-                # LLM hallucinated a file id. We don't want to show this to users, so remove the citation.
-                return ""
-
-            file = files[file_id]
-
-            # Determine the citation index
-            if file_id in tracked_file_ids:
-                # If the file has already been cited, return the existing citation reference
-                citation_index = tracked_file_ids.index(file_id) + 1
-            else:
-                citation_index = len(tracked_file_ids) + 1
-                tracked_file_ids.append(file_id)
-
-                # Store the reference for this file (only once)
-                download_link = file.download_link(self.session.id)
-                file_references[citation_index] = f"[^{citation_index}]: [{file.name}]({download_link})"
-
-            return f"[^{citation_index}]"
-
-        # Replace citations in the message
-        ai_message = citation_pattern.sub(replace_citations, ai_message)
-
-        # Build reference section from stored references
-        if file_references:
-            refs_section = "\n".join([file_references[i] for i in sorted(file_references.keys())])
-            ai_message += "\n\n" + refs_section
-
-        return ai_message
+        return populate_reference_section_from_citations(text=ai_message, cited_files=cited_files, session=self.session)
 
 
 class AssistantAdapter(BaseAdapter):
