@@ -62,7 +62,7 @@ class Flags(FlagInfo, Enum):
         return None
 
 
-def get_flag_info(flag_name: str) -> FlagInfo | None:
+def get_flag_info(flag_name: str) -> Flags | None:
     """
     Get flag information by flag name.
 
@@ -78,7 +78,7 @@ def get_flag_info(flag_name: str) -> FlagInfo | None:
     return None
 
 
-def get_all_flag_info() -> dict[str, FlagInfo]:
+def get_all_flag_info() -> dict[str, Flags]:
     """
     Get all flag information as a dictionary.
 

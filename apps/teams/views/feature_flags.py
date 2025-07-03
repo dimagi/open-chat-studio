@@ -1,6 +1,8 @@
 from django import forms
 from django.contrib import messages
 from django.shortcuts import redirect, render
+from django.utils.html import format_html
+from django.utils.safestring import mark_safe
 from django.utils.translation import gettext_lazy as _
 
 from apps.teams.decorators import login_and_team_required
@@ -25,10 +27,14 @@ class FeatureFlagForm(forms.Form):
             if not info.teams_can_manage:
                 continue
 
+            label = flag_name.split("_", 1)[-1]
+            help_text = f"Flag: {label}"
+            if info.docs_slug:
+                help_text += format_html(' (<a class="link" target="_blank" href="{}">docs</a>)', info.docs_url)
             self.fields[flag_name] = forms.BooleanField(
                 label=info.description,
                 required=False,
-                help_text=f"Flag: {flag_name}",
+                help_text=mark_safe(help_text),
                 initial=self._is_flag_active_for_team(flag_name),
             )
 
