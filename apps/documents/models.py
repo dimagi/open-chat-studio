@@ -33,6 +33,28 @@ class CollectionFileMetadata(pydantic.BaseModel):
     chunking_strategy: ChunkingStrategy = pydantic.Field(description="Chunking strategy used for the file")
 
 
+class GitHubSourceConfig(pydantic.BaseModel):
+    repo_url: str = pydantic.Field(description="GitHub repository URL")
+    branch: str = pydantic.Field(default="main", description="Branch to sync from")
+    file_pattern: str = pydantic.Field(default="*.md", description="File pattern to match (e.g., *.md, *.py)")
+    path_filter: str = pydantic.Field(default="", description="Optional path prefix filter")
+
+
+class ConfluenceSourceConfig(pydantic.BaseModel):
+    base_url: str = pydantic.Field(description="Confluence base URL")
+    space_key: str = pydantic.Field(description="Confluence space key")
+    username: str = pydantic.Field(description="Confluence username")
+    api_token: str = pydantic.Field(description="Confluence API token")
+    page_filter: str = pydantic.Field(default="", description="Optional page title filter")
+
+
+class DocumentSourceConfig(pydantic.BaseModel):
+    github: GitHubSourceConfig | None = pydantic.Field(default=None, description="GitHub source configuration")
+    confluence: ConfluenceSourceConfig | None = pydantic.Field(
+        default=None, description="Confluence source configuration"
+    )
+
+
 class CollectionObjectManager(VersionsObjectManagerMixin, AuditingManager):
     pass
 
@@ -281,6 +303,75 @@ class Collection(BaseTeamModel, VersionsMixin):
 
         self.openai_vector_store_id = ""
         self.save(update_fields=["openai_vector_store_id"])
+
+
+class SourceType(models.TextChoices):
+    GITHUB = "github", _("GitHub Repository")
+    CONFLUENCE = "confluence", _("Confluence Space")
+
+
+class SyncStatus(models.TextChoices):
+    SUCCESS = "success", _("Success")
+    FAILED = "failed", _("Failed")
+    IN_PROGRESS = "in_progress", _("In Progress")
+
+
+class DocumentSource(BaseTeamModel):
+    collection = models.OneToOneField(
+        Collection,
+        on_delete=models.CASCADE,
+        related_name="document_source",
+        help_text="The collection this document source belongs to",
+    )
+    source_type = models.CharField(max_length=20, choices=SourceType.choices, help_text="Type of document source")
+    config = SchemaField(schema=DocumentSourceConfig, help_text="Configuration for the document source")
+    auto_sync_enabled = models.BooleanField(
+        default=False, help_text="Whether to automatically sync this source on a schedule"
+    )
+    last_sync = models.DateTimeField(null=True, blank=True, help_text="Timestamp of the last successful sync")
+
+    class Meta:
+        constraints = [
+            models.UniqueConstraint(fields=["team", "collection"], name="unique_document_source_per_collection")
+        ]
+
+    def __str__(self) -> str:
+        return f"{self.get_source_type_display()} source for {self.collection.name}"
+
+    @property
+    def source_config(self):
+        """Get the configuration for the specific source type"""
+        if self.source_type == SourceType.GITHUB:
+            return self.config.github
+        elif self.source_type == SourceType.CONFLUENCE:
+            return self.config.confluence
+        return None
+
+
+class DocumentSourceSyncLog(models.Model):
+    document_source = models.ForeignKey(
+        DocumentSource,
+        on_delete=models.CASCADE,
+        related_name="sync_logs",
+        help_text="The document source this sync log belongs to",
+    )
+    sync_date = models.DateTimeField(auto_now_add=True, help_text="When the sync was performed")
+    status = models.CharField(max_length=20, choices=SyncStatus.choices, help_text="Status of the sync")
+    files_added = models.IntegerField(default=0, help_text="Number of files added during sync")
+    files_updated = models.IntegerField(default=0, help_text="Number of files updated during sync")
+    files_removed = models.IntegerField(default=0, help_text="Number of files removed during sync")
+    error_message = models.TextField(blank=True, help_text="Error message if sync failed")
+    duration_seconds = models.FloatField(null=True, blank=True, help_text="Duration of the sync in seconds")
+
+    class Meta:
+        ordering = ["-sync_date"]
+
+    def __str__(self) -> str:
+        return f"Sync of {self.document_source} on {self.sync_date}"
+
+    @property
+    def total_files_processed(self) -> int:
+        return self.files_added + self.files_updated + self.files_removed
 
     def get_index_manager(self):
         if self.is_index and self.is_remote_index:
