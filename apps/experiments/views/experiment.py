@@ -15,7 +15,7 @@ from django.contrib.auth.decorators import permission_required
 from django.contrib.auth.mixins import PermissionRequiredMixin
 from django.core.exceptions import PermissionDenied, ValidationError
 from django.db import transaction
-from django.db.models import Case, Count, IntegerField, When
+from django.db.models import Case, Count, IntegerField, Prefetch, When
 from django.http import FileResponse, Http404, HttpResponse, HttpResponseForbidden, HttpResponseRedirect
 from django.shortcuts import get_object_or_404, redirect, render
 from django.template.response import TemplateResponse
@@ -32,7 +32,7 @@ from django_tables2 import SingleTableView
 from field_audit.models import AuditAction
 from waffle import flag_is_active
 
-from apps.annotations.models import Tag
+from apps.annotations.models import CustomTaggedItem, Tag
 from apps.assistants.sync import OpenAiSyncError, get_diff_with_openai_assistant, get_out_of_sync_files
 from apps.channels.datamodels import Attachment, AttachmentType
 from apps.channels.exceptions import ExperimentChannelException
@@ -129,6 +129,11 @@ class ExperimentSessionsTableView(LoginAndTeamRequiredMixin, SingleTableView, Pe
             .prefetch_related(
                 "chat__tags",
                 "chat__messages__tags",
+                Prefetch(
+                    "chat__tagged_items",
+                    queryset=CustomTaggedItem.objects.select_related("tag", "user"),
+                    to_attr="prefetched_tagged_items",
+                ),
             )
         )
         timezone = self.request.session.get("detected_tz", None)
