@@ -21,9 +21,17 @@ class FlagInfo:
 class Flags(Enum):
     """All feature flags with their metadata."""
 
-    PIPELINES_V2 = FlagInfo("flag_pipelines-v2", "Second version of pipeline functionality with enhanced features", "")
+    PIPELINES_V2 = FlagInfo(
+        "flag_pipelines-v2",
+        "Second version of pipeline functionality with enhanced features",
+        "https://docs.openchatstudio.com/concepts/pipelines/",
+    )
 
-    CHATBOTS = FlagInfo("flag_chatbots", "Enables simplified chatbot creation and management interface", "")
+    CHATBOTS = FlagInfo(
+        "flag_chatbots",
+        "Enables simplified chatbot creation and management interface",
+        "https://docs.openchatstudio.com/concepts/chatbots/",
+    )
 
     TEAM_DASHBOARD = FlagInfo("flag_team_dashboard", "Enables new team dashboard with analytics and overview", "")
 
