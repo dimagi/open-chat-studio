@@ -82,17 +82,3 @@ def get_all_flag_info() -> dict[str, FlagInfo]:
         Dictionary mapping flag names to FlagInfo objects
     """
     return {flag.slug: flag for flag in Flags}
-
-
-def get_undefined_flags(existing_flag_names: list[str]) -> list[str]:
-    """
-    Get list of flag names that exist in database but not in Flags enum.
-
-    Args:
-        existing_flag_names: List of flag names from database
-
-    Returns:
-        List of flag names not defined in Flags enum
-    """
-    defined_flags = {flag.slug for flag in Flags}
-    return [name for name in existing_flag_names if name not in defined_flags]
