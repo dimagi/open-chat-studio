@@ -1,0 +1,57 @@
+{% extends 'web/app/app_base.html' %}
+{% load form_tags %}
+
+{% block app %}
+  <div class="app-card max-w-5xl mx-auto">
+    <div class="flex">
+      <div class="flex-1">
+        <h1 class="pg-title">Feature Flags</h1>
+        <p class="text-base-content/70 mt-1">
+          Enable or disable experimental features for your team.
+        </p>
+      </div>
+    </div>
+
+    <div class="mt-6">
+      <form method="post" class="my-2">
+        {% csrf_token %}
+        {{ form.non_field_errors }}
+
+        <div class="grid gap-4">
+          {% for field in form %}
+            <div class="form-control">
+              <label class="label cursor-pointer justify-start gap-4">
+                <input type="checkbox" name="{{ field.name }}" class="checkbox checkbox-primary"
+                       {% if field.value %}checked{% endif %}>
+                <div class="flex-1">
+                  <div class="label-text font-medium">{{ field.label }}</div>
+                  <div class="label-text-alt text-base-content/60">{{ field.help_text }}</div>
+                </div>
+              </label>
+            </div>
+          {% endfor %}
+        </div>
+
+        <div class="mt-6 flex gap-2">
+          <input type="submit" class="btn btn-primary" value="Save Changes">
+          <a href="{% url 'web_team:home' team.slug %}" class="btn btn-outline">Cancel</a>
+        </div>
+      </form>
+    </div>
+
+    <div class="mt-8">
+      <div class="alert alert-info">
+        <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" class="stroke-current shrink-0 w-6 h-6">
+          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"></path>
+        </svg>
+        <div>
+          <h3 class="font-medium">About Feature Flags</h3>
+          <p class="text-sm mt-1">
+            Feature flags allow you to enable experimental features for your team.
+            Changes will take effect immediately for all team members.
+          </p>
+        </div>
+      </div>
+    </div>
+  </div>
+{% endblock %}
