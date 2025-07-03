@@ -454,23 +454,27 @@ class ScheduledMessage(BaseTeamModel):
                 "trigger_number": self.total_triggers,
             },
         )
-        trace_metadata = experiment_session.ad_hoc_bot_message(
-            self.params["prompt_text"],
-            trace_info,
-            fail_silently=True,
-            use_experiment=self._get_experiment_to_generate_response(),
-        )
-
-        utc_now = timezone.now()
-        self.last_triggered_at = utc_now
-        self.total_triggers += 1
-        if self._should_mark_complete():
-            self.is_complete = True
-        else:
-            delta = relativedelta(**{self.params["time_period"]: self.params["frequency"]})
-            self.next_trigger_date = utc_now + delta
-
-        self.save()
+        trace_metadata = {}
+        try:
+            trace_metadata = experiment_session.ad_hoc_bot_message(
+                self.params["prompt_text"],
+                trace_info,
+                fail_silently=False,
+                use_experiment=self._get_experiment_to_generate_response(),
+            )
+        except Exception as e:
+            e.trace_metadata = trace_metadata
+            raise
+        finally:
+            utc_now = timezone.now()
+            self.last_triggered_at = utc_now
+            self.total_triggers += 1
+            if self._should_mark_complete():
+                self.is_complete = True
+            else:
+                delta = relativedelta(**{self.params["time_period"]: self.params["frequency"]})
+                self.next_trigger_date = utc_now + delta
+            self.save()
         return trace_metadata or {}
 
     def _get_experiment_to_generate_response(self) -> Experiment:

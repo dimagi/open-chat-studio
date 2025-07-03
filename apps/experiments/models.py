@@ -1715,12 +1715,16 @@ class ExperimentSession(BaseTeamModel):
                         instruction_prompt, trace_info, use_experiment=use_experiment, trace_service=trace_service
                     )
                     self.try_send_message(message=bot_message)
+                    raise RuntimeError("Simulated bot failure!")
                     trace_service.set_current_span_outputs({"response": bot_message})
                     trace_info = trace_service.get_trace_metadata()
                 return trace_info
         except Exception as e:
             log.exception(f"Could not send message to experiment session {self.id}. Reason: {e}")
             if not fail_silently:
+                if trace_service:
+                    trace_metadata = trace_service.get_trace_metadata()
+                    e.trace_metadata = trace_metadata
                 raise e
 
     def _bot_prompt_for_user(
