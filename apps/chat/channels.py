@@ -513,7 +513,7 @@ class ChannelBase(ABC):
             bot_message, uncited_files = self._format_reference_section(bot_message, files=files)
             # Links to cited files are already appended
             unsupported_files = [file for file in unsupported_files if file in uncited_files]
-            bot_message = self.append_attachment_links(bot_message, linkify_files=uncited_files)
+            bot_message = self.append_attachment_links(bot_message, linkify_files=unsupported_files)
             self.send_text_to_user(bot_message)
         else:
             bot_message, extracted_urls = strip_urls_and_emojis(bot_message)

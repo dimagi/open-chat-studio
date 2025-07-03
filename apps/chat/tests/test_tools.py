@@ -400,7 +400,7 @@ class TestSearchIndexTool:
         file = FileFactory(team=team, name="the_greatness_of_fruit.txt")
         vector_data = self.load_vector_data()
 
-        oranges_chunk = FileChunkEmbedding.objects.create(
+        FileChunkEmbedding.objects.create(
             team=team,
             file=file,
             collection=collection,
@@ -409,7 +409,7 @@ class TestSearchIndexTool:
             embedding=vector_data["Oranges are nice"],
             page_number=0,
         )
-        apples_chunk = FileChunkEmbedding.objects.create(
+        FileChunkEmbedding.objects.create(
             team=team,
             file=file,
             collection=collection,
@@ -435,13 +435,11 @@ class TestSearchIndexTool:
         expected_result = f"""
 # Retrieved chunks
 
-## Chunk: {apples_chunk.id}
-### File name: the_greatness_of_fruit.txt, file_id={file.id}
+## File name: the_greatness_of_fruit.txt, file_id={file.id}
 ### Content
 Apples are great
 
-## Chunk: {oranges_chunk.id}
-### File name: the_greatness_of_fruit.txt, file_id={file.id}
+## File name: the_greatness_of_fruit.txt, file_id={file.id}
 ### Content
 Oranges are nice
 

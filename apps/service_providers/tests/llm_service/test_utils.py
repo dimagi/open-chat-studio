@@ -3,7 +3,6 @@ import pytest
 from apps.service_providers.llm_service.utils import (
     detangle_file_ids,
     extract_file_ids_from_ocs_citations,
-    remove_citation_tags,
 )
 
 
@@ -29,23 +28,3 @@ def test_detangle_file_ids():
 def test_extract_file_ids_from_ocs_citations(input_text, expected_file_ids):
     result = extract_file_ids_from_ocs_citations(input_text)
     assert result == expected_file_ids
-
-
-@pytest.mark.parametrize(
-    ("input_text", "expected_output"),
-    [
-        ("", ""),
-        ("No citations here", "No citations here"),
-        ("<CIT 123 />", ""),
-        ("Text with citation<CIT 123 />.", "Text with citation."),
-        ('<xml something="123" />\n.\t<CIT 123 />', '<xml something="123" />\n.\t'),
-        ("\n<a href=''></a>", "\n<a href=''></a>"),
-        ("Text with multiple<CIT 123 /> citations<CIT 456 />.", "Text with multiple citations."),
-        ("Citation with extra space <CIT 123  />.", "Citation with extra space ."),
-        ("<div><p>Some text</p><CIT 123 /></div>", "<div><p>Some text</p></div>"),
-        ("<CIT 123 /><CIT 456 />", ""),
-    ],
-)
-def test_remove_ocs_citations(input_text, expected_output):
-    result = remove_citation_tags(input_text)
-    assert result == expected_output
