@@ -7,7 +7,7 @@
                     {% if banner.title %}
                         <strong>{{ banner.title }}</strong>:
                     {% endif %}
-                    {{ banner.message|render_markdown }}
+                    <div class="markdown">{{ banner.message|render_markdown }}</div>
                 </div>
                 <button class="btn btn-sm btn-ghost dismiss-banner ml-4"
                         data-banner-id="{{ banner.id }}"
