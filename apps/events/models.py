@@ -463,6 +463,7 @@ class ScheduledMessage(BaseTeamModel):
                 use_experiment=self._get_experiment_to_generate_response(),
             )
         except Exception as e:
+            trace_metadata = getattr(e, "trace_metadata", {})
             e.trace_metadata = trace_metadata
             raise
         finally:

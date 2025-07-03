@@ -441,3 +441,90 @@ def test_scheduled_message_attempts_success_and_failure(ad_hoc_bot_message, mock
     assert args == ()
     assert kwargs["args"] == [sm.id, 3]
     assert kwargs["countdown"] == 2
+
+
+@pytest.mark.django_db()
+@patch("apps.events.tasks.retry_scheduled_message.apply_async")
+@patch("apps.experiments.models.ExperimentSession.ad_hoc_bot_message")
+def test_scheduled_message_stops_retry_after_max(ad_hoc_bot_message, mock_retry_task):
+    """Test that ScheduledMessage stops retrying after 3 attempts"""
+    ad_hoc_bot_message.side_effect = Exception("Forced failure for max retries")
+
+    session = ExperimentSessionFactory()
+    event_action, params = _construct_event_action(
+        frequency=1, time_period="minutes", repetitions=1, experiment_id=session.experiment.id
+    )
+    sm = ScheduledMessageFactory(
+        participant=session.participant,
+        action=event_action,
+        team=session.team,
+        experiment=session.experiment,
+    )
+    sm.next_trigger_date = timezone.now() - relativedelta(minutes=1)
+    sm.save()
+
+    # First failure
+    poll_scheduled_messages()
+    sm.refresh_from_db()
+    assert ScheduledMessageAttempt.objects.count() == 1
+
+    # Second failure
+    retry_scheduled_message(scheduled_message_id=sm.id, attempt_number=2)
+    sm.refresh_from_db()
+    assert ScheduledMessageAttempt.objects.count() == 2
+
+    # Third failure
+    retry_scheduled_message(scheduled_message_id=sm.id, attempt_number=3)
+    sm.refresh_from_db()
+    assert ScheduledMessageAttempt.objects.count() == 3
+
+    assert mock_retry_task.call_count == 2
+
+    attempts = ScheduledMessageAttempt.objects.filter(scheduled_message=sm).order_by("attempt_number")
+    assert all(a.attempt_result == EventLogStatusChoices.FAILURE for a in attempts)
+    assert attempts.last().attempt_number == 3
+
+
+@pytest.mark.django_db()
+@patch("apps.events.tasks.retry_scheduled_message.apply_async")
+@patch("apps.experiments.models.ExperimentSession.ad_hoc_bot_message")
+def test_scheduled_message_trace_info_success_and_failure(ad_hoc_bot_message, mock_retry_task):
+    """Test that trace info is saved correctly for success and failure"""
+    # On first call, success with trace_info
+    ad_hoc_bot_message.return_value = {"trace_id": "xyz123", "trace_provider": "langfuse"}
+
+    session = ExperimentSessionFactory()
+    event_action, params = _construct_event_action(
+        frequency=1, time_period="minutes", repetitions=1, experiment_id=session.experiment.id
+    )
+    sm = ScheduledMessageFactory(
+        participant=session.participant,
+        action=event_action,
+        team=session.team,
+        experiment=session.experiment,
+    )
+    sm.next_trigger_date = timezone.now() - relativedelta(minutes=1)
+    sm.save()
+
+    poll_scheduled_messages()
+    sm.refresh_from_db()
+
+    success_attempt = ScheduledMessageAttempt.objects.get(
+        scheduled_message=sm, attempt_result=EventLogStatusChoices.SUCCESS
+    )
+    assert success_attempt.trace_info == {"trace_id": "xyz123", "trace_provider": "langfuse"}
+
+    # Failed call
+    def fail_with_trace(*args, **kwargs):
+        e = Exception("Bot failed!")
+        e.trace_metadata = {"trace_id": "fail456"}
+        raise e
+
+    ad_hoc_bot_message.side_effect = fail_with_trace
+    retry_scheduled_message(scheduled_message_id=sm.id, attempt_number=2)
+
+    failure_attempt = ScheduledMessageAttempt.objects.get(
+        scheduled_message=sm, attempt_result=EventLogStatusChoices.FAILURE
+    )
+    assert failure_attempt.trace_info == {"trace_id": "fail456"}
+    assert "Bot failed!" in failure_attempt.log_message
