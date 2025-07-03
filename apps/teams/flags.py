@@ -5,7 +5,7 @@ This module contains all feature flag definitions with their descriptions and do
 Developers should add new flags here when introducing new features.
 """
 
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from enum import Enum
 
 from django.conf import settings
@@ -18,6 +18,8 @@ class FlagInfo:
     slug: str
     description: str
     docs_slug: str = ""
+    requires: list[str] = field(default_factory=list)
+    """Other feature flags that should be enabled with this flag."""
 
 
 class Flags(FlagInfo, Enum):
@@ -33,6 +35,7 @@ class Flags(FlagInfo, Enum):
         "flag_chatbots",
         "Enables simplified chatbot creation and management interface",
         "chatbots",
+        ["flag_pipelines-v2"],
     )
 
     TEAM_DASHBOARD = ("flag_team_dashboard", "Enables new team dashboard with analytics and overview", "")

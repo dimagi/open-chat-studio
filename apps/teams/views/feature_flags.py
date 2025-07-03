@@ -15,6 +15,8 @@ class FeatureFlagForm(forms.Form):
         self.team = kwargs.pop("team", None)
         super().__init__(*args, **kwargs)
 
+        self._all_flags = None
+
         # Get all available flags
         flag_info = get_all_flag_info()
 
@@ -43,16 +45,30 @@ class FeatureFlagForm(forms.Form):
         if not self.team:
             return
 
-        for flag_name, is_enabled in self.cleaned_data.items():
-            flag, _created = Flag.objects.get_or_create(name=flag_name, defaults={"everyone": False})
+        flag_infos = get_all_flag_info()
 
+        for flag_name, is_enabled in self.cleaned_data.items():
+            flag = self._get_flag(flag_name)
             if is_enabled:
                 flag.teams.add(self.team)
+                if (flag_info := flag_infos.get(flag_name)) and flag_info.requires:
+                    for required_flag_name in flag_info.requires:
+                        required_flag = self._get_flag(required_flag_name)
+                        required_flag.teams.add(self.team)
             else:
                 flag.teams.remove(self.team)
 
             # Clear the cache to ensure the flag state is updated
             flag.flush()
+
+    def _get_flag(self, flag_name):
+        if not self._all_flags:
+            self._all_flags = {flag.name: flag for flag in Flag.get_all()}
+
+        if flag_name not in self._all_flags:
+            flag, _created = Flag.objects.get_or_create(name=flag_name, defaults={"everyone": False})
+            self._all_flags[flag_name] = flag
+        return self._all_flags[flag_name]
 
 
 @login_and_team_required
@@ -65,7 +81,7 @@ def feature_flags(request, team_slug):
         if form.is_valid():
             form.save()
             messages.success(request, _("Feature flags updated successfully."))
-            return redirect("web_team:feature_flags", team_slug=team.slug)
+            return redirect("single_team:feature_flags", team_slug=team.slug)
     else:
         form = FeatureFlagForm(team=team)
 
