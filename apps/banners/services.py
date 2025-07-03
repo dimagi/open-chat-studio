@@ -42,7 +42,7 @@ class BannerService:
                 banners.append(
                     {
                         "title": banner.title,
-                        "message": banner.get_formatted_message(request),
+                        "message": message,
                         "type": banner.banner_type,
                         "id": banner.id,
                         "end_date": banner.end_date,
