@@ -9,6 +9,7 @@ from django.utils.html import format_html
 from apps.service_providers.models import LlmProvider, LlmProviderModel
 
 from ..experiments.export import get_filtered_sessions
+from ..service_providers.utils import get_dropdown_llm_model_choices
 from .const import LANGUAGE_CHOICES
 from .models import AnalysisQuery, TranscriptAnalysis
 
@@ -46,14 +47,7 @@ class TranscriptAnalysisForm(forms.ModelForm):
         )
 
         # Set up LLM provider model field
-        llm_providers = LlmProvider.objects.filter(team=self.team).all()
-        llm_provider_models_by_type = {}
-        for model in LlmProviderModel.objects.for_team(self.team):
-            llm_provider_models_by_type.setdefault(model.type, []).append(model)
-        model_choices = []
-        for provider in llm_providers:
-            for model in llm_provider_models_by_type.get(provider.type, []):
-                model_choices.append((f"{provider.id}:{model.id}", f"{provider.name} - {model!s}"))
+        model_choices = get_dropdown_llm_model_choices(self.team)
 
         self.fields["provider_model"] = forms.ChoiceField(
             choices=model_choices,
