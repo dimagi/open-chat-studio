@@ -94,9 +94,6 @@ class ChannelBase(ABC):
     This class defines a set of common functions that all channels
     must implement. It provides a blueprint for tuning the behavior of the handler to suit specific channels.
 
-    Attributes:
-        voice_replies_supported: Indicates whether the channel supports voice messages
-
     Args:
         experiment: An Experiment object representing the experiment associated with the handler.
         experiment_channel: An ExperimentChannel object representing the channel associated with the handler.
@@ -106,7 +103,9 @@ class ChannelBase(ABC):
         ChannelException: If both 'experiment_channel' and 'experiment_session' arguments are not provided.
 
     Class variables:
+        voice_replies_supported: Indicates whether the channel supports voice messages
         supported_message_types: A list of message content types that are supported by this channel
+        supports_conversational_consent_flow: Indicates whether the channel supports a conversational consent flow.
 
     Abstract methods:
         send_voice_to_user: (Optional) An abstract method to send a voice message to the user. This must be implemented
@@ -125,6 +124,7 @@ class ChannelBase(ABC):
 
     voice_replies_supported: ClassVar[bool] = False
     supported_message_types: ClassVar[str] = []
+    supports_conversational_consent_flow: ClassVar[bool] = True
 
     def __init__(
         self,
@@ -376,7 +376,7 @@ class ChannelBase(ABC):
                 resp = self._handle_unsupported_message()
                 return ChatMessage(content=resp)
 
-            if self.experiment_channel.platform != ChannelPlatform.WEB:
+            if self.supports_conversational_consent_flow:
                 # Webchats' statuses are updated through an "external" flow
                 if self._is_reset_conversation_request():
                     return ChatMessage(content="Conversation reset")
@@ -850,6 +850,7 @@ class WebChannel(ChannelBase):
 
     voice_replies_supported = False
     supported_message_types = [MESSAGE_TYPES.TEXT]
+    supports_conversational_consent_flow: bool = False
 
     def send_text_to_user(self, bot_message: str):
         # Bot responses are returned by the task and picked up by a periodic request from the browser.
