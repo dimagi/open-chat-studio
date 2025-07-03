@@ -144,10 +144,6 @@ def flag_detail(request, flag_id):
         "-event_date"
     )[:50]  # Last 50 changes
 
-    audit_events = AuditEvent.objects.filter(object_class_path="apps.teams.models.Flag", object_pk=flag.pk).order_by(
-        "-event_date"
-    )[:50]  # Last 50 changes
-
     return TemplateResponse(
         request,
         "admin/flags/detail.html",

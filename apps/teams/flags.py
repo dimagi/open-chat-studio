@@ -8,44 +8,51 @@ Developers should add new flags here when introducing new features.
 from dataclasses import dataclass
 from enum import Enum
 
+from django.conf import settings
+
 
 @dataclass
 class FlagInfo:
     """Information about a feature flag."""
 
-    name: str
+    slug: str
     description: str
-    docs_url: str = ""
+    docs_slug: str = ""
 
 
-class Flags(Enum):
+class Flags(FlagInfo, Enum):
     """All feature flags with their metadata."""
 
-    PIPELINES_V2 = FlagInfo(
+    PIPELINES_V2 = (
         "flag_pipelines-v2",
         "Second version of pipeline functionality with enhanced features",
-        "https://docs.openchatstudio.com/concepts/pipelines/",
+        "pipelines",
     )
 
-    CHATBOTS = FlagInfo(
+    CHATBOTS = (
         "flag_chatbots",
         "Enables simplified chatbot creation and management interface",
-        "https://docs.openchatstudio.com/concepts/chatbots/",
+        "chatbots",
     )
 
-    TEAM_DASHBOARD = FlagInfo("flag_team_dashboard", "Enables new team dashboard with analytics and overview", "")
+    TEAM_DASHBOARD = ("flag_team_dashboard", "Enables new team dashboard with analytics and overview", "")
 
-    OPEN_AI_VOICE_ENGINE = FlagInfo(
-        "flag_open_ai_voice_engine", "Enables OpenAI voice synthesis for audio responses", ""
-    )
+    OPEN_AI_VOICE_ENGINE = ("flag_open_ai_voice_engine", "Enables OpenAI voice synthesis for audio responses", "")
 
-    SESSION_ANALYSIS = FlagInfo("flag_session-analysis", "Enables detailed session analysis and reporting", "")
+    SESSION_ANALYSIS = ("flag_session-analysis", "Enables detailed session analysis and reporting", "")
 
-    EVENTS = FlagInfo("flag_events", "Enables event-driven triggers and scheduled messages", "")
+    EVENTS = ("flag_events", "Enables event-driven triggers and scheduled messages", "")
 
-    SSO_LOGIN = FlagInfo("flag_sso_login", "Enables Single Sign-On authentication integration", "")
+    SSO_LOGIN = ("flag_sso_login", "Enables Single Sign-On authentication integration", "")
 
-    COMMCARE_CONNECT = FlagInfo("flag_commcare_connect", "Enables integration with CommCare Connect platform", "")
+    COMMCARE_CONNECT = ("flag_commcare_connect", "Enables integration with CommCare Connect platform", "")
+
+    @property
+    def docs_url(self):
+        docs_link = settings.DOCUMENTATION_LINKS.get(self.docs_slug, None)
+        if docs_link:
+            return f"{settings.DOCUMENTATION_BASE_URL}{docs_link}"
+        return None
 
 
 def get_flag_info(flag_name: str) -> FlagInfo | None:
@@ -59,8 +66,8 @@ def get_flag_info(flag_name: str) -> FlagInfo | None:
         FlagInfo object if found, None otherwise
     """
     for flag in Flags:
-        if flag.value.name == flag_name:
-            return flag.value
+        if flag.slug == flag_name:
+            return flag
     return None
 
 
@@ -71,7 +78,7 @@ def get_all_flag_info() -> dict[str, FlagInfo]:
     Returns:
         Dictionary mapping flag names to FlagInfo objects
     """
-    return {flag.value.name: flag.value for flag in Flags}
+    return {flag.slug: flag for flag in Flags}
 
 
 def get_undefined_flags(existing_flag_names: list[str]) -> list[str]:
@@ -84,5 +91,5 @@ def get_undefined_flags(existing_flag_names: list[str]) -> list[str]:
     Returns:
         List of flag names not defined in Flags enum
     """
-    defined_flags = {flag.value.name for flag in Flags}
+    defined_flags = {flag.slug for flag in Flags}
     return [name for name in existing_flag_names if name not in defined_flags]
