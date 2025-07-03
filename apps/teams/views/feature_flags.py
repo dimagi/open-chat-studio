@@ -22,6 +22,9 @@ class FeatureFlagForm(forms.Form):
 
         # Create boolean fields for each flag
         for flag_name, info in flag_info.items():
+            if not info.teams_can_manage:
+                continue
+
             self.fields[flag_name] = forms.BooleanField(
                 label=info.description,
                 required=False,

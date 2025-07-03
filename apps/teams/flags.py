@@ -21,6 +21,9 @@ class FlagInfo:
     requires: list[str] = field(default_factory=list)
     """Other feature flags that should be enabled with this flag."""
 
+    teams_can_manage: bool = False
+    """Whether team admins can enable / disable this flag themselves"""
+
 
 class Flags(FlagInfo, Enum):
     """All feature flags with their metadata."""
@@ -36,6 +39,7 @@ class Flags(FlagInfo, Enum):
         "Enables simplified chatbot creation and management interface",
         "chatbots",
         ["flag_pipelines-v2"],
+        True,
     )
 
     TEAM_DASHBOARD = ("flag_team_dashboard", "Enables new team dashboard with analytics and overview", "")
