@@ -19,10 +19,8 @@ class FeatureFlagForm(forms.Form):
 
         self._all_flags = None
 
-        # Get all available flags
         flag_info = get_all_flag_info()
 
-        # Create boolean fields for each flag
         for flag_name, info in flag_info.items():
             if not info.teams_can_manage:
                 continue
@@ -59,7 +57,7 @@ class FeatureFlagForm(forms.Form):
         for flag_name, is_enabled in self.cleaned_data.items():
             flag_info = flag_infos.get(flag_name)
             if not flag_info or not flag_info.teams_can_manage:
-                continue  # Skip flags that teams cannot manage
+                continue
 
             flag = self._get_or_create_flag(flag_name)
             if is_enabled:
