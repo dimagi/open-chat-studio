@@ -113,15 +113,16 @@ class TaggedModelMixin(models.Model, AnnotationMixin):
         self.tags.add(tag, through_defaults={"team": team, "user": added_by})
 
     def user_tag_names(self):
-        return {tag["name"] for tag in self.tags_json if not tag["is_system_tag"]}
+        return {tag["name"] for tag in self.prefetched_tags_json if not tag["is_system_tag"]}
 
     def system_tags_names(self):
-        return {(tag["name"], tag["category"]) for tag in self.tags_json if tag["is_system_tag"]}
+        return {(tag["name"], tag["category"]) for tag in self.prefetched_tags_json if tag["is_system_tag"]}
 
     def all_tag_names(self):
-        return [tag["name"] for tag in self.tags_json]
+        return [tag["name"] for tag in self.prefetched_tags_json]
 
-    def _get_tags_from_prefetch(self):
+    @cached_property
+    def prefetched_tags_json(self):
         if not hasattr(self, "prefetched_tagged_items"):
             return []
 
@@ -143,10 +144,6 @@ class TaggedModelMixin(models.Model, AnnotationMixin):
                 }
             )
         return tags
-
-    @cached_property
-    def tags_json(self):
-        return self._get_tags_from_prefetch()
 
 
 class UserComment(BaseTeamModel):
