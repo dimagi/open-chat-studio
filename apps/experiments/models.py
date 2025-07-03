@@ -1642,6 +1642,7 @@ class ExperimentSession(BaseTeamModel):
             return False
         return self.experiment_channel.experiment != self.experiment
 
+    @property
     def is_complete(self):
         return self.status == SessionStatus.COMPLETE
 
