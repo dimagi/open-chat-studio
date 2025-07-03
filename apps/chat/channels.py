@@ -511,8 +511,10 @@ class ChannelBase(ABC):
 
         if reply_text:
             bot_message, uncited_files = self._format_reference_section(bot_message, files=files)
-            # Links to cited files are already appended
+            # Cited file links are already included in the bot message, so we only need to append the list of
+            # unsupported files that are also uncited
             unsupported_files = [file for file in unsupported_files if file in uncited_files]
+
             bot_message = self.append_attachment_links(bot_message, linkify_files=unsupported_files)
             self.send_text_to_user(bot_message)
         else:
