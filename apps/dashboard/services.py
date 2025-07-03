@@ -54,7 +54,7 @@ class DashboardService:
         base_filters = {"created_at__gte": start_date, "created_at__lte": end_date}
 
         # Base querysets
-        experiments = Experiment.objects.filter(team=self.team, is_archived=False)
+        experiments = Experiment.objects.filter(team=self.team, is_archived=False, working_version=None)
         sessions = ExperimentSession.objects.filter(team=self.team, **base_filters)
         messages = ChatMessage.objects.filter(chat__team=self.team, **base_filters)
         participants = Participant.objects.filter(team=self.team)
