@@ -21,7 +21,7 @@ from langchain_core.prompts import PromptTemplate, get_template_variables
 from langchain_core.tools import BaseTool
 
 from apps.assistants.models import OpenAiAssistant, ToolResources
-from apps.chat.agent.tools import OCS_CITATION_PATTERN, SearchIndexTool, get_assistant_tools, get_tools
+from apps.chat.agent.tools import OCS_CITATION_PATTERN, get_assistant_tools, get_tools
 from apps.chat.models import Chat
 from apps.experiments.models import Experiment, ExperimentSession
 from apps.files.models import File
@@ -88,11 +88,6 @@ class ChatAdapter(BaseAdapter):
         self.team = session.team
         self.template_context = template_context
         self.save_message_metadata_only = save_message_metadata_only
-
-    @cached_property
-    def ocs_search_tool_enabled(self) -> bool:
-        """Check if the OCS search tool is present in the tools list."""
-        return any(isinstance(tool, SearchIndexTool) for tool in self.tools)
 
     @classmethod
     def for_experiment(cls, experiment: Experiment, session: ExperimentSession) -> Self:
