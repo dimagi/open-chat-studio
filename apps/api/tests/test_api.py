@@ -524,7 +524,7 @@ def test_generate_bot_message_and_send(ConnectClient, experiment):
     encryption_key = os.urandom(32).hex()
     participant_data = _setup_participant_data(
         experiment,
-        connect_id=connect_id.upper(),
+        connect_id=connect_id,
         system_metadata={"commcare_connect_channel_id": commcare_connect_channel_id, "consent": True},
         encryption_key=encryption_key,
     )
