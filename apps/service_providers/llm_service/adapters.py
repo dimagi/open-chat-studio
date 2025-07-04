@@ -26,6 +26,7 @@ from apps.experiments.models import Experiment, ExperimentSession
 from apps.files.models import File
 from apps.service_providers.llm_service.main import LlmService, OpenAIAssistantRunnable
 from apps.service_providers.llm_service.prompt_context import PromptTemplateContext
+from apps.service_providers.llm_service.utils import populate_reference_section_from_citations
 
 if TYPE_CHECKING:
     from apps.pipelines.nodes.base import PipelineState
@@ -159,6 +160,9 @@ class ChatAdapter(BaseAdapter):
 
         self.session.chat.attach_files(attachment_type="file_citation", files=cited_files)
         return {"cited_files": [file.id for file in cited_files]}
+
+    def add_citation_section_from_cited_files(self, ai_message: str, cited_files: list[File]) -> str:
+        return populate_reference_section_from_citations(text=ai_message, cited_files=cited_files, session=self.session)
 
 
 class AssistantAdapter(BaseAdapter):
