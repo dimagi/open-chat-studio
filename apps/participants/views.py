@@ -157,7 +157,7 @@ def edit_name(request, team_slug: str, pk: int):
 def cancel_schedule(request, team_slug: str, participant_id: int, schedule_id: str):
     schedule = get_object_or_404(
         ScheduledMessage, external_id=schedule_id, participant_id=participant_id, team=request.team
-    ).prefetch_related("attempts")
+    )
     schedule.cancel(cancelled_by=request.user)
     return render(
         request,
