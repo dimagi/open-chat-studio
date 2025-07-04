@@ -281,9 +281,6 @@ class DashboardService:
         date_filter = Q(experimentsession__chat__messages__created_at__gte=querysets["start_date"]) & Q(
             experimentsession__chat__messages__created_at__lte=querysets["end_date"]
         )
-        session_filter = Q(experimentsession__created_at__gte=querysets["start_date"]) & Q(
-            experimentsession__created_at__lte=querysets["end_date"]
-        )
 
         participant_stats = (
             participants.annotate(
@@ -291,9 +288,8 @@ class DashboardService:
                     "experimentsession__chat__messages",
                     filter=Q(experimentsession__chat__messages__message_type=ChatMessageType.HUMAN) & date_filter,
                 ),
-                total_sessions=Count("experimentsession", filter=session_filter),
+                total_sessions=Count("experimentsession", filter=date_filter),
                 last_activity=Max("experimentsession__chat__messages__created_at"),
-                experiments_count=Count("experimentsession__experiment", distinct=True),
             )
             .filter(total_messages__gt=0)
             .order_by("-total_messages")
@@ -301,9 +297,6 @@ class DashboardService:
 
         # Most active participants
         most_active = [self._format_participant_data(p) for p in participant_stats[:limit]]
-
-        # Least active participants (but with at least some activity)
-        least_active = [self._format_participant_data(p) for p in participant_stats.order_by("total_messages")[:limit]]
 
         # Session length distribution
         sessions = querysets["sessions"].filter(ended_at__isnull=False)
@@ -318,9 +311,7 @@ class DashboardService:
 
         data = {
             "most_active_participants": most_active,
-            "least_active_participants": least_active,
             "session_length_distribution": session_length_distribution,
-            "total_participants": participant_stats.count(),
         }
 
         DashboardCache.set_cached_data(self.team, cache_key, data)
@@ -471,9 +462,6 @@ class DashboardService:
 
     def _format_participant_data(self, participant) -> dict[str, Any]:
         """Format participant data for engagement analysis"""
-        avg_messages_per_session = (
-            participant.total_messages / participant.total_sessions if participant.total_sessions > 0 else 0
-        )
         participant_url = reverse(
             "participants:single-participant-home",
             kwargs={"team_slug": self.team.slug, "participant_id": participant.id},
@@ -484,9 +472,7 @@ class DashboardService:
             "participant_url": participant_url,
             "total_messages": participant.total_messages,
             "total_sessions": participant.total_sessions,
-            "avg_messages_per_session": avg_messages_per_session,
             "last_activity": participant.last_activity.isoformat() if participant.last_activity else None,
-            "experiments_count": participant.experiments_count,
         }
 
     def get_overview_stats(self, **filters) -> dict[str, Any]:

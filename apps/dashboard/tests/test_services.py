@@ -1,4 +1,5 @@
 from datetime import timedelta
+from unittest.mock import ANY
 
 import pytest
 from django.utils import timezone
@@ -217,13 +218,18 @@ class TestDashboardService:
         data = service.get_user_engagement_data(limit=5)
 
         assert isinstance(data, dict)
-        assert "most_active_participants" in data
-        assert "least_active_participants" in data
-        assert "session_length_distribution" in data
-        assert "total_participants" in data
+        assert data["most_active_participants"] == [
+            {
+                "participant_id": participant.id,
+                "participant_name": participant.name,
+                "participant_url": ANY,
+                "total_messages": 3,
+                "total_sessions": 3,
+                "last_activity": ANY,
+            }
+        ]
 
         assert isinstance(data["most_active_participants"], list)
-        assert isinstance(data["least_active_participants"], list)
         assert isinstance(data["session_length_distribution"], list)
 
     def test_granularity_options(self, team, experiment, participant, experiment_session, chat):
