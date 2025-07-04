@@ -1,5 +1,5 @@
 import React, {ChangeEvent, ChangeEventHandler, ReactNode, useEffect, useId, useState,} from "react";
-import CodeMirror from '@uiw/react-codemirror';
+import CodeMirror, {EditorState} from '@uiw/react-codemirror';
 import {python} from "@codemirror/lang-python";
 import {githubDark, githubLight} from "@uiw/codemirror-theme-github";
 import {CompletionContext, snippetCompletion as snip, autocompletion, Completion} from '@codemirror/autocomplete'
@@ -64,6 +64,7 @@ interface WidgetParams {
   nodeSchema: JsonSchema
   required: boolean,
   getNodeFieldError: (nodeId: string, fieldName: string) => string | undefined;
+  readOnly: boolean,
 }
 
 interface ToggleWidgetParams extends Omit<WidgetParams, 'paramValue'> {
@@ -335,13 +336,14 @@ export function CodeWidget(props: WidgetParams) {
         isDarkMode={isDarkMode}
         inputError={props.inputError}
         documentationLink={getDocumentationLink(props.nodeSchema)}
+        readOnly={props.readOnly}
       />
     </>
   );
 }
 
 export function CodeModal(
-  { modalId, humanName, value, onChange, isDarkMode, inputError, documentationLink }: {
+  { modalId, humanName, value, onChange, isDarkMode, inputError, documentationLink, readOnly }: {
     modalId: string;
     humanName: string;
     value: string;
@@ -349,6 +351,7 @@ export function CodeModal(
     isDarkMode: boolean;
     inputError: string | undefined;
     documentationLink: string | null;
+    readOnly: boolean;
   }) {
 
   const [showGenerate, setShowGenerate] = useState(false);
@@ -373,21 +376,22 @@ export function CodeModal(
                 <i className="fa-regular fa-circle-question fa-sm"></i>
               </a>}
             </h4>
-            <button className="btn btn-sm btn-ghost" onClick={() => setShowGenerate(!showGenerate)}>
+            {!readOnly && <button className="btn btn-sm btn-ghost" onClick={() => setShowGenerate(!showGenerate)}>
               <i className="fa-solid fa-wand-magic-sparkles"></i>Help
-            </button>
+            </button>}
           </div>
-          <GenerateCodeSection
+          {!readOnly && <GenerateCodeSection
             showGenerate={showGenerate}
             setShowGenerate={setShowGenerate}
             isDarkMode={isDarkMode}
             onAccept={onChange}
             currentCode={value}
-          />
+          />}
           <CodeNodeEditor
             value={value}
             onChange={onChange}
             isDarkMode={isDarkMode}
+            readOnly={readOnly}
             />
         </div>
         <div className="flex flex-col">
@@ -472,6 +476,7 @@ function GenerateCodeSection({
             value={generated}
             onChange={setGenerated}
             isDarkMode={isDarkMode}
+            readOnly={false}
             />
         <div className={"my-2 join"}>
           <button className={"btn btn-sm btn-success join-item"} onClick={() => {
@@ -498,10 +503,11 @@ function GenerateCodeSection({
 }
 
 function CodeNodeEditor(
-  {value, onChange, isDarkMode}: {
+  {value, onChange, isDarkMode, readOnly}: {
     value: string;
     onChange: (value: string) => void;
     isDarkMode: boolean;
+    readOnly: boolean;
   }
 ) {
   const customCompletions = {
@@ -617,6 +623,19 @@ function CodeNodeEditor(
     }
   }
 
+  let extensions = [
+    python(),
+    python().language.data.of({
+      autocomplete: pythonCompletions
+    })
+  ];
+  if (readOnly) {
+    extensions = [
+      ...extensions,
+      EditorView.editable.of(false),
+      EditorState.readOnly.of(true),
+    ]
+  }
   return <CodeMirror
     value={value}
     onChange={onChange}
@@ -624,12 +643,7 @@ function CodeNodeEditor(
     height="100%"
     width="100%"
     theme={isDarkMode ? githubDark : githubLight}
-    extensions={[
-      python(),
-      python().language.data.of({
-        autocomplete: pythonCompletions
-      })
-    ]}
+    extensions={extensions}
     basicSetup={{
       lineNumbers: true,
       tabSize: 4,
@@ -1208,6 +1222,7 @@ export function TextEditorWidget(props: WidgetParams) {
         label={props.label}
         inputError={props.inputError}
         autocomplete_vars_list={autocomplete_vars_list}
+        readOnly={props.readOnly}
       />
     </>
   );
@@ -1221,6 +1236,7 @@ function TextEditorModal({
   label,
   inputError,
   autocomplete_vars_list,
+  readOnly,
 }: {
   modalId: string;
   value: string;
@@ -1229,7 +1245,25 @@ function TextEditorModal({
   label: string;
   inputError?: string;
   autocomplete_vars_list: string[];
+  readOnly: boolean;
 }) {
+  let extensions = [
+    autocompletion({
+      override: [textEditorVarCompletions(autocomplete_vars_list)],
+      activateOnTyping: true,
+    }),
+    highlightAutoCompleteVars(autocomplete_vars_list),
+    autocompleteVarTheme(isDarkMode),
+    EditorView.lineWrapping,
+    EditorView.editable.of(true)
+  ];
+  if (readOnly) {
+    extensions = [
+      ...extensions,
+      EditorView.editable.of(false),
+      EditorState.readOnly.of(true),
+    ]
+  }
   return (
     <dialog id={modalId} className="modal nopan nodelete nodrag noflow nowheel">
       <div className="modal-box min-w-[85vw] h-[80vh] flex flex-col">
@@ -1247,16 +1281,7 @@ function TextEditorModal({
             onChange={onChange}
             height="100%"
             theme={isDarkMode ? githubDark : githubLight}
-            extensions={[
-              autocompletion({
-                override: [textEditorVarCompletions(autocomplete_vars_list)],
-                activateOnTyping: true,
-              }),
-              highlightAutoCompleteVars(autocomplete_vars_list),
-              autocompleteVarTheme(isDarkMode),
-              EditorView.lineWrapping,
-              EditorView.editable.of(true)
-            ]}
+            extensions={extensions}
             basicSetup={{
               lineNumbers: true,
               tabSize: 2,
