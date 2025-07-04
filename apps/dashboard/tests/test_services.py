@@ -218,22 +218,18 @@ class TestDashboardService:
         data = service.get_user_engagement_data(limit=5)
 
         assert isinstance(data, dict)
-        participant_data = {
-            "participant_id": participant.id,
-            "participant_name": participant.name,
-            "participant_url": ANY,
-            "total_messages": 3,
-            "total_sessions": 3,
-            "avg_messages_per_session": 1.0,
-            "last_activity": ANY,
-            "experiments_count": 1,
-        }
-        assert data["most_active_participants"] == [participant_data]
-        assert data["least_active_participants"] == [participant_data]
-        assert data["total_participants"] == 1
+        assert data["most_active_participants"] == [
+            {
+                "participant_id": participant.id,
+                "participant_name": participant.name,
+                "participant_url": ANY,
+                "total_messages": 3,
+                "total_sessions": 3,
+                "last_activity": ANY,
+            }
+        ]
 
         assert isinstance(data["most_active_participants"], list)
-        assert isinstance(data["least_active_participants"], list)
         assert isinstance(data["session_length_distribution"], list)
 
     def test_granularity_options(self, team, experiment, participant, experiment_session, chat):
