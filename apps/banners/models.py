@@ -1,5 +1,10 @@
+import logging
+
 from django.db import models
+from django.template import engines
 from django.utils import timezone
+
+logger = logging.getLogger("ocs.banners")
 
 
 class Banner(models.Model):
@@ -65,3 +70,15 @@ class Banner(models.Model):
     def is_visible(self):
         now = timezone.now()
         return self.is_active and self.start_date <= now and self.end_date > now
+
+    def get_formatted_message(self, request):
+        try:
+            django_engine = engines["django"]
+            template = django_engine.from_string(self.message)
+            return template.render({"request": request})
+        except Exception as e:
+            logger.exception("Error rendering banner")
+            if request.user.is_superuser:
+                return f"ERROR: {str(e)}"
+
+        return ""

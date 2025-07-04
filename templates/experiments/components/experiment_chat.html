@@ -1,5 +1,6 @@
 {% load json_tags %}
 {% load chat_tags %}
+{% load form_tags %}
 {% load waffle_tags %}
 {% load pagination_tags %}
 
@@ -17,7 +18,7 @@
             hx-get="{% url 'experiments:experiment_session_messages_view' request.team.slug experiment.public_id experiment_session.external_id %}"
             hx-trigger="keyup changed delay:500ms"
             hx-target="#messages-container"
-            hx-include="[name='search']"
+            hx-include="[name='search'], [name='language'], [name='show_original_translation']"
           >
           {% if search %}
             <button
@@ -28,6 +29,83 @@
               <i class="fa-solid fa-times"></i>
             </button>
           {% endif %}
+        </div>
+      {% endif %}
+      {% if available_languages %}
+        <div class="grid grid-cols-4 gap-4 items-center">
+          <select
+            name="language"
+            class="select select-sm select-bordered w-48"
+            hx-get="{% url 'experiments:experiment_session_messages_view' request.team.slug experiment.public_id experiment_session.external_id %}"
+            hx-target="#messages-container"
+            hx-include="[name='search'], [name='show_original_translation']"
+            hx-trigger="change"
+          >
+            {% for lang_code, lang_name in available_languages %}
+              <option value="{{ lang_code }}" {% if request.GET.language == lang_code %}selected{% endif %}>
+                {{ lang_name }}
+              </option>
+            {% endfor %}
+          </select>
+          <div class="col-span-3 flex items-center gap-2">
+            {% if language %}
+              <div class="tooltip" data-tip="Messages translated from original language">
+                <a class="badge badge-info badge-sm" aria-label="Messages translated from original language">
+                  Translated
+                </a>
+              </div>
+
+              <div class="my-2">
+                <label class="label cursor-pointer space-x-2 text-xs">
+                  Show Original Messages
+                  <input type="checkbox"
+                         name="show_original_translation"
+                         class="toggle"
+                         aria-label="Show original translation alongside translated text"
+                         hx-get="{% url 'experiments:experiment_session_messages_view' request.team.slug experiment.public_id experiment_session.external_id %}"
+                         hx-target="#messages-container"
+                         hx-include="[name='search'], [name='language']"
+                         hx-trigger="change"
+                         {% if request.GET.show_original_translation == "on" %}checked{% else %}unchecked{% endif %}>
+                </label>
+              </div>
+              {% if has_missing_translations %}
+                <label for="translate-messages-modal" class="btn btn-primary btn-sm">
+                  Translate Remaining Messages
+                </label>
+
+                <input type="checkbox" id="translate-messages-modal" class="modal-toggle" />
+                <div class="modal">
+                  <div class="modal-box">
+                    <h3 class="font-bold text-lg">Translate Remaining Messages?</h3>
+                    <p class="py-4">
+                      This will translate all messages that don't currently have translations for:
+                      <strong>{% for lang_code, lang_name in available_languages %}
+                        {% if lang_code == language %}{{ lang_name }}{% endif %}
+                      {% endfor %}</strong>
+                    </p>
+
+                    {% render_form_fields translate_form %}
+                    <p class="pb-4">This action may take a few moments to complete.</p>
+                    <div class="modal-action">
+                      <button
+                        data-action="translate-messages"
+                        class="btn btn-primary"
+                        hx-post="{% url 'experiments:translate_messages' request.team.slug experiment.public_id experiment_session.external_id %}"
+                        hx-vals='{"language": "{{ language }}"}'
+                        hx-include="[name='search'], [name='language'], [name='show_original_translation'], #translation-provider-model"
+                        hx-target="#messages-container"
+                        hx-indicator="#chat-message-untranslated"
+                        onclick="document.getElementById('translate-messages-modal').checked = false;"
+                      >Translate Messages
+                      </button>
+                      <label for="translate-messages-modal" class="btn">Cancel</label>
+                    </div>
+                  </div>
+                </div>
+              {% endif %}
+            {% endif %}
+          </div>
         </div>
       {% endif %}
 
@@ -70,8 +148,33 @@
                     {% endif %}
                     <div class="grow">
                       <div class="message-contents">
-                        <p>{{ message.content|render_markdown }}</p>
+                        {% if message.translation %}
+                          {% if message.translation == default_message %}
+                            <div id="chat-message-untranslated">
+                              <div class="htmx-show">
+                                <span class="loading loading-spinner loading-sm"></span>
+                                <span class="ml-2">Translating...</span>
+                              </div>
+                              <div class="htmx-hide"><p>{{ message.translation|render_markdown }}</p></div>
+                            </div>
+                          {% else %}
+                            <p>{{ message.translation|render_markdown }}</p>
+                          {% endif %}
+                        {% else %}
+                          <p>{{ message.content|render_markdown }}</p>
+                        {% endif %}
                       </div>
+                      {% if show_original_translation and not message.translation == default_message %}
+                        <div class="pg-text-muted">
+                          <p><strong>Original Message: </strong>{{ message.content|render_markdown }}</p>
+                        </div>
+                      {% endif %}
+                      {% if message.translation == default_message %}
+                        {# hidden when loading spinners are shown #}
+                        <div id="chat-message-untranslated" class="pg-text-muted htmx-hide">
+                          <p><strong>Original Message: </strong>{{ message.content|render_markdown }}</p>
+                        </div>
+                      {% endif %}
                       <div class="flex flex-col">
                         {% for file in message.get_attached_files %}
                           <div class="inline text-sm p-1">

@@ -8,13 +8,17 @@ import { HTMLStencilElement, JSXBase } from "@stencil/core/internal";
 export namespace Components {
     interface OpenChatStudioWidget {
         /**
-          * The URL of the bot to connect to.
+          * The base URL for the API (defaults to current origin).
          */
-        "botUrl": string;
+        "apiBaseUrl"?: string;
         /**
           * The text to display on the button.
          */
         "buttonText": string;
+        /**
+          * The ID of the chatbot to connect to.
+         */
+        "chatbotId": string;
         /**
           * Whether the chat widget is initially expanded.
          */
@@ -43,13 +47,17 @@ declare global {
 declare namespace LocalJSX {
     interface OpenChatStudioWidget {
         /**
-          * The URL of the bot to connect to.
+          * The base URL for the API (defaults to current origin).
          */
-        "botUrl": string;
+        "apiBaseUrl"?: string;
         /**
           * The text to display on the button.
          */
         "buttonText"?: string;
+        /**
+          * The ID of the chatbot to connect to.
+         */
+        "chatbotId": string;
         /**
           * Whether the chat widget is initially expanded.
          */

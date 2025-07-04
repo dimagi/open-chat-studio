@@ -7,6 +7,7 @@ from apps.api.models import UserAPIKey
 class ApiTestClient(APIClient):
     def __init__(self, user, team):
         super().__init__()
+        self.user = user
         _user_key, self._api_key = UserAPIKey.objects.create_key(name=f"{user.email}-key", user=user, team=team)
 
     def request(self, *args, **kwargs):

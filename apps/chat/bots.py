@@ -9,7 +9,7 @@ from pydantic import ValidationError
 from apps.annotations.models import TagCategories
 from apps.chat.conversation import BasicConversation
 from apps.chat.exceptions import ChatException
-from apps.chat.models import ChatAttachment, ChatMessage, ChatMessageType
+from apps.chat.models import ChatMessage, ChatMessageType
 from apps.events.models import StaticTriggerType
 from apps.events.tasks import enqueue_static_triggers
 from apps.experiments.models import Experiment, ExperimentRoute, ExperimentSession, SafetyLayer
@@ -270,6 +270,7 @@ class SafetyBot:
 
 class PipelineBot:
     def __init__(self, session: ExperimentSession, experiment: Experiment, trace_service, disable_reminder_tools=False):
+        self.team = experiment.team
         self.experiment = experiment
         self.session = session
         self.trace_service = trace_service
@@ -303,17 +304,19 @@ class PipelineBot:
         self._process_intents(output)
         return result
 
-    def _get_input_state(self, attachments, user_input):
+    def _get_input_state(self, attachments: list["Attachment"], user_input: str):
         attachments = attachments or []
         serializable_attachments = [attachment.model_dump() for attachment in attachments]
         incoming_file_ids = []
+
         for attachment in attachments:
-            file = File.objects.get(id=attachment.id)
-            ChatAttachment.objects.create(chat=self.session.chat, tool_type="ocs_attachments")
+            file = File.objects.get(id=attachment.id, team_id=self.team.id)
             incoming_file_ids.append(file.id)
+
         input_message_metadata = {}
         if incoming_file_ids:
             input_message_metadata["ocs_attachment_file_ids"] = incoming_file_ids
+
         return PipelineState(
             messages=[user_input],
             experiment_session=self.session,

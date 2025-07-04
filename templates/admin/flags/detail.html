@@ -3,27 +3,40 @@
 
 {% block app %}
   <section class="app-card">
-    <div class="flex justify-between items-center mb-6">
-      <div>
-        <a href="{% url 'ocs_admin:flags_home' %}" class="text-sm text-base-content/70 hover:text-base-content mb-2 inline-block">
-          ← {% translate "Back to Flags" %}
-        </a>
-        <h1 class="pg-title">{{ flag.name }}</h1>
-        {% if flag_info %}
-          <p class="text-base-content/80 mt-2">{{ flag_info.description }}</p>
-          {% if flag_info.docs_url %}
-            <a href="{{ flag_info.docs_url }}" target="_blank" class="text-sm text-primary hover:text-primary-focus mt-1 inline-flex items-center">
-              <i class="fa fa-external-link mr-1" aria-hidden="true"></i>
-              View Documentation
-            </a>
-          {% endif %}
-        {% else %}
-          <p class="text-warning text-sm mt-2">
-            <i class="fa fa-warning mr-1" aria-hidden="true"></i>
-            No description defined for this flag
-          </p>
+    <div>
+      <a href="{% url 'ocs_admin:flags_home' %}" class="text-sm text-base-content/70 hover:text-base-content mb-2 inline-block">
+        ← {% translate "Back to Flags" %}
+      </a>
+      <h1 class="pg-title">{{ flag.name }}</h1>
+      {% if flag_info %}
+        <p class="text-base-content/80 mt-2">{{ flag_info.description }}</p>
+        {% if flag_info.docs_url %}
+          <a href="{{ flag_info.docs_url }}" target="_blank" class="text-sm text-primary hover:text-primary-focus mt-1 inline-flex items-center">
+            <i class="fa fa-external-link mr-1" aria-hidden="true"></i>
+            View Documentation
+          </a>
         {% endif %}
-      </div>
+        {% if flag_info.requires %}
+          <div role="alert" class="alert alert-warning">
+            <svg xmlns="http://www.w3.org/2000/svg" class="h-6 w-6 shrink-0 stroke-current" fill="none" viewBox="0 0 24 24">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
+            </svg>
+            <div>
+              <span>This flag depends on the following flags:</span>
+              <ul class="list-inside list-disc">
+                {% for requires in flag_info.requires %}
+                  <li><a href="{% url "ocs_admin:flag_detail" requires %}">{{ requires }}</a></li>
+                {% endfor %}
+              </ul>
+            </div>
+          </div>
+        {% endif %}
+      {% else %}
+        <p class="text-warning text-sm mt-2">
+          <i class="fa fa-warning mr-1" aria-hidden="true"></i>
+          No description defined for this flag
+        </p>
+      {% endif %}
     </div>
 
     <div
@@ -196,7 +209,7 @@
 
             <div
               id="flag-history-section"
-              hx-get="{% url 'ocs_admin:flag_history' flag.id %}"
+              hx-get="{% url 'ocs_admin:flag_history' flag.name %}"
               hx-trigger="load, refreshHistory from:body"
               hx-swap="innerHTML"
             >

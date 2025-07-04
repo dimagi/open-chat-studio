@@ -64,6 +64,9 @@ DEFAULT_ERROR_RESPONSE_TEXT = "Sorry, something went wrong while processing your
 # The regex from https://stackoverflow.com/a/6041965 is used, but tweaked to remove capturing groups
 URL_REGEX = r"(?:http|ftp|https):\/\/(?:[\w_-]+(?:(?:\.[\w_-]+)+))(?:[\w.,@?^=%&:\/~+#-]*[\w@?^=%&\/~+#-])"
 
+# Matches [^2]: [file_name](https://example.com)
+MARKDOWN_REF_PATTERN = r"^\[(?P<ref>.+?)\]:\s*\[(?P<file_name>[^\]]+)\]\((?P<download_link>.*)\)"
+
 
 def strip_urls_and_emojis(text: str) -> tuple[str, list[str]]:
     """Strips any URLs in `text` and appends them to the end of the text. Emoji's are filtered out"""
@@ -91,9 +94,6 @@ class ChannelBase(ABC):
     This class defines a set of common functions that all channels
     must implement. It provides a blueprint for tuning the behavior of the handler to suit specific channels.
 
-    Attributes:
-        voice_replies_supported: Indicates whether the channel supports voice messages
-
     Args:
         experiment: An Experiment object representing the experiment associated with the handler.
         experiment_channel: An ExperimentChannel object representing the channel associated with the handler.
@@ -103,7 +103,9 @@ class ChannelBase(ABC):
         ChannelException: If both 'experiment_channel' and 'experiment_session' arguments are not provided.
 
     Class variables:
+        voice_replies_supported: Indicates whether the channel supports voice messages
         supported_message_types: A list of message content types that are supported by this channel
+        supports_conversational_consent_flow: Indicates whether the channel supports a conversational consent flow.
 
     Abstract methods:
         send_voice_to_user: (Optional) An abstract method to send a voice message to the user. This must be implemented
@@ -122,6 +124,7 @@ class ChannelBase(ABC):
 
     voice_replies_supported: ClassVar[bool] = False
     supported_message_types: ClassVar[str] = []
+    supports_conversational_consent_flow: ClassVar[bool] = True
 
     def __init__(
         self,
@@ -373,7 +376,7 @@ class ChannelBase(ABC):
                 resp = self._handle_unsupported_message()
                 return ChatMessage(content=resp)
 
-            if self.experiment_channel.platform != ChannelPlatform.WEB:
+            if self.supports_conversational_consent_flow:
                 # Webchats' statuses are updated through an "external" flow
                 if self._is_reset_conversation_request():
                     return ChatMessage(content="Conversation reset")
@@ -507,6 +510,11 @@ class ChannelBase(ABC):
             unsupported_files = files
 
         if reply_text:
+            bot_message, uncited_files = self._format_reference_section(bot_message, files=files)
+            # Cited file links are already included in the bot message, so we only need to append the list of
+            # unsupported files that are also uncited
+            unsupported_files = [file for file in unsupported_files if file in uncited_files]
+
             bot_message = self.append_attachment_links(bot_message, linkify_files=unsupported_files)
             self.send_text_to_user(bot_message)
         else:
@@ -526,6 +534,76 @@ class ChannelBase(ABC):
         # Finally send the attachments that are supported by the channel
         if supported_files:
             self._send_files_to_user(supported_files)
+
+    def _format_reference_section(self, text: str, files: list[File]) -> tuple[str, list[File]]:
+        """
+        Formats file references in text to be channel-appropriate.
+
+        This method processes markdown-style file references in text and adapts them based on
+        the channel's file-sending capabilities. It handles both inline citations and reference
+        sections at the end of the text.
+
+        Processing steps:
+        1. Convert footnote citations [^1] to regular citations [1] for non-web channels
+        2. Process reference entries like "[1]: [filename.txt](http://example.com/file.txt)"
+        3. For files that CAN be sent through the channel: show only filename
+        4. For files that CANNOT be sent: show filename with download link in parentheses
+
+        Args:
+            text: The text containing markdown file references
+            files: List of File objects that may be referenced in the text
+
+        Returns:
+            tuple: (formatted_text, uncited_files)
+                - formatted_text: Text with references adapted for the channel
+                - uncited_files: Files from the input list that weren't referenced in text
+
+        Example:
+            Input text (assuming .txt files can't be sent, .pdf files can):
+            ```
+            Here's a fact [^1] and another [^2].
+
+            [^1]: [report.txt](http://example.com/report.txt)
+            [^2]: [summary.pdf](http://example.com/summary.pdf)
+            ```
+
+            Output text:
+            ```
+            Here's a fact [1] and another [2].
+
+            [1]: report.txt (http://example.com/report.txt)
+            [2]: summary.pdf
+            ```
+        """
+        text = re.sub(r"\[\^([^\]]+)\]", r"[\1]", text)
+
+        cited_files = set()
+        if not files:
+            return text, []
+
+        files_by_name = {file.name: file for file in files}
+
+        def format_citation_match(match):
+            ref_id = match.groupdict()["ref"]
+            file_name = match.groupdict()["file_name"]
+            download_link = match.groupdict()["download_link"]
+            file = files_by_name.get(file_name)
+
+            if not file:
+                return match.group(0)
+
+            cited_files.add(file)
+
+            if self._can_send_file(file):
+                return f"[{ref_id}]: {file.name}"
+            else:
+                return f"[{ref_id}]: {file.name} ({download_link})"
+
+        markdown_ref_pattern = re.compile(MARKDOWN_REF_PATTERN, re.MULTILINE)
+        text = markdown_ref_pattern.sub(format_citation_match, text)
+
+        uncited_files = [file for file in files if file not in cited_files]
+        return text, uncited_files
 
     def _send_files_to_user(self, files: list[File]):
         """
@@ -774,6 +852,7 @@ class WebChannel(ChannelBase):
 
     voice_replies_supported = False
     supported_message_types = [MESSAGE_TYPES.TEXT]
+    supports_conversational_consent_flow: bool = False
 
     def send_text_to_user(self, bot_message: str):
         # Bot responses are returned by the task and picked up by a periodic request from the browser.

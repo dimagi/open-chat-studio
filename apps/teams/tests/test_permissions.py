@@ -35,6 +35,7 @@ IGNORE_APPS = {
     "celery",  # heath_check.celery
     "celery_progress",
     "contenttypes",
+    "corsheaders",
     "db",  # heath_check.db
     "django_celery_beat",
     "django_cleanup",

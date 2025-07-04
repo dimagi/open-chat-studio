@@ -146,7 +146,7 @@ def session_chat_url(url_name, request, record, value):
 
 
 def _show_chat_button(request, record):
-    return record.participant.user == request.user and not record.is_complete() and record.experiment.is_editable()
+    return record.participant.user == request.user and not record.is_complete and record.experiment.is_editable
 
 
 class ExperimentSessionsTable(tables.Table):

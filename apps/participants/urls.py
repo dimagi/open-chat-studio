@@ -27,7 +27,12 @@ urlpatterns = [
         views.cancel_schedule,
         name="cancel_schedule",
     ),
-    path("participants/identifiers/<int:experiment_id>/", views.participant_identifiers, name="participant_identifier"),
+    path(
+        "participants/identifiers/<int:experiment_id>/",
+        views.participant_identifiers_by_experiment,
+        name="participant_identifier",
+    ),
+    path("participants/identifiers/", views.all_participant_identifiers, name="all_participant_identifiers"),
 ]
 
 urlpatterns.extend(make_crud_urls(views, "Participant", "participant", edit=False, delete=False, new=False))

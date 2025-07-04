@@ -301,6 +301,7 @@
                   <th>{% trans "Participant" %}</th>
                   <th>{% trans "Messages" %}</th>
                   <th>{% trans "Sessions" %}</th>
+                  <th>{% trans "Last Activity" %}</th>
                 </tr>
               </thead>
               <tbody>
@@ -314,6 +315,7 @@
                     </td>
                     <td x-text="formatNumber(participant.total_messages)"></td>
                     <td x-text="formatNumber(participant.total_sessions)"></td>
+                    <td x-text="`${formatDate(participant.last_activity)} ago`"></td>
                   </tr>
                 </template>
               </tbody>
