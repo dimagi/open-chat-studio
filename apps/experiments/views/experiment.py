@@ -15,7 +15,9 @@ from django.contrib.auth.decorators import permission_required
 from django.contrib.auth.mixins import PermissionRequiredMixin
 from django.core.exceptions import PermissionDenied, ValidationError
 from django.db import transaction
-from django.db.models import Case, Count, IntegerField, When
+from django.db.models import Case, CharField, Count, IntegerField, Value, When
+from django.db.models.fields.json import KeyTextTransform
+from django.db.models.functions import Coalesce
 from django.http import FileResponse, Http404, HttpResponse, HttpResponseForbidden, HttpResponseRedirect
 from django.shortcuts import get_object_or_404, redirect, render
 from django.template.response import TemplateResponse
@@ -32,6 +34,7 @@ from django_tables2 import SingleTableView
 from field_audit.models import AuditAction
 from waffle import flag_is_active
 
+from apps.analysis.const import LANGUAGE_CHOICES
 from apps.annotations.models import Tag
 from apps.assistants.sync import OpenAiSyncError, get_diff_with_openai_assistant, get_out_of_sync_files
 from apps.channels.datamodels import Attachment, AttachmentType
@@ -63,6 +66,7 @@ from apps.experiments.forms import (
     ExperimentInvitationForm,
     ExperimentVersionForm,
     SurveyCompletedForm,
+    TranslateMessagesForm,
 )
 from apps.experiments.helpers import get_real_user_or_none
 from apps.experiments.models import (
@@ -93,6 +97,7 @@ from apps.experiments.views.prompt import PROMPT_DATA_SESSION_KEY
 from apps.files.models import File
 from apps.generics.chips import Chip
 from apps.generics.views import generic_home, paginate_session, render_session_details
+from apps.service_providers.models import LlmProvider, LlmProviderModel
 from apps.service_providers.utils import get_llm_provider_choices
 from apps.teams.decorators import login_and_team_required, team_required
 from apps.teams.mixins import LoginAndTeamRequiredMixin
@@ -475,6 +480,7 @@ def base_single_experiment_view(request, team_slug, experiment_id, template_name
         "channel_list": channel_list,
         "allow_copy": not experiment.child_links.exists(),
         "date_range_options": DATE_RANGE_OPTIONS,
+        "filter_columns": ["participant", "last_message", "first_message", "tags", "versions", "channels"],
         **_get_events_context(experiment, team_slug, request.origin),
     }
     if active_tab != "chatbots":
@@ -1216,6 +1222,14 @@ def _experiment_chat_ui(request, embedded=False):
     )
 
 
+def _get_available_languages_for_chat(session):
+    available_language_codes = session.chat.translated_languages
+    available_languages = [
+        choice for choice in LANGUAGE_CHOICES if choice[0] == "" or choice[0] in available_language_codes
+    ]
+    return available_languages
+
+
 @experiment_session_view()
 @verify_session_access_cookie
 def experiment_session_messages_view(request, team_slug: str, experiment_id: uuid.UUID, session_id: str):
@@ -1224,10 +1238,27 @@ def experiment_session_messages_view(request, team_slug: str, experiment_id: uui
     experiment = request.experiment
     page = int(request.GET.get("page", 1))
     search = request.GET.get("search", "")
+    language = request.GET.get("language", "")
+    show_original_translation = request.GET.get("show_original_translation") == "on"
     page_size = 100
     messages_queryset = ChatMessage.objects.filter(chat=session.chat).all().order_by("created_at")
+    available_languages = _get_available_languages_for_chat(session)
+    has_missing_translations = False
+    translate_form = TranslateMessagesForm(team=request.team)
+    default_message = "(message generated after last translation)"
+
     if search:
         messages_queryset = messages_queryset.filter(tags__name__icontains=search).distinct()
+
+    if language:
+        messages_queryset = messages_queryset.annotate(
+            translation=Coalesce(
+                KeyTextTransform(language, "translations"),
+                Value(default_message),
+                output_field=CharField(),
+            )
+        )
+        has_missing_translations = messages_queryset.exclude(**{f"translations__{language}__isnull": False}).exists()
 
     total_messages = messages_queryset.count()
     total_pages = max(1, (total_messages + page_size - 1) // page_size)
@@ -1245,7 +1276,13 @@ def experiment_session_messages_view(request, team_slug: str, experiment_id: uui
         "page_size": page_size,
         "page_start_index": start_idx,
         "search": search,
+        "language": language,
+        "available_languages": available_languages,
         "available_tags": [t.name for t in Tag.objects.filter(team__slug=team_slug, is_system_tag=False).all()],
+        "has_missing_translations": has_missing_translations,
+        "show_original_translation": show_original_translation,
+        "translate_form": translate_form,
+        "default_message": default_message,
     }
 
     return TemplateResponse(
@@ -1253,6 +1290,74 @@ def experiment_session_messages_view(request, team_slug: str, experiment_id: uui
         "experiments/components/experiment_chat.html",
         context,
     )
+
+
+@experiment_session_view()
+@verify_session_access_cookie
+def translate_messages_view(request, team_slug: str, experiment_id: uuid.UUID, session_id: str):
+    from apps.analysis.translation import translate_messages_with_llm
+
+    session = request.experiment_session
+    language = request.POST.get("language")
+    provider_model = request.POST.get("provider_model", "")
+    valid_languages = [choice[0] for choice in LANGUAGE_CHOICES if choice[0]]
+
+    if not language or language not in valid_languages:
+        messages.error(request, "No language selected for translation.")
+        return redirect_to_messages_view(request, session)
+    if not provider_model:
+        messages.error(request, "No LLM provider model selected.")
+        return redirect_to_messages_view(request, session)
+    try:
+        provider_id, model_id = provider_model.split(":", 1)
+
+        try:
+            llm_provider = LlmProvider.objects.get(id=provider_id, team=request.team)
+            llm_provider_model = LlmProviderModel.objects.get(id=model_id)
+        except (LlmProvider.DoesNotExist, LlmProviderModel.DoesNotExist):
+            messages.error(request, "Selected provider or model not found.")
+            return redirect_to_messages_view(request, session)
+
+        messages_to_translate = ChatMessage.objects.filter(chat=session.chat).exclude(
+            **{f"translations__{language}__isnull": False}
+        )
+        if not messages_to_translate.exists():
+            messages.info(request, "All messages already have translations for this language.")
+            return redirect_to_messages_view(request, session)
+        translate_messages_with_llm(
+            messages=list(messages_to_translate),
+            target_language=language,
+            llm_provider=llm_provider,
+            llm_provider_model=llm_provider_model,
+        )
+    except Exception as e:
+        logging.exception("Error translating messages")
+        messages.error(request, f"Translation failed: {str(e)}")
+        return redirect_to_messages_view(request, session)
+
+    return redirect_to_messages_view(request, session)
+
+
+def redirect_to_messages_view(request, session):
+    url = reverse(
+        "experiments:experiment_session_messages_view",
+        args=[request.team.slug, session.experiment.public_id, session.external_id],
+    )
+    params = {}
+    search = request.POST.get("search", "").strip()
+    show_original_translation = request.POST.get("show_original_translation", "")
+    params["language"] = request.POST.get("language", "")
+    if search:
+        params["search"] = search
+    if show_original_translation:
+        params["show_original_translation"] = show_original_translation
+
+    if params:
+        from urllib.parse import urlencode
+
+        url += "?" + urlencode(params)
+
+    return HttpResponseRedirect(url)
 
 
 @experiment_session_view(allowed_states=[SessionStatus.ACTIVE, SessionStatus.SETUP])

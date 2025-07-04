@@ -1,0 +1,11 @@
+<button
+  type="button"
+  class="btn btn-sm"
+  title="Edit message"
+  hx-get="{% url 'evaluations:edit_message_modal' request.team.slug record.id %}"
+  hx-target="#editMessageModal"
+  hx-swap="innerHTML"
+  hx-on::after-request="document.getElementById('editMessageModal').showModal()"
+>
+  <i class="fa-solid fa-pencil"></i>
+</button>

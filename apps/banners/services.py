@@ -35,16 +35,17 @@ class BannerService:
         dismissed_ids_raw = request.COOKIES.get("dismissed_banners", "[]")
         dismissed_ids = unquote(dismissed_ids_raw)
         team = getattr(request, "team", None)
-        banners = BannerService.get_active_banners(dismissed_ids, location, team)
-        return {
-            "banners": [
-                {
-                    "title": banner.title,
-                    "message": banner.message,
-                    "type": banner.banner_type,
-                    "id": banner.id,
-                    "end_date": banner.end_date,
-                }
-                for banner in banners
-            ],
-        }
+        banners = []
+        for banner in BannerService.get_active_banners(dismissed_ids, location, team):
+            message = banner.get_formatted_message(request)
+            if message:
+                banners.append(
+                    {
+                        "title": banner.title,
+                        "message": message,
+                        "type": banner.banner_type,
+                        "id": banner.id,
+                        "end_date": banner.end_date,
+                    }
+                )
+        return {"banners": banners}
