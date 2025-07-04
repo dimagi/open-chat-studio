@@ -462,10 +462,6 @@ class ScheduledMessage(BaseTeamModel):
                 fail_silently=False,
                 use_experiment=self._get_experiment_to_generate_response(),
             )
-        except Exception as e:
-            trace_metadata = getattr(e, "trace_metadata", {})
-            e.trace_metadata = trace_metadata
-            raise
         finally:
             utc_now = timezone.now()
             self.last_triggered_at = utc_now

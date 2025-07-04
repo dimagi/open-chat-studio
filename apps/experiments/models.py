@@ -1715,7 +1715,6 @@ class ExperimentSession(BaseTeamModel):
                         instruction_prompt, trace_info, use_experiment=use_experiment, trace_service=trace_service
                     )
                     self.try_send_message(message=bot_message)
-                    raise RuntimeError("Simulated bot failure!")
                     trace_service.set_current_span_outputs({"response": bot_message})
                     trace_info = trace_service.get_trace_metadata()
                 return trace_info
