@@ -563,8 +563,8 @@ class ChannelBase(ABC):
             ```
             Here's a fact [^1] and another [^2].
 
-            [1]: [report.txt](http://example.com/report.txt)
-            [2]: [summary.pdf](http://example.com/summary.pdf)
+            [^1]: [report.txt](http://example.com/report.txt)
+            [^2]: [summary.pdf](http://example.com/summary.pdf)
             ```
 
             Output text:
