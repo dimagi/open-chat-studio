@@ -443,19 +443,18 @@ class ScheduledMessage(BaseTeamModel):
                 retry_scheduled_message.apply_async(args=[self.id, attempt_number + 1], countdown=backoff_seconds)
 
     def _trigger(self):
-        experiment_session = self.participant.get_latest_session(experiment=self.experiment)
-        if not experiment_session:
-            # Schedules probably created by the API
-            return
-        trace_info = TraceInfo(
-            name="scheduled message",
-            metadata={
-                "schedule_id": self.external_id,
-                "trigger_number": self.total_triggers,
-            },
-        )
-        trace_metadata = {}
         try:
+            experiment_session = self.participant.get_latest_session(experiment=self.experiment)
+            if not experiment_session:
+                # Schedules probably created by the API
+                return
+            trace_info = TraceInfo(
+                name="scheduled message",
+                metadata={
+                    "schedule_id": self.external_id,
+                    "trigger_number": self.total_triggers,
+                },
+            )
             trace_metadata = experiment_session.ad_hoc_bot_message(
                 self.params["prompt_text"],
                 trace_info,
