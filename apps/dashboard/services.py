@@ -281,9 +281,6 @@ class DashboardService:
         date_filter = Q(experimentsession__chat__messages__created_at__gte=querysets["start_date"]) & Q(
             experimentsession__chat__messages__created_at__lte=querysets["end_date"]
         )
-        session_filter = Q(experimentsession__created_at__gte=querysets["start_date"]) & Q(
-            experimentsession__created_at__lte=querysets["end_date"]
-        )
 
         participant_stats = (
             participants.annotate(
@@ -291,7 +288,7 @@ class DashboardService:
                     "experimentsession__chat__messages",
                     filter=Q(experimentsession__chat__messages__message_type=ChatMessageType.HUMAN) & date_filter,
                 ),
-                total_sessions=Count("experimentsession", filter=session_filter),
+                total_sessions=Count("experimentsession", filter=date_filter),
                 last_activity=Max("experimentsession__chat__messages__created_at"),
                 experiments_count=Count("experimentsession__experiment", distinct=True),
             )
