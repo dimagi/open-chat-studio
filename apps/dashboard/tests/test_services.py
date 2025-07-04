@@ -44,13 +44,8 @@ class TestDashboardService:
         old_date = timezone.now() - timedelta(days=60)
         recent_date = timezone.now() - timedelta(days=5)
 
-        old_session = ExperimentSession.objects.create(experiment=experiment, participant=participant, team=team)
-        old_session.created_at = old_date
-        old_session.save()
-
-        recent_session = ExperimentSession.objects.create(experiment=experiment, participant=participant, team=team)
-        recent_session.created_at = recent_date
-        recent_session.save()
+        old_session = _create_session(experiment, participant, team, old_date)
+        recent_session = _create_session(experiment, participant, team, recent_date)
 
         # Filter for last 30 days
         start_date = timezone.now() - timedelta(days=30)
@@ -73,9 +68,9 @@ class TestDashboardService:
         other_experiment = Experiment.objects.create(name="Other Experiment", team=team, owner=experiment.owner)
 
         # Create sessions for both experiments
-        session1 = ExperimentSession.objects.create(experiment=experiment, participant=participant, team=team)
+        session1 = _create_session(experiment, participant, team, timezone.now())
 
-        session2 = ExperimentSession.objects.create(experiment=other_experiment, participant=participant, team=team)
+        session2 = _create_session(other_experiment, participant, team, timezone.now())
 
         # Filter by specific experiment
         querysets = service.get_filtered_queryset_base(experiment_ids=[experiment.id])
@@ -303,3 +298,11 @@ class TestDashboardService:
 
         # Data should be identical
         assert data1 == data2
+
+
+def _create_session(experiment, participant, team, message_date):
+    session = ExperimentSession.objects.create(experiment=experiment, participant=participant, team=team)
+    message = ChatMessage.objects.create(chat=session.chat)
+    message.created_at = message_date
+    message.save()
+    return session
