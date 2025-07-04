@@ -82,6 +82,7 @@ function DefaultWidget(props: WidgetParams) {
         value={props.paramValue}
         type="text"
         required={props.required}
+        readOnly={props.readOnly}
       ></input>
     </InputField>
   );
@@ -113,6 +114,7 @@ function NodeNameWidget(props: WidgetParams) {
         value={inputValue}
         type="text"
         required={props.required}
+        readOnly={props.readOnly}
       ></input>
     </InputField>
   );
@@ -128,6 +130,7 @@ function FloatWidget(props: WidgetParams) {
       type="number"
       step=".1"
       required={props.required}
+      readOnly={props.readOnly}
     ></input>
   </InputField>
 }
@@ -149,6 +152,7 @@ function RangeWidget(props: WidgetParams) {
       type="number"
       step=".1"
       required={props.required}
+      readOnly={props.readOnly}
     ></input>
     <input
       className="range range-xs w-full"
@@ -160,6 +164,7 @@ function RangeWidget(props: WidgetParams) {
       max={getPropOrOther("maximum", "exclusiveMaximum")}
       step=".1"
       required={props.required}
+      disabled={props.readOnly}
     ></input>
   </InputField>
 }
@@ -173,6 +178,7 @@ function ToggleWidget(props: ToggleWidgetParams) {
         onChange={props.updateParamValue}
         checked={props.paramValue}
         type="checkbox"
+        disabled={props.readOnly}
       ></input>
     </InputField>
   );
@@ -198,6 +204,7 @@ function SelectWidget(props: WidgetParams) {
         onChange={onUpdate}
         value={props.paramValue}
         required={props.required}
+        disabled={props.readOnly}
       >
         {options.map((option) => (
           <option key={option.value} value={option.value}>
@@ -258,6 +265,7 @@ function MultiSelectWidget(props: WidgetParams) {
             id={option.value}
             key={option.value}
             type="checkbox"
+            disabled={props.readOnly}
           />
           <span className="ml-2">{option.label}</span>
         </div>
@@ -316,7 +324,7 @@ export function CodeWidget(props: WidgetParams) {
         <div className="relative w-full">
           <textarea
             className="textarea textarea-bordered resize-none textarea-sm w-full overflow-x-auto overflow-y"
-            disabled={true}
+            readOnly={true}
             rows={3}
             wrap="off"
             name={props.name}
@@ -655,12 +663,13 @@ function CodeNodeEditor(
 
 
 export function TextModal(
-  {modalId, humanName, name, value, onChange}: {
+  {modalId, humanName, name, value, onChange, readOnly}: {
     modalId: string;
     humanName: string;
     name: string;
     value: string | string[];
     onChange: ChangeEventHandler;
+    readOnly: boolean;
   }) {
   return (
     <dialog
@@ -682,6 +691,7 @@ export function TextModal(
             name={name}
             onChange={onChange}
             value={value}
+            readOnly={readOnly}
           ></textarea>
         </div>
       </div>
@@ -713,13 +723,16 @@ export function ExpandableTextWidget(props: WidgetParams) {
         name={props.name}
         onChange={props.updateParamValue}
         value={props.paramValue}
+        readOnly={props.readOnly}
       ></textarea>
       <TextModal
         modalId={modalId}
         humanName={props.label}
         name={props.name}
         value={props.paramValue}
-        onChange={props.updateParamValue}>
+        onChange={props.updateParamValue}
+        readOnly={props.readOnly}
+      >
       </TextModal>
     </InputField>
   );
@@ -833,7 +846,7 @@ export function KeywordsWidget(props: WidgetParams) {
                   {label}
                   <div className="pl-2 tooltip" data-tip={isDefault ? "Default" : "Set as Default"}>
                     <span
-                      onClick={() => !isDefault && setAsDefault(index)}
+                      onClick={() => !props.readOnly && !isDefault && setAsDefault(index)}
                       style={{ cursor: isDefault ? 'default' : 'pointer' }}
                     >
                       {isDefault ? (
@@ -844,17 +857,18 @@ export function KeywordsWidget(props: WidgetParams) {
                     </span>
                   </div>
                 </label>
-                <div className="tooltip tooltip-left" data-tip={`Delete Keyword ${index + 1}`}>
+                {!props.readOnly && <div className="tooltip tooltip-left" data-tip={`Delete Keyword ${index + 1}`}>
                   <button className="btn btn-xs btn-ghost" onClick={() => deleteKeyword(index)} disabled={!canDelete}>
                     <i className="fa-solid fa-minus"></i>
                   </button>
-                </div>
+                </div>}
               </div>
               <input
                 className={classNames("input w-full", value ? "" : "input-error")}
                 name="keywords"
                 onChange={(event) => updateKeyword(index, event.target.value)}
                 value={value}
+                readOnly={props.readOnly}
               ></input>
             </div>
           );
@@ -901,6 +915,7 @@ export function LlmWidget(props: WidgetParams) {
         name={props.name}
         onChange={updateParamValue}
         value={value}
+        disabled={props.readOnly}
       >
         <option value="" disabled>
           Select a model
@@ -935,6 +950,7 @@ export function HistoryTypeWidget(props: WidgetParams) {
             name={props.name}
             onChange={props.updateParamValue}
             value={historyType}
+            disabled={props.readOnly}
           >
             {options.map((option) => (
               <option key={option.value} value={option.value}>
@@ -950,6 +966,7 @@ export function HistoryTypeWidget(props: WidgetParams) {
               name="history_name"
               onChange={props.updateParamValue}
               value={historyName || ""}
+              readOnly={props.readOnly}
             ></input>
           </InputField>
         )}
@@ -990,6 +1007,7 @@ export function HistoryModeWidget(props: WidgetParams) {
               props.updateParamValue(e);
             }}
             value={historyMode}
+            disabled={props.readOnly}
           >
             {options.map((option) => (
               <option key={option.value} value={option.value}>
@@ -1010,6 +1028,7 @@ export function HistoryModeWidget(props: WidgetParams) {
               type="number"
               onChange={props.updateParamValue}
               value={userMaxTokenLimit || defaultMaxTokens || ""}
+              readOnly={props.readOnly}
             />
             <small className ="text-muted mt-2">Maximum number of tokens before messages are summarized or truncated.</small>
           </InputField>
@@ -1025,6 +1044,7 @@ export function HistoryModeWidget(props: WidgetParams) {
               type="number"
               onChange={props.updateParamValue}
               value={maxHistoryLength || ""}
+              readOnly={props.readOnly}
             />
             <small className ="text-muted mt-2">Chat history will only keep the most recent messages up to max history length.</small>
           </InputField>
@@ -1110,6 +1130,7 @@ function BuiltInToolsWidget(props: WidgetParams) {
             checked={selectedValues.includes(option.value)}
             id={option.value}
             type="checkbox"
+            disabled={props.readOnly}
           />
           <span className="ml-2">{option.label}</span>
         </div>
@@ -1202,7 +1223,7 @@ export function TextEditorWidget(props: WidgetParams) {
       >
         <div className="relative w-full">
           <textarea className="textarea textarea-bordered resize-none textarea-sm w-full"
-            disabled={true}
+            readOnly={true}
             rows={3}
             value={props.paramValue}
             name={props.name}
