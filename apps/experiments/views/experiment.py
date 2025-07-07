@@ -1353,7 +1353,8 @@ def redirect_to_messages_view(request, session):
     params = {}
     search = request.POST.get("search", "").strip()
     show_original_translation = request.POST.get("show_original_translation", "")
-    params["language"] = request.POST.get("language", "")
+    language = request.POST.get("language", "")
+    params["language"] = language or request.POST.get("target_language", "")
     if search:
         params["search"] = search
     if show_original_translation:
