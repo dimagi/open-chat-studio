@@ -14,9 +14,14 @@
 {% endblock %}
 {% block app %}
   <section class="app-card">
-    <h3 class="pg-subtitle">
-      {% translate "Team Details" %}
-    </h3>
+    {% if not create %}
+      <div class="flex justify-between">
+        <h3 class="pg-subtitle">
+          {% translate "Team Details" %}
+        </h3>
+        <a href="{% url "single_team:feature_flags" request.team.slug %}" class="btn btn-primary">Manage Feature Flags</a>
+      </div>
+    {% endif %}
     <form method="post">
       {% csrf_token %}
       {% render_form_fields team_form %}

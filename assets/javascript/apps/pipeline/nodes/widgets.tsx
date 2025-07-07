@@ -1,9 +1,9 @@
 import React, {ChangeEvent, ChangeEventHandler, ReactNode, useEffect, useId, useState,} from "react";
-import CodeMirror from '@uiw/react-codemirror';
+import CodeMirror, {EditorState} from '@uiw/react-codemirror';
 import {python} from "@codemirror/lang-python";
 import {githubDark, githubLight} from "@uiw/codemirror-theme-github";
-import {CompletionContext, snippetCompletion as snip} from '@codemirror/autocomplete'
-import {TypedOption, LlmProviderModel} from "../types/nodeParameterValues";
+import {CompletionContext, snippetCompletion as snip, autocompletion, Completion} from '@codemirror/autocomplete'
+import {TypedOption, LlmProviderModel, Option} from "../types/nodeParameterValues";
 import usePipelineStore from "../stores/pipelineStore";
 import {classNames, concatenate, getCachedData, getDocumentationLink, getSelectOptions} from "../utils";
 import {JsonSchema, NodeParams, PropertySchema} from "../types/nodeParams";
@@ -11,6 +11,7 @@ import {Node, useUpdateNodeInternals} from "reactflow";
 import DOMPurify from 'dompurify';
 import {apiClient} from "../api/api";
 import { produce } from "immer";
+import { EditorView,ViewPlugin, Decoration, ViewUpdate, DecorationSet } from '@codemirror/view';
 
 export function getWidget(name: string, params: PropertySchema) {
   switch (name) {
@@ -40,6 +41,8 @@ export function getWidget(name: string, params: PropertySchema) {
       return NodeNameWidget
     case "built_in_tools":
         return BuiltInToolsWidget
+    case "text_editor_widget":
+        return TextEditorWidget
     default:
       if (params.enum) {
         return SelectWidget
@@ -61,6 +64,7 @@ interface WidgetParams {
   nodeSchema: JsonSchema
   required: boolean,
   getNodeFieldError: (nodeId: string, fieldName: string) => string | undefined;
+  readOnly: boolean,
 }
 
 interface ToggleWidgetParams extends Omit<WidgetParams, 'paramValue'> {
@@ -78,6 +82,7 @@ function DefaultWidget(props: WidgetParams) {
         value={props.paramValue}
         type="text"
         required={props.required}
+        readOnly={props.readOnly}
       ></input>
     </InputField>
   );
@@ -109,6 +114,7 @@ function NodeNameWidget(props: WidgetParams) {
         value={inputValue}
         type="text"
         required={props.required}
+        readOnly={props.readOnly}
       ></input>
     </InputField>
   );
@@ -124,6 +130,7 @@ function FloatWidget(props: WidgetParams) {
       type="number"
       step=".1"
       required={props.required}
+      readOnly={props.readOnly}
     ></input>
   </InputField>
 }
@@ -145,6 +152,7 @@ function RangeWidget(props: WidgetParams) {
       type="number"
       step=".1"
       required={props.required}
+      readOnly={props.readOnly}
     ></input>
     <input
       className="range range-xs w-full"
@@ -156,6 +164,7 @@ function RangeWidget(props: WidgetParams) {
       max={getPropOrOther("maximum", "exclusiveMaximum")}
       step=".1"
       required={props.required}
+      disabled={props.readOnly}
     ></input>
   </InputField>
 }
@@ -169,6 +178,7 @@ function ToggleWidget(props: ToggleWidgetParams) {
         onChange={props.updateParamValue}
         checked={props.paramValue}
         type="checkbox"
+        disabled={props.readOnly}
       ></input>
     </InputField>
   );
@@ -194,6 +204,7 @@ function SelectWidget(props: WidgetParams) {
         onChange={onUpdate}
         value={props.paramValue}
         required={props.required}
+        disabled={props.readOnly}
       >
         {options.map((option) => (
           <option key={option.value} value={option.value}>
@@ -254,6 +265,7 @@ function MultiSelectWidget(props: WidgetParams) {
             id={option.value}
             key={option.value}
             type="checkbox"
+            disabled={props.readOnly}
           />
           <span className="ml-2">{option.label}</span>
         </div>
@@ -312,7 +324,7 @@ export function CodeWidget(props: WidgetParams) {
         <div className="relative w-full">
           <textarea
             className="textarea textarea-bordered resize-none textarea-sm w-full overflow-x-auto overflow-y"
-            disabled={true}
+            readOnly={true}
             rows={3}
             wrap="off"
             name={props.name}
@@ -332,13 +344,14 @@ export function CodeWidget(props: WidgetParams) {
         isDarkMode={isDarkMode}
         inputError={props.inputError}
         documentationLink={getDocumentationLink(props.nodeSchema)}
+        readOnly={props.readOnly}
       />
     </>
   );
 }
 
 export function CodeModal(
-  { modalId, humanName, value, onChange, isDarkMode, inputError, documentationLink }: {
+  { modalId, humanName, value, onChange, isDarkMode, inputError, documentationLink, readOnly }: {
     modalId: string;
     humanName: string;
     value: string;
@@ -346,6 +359,7 @@ export function CodeModal(
     isDarkMode: boolean;
     inputError: string | undefined;
     documentationLink: string | null;
+    readOnly: boolean;
   }) {
 
   const [showGenerate, setShowGenerate] = useState(false);
@@ -370,21 +384,22 @@ export function CodeModal(
                 <i className="fa-regular fa-circle-question fa-sm"></i>
               </a>}
             </h4>
-            <button className="btn btn-sm btn-ghost" onClick={() => setShowGenerate(!showGenerate)}>
+            {!readOnly && <button className="btn btn-sm btn-ghost" onClick={() => setShowGenerate(!showGenerate)}>
               <i className="fa-solid fa-wand-magic-sparkles"></i>Help
-            </button>
+            </button>}
           </div>
-          <GenerateCodeSection
+          {!readOnly && <GenerateCodeSection
             showGenerate={showGenerate}
             setShowGenerate={setShowGenerate}
             isDarkMode={isDarkMode}
             onAccept={onChange}
             currentCode={value}
-          />
+          />}
           <CodeNodeEditor
             value={value}
             onChange={onChange}
             isDarkMode={isDarkMode}
+            readOnly={readOnly}
             />
         </div>
         <div className="flex flex-col">
@@ -469,6 +484,7 @@ function GenerateCodeSection({
             value={generated}
             onChange={setGenerated}
             isDarkMode={isDarkMode}
+            readOnly={false}
             />
         <div className={"my-2 join"}>
           <button className={"btn btn-sm btn-success join-item"} onClick={() => {
@@ -495,10 +511,11 @@ function GenerateCodeSection({
 }
 
 function CodeNodeEditor(
-  {value, onChange, isDarkMode}: {
+  {value, onChange, isDarkMode, readOnly}: {
     value: string;
     onChange: (value: string) => void;
     isDarkMode: boolean;
+    readOnly: boolean;
   }
 ) {
   const customCompletions = {
@@ -614,6 +631,19 @@ function CodeNodeEditor(
     }
   }
 
+  let extensions = [
+    python(),
+    python().language.data.of({
+      autocomplete: pythonCompletions
+    })
+  ];
+  if (readOnly) {
+    extensions = [
+      ...extensions,
+      EditorView.editable.of(false),
+      EditorState.readOnly.of(true),
+    ]
+  }
   return <CodeMirror
     value={value}
     onChange={onChange}
@@ -621,12 +651,7 @@ function CodeNodeEditor(
     height="100%"
     width="100%"
     theme={isDarkMode ? githubDark : githubLight}
-    extensions={[
-      python(),
-      python().language.data.of({
-        autocomplete: pythonCompletions
-      })
-    ]}
+    extensions={extensions}
     basicSetup={{
       lineNumbers: true,
       tabSize: 4,
@@ -638,12 +663,13 @@ function CodeNodeEditor(
 
 
 export function TextModal(
-  {modalId, humanName, name, value, onChange}: {
+  {modalId, humanName, name, value, onChange, readOnly}: {
     modalId: string;
     humanName: string;
     name: string;
     value: string | string[];
     onChange: ChangeEventHandler;
+    readOnly: boolean;
   }) {
   return (
     <dialog
@@ -665,6 +691,7 @@ export function TextModal(
             name={name}
             onChange={onChange}
             value={value}
+            readOnly={readOnly}
           ></textarea>
         </div>
       </div>
@@ -696,13 +723,16 @@ export function ExpandableTextWidget(props: WidgetParams) {
         name={props.name}
         onChange={props.updateParamValue}
         value={props.paramValue}
+        readOnly={props.readOnly}
       ></textarea>
       <TextModal
         modalId={modalId}
         humanName={props.label}
         name={props.name}
         value={props.paramValue}
-        onChange={props.updateParamValue}>
+        onChange={props.updateParamValue}
+        readOnly={props.readOnly}
+      >
       </TextModal>
     </InputField>
   );
@@ -816,7 +846,7 @@ export function KeywordsWidget(props: WidgetParams) {
                   {label}
                   <div className="pl-2 tooltip" data-tip={isDefault ? "Default" : "Set as Default"}>
                     <span
-                      onClick={() => !isDefault && setAsDefault(index)}
+                      onClick={() => !props.readOnly && !isDefault && setAsDefault(index)}
                       style={{ cursor: isDefault ? 'default' : 'pointer' }}
                     >
                       {isDefault ? (
@@ -827,17 +857,18 @@ export function KeywordsWidget(props: WidgetParams) {
                     </span>
                   </div>
                 </label>
-                <div className="tooltip tooltip-left" data-tip={`Delete Keyword ${index + 1}`}>
+                {!props.readOnly && <div className="tooltip tooltip-left" data-tip={`Delete Keyword ${index + 1}`}>
                   <button className="btn btn-xs btn-ghost" onClick={() => deleteKeyword(index)} disabled={!canDelete}>
                     <i className="fa-solid fa-minus"></i>
                   </button>
-                </div>
+                </div>}
               </div>
               <input
                 className={classNames("input w-full", value ? "" : "input-error")}
                 name="keywords"
                 onChange={(event) => updateKeyword(index, event.target.value)}
                 value={value}
+                readOnly={props.readOnly}
               ></input>
             </div>
           );
@@ -884,6 +915,7 @@ export function LlmWidget(props: WidgetParams) {
         name={props.name}
         onChange={updateParamValue}
         value={value}
+        disabled={props.readOnly}
       >
         <option value="" disabled>
           Select a model
@@ -918,6 +950,7 @@ export function HistoryTypeWidget(props: WidgetParams) {
             name={props.name}
             onChange={props.updateParamValue}
             value={historyType}
+            disabled={props.readOnly}
           >
             {options.map((option) => (
               <option key={option.value} value={option.value}>
@@ -933,6 +966,7 @@ export function HistoryTypeWidget(props: WidgetParams) {
               name="history_name"
               onChange={props.updateParamValue}
               value={historyName || ""}
+              readOnly={props.readOnly}
             ></input>
           </InputField>
         )}
@@ -973,6 +1007,7 @@ export function HistoryModeWidget(props: WidgetParams) {
               props.updateParamValue(e);
             }}
             value={historyMode}
+            disabled={props.readOnly}
           >
             {options.map((option) => (
               <option key={option.value} value={option.value}>
@@ -993,6 +1028,7 @@ export function HistoryModeWidget(props: WidgetParams) {
               type="number"
               onChange={props.updateParamValue}
               value={userMaxTokenLimit || defaultMaxTokens || ""}
+              readOnly={props.readOnly}
             />
             <small className ="text-muted mt-2">Maximum number of tokens before messages are summarized or truncated.</small>
           </InputField>
@@ -1008,6 +1044,7 @@ export function HistoryModeWidget(props: WidgetParams) {
               type="number"
               onChange={props.updateParamValue}
               value={maxHistoryLength || ""}
+              readOnly={props.readOnly}
             />
             <small className ="text-muted mt-2">Chat history will only keep the most recent messages up to max history length.</small>
           </InputField>
@@ -1093,6 +1130,7 @@ function BuiltInToolsWidget(props: WidgetParams) {
             checked={selectedValues.includes(option.value)}
             id={option.value}
             type="checkbox"
+            disabled={props.readOnly}
           />
           <span className="ml-2">{option.label}</span>
         </div>
@@ -1129,3 +1167,242 @@ function BuiltInToolsWidget(props: WidgetParams) {
     </InputField>
   );
 }
+
+export function TextEditorWidget(props: WidgetParams) {
+  const { parameterValues } = getCachedData();
+  const autocomplete_vars_list: string[] = Array.isArray(parameterValues.text_editor_autocomplete_vars)
+  ? parameterValues.text_editor_autocomplete_vars.map((v: Option) => v.value) : [];
+
+  const modalId = useId();
+  const [isDarkMode, setIsDarkMode] = useState(false);
+  const setNode = usePipelineStore((state) => state.setNode);
+
+  const onChangeCallback = (value: string) => {
+  setNode(
+    props.nodeId,
+    produce((draft) => {
+      draft.data.params[props.name] = value;
+    })
+  );
+};
+
+  const openModal = () => {
+    (document.getElementById(modalId) as HTMLDialogElement)?.showModal();
+    }
+
+  useEffect(() => {
+    const updateTheme = () =>
+      setIsDarkMode(document.documentElement.getAttribute("data-theme") === "dark");
+    updateTheme();
+    const observer = new MutationObserver(updateTheme);
+    observer.observe(document.documentElement, { attributes: true });
+    return () => observer.disconnect();
+  }, []);
+
+  const label = (
+    <>
+      {props.label}
+        <div className="tooltip tooltip-left" data-tip={`Expand ${props.label}`}>
+        <button
+          type="button"
+          className="btn btn-xs btn-ghost float-right"
+          onClick={openModal}
+        >
+          <i className="fa-solid fa-expand-alt"></i>
+        </button>
+      </div>
+    </>
+  );
+
+  return (
+    <>
+      <InputField
+        label={label}
+        help_text={props.helpText}
+        inputError={props.inputError}
+      >
+        <div className="relative w-full">
+          <textarea className="textarea textarea-bordered resize-none textarea-sm w-full"
+            readOnly={true}
+            rows={3}
+            value={props.paramValue}
+            name={props.name}
+          ></textarea>
+          <div
+            className="absolute inset-0 cursor-pointer"
+            onClick={openModal}
+          ></div>
+        </div>
+      </InputField>
+
+      <TextEditorModal
+        modalId={modalId}
+        value={Array.isArray(props.paramValue) ? props.paramValue.join('') : props.paramValue || ''}
+        onChange={onChangeCallback}
+        isDarkMode={isDarkMode}
+        label={props.label}
+        inputError={props.inputError}
+        autocomplete_vars_list={autocomplete_vars_list}
+        readOnly={props.readOnly}
+      />
+    </>
+  );
+}
+
+function TextEditorModal({
+  modalId,
+  value,
+  onChange,
+  isDarkMode,
+  label,
+  inputError,
+  autocomplete_vars_list,
+  readOnly,
+}: {
+  modalId: string;
+  value: string;
+  onChange: (val: string) => void;
+  isDarkMode: boolean;
+  label: string;
+  inputError?: string;
+  autocomplete_vars_list: string[];
+  readOnly: boolean;
+}) {
+  let extensions = [
+    autocompletion({
+      override: [textEditorVarCompletions(autocomplete_vars_list)],
+      activateOnTyping: true,
+    }),
+    highlightAutoCompleteVars(autocomplete_vars_list),
+    autocompleteVarTheme(isDarkMode),
+    EditorView.lineWrapping,
+    EditorView.editable.of(true)
+  ];
+  if (readOnly) {
+    extensions = [
+      ...extensions,
+      EditorView.editable.of(false),
+      EditorState.readOnly.of(true),
+    ]
+  }
+  return (
+    <dialog id={modalId} className="modal nopan nodelete nodrag noflow nowheel">
+      <div className="modal-box min-w-[85vw] h-[80vh] flex flex-col">
+        <form method="dialog">
+          <button className="btn btn-sm btn-circle btn-ghost absolute right-2 top-2">
+            ✕
+          </button>
+        </form>
+
+        <div className="grow h-full w-full flex flex-col">
+          <h4 className="mb-4 font-bold text-lg capitalize">{label}</h4>
+
+          <CodeMirror
+            value={value}
+            onChange={onChange}
+            height="100%"
+            theme={isDarkMode ? githubDark : githubLight}
+            extensions={extensions}
+            basicSetup={{
+              lineNumbers: true,
+              tabSize: 2,
+              indentOnInput: true,
+            }}
+          />
+        </div>
+
+        {inputError && <div className="text-red-500">{inputError}</div>}
+      </div>
+      <form method="dialog" className="modal-backdrop">
+        <button>close</button>
+      </form>
+    </dialog>
+  );
+}
+
+function textEditorVarCompletions(autocomplete_vars_list: string[]) {
+  return (context: CompletionContext) => {
+    const word = context.matchBefore(/[a-zA-Z0-9._[\]"]*$/);
+    if (!word || (word.from === word.to && !context.explicit)) return null;
+
+    return {
+      from: word.from,
+      options: autocomplete_vars_list.map((v) => ({
+        label: v,
+        type: "variable",
+        info: `Insert {${v}}`,
+        apply: (view: EditorView, completion: Completion, from: number, to: number) => {
+          const beforeText = view.state.doc.sliceString(from - 1, from);
+          const insertText =
+            beforeText === "{" ? `${completion.label}` : `{${completion.label}}`;
+          view.dispatch({
+            changes: { from, to, insert: insertText },
+          });
+        },
+      })),
+    };
+  };
+}
+// highlight auto complete words. valid - blue, invalid - red
+function highlightAutoCompleteVars(autocomplete_vars_list: string[]) {
+  return ViewPlugin.fromClass(
+    class {
+      decorations: DecorationSet;
+
+      constructor(view: EditorView) {
+        this.decorations = this.buildDecorations(view);
+      }
+
+      update(update: ViewUpdate) {
+        if (update.docChanged || update.viewportChanged) {
+          this.decorations = this.buildDecorations(update.view);
+        }
+      }
+
+      buildDecorations(view: EditorView) {
+        const widgets: any[] = [];
+        const text = view.state.doc.toString();
+        const regex = /\{([a-zA-Z0-9._[\]"]+)\}/g;
+        let match;
+        while ((match = regex.exec(text)) !== null) {
+          const varName = match[1];
+          const from = match.index;
+          const to = from + match[0].length;
+          const isValidVar = autocomplete_vars_list.some(
+            v => varName === v || varName.startsWith(v + ".") || varName.startsWith(v + "[")
+        );
+          const deco = Decoration.mark({
+            class: isValidVar
+              ? "autocomplete-var-valid"
+              : "autocomplete-var-invalid",
+          });
+          widgets.push(deco.range(from, to));
+        }
+        return Decoration.set(widgets);
+      }
+    },
+    {
+      decorations: (v) => v.decorations,
+    }
+  );
+}
+
+const autocompleteVarTheme = (isDarkMode: boolean) =>
+  EditorView.theme({
+    ".cm-content": {
+      fontFamily:
+        'ui-sans-serif, system-ui, sans-serif, "Apple Color Emoji", "Segoe UI Emoji", "Segoe UI Symbol"',
+      backgroundColor: isDarkMode
+        ? "oklch(25.33% 0.016 252.42)"
+        : null,
+      color: isDarkMode ? "oklch(97.807% 0.029 256.847)" : null,
+    },
+    ".autocomplete-var-valid": {
+      color: isDarkMode ? "#93c5fd" : "navy",
+      fontWeight: "bold",
+    },
+    ".autocomplete-var-invalid": {
+      color: isDarkMode ? "#f87171" : "red",
+      fontWeight: "bold",
+    },
+  });

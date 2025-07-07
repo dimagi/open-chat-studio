@@ -1,7 +1,7 @@
-<div x-data="filterComponent" @click.outside="filterData.showFilters = false">
+<div x-data="filterComponent" @click.outside="filterData.showFilters = false" class="relative">
   <!-- Filter Button -->
   <div class="flex items-center">
-    <button @click="toggleFilters()" class="btn btn-sm btn-outline">
+    <button type="button" @click="toggleFilters()" class="btn btn-sm btn-outline">
       <i class="fa-solid fa-filter"></i> Filter
       <span x-show="getActiveFilterCount() > 0" x-cloak>(<span x-text="getActiveFilterCount()"></span>)</span>
     </button>
@@ -12,6 +12,7 @@
 
     <!-- Clear filters button -->
     <button
+      type="button"
       x-show="getActiveFilterCount() > 0 && !filterData.loading"
       @click="clearAllFilters()"
       class="btn btn-square btn-sm btn-ghost"
@@ -78,10 +79,10 @@
           <!-- Value Input (Choice, String, Timestamp) -->
           <template x-if="filter.operator">
             <div class="relative">
-              <template x-if="filterData.columns[filter.column]?.type === 'choice' && ['any of', 'all of', 'excludes'].includes(filter.operator)">
+              <template x-if="['choice', 'string'].includes(filterData.columns[filter.column]?.type) && ['any of', 'all of', 'excludes'].includes(filter.operator)">
                 <div class="relative">
                   <div @click="filter.showOptions = !filter.showOptions" class="w-40 px-3 border border-base-200 rounded-lg bg-base-100 text-sm cursor-pointer flex justify-between items-center" style="height: 2rem;">
-                    <span x-text="filter.selectedValues.length ? (filter.selectedValues.join(', ').length > 18 ? filter.selectedValues.join(', ').substring(0, 18) + '...' : filter.selectedValues.join(', ')) : 'Select'"></span>
+                    <span x-text="filter.selectedValues.length ? getSelectedDisplayText(filter) : 'Select'"></span>
                     <i class="fa-solid fa-caret-down fa-sm"></i>
                   </div>
                   <div x-show="filter.showOptions" @click.outside="filter.showOptions = false" class="absolute z-50 mt-1 bg-base-100 rounded-lg max-h-64 overflow-y-auto w-40 border border-base-300" style="z-index: 9999 !important;">
@@ -91,10 +92,10 @@
                       </div>
                     </div>
                     <div class="py-1">
-                      <template x-for="option in filter.filteredOptions" :key="option">
-                        <label :for="`option-${index}-${option}`" class="flex items-center px-4 py-2 hover:bg-base-200 cursor-pointer text-sm">
-                          <input type="checkbox" :id="`option-${index}-${option}`" :value="option" x-model="filter.selectedValues" @change="triggerFilterChange()" class="checkbox checkbox-xs mr-2">
-                          <span x-text="option"></span>
+                      <template x-for="option in filter.filteredOptions" :key="typeof option === 'object' ? option.id : option">
+                        <label :for="`option-${index}-${typeof option === 'object' ? option.id : option}`" class="flex items-center px-4 py-2 hover:bg-base-200 cursor-pointer text-sm">
+                          <input type="checkbox" :id="`option-${index}-${typeof option === 'object' ? option.id : option}`" :value="typeof option === 'object' ? option.id : option" x-model="filter.selectedValues" @change="triggerFilterChange()" class="checkbox checkbox-xs mr-2">
+                          <span x-text="typeof option === 'object' ? option.name : option"></span>
                         </label>
                       </template>
                       <div x-show="filter.filteredOptions && filter.filteredOptions.length === 0" class="px-4 py-2 text-sm text-gray-500 italic">
@@ -105,7 +106,7 @@
                 </div>
               </template>
 
-              <template x-if="filterData.columns[filter.column]?.type === 'string'">
+              <template x-if="filterData.columns[filter.column]?.type === 'string' && filter.operator !== 'any of'">
                 <input type="text" x-model="filter.value" @input.debounce="triggerFilterChange()" class="w-40 block px-3 border border-base-200 rounded-lg bg-base-100 text-sm" style="height: 2rem;" placeholder="Enter value...">
               </template>
 
@@ -160,23 +161,27 @@
           </template>
 
           <!-- Remove Filter Button -->
-          <button @click="removeFilter(index)" class="btn btn-square btn-sm btn-ghost" aria-label="Remove filter">×</button>
+          <button type="button" @click="removeFilter(index)" class="btn btn-square btn-sm btn-ghost" aria-label="Remove filter">×</button>
         </div>
       </template>
 
       <!-- Add Filter Button -->
-      <button @click="addFilter()" class="btn btn-sm btn-outline">+ Add Filter</button>
+      <button type="button" @click="addFilter()" class="btn btn-sm btn-outline">+ Add Filter</button>
     </div>
   </div>
 </div>
 
 {{ field_type_filters|json_script:"field-type-filters" }}
 {{ date_range_options|json_script:"date-range-options" }}
+{{ filter_columns|json_script:"filter-columns-data" }}
+{% if experiment_list %}{{ experiment_list|json_script:"experiment-list-data" }}{% else %}<script id="experiment-list-data" type="application/json">[]</script>{% endif %}
 <script>
   const tags = JSON.parse(document.getElementById('available-tags-data').textContent);
   const versionsList = JSON.parse(document.getElementById('experiment-versions-data').textContent);
   const fieldTypeFilters = JSON.parse(document.getElementById('field-type-filters').textContent);
   const channelsList = JSON.parse(document.getElementById('channel-list-data').textContent);
+  const experimentList = JSON.parse(document.getElementById('experiment-list-data').textContent);
+  const filterColumns = JSON.parse(document.getElementById('filter-columns-data').textContent);
   const dateRangeOptions = JSON.parse(document.getElementById('date-range-options').textContent);
   document.addEventListener('alpine:init', () => {
     Alpine.data('filterComponent', () => ({
@@ -185,17 +190,30 @@
         showFilters: false,
         filters: [],
         loading: false,
-        columns: {
+        columns: {}
+      },
+
+      init() {
+        const App = SiteJS.app;
+        // Build columns dynamically based on filter_columns context
+        const allColumns = {
+          'experiment': {type: 'choice', operators: fieldTypeFilters.choice.filter(op => op === 'any of' || op === 'excludes'), options: experimentList, label: 'Experiment'},
           'participant': {type: 'string', operators: fieldTypeFilters.string, label: 'Participant'},
           'first_message': {type: 'timestamp', operators: fieldTypeFilters.timestamp, label: 'First Message',  options: dateRangeOptions},
           'last_message': {type: 'timestamp', operators: fieldTypeFilters.timestamp, label: 'Last Message',  options: dateRangeOptions},
           'tags': {type: 'choice', operators: fieldTypeFilters.choice, options: tags, label: 'Tags' },
           'versions': {type: 'choice', operators: fieldTypeFilters.choice.filter(op => op === 'any of' || op === 'excludes'), options: versionsList, label: 'Versions'},
           'channels': {type: 'choice', operators: fieldTypeFilters.choice, options: channelsList, label: 'Channels'},
-        }
-      },
+        };
 
-      init() {
+        // Only include columns that are in the filterColumns list
+        this.filterData.columns = {};
+        filterColumns.forEach(column => {
+          if (allColumns[column]) {
+            this.filterData.columns[column] = allColumns[column];
+          }
+        });
+
         this.loadFiltersFromUrl();
         let defaultFilterApplied = false;
         // set default filter to exclude API sessions
@@ -231,6 +249,24 @@
         window.addEventListener('popstate', () => {
           this.setLabelFromURL();
         });
+        fetch("{% if experiment.id %}{% url 'participants:participant_identifier' team.slug experiment.id %}{% else %}{% url 'participants:all_participant_identifiers' team.slug %}{% endif %}", {
+          method: 'GET',
+          credentials: 'same-origin',
+          headers: {
+            'X-CSRFToken': App.Cookies.get('csrftoken'),
+            'Accept': 'application/json'
+          }
+        })
+          .then(res => res.json())
+          .then(data => {
+            this.filterData.columns.participant.options = data;
+            this.filterData.filters.forEach(filter => {
+              if (filter.column === 'participant') {
+                filter.filteredOptions = [...data];
+              }
+            });
+          })
+          .catch(err => console.error("Failed to load participants", err));
       },
 
       toggleFilters() {
@@ -262,7 +298,7 @@
           filter.value = '';
           filter.selectedValues = [];
           filter.searchQuery = '';
-          if (this.filterData.columns[column].type === 'choice') {
+          if (['choice', 'string'].includes(this.filterData.columns[column].type)) {
             filter.filteredOptions = [...this.filterData.columns[column].options || []];
           } else {
             filter.filteredOptions = [];
@@ -296,6 +332,23 @@
         this.filterData.showFilters = false;
         this.triggerFilterChange();
       },
+
+      getSelectedDisplayText(filter) {
+        if (filter.column === 'experiment') {
+          // For experiments, convert IDs to names for display
+          const displayValues = filter.selectedValues.map(id => {
+            const experiment = experimentList.find(exp => exp.id == id);
+            return experiment ? experiment.name : id;
+          });
+          const text = displayValues.join(', ');
+          return text.length > 18 ? text.substring(0, 18) + '...' : text;
+        } else {
+          // For other filters, use values directly
+          const text = filter.selectedValues.join(', ');
+          return text.length > 18 ? text.substring(0, 18) + '...' : text;
+        }
+      },
+
       filterDropdownOptions(index) {
         const filter = this.filterData.filters[index];
         const column = filter.column;
@@ -305,9 +358,15 @@
           if (!searchQuery) {
             filter.filteredOptions = [...this.filterData.columns[column].options];
           } else {
-            filter.filteredOptions = this.filterData.columns[column].options.filter(option =>
-              option.toLowerCase().includes(searchQuery)
-            );
+            filter.filteredOptions = this.filterData.columns[column].options.filter(option => {
+              if (typeof option === 'object' && option.name) {
+                // For experiment objects, search by name
+                return option.name.toLowerCase().includes(searchQuery);
+              } else {
+                // For simple string options
+                return option.toLowerCase().includes(searchQuery);
+              }
+            });
           }
         }
       },
@@ -357,7 +416,16 @@
               }
               else if (['any of', 'all of', 'excludes'].includes(operatorParam) && valueParam) {
                 try {
-                  filter.selectedValues = JSON.parse(valueParam);
+                  const parsedValues = JSON.parse(valueParam);
+                  // For experiment filter, convert from IDs back to names for display
+                  if (columnParam === 'experiment') {
+                    filter.selectedValues = parsedValues.map(id => {
+                      const experiment = experimentList.find(exp => exp.id == id);
+                      return experiment ? experiment.name : id;
+                    });
+                  } else {
+                    filter.selectedValues = parsedValues;
+                  }
                   if (this.filterData.columns[columnParam].options) {
                     filter.filteredOptions = [...this.filterData.columns[columnParam].options];
                   }
@@ -401,7 +469,15 @@
 
           if (['any of', 'all of', 'excludes'].includes(filter.operator)) {
             if (filter.selectedValues && filter.selectedValues.length > 0) {
-              params.set(`filter_${i}_value`, JSON.stringify(filter.selectedValues));
+              // For experiment filter, convert names back to IDs
+              let valuesToSerialize = filter.selectedValues;
+              if (filter.column === 'experiment') {
+                valuesToSerialize = filter.selectedValues.map(name => {
+                  const experiment = experimentList.find(exp => exp.name === name);
+                  return experiment ? experiment.id : name;
+                });
+              }
+              params.set(`filter_${i}_value`, JSON.stringify(valuesToSerialize));
             }
           } else {
             params.set(`filter_${i}_value`, filter.value);
@@ -433,7 +509,15 @@
 
             if (['any of', 'all of', 'excludes'].includes(filter.operator)) {
               if (filter.selectedValues && filter.selectedValues.length > 0) {
-                filterParams[`filter_${i}_value`] = JSON.stringify(filter.selectedValues);
+                // For experiment filter, convert names back to IDs
+                let valuesToSend = filter.selectedValues;
+                if (filter.column === 'experiment') {
+                  valuesToSend = filter.selectedValues.map(name => {
+                    const experiment = experimentList.find(exp => exp.name === name);
+                    return experiment ? experiment.id : name;
+                  });
+                }
+                filterParams[`filter_${i}_value`] = JSON.stringify(valuesToSend);
               }
             } else {
               filterParams[`filter_${i}_value`] = filter.value;

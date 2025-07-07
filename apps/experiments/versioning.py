@@ -350,6 +350,7 @@ class VersionsMixin:
         self.is_archived = True
         self.save(update_fields=["is_archived"])
 
+    @property
     def is_editable(self) -> bool:
         return not self.is_archived
 
