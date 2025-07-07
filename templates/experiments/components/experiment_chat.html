@@ -70,11 +70,11 @@
                 </label>
               </div>
               {% if has_missing_translations %}
-                <label for="translate-messages-modal" class="btn btn-primary btn-sm">
+                <label for="translate-remaining-messages-modal" class="btn btn-primary btn-sm">
                   Translate Remaining Messages
                 </label>
 
-                <input type="checkbox" id="translate-messages-modal" class="modal-toggle" />
+                <input type="checkbox" id="translate-remaining-messages-modal" class="modal-toggle" />
                 <div class="modal">
                   <div class="modal-box">
                     <h3 class="font-bold text-lg">Translate Remaining Messages?</h3>
@@ -89,17 +89,17 @@
                     <p class="pb-4">This action may take a few moments to complete.</p>
                     <div class="modal-action">
                       <button
-                        data-action="translate-messages"
+                        data-action="translate-remaining-messages"
                         class="btn btn-primary"
                         hx-post="{% url 'experiments:translate_messages' request.team.slug experiment.public_id experiment_session.external_id %}"
                         hx-vals='{"language": "{{ language }}"}'
                         hx-include="[name='search'], [name='language'], [name='show_original_translation'], #translation-provider-model"
                         hx-target="#messages-container"
                         hx-indicator="#chat-message-untranslated"
-                        onclick="document.getElementById('translate-messages-modal').checked = false;"
+                        onclick="document.getElementById('translate-remaining-messages-modal').checked = false;"
                       >Translate Messages
                       </button>
-                      <label for="translate-messages-modal" class="btn">Cancel</label>
+                      <label for="translate-remaining-messages-modal" class="btn">Cancel</label>
                     </div>
                   </div>
                 </div>
