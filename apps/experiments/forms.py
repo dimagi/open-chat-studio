@@ -285,6 +285,12 @@ class ExperimentVersionForm(forms.Form):
 
 
 class TranslateMessagesForm(forms.Form):
+    language = forms.ChoiceField(
+        choices=[],
+        required=True,
+        label="Select Language",
+        widget=forms.Select(attrs={"class": "select select-bordered w-full", "id": "translation-language"}),
+    )
     provider_model = forms.ChoiceField(
         choices=[],
         required=True,
@@ -292,9 +298,13 @@ class TranslateMessagesForm(forms.Form):
         widget=forms.Select(attrs={"class": "select select-bordered w-full", "id": "translation-provider-model"}),
     )
 
-    def __init__(self, *args, team=None, **kwargs):
+    def __init__(self, *args, team=None, translatable_languages=None, **kwargs):
         super().__init__(*args, **kwargs)
         if team:
             self.fields["provider_model"].choices = [
                 ("", "Choose a model for translation")
             ] + get_dropdown_llm_model_choices(team)
+        if translatable_languages:
+            self.fields["language"].choices = [("", "Choose a language")] + [
+                (code, name) for code, name in translatable_languages if code
+            ]

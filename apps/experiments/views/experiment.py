@@ -1222,12 +1222,15 @@ def _experiment_chat_ui(request, embedded=False):
     )
 
 
-def _get_available_languages_for_chat(session):
+def _get_languages_for_chat(session):
     available_language_codes = session.chat.translated_languages
     available_languages = [
         choice for choice in LANGUAGE_CHOICES if choice[0] == "" or choice[0] in available_language_codes
     ]
-    return available_languages
+    translatable_languages = [
+        choice for choice in LANGUAGE_CHOICES if choice[0] != "" and choice[0] not in available_language_codes
+    ]
+    return available_languages, translatable_languages
 
 
 @experiment_session_view()
@@ -1242,9 +1245,9 @@ def experiment_session_messages_view(request, team_slug: str, experiment_id: uui
     show_original_translation = request.GET.get("show_original_translation") == "on"
     page_size = 100
     messages_queryset = ChatMessage.objects.filter(chat=session.chat).all().order_by("created_at")
-    available_languages = _get_available_languages_for_chat(session)
+    available_languages, translatable_languages = _get_languages_for_chat(session)
     has_missing_translations = False
-    translate_form = TranslateMessagesForm(team=request.team)
+    translate_form = TranslateMessagesForm(team=request.team, translatable_languages=translatable_languages)
     default_message = "(message generated after last translation)"
 
     if search:
