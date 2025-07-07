@@ -1301,9 +1301,13 @@ def translate_messages_view(request, team_slug: str, experiment_id: uuid.UUID, s
     from apps.analysis.translation import translate_messages_with_llm
 
     session = request.experiment_session
-    language = request.POST.get("language")
     provider_model = request.POST.get("provider_model", "")
     valid_languages = [choice[0] for choice in LANGUAGE_CHOICES if choice[0]]
+    translate_all = request.POST.get("translate_all", "false") == "true"
+    if translate_all:
+        language = request.POST.get("target_language")
+    else:
+        language = request.POST.get("language")
 
     if not language or language not in valid_languages:
         messages.error(request, "No language selected for translation.")

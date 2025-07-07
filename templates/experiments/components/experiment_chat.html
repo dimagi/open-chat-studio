@@ -69,7 +69,7 @@
                 class="btn btn-primary"
                 hx-post="{% url 'experiments:translate_messages' request.team.slug experiment.public_id experiment_session.external_id %}"
                 hx-vals='{"translate_all": "true"}'
-                hx-include="[name='search'], #translation-provider-model, #translation-language"
+                hx-include="[name='search'], #translation-provider-model, [name='target_language']"
                 hx-target="#messages-container"
                 hx-indicator="#chat-message-untranslated"
                 onclick="document.getElementById('translate-all-messages-modal').checked = false;"

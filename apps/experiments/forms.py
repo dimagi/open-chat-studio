@@ -285,7 +285,7 @@ class ExperimentVersionForm(forms.Form):
 
 
 class TranslateMessagesForm(forms.Form):
-    language = forms.ChoiceField(
+    target_language = forms.ChoiceField(
         choices=[],
         required=True,
         label="Select Language",
@@ -305,6 +305,6 @@ class TranslateMessagesForm(forms.Form):
                 ("", "Choose a model for translation")
             ] + get_dropdown_llm_model_choices(team)
         if translatable_languages:
-            self.fields["language"].choices = [("", "Choose a language")] + [
+            self.fields["target_language"].choices = [("", "Choose a language")] + [
                 (code, name) for code, name in translatable_languages if code
             ]
