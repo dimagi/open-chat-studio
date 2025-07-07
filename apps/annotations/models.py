@@ -1,4 +1,5 @@
 import json
+import logging
 from functools import cached_property
 
 from django.contrib.contenttypes.fields import GenericForeignKey, GenericRelation
@@ -13,6 +14,8 @@ from taggit.models import GenericTaggedItemBase, TagBase
 
 from apps.teams.models import BaseTeamModel, Team
 from apps.users.models import CustomUser
+
+logger = logging.getLogger("ocs.annotations")
 
 
 class TagCategories(models.TextChoices):
@@ -124,6 +127,7 @@ class TaggedModelMixin(models.Model, AnnotationMixin):
     @cached_property
     def prefetched_tags_json(self):
         if not hasattr(self, "prefetched_tagged_items"):
+            logger.warning("Warning: unable to prefectch tags")
             return []
 
         tags = []
