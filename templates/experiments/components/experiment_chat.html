@@ -191,7 +191,15 @@
                             <p>{{ message.translation|render_markdown }}</p>
                           {% endif %}
                         {% else %}
-                          <p>{{ message.content|render_markdown }}</p>
+                          <div id="chat-message-untranslated">
+                            <div class="htmx-hide">
+                              <p>{{ message.content|render_markdown }}</p>
+                            </div>
+                            <div class="htmx-show">
+                              <span class="loading loading-spinner loading-sm"></span>
+                              <span class="ml-2">Translating...</span>
+                            </div>
+                          </div>
                         {% endif %}
                       </div>
                       {% if show_original_translation and not message.translation == default_message %}
