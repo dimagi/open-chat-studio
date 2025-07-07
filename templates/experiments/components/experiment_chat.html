@@ -181,22 +181,24 @@
                     {% endif %}
                     <div class="grow">
                       <div class="message-contents">
-                        {% if message.translation %}
-                          {% if message.translation == default_message %}
-                            <div id="chat-message-untranslated">
-                              <div class="htmx-show">
-                                <span class="loading loading-spinner loading-sm"></span>
-                                <span class="ml-2">Translating...</span>
-                              </div>
-                              <div class="htmx-hide"><p>{{ message.translation|render_markdown }}</p></div>
+                        {% if message.translation == default_message %}
+                          <div id="chat-message-untranslated">
+                            <div class="htmx-show">
+                              <span class="loading loading-spinner loading-sm"></span>
+                              <span class="ml-2">Translating...</span>
                             </div>
-                          {% else %}
-                            <p>{{ message.translation|render_markdown }}</p>
-                          {% endif %}
+                            <div class="htmx-hide">
+                              <p>{{ message.translation|render_markdown }}</p>
+                            </div>
+                          </div>
                         {% else %}
                           <div id="chat-message-untranslated">
                             <div class="htmx-hide">
-                              <p>{{ message.content|render_markdown }}</p>
+                              {% if message.translation %}
+                                <p>{{ message.translation|render_markdown }}</p>
+                              {% else %}
+                                <p>{{ message.content|render_markdown }}</p>
+                              {% endif %}
                             </div>
                             <div class="htmx-show">
                               <span class="loading loading-spinner loading-sm"></span>
@@ -206,7 +208,7 @@
                         {% endif %}
                       </div>
                       {% if show_original_translation and not message.translation == default_message %}
-                        <div class="pg-text-muted">
+                        <div id="chat-message-untranslated" class="pg-text-muted htmx-hide">
                           <p><strong>Original Message: </strong>{{ message.content|render_markdown }}</p>
                         </div>
                       {% endif %}
