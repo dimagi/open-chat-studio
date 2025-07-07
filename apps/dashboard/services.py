@@ -1,12 +1,12 @@
 from datetime import datetime, timedelta
 from typing import Any
 
-from django.db.models import Count, Max, Q
+from django.db.models import Count, Max, Prefetch, Q
 from django.db.models.functions import TruncDate, TruncHour, TruncMonth, TruncWeek
 from django.urls import reverse
 from django.utils import timezone
 
-from apps.channels.models import ExperimentChannel
+from apps.channels.models import ChannelPlatform, ExperimentChannel
 from apps.chat.models import ChatMessage, ChatMessageType
 from apps.experiments.models import Experiment, ExperimentSession, Participant
 
@@ -195,34 +195,41 @@ class DashboardService:
 
         if not cached_data:
             querysets = self.get_filtered_queryset_base(**cache_filters)
-            experiments = querysets["experiments"]
+            experiments = (
+                querysets["experiments"]
+                .annotate(
+                    participants_count=Count("sessions__participant", distinct=True),
+                    sessions_count=Count("sessions", distinct=True),
+                    messages_count=Count("sessions__chat__messages", distinct=True),
+                )
+                .prefetch_related(
+                    Prefetch(
+                        "sessions",
+                        queryset=ExperimentSession.objects.filter(ended_at__isnull=False).only(
+                            "created_at", "ended_at"
+                        ),
+                    )
+                )
+            )
 
-            # Get performance metrics for each experiment
             performance_data = []
             for experiment in experiments:
-                exp_sessions = querysets["sessions"].filter(experiment=experiment)
-                exp_messages = querysets["messages"].filter(chat__experiment_session__experiment=experiment)
-
-                participants_count = exp_sessions.values("participant").distinct().count()
-                sessions_count = exp_sessions.count()
-                messages_count = exp_messages.count()
-
-                # Calculate average session duration
-                completed_sessions = exp_sessions.filter(ended_at__isnull=False)
-                avg_duration = None
-                if completed_sessions.exists():
-                    durations = []
-                    for session in completed_sessions:
-                        if session.ended_at and session.created_at:
-                            duration = session.ended_at - session.created_at
-                            durations.append(duration.total_seconds() / 60)
-                    avg_duration = sum(durations) / len(durations) if durations else 0
-
-                # Completion rate
-                completion_rate = (completed_sessions.count() / sessions_count) if sessions_count > 0 else 0
+                participants_count = experiment.participants_count
+                sessions_count = experiment.sessions_count
+                messages_count = experiment.messages_count
+                exp_sessions = getattr(experiment, "prefetched_sessions", [])
+                completed_sessions = [s for s in exp_sessions if s.ended_at]
+                durations = [
+                    (s.ended_at - s.created_at).total_seconds() / 60
+                    for s in completed_sessions
+                    if s.ended_at and s.created_at
+                ]
+                avg_duration = sum(durations) / len(durations) if durations else 0
+                completion_rate = (len(completed_sessions) / sessions_count) if sessions_count else 0
 
                 experiment_url = reverse(
-                    "chatbots:single_chatbot_home", kwargs={"team_slug": self.team.slug, "experiment_id": experiment.id}
+                    "chatbots:single_chatbot_home",
+                    kwargs={"team_slug": self.team.slug, "experiment_id": experiment.id},
                 )
                 performance_data.append(
                     {
@@ -299,12 +306,12 @@ class DashboardService:
         most_active = [self._format_participant_data(p) for p in participant_stats[:limit]]
 
         # Session length distribution
-        sessions = querysets["sessions"].filter(ended_at__isnull=False)
+        sessions = querysets["sessions"].filter(ended_at__isnull=False).values_list("created_at", "ended_at")
         session_lengths = []
-        for session in sessions:
-            if session.ended_at and session.created_at:
-                duration = session.ended_at - session.created_at
-                session_lengths.append(duration.total_seconds() / 60)  # in minutes
+        for created_at, ended_at in sessions:
+            if ended_at and created_at:
+                duration = (ended_at - created_at).total_seconds() / 60
+                session_lengths.append(duration)  # in minutes
 
         # Create histogram bins
         session_length_distribution = self._create_histogram(session_lengths, bins=10)
@@ -326,38 +333,56 @@ class DashboardService:
 
         querysets = self.get_filtered_queryset_base(**filters)
 
-        # Get platform statistics by aggregating all channels per platform
-
-        from apps.channels.models import ChannelPlatform
-
-        platform_data = []
-
-        # Get all platforms that have channels in this team
         platforms_in_use = (
             ExperimentChannel.objects.filter(team=self.team, deleted=False)
             .order_by()
             .values_list("platform", flat=True)
             .distinct()
         )
-        for platform in platforms_in_use:
-            platform_sessions = querysets["sessions"].filter(experiment_channel__platform=platform)
-            platform_messages = querysets["messages"].filter(
-                chat__experiment_session__experiment_channel__platform=platform
-            )
-            platform_participants = platform_sessions.values("participant").distinct().count()
+        sessions_stats = (
+            querysets["sessions"]
+            .values("experiment_channel__platform")
+            .annotate(sessions_count=Count("id"), participants_count=Count("participant", distinct=True))
+        )
 
-            # Get human-readable platform name
+        messages_stats = (
+            querysets["messages"]
+            .values("chat__experiment_session__experiment_channel__platform")
+            .annotate(
+                messages_count=Count("id"),
+                human_messages_count=Count("id", filter=Q(message_type=ChatMessageType.HUMAN)),
+                ai_messages_count=Count("id", filter=Q(message_type=ChatMessageType.AI)),
+            )
+        )
+
+        session_stats_map = {item["experiment_channel__platform"]: item for item in sessions_stats}
+        message_stats_map = {
+            item["chat__experiment_session__experiment_channel__platform"]: item for item in messages_stats
+        }
+
+        platform_data = []
+
+        for platform in platforms_in_use:
+            s_stats = session_stats_map.get(platform, {})
+            m_stats = message_stats_map.get(platform, {})
+
+            sessions_count = s_stats.get("sessions_count", 0)
+            participants_count = s_stats.get("participants_count", 0)
+            messages_count = m_stats.get("messages_count", 0)
+            human_messages_count = m_stats.get("human_messages_count", 0)
+            ai_messages_count = m_stats.get("ai_messages_count", 0)
+
             platform_label = dict(ChannelPlatform.choices).get(platform, platform.title())
 
             platform_data.append(
                 {
                     "platform": platform,
                     "platform_name": platform_label,
-                    "sessions": platform_sessions.count(),
-                    "messages": platform_messages.count(),
-                    "participants": platform_participants,
-                    "human_messages": platform_messages.filter(message_type=ChatMessageType.HUMAN).count(),
-                    "ai_messages": platform_messages.filter(message_type=ChatMessageType.AI).count(),
+                    "sessions": sessions_count,
+                    "messages": messages_count,
+                    "participants": participants_count,
+                    "human_messages": human_messages_count,
+                    "ai_messages": ai_messages_count,
                 }
             )
 
@@ -406,7 +431,9 @@ class DashboardService:
 
         # Count tags by category
         tag_stats = {}
+        total_tagged = 0
         for tagged_item in tagged_messages:
+            total_tagged += 1
             tag = tagged_item.tag
             category = str(tag.label)
 
@@ -418,7 +445,7 @@ class DashboardService:
 
             tag_stats[category][tag.name] += 1
 
-        data = {"tag_categories": tag_stats, "total_tagged_messages": tagged_messages.count()}
+        data = {"tag_categories": tag_stats, "total_tagged_messages": total_tagged}
 
         DashboardCache.set_cached_data(self.team, cache_key, data)
         return data
