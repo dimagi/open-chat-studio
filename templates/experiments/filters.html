@@ -20,7 +20,7 @@
       x
     </button>
     <!-- Date Range dropdown filter -->
-    <div x-init="init" class="dropdown">
+    <div class="dropdown">
       <div tabindex="0" role="button" class="btn btn-ghost btn-sm normal-case">
         <i class="fa-regular fa-clock"></i>
         <span x-text="selectedLabel || 'Date Range'" class="dropdown-label"></span>
@@ -240,6 +240,7 @@
             this.triggerFilterChange();
           });
         }
+
           // Always trigger a data load on init to ensure correct data is shown
         this.$nextTick(() => {
           this.triggerFilterChange(defaultFilterApplied); // Don't update URL again since we just loaded from it
