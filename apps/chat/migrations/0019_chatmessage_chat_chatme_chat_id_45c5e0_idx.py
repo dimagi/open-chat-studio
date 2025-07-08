@@ -15,4 +15,8 @@ class Migration(migrations.Migration):
             model_name='chatmessage',
             index=models.Index(fields=['chat', 'created_at'], name='chat_chatme_chat_id_45c5e0_idx'),
         ),
+        migrations.AddIndex(
+            model_name='chatmessage',
+            index=models.Index(fields=['chat', 'message_type', 'created_at'], name='chat_chatme_chat_id_4753eb_idx'),
+        ),
     ]

@@ -22,4 +22,12 @@ class Migration(migrations.Migration):
             model_name='experiment',
             index=models.Index(fields=['team', 'is_archived', 'working_version'], name='experiments_team_id_e83039_idx'),
         ),
+        migrations.AddIndex(
+            model_name='experimentsession',
+            index=models.Index(fields=['chat', 'team'], name='experiments_chat_id_d99242_idx'),
+        ),
+        migrations.AddIndex(
+            model_name='experimentsession',
+            index=models.Index(fields=['chat', 'team', 'ended_at'], name='experiments_chat_id_6337a3_idx'),
+        ),
     ]
