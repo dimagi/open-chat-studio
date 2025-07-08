@@ -290,6 +290,15 @@
         });
       },
 
+      getActiveFilters(filters) {
+        return filters.filter(filter => {
+          return filter.column && filter.operator && (
+            filter.value ||
+            (Array.isArray(filter.selectedValues) && filter.selectedValues.length > 0)
+          )
+        })
+      },
+
       updateOperatorsByColumn(index) {
         const filter = this.filterData.filters[index];
         const column = filter.column;
@@ -320,12 +329,7 @@
         this.triggerFilterChange();
       },
       getActiveFilterCount() {
-        return this.filterData.filters.filter(filter => {
-          return filter.column && filter.operator && (
-            filter.value ||
-            (Array.isArray(filter.selectedValues) && filter.selectedValues.length > 0)
-          );
-        }).length;
+        return this.getActiveFilters(this.filterData.filters).length;
       },
       clearAllFilters() {
         this.filterData.filters = [];
@@ -439,12 +443,7 @@
             }
           }
         }
-        this.filterData.filters = filters.filter(filter =>
-          filter.column && filter.operator && (
-            filter.value ||
-            (Array.isArray(filter.selectedValues) && filter.selectedValues.length > 0)
-          )
-        );
+        this.filterData.filters = this.getActiveFilters(this.filterData.filters);
         this.filterData.showFilters = false;
         if (this.filterData.filters.length === 0) {
           this.addFilter();
@@ -452,12 +451,7 @@
       },
 
       updateUrlWithFilters() {
-        const activeFilters = this.filterData.filters.filter(filter =>
-          filter.column && filter.operator && (
-            filter.value ||
-            (Array.isArray(filter.selectedValues) && filter.selectedValues.length > 0)
-          )
-        );
+        const activeFilters = this.getActiveFilters(this.filterData.filters);
         const params = new URLSearchParams(window.location.search);
         [...params.keys()].forEach(key => {
           if (key.startsWith('filter_')) {
@@ -500,29 +494,25 @@
         this.filterData.loading = true;
 
         let filterParams = {};
-        this.filterData.filters.forEach((filter, i) => {
-          if (filter.column && filter.operator && (
-            filter.value ||
-            (Array.isArray(filter.selectedValues) && filter.selectedValues.length > 0)
-          )) {
-            filterParams[`filter_${i}_column`] = filter.column;
-            filterParams[`filter_${i}_operator`] = filter.operator;
+        let activeFilters = this.getActiveFilters(this.filterData.filters);
+        activeFilters.forEach((filter, i) => {
+          filterParams[`filter_${i}_column`] = filter.column;
+          filterParams[`filter_${i}_operator`] = filter.operator;
 
-            if (['any of', 'all of', 'excludes'].includes(filter.operator)) {
-              if (filter.selectedValues && filter.selectedValues.length > 0) {
-                // For experiment filter, convert names back to IDs
-                let valuesToSend = filter.selectedValues;
-                if (filter.column === 'experiment') {
-                  valuesToSend = filter.selectedValues.map(name => {
-                    const experiment = experimentList.find(exp => exp.name === name);
-                    return experiment ? experiment.id : name;
-                  });
-                }
-                filterParams[`filter_${i}_value`] = JSON.stringify(valuesToSend);
+          if (['any of', 'all of', 'excludes'].includes(filter.operator)) {
+            if (filter.selectedValues && filter.selectedValues.length > 0) {
+              // For experiment filter, convert names back to IDs
+              let valuesToSend = filter.selectedValues;
+              if (filter.column === 'experiment') {
+                valuesToSend = filter.selectedValues.map(name => {
+                  const experiment = experimentList.find(exp => exp.name === name);
+                  return experiment ? experiment.id : name;
+                });
               }
-            } else {
-              filterParams[`filter_${i}_value`] = filter.value;
+              filterParams[`filter_${i}_value`] = JSON.stringify(valuesToSend);
             }
+          } else {
+            filterParams[`filter_${i}_value`] = filter.value;
           }
         });
         const sessionsTableUrl = document.getElementById('sessions-table').dataset.url;
