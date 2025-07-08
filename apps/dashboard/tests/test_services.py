@@ -106,22 +106,6 @@ class TestDashboardService:
         assert stats["total_sessions"] >= 1
         assert stats["total_messages"] >= 2
 
-    def test_get_active_participants_data(self, team, experiment, participant, experiment_session, chat):
-        """Test active participants data generation"""
-        service = DashboardService(team)
-
-        # Create human message (makes participant active)
-        ChatMessage.objects.create(chat=chat, message_type=ChatMessageType.HUMAN, content="Test message")
-
-        data = service.get_active_participants_data(granularity="daily")
-
-        assert isinstance(data, list)
-        if data:  # If there's data
-            item = data[0]
-            assert "date" in item
-            assert "active_participants" in item
-            assert item["active_participants"] >= 1
-
     def test_get_session_analytics_data(self, team, experiment, participant, experiment_session, chat):
         """Test session analytics data generation"""
 
@@ -247,7 +231,7 @@ class TestDashboardService:
         granularities = ["hourly", "daily", "weekly", "monthly"]
 
         for granularity in granularities:
-            data = service.get_active_participants_data(granularity=granularity)
+            data = service.get_session_analytics_data(granularity=granularity)
             assert isinstance(data, list)
 
             # Test that the function doesn't crash with different granularities
@@ -278,9 +262,6 @@ class TestDashboardService:
         # Test various methods with no data
         stats = service.get_overview_stats()
         assert all(value >= 0 for value in stats.values() if isinstance(value, int | float))
-
-        participants_data = service.get_active_participants_data()
-        assert isinstance(participants_data, list)
 
         session_data = service.get_session_analytics_data()
         assert isinstance(session_data, dict)

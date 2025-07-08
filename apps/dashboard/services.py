@@ -136,8 +136,8 @@ class DashboardService:
 
         for stat in session_stats:
             period_str = self._format_period(stat["period"])
-            data["sessions"].append({"date": period_str, "total_sessions": stat["total_sessions"]})
-            data["participants"].append({"date": period_str, "unique_participants": stat["unique_participants"]})
+            data["sessions"].append({"date": period_str, "active_sessions": stat["total_sessions"]})
+            data["participants"].append({"date": period_str, "active_participants": stat["unique_participants"]})
 
         DashboardCache.set_cached_data(self.team, cache_key, data)
         return data
