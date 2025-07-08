@@ -369,62 +369,26 @@ class DashboardService:
             .annotate(sessions_count=Count("id", distinct=True), participants_count=Count("participant", distinct=True))
         )
 
-        messages_stats = (
-            querysets["messages"]
-            .values("chat__experiment_session__experiment_channel__platform")
-            .annotate(
-                messages_count=Count("id"),
-                human_messages_count=Count("id", filter=Q(message_type=ChatMessageType.HUMAN)),
-                ai_messages_count=Count("id", filter=Q(message_type=ChatMessageType.AI)),
-            )
-        )
-
         session_stats_map = {item["experiment_channel__platform"]: item for item in sessions_stats}
-        message_stats_map = {
-            item["chat__experiment_session__experiment_channel__platform"]: item for item in messages_stats
-        }
 
         platform_data = []
 
         for platform in platforms_in_use:
             s_stats = session_stats_map.get(platform, {})
-            m_stats = message_stats_map.get(platform, {})
-
             sessions_count = s_stats.get("sessions_count", 0)
-            participants_count = s_stats.get("participants_count", 0)
-            messages_count = m_stats.get("messages_count", 0)
-            human_messages_count = m_stats.get("human_messages_count", 0)
-            ai_messages_count = m_stats.get("ai_messages_count", 0)
-
-            platform_label = dict(ChannelPlatform.choices).get(platform, platform.title())
-
             platform_data.append(
                 {
                     "platform": platform,
-                    "platform_name": platform_label,
                     "sessions": sessions_count,
-                    "messages": messages_count,
-                    "participants": participants_count,
-                    "human_messages": human_messages_count,
-                    "ai_messages": ai_messages_count,
                 }
             )
 
-        # Calculate totals and percentages
+        # Calculate total sessions
         total_sessions = sum(item["sessions"] for item in platform_data)
-        total_messages = sum(item["messages"] for item in platform_data)
-        total_participants = sum(item["participants"] for item in platform_data)
-
-        for item in platform_data:
-            item["session_percentage"] = (item["sessions"] / total_sessions * 100) if total_sessions > 0 else 0
-            item["message_percentage"] = (item["messages"] / total_messages * 100) if total_messages > 0 else 0
-            item["participant_percentage"] = (
-                (item["participants"] / total_participants * 100) if total_participants > 0 else 0
-            )
 
         data = {
             "platforms": platform_data,
-            "totals": {"sessions": total_sessions, "messages": total_messages, "participants": total_participants},
+            "totals": {"sessions": total_sessions},
         }
 
         DashboardCache.set_cached_data(self.team, cache_key, data)
