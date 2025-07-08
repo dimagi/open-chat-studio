@@ -119,6 +119,8 @@ def build_filter_condition(column, operator, value, timezone):
         return build_channels_filter(operator, value)
     elif column == "experiment":
         return build_experiment_filter(operator, value)
+    elif column =="state":
+        return build_state_filter(operator, value)
     return None
 
 
@@ -292,3 +294,27 @@ def build_experiment_filter(operator, value):
     except json.JSONDecodeError:
         pass
     return None
+
+def build_state_filter(operator, value):
+    try:
+        selected_values = json.loads(value)
+    except json.JSONDecodeError:
+        return None
+
+    if not selected_values:
+        return None
+
+    if operator == Operators.ANY_OF:
+        return Q(status__in=selected_values)
+
+    elif operator == Operators.ALL_OF:
+        conditions = Q()
+        for state in selected_values:
+            conditions &= Q(status__iexact=state)
+        return conditions
+
+    elif operator == Operators.EXCLUDES:
+        return ~Q(status__in=selected_values)
+
+    return None
+
