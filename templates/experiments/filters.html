@@ -525,7 +525,7 @@
             }
           }
         });
-        const sessionsTableUrl = document.getElementById('sessions-table').getAttribute('hx-get');
+        const sessionsTableUrl = document.getElementById('sessions-table').dataset.url;
         const showAllCheckbox = document.querySelector('input[name="show-all"]');
         if (showAllCheckbox && showAllCheckbox.checked) {
           filterParams['show-all'] = 'on';
