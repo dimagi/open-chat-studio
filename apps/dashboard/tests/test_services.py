@@ -119,8 +119,8 @@ class TestDashboardService:
 
         data = service.get_session_analytics_data(granularity="daily")
         assert data == {
-            "sessions": [{"date": str(message.created_at.date()), "total_sessions": 1}],
-            "participants": [{"date": str(message.created_at.date()), "unique_participants": 1}],
+            "sessions": [{"date": str(message.created_at.date()), "active_sessions": 1}],
+            "participants": [{"date": str(message.created_at.date()), "active_participants": 1}],
         }
 
     def test_get_message_volume_data(self, team, experiment, participant, experiment_session, chat):
@@ -232,7 +232,7 @@ class TestDashboardService:
 
         for granularity in granularities:
             data = service.get_session_analytics_data(granularity=granularity)
-            assert isinstance(data, list)
+            assert isinstance(data, dict)
 
             # Test that the function doesn't crash with different granularities
             # The exact data will depend on when the test is run
