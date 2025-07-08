@@ -122,17 +122,22 @@ class TestDashboardService:
             assert "active_participants" in item
             assert item["active_participants"] >= 1
 
-    def test_get_session_analytics_data(self, team, experiment, participant, experiment_session):
+    def test_get_session_analytics_data(self, team, experiment, participant, experiment_session, chat):
         """Test session analytics data generation"""
+
+        message = ChatMessage.objects.create(chat=chat, message_type=ChatMessageType.HUMAN, content="Human message")
+        message.created_at = timezone.now() - timedelta(days=15)
+        message.save()
+
+        assert message.created_at != experiment_session.created_at
+
         service = DashboardService(team)
 
         data = service.get_session_analytics_data(granularity="daily")
-
-        assert isinstance(data, dict)
-        assert "sessions" in data
-        assert "participants" in data
-        assert isinstance(data["sessions"], list)
-        assert isinstance(data["participants"], list)
+        assert data == {
+            "sessions": [{"date": str(message.created_at.date()), "total_sessions": 1}],
+            "participants": [{"date": str(message.created_at.date()), "unique_participants": 1}],
+        }
 
     def test_get_message_volume_data(self, team, experiment, participant, experiment_session, chat):
         """Test message volume data generation"""

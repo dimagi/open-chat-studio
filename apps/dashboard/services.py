@@ -126,7 +126,7 @@ class DashboardService:
         trunc_func = self._get_trunc_function(granularity)
 
         session_stats = (
-            sessions.annotate(period=trunc_func("created_at"))
+            sessions.annotate(period=trunc_func("chat__messages__created_at"))
             .values("period")
             .annotate(total_sessions=Count("id"), unique_participants=Count("participant", distinct=True))
             .order_by("period")
