@@ -15,7 +15,7 @@ from django.contrib.auth.decorators import permission_required
 from django.contrib.auth.mixins import PermissionRequiredMixin
 from django.core.exceptions import PermissionDenied, ValidationError
 from django.db import transaction
-from django.db.models import Case, CharField, Count, IntegerField, Value, When
+from django.db.models import Case, CharField, Count, IntegerField, Prefetch, Value, When
 from django.db.models.fields.json import KeyTextTransform
 from django.db.models.functions import Coalesce
 from django.http import FileResponse, Http404, HttpResponse, HttpResponseForbidden, HttpResponseRedirect
@@ -35,7 +35,7 @@ from field_audit.models import AuditAction
 from waffle import flag_is_active
 
 from apps.analysis.const import LANGUAGE_CHOICES
-from apps.annotations.models import Tag
+from apps.annotations.models import CustomTaggedItem, Tag
 from apps.assistants.sync import OpenAiSyncError, get_diff_with_openai_assistant, get_out_of_sync_files
 from apps.channels.datamodels import Attachment, AttachmentType
 from apps.channels.exceptions import ExperimentChannelException
@@ -130,7 +130,16 @@ class ExperimentSessionsTableView(LoginAndTeamRequiredMixin, SingleTableView, Pe
         query_set = (
             ExperimentSession.objects.with_last_message_created_at()
             .filter(team=self.request.team, experiment__id=self.kwargs["experiment_id"])
-            .select_related("participant__user")
+            .select_related("participant__user", "chat")
+            .prefetch_related(
+                "chat__tags",
+                "chat__messages__tags",
+                Prefetch(
+                    "chat__tagged_items",
+                    queryset=CustomTaggedItem.objects.select_related("tag", "user"),
+                    to_attr="prefetched_tagged_items",
+                ),
+            )
         )
         timezone = self.request.session.get("detected_tz", None)
         query_set = apply_dynamic_filters(query_set, self.request.GET, timezone)

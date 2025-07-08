@@ -126,7 +126,7 @@ class DashboardService:
         trunc_func = self._get_trunc_function(granularity)
 
         session_stats = (
-            sessions.annotate(period=trunc_func("created_at"))
+            sessions.annotate(period=trunc_func("chat__messages__created_at"))
             .values("period")
             .annotate(total_sessions=Count("id"), unique_participants=Count("participant", distinct=True))
             .order_by("period")
@@ -136,8 +136,8 @@ class DashboardService:
 
         for stat in session_stats:
             period_str = self._format_period(stat["period"])
-            data["sessions"].append({"date": period_str, "total_sessions": stat["total_sessions"]})
-            data["participants"].append({"date": period_str, "unique_participants": stat["unique_participants"]})
+            data["sessions"].append({"date": period_str, "active_sessions": stat["total_sessions"]})
+            data["participants"].append({"date": period_str, "active_participants": stat["unique_participants"]})
 
         DashboardCache.set_cached_data(self.team, cache_key, data)
         return data
@@ -319,7 +319,7 @@ class DashboardService:
                     "experimentsession__chat__messages",
                     filter=Q(experimentsession__chat__messages__message_type=ChatMessageType.HUMAN) & date_filter,
                 ),
-                total_sessions=Count("experimentsession", filter=date_filter),
+                total_sessions=Count("experimentsession", filter=date_filter, distinct=True),
                 last_activity=Max("experimentsession__chat__messages__created_at"),
             )
             .filter(total_messages__gt=0)

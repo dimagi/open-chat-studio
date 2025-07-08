@@ -31,7 +31,6 @@ from django_cryptography.fields import encrypt
 from field_audit import audit_fields
 from field_audit.models import AuditAction, AuditingManager
 
-from apps.annotations.models import Tag
 from apps.chat.models import Chat, ChatMessage, ChatMessageType
 from apps.custom_actions.mixins import CustomActionOperationMixin
 from apps.experiments import model_audit_fields
@@ -1776,17 +1775,16 @@ class ExperimentSession(BaseTeamModel):
         return self.experiment.get_working_version()
 
     @property
-    def experiment_version_for_display(self):
-        version_tags = list(
-            Tag.objects.filter(chatmessage__chat=self.chat, category=Chat.MetadataKeys.EXPERIMENT_VERSION)
-            .order_by("name")
-            .values_list("name", flat=True)
-            .distinct()
-        )
-        if not version_tags:
-            return ""
-
-        return ", ".join(version_tags)
+    def experiment_versions_from_prefetched_data(self):
+        if not hasattr(self.chat, "messages"):
+            return set()
+        version_tags = {
+            tag.name
+            for message in self.chat.messages.all()
+            for tag in message.tags.all()
+            if tag.category == Chat.MetadataKeys.EXPERIMENT_VERSION
+        }
+        return ", ".join(sorted(version_tags)) if version_tags else ""
 
     def get_experiment_version_number(self) -> int:
         """
