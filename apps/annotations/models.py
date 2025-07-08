@@ -1,4 +1,5 @@
 import json
+import logging
 from functools import cached_property
 
 from django.contrib.contenttypes.fields import GenericForeignKey, GenericRelation
@@ -13,6 +14,8 @@ from taggit.models import GenericTaggedItemBase, TagBase
 
 from apps.teams.models import BaseTeamModel, Team
 from apps.users.models import CustomUser
+
+logger = logging.getLogger("ocs.annotations")
 
 
 class TagCategories(models.TextChoices):
@@ -113,28 +116,28 @@ class TaggedModelMixin(models.Model, AnnotationMixin):
         self.tags.add(tag, through_defaults={"team": team, "user": added_by})
 
     def user_tag_names(self):
-        return {tag["name"] for tag in self.tags_json if not tag["is_system_tag"]}
+        return {tag["name"] for tag in self.prefetched_tags_json if not tag["is_system_tag"]}
 
     def system_tags_names(self):
-        return {(tag["name"], tag["category"]) for tag in self.tags_json if tag["is_system_tag"]}
+        return {(tag["name"], tag["category"]) for tag in self.prefetched_tags_json if tag["is_system_tag"]}
 
     def all_tag_names(self):
-        return [tag["name"] for tag in self.tags_json]
+        return [tag["name"] for tag in self.prefetched_tags_json]
 
     @cached_property
-    def tags_json(self):
-        tagged_items = CustomTaggedItem.objects.filter(
-            content_type__model=self._meta.model_name, content_type__app_label=self._meta.app_label, object_id=self.id
-        ).prefetch_related("tag", "user")
+    def prefetched_tags_json(self):
+        if not hasattr(self, "prefetched_tagged_items"):
+            logger.warning("Warning: unable to prefectch tags")
+            return []
+
         tags = []
-        for tagged_item in tagged_items:
+        for tagged_item in self.prefetched_tagged_items:
             if tagged_item.tag.is_system_tag:
                 added_by = "System"
             elif tagged_item.user and tagged_item.user.email:
                 added_by = tagged_item.user.email
             else:
                 added_by = "Participant"
-
             tags.append(
                 {
                     "name": tagged_item.tag.name,
