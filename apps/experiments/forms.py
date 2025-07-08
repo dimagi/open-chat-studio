@@ -298,12 +298,13 @@ class TranslateMessagesForm(forms.Form):
         widget=forms.Select(attrs={"class": "select select-bordered w-full", "id": "translation-provider-model"}),
     )
 
-    def __init__(self, *args, team=None, translatable_languages=None, **kwargs):
+    def __init__(self, *args, team=None, translatable_languages=None, widget_id_suffix="", **kwargs):
         super().__init__(*args, **kwargs)
         if team:
             self.fields["provider_model"].choices = [
                 ("", "Choose a model for translation")
             ] + get_dropdown_llm_model_choices(team)
+            self.fields["provider_model"].widget.attrs["id"] = f"translation-provider-model{widget_id_suffix}"
         if translatable_languages:
             self.fields["target_language"].choices = [("", "Choose a language")] + [
                 (code, name) for code, name in translatable_languages if code

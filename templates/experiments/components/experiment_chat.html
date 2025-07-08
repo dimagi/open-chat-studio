@@ -61,7 +61,7 @@
             <p class="py-4">
               This will translate all messages in this session. Select the target language:
             </p>
-            {% render_form_fields translate_form %}
+            {% render_form_fields translate_form_all %}
             <p class="pb-4">This action may take a few moments to complete.</p>
             <div class="modal-action">
               <button
@@ -69,7 +69,7 @@
                 class="btn btn-primary"
                 hx-post="{% url 'experiments:translate_messages' request.team.slug experiment.public_id experiment_session.external_id %}"
                 hx-vals='{"translate_all": "true"}'
-                hx-include="[name='search'], #translation-provider-model, [name='target_language']"
+                hx-include="[name='search'], #translation-provider-model-all, [name='target_language']"
                 hx-target="#messages-container"
                 hx-indicator="#chat-message-untranslated"
                 onclick="document.getElementById('translate-all-messages-modal').checked = false;"
@@ -119,7 +119,7 @@
                     {% endfor %}</strong>
                   </p>
 
-                  {% render_form_fields translate_form "provider_model" %}
+                  {% render_form_fields translate_form_remaining "provider_model" %}
                   <p class="pb-4">This action may take a few moments to complete.</p>
                   <div class="modal-action">
                     <button
@@ -127,7 +127,7 @@
                       class="btn btn-primary"
                       hx-post="{% url 'experiments:translate_messages' request.team.slug experiment.public_id experiment_session.external_id %}"
                       hx-vals='{"language": "{{ language }}"}'
-                      hx-include="[name='search'], [name='language'], [name='show_original_translation'], #translation-provider-model"
+                      hx-include="[name='search'], [name='language'], [name='show_original_translation'], #translation-provider-model-remaining"
                       hx-target="#messages-container"
                       hx-indicator="#chat-message-untranslated"
                       onclick="document.getElementById('translate-remaining-messages-modal').checked = false;"

@@ -1247,7 +1247,12 @@ def experiment_session_messages_view(request, team_slug: str, experiment_id: uui
     messages_queryset = ChatMessage.objects.filter(chat=session.chat).all().order_by("created_at")
     available_languages, translatable_languages = _get_languages_for_chat(session)
     has_missing_translations = False
-    translate_form = TranslateMessagesForm(team=request.team, translatable_languages=translatable_languages)
+    translate_form_all = TranslateMessagesForm(
+        team=request.team, translatable_languages=translatable_languages, widget_id_suffix="-all"
+    )
+    translate_form_remaining = TranslateMessagesForm(
+        team=request.team, translatable_languages=translatable_languages, widget_id_suffix="-remaining"
+    )
     default_message = "(message generated after last translation)"
 
     if search:
@@ -1284,7 +1289,8 @@ def experiment_session_messages_view(request, team_slug: str, experiment_id: uui
         "available_tags": [t.name for t in Tag.objects.filter(team__slug=team_slug, is_system_tag=False).all()],
         "has_missing_translations": has_missing_translations,
         "show_original_translation": show_original_translation,
-        "translate_form": translate_form,
+        "translate_form_all": translate_form_all,
+        "translate_form_remaining": translate_form_remaining,
         "default_message": default_message,
     }
 
