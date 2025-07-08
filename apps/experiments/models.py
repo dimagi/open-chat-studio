@@ -1538,6 +1538,7 @@ class SessionStatus(models.TextChoices):
     def for_chatbots(cls):
         return [cls.ACTIVE.value, cls.COMPLETE.value]
 
+
 class ExperimentSessionObjectManager(models.Manager):
     def with_last_message_created_at(self):
         return self.annotate_with_last_message_created_at(self.get_queryset())

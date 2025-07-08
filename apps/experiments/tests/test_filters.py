@@ -293,7 +293,7 @@ class TestDynamicFilters:
         filtered = apply_dynamic_filters(base_session.experiment.sessions.all(), params, timezone)
         assert filtered.count() == base_session.experiment.sessions.count()
 
-        @pytest.mark.django_db
+        @pytest.mark.django_db()
         def test_state_filters(sessions_with_statuses):
             """
             Test status filter with ANY_OF and EXCLUDES.

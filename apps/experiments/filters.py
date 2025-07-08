@@ -119,7 +119,7 @@ def build_filter_condition(column, operator, value, timezone):
         return build_channels_filter(operator, value)
     elif column == "experiment":
         return build_experiment_filter(operator, value)
-    elif column =="state":
+    elif column == "state":
         return build_state_filter(operator, value)
     return None
 
@@ -295,6 +295,7 @@ def build_experiment_filter(operator, value):
         pass
     return None
 
+
 def build_state_filter(operator, value):
     try:
         selected_values = json.loads(value)
@@ -317,4 +318,3 @@ def build_state_filter(operator, value):
         return ~Q(status__in=selected_values)
 
     return None
-
