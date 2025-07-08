@@ -47,6 +47,9 @@ class Banner(models.Model):
         null=True,
         help_text="Banner will only show if team has the flag enabled",
     )
+    dismiss_timeout = models.PositiveSmallIntegerField(
+        default=0, help_text="The banner will re-appear this many days after being dismissed"
+    )
 
     class Meta:
         ordering = ["-end_date"]
@@ -82,3 +85,13 @@ class Banner(models.Model):
                 return f"ERROR: {str(e)}"
 
         return ""
+
+    @property
+    def cookie_expires(self):
+        """The cookie should expire when the banner expires
+        or at after `dismiss_timeout` days, whichever is sooner."""
+        expires_delta = self.end_date - timezone.now()
+        delta_days = expires_delta.days + 1  # approximate
+        if not self.dismiss_timeout:
+            return delta_days
+        return min(delta_days, self.dismiss_timeout)

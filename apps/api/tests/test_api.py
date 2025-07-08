@@ -357,8 +357,7 @@ def test_update_participant_data_and_setup_connect_channels(httpx_mock):
     client = ApiTestClient(user, team)
 
     data = {
-        # lower-case identifier is used to ensure we're converting it to upper-case
-        "identifier": "connectid_2",
+        "identifier": "ConnectID_2",
         "platform": "commcare_connect",
         "data": [
             {
@@ -377,14 +376,14 @@ def test_update_participant_data_and_setup_connect_channels(httpx_mock):
     response = client.post(url, json.dumps(data), content_type="application/json")
     assert response.status_code == 200
 
-    # Only one of the two experiments that the "connectid_2" participant belongs to has a connect messaging channel, so
+    # Only one of the two experiments that the "ConnectID_2" participant belongs to has a connect messaging channel, so
     # we expect only one call to the Connect servers to have been made
     request = httpx_mock.get_request()
     request_data = json.loads(request.read())
-    assert request_data["connectid"] == "CONNECTID_2"
+    assert request_data["connectid"] == "ConnectID_2"
     assert request_data["channel_source"] == "bot1"
-    assert Participant.objects.filter(identifier="CONNECTID_2").exists()
-    data = ParticipantData.objects.get(participant__identifier="CONNECTID_2", experiment_id=experiment1.id)
+    assert Participant.objects.filter(identifier="ConnectID_2").exists()
+    data = ParticipantData.objects.get(participant__identifier="ConnectID_2", experiment_id=experiment1.id)
     assert data.system_metadata == {"commcare_connect_channel_id": created_connect_channel_id, "consent": True}
 
 
@@ -525,7 +524,7 @@ def test_generate_bot_message_and_send(ConnectClient, experiment):
     encryption_key = os.urandom(32).hex()
     participant_data = _setup_participant_data(
         experiment,
-        connect_id=connect_id.upper(),
+        connect_id=connect_id,
         system_metadata={"commcare_connect_channel_id": commcare_connect_channel_id, "consent": True},
         encryption_key=encryption_key,
     )

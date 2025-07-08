@@ -123,27 +123,21 @@ class ChartManager {
         if (!ctx) return;
         
         this.destroyChart('sessionAnalytics');
-        
-        const labels = data.sessions?.map(item => this.formatDateLabel(item.date)) || [];
-        
+
         const chartData = {
-            labels: labels,
-            datasets: [
-                {
-                    label: 'Total Sessions',
-                    data: data.sessions?.map(item => item.total_sessions) || [],
-                    backgroundColor: this.colorPalette.primary,
-                    yAxisID: 'y'
-                },
-                {
-                    label: 'Unique Participants',
-                    data: data.participants?.map(item => item.unique_participants) || [],
-                    backgroundColor: this.colorPalette.secondary,
-                    yAxisID: 'y1'
-                }
-            ]
+            labels: data.map(item => this.formatDateLabel(item.date)),
+            datasets: [{
+                label: 'Active Sessions',
+                data: data.map(item => item.active_sessions),
+                borderColor: this.colorPalette.secondary,
+                backgroundColor: this.colorPalette.secondary + '20',
+                fill: true,
+                tension: 0.3,
+                pointRadius: 4,
+                pointHoverRadius: 6
+            }]
         };
-        
+
         const options = {
             ...this.defaultOptions,
             plugins: {
@@ -153,37 +147,19 @@ class ChartManager {
                 }
             },
             scales: {
-                x: {
-                    ...this.defaultOptions.scales.x,
-                    stacked: false
-                },
+                ...this.defaultOptions.scales,
                 y: {
                     ...this.defaultOptions.scales.y,
-                    type: 'linear',
-                    display: true,
-                    position: 'left',
                     title: {
                         display: true,
-                        text: 'Sessions'
-                    }
-                },
-                y1: {
-                    type: 'linear',
-                    display: true,
-                    position: 'right',
-                    title: {
-                        display: true,
-                        text: 'Participants'
-                    },
-                    grid: {
-                        drawOnChartArea: false
+                        text: 'Number of Sessions'
                     }
                 }
             }
         };
-        
+
         this.charts.sessionAnalytics = new Chart(ctx, {
-            type: 'bar',
+            type: 'line',
             data: chartData,
             options: options
         });

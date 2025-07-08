@@ -1,4 +1,5 @@
 from datetime import timedelta
+from unittest.mock import ANY
 
 import pytest
 from django.utils import timezone
@@ -44,13 +45,8 @@ class TestDashboardService:
         old_date = timezone.now() - timedelta(days=60)
         recent_date = timezone.now() - timedelta(days=5)
 
-        old_session = ExperimentSession.objects.create(experiment=experiment, participant=participant, team=team)
-        old_session.created_at = old_date
-        old_session.save()
-
-        recent_session = ExperimentSession.objects.create(experiment=experiment, participant=participant, team=team)
-        recent_session.created_at = recent_date
-        recent_session.save()
+        old_session = _create_session(experiment, participant, team, old_date)
+        recent_session = _create_session(experiment, participant, team, recent_date)
 
         # Filter for last 30 days
         start_date = timezone.now() - timedelta(days=30)
@@ -73,9 +69,9 @@ class TestDashboardService:
         other_experiment = Experiment.objects.create(name="Other Experiment", team=team, owner=experiment.owner)
 
         # Create sessions for both experiments
-        session1 = ExperimentSession.objects.create(experiment=experiment, participant=participant, team=team)
+        session1 = _create_session(experiment, participant, team, timezone.now())
 
-        session2 = ExperimentSession.objects.create(experiment=other_experiment, participant=participant, team=team)
+        session2 = _create_session(other_experiment, participant, team, timezone.now())
 
         # Filter by specific experiment
         querysets = service.get_filtered_queryset_base(experiment_ids=[experiment.id])
@@ -110,33 +106,22 @@ class TestDashboardService:
         assert stats["total_sessions"] >= 1
         assert stats["total_messages"] >= 2
 
-    def test_get_active_participants_data(self, team, experiment, participant, experiment_session, chat):
-        """Test active participants data generation"""
-        service = DashboardService(team)
-
-        # Create human message (makes participant active)
-        ChatMessage.objects.create(chat=chat, message_type=ChatMessageType.HUMAN, content="Test message")
-
-        data = service.get_active_participants_data(granularity="daily")
-
-        assert isinstance(data, list)
-        if data:  # If there's data
-            item = data[0]
-            assert "date" in item
-            assert "active_participants" in item
-            assert item["active_participants"] >= 1
-
-    def test_get_session_analytics_data(self, team, experiment, participant, experiment_session):
+    def test_get_session_analytics_data(self, team, experiment, participant, experiment_session, chat):
         """Test session analytics data generation"""
+
+        message = ChatMessage.objects.create(chat=chat, message_type=ChatMessageType.HUMAN, content="Human message")
+        message.created_at = timezone.now() - timedelta(days=15)
+        message.save()
+
+        assert message.created_at != experiment_session.created_at
+
         service = DashboardService(team)
 
         data = service.get_session_analytics_data(granularity="daily")
-
-        assert isinstance(data, dict)
-        assert "sessions" in data
-        assert "participants" in data
-        assert isinstance(data["sessions"], list)
-        assert isinstance(data["participants"], list)
+        assert data == {
+            "sessions": [{"date": str(message.created_at.date()), "active_sessions": 1}],
+            "participants": [{"date": str(message.created_at.date()), "active_participants": 1}],
+        }
 
     def test_get_message_volume_data(self, team, experiment, participant, experiment_session, chat):
         """Test message volume data generation"""
@@ -222,13 +207,18 @@ class TestDashboardService:
         data = service.get_user_engagement_data(limit=5)
 
         assert isinstance(data, dict)
-        assert "most_active_participants" in data
-        assert "least_active_participants" in data
-        assert "session_length_distribution" in data
-        assert "total_participants" in data
+        assert data["most_active_participants"] == [
+            {
+                "participant_id": participant.id,
+                "participant_name": participant.name,
+                "participant_url": ANY,
+                "total_messages": 3,
+                "total_sessions": 1,
+                "last_activity": ANY,
+            }
+        ]
 
         assert isinstance(data["most_active_participants"], list)
-        assert isinstance(data["least_active_participants"], list)
         assert isinstance(data["session_length_distribution"], list)
 
     def test_granularity_options(self, team, experiment, participant, experiment_session, chat):
@@ -241,8 +231,8 @@ class TestDashboardService:
         granularities = ["hourly", "daily", "weekly", "monthly"]
 
         for granularity in granularities:
-            data = service.get_active_participants_data(granularity=granularity)
-            assert isinstance(data, list)
+            data = service.get_session_analytics_data(granularity=granularity)
+            assert isinstance(data, dict)
 
             # Test that the function doesn't crash with different granularities
             # The exact data will depend on when the test is run
@@ -273,9 +263,6 @@ class TestDashboardService:
         stats = service.get_overview_stats()
         assert all(value >= 0 for value in stats.values() if isinstance(value, int | float))
 
-        participants_data = service.get_active_participants_data()
-        assert isinstance(participants_data, list)
-
         session_data = service.get_session_analytics_data()
         assert isinstance(session_data, dict)
 
@@ -303,3 +290,11 @@ class TestDashboardService:
 
         # Data should be identical
         assert data1 == data2
+
+
+def _create_session(experiment, participant, team, message_date):
+    session = ExperimentSession.objects.create(experiment=experiment, participant=participant, team=team)
+    message = ChatMessage.objects.create(chat=session.chat)
+    message.created_at = message_date
+    message.save()
+    return session

@@ -11,6 +11,7 @@ from freezegun import freeze_time
 from apps.chat.agent import tools
 from apps.chat.agent.schemas import WeekdaysEnum
 from apps.chat.agent.tools import (
+    CITATION_PROMPT,
     TOOL_CLASS_MAP,
     DeleteReminderTool,
     SearchIndexTool,
@@ -399,7 +400,7 @@ class TestSearchIndexTool:
         file = FileFactory(team=team, name="the_greatness_of_fruit.txt")
         vector_data = self.load_vector_data()
 
-        file_chunk_embedding = FileChunkEmbedding.objects.create(
+        FileChunkEmbedding.objects.create(
             team=team,
             file=file,
             collection=collection,
@@ -408,7 +409,7 @@ class TestSearchIndexTool:
             embedding=vector_data["Oranges are nice"],
             page_number=0,
         )
-        file_chunk_embedding = FileChunkEmbedding.objects.create(
+        FileChunkEmbedding.objects.create(
             team=team,
             file=file,
             collection=collection,
@@ -417,7 +418,7 @@ class TestSearchIndexTool:
             embedding=vector_data["Apples are great"],
             page_number=0,
         )
-        file_chunk_embedding = FileChunkEmbedding.objects.create(
+        FileChunkEmbedding.objects.create(
             team=team,
             file=file,
             collection=collection,
@@ -426,20 +427,23 @@ class TestSearchIndexTool:
             embedding=vector_data["Greatness is subjective"],
             page_number=0,
         )
-        collection = file_chunk_embedding.collection
 
         # The return value of get_embedding_vector is what determines the search results.
         local_index_manager_mock.get_embedding_vector.return_value = vector_data["What are great fruit?"]
         search_config = SearchToolConfig(index_id=collection.id, max_results=2)
         result = SearchIndexTool(search_config=search_config).action(query="What are great fruit?")
-        expected_result = """
-# File: the_greatness_of_fruit.txt
-## Content
+        expected_result = f"""
+# Retrieved chunks
+
+## File name: the_greatness_of_fruit.txt, file_id={file.id}
+### Content
 Apples are great
 
-# File: the_greatness_of_fruit.txt
-## Content
+## File name: the_greatness_of_fruit.txt, file_id={file.id}
+### Content
 Oranges are nice
+
+{CITATION_PROMPT}
 """
         assert result == expected_result
 
