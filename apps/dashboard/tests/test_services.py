@@ -106,33 +106,22 @@ class TestDashboardService:
         assert stats["total_sessions"] >= 1
         assert stats["total_messages"] >= 2
 
-    def test_get_active_participants_data(self, team, experiment, participant, experiment_session, chat):
-        """Test active participants data generation"""
-        service = DashboardService(team)
-
-        # Create human message (makes participant active)
-        ChatMessage.objects.create(chat=chat, message_type=ChatMessageType.HUMAN, content="Test message")
-
-        data = service.get_active_participants_data(granularity="daily")
-
-        assert isinstance(data, list)
-        if data:  # If there's data
-            item = data[0]
-            assert "date" in item
-            assert "active_participants" in item
-            assert item["active_participants"] >= 1
-
-    def test_get_session_analytics_data(self, team, experiment, participant, experiment_session):
+    def test_get_session_analytics_data(self, team, experiment, participant, experiment_session, chat):
         """Test session analytics data generation"""
+
+        message = ChatMessage.objects.create(chat=chat, message_type=ChatMessageType.HUMAN, content="Human message")
+        message.created_at = timezone.now() - timedelta(days=15)
+        message.save()
+
+        assert message.created_at != experiment_session.created_at
+
         service = DashboardService(team)
 
         data = service.get_session_analytics_data(granularity="daily")
-
-        assert isinstance(data, dict)
-        assert "sessions" in data
-        assert "participants" in data
-        assert isinstance(data["sessions"], list)
-        assert isinstance(data["participants"], list)
+        assert data == {
+            "sessions": [{"date": str(message.created_at.date()), "active_sessions": 1}],
+            "participants": [{"date": str(message.created_at.date()), "active_participants": 1}],
+        }
 
     def test_get_message_volume_data(self, team, experiment, participant, experiment_session, chat):
         """Test message volume data generation"""
@@ -224,7 +213,7 @@ class TestDashboardService:
                 "participant_name": participant.name,
                 "participant_url": ANY,
                 "total_messages": 3,
-                "total_sessions": 3,
+                "total_sessions": 1,
                 "last_activity": ANY,
             }
         ]
@@ -242,8 +231,8 @@ class TestDashboardService:
         granularities = ["hourly", "daily", "weekly", "monthly"]
 
         for granularity in granularities:
-            data = service.get_active_participants_data(granularity=granularity)
-            assert isinstance(data, list)
+            data = service.get_session_analytics_data(granularity=granularity)
+            assert isinstance(data, dict)
 
             # Test that the function doesn't crash with different granularities
             # The exact data will depend on when the test is run
@@ -273,9 +262,6 @@ class TestDashboardService:
         # Test various methods with no data
         stats = service.get_overview_stats()
         assert all(value >= 0 for value in stats.values() if isinstance(value, int | float))
-
-        participants_data = service.get_active_participants_data()
-        assert isinstance(participants_data, list)
 
         session_data = service.get_session_analytics_data()
         assert isinstance(session_data, dict)

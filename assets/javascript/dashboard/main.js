@@ -314,7 +314,6 @@ function dashboard() {
         async refreshAllCharts() {
             await Promise.all([
                 this.loadOverviewStats(),
-                this.loadActiveParticipantsChart(),
                 this.loadSessionAnalyticsChart(),
                 this.loadMessageVolumeChart(),
                 this.loadChannelBreakdownChart(),
@@ -366,35 +365,23 @@ function dashboard() {
             }
         },
         
-        async loadActiveParticipantsChart() {
-            this.setLoadingState('activeParticipants', true);
-            
-            try {
-                const data = await this.apiRequest('api/active-participants/');
-                if (window.chartManager) {
-                    window.chartManager.renderActiveParticipantsChart(data);
-                }
-            } catch (error) {
-                console.error('Error loading active participants chart:', error);
-                this.showChartError('activeParticipantsChart', 'Failed to load active participants data');
-            } finally {
-                this.setLoadingState('activeParticipants', false);
-            }
-        },
-        
         async loadSessionAnalyticsChart() {
+            this.setLoadingState('activeParticipants', true);
             this.setLoadingState('sessionAnalytics', true);
             
             try {
                 const data = await this.apiRequest('api/session-analytics/');
                 if (window.chartManager) {
-                    window.chartManager.renderSessionAnalyticsChart(data);
+                    window.chartManager.renderSessionAnalyticsChart(data.sessions);
+                    window.chartManager.renderActiveParticipantsChart(data.participants);
                 }
             } catch (error) {
                 console.error('Error loading session analytics chart:', error);
                 this.showChartError('sessionAnalyticsChart', 'Failed to load session analytics data');
+                this.showChartError('activeParticipantsChart', 'Failed to load session analytics data');
             } finally {
                 this.setLoadingState('sessionAnalytics', false);
+                this.setLoadingState('activeParticipants', false);
             }
         },
         
