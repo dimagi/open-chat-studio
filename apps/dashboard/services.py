@@ -6,7 +6,7 @@ from django.db.models.functions import TruncDate, TruncHour, TruncMonth, TruncWe
 from django.urls import reverse
 from django.utils import timezone
 
-from apps.channels.models import ChannelPlatform, ExperimentChannel
+from apps.channels.models import ExperimentChannel
 from apps.chat.models import ChatMessage, ChatMessageType
 from apps.experiments.models import Experiment, ExperimentSession, Participant
 
@@ -192,12 +192,6 @@ class DashboardService:
         cache_filters = {k: v for k, v in filters.items() if k not in ["page", "page_size", "order_by", "order_dir"]}
         cache_key = f"bot_performance_{hash(str(sorted(cache_filters.items())))}"
         cached_data = DashboardCache.get_cached_data(self.team, cache_key)
-        start_date = cache_filters.get("start_date")
-        end_date = cache_filters.get("end_date")
-        if not end_date:
-            end_date = timezone.now()
-        if not start_date:
-            start_date = end_date - timedelta(days=30)
 
         if not cached_data:
             querysets = self.get_filtered_queryset_base(**cache_filters)
@@ -205,33 +199,20 @@ class DashboardService:
                 querysets["experiments"]
                 .annotate(
                     participants_count=Count(
-                        "sessions__participant",
-                        filter=Q(sessions__created_at__gte=start_date, sessions__created_at__lte=end_date),
-                        distinct=True
+                        "sessions__participant", filter=Q(sessions__in=querysets["sessions"]), distinct=True
                     ),
-                    sessions_count=Count(
-                        "sessions",
-                        filter=Q(sessions__created_at__gte=start_date, sessions__created_at__lte=end_date),
-                        distinct=True
-                    ),
+                    sessions_count=Count("sessions", filter=Q(sessions__in=querysets["sessions"]), distinct=True),
                     messages_count=Count(
                         "sessions__chat__messages",
-                        filter=Q(
-                            sessions__chat__messages__created_at__gte=start_date,
-                            sessions__chat__messages__created_at__lte=end_date
-                        ),
-                        distinct=True
+                        filter=Q(sessions__chat__messages__in=querysets["messages"]),
+                        distinct=True,
                     ),
                 )
                 .prefetch_related(
                     Prefetch(
                         "sessions",
-                        queryset=ExperimentSession.objects.filter(
-                            ended_at__isnull=False,
-                            created_at__gte=start_date,
-                            created_at__lte=end_date
-                        ).only("created_at", "ended_at"),
-                        to_attr="prefetched_sessions"
+                        queryset=querysets["sessions"].filter(ended_at__isnull=False).only("created_at", "ended_at"),
+                        to_attr="prefetched_sessions",
                     )
                 )
             )
@@ -364,7 +345,8 @@ class DashboardService:
             .distinct()
         )
         sessions_stats = (
-            querysets["sessions"].order_by()
+            querysets["sessions"]
+            .order_by()
             .values("experiment_channel__platform")
             .annotate(sessions_count=Count("id", distinct=True), participants_count=Count("participant", distinct=True))
         )
