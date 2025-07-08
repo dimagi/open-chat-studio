@@ -288,7 +288,7 @@ class DashboardService:
                     "experimentsession__chat__messages",
                     filter=Q(experimentsession__chat__messages__message_type=ChatMessageType.HUMAN) & date_filter,
                 ),
-                total_sessions=Count("experimentsession", filter=date_filter),
+                total_sessions=Count("experimentsession", filter=date_filter, distinct=True),
                 last_activity=Max("experimentsession__chat__messages__created_at"),
             )
             .filter(total_messages__gt=0)

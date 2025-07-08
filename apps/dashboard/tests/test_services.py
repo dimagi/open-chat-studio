@@ -224,7 +224,7 @@ class TestDashboardService:
                 "participant_name": participant.name,
                 "participant_url": ANY,
                 "total_messages": 3,
-                "total_sessions": 3,
+                "total_sessions": 1,
                 "last_activity": ANY,
             }
         ]
