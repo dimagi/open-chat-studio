@@ -450,8 +450,7 @@
         }
       },
 
-      updateUrlWithFilters() {
-        const activeFilters = this.getActiveFilters(this.filterData.filters);
+      updateUrlWithFilters(activeFilters) {
         const params = new URLSearchParams(window.location.search);
         [...params.keys()].forEach(key => {
           if (key.startsWith('filter_')) {
@@ -521,7 +520,7 @@
           filterParams['show-all'] = 'on';
         }
         if (updateUrl) {
-          this.updateUrlWithFilters();
+          this.updateUrlWithFilters(activeFilters);
         }
         htmx.ajax('GET', sessionsTableUrl, {
           target: '#sessions-table',
