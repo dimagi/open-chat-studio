@@ -265,3 +265,11 @@ class TracingService:
         if self.span_stack:
             return self.span_stack[-1]
         return self.trace_id, self.trace_name
+
+    def add_output_message_tags_to_trace(self, tags: list[str]) -> None:
+        if not self.activated or not tags:
+            return
+        span_id, _ = self._get_current_span_info()
+        self.outputs[span_id].setdefault("tags", [])
+        self.outputs[span_id].setdefault("tags", []).extend(tags)
+        self.outputs[self.trace_id].setdefault("tags", []).extend(tags)
