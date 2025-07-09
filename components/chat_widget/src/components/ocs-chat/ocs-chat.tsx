@@ -3,6 +3,7 @@ import {
   XMarkIcon,
   ChevronDownIcon,
   ChevronUpIcon,
+  EllipsisHorizontalIcon
 } from './heroicons';
 
 interface ChatMessage {
@@ -537,10 +538,7 @@ export class OcsChat {
               {/* Drag indicator */}
               <div class="hidden sm:flex items-center gap-1">
                 <div class="flex items-center gap-0.5 ml-2 pointer-events-none">
-                  <div class="w-1 h-1 bg-gray-300 rounded-full"></div>
-                  <div class="w-1 h-1 bg-gray-300 rounded-full"></div>
-                  <div class="w-1 h-1 bg-gray-300 rounded-full"></div>
-                  <div class="w-1 h-1 bg-gray-300 rounded-full"></div>
+                  <EllipsisHorizontalIcon/>
                 </div>
               </div>
               <div class="flex gap-1">
