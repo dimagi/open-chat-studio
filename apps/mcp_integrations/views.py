@@ -47,6 +47,11 @@ class CreateMcpServer(LoginAndTeamRequiredMixin, PermissionRequiredMixin, Create
     }
     permission_required = "mcp_integrations.add_mcpserver"
 
+    def get_form_kwargs(self):
+        return super().get_form_kwargs() | {
+            "request": self.request,
+        }
+
     def get_success_url(self):
         return reverse("single_team:manage_team", args=[self.request.team.slug])
 
@@ -65,6 +70,11 @@ class EditMcpServer(LoginAndTeamRequiredMixin, PermissionRequiredMixin, UpdateVi
         "active_tab": "mcp_integrations",
     }
     permission_required = "mcp_integrations.change_mcpserver"
+
+    def get_form_kwargs(self):
+        return super().get_form_kwargs() | {
+            "request": self.request,
+        }
 
     def get_queryset(self):
         return McpServer.objects.filter(team=self.request.team)

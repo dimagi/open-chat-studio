@@ -15,8 +15,13 @@ class McpServer(BaseTeamModel):
     transport_type = models.CharField(
         max_length=20, choices=TransportType.choices, default=TransportType.STREAMABLE_HTTP
     )
-    header_name = models.CharField(max_length=255, blank=True)
-    header_value = models.CharField(max_length=255, blank=True)
+    auth_provider = models.ForeignKey(
+        "service_providers.AuthProvider",
+        on_delete=models.SET_NULL,
+        related_name="mcp_servers",
+        null=True,
+        blank=True,
+    )
 
     class Meta:
         ordering = ("name",)
