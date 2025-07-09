@@ -270,6 +270,5 @@ class TracingService:
         if not self.activated or not tags:
             return
         span_id, _ = self._get_current_span_info()
-        self.outputs[span_id].setdefault("tags", [])
         self.outputs[span_id].setdefault("tags", []).extend(tags)
         self.outputs[self.trace_id].setdefault("tags", []).extend(tags)
