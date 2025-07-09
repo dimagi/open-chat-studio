@@ -531,13 +531,13 @@ export class OcsChat {
           >
             {/* Header */}
             <div
-              class={`flex justify-between items-center px-2 py-2 border-b border-gray-100 sm:cursor-grab sm:select-none ${this.isDragging ? 'sm:cursor-grabbing' : ''} active:bg-gray-50 sm:hover:bg-gray-25 transition-colors duration-150`}
+              class={`flex justify-between items-center px-2 py-2 border-b border-gray-100 sm:${this.isDragging ? 'cursor-grabbing' : 'cursor-grab'} active:bg-gray-50 sm:hover:bg-gray-25 transition-colors duration-150`}
               onMouseDown={this.handleMouseDown}
               onTouchStart={this.handleTouchStart}
             >
               {/* Drag indicator */}
-              <div class="hidden sm:flex items-center gap-1">
-                <div class="flex items-center gap-0.5 ml-2 pointer-events-none">
+              <div class="hidden sm:flex gap-1">
+                <div class="flex gap-0.5 ml-2 pointer-events-none">
                   <EllipsisHorizontalIcon/>
                 </div>
               </div>
