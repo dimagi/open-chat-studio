@@ -1,9 +1,5 @@
 import { Component, Host, h, Prop, State } from '@stencil/core';
 import {
-  ArrowLeftEndOnRectangleIcon,
-  ArrowRightEndOnRectangleIcon,
-  ArrowDownOnSquareIcon,
-  ViewfinderCircleIcon,
   XMarkIcon,
   ChevronDownIcon,
   ChevronUpIcon,
@@ -96,9 +92,13 @@ export class OcsChat {
   @State() pollingInterval?: any;
   @State() lastPollTime?: Date;
   @State() isTaskPolling: boolean = false;
+  @State() isDragging: boolean = false;
+  @State() dragOffset: { x: number; y: number } = { x: 0, y: 0 };
+  @State() windowPosition: { x: number; y: number } = { x: 0, y: 0 };
 
   private messageListRef?: HTMLDivElement;
   private textareaRef?: HTMLTextAreaElement;
+  private chatWindowRef?: HTMLDivElement;
 
   componentWillLoad() {
     this.loaded = this.visible;
@@ -112,10 +112,17 @@ export class OcsChat {
     if (this.visible && !this.sessionId) {
       this.startSession();
     }
+    this.initializePosition();
+    window.addEventListener('resize', this.handleWindowResize);
   }
 
   disconnectedCallback() {
     this.cleanup();
+    document.removeEventListener('mousemove', this.handleMouseMove);
+    document.removeEventListener('mouseup', this.handleMouseUp);
+    document.removeEventListener('touchmove', this.handleTouchMove);
+    document.removeEventListener('touchend', this.handleTouchEnd);
+    window.removeEventListener('resize', this.handleWindowResize);
   }
 
   private cleanup() {
@@ -326,7 +333,6 @@ export class OcsChat {
     this.error = '';
   }
 
-
   private scrollToBottom(): void {
     setTimeout(() => {
       if (this.messageListRef) {
@@ -377,16 +383,131 @@ export class OcsChat {
   }
 
   getPositionClasses() {
-    const baseClasses = `fixed w-full sm:w-[450px] ${this.expanded ? 'h-5/6' : 'h-3/5'} bg-white border border-gray-200 shadow-lg rounded-lg overflow-hidden flex flex-col`;
-
-    const positionClasses = {
-      left: 'left-0 sm:left-5 bottom-0 sm:bottom-5',
-      right: 'right-0 sm:right-5 bottom-0 sm:bottom-5',
-      center: 'left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2'
-    }[this.position];
-
-    return `${baseClasses} ${positionClasses}`;
+    return `fixed w-full sm:w-[450px] ${this.expanded ? 'h-5/6' : 'h-3/5'} bg-white border border-gray-200 ${this.isDragging ? 'shadow-2xl cursor-grabbing' : 'shadow-lg transition-shadow duration-200'} rounded-lg overflow-hidden flex flex-col`;
   }
+
+  getPositionStyles() {
+    return {
+      left: `${this.windowPosition.x}px`,
+      top: `${this.windowPosition.y}px`,
+    };
+  }
+
+  private initializePosition(): void {
+    const windowWidth = window.innerWidth;
+    const windowHeight = window.innerHeight;
+    const chatWidth = windowWidth < 640 ? windowWidth : 450;
+    const chatHeight = this.expanded ? (windowHeight * 0.83) : (windowHeight * 0.6);
+
+    switch (this.position) {
+      case 'left':
+        this.windowPosition = {
+          x: windowWidth < 640 ? 0 : 20,
+          y: windowWidth < 640 ? 0 : windowHeight - chatHeight - 20
+        };
+        break;
+      case 'right':
+        this.windowPosition = {
+          x: windowWidth < 640 ? 0 : windowWidth - chatWidth - 20,
+          y: windowWidth < 640 ? 0 : windowHeight - chatHeight - 20
+        };
+        break;
+      case 'center':
+        this.windowPosition = {
+          x: windowWidth < 640 ? 0 : (windowWidth - chatWidth) / 2,
+          y: windowWidth < 640 ? 0 : (windowHeight - chatHeight) / 2
+        };
+        break;
+    }
+  }
+
+  private handleMouseDown = (event: MouseEvent): void => {
+    if (window.innerWidth < 640) return;
+    if ((event.target as HTMLElement).closest('button')) return;
+    if (!this.chatWindowRef) return;
+
+    this.isDragging = true;
+    const rect = this.chatWindowRef.getBoundingClientRect();
+    this.dragOffset = {
+      x: event.clientX - rect.left,
+      y: event.clientY - rect.top
+    };
+
+    document.addEventListener('mousemove', this.handleMouseMove);
+    document.addEventListener('mouseup', this.handleMouseUp);
+    event.preventDefault();
+  };
+
+  private handleMouseMove = (event: MouseEvent): void => {
+    if (!this.isDragging) return;
+
+    const newX = event.clientX - this.dragOffset.x;
+    const newY = event.clientY - this.dragOffset.y;
+
+    // Constrain chatbox to window
+    const windowWidth = window.innerWidth;
+    const windowHeight = window.innerHeight;
+    const chatWidth = 450;
+    const chatHeight = this.expanded ? (windowHeight * 0.83) : (windowHeight * 0.6);
+
+    this.windowPosition = {
+      x: Math.max(0, Math.min(newX, windowWidth - chatWidth)),
+      y: Math.max(0, Math.min(newY, windowHeight - chatHeight))
+    };
+  };
+
+  private handleMouseUp = (): void => {
+    this.isDragging = false;
+    document.removeEventListener('mousemove', this.handleMouseMove);
+    document.removeEventListener('mouseup', this.handleMouseUp);
+  };
+
+  private handleTouchStart = (event: TouchEvent): void => {
+    if ((event.target as HTMLElement).closest('button')) return;
+    if (!this.chatWindowRef || event.touches.length !== 1) return;
+
+    const touch = event.touches[0];
+    this.isDragging = true;
+    const rect = this.chatWindowRef.getBoundingClientRect();
+    this.dragOffset = {
+      x: touch.clientX - rect.left,
+      y: touch.clientY - rect.top
+    };
+
+    document.addEventListener('touchmove', this.handleTouchMove, { passive: false });
+    document.addEventListener('touchend', this.handleTouchEnd);
+    event.preventDefault();
+  };
+
+  private handleTouchMove = (event: TouchEvent): void => {
+    if (!this.isDragging || event.touches.length !== 1) return;
+
+    const touch = event.touches[0];
+    const newX = touch.clientX - this.dragOffset.x;
+    const newY = touch.clientY - this.dragOffset.y;
+
+    // Constrain chatbox to window
+    const windowWidth = window.innerWidth;
+    const windowHeight = window.innerHeight;
+    const chatWidth = windowWidth < 640 ? windowWidth : 450;
+    const chatHeight = this.expanded ? (windowHeight * 0.83) : (windowHeight * 0.6);
+
+    this.windowPosition = {
+      x: Math.max(0, Math.min(newX, windowWidth - chatWidth)),
+      y: Math.max(0, Math.min(newY, windowHeight - chatHeight))
+    };
+    event.preventDefault();
+  };
+
+  private handleTouchEnd = (): void => {
+    this.isDragging = false;
+    document.removeEventListener('touchmove', this.handleTouchMove);
+    document.removeEventListener('touchend', this.handleTouchEnd);
+  };
+
+  private handleWindowResize = (): void => {
+    this.initializePosition();
+  };
 
   render() {
     if (this.error) {
@@ -401,47 +522,26 @@ export class OcsChat {
       <Host>
         <button class="btn" onClick={() => this.load()}>{this.buttonText}</button>
         {this.visible && (
-          <div id="ocs-chat-window" class={this.getPositionClasses()}>
+          <div
+            ref={(el) => this.chatWindowRef = el}
+            id="ocs-chat-window"
+            class={this.getPositionClasses()}
+            style={this.getPositionStyles()}
+          >
             {/* Header */}
-            <div class="flex justify-between items-center px-2 py-2 border-b border-gray-100">
-              <div class="flex gap-1">
-                <button
-                  class={{
-                    'hidden sm:block p-1.5 rounded-md transition-colors duration-200 hover:bg-gray-100': true,
-                    'text-blue-600': this.position === 'left',
-                    'text-gray-500': this.position !== 'left'
-                  }}
-                  onClick={() => this.setPosition('left')}
-                  aria-label="Dock to left"
-                  title="Dock to left"
-                >
-                  <ArrowLeftEndOnRectangleIcon/>
-                </button>
-                <button
-                  class={{
-                    'p-1.5 rounded-md transition-colors duration-200 hover:bg-gray-100': true,
-                    'text-blue-600': this.position === 'center',
-                    'text-gray-500': this.position !== 'center'
-                  }}
-                  onClick={() => this.setPosition('center')}
-                  aria-label="Center"
-                  title="Center"
-                >
-                  <ViewfinderCircleIcon/>
-                </button>
-                <button
-                  class={{
-                    'p-1.5 rounded-md transition-colors duration-200 hover:bg-gray-100': true,
-                    'text-blue-600': this.position === 'right',
-                    'text-gray-500': this.position !== 'right'
-                  }}
-                  onClick={() => this.setPosition('right')}
-                  aria-label="Dock to right"
-                  title="Dock to right"
-                >
-                  <span class="hidden sm:block"><ArrowRightEndOnRectangleIcon/></span>
-                  <span class="sm:hidden"><ArrowDownOnSquareIcon/></span>
-                </button>
+            <div
+              class={`flex justify-between items-center px-2 py-2 border-b border-gray-100 sm:cursor-grab sm:select-none ${this.isDragging ? 'sm:cursor-grabbing' : ''} active:bg-gray-50 sm:hover:bg-gray-25 transition-colors duration-150`}
+              onMouseDown={this.handleMouseDown}
+              onTouchStart={this.handleTouchStart}
+            >
+              {/* Drag indicator */}
+              <div class="hidden sm:flex items-center gap-1">
+                <div class="flex items-center gap-0.5 ml-2 pointer-events-none">
+                  <div class="w-1 h-1 bg-gray-300 rounded-full"></div>
+                  <div class="w-1 h-1 bg-gray-300 rounded-full"></div>
+                  <div class="w-1 h-1 bg-gray-300 rounded-full"></div>
+                  <div class="w-1 h-1 bg-gray-300 rounded-full"></div>
+                </div>
               </div>
               <div class="flex gap-1">
                 <button
