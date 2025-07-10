@@ -19,7 +19,7 @@ import logging
 import time
 import uuid
 from dataclasses import asdict, dataclass
-from typing import Any, Literal, Self
+from typing import Any, ClassVar, Literal, Self
 
 import aiohttp
 import pandas as pd
@@ -49,6 +49,22 @@ class EvaluationResult:
 class EvaluationScoreOutput(BaseModel):
     """Pydantic model for evaluation output for score output"""
 
+    DEFAULT_PROMPT: ClassVar[str] = """You are an expert evaluator of chatbot responses. 
+            You will evaluate how well a chatbot responded to a user's input based on the following criteria:
+            
+            1. Relevance: How well does the response address the user's question or request?
+            2. Accuracy: Is the information provided correct and factual?
+            3. Helpfulness: Does the response provide useful information or assistance?
+            4. Clarity: Is the response clear and easy to understand?
+            5. Completeness: Does the response fully address the user's needs?
+            
+            Provide a score from 1-10 where:
+            - 1-3: Poor response (unhelpful, incorrect, or irrelevant)
+            - 4-6: Average response (partially helpful but has significant issues)
+            - 7-8: Good response (helpful and mostly accurate)
+            - 9-10: Excellent response (comprehensive, accurate, and very helpful)
+            """
+
     result: float = Field(description="Score from 1-10 where 10 is best")
     reasoning: str = Field(description="Detailed reasoning for the score")
 
@@ -59,6 +75,18 @@ class EvaluationScoreOutput(BaseModel):
 
 class EvaluationBinaryOutput(BaseModel):
     """Pydantic model for evaluation output for 'true' / 'false' output"""
+
+    DEFAULT_PROMPT: ClassVar[str] = """You are an expert evaluator of chatbot responses. 
+            You will evaluate how well a chatbot responded to a user's input based on the following criteria:
+            
+            1. Relevance: How well does the response address the user's question or request?
+            2. Accuracy: Is the information provided correct and factual?
+            3. Helpfulness: Does the response provide useful information or assistance?
+            4. Clarity: Is the response clear and easy to understand?
+            5. Completeness: Does the response fully address the user's needs?
+            
+            Respond with `true` if the response meets all these critia otherwise respond with `false`
+            """
 
     result: bool = Field(description="Evaluation result")
     reasoning: str = Field(description="Detailed reasoning for the result")
@@ -191,43 +219,24 @@ class OCSAPIClient:
 class BotEvaluator:
     """Main bot evaluation class"""
 
-    def __init__(self, evaluator_model: str = "gpt-4o-mini", evaluation_mode: Literal["score", "binary"] = "score"):
+    def __init__(
+        self,
+        evaluator_model: str = "gpt-4o-mini",
+        evaluation_mode: Literal["score", "binary"] = "score",
+        custom_prompt: str = None,
+        custom_eval_message: str = None,
+    ):
         self.evaluator_model = evaluator_model
         self.mode = evaluation_mode
         self.llm = ChatOpenAI(model=evaluator_model, temperature=0)
 
         # Default evaluation prompt
-        self.default_prompt = """You are an expert evaluator of chatbot responses. 
-            You will evaluate how well a chatbot responded to a user's input based on the following criteria:
-            
-            1. Relevance: How well does the response address the user's question or request?
-            2. Accuracy: Is the information provided correct and factual?
-            3. Helpfulness: Does the response provide useful information or assistance?
-            4. Clarity: Is the response clear and easy to understand?
-            5. Completeness: Does the response fully address the user's needs?
-            
-            Provide a score from 1-10 where:
-            - 1-3: Poor response (unhelpful, incorrect, or irrelevant)
-            - 4-6: Average response (partially helpful but has significant issues)
-            - 7-8: Good response (helpful and mostly accurate)
-            - 9-10: Excellent response (comprehensive, accurate, and very helpful)
-            """
+        self.output_schema = EvaluationScoreOutput if self.mode == "score" else EvaluationBinaryOutput
         self.eval_message = "User Input: {input_text}\n\nBot Response: {bot_response}\n\nEvaluate this response."
         self.evaluation_prompt = ChatPromptTemplate.from_messages(
             [
-                ("system", self.default_prompt),
-                ("human", self.eval_message),
-            ]
-        )
-        self.output_schema = EvaluationScoreOutput if self.mode == "score" else EvaluationBinaryOutput
-        self.evaluation_chain = self.evaluation_prompt | self.llm.with_structured_output(self.output_schema)
-
-    def set_custom_evaluation_prompt(self, prompt: str, eval_message: str):
-        """Set a custom evaluation prompt"""
-        self.evaluation_prompt = ChatPromptTemplate.from_messages(
-            [
-                ("system", prompt or self.default_prompt),
-                ("human", eval_message or self.eval_message),
+                ("system", custom_prompt or self.output_schema.DEFAULT_PROMPT),
+                ("human", custom_eval_message or self.eval_message),
             ]
         )
         self.evaluation_chain = self.evaluation_prompt | self.llm.with_structured_output(self.output_schema)
@@ -255,13 +264,8 @@ class BotEvaluator:
         session_state_column: str = None,
         participant_data_column: str = None,
         history_column: str = None,
-        custom_prompt: str = None,
-        custom_evaluation_message: str = None,
     ) -> list[EvaluationResult]:
         """Evaluate entire dataset"""
-
-        if custom_prompt or custom_evaluation_message:
-            self.set_custom_evaluation_prompt(custom_prompt, custom_evaluation_message)
 
         # Read CSV data
         df = pd.read_csv(csv_file)
@@ -318,7 +322,7 @@ class BotEvaluator:
 
                 results.append(result)
 
-                logger.info(f"Row {index + 1} completed - Result: {evaluation.result:.1f}")
+                logger.info(f"Row {index + 1} completed - Result: {evaluation.result}")
 
             except Exception as e:
                 logger.error(f"Error processing row {index + 1}: {e}")
@@ -397,7 +401,12 @@ async def main():
     args = parser.parse_args()
 
     # Initialize evaluator
-    evaluator = BotEvaluator(evaluator_model=args.evaluator_model, evaluation_mode=args.eval_mode)
+    evaluator = BotEvaluator(
+        evaluator_model=args.evaluator_model,
+        evaluation_mode=args.eval_mode,
+        custom_prompt=args.custom_prompt,
+        custom_eval_message=args.custom_eval_message,
+    )
 
     # Initialize API client
     async with OCSAPIClient(args.base_url, args.api_key) as api_client:
@@ -411,8 +420,6 @@ async def main():
             session_state_column=args.session_data_column,
             participant_data_column=args.participant_data_column,
             history_column=args.history_column,
-            custom_prompt=args.custom_prompt,
-            custom_evaluation_message=args.custom_eval_message,
         )
 
         # Save results
