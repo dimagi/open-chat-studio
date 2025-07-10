@@ -265,3 +265,12 @@ class TracingService:
         if self.span_stack:
             return self.span_stack[-1]
         return self.trace_id, self.trace_name
+
+    def add_output_message_tags_to_trace(self, tags: list[str]) -> None:
+        if not self.activated or not tags:
+            return
+        for tracer in self._active_tracers:
+            try:
+                tracer.add_trace_tags(tags)
+            except Exception:
+                logger.exception(f"Tracer {tracer.__class__.__name__} failed to add tags.")
