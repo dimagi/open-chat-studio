@@ -318,7 +318,6 @@ class SearchIndexTool(CustomBaseTool):
 {citation_prompt}
 """
         citation_prompt = CITATION_PROMPT if self.search_config.generate_citations else ""
-        print(response_template.format(retrieved_chunks=retrieved_chunks, citation_prompt=citation_prompt))
         return response_template.format(retrieved_chunks=retrieved_chunks, citation_prompt=citation_prompt)
 
     def _format_result(self, embedding: FileChunkEmbedding) -> str:

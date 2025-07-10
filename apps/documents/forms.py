@@ -81,9 +81,17 @@ class CollectionForm(forms.ModelForm):
     def clean(self):
         cleaned_data = super().clean()
         is_index = self.cleaned_data["is_index"]
-        llm_provider = self.cleaned_data["llm_provider"]
-        is_remote_index = self.cleaned_data["is_remote_index"]
-        embedding_provider_model = self.cleaned_data["embedding_provider_model"]
+        llm_provider = cleaned_data.get("llm_provider")
+        is_remote_index = cleaned_data["is_remote_index"]
+        embedding_provider_model = cleaned_data.get("embedding_provider_model")
+
+        if self.instance.id:
+            if not llm_provider:
+                llm_provider = self.instance.llm_provider
+                self.cleaned_data["llm_provider"] = llm_provider
+            if not embedding_provider_model:
+                embedding_provider_model = self.instance.embedding_provider_model
+                self.cleaned_data["embedding_provider_model"] = embedding_provider_model
 
         if is_index:
             if not llm_provider:
