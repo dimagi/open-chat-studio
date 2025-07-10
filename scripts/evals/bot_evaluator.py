@@ -36,6 +36,7 @@ logger = logging.getLogger("eval")
 class EvaluationResult:
     """Data class for evaluation results"""
 
+    input_row_index: int
     input_text: str
     bot_response: str
     expected_response: str
@@ -312,6 +313,7 @@ class BotEvaluator:
                 expected_output = self._get_optional_column(df, expected_output_column, row)
                 eval_result = self.output_schema.error(f"Processing failed: {str(result)}")
                 error_result = EvaluationResult(
+                    input_row_index=i,
                     input_text=input_text,
                     bot_response=f"ERROR: {str(result)}",
                     expected_response=expected_output,
@@ -378,6 +380,7 @@ class BotEvaluator:
                 evaluation = await self.evaluate_response(evaluation_input, bot_response, expected_output)
 
                 result = EvaluationResult(
+                    input_row_index=index,
                     input_text=input_text,
                     bot_response=bot_response,
                     expected_response=expected_output,
