@@ -319,8 +319,3 @@ class TestDynamicFilters:
             params["filter_0_value"] = json.dumps([SessionStatus.ACTIVE.value])
             filtered = apply_dynamic_filters(session_queryset, params, timezone)
             assert all(s.status != SessionStatus.ACTIVE for s in filtered)
-
-            params["filter_0_operator"] = Operators.ALL_OF
-            params["filter_0_value"] = json.dumps([SessionStatus.ACTIVE.value, SessionStatus.COMPLETE.value])
-            filtered = apply_dynamic_filters(session_queryset, params, timezone)
-            assert filtered.count() == 0

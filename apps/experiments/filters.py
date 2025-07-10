@@ -308,12 +308,6 @@ def build_state_filter(operator, value):
     if operator == Operators.ANY_OF:
         return Q(status__in=selected_values)
 
-    elif operator == Operators.ALL_OF:
-        conditions = Q()
-        for state in selected_values:
-            conditions &= Q(status__iexact=state)
-        return conditions
-
     elif operator == Operators.EXCLUDES:
         return ~Q(status__in=selected_values)
 
