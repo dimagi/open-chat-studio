@@ -28,7 +28,7 @@ from langchain_openai import ChatOpenAI
 from pydantic import BaseModel, Field
 
 # Configure logging
-logging.basicConfig(level=logging.INFO)
+logging.basicConfig(level=logging.WARN)
 logger = logging.getLogger("eval")
 
 
@@ -358,7 +358,7 @@ class BotEvaluator:
                     if isinstance(history_data, dict):
                         history_data = [history_data]
 
-            logger.info(f"Processing row {index + 1}/{total_rows}: {input_text[:50]}...")
+            logger.debug(f"Processing row {index + 1}/{total_rows}: {input_text[:50]}...")
 
             try:
                 # Get bot response
@@ -388,7 +388,7 @@ class BotEvaluator:
                     timestamp=time.strftime("%Y-%m-%d %H:%M:%S"),
                 )
 
-                logger.info(f"Row {index + 1} completed - Result: {evaluation.result}")
+                logger.debug(f"Row {index + 1} completed - Result: {evaluation.result}")
                 return result
 
             except Exception as e:
@@ -463,8 +463,11 @@ async def main():
     parser.add_argument("--custom-eval-message", help="Custom evaluation message")
     parser.add_argument("--eval-mode", choices=["score", "binary"], help="Evaluation Mode")
     parser.add_argument("--max-concurrency", type=int, default=10, help="Maximum number of concurrent evaluations")
+    parser.add_argument("--verbose", action="store_true", help="Verbose output")
 
     args = parser.parse_args()
+
+    logger.setLevel(logging.DEBUG if args.verbose else logging.INFO)
 
     # Initialize evaluator
     evaluator = BotEvaluator(
