@@ -1,0 +1,11 @@
+input,expected_output
+"What is your name?","I am a helpful AI assistant."
+"How can you help me?","I can help you with various tasks including answering questions, providing information, and assisting with problem-solving."
+"What is the capital of France?","The capital of France is Paris."
+"Explain quantum computing in simple terms","Quantum computing is a type of computing that uses quantum mechanics principles to process information in ways that are potentially much faster than traditional computers for certain types of problems."
+"What is 2+2?","2+2 equals 4."
+"Tell me a joke","Why don't scientists trust atoms? Because they make up everything!"
+"What are the benefits of exercise?","Exercise has many benefits including improved cardiovascular health, stronger muscles and bones, better mental health, weight management, and increased energy levels."
+"How do I bake a cake?","To bake a basic cake, you'll need flour, sugar, eggs, butter, baking powder, and milk. Mix the dry ingredients, combine wet ingredients separately, then fold them together. Pour into a greased pan and bake at 350°F for 25-30 minutes."
+"What is artificial intelligence?","Artificial intelligence (AI) is a field of computer science that focuses on creating systems capable of performing tasks that typically require human intelligence, such as learning, reasoning, and problem-solving."
+"Goodbye","Goodbye! Have a great day!"
