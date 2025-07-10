@@ -269,6 +269,8 @@ class TracingService:
     def add_output_message_tags_to_trace(self, tags: list[str]) -> None:
         if not self.activated or not tags:
             return
-        span_id, _ = self._get_current_span_info()
-        self.outputs[span_id].setdefault("tags", []).extend(tags)
-        self.outputs[self.trace_id].setdefault("tags", []).extend(tags)
+        for tracer in self._active_tracers:
+            try:
+                tracer.add_trace_tags(tags)
+            except Exception:
+                logger.exception(f"Tracer {tracer.__class__.__name__} failed to add tags.")

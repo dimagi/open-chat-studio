@@ -196,28 +196,12 @@ class TestTracingService:
         mock_tracer.trace = {"name": "test"}
         assert tracing_service._active_tracers == [mock_tracer]
 
-    def test_span_adds_tags_to_outputs(self, tracing_service, mock_tracer):
+    def test_add_add_output_message_tags_to_trace(self, tracing_service, mock_tracer):
         trace_name = "test_trace"
         session_id = "test_session"
         user_id = "test_user"
-        span_name = "test_span"
-        inputs = {"input": "test"}
 
         with tracing_service.trace(trace_name, session_id, user_id):
-            with tracing_service.span(span_name, inputs):
-                tracing_service.set_current_span_outputs({"output": "initial"})
-                tags = ["tag1", "tag2"]
-                tracing_service.add_output_message_tags_to_trace(tags)
-
-                span_id, _ = tracing_service._get_current_span_info()
-                outputs = tracing_service.outputs[span_id]
-
-                assert outputs["output"] == "initial"
-                assert "tags" in outputs
-                assert outputs["tags"] == tags
-
-            span_data = mock_tracer.spans[span_id]
-            assert span_data["ended"]
-            assert "outputs" in span_data
-            assert "tags" in span_data["outputs"]
-            assert span_data["outputs"]["tags"] == tags
+            tags = ["tag1", "tag2"]
+            tracing_service.add_output_message_tags_to_trace(tags)
+            assert mock_tracer.tags == tags
