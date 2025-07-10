@@ -38,6 +38,7 @@ class EvaluationResult:
 
     input_text: str
     bot_response: str
+    expected_response: str
     evaluation_score: float
     evaluation_reasoning: str
     response_time: float
@@ -180,11 +181,7 @@ class BotEvaluator:
         self.llm = ChatOpenAI(model=evaluator_model, temperature=0)
 
         # Default evaluation prompt
-        self.evaluation_prompt = ChatPromptTemplate.from_messages(
-            [
-                (
-                    "system",
-                    """You are an expert evaluator of chatbot responses. 
+        self.default_prompt = """You are an expert evaluator of chatbot responses. 
             You will evaluate how well a chatbot responded to a user's input based on the following criteria:
             
             1. Relevance: How well does the response address the user's question or request?
@@ -198,32 +195,32 @@ class BotEvaluator:
             - 4-6: Average response (partially helpful but has significant issues)
             - 7-8: Good response (helpful and mostly accurate)
             - 9-10: Excellent response (comprehensive, accurate, and very helpful)
-            """,
-                ),
-                ("human", "User Input: {input_text}\n\nBot Response: {bot_response}\n\nEvaluate this response."),
+            """
+        self.eval_message = "User Input: {input_text}\n\nBot Response: {bot_response}\n\nEvaluate this response."
+        self.evaluation_prompt = ChatPromptTemplate.from_messages(
+            [
+                ("system", self.default_prompt),
+                ("human", self.eval_message),
             ]
         )
 
         self.evaluation_chain = self.evaluation_prompt | self.llm.with_structured_output(EvaluationOutput)
 
-    def set_custom_evaluation_prompt(self, prompt: str):
+    def set_custom_evaluation_prompt(self, prompt: str, eval_message: str):
         """Set a custom evaluation prompt"""
         self.evaluation_prompt = ChatPromptTemplate.from_messages(
             [
-                ("system", prompt),
-                ("human", "User Input: {input_text}\n\nBot Response: {bot_response}\n\nEvaluate this response:"),
+                ("system", prompt or self.default_prompt),
+                ("human", eval_message or self.eval_message),
             ]
         )
         self.evaluation_chain = self.evaluation_prompt | self.llm.with_structured_output(EvaluationOutput)
 
-    async def evaluate_response(self, input_text: str, bot_response: str) -> EvaluationOutput:
+    async def evaluate_response(self, input_text: str, bot_response: str, expected_output: str) -> EvaluationOutput:
         """Evaluate a single bot response"""
         try:
             result = await self.evaluation_chain.ainvoke(
-                {
-                    "input_text": input_text,
-                    "bot_response": bot_response,
-                }
+                {"input_text": input_text, "bot_response": bot_response, "expected_output": expected_output}
             )
             return result
         except Exception as e:
@@ -244,11 +241,12 @@ class BotEvaluator:
         participant_data_column: str = None,
         history_column: str = None,
         custom_prompt: str = None,
+        custom_evaluation_message: str = None,
     ) -> list[EvaluationResult]:
         """Evaluate entire dataset"""
 
-        if custom_prompt:
-            self.set_custom_evaluation_prompt(custom_prompt)
+        if custom_prompt or custom_evaluation_message:
+            self.set_custom_evaluation_prompt(custom_prompt, custom_evaluation_message)
 
         # Read CSV data
         df = pd.read_csv(csv_file)
@@ -288,13 +286,14 @@ class BotEvaluator:
                 # Evaluate response
                 evaluation_input = input_text
                 if expected_output:
-                    evaluation_input += f"\n\nExpected Output: {expected_output}"
+                    evaluation_input += "\n\nExpected Output: {expected_output}"
 
-                evaluation = await self.evaluate_response(evaluation_input, bot_response)
+                evaluation = await self.evaluate_response(evaluation_input, bot_response, expected_output)
 
                 result = EvaluationResult(
                     input_text=input_text,
                     bot_response=bot_response,
+                    expected_response=expected_output,
                     evaluation_score=evaluation.score,
                     evaluation_reasoning=evaluation.reasoning,
                     response_time=response_time,
@@ -311,6 +310,7 @@ class BotEvaluator:
                 result = EvaluationResult(
                     input_text=input_text,
                     bot_response=f"ERROR: {str(e)}",
+                    expected_response=expected_output,
                     evaluation_score=0.0,
                     evaluation_reasoning=f"Processing failed: {str(e)}",
                     response_time=0.0,
@@ -322,7 +322,6 @@ class BotEvaluator:
         return results
 
     def _get_optional_column(self, df, column_name, row, converter=str):
-        print(column_name, row[column_name] if column_name and column_name in df.columns else None)
         return converter(row[column_name]) if column_name and column_name in df.columns else None
 
     def save_results(self, results: list[EvaluationResult], output_file: str):
@@ -370,6 +369,7 @@ async def main():
     parser.add_argument("--output", default="evaluation_results.csv", help="Output CSV file")
     parser.add_argument("--evaluator-model", default="gpt-4o-mini", help="LLM model for evaluation")
     parser.add_argument("--custom-prompt", help="Custom evaluation prompt")
+    parser.add_argument("--custom-eval-message", help="Custom evaluation message")
 
     args = parser.parse_args()
 
@@ -389,6 +389,7 @@ async def main():
             participant_data_column=args.participant_data_column,
             history_column=args.history_column,
             custom_prompt=args.custom_prompt,
+            custom_evaluation_message=args.custom_eval_message,
         )
 
         # Save results

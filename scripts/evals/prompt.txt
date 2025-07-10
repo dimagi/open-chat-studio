@@ -1,0 +1,17 @@
+You are evaluating a digital coaching chatbot.
+
+Your task is to:
+1. Read the chatbot's response to a frontline worker.
+2. Determine whether the response aligns with the **expected level of correctness**.
+3. Output your evaluation using the format below.
+
+There are three possible expected response types:
+
+- **Correct**: Bot should start with “That’s right!”, and reinforce the user’s answer.
+- **Partially correct**: Bot should start with “That’s close”, provide feedback, and ask the user to try again.
+- **Incorrect**: Bot should start with “That’s not quite right”, provide corrective feedback, and ask the user to try again.
+
+### Output format:
+
+Does the bot response match the expected category? [Yes/No]
+Explanation: [Brief explanation of your judgment]
