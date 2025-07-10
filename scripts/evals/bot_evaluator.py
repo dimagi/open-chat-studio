@@ -225,9 +225,11 @@ class BotEvaluator:
         evaluation_mode: Literal["score", "binary"] = "score",
         custom_prompt: str = None,
         custom_eval_message: str = None,
+        max_concurrency: int = 10,
     ):
         self.evaluator_model = evaluator_model
         self.mode = evaluation_mode
+        self.max_concurrency = max_concurrency
         self.llm = ChatOpenAI(model=evaluator_model, temperature=0)
 
         # Default evaluation prompt
@@ -265,7 +267,7 @@ class BotEvaluator:
         participant_data_column: str = None,
         history_column: str = None,
     ) -> list[EvaluationResult]:
-        """Evaluate entire dataset"""
+        """Evaluate entire dataset with parallel processing"""
 
         # Read CSV data
         df = pd.read_csv(csv_file)
@@ -273,9 +275,75 @@ class BotEvaluator:
         if input_column not in df.columns:
             raise ValueError(f"Input column '{input_column}' not found in CSV")
 
-        results = []
+        # Create semaphore for concurrency control
+        semaphore = asyncio.Semaphore(self.max_concurrency)
 
+        # Create tasks for parallel processing
+        tasks = []
         for index, row in df.iterrows():
+            task = self._evaluate_single_row(
+                semaphore=semaphore,
+                index=index,
+                row=row,
+                df=df,
+                experiment_id=experiment_id,
+                api_client=api_client,
+                input_column=input_column,
+                expected_output_column=expected_output_column,
+                session_state_column=session_state_column,
+                participant_data_column=participant_data_column,
+                history_column=history_column,
+                total_rows=len(df),
+            )
+            tasks.append(task)
+
+        # Execute all tasks concurrently
+        logger.info(f"Starting evaluation of {len(tasks)} rows with max concurrency of {self.max_concurrency}")
+        results = await asyncio.gather(*tasks, return_exceptions=True)
+
+        # Filter out any exceptions and log them
+        evaluation_results = []
+        for i, result in enumerate(results):
+            if isinstance(result, Exception):
+                logger.error(f"Task {i} failed with exception: {result}")
+                # Create error result
+                row = df.iloc[i]
+                input_text = str(row[input_column])
+                expected_output = self._get_optional_column(df, expected_output_column, row)
+                eval_result = self.output_schema.error(f"Processing failed: {str(result)}")
+                error_result = EvaluationResult(
+                    input_text=input_text,
+                    bot_response=f"ERROR: {str(result)}",
+                    expected_response=expected_output,
+                    evaluation_result=eval_result.result,
+                    evaluation_reasoning=eval_result.reasoning,
+                    response_time=0.0,
+                    session_id="",
+                    timestamp=time.strftime("%Y-%m-%d %H:%M:%S"),
+                )
+                evaluation_results.append(error_result)
+            else:
+                evaluation_results.append(result)
+
+        return evaluation_results
+
+    async def _evaluate_single_row(
+        self,
+        semaphore: asyncio.Semaphore,
+        index: int,
+        row: pd.Series,
+        df: pd.DataFrame,
+        experiment_id: str,
+        api_client: OCSAPIClient,
+        input_column: str,
+        expected_output_column: str,
+        session_state_column: str,
+        participant_data_column: str,
+        history_column: str,
+        total_rows: int,
+    ) -> EvaluationResult:
+        """Evaluate a single row with semaphore control"""
+        async with semaphore:
             input_text = str(row[input_column])
             expected_output = self._get_optional_column(df, expected_output_column, row)
             session_state = self._get_optional_column(df, session_state_column, row, json.loads) or {}
@@ -290,7 +358,7 @@ class BotEvaluator:
                     if isinstance(history_data, dict):
                         history_data = [history_data]
 
-            logger.info(f"Processing row {index + 1}/{len(df)}: {input_text[:50]}...")
+            logger.info(f"Processing row {index + 1}/{total_rows}: {input_text[:50]}...")
 
             try:
                 # Get bot response
@@ -320,9 +388,8 @@ class BotEvaluator:
                     timestamp=time.strftime("%Y-%m-%d %H:%M:%S"),
                 )
 
-                results.append(result)
-
                 logger.info(f"Row {index + 1} completed - Result: {evaluation.result}")
+                return result
 
             except Exception as e:
                 logger.error(f"Error processing row {index + 1}: {e}")
@@ -337,9 +404,7 @@ class BotEvaluator:
                     session_id="",
                     timestamp=time.strftime("%Y-%m-%d %H:%M:%S"),
                 )
-                results.append(result)
-
-        return results
+                return result
 
     def _get_optional_column(self, df, column_name, row, converter=str):
         return converter(row[column_name]) if column_name and column_name in df.columns else None
@@ -397,6 +462,7 @@ async def main():
     parser.add_argument("--custom-prompt", help="Custom evaluation prompt")
     parser.add_argument("--custom-eval-message", help="Custom evaluation message")
     parser.add_argument("--eval-mode", choices=["score", "binary"], help="Evaluation Mode")
+    parser.add_argument("--max-concurrency", type=int, default=10, help="Maximum number of concurrent evaluations")
 
     args = parser.parse_args()
 
@@ -406,6 +472,7 @@ async def main():
         evaluation_mode=args.eval_mode,
         custom_prompt=args.custom_prompt,
         custom_eval_message=args.custom_eval_message,
+        max_concurrency=args.max_concurrency,
     )
 
     # Initialize API client
