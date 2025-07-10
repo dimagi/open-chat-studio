@@ -198,7 +198,7 @@ class BotEvaluator:
                     "format_instructions": self.parser.get_format_instructions(),
                 }
             )
-            return EvaluationOutput(**result)
+            return result
         except Exception as e:
             logger.exception(f"Evaluation failed: {e}")
             return EvaluationOutput(
