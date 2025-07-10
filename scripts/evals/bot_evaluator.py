@@ -21,7 +21,6 @@ from typing import Any
 
 import aiohttp
 import pandas as pd
-from langchain_core.messages import HumanMessage, SystemMessage
 from langchain_core.output_parsers import JsonOutputParser
 from langchain_core.prompts import ChatPromptTemplate
 from langchain_openai import ChatOpenAI
@@ -149,8 +148,9 @@ class BotEvaluator:
         # Default evaluation prompt
         self.evaluation_prompt = ChatPromptTemplate.from_messages(
             [
-                SystemMessage(
-                    content="""You are an expert evaluator of chatbot responses. 
+                (
+                    "system",
+                    """You are an expert evaluator of chatbot responses. 
             You will evaluate how well a chatbot responded to a user's input based on the following criteria:
             
             1. Relevance: How well does the response address the user's question or request?
@@ -165,11 +165,9 @@ class BotEvaluator:
             - 7-8: Good response (helpful and mostly accurate)
             - 9-10: Excellent response (comprehensive, accurate, and very helpful)
             
-            {format_instructions}"""
+            {format_instructions}""",
                 ),
-                HumanMessage(
-                    content="User Input: {input_text}\n\nBot Response: {bot_response}\n\nEvaluate this response."
-                ),
+                ("human", "User Input: {input_text}\n\nBot Response: {bot_response}\n\nEvaluate this response."),
             ]
         )
 
@@ -179,10 +177,8 @@ class BotEvaluator:
         """Set a custom evaluation prompt"""
         self.evaluation_prompt = ChatPromptTemplate.from_messages(
             [
-                SystemMessage(content=prompt + "\n\n{format_instructions}"),
-                HumanMessage(
-                    content="User Input: {input_text}\n\nBot Response: {bot_response}\n\nEvaluate this response:"
-                ),
+                ("system", prompt + "\n\n{format_instructions}"),
+                ("human", "User Input: {input_text}\n\nBot Response: {bot_response}\n\nEvaluate this response:"),
             ]
         )
         self.evaluation_chain = self.evaluation_prompt | self.llm | self.parser
