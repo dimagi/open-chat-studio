@@ -13,5 +13,5 @@ There are three possible expected response types:
 
 ### Output format:
 
-Does the bot response match the expected category? [Yes/No]
+Does the bot response match the expected category? [true/false]
 Explanation: [Brief explanation of your judgment]

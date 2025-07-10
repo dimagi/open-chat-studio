@@ -19,7 +19,7 @@ import logging
 import time
 import uuid
 from dataclasses import asdict, dataclass
-from typing import Any
+from typing import Any, Literal, Self
 
 import aiohttp
 import pandas as pd
@@ -29,7 +29,7 @@ from pydantic import BaseModel, Field
 
 # Configure logging
 logging.basicConfig(level=logging.INFO)
-logger = logging.getLogger(__name__)
+logger = logging.getLogger("eval")
 
 
 @dataclass
@@ -39,18 +39,33 @@ class EvaluationResult:
     input_text: str
     bot_response: str
     expected_response: str
-    evaluation_score: float
+    evaluation_result: Any
     evaluation_reasoning: str
     response_time: float
     session_id: str
     timestamp: str
 
 
-class EvaluationOutput(BaseModel):
-    """Pydantic model for evaluation output"""
+class EvaluationScoreOutput(BaseModel):
+    """Pydantic model for evaluation output for score output"""
 
-    score: float = Field(description="Score from 1-10 where 10 is best")
+    result: float = Field(description="Score from 1-10 where 10 is best")
     reasoning: str = Field(description="Detailed reasoning for the score")
+
+    @classmethod
+    def error(cls, message: str) -> Self:
+        return cls(result=0.0, reasoning=message)
+
+
+class EvaluationBinaryOutput(BaseModel):
+    """Pydantic model for evaluation output for 'true' / 'false' output"""
+
+    result: bool = Field(description="Evaluation result")
+    reasoning: str = Field(description="Detailed reasoning for the result")
+
+    @classmethod
+    def error(cls, message: str) -> Self:
+        return cls(result=False, reasoning=message)
 
 
 class OCSAPIClient:
@@ -176,8 +191,9 @@ class OCSAPIClient:
 class BotEvaluator:
     """Main bot evaluation class"""
 
-    def __init__(self, evaluator_model: str = "gpt-4o-mini"):
+    def __init__(self, evaluator_model: str = "gpt-4o-mini", evaluation_mode: Literal["score", "binary"] = "score"):
         self.evaluator_model = evaluator_model
+        self.mode = evaluation_mode
         self.llm = ChatOpenAI(model=evaluator_model, temperature=0)
 
         # Default evaluation prompt
@@ -203,8 +219,8 @@ class BotEvaluator:
                 ("human", self.eval_message),
             ]
         )
-
-        self.evaluation_chain = self.evaluation_prompt | self.llm.with_structured_output(EvaluationOutput)
+        self.output_schema = EvaluationScoreOutput if self.mode == "score" else EvaluationBinaryOutput
+        self.evaluation_chain = self.evaluation_prompt | self.llm.with_structured_output(self.output_schema)
 
     def set_custom_evaluation_prompt(self, prompt: str, eval_message: str):
         """Set a custom evaluation prompt"""
@@ -214,9 +230,11 @@ class BotEvaluator:
                 ("human", eval_message or self.eval_message),
             ]
         )
-        self.evaluation_chain = self.evaluation_prompt | self.llm.with_structured_output(EvaluationOutput)
+        self.evaluation_chain = self.evaluation_prompt | self.llm.with_structured_output(self.output_schema)
 
-    async def evaluate_response(self, input_text: str, bot_response: str, expected_output: str) -> EvaluationOutput:
+    async def evaluate_response(
+        self, input_text: str, bot_response: str, expected_output: str
+    ) -> EvaluationScoreOutput | EvaluationBinaryOutput:
         """Evaluate a single bot response"""
         try:
             result = await self.evaluation_chain.ainvoke(
@@ -225,10 +243,7 @@ class BotEvaluator:
             return result
         except Exception as e:
             logger.exception(f"Evaluation failed: {e}")
-            return EvaluationOutput(
-                score=0.0,
-                reasoning=f"Evaluation failed: {str(e)}",
-            )
+            return self.output_schema.error(f"Evaluation failed: {str(e)}")
 
     async def evaluate_dataset(
         self,
@@ -294,7 +309,7 @@ class BotEvaluator:
                     input_text=input_text,
                     bot_response=bot_response,
                     expected_response=expected_output,
-                    evaluation_score=evaluation.score,
+                    evaluation_result=evaluation.result,
                     evaluation_reasoning=evaluation.reasoning,
                     response_time=response_time,
                     session_id=session_id,
@@ -303,16 +318,17 @@ class BotEvaluator:
 
                 results.append(result)
 
-                logger.info(f"Row {index + 1} completed - Score: {evaluation.score:.1f}")
+                logger.info(f"Row {index + 1} completed - Result: {evaluation.result:.1f}")
 
             except Exception as e:
                 logger.error(f"Error processing row {index + 1}: {e}")
+                eval_result = self.output_schema.error(f"Processing failed: {str(e)}")
                 result = EvaluationResult(
                     input_text=input_text,
                     bot_response=f"ERROR: {str(e)}",
                     expected_response=expected_output,
-                    evaluation_score=0.0,
-                    evaluation_reasoning=f"Processing failed: {str(e)}",
+                    evaluation_result=eval_result.result,
+                    evaluation_reasoning=eval_result.reasoning,
                     response_time=0.0,
                     session_id="",
                     timestamp=time.strftime("%Y-%m-%d %H:%M:%S"),
@@ -331,11 +347,17 @@ class BotEvaluator:
         logger.info(f"Results saved to {output_file}")
 
         # Print summary statistics
-        avg_score = df["evaluation_score"].mean()
-        avg_response_time = df["response_time"].mean()
-
         logger.info("Evaluation Summary:")
-        logger.info(f"  Average Score: {avg_score:.2f}/10")
+
+        if self.mode == "score":
+            avg_score = df["evaluation_result"].mean()
+            logger.info(f"  Average result: {avg_score:.2f}/10")
+        elif self.mode == "binary":
+            df["evaluation_result"].value_counts()
+            counts = df["evaluation_result"].value_counts(dropna=False).reindex([True, False], fill_value=0)
+            logger.info(f"  Result counts: True: {counts[True]}, False: {counts[False]}")
+
+        avg_response_time = df["response_time"].mean()
         logger.info(f"  Average Response Time: {avg_response_time:.2f}s")
         logger.info(f"  Total Evaluations: {len(results)}")
 
@@ -370,11 +392,12 @@ async def main():
     parser.add_argument("--evaluator-model", default="gpt-4o-mini", help="LLM model for evaluation")
     parser.add_argument("--custom-prompt", help="Custom evaluation prompt")
     parser.add_argument("--custom-eval-message", help="Custom evaluation message")
+    parser.add_argument("--eval-mode", choices=["score", "binary"], help="Evaluation Mode")
 
     args = parser.parse_args()
 
     # Initialize evaluator
-    evaluator = BotEvaluator(evaluator_model=args.evaluator_model)
+    evaluator = BotEvaluator(evaluator_model=args.evaluator_model, evaluation_mode=args.eval_mode)
 
     # Initialize API client
     async with OCSAPIClient(args.base_url, args.api_key) as api_client:
