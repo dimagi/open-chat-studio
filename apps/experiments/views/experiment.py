@@ -1257,10 +1257,10 @@ def experiment_session_messages_view(request, team_slug: str, experiment_id: uui
     available_languages, translatable_languages = _get_languages_for_chat(session)
     has_missing_translations = False
     translate_form_all = TranslateMessagesForm(
-        team=request.team, translatable_languages=translatable_languages, widget_id_suffix="-all"
+        team=request.team, translatable_languages=translatable_languages, is_translate_all_form=True
     )
     translate_form_remaining = TranslateMessagesForm(
-        team=request.team, translatable_languages=translatable_languages, widget_id_suffix="-remaining"
+        team=request.team, translatable_languages=translatable_languages, is_translate_all_form=False
     )
     default_message = "(message generated after last translation)"
 
