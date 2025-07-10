@@ -7,6 +7,7 @@ import openai
 from django.conf import settings
 from langchain_openai import OpenAIEmbeddings
 from langchain_text_splitters import RecursiveCharacterTextSplitter
+from pgvector.django import CosineDistance
 
 from apps.assistants.utils import chunk_list
 from apps.documents.exceptions import FileUploadError
@@ -335,3 +336,24 @@ class OpenAILocalIndexManager(LocalIndexManager):
             api_key=self.client.api_key, model=self.embedding_model_name, dimensions=settings.EMBEDDING_VECTOR_SIZE
         )
         return embeddings.embed_query(content)
+
+    def query(self, index_id: int, query: str, top_k: int = 5) -> list[FileChunkEmbedding]:
+        """
+        Query the local index for the most relevant file chunks based on the query string.
+
+        Args:
+            query: The query string to search for.
+            top_k: The number of top results to return.
+
+        Returns:
+            list[FileChunkEmbedding]: List of FileChunkEmbedding instances matching the query.
+        """
+
+        embedding_vector = self.get_embedding_vector(query)
+        return (
+            FileChunkEmbedding.objects.annotate(distance=CosineDistance("embedding", embedding_vector))
+            .filter(collection_id=index_id)
+            .order_by("distance")
+            .select_related("file")
+            .only("text", "file__name")[:top_k]
+        )

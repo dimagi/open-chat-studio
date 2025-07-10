@@ -1,0 +1,6 @@
+{% for chunk in chunks %}
+    <p class="text-sm text-base-content/70">Source: {{ chunk.file.name }}</p>
+    <div class="p-3 bg-base-200 rounded-lg">
+        <p class="text-sm text-base-content/70">{{ chunk.text }}</p>
+    </div>
+{% endfor %}
