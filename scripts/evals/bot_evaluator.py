@@ -204,8 +204,6 @@ class BotEvaluator:
             return EvaluationOutput(
                 score=0.0,
                 reasoning=f"Evaluation failed: {str(e)}",
-                criteria_met=[],
-                areas_for_improvement=["Evaluation system error"],
             )
 
     async def evaluate_dataset(
