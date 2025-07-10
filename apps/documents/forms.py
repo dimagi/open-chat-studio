@@ -1,7 +1,9 @@
 from django import forms
+from django.db.models import Q, Subquery
 
 from apps.assistants.models import OpenAiAssistant, ToolResources
 from apps.documents.models import Collection
+from apps.service_providers.models import EmbeddingProviderModel
 
 
 class CollectionForm(forms.ModelForm):
@@ -21,7 +23,16 @@ class CollectionForm(forms.ModelForm):
 
     def __init__(self, request, *args, **kwargs):
         super().__init__(*args, **kwargs)
-        self.fields["llm_provider"].queryset = request.team.llmprovider_set.all()
+        embedding_model_provider_queryset = EmbeddingProviderModel.objects.filter(
+            Q(team_id=None) | Q(team_id=request.team.id)
+        )
+
+        embedding_model_provider_types = embedding_model_provider_queryset.values_list("type").distinct()
+        self.fields["llm_provider"].queryset = request.team.llmprovider_set.filter(
+            type__in=Subquery(embedding_model_provider_types)
+        ).all()
+
+        self.fields["embedding_provider_model"].queryset = embedding_model_provider_queryset
         self.fields["embedding_provider_model"].widget.template_name = "django/forms/widgets/select_dynamic.html"
 
         # Alpine.js bindings
