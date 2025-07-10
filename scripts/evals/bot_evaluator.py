@@ -21,7 +21,6 @@ from typing import Any
 
 import aiohttp
 import pandas as pd
-from langchain_core.output_parsers import JsonOutputParser
 from langchain_core.prompts import ChatPromptTemplate
 from langchain_openai import ChatOpenAI
 from pydantic import BaseModel, Field
@@ -143,7 +142,6 @@ class BotEvaluator:
     def __init__(self, evaluator_model: str = "gpt-4o-mini"):
         self.evaluator_model = evaluator_model
         self.llm = ChatOpenAI(model=evaluator_model, temperature=0)
-        self.parser = JsonOutputParser(pydantic_object=EvaluationOutput)
 
         # Default evaluation prompt
         self.evaluation_prompt = ChatPromptTemplate.from_messages(
@@ -164,24 +162,23 @@ class BotEvaluator:
             - 4-6: Average response (partially helpful but has significant issues)
             - 7-8: Good response (helpful and mostly accurate)
             - 9-10: Excellent response (comprehensive, accurate, and very helpful)
-            
-            {format_instructions}""",
+            """,
                 ),
                 ("human", "User Input: {input_text}\n\nBot Response: {bot_response}\n\nEvaluate this response."),
             ]
         )
 
-        self.evaluation_chain = self.evaluation_prompt | self.llm | self.parser
+        self.evaluation_chain = self.evaluation_prompt | self.llm.with_structured_output(EvaluationOutput)
 
     def set_custom_evaluation_prompt(self, prompt: str):
         """Set a custom evaluation prompt"""
         self.evaluation_prompt = ChatPromptTemplate.from_messages(
             [
-                ("system", prompt + "\n\n{format_instructions}"),
+                ("system", prompt),
                 ("human", "User Input: {input_text}\n\nBot Response: {bot_response}\n\nEvaluate this response:"),
             ]
         )
-        self.evaluation_chain = self.evaluation_prompt | self.llm | self.parser
+        self.evaluation_chain = self.evaluation_prompt | self.llm.with_structured_output(EvaluationOutput)
 
     async def evaluate_response(self, input_text: str, bot_response: str) -> EvaluationOutput:
         """Evaluate a single bot response"""
@@ -190,10 +187,9 @@ class BotEvaluator:
                 {
                     "input_text": input_text,
                     "bot_response": bot_response,
-                    "format_instructions": self.parser.get_format_instructions(),
                 }
             )
-            return EvaluationOutput(**result)
+            return result
         except Exception as e:
             logger.exception(f"Evaluation failed: {e}")
             return EvaluationOutput(
