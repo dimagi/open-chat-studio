@@ -202,6 +202,7 @@ class TestTracingService:
         user_id = "test_user"
 
         with tracing_service.trace(trace_name, session_id, user_id):
-            tags = ["tag1", "tag2"]
-            tracing_service.add_output_message_tags_to_trace(tags)
-            assert mock_tracer.tags == tags
+            raw_tags = [("tag1", "categoryA"), ("tag2", "categoryB")]
+            flat_tags = [f"{category}:{tag}" for tag, category in raw_tags]
+            tracing_service.add_output_message_tags_to_trace(flat_tags)
+            assert mock_tracer.tags == flat_tags

@@ -377,7 +377,7 @@ class PipelineBot:
             version_number=self.experiment.version_number, is_a_version=self.experiment.is_a_version
         )
         if self.trace_service and (tags := output.get("output_message_tags")):
-            flat_tags = [f"{tag}:{category}" for tag, category in tags]
+            flat_tags = [f"{category}:{tag}" for tag, category in tags]
             self.trace_service.add_output_message_tags_to_trace(flat_tags)
 
         if session_tags := output.get("session_tags"):
