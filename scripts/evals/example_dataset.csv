@@ -1,2 +1,3 @@
-input,expected_output,session_data,participant_data
-"What is your name?","I am a helpful AI assistant.",{"a": 1},{"b": 2}
+input,expected_output,session_data,participant_data,history
+"What is your name?","I am a helpful AI assistant.",{"a": 1},{"b": 2},"hi, how can I help you"
+"What is your name?","I am a helpful AI assistant.",{"a": 1},{"b": 2},"[{""role"": ""user"", ""content"": ""hi""},{""role"": ""assistant"", ""content"": ""how can I help?""}]"

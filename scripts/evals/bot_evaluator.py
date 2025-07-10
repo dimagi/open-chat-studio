@@ -69,11 +69,20 @@ class OCSAPIClient:
             await self.session.close()
 
     async def start_chat_session(
-        self, experiment_id: str, participant_id: str, session_data: dict[str, Any] = None
+        self,
+        experiment_id: str,
+        participant_id: str,
+        session_data: dict[str, Any] = None,
+        history_data: list[dict[str, Any]] = None,
     ) -> str:
         """Start a new chat session"""
         url = f"{self.base_url}/api/sessions/"
-        payload = {"experiment": experiment_id, "state": session_data or {}, "participant": participant_id}
+        payload = {
+            "experiment": experiment_id,
+            "state": session_data or {},
+            "participant": participant_id,
+            "messages": history_data or [],
+        }
 
         async with self.session.post(url, json=payload) as response:
             if response.status == 201:
@@ -124,6 +133,7 @@ class OCSAPIClient:
         input_text: str,
         session_data: dict[str, Any] = None,
         participant_data: dict[str, Any] = None,
+        history_data: list[dict[str, Any]] = None,
     ) -> tuple[str, str, float]:
         """Get bot response for input text"""
         start_time = time.time()
@@ -131,7 +141,7 @@ class OCSAPIClient:
         participant_id = await self.create_participant(experiment_id, participant_data)
 
         # Start session
-        session_id = await self.start_chat_session(experiment_id, participant_id, session_data)
+        session_id = await self.start_chat_session(experiment_id, participant_id, session_data, history_data)
 
         # Send message
         task_id = await self.send_message(session_id, input_text)
@@ -232,6 +242,7 @@ class BotEvaluator:
         expected_output_column: str = None,
         session_state_column: str = None,
         participant_data_column: str = None,
+        history_column: str = None,
         custom_prompt: str = None,
     ) -> list[EvaluationResult]:
         """Evaluate entire dataset"""
@@ -252,6 +263,15 @@ class BotEvaluator:
             expected_output = self._get_optional_column(df, expected_output_column, row)
             session_state = self._get_optional_column(df, session_state_column, row, json.loads) or {}
             participant_data = self._get_optional_column(df, participant_data_column, row, json.loads) or {}
+            history_data = self._get_optional_column(df, history_column, row)
+            if history_data:
+                try:
+                    history_data = json.loads(history_data)
+                except json.decoder.JSONDecodeError:
+                    history_data = [{"role": "assistant", "content": history_data}]
+                else:
+                    if isinstance(history_data, dict):
+                        history_data = [history_data]
 
             logger.info(f"Processing row {index + 1}/{len(df)}: {input_text[:50]}...")
 
@@ -262,6 +282,7 @@ class BotEvaluator:
                     input_text,
                     session_data={**session_state, "evaluation_row": index},
                     participant_data=participant_data,
+                    history_data=history_data,
                 )
 
                 # Evaluate response
@@ -301,6 +322,7 @@ class BotEvaluator:
         return results
 
     def _get_optional_column(self, df, column_name, row, converter=str):
+        print(column_name, row[column_name] if column_name and column_name in df.columns else None)
         return converter(row[column_name]) if column_name and column_name in df.columns else None
 
     def save_results(self, results: list[EvaluationResult], output_file: str):
@@ -328,11 +350,22 @@ async def main():
     parser.add_argument("--base-url", default="https://chatbots.dimagi.com", help="OCS base URL")
     parser.add_argument("--input-column", default="input", help="CSV column name for input text")
     parser.add_argument(
-        "--expected-output-column", default="expected_output", help="CSV column name for expected output"
+        "--expected-output-column",
+        default="expected_output",
+        required=False,
+        help="CSV column name for expected output",
     )
-    parser.add_argument("--session-data-column", default="session_data", help="CSV column name for session data (JSON)")
     parser.add_argument(
-        "--participant-data-column", default="participant_data", help="CSV column name for participant data (JSON)"
+        "--session-data-column", default="session_data", required=False, help="CSV column name for session data (JSON)"
+    )
+    parser.add_argument(
+        "--participant-data-column",
+        default="participant_data",
+        required=False,
+        help="CSV column name for participant data (JSON)",
+    )
+    parser.add_argument(
+        "--history-column", default="history", required=False, help="Previous session history data (JSON)"
     )
     parser.add_argument("--output", default="evaluation_results.csv", help="Output CSV file")
     parser.add_argument("--evaluator-model", default="gpt-4o-mini", help="LLM model for evaluation")
@@ -354,6 +387,7 @@ async def main():
             expected_output_column=args.expected_output_column,
             session_state_column=args.session_data_column,
             participant_data_column=args.participant_data_column,
+            history_column=args.history_column,
             custom_prompt=args.custom_prompt,
         )
 
