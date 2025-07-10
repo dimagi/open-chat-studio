@@ -185,7 +185,6 @@ class BotEvaluator:
 
     async def evaluate_response(self, input_text: str, bot_response: str) -> EvaluationOutput:
         """Evaluate a single bot response"""
-        print("----", input_text, bot_response)
         try:
             result = await self.evaluation_chain.ainvoke(
                 {
@@ -194,7 +193,7 @@ class BotEvaluator:
                     "format_instructions": self.parser.get_format_instructions(),
                 }
             )
-            return result
+            return EvaluationOutput(**result)
         except Exception as e:
             logger.exception(f"Evaluation failed: {e}")
             return EvaluationOutput(
