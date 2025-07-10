@@ -12,7 +12,7 @@ class Migration(migrations.Migration):
     operations = [
         migrations.AddField(
             model_name='collection',
-            name='show_file_references',
+            name='generate_citations',
             field=models.BooleanField(default=False),
         ),
     ]

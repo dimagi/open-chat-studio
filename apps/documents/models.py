@@ -109,7 +109,7 @@ class Collection(BaseTeamModel, VersionsMixin):
     )
     openai_vector_store_id = models.CharField(blank=True, max_length=255)
     is_index = models.BooleanField(default=False)
-    show_file_references = models.BooleanField(default=False)
+    generate_citations = models.BooleanField(default=False)
 
     objects = CollectionObjectManager()
 
@@ -312,7 +312,9 @@ class Collection(BaseTeamModel, VersionsMixin):
                 max_num_results=max_results,
             )
 
-        search_config = SearchToolConfig(index_id=self.id, max_results=max_results)
+        search_config = SearchToolConfig(
+            index_id=self.id, max_results=max_results, generate_citations=self.generate_citations
+        )
         return SearchIndexTool(search_config=search_config)
 
     def add_files_to_index(
