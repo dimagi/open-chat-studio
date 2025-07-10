@@ -50,8 +50,6 @@ class EvaluationOutput(BaseModel):
 
     score: float = Field(description="Score from 1-10 where 10 is best")
     reasoning: str = Field(description="Detailed reasoning for the score")
-    criteria_met: list[str] = Field(description="List of criteria that were met")
-    areas_for_improvement: list[str] = Field(description="Areas where the response could be improved")
 
 
 class OCSAPIClient:
@@ -96,7 +94,7 @@ class OCSAPIClient:
                 error_text = await response.text()
                 raise Exception(f"Failed to send message: {response.status} - {error_text}")
 
-    async def poll_for_response(self, session_id: str, task_id: str, timeout: int = 30) -> list[dict[str, Any]]:
+    async def poll_for_response(self, session_id: str, task_id: str, timeout: int = 30) -> dict[str, Any]:
         """Poll for new messages in the chat session"""
         url = f"{self.base_url}/api/chat/{session_id}/{task_id}/poll/"
 
@@ -105,13 +103,9 @@ class OCSAPIClient:
             async with self.session.get(url) as response:
                 if response.status == 200:
                     data = await response.json()
-                    messages = data.get("messages", [])
-                    if messages:
-                        return messages
-
-                    # If session ended, break
-                    if data.get("session_status") == "ended":
-                        break
+                    message = data.get("message", None)
+                    if message:
+                        return message
 
                     await asyncio.sleep(1)
                 else:
@@ -119,7 +113,8 @@ class OCSAPIClient:
                     logger.warning(f"Poll failed: {response.status} - {error_text}")
                     await asyncio.sleep(1)
 
-        return []
+        logger.warning("Poll timed out")
+        return {}
 
     async def get_bot_response(
         self, experiment_id: str, input_text: str, session_data: dict[str, Any] = None
@@ -134,17 +129,12 @@ class OCSAPIClient:
         task_id = await self.send_message(session_id, input_text)
 
         # Poll for response
-        messages = await self.poll_for_response(session_id, task_id)
+        message = await self.poll_for_response(session_id, task_id)
 
         response_time = time.time() - start_time
 
         # Extract bot response
-        bot_response = ""
-        for message in messages:
-            if message.get("role") == "assistant":
-                bot_response = message.get("content", "")
-                break
-
+        bot_response = message.get("content", "")
         return bot_response, session_id, response_time
 
 
@@ -178,7 +168,7 @@ class BotEvaluator:
             {format_instructions}"""
                 ),
                 HumanMessage(
-                    content="User Input: {input_text}\n\nBot Response: {bot_response}\n\nEvaluate this response:"
+                    content="User Input: {input_text}\n\nBot Response: {bot_response}\n\nEvaluate this response."
                 ),
             ]
         )
@@ -199,6 +189,7 @@ class BotEvaluator:
 
     async def evaluate_response(self, input_text: str, bot_response: str) -> EvaluationOutput:
         """Evaluate a single bot response"""
+        print("----", input_text, bot_response)
         try:
             result = await self.evaluation_chain.ainvoke(
                 {
@@ -209,7 +200,7 @@ class BotEvaluator:
             )
             return EvaluationOutput(**result)
         except Exception as e:
-            logger.error(f"Evaluation failed: {e}")
+            logger.exception(f"Evaluation failed: {e}")
             return EvaluationOutput(
                 score=0.0,
                 reasoning=f"Evaluation failed: {str(e)}",
