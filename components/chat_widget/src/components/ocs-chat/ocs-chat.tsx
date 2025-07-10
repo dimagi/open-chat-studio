@@ -401,24 +401,30 @@ export class OcsChat {
     const windowHeight = window.innerHeight;
     const chatWidth = windowWidth < 640 ? windowWidth : 450;
     const chatHeight = this.expanded ? (windowHeight * 0.83) : (windowHeight * 0.6);
+    const isMobile = windowWidth < 640;
 
+    if (isMobile) {
+      this.windowPosition = { x: 0, y: 0 };
+      return;
+    }
+    const margin = 20;
     switch (this.position) {
       case 'left':
         this.windowPosition = {
-          x: windowWidth < 640 ? 0 : 20,
-          y: windowWidth < 640 ? 0 : windowHeight - chatHeight - 20
+          x: margin,
+          y: windowHeight - chatHeight - margin
         };
         break;
       case 'right':
         this.windowPosition = {
-          x: windowWidth < 640 ? 0 : windowWidth - chatWidth - 20,
-          y: windowWidth < 640 ? 0 : windowHeight - chatHeight - 20
+          x: windowWidth - chatWidth - margin,
+          y: windowHeight - chatHeight - margin
         };
         break;
       case 'center':
         this.windowPosition = {
-          x: windowWidth < 640 ? 0 : (windowWidth - chatWidth) / 2,
-          y: windowWidth < 640 ? 0 : (windowHeight - chatHeight) / 2
+          x: (windowWidth - chatWidth) / 2,
+          y: (windowHeight - chatHeight) / 2
         };
         break;
     }
