@@ -8,7 +8,7 @@ This script evaluates chatbot responses by sending inputs from a CSV dataset to 
 - **OCS API Integration**: Communicate with Open Chat Studio bots via the official API
 - **LangChain Evaluation**: Use LLMs to evaluate bot responses with customizable prompts
 - **Comprehensive Results**: Generate detailed evaluation reports with scores, reasoning, and metrics
-- **Async Processing**: Efficient async/await implementation for faster evaluation
+- **Parallel Processing**: Efficient async/await implementation with configurable concurrency for faster evaluation
 
 ## Installation
 
@@ -40,12 +40,16 @@ python bot_evaluator.py \
   --csv my_test_data.csv \
   --experiment-id "123e4567-e89b-12d3-a456-426614174000" \
   --api-key "your-ocs-api-key" \
-  --base-url "https://your-ocs-instance.com" \
-  --input-column "question" \
-  --expected-output-column "ideal_answer" \
-  --output "my_evaluation_results.csv" \
-  --evaluator-model "gpt-4o" \
-  --custom-prompt "Evaluate this customer service response for helpfulness and accuracy. Score 1-10."
+  --input-column "Input" \
+  --expected-output-column "Response" \
+  --participant-data-column "participant_data" \
+  --session-data-column "session_data" \
+  --history-column "Scenario text" \
+  --custom-prompt "$(cat prompt.txt)" \
+  --custom-eval-message "Bot response: {bot_response}\n\nExpected response: {expected_output}" \
+  --eval-mode "binary" \
+  --max-concurrency 5 \
+  --verbose
 ```
 
 ### Command Line Options
@@ -56,23 +60,40 @@ python bot_evaluator.py \
 - `--base-url`: OCS instance URL (default: https://chatbots.dimagi.com)
 - `--input-column`: CSV column name for input text (default: "input")
 - `--expected-output-column`: CSV column name for expected output (optional)
+- `--participant-data-column`: CSV column name for participant data (optional)
+- `--session-data-column`: CSV column name for session data (optional)
+- `--history-column`: CSV column name for conversation history (optional)
 - `--output`: Output CSV file path (default: "evaluation_results.csv")
 - `--evaluator-model`: LLM model for evaluation (default: "gpt-4o-mini")
 - `--custom-prompt`: Custom evaluation prompt (optional)
+- `--custom-eval-message`: Custom evaluation message template (optional)
+- `--eval-mode`: Evaluation mode: "score" (1-10) or "binary" (true/false) (default: "score")
+- `--max-concurrency`: Maximum number of concurrent evaluations (default: 10)
+- `--verbose`: Enable detailed logging (optional)
 
 ## CSV Format
 
-Your CSV file should have at least one column with input text. Example:
+Your CSV file should have at least one column with input text. Additional columns can provide expected outputs, participant data, session data, and conversation history. Example:
 
 ```csv
-input,expected_output
-"What is your name?","I am a helpful AI assistant."
-"How can you help me?","I can help you with various tasks..."
-"What is the capital of France?","The capital of France is Paris."
+input,expected_output,participant_data,session_data,history
+"What is your name?","I am a helpful AI assistant.","{""age"": 25}","{""context"": ""first_visit""}","User just started the conversation"
+"How can you help me?","I can help you with various tasks...","{""role"": ""student""}","{""topic"": ""support""}","Previous: What is your name?"
+"What is the capital of France?","The capital of France is Paris.","{""level"": ""beginner""}","","User asking geography questions"
 ```
 
-## Evaluation Criteria
+### Optional CSV Columns
 
+- **participant_data**: JSON string containing participant information (age, role, preferences, etc.)
+- **session_data**: JSON string containing session context (current topic, state, etc.)
+- **history**: Text describing conversation history or scenario context
+- **expected_output**: Expected bot response for comparison
+
+## Evaluation Modes
+
+The script supports two evaluation modes:
+
+### Score Mode (Default)
 The default evaluation prompt assesses responses based on:
 
 1. **Relevance**: How well does the response address the user's question?
@@ -87,13 +108,17 @@ Scores range from 1-10:
 - 7-8: Good response (helpful and mostly accurate)
 - 9-10: Excellent response (comprehensive, accurate, and very helpful)
 
+### Binary Mode
+When using `--eval-mode binary`, the evaluator returns true/false judgments instead of numeric scores. This is useful for pass/fail evaluations or when you need simple binary classifications.
+
 ## Output Format
 
 The evaluation results are saved to a CSV file with the following columns:
 
 - `input_text`: Original input from the dataset
 - `bot_response`: Response from the OCS bot
-- `evaluation_score`: Score from 1-10
+- `expected_response`: Expected bot response
+- `evaluation_result`: Score from 1-10 (score mode) or true/false (binary mode)
 - `evaluation_reasoning`: Detailed reasoning for the score
 - `response_time`: Time taken for the bot to respond (seconds)
 - `session_id`: OCS session ID for this interaction
@@ -101,32 +126,30 @@ The evaluation results are saved to a CSV file with the following columns:
 
 ## Custom Evaluation Prompts
 
-You can provide custom evaluation prompts to focus on specific aspects:
+You can provide custom evaluation prompts and messages to focus on specific aspects:
 
 ```bash
+# Custom evaluation prompt
 python bot_evaluator.py \
   --csv dataset.csv \
   --experiment-id "your-id" \
   --api-key "your-key" \
   --custom-prompt "Rate this medical advice response for accuracy and safety. Consider if the response appropriately refers to healthcare professionals when needed. Score 1-10."
+
+# Custom evaluation message template
+python bot_evaluator.py \
+  --csv dataset.csv \
+  --experiment-id "your-id" \
+  --api-key "your-key" \
+  --custom-eval-message "User Input: {input_text}\nBot Response: {bot_response}\nExpected Response: {expected_output}\n\nEvaluate the bot's response quality."
 ```
 
-## Example Results
-
-After running the evaluation, you'll see output like:
-
-```
-INFO:__main__:Processing row 1/10: What is your name?...
-INFO:__main__:Row 1 completed - Score: 8.5
-INFO:__main__:Processing row 2/10: How can you help me?...
-INFO:__main__:Row 2 completed - Score: 7.2
-...
-INFO:__main__:Results saved to evaluation_results.csv
-INFO:__main__:Evaluation Summary:
-INFO:__main__:  Average Score: 7.85/10
-INFO:__main__:  Average Response Time: 2.34s
-INFO:__main__:  Total Evaluations: 10
-```
+### Template Variables
+When using `--custom-eval-message`, you can use these variables:
+- `{input_text}`: Original user input
+- `{bot_response}`: Bot's response
+- `{expected_output}`: Expected response (if provided)
+- `{history}`: Conversation history (if provided)
 
 ## Error Handling
 
@@ -148,17 +171,21 @@ The script supports both API key and token authentication as defined in the OCS 
 
 ## Performance Considerations
 
-- The script processes evaluations sequentially to avoid overwhelming the OCS API
+- The script processes evaluations in parallel with configurable concurrency (default: 10 concurrent evaluations)
+- Use `--max-concurrency` to adjust the number of parallel evaluations based on your API limits
 - Default timeout for bot responses is 30 seconds
 - Use `gpt-4o-mini` for faster and more cost-effective evaluations
-- Consider rate limiting for large datasets
+- Consider adjusting concurrency for large datasets to balance speed and API rate limits
 
 ## Troubleshooting
 
 1. **"Failed to start session"**: Check your experiment ID and API key
-2. **"Input column not found"**: Verify your CSV column names
+2. **"Input column not found"**: Verify your CSV column names match the `--input-column` parameter
 3. **"Evaluation failed"**: Check your OpenAI API key and quota
 4. **Timeout errors**: Increase timeout or check bot performance
+5. **High error rate**: Try reducing `--max-concurrency` to avoid overwhelming the API
+6. **JSON parsing errors**: Ensure participant_data and session_data columns contain valid JSON
+7. **Rate limit errors**: Use `--verbose` to see detailed error messages and adjust concurrency
 
 ## Development
 
@@ -168,7 +195,3 @@ The script is structured with these main components:
 - `BotEvaluator`: Manages LangChain evaluation logic
 - `EvaluationResult`: Data class for results
 - `EvaluationOutput`: Pydantic model for LLM output parsing
-
-## License
-
-This script is part of the Open Chat Studio project and follows the same license terms.
