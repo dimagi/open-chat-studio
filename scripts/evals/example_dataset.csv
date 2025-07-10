@@ -1,6 +1,2 @@
-input,expected_output
-"What is your name?","I am a helpful AI assistant."
-"How can you help me?","I can help you with various tasks including answering questions, providing information, and assisting with problem-solving."
-"What is the capital of France?","The capital of France is Paris."
-"Explain quantum computing in simple terms","Quantum computing is a type of computing that uses quantum mechanics principles to process information in ways that are potentially much faster than traditional computers for certain types of problems."
-"What is 2+2?","2+2 equals 4."
+input,expected_output,session_data,participant_data
+"What is your name?","I am a helpful AI assistant.",{"a": 1},{"b": 2}

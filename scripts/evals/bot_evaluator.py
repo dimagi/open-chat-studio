@@ -14,8 +14,10 @@ Usage:
 
 import argparse
 import asyncio
+import json
 import logging
 import time
+import uuid
 from dataclasses import asdict, dataclass
 from typing import Any
 
@@ -66,15 +68,17 @@ class OCSAPIClient:
         if self.session:
             await self.session.close()
 
-    async def start_chat_session(self, experiment_id: str, session_data: dict[str, Any] = None) -> str:
+    async def start_chat_session(
+        self, experiment_id: str, participant_id: str, session_data: dict[str, Any] = None
+    ) -> str:
         """Start a new chat session"""
-        url = f"{self.base_url}/api/chat/start/"
-        payload = {"chatbot_id": experiment_id, "session_data": session_data or {}}
+        url = f"{self.base_url}/api/sessions/"
+        payload = {"experiment": experiment_id, "state": session_data or {}, "participant": participant_id}
 
         async with self.session.post(url, json=payload) as response:
             if response.status == 201:
                 data = await response.json()
-                return data["session_id"]
+                return data["id"]
             else:
                 error_text = await response.text()
                 raise Exception(f"Failed to start session: {response.status} - {error_text}")
@@ -115,13 +119,19 @@ class OCSAPIClient:
         return {}
 
     async def get_bot_response(
-        self, experiment_id: str, input_text: str, session_data: dict[str, Any] = None
+        self,
+        experiment_id: str,
+        input_text: str,
+        session_data: dict[str, Any] = None,
+        participant_data: dict[str, Any] = None,
     ) -> tuple[str, str, float]:
         """Get bot response for input text"""
         start_time = time.time()
 
+        participant_id = await self.create_participant(experiment_id, participant_data)
+
         # Start session
-        session_id = await self.start_chat_session(experiment_id, session_data)
+        session_id = await self.start_chat_session(experiment_id, participant_id, session_data)
 
         # Send message
         task_id = await self.send_message(session_id, input_text)
@@ -134,6 +144,22 @@ class OCSAPIClient:
         # Extract bot response
         bot_response = message.get("content", "")
         return bot_response, session_id, response_time
+
+    async def create_participant(self, experiment_id, participant_data):
+        url = f"{self.base_url}/api/participants"
+        participant_id = f"eval:{str(uuid.uuid4())}"
+        payload = {
+            "identifier": participant_id,
+            "platform": "api",
+            "data": [{"experiment": experiment_id, "data": participant_data}],
+        }
+
+        async with self.session.post(url, json=payload) as response:
+            if response.status == 200:
+                return participant_id
+            else:
+                error_text = await response.text()
+                raise Exception(f"Failed to send message: {response.status} - {error_text}")
 
 
 class BotEvaluator:
@@ -204,6 +230,8 @@ class BotEvaluator:
         api_client: OCSAPIClient,
         input_column: str = "input",
         expected_output_column: str = None,
+        session_state_column: str = None,
+        participant_data_column: str = None,
         custom_prompt: str = None,
     ) -> list[EvaluationResult]:
         """Evaluate entire dataset"""
@@ -221,18 +249,19 @@ class BotEvaluator:
 
         for index, row in df.iterrows():
             input_text = str(row[input_column])
-            expected_output = (
-                str(row[expected_output_column])
-                if expected_output_column and expected_output_column in df.columns
-                else None
-            )
+            expected_output = self._get_optional_column(df, expected_output_column, row)
+            session_state = self._get_optional_column(df, session_state_column, row, json.loads) or {}
+            participant_data = self._get_optional_column(df, participant_data_column, row, json.loads) or {}
 
             logger.info(f"Processing row {index + 1}/{len(df)}: {input_text[:50]}...")
 
             try:
                 # Get bot response
                 bot_response, session_id, response_time = await api_client.get_bot_response(
-                    experiment_id, input_text, session_data={"evaluation_row": index}
+                    experiment_id,
+                    input_text,
+                    session_data={**session_state, "evaluation_row": index},
+                    participant_data=participant_data,
                 )
 
                 # Evaluate response
@@ -271,6 +300,9 @@ class BotEvaluator:
 
         return results
 
+    def _get_optional_column(self, df, column_name, row, converter=str):
+        return converter(row[column_name]) if column_name and column_name in df.columns else None
+
     def save_results(self, results: list[EvaluationResult], output_file: str):
         """Save evaluation results to CSV"""
         df = pd.DataFrame([asdict(result) for result in results])
@@ -295,7 +327,13 @@ async def main():
     parser.add_argument("--api-key", required=True, help="OCS API key")
     parser.add_argument("--base-url", default="https://chatbots.dimagi.com", help="OCS base URL")
     parser.add_argument("--input-column", default="input", help="CSV column name for input text")
-    parser.add_argument("--expected-output-column", help="CSV column name for expected output")
+    parser.add_argument(
+        "--expected-output-column", default="expected_output", help="CSV column name for expected output"
+    )
+    parser.add_argument("--session-data-column", default="session_data", help="CSV column name for session data (JSON)")
+    parser.add_argument(
+        "--participant-data-column", default="participant_data", help="CSV column name for participant data (JSON)"
+    )
     parser.add_argument("--output", default="evaluation_results.csv", help="Output CSV file")
     parser.add_argument("--evaluator-model", default="gpt-4o-mini", help="LLM model for evaluation")
     parser.add_argument("--custom-prompt", help="Custom evaluation prompt")
@@ -314,6 +352,8 @@ async def main():
             api_client=api_client,
             input_column=args.input_column,
             expected_output_column=args.expected_output_column,
+            session_state_column=args.session_data_column,
+            participant_data_column=args.participant_data_column,
             custom_prompt=args.custom_prompt,
         )
 
