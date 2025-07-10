@@ -46,6 +46,11 @@ interface ChatPollResponse {
   session_status: 'active' | 'ended';
 }
 
+interface PointerEvent {
+  clientX: number;
+  clientY: number;
+}
+
 @Component({
   tag: 'open-chat-studio-widget',
   styleUrl: 'ocs-chat.css',
@@ -119,10 +124,7 @@ export class OcsChat {
 
   disconnectedCallback() {
     this.cleanup();
-    document.removeEventListener('mousemove', this.handleMouseMove);
-    document.removeEventListener('mouseup', this.handleMouseUp);
-    document.removeEventListener('touchmove', this.handleTouchMove);
-    document.removeEventListener('touchend', this.handleTouchEnd);
+    this.removeEventListeners();
     window.removeEventListener('resize', this.handleWindowResize);
   }
 
@@ -422,70 +424,32 @@ export class OcsChat {
     }
   }
 
-  private handleMouseDown = (event: MouseEvent): void => {
-    if (window.innerWidth < 640) return;
-    if ((event.target as HTMLElement).closest('button')) return;
+  private getPointerCoordinates(event: MouseEvent | TouchEvent): PointerEvent | null {
+    if (event instanceof MouseEvent) {
+      return { clientX: event.clientX, clientY: event.clientY };
+    } else if (event instanceof TouchEvent && event.touches.length === 1) {
+      const touch = event.touches[0];
+      return { clientX: touch.clientX, clientY: touch.clientY };
+    }
+    return null;
+  }
+
+  private startDrag(pointer: PointerEvent): void {
     if (!this.chatWindowRef) return;
 
     this.isDragging = true;
     const rect = this.chatWindowRef.getBoundingClientRect();
     this.dragOffset = {
-      x: event.clientX - rect.left,
-      y: event.clientY - rect.top
+      x: pointer.clientX - rect.left,
+      y: pointer.clientY - rect.top
     };
+  }
 
-    document.addEventListener('mousemove', this.handleMouseMove);
-    document.addEventListener('mouseup', this.handleMouseUp);
-    event.preventDefault();
-  };
-
-  private handleMouseMove = (event: MouseEvent): void => {
+  private updateDragPosition(pointer: PointerEvent): void {
     if (!this.isDragging) return;
 
-    const newX = event.clientX - this.dragOffset.x;
-    const newY = event.clientY - this.dragOffset.y;
-
-    // Constrain chatbox to window
-    const windowWidth = window.innerWidth;
-    const windowHeight = window.innerHeight;
-    const chatWidth = 450;
-    const chatHeight = this.expanded ? (windowHeight * 0.83) : (windowHeight * 0.6);
-
-    this.windowPosition = {
-      x: Math.max(0, Math.min(newX, windowWidth - chatWidth)),
-      y: Math.max(0, Math.min(newY, windowHeight - chatHeight))
-    };
-  };
-
-  private handleMouseUp = (): void => {
-    this.isDragging = false;
-    document.removeEventListener('mousemove', this.handleMouseMove);
-    document.removeEventListener('mouseup', this.handleMouseUp);
-  };
-
-  private handleTouchStart = (event: TouchEvent): void => {
-    if ((event.target as HTMLElement).closest('button')) return;
-    if (!this.chatWindowRef || event.touches.length !== 1) return;
-
-    const touch = event.touches[0];
-    this.isDragging = true;
-    const rect = this.chatWindowRef.getBoundingClientRect();
-    this.dragOffset = {
-      x: touch.clientX - rect.left,
-      y: touch.clientY - rect.top
-    };
-
-    document.addEventListener('touchmove', this.handleTouchMove, { passive: false });
-    document.addEventListener('touchend', this.handleTouchEnd);
-    event.preventDefault();
-  };
-
-  private handleTouchMove = (event: TouchEvent): void => {
-    if (!this.isDragging || event.touches.length !== 1) return;
-
-    const touch = event.touches[0];
-    const newX = touch.clientX - this.dragOffset.x;
-    const newY = touch.clientY - this.dragOffset.y;
+    const newX = pointer.clientX - this.dragOffset.x;
+    const newY = pointer.clientY - this.dragOffset.y;
 
     // Constrain chatbox to window
     const windowWidth = window.innerWidth;
@@ -497,13 +461,72 @@ export class OcsChat {
       x: Math.max(0, Math.min(newX, windowWidth - chatWidth)),
       y: Math.max(0, Math.min(newY, windowHeight - chatHeight))
     };
+  }
+
+  private endDrag(): void {
+    this.isDragging = false;
+    this.removeEventListeners();
+  }
+
+  private addEventListeners(): void {
+    document.addEventListener('mousemove', this.handleMouseMove);
+    document.addEventListener('mouseup', this.handleMouseUp);
+    document.addEventListener('touchmove', this.handleTouchMove, { passive: false });
+    document.addEventListener('touchend', this.handleTouchEnd);
+  }
+
+  private removeEventListeners(): void {
+    document.removeEventListener('mousemove', this.handleMouseMove);
+    document.removeEventListener('mouseup', this.handleMouseUp);
+    document.removeEventListener('touchmove', this.handleTouchMove);
+    document.removeEventListener('touchend', this.handleTouchEnd);
+  }
+
+  private handleMouseDown = (event: MouseEvent): void => {
+    if (window.innerWidth < 640) return;
+    if ((event.target as HTMLElement).closest('button')) return;
+
+    const pointer = this.getPointerCoordinates(event);
+    if (!pointer) return;
+
+    this.startDrag(pointer);
+    this.addEventListeners();
+    event.preventDefault();
+  };
+
+  private handleMouseMove = (event: MouseEvent): void => {
+    const pointer = this.getPointerCoordinates(event);
+    if (!pointer) return;
+
+    this.updateDragPosition(pointer);
+  };
+
+  private handleMouseUp = (): void => {
+    this.endDrag();
+  };
+
+  private handleTouchStart = (event: TouchEvent): void => {
+    if ((event.target as HTMLElement).closest('button')) return;
+    if (!this.chatWindowRef) return;
+
+    const pointer = this.getPointerCoordinates(event);
+    if (!pointer) return;
+
+    this.startDrag(pointer);
+    this.addEventListeners();
+    event.preventDefault();
+  };
+
+  private handleTouchMove = (event: TouchEvent): void => {
+    const pointer = this.getPointerCoordinates(event);
+    if (!pointer) return;
+
+    this.updateDragPosition(pointer);
     event.preventDefault();
   };
 
   private handleTouchEnd = (): void => {
-    this.isDragging = false;
-    document.removeEventListener('touchmove', this.handleTouchMove);
-    document.removeEventListener('touchend', this.handleTouchEnd);
+    this.endDrag();
   };
 
   private handleWindowResize = (): void => {
