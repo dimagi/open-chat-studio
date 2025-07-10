@@ -109,6 +109,7 @@ class Collection(BaseTeamModel, VersionsMixin):
     )
     openai_vector_store_id = models.CharField(blank=True, max_length=255)
     is_index = models.BooleanField(default=False)
+    show_file_references = models.BooleanField(default=False)
 
     objects = CollectionObjectManager()
 

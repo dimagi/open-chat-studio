@@ -395,7 +395,8 @@ class TestSearchIndexTool:
         with open(vector_data_file) as json_file:
             return json.load(json_file)
 
-    def test_action_returns_relevant_chunks(self, team, local_index_manager_mock):
+    @pytest.mark.parametrize("generate_citations", [True, False])
+    def test_action_returns_relevant_chunks(self, generate_citations, team, local_index_manager_mock):
         collection = CollectionFactory(team=team)
         file = FileFactory(team=team, name="the_greatness_of_fruit.txt")
         vector_data = self.load_vector_data()
@@ -430,9 +431,10 @@ class TestSearchIndexTool:
 
         # The return value of get_embedding_vector is what determines the search results.
         local_index_manager_mock.get_embedding_vector.return_value = vector_data["What are great fruit?"]
-        search_config = SearchToolConfig(index_id=collection.id, max_results=2)
+        search_config = SearchToolConfig(index_id=collection.id, max_results=2, generate_citations=generate_citations)
         result = SearchIndexTool(search_config=search_config).action(query="What are great fruit?")
-        expected_result = f"""
+        if generate_citations:
+            expected_result = f"""
 # Retrieved chunks
 
 ## File name: the_greatness_of_fruit.txt, file_id={file.id}
@@ -444,6 +446,20 @@ Apples are great
 Oranges are nice
 
 {CITATION_PROMPT}
+"""
+        else:
+            expected_result = f"""
+# Retrieved chunks
+
+## File name: the_greatness_of_fruit.txt, file_id={file.id}
+### Content
+Apples are great
+
+## File name: the_greatness_of_fruit.txt, file_id={file.id}
+### Content
+Oranges are nice
+
+
 """
         assert result == expected_result
 

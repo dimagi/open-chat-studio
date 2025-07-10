@@ -9,7 +9,14 @@ from apps.service_providers.models import EmbeddingProviderModel
 class CollectionForm(forms.ModelForm):
     class Meta:
         model = Collection
-        fields = ["name", "is_index", "llm_provider", "embedding_provider_model", "is_remote_index"]
+        fields = [
+            "name",
+            "is_index",
+            "llm_provider",
+            "embedding_provider_model",
+            "is_remote_index",
+            "show_file_references",
+        ]
         labels = {
             "is_index": "Create file index",
             "is_remote_index": "Use the provider hosted index",
@@ -18,6 +25,9 @@ class CollectionForm(forms.ModelForm):
             "is_index": "If checked, the files will be indexed and searchable using RAG",
             "llm_provider": "The provider whose embedding model will be used for indexing",
             "embedding_provider_model": "The model to use to create embeddings for the files in this collection",
+            "show_file_references": (
+                "Allow files from this collection to be referenced in LLM responses and downloaded by users"
+            ),
         }
         widgets = {"is_index": forms.HiddenInput()}
 
