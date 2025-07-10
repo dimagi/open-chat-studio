@@ -1534,6 +1534,10 @@ class SessionStatus(models.TextChoices):
     # CANCELLED = "cancelled", gettext("Cancelled")  # not used anywhere yet
     UNKNOWN = "unknown", gettext("Unknown")
 
+    @classmethod
+    def for_chatbots(cls):
+        return [cls.ACTIVE.value, cls.COMPLETE.value]
+
 
 class ExperimentSessionObjectManager(models.Manager):
     def with_last_message_created_at(self):

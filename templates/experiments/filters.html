@@ -174,6 +174,7 @@
 {{ field_type_filters|json_script:"field-type-filters" }}
 {{ date_range_options|json_script:"date-range-options" }}
 {{ filter_columns|json_script:"filter-columns-data" }}
+{{ state_list|json_script:"state-data"}}
 {% if experiment_list %}{{ experiment_list|json_script:"experiment-list-data" }}{% else %}<script id="experiment-list-data" type="application/json">[]</script>{% endif %}
 <script>
   const tags = JSON.parse(document.getElementById('available-tags-data').textContent);
@@ -183,6 +184,7 @@
   const experimentList = JSON.parse(document.getElementById('experiment-list-data').textContent);
   const filterColumns = JSON.parse(document.getElementById('filter-columns-data').textContent);
   const dateRangeOptions = JSON.parse(document.getElementById('date-range-options').textContent);
+  const stateOptions = JSON.parse(document.getElementById('state-data').textContent);
   document.addEventListener('alpine:init', () => {
     Alpine.data('filterComponent', () => ({
       dateRangeOptions,
@@ -204,6 +206,7 @@
           'tags': {type: 'choice', operators: fieldTypeFilters.choice, options: tags, label: 'Tags' },
           'versions': {type: 'choice', operators: fieldTypeFilters.choice.filter(op => op === 'any of' || op === 'excludes'), options: versionsList, label: 'Versions'},
           'channels': {type: 'choice', operators: fieldTypeFilters.choice, options: channelsList, label: 'Channels'},
+          'state': {type: 'choice', operators: fieldTypeFilters.choice.filter(op => op === 'any of' || op === 'excludes'), options: stateOptions, label: 'State'},
         };
 
         // Only include columns that are in the filterColumns list
