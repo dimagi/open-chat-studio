@@ -3,6 +3,7 @@ from unittest.mock import Mock
 import pytest
 
 from apps.documents.forms import CollectionForm
+from apps.service_providers.models import LlmProviderTypes
 from apps.utils.factories.service_provider_factories import EmbeddingProviderModelFactory, LlmProviderFactory
 
 
@@ -66,3 +67,18 @@ class TestCollectionForm:
         data = {"name": "name", "is_index": True, "llm_provider": llm_provider.id, "embedding_provider_model": None}
         form = CollectionForm(request=request, data=data)
         assert form.is_valid() is False, "Form should not be valid but it is!"
+
+    def test_show_providers_with_embedding_models(self, team):
+        """
+        Only providers that have embedding models should be shown in the form.
+        """
+        request = Mock(team=team)
+        openai_provider = LlmProviderFactory(team=team, type=LlmProviderTypes.openai)
+        LlmProviderFactory(team=team, type=LlmProviderTypes.perplexity)
+        EmbeddingProviderModelFactory(team=team, type=LlmProviderTypes.openai)
+
+        form = CollectionForm(request=request)
+        assert form.fields["llm_provider"].queryset.count() == 1
+        assert form.fields["llm_provider"].queryset.first() == openai_provider, (
+            "LlmProvider queryset should only contain OpenAI provider"
+        )
