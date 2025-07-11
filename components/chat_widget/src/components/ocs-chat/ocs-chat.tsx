@@ -143,26 +143,23 @@ export class OcsChat {
     window.removeEventListener('resize', this.handleWindowResize);
   }
 
-  private parseWelcomeMessages() {
+  private parseJSONProp(propValue: string | undefined, propName: string): string[] {
     try {
-      if (this.welcomeMessages) {
-        this.parsedWelcomeMessages = JSON.parse(this.welcomeMessages);
+      if (propValue) {
+        return JSON.parse(propValue);
       }
     } catch (error) {
-      console.warn('Failed to parse welcome messages:', error);
-      this.parsedWelcomeMessages = [];
+      console.warn(`Failed to parse ${propName}:`, error);
     }
+    return [];
+  }
+
+  private parseWelcomeMessages() {
+    this.parsedWelcomeMessages = this.parseJSONProp(this.welcomeMessages, 'welcome messages');
   }
 
   private parseStarterQuestions() {
-    try {
-      if (this.starterQuestions) {
-        this.parsedStarterQuestions = JSON.parse(this.starterQuestions);
-      }
-    } catch (error) {
-      console.warn('Failed to parse starter questions:', error);
-      this.parsedStarterQuestions = [];
-    }
+    this.parsedStarterQuestions = this.parseJSONProp(this.starterQuestions, 'starter questions');
   }
 
   private cleanup() {
@@ -674,7 +671,7 @@ export class OcsChat {
                           {this.parsedStarterQuestions.map((question, index) => (
                             <div key={`starter-${index}`} class="flex justify-end">
                               <button
-                                class="max-w-xs lg:max-w-md text-left p-3 border border-blue-500 rounded-lg hover:bg-blue-50 hover:border-blue-600 transition-colors duration-200 text-blue-600 ml-12"
+                                class="starter-question max-w-xs lg:max-w-md text-left p-3 rounded-lg transition-colors duration-200 ml-12 border border-blue-500 hover:bg-blue-50 hover:border-blue-600"
                                 onClick={() => this.handleStarterQuestionClick(question)}
                               >
                                 {question}
