@@ -42,6 +42,7 @@ class DashboardService:
         end_date: datetime | None = None,
         experiment_ids: list[int] | None = None,
         platform_names: list[str] | None = None,
+        participant_identifiers: list[str] | None = None
     ) -> dict[str, Any]:
         """Get base querysets with common filters applied"""
 
@@ -72,6 +73,12 @@ class DashboardService:
         if platform_names:
             sessions = sessions.filter(experiment_channel__platform__in=platform_names)
             messages = messages.filter(chat__experiment_session__experiment_channel__platform__in=platform_names)
+
+        if participant_identifiers:
+            participants = participants.filter(id__in=participant_identifiers).distinct()
+            sessions = sessions.filter(participant__id__in=participant_identifiers)
+            messages = messages.filter(chat__experiment_session__participant__id__in=participant_identifiers)
+
 
         return {
             "experiments": experiments,
