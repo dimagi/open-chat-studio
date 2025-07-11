@@ -1,0 +1,27 @@
+{% if collection_file.status %}
+  <div id="file-status-{{ collection_file.id }}"
+       class="tooltip"
+       data-tip="{{ collection_file.status_enum.label }}"
+       {% if collection_file.status == 'pending' or collection_file.status == 'in_progress' %}
+         hx-get="{% url 'documents:get_collection_file_status' team.slug collection.id collection_file.id %}"
+         hx-trigger="load, every 5s"
+         hx-swap="outerHTML"
+       {% endif %}>
+    {% if collection_file.status == 'pending' %}
+      <span class="status"></span>
+    {% elif collection_file.status == 'in_progress' %}
+      <div class="inline-grid *:[grid-area:1/1]">
+        <div aria-label="warning" class="status status-warning animate-ping"></div>
+        <div aria-label="warning" class="status status-warning"></div>
+      </div>
+    {% elif collection_file.status == 'completed' %}
+      <div class="inline-grid *:[grid-area:1/1]">
+        <div aria-label="success" class="status status-success"></div>
+      </div>
+    {% else %}
+      <div class="inline-grid *:[grid-area:1/1]">
+        <div aria-label="error" class="status status-error"></div>
+      </div>
+    {% endif %}
+  </div>
+{% endif %}

@@ -70,26 +70,7 @@
           <div class="flex items-center justify-between p-3 bg-base-200 rounded-lg">
             <div class="flex flex-col flex-1 gap-1">
               <div class="flex items-center gap-2">
-                {% if collection_file.status %}
-                  <div class="tooltip" data-tip="{{ collection_file.status_enum.label }}">
-                    {% if collection_file.status == 'pending' %}
-                      <span class="status"></span>
-                    {% elif collection_file.status == 'in_progress' %}
-                      <div class="inline-grid *:[grid-area:1/1]">
-                        <div aria-label="warning" class="status status-warning animate-ping"></div>
-                        <div aria-label="warning" class="status status-warning"></div>
-                      </div>
-                    {% elif collection_file.status == 'completed' %}
-                      <div class="inline-grid *:[grid-area:1/1]">
-                        <div aria-label="success" class="status status-success"></div>
-                      </div>
-                    {% else %}
-                      <div class="inline-grid *:[grid-area:1/1]">
-                        <div aria-label="error" class="status status-error"></div>
-                      </div>
-                    {% endif %}
-                  </div>
-                {% endif %}
+                {% include 'documents/collection_file_status.html' %}
                 <span class="text-sm font-medium">{% include "generic/chip.html" with chip=collection_file.file.as_chip %}</span>
                 <div class="text-xs badge badge-ghost">{{ collection_file.file_size_mb }} MB</div>
               </div>

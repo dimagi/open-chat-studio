@@ -194,6 +194,26 @@ def delete_collection_file(request, team_slug: str, pk: int, file_id: int):
     return redirect("documents:single_collection_home", team_slug=team_slug, pk=pk)
 
 
+@login_and_team_required
+@permission_required("documents.view_collection", raise_exception=True)
+def get_collection_file_status(request, team_slug: str, pk: int, file_id: int):
+    collection_file = get_object_or_404(
+        CollectionFile.objects.select_related("collection"),
+        collection_id=pk,
+        id=file_id,
+        collection__team__slug=team_slug,
+    )
+    return render(
+        request,
+        "documents/collection_file_status.html",
+        {
+            "collection_file": collection_file,
+            "collection": collection_file.collection,
+            "team": request.team,
+        },
+    )
+
+
 class CollectionTableView(LoginAndTeamRequiredMixin, SingleTableView, PermissionRequiredMixin):
     model = Collection
     paginate_by = 25
