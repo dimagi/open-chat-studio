@@ -131,6 +131,10 @@ class ChatMessage(BaseModel, TaggedModelMixin, UserCommentsMixin):
 
     class Meta:
         ordering = ["created_at"]
+        indexes = [
+            models.Index(fields=["chat", "created_at"]),
+            models.Index(fields=["chat", "message_type", "created_at"]),
+        ]
 
     @classmethod
     def make_summary_message(cls, message):

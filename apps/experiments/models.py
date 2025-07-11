@@ -757,6 +757,9 @@ class Experiment(BaseTeamModel, VersionsMixin, CustomActionOperationMixin):
                 name="unique_version_number_per_experiment",
             ),
         ]
+        indexes = [
+            models.Index(fields=["team", "is_archived", "working_version"]),
+        ]
 
     def __str__(self):
         if self.working_version is None:
@@ -1584,6 +1587,7 @@ class ExperimentSession(BaseTeamModel):
 
     class Meta:
         ordering = ["-created_at"]
+        indexes = [models.Index(fields=["chat", "team"]), models.Index(fields=["chat", "team", "ended_at"])]
 
     def __str__(self):
         return f"ExperimentSession(id={self.external_id})"
