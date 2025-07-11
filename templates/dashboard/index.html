@@ -76,6 +76,10 @@
             {% with field=filter_form.experiments %}{% partial "select_filter" %}
             {% endwith %}
           </div>
+          <div class="form-control col-span-2">
+          <label class="label label-text">{% trans "Participants" %}</label>
+          {% with field=filter_form.participants %}{% partial "select_filter" %}{% endwith %}
+        </div>
         </form>
 
       <!-- Saved Filters -->

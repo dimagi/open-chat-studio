@@ -5,7 +5,7 @@ from django.utils import timezone
 from django.utils.translation import gettext_lazy as _
 
 from apps.channels.models import ChannelPlatform
-from apps.experiments.models import Experiment
+from apps.experiments.models import Experiment, Participant
 
 
 class DashboardFilterForm(forms.Form):
@@ -64,6 +64,12 @@ class DashboardFilterForm(forms.Form):
         widget=forms.SelectMultiple(),
     )
 
+    participants = forms.MultipleChoiceField(
+        choices=[],
+        required=False,
+        widget=forms.SelectMultiple
+    )
+
     def __init__(self, *args, team=None, **kwargs):
         super().__init__(*args, **kwargs)
 
@@ -82,6 +88,10 @@ class DashboardFilterForm(forms.Form):
                 (label_to_value[label], label) for label in available_platform_labels if label in label_to_value
             ]
             self.fields["channels"].choices = platform_choices
+            all_participants = Participant.objects.filter(team=team).values("id", "identifier")
+            self.fields["participants"].choices = [
+                (p["id"], p["identifier"]) for p in all_participants
+            ]
 
         # Set default dates if not provided
         if not self.data.get("start_date") and not self.data.get("end_date"):
@@ -144,6 +154,9 @@ class DashboardFilterForm(forms.Form):
 
         if data.get("channels"):
             params["platform_names"] = data["channels"]
+
+        if data.get("participants"):
+            params["participant_identifiers"] = data["participants"]
 
         return params
 
