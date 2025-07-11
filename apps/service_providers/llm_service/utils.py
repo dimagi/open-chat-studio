@@ -96,6 +96,10 @@ def populate_reference_section_from_citations(text: str, cited_files: list[File]
 def remove_citations_from_text(text: str) -> str:
     """
     Remove all citations from the text.
+
+    Example:
+        >>> remove_citations_from_text("This is a fact <CIT 123 />.")
+        'This is a fact .'
     """
     # This is used as a cleanup step to prevent users from tricking the bot to generate citations.
     # While participants will not be able to download or really do anything with the citations, it will still reveal
