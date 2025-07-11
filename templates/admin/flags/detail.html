@@ -42,6 +42,7 @@
     <div
       x-data="flagManager({
               flagId: {{ flag.id }},
+              flagName: '{{ flag.name }}',
               initialData: {
               everyone: {{ flag.everyone|yesno:'true,false' }},
               testing: {{ flag.testing|yesno:'true,false' }},
@@ -242,6 +243,7 @@
     function flagManager(config) {
       return {
         flagId: config.flagId,
+        flagName: config.flagName,
         formData: { ...config.initialData },
         originalData: { ...config.initialData },
         loading: false,
@@ -314,7 +316,7 @@
 
           try {
             const formData = this.buildFormData();
-            const response = await fetch(`/admin/flags/${this.flagId}/update/`, {
+            const response = await fetch(`/admin/flags/${this.flagName}/update/`, {
               method: 'POST',
               body: formData
             });
