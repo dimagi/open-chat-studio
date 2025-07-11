@@ -208,7 +208,7 @@ def get_collection_file_status(request, team_slug: str, pk: int, file_id: int):
         "documents/collection_file_status.html",
         {
             "collection_file": collection_file,
-            "collection": collection_file.collection,
+            "collection_id": pk,
             "team": request.team,
         },
     )
