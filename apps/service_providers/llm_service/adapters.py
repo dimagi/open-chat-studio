@@ -77,7 +77,7 @@ class ChatAdapter(BaseAdapter):
         disabled_tools: set[str] = None,
         input_formatter: str | None = None,
         save_message_metadata_only=False,
-        expect_citations: bool = False,
+        expect_citations: bool = True,
     ):
         self.session = session
         self.provider_model_name = provider_model_name
@@ -119,7 +119,7 @@ class ChatAdapter(BaseAdapter):
         tools: list[BaseTool],
         pipeline_state: PipelineState,
         disabled_tools: set[str] = None,
-        expect_citations: bool = False,
+        expect_citations: bool = True,
     ) -> Self:
         extra_prompt_context = {
             "temp_state": pipeline_state.get("temp_state", {}),

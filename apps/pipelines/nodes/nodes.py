@@ -442,7 +442,7 @@ class LLMResponseWithPrompt(LLMResponse, HistoryMixin, OutputMessageTagMixin):
         tools = self._get_configured_tools(session=session, tool_callbacks=tool_callbacks)
         attachments = self._get_attachments(state)
 
-        expect_citations = False
+        expect_citations = True
         if self.collection_index_id:
             collection = Collection.objects.get(id=self.collection_index_id)
             expect_citations = collection.generate_citations
