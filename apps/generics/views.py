@@ -97,7 +97,7 @@ HELP_TEXT_KEYS = {
 }
 
 
-def generic_home(request, team_slug: str, title: str, table_url_name: str, new_url: str, show_modal_instead=False):
+def generic_home(request, team_slug: str, title: str, table_url_name: str, new_url: str, show_modal_or_banner=False):
     help_key = HELP_TEXT_KEYS.get(title, title.lower())  # Default to lowercase if missing
     return TemplateResponse(
         request,
@@ -110,7 +110,7 @@ def generic_home(request, team_slug: str, title: str, table_url_name: str, new_u
             "table_url": reverse(table_url_name, args=[team_slug]),
             "enable_search": True,
             "toggle_archived": True,
-            "show_modal_instead": show_modal_instead,
+            "show_modal_or_banner": show_modal_or_banner,
         },
     )
 
