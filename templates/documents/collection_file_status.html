@@ -9,10 +9,7 @@
   {% if collection_file.status == 'pending' %}
     <span class="status"></span>
   {% elif collection_file.status == 'in_progress' %}
-    <div class="inline-grid *:[grid-area:1/1]">
-      <div aria-label="warning" class="status status-warning animate-ping"></div>
-      <div aria-label="warning" class="status status-warning"></div>
-    </div>
+    <div class="loading loading-spinner loading-sm"></div>
   {% elif collection_file.status == 'completed' %}
     <div aria-label="success" class="status status-success"></div>
   {% else %}

@@ -79,7 +79,7 @@
               {% if collection.is_index %}
                 {% if not collection.is_remote_index %}
                   <div id="chunk_count_{{ collection_file.id }}" class="flex flex-row items-center gap-2">
-                    <span class="text-xs text-base-content/70">{{ collection_file.chunk_count }} chunks</span>
+                    <span class="text-xs text-base-content/70">{{ collection_file.chunk_count|default:0 }} chunks</span>
                   </div>
                 {% endif %}
                 <div class="flex flex-row items-center gap-2">
