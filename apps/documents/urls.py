@@ -21,7 +21,7 @@ urlpatterns = [
         "collections/create-from-assistant", views.CreateCollectionFromAssistant.as_view(), name="create_from_assistant"
     ),
     path(
-        "collections/<int:pk>/files/<int:collection_file_id>/status",
+        "collections/<int:collection_id>/files/<int:pk>/status",
         views.get_collection_file_status,
         name="get_collection_file_status",
     ),

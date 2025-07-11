@@ -196,7 +196,7 @@ def delete_collection_file(request, team_slug: str, pk: int, file_id: int):
 
 @login_and_team_required
 @permission_required("documents.view_collection", raise_exception=True)
-def get_collection_file_status(request, team_slug: str, pk: int, collection_file_id: int):
+def get_collection_file_status(request, team_slug: str, collection_id: int, pk: int):
     chunk_count_query = (
         FileChunkEmbedding.objects.filter(collection_id=OuterRef("collection_id"), file_id=OuterRef("file_id"))
         .values("collection_id", "file_id")
@@ -208,8 +208,8 @@ def get_collection_file_status(request, team_slug: str, pk: int, collection_file
         CollectionFile.objects.annotate(
             chunk_count=Subquery(chunk_count_query, output_field=IntegerField())
         ).select_related("collection"),
-        collection_id=pk,
-        id=collection_file_id,
+        collection_id=collection_id,
+        id=pk,
         collection__team__slug=team_slug,
     )
 
@@ -218,7 +218,7 @@ def get_collection_file_status(request, team_slug: str, pk: int, collection_file
         "documents/collection_file_status_response.html",
         {
             "collection_file": collection_file,
-            "collection": Collection.objects.get(id=pk, team__slug=team_slug),
+            "collection": Collection.objects.get(id=collection_id, team__slug=team_slug),
             "team": request.team,
         },
     )
