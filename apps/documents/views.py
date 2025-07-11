@@ -215,12 +215,11 @@ def get_collection_file_status(request, team_slug: str, pk: int, collection_file
 
     return render(
         request,
-        "documents/collection_file_status.html",
+        "documents/collection_file_status_response.html",
         {
             "collection_file": collection_file,
             "collection": Collection.objects.get(id=pk, team__slug=team_slug),
             "team": request.team,
-            "is_response": True,
         },
     )
 

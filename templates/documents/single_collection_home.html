@@ -70,7 +70,9 @@
           <div class="flex items-center justify-between p-3 bg-base-200 rounded-lg">
             <div class="flex flex-col flex-1 gap-1">
               <div class="flex items-center gap-2">
-                {% include 'documents/collection_file_status.html' %}
+                {% if collection_file.status %}
+                  {% include 'documents/collection_file_status.html' %}
+                {% endif %}
                 <span class="text-sm font-medium">{% include "generic/chip.html" with chip=collection_file.file.as_chip %}</span>
                 <div class="text-xs badge badge-ghost">{{ collection_file.file_size_mb }} MB</div>
               </div>
