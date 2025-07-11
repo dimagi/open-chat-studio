@@ -214,11 +214,14 @@ class LLMChat(RunnableSerializable[str, ChainOutput]):
         cited_files = []
         for token in chain.stream({**self._get_input(input), **context}, config):
             output += self._parse_output(token)
-            cited_files.extend(self._get_cited_files(token))
+
+            if self.adapter.citations_expected:
+                cited_files.extend(self._get_cited_files(token))
+
             if self._chat_is_cancelled():
                 break
 
-        return LlmChatResponse(text=output, cited_files=cited_files)
+        return LlmChatResponse(text=output, cited_files=set(cited_files))
 
     def _parse_output(self, output):
         return output
