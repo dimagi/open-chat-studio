@@ -3,7 +3,7 @@
        class="tooltip"
        data-tip="{{ collection_file.status_enum.label }}"
        {% if collection_file.status == 'pending' or collection_file.status == 'in_progress' %}
-         hx-get="{% url 'documents:get_collection_file_status' team.slug collection_id collection_file.id %}"
+         hx-get="{% url 'documents:get_collection_file_status' team.slug collection.id collection_file.id %}"
          hx-trigger="every 5s"
          hx-swap="outerHTML"
        {% endif %}>
@@ -20,4 +20,12 @@
       <div aria-label="error" class="status status-error"></div>
     {% endif %}
   </div>
+{% endif %}
+
+{% if is_response %}
+  {% if collection.is_index and not collection.is_remote_index %}
+    <div id="chunk_count_{{ collection_file.id }}" class="flex flex-row items-center gap-2" hx-swap-oob="outerHTML">
+      <span class="text-xs text-base-content/70">{{ collection_file.chunk_count }} chunks</span>
+    </div>
+  {% endif %}
 {% endif %}

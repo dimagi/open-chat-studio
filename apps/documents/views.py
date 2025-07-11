@@ -196,20 +196,31 @@ def delete_collection_file(request, team_slug: str, pk: int, file_id: int):
 
 @login_and_team_required
 @permission_required("documents.view_collection", raise_exception=True)
-def get_collection_file_status(request, team_slug: str, pk: int, file_id: int):
+def get_collection_file_status(request, team_slug: str, pk: int, collection_file_id: int):
+    chunk_count_query = (
+        FileChunkEmbedding.objects.filter(collection_id=OuterRef("collection_id"), file_id=OuterRef("file_id"))
+        .values("collection_id", "file_id")
+        .annotate(count=Count("id"))
+        .values_list("count")
+    )
+
     collection_file = get_object_or_404(
-        CollectionFile.objects.select_related("collection"),
+        CollectionFile.objects.annotate(
+            chunk_count=Subquery(chunk_count_query, output_field=IntegerField())
+        ).select_related("collection"),
         collection_id=pk,
-        id=file_id,
+        id=collection_file_id,
         collection__team__slug=team_slug,
     )
+
     return render(
         request,
         "documents/collection_file_status.html",
         {
             "collection_file": collection_file,
-            "collection_id": pk,
+            "collection": Collection.objects.get(id=pk, team__slug=team_slug),
             "team": request.team,
+            "is_response": True,
         },
     )
 
