@@ -379,8 +379,8 @@ def test_cited_files_are_saved_in_metadata(session):
 
 
 @pytest.mark.django_db()
-@pytest.mark.parametrize("citations_expected", [True, False])
-def test_citation_handling(citations_expected, session):
+@pytest.mark.parametrize("expect_citations", [True, False])
+def test_citation_handling(expect_citations, session):
     """
     Test that references are included in the output when expected. When we do not expect file references, any citation
     tags should be stripped and we should not see any file references in the output.
@@ -403,7 +403,7 @@ def test_citation_handling(citations_expected, session):
         prompt_text="You are a helpful assistant",
         max_token_limit=1000,
         template_context=PromptTemplateContext(session=session),
-        citations_expected=citations_expected,
+        expect_citations=expect_citations,
     )
 
     # Create runnable and invoke
@@ -414,7 +414,7 @@ def test_citation_handling(citations_expected, session):
         _get_cited_files.return_value = [file1, file2]
         result = runnable.invoke("Tell me about the documents")
 
-    if citations_expected:
+    if expect_citations:
         # Quick check to see if references are included
         assert "This is a fact [^1]. Another fact [^2]" in result.output
         # Make sure the files are attached to the chat

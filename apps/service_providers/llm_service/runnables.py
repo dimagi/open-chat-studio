@@ -162,7 +162,7 @@ class LLMChat(RunnableSerializable[str, ChainOutput]):
             llm_response = self._get_output_check_cancellation(input, merged_config)
             ai_message = llm_response.text
             ai_message_metadata = self.adapter.get_output_message_metadata(llm_response.cited_files)
-            if self.adapter.citations_expected:
+            if self.adapter.expect_citations:
                 ai_message = self.adapter.add_citation_section_from_cited_files(
                     ai_message, cited_files=llm_response.cited_files
                 )
@@ -215,7 +215,7 @@ class LLMChat(RunnableSerializable[str, ChainOutput]):
         for token in chain.stream({**self._get_input(input), **context}, config):
             output += self._parse_output(token)
 
-            if self.adapter.citations_expected:
+            if self.adapter.expect_citations:
                 cited_files.extend(self._get_cited_files(token))
 
             if self._chat_is_cancelled():

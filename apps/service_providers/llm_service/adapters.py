@@ -77,7 +77,7 @@ class ChatAdapter(BaseAdapter):
         disabled_tools: set[str] = None,
         input_formatter: str | None = None,
         save_message_metadata_only=False,
-        citations_expected: bool = False,
+        expect_citations: bool = False,
     ):
         self.session = session
         self.provider_model_name = provider_model_name
@@ -88,7 +88,7 @@ class ChatAdapter(BaseAdapter):
         self.tools = tools or []
         self.disabled_tools = disabled_tools
         self.input_formatter = input_formatter
-        self.citations_expected = citations_expected
+        self.expect_citations = expect_citations
 
         self.team = session.team
         self.template_context = template_context
@@ -119,7 +119,7 @@ class ChatAdapter(BaseAdapter):
         tools: list[BaseTool],
         pipeline_state: PipelineState,
         disabled_tools: set[str] = None,
-        citations_expected: bool = False,
+        expect_citations: bool = False,
     ) -> Self:
         extra_prompt_context = {
             "temp_state": pipeline_state.get("temp_state", {}),
@@ -142,7 +142,7 @@ class ChatAdapter(BaseAdapter):
             disabled_tools=disabled_tools,
             input_formatter="{input}",
             save_message_metadata_only=True,
-            citations_expected=citations_expected,
+            expect_citations=expect_citations,
         )
 
     def get_chat_model(self):
