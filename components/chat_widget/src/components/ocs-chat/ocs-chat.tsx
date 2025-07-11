@@ -88,6 +88,16 @@ export class OcsChat {
    */
   @Prop({ mutable: true }) expanded: boolean = false;
 
+  /**
+   * Welcome messages to display above starter questions (JSON array of strings)
+   */
+  @Prop() welcomeMessages?: string;
+
+  /**
+   * Array of starter questions that users can click to send (JSON array of strings)
+   */
+  @Prop() starterQuestions?: string;
+
   @State() loaded: boolean = false;
   @State() error: string = "";
   @State() messages: ChatMessage[] = [];
@@ -101,6 +111,9 @@ export class OcsChat {
   @State() isDragging: boolean = false;
   @State() dragOffset: { x: number; y: number } = { x: 0, y: 0 };
   @State() windowPosition: { x: number; y: number } = { x: 0, y: 0 };
+  @State() showStarterQuestions: boolean = true;
+  @State() parsedWelcomeMessages: string[] = [];
+  @State() parsedStarterQuestions: string[] = [];
 
   private messageListRef?: HTMLDivElement;
   private textareaRef?: HTMLTextAreaElement;
@@ -111,6 +124,8 @@ export class OcsChat {
     if (!this.chatbotId) {
       this.error = 'Chatbot ID is required';
     }
+    this.parseWelcomeMessages();
+    this.parseStarterQuestions();
   }
 
   componentDidLoad() {
@@ -126,6 +141,28 @@ export class OcsChat {
     this.cleanup();
     this.removeEventListeners();
     window.removeEventListener('resize', this.handleWindowResize);
+  }
+
+  private parseWelcomeMessages() {
+    try {
+      if (this.welcomeMessages) {
+        this.parsedWelcomeMessages = JSON.parse(this.welcomeMessages);
+      }
+    } catch (error) {
+      console.warn('Failed to parse welcome messages:', error);
+      this.parsedWelcomeMessages = [];
+    }
+  }
+
+  private parseStarterQuestions() {
+    try {
+      if (this.starterQuestions) {
+        this.parsedStarterQuestions = JSON.parse(this.starterQuestions);
+      }
+    } catch (error) {
+      console.warn('Failed to parse starter questions:', error);
+      this.parsedStarterQuestions = [];
+    }
   }
 
   private cleanup() {
@@ -184,6 +221,9 @@ export class OcsChat {
   private async sendMessage(message: string): Promise<void> {
     if (!this.sessionId || !message.trim()) return;
 
+    // Hide starter questions on any user interaction
+    this.showStarterQuestions = false;
+
     try {
       // Add user message immediately
       const userMessage: ChatMessage = {
@@ -224,6 +264,10 @@ export class OcsChat {
       // Clear typing indicator on error
       this.isTyping = false;
     }
+  }
+
+  private handleStarterQuestionClick(question: string): void {
+    this.sendMessage(question);
   }
 
   private async pollTaskResponse(taskId: string): Promise<void> {
@@ -356,6 +400,14 @@ export class OcsChat {
     if (event.key === 'Enter' && !event.shiftKey) {
       event.preventDefault();
       this.sendMessage(this.messageInput);
+    }
+  }
+
+  private handleInputChange(event: Event): void {
+    this.messageInput = (event.target as HTMLTextAreaElement).value;
+    // Hide starter questions when user starts typing
+    if (this.messageInput.trim().length > 0) {
+      this.showStarterQuestions = false;
     }
   }
 
@@ -605,6 +657,35 @@ export class OcsChat {
                   ref={(el) => this.messageListRef = el}
                   class="flex-grow overflow-y-auto p-4 space-y-4"
                 >
+                  {this.showStarterQuestions && this.messages.length === 0 && !this.isTyping && (
+                    <div class="space-y-4">
+                      {/* Welcome Messages */}
+                      {this.parsedWelcomeMessages.map((message, index) => (
+                        <div key={`welcome-${index}`} class="flex justify-start">
+                          <div class="bg-gray-200 text-gray-800 max-w-xs lg:max-w-md px-4 py-2 rounded-lg">
+                            <div class="whitespace-pre-wrap">{message}</div>
+                          </div>
+                        </div>
+                      ))}
+
+                      {/* Starter Questions */}
+                      {this.parsedStarterQuestions.length > 0 && (
+                        <div class="space-y-2">
+                          {this.parsedStarterQuestions.map((question, index) => (
+                            <div key={`starter-${index}`} class="flex justify-end">
+                              <button
+                                class="max-w-xs lg:max-w-md text-left p-3 border border-blue-500 rounded-lg hover:bg-blue-50 hover:border-blue-600 transition-colors duration-200 text-blue-600 ml-12"
+                                onClick={() => this.handleStarterQuestionClick(question)}
+                              >
+                                {question}
+                              </button>
+                            </div>
+                          ))}
+                        </div>
+                      )}
+                    </div>
+                  )}
+                  {/* Regular Chat Messages */}
                   {this.messages.map((message, index) => (
                     <div
                       key={index}
@@ -670,7 +751,7 @@ export class OcsChat {
                       rows={1}
                       placeholder="Type your message..."
                       value={this.messageInput}
-                      onInput={(e) => this.messageInput = (e.target as HTMLTextAreaElement).value}
+                      onInput={(e) => this.handleInputChange(e)}
                       onKeyPress={(e) => this.handleKeyPress(e)}
                       disabled={this.isTyping}
                     ></textarea>
