@@ -28,9 +28,17 @@ export namespace Components {
          */
         "position": 'left' | 'center' | 'right';
         /**
+          * Array of starter questions that users can click to send (JSON array of strings)
+         */
+        "starterQuestions"?: string;
+        /**
           * Whether the chat widget is visible on load.
          */
         "visible": boolean;
+        /**
+          * Welcome messages to display above starter questions (JSON array of strings)
+         */
+        "welcomeMessages"?: string;
     }
 }
 declare global {
@@ -67,9 +75,17 @@ declare namespace LocalJSX {
          */
         "position"?: 'left' | 'center' | 'right';
         /**
+          * Array of starter questions that users can click to send (JSON array of strings)
+         */
+        "starterQuestions"?: string;
+        /**
           * Whether the chat widget is visible on load.
          */
         "visible"?: boolean;
+        /**
+          * Welcome messages to display above starter questions (JSON array of strings)
+         */
+        "welcomeMessages"?: string;
     }
     interface IntrinsicElements {
         "open-chat-studio-widget": OpenChatStudioWidget;

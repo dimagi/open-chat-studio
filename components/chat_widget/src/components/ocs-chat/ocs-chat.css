@@ -42,6 +42,9 @@
     color: var(--button-text-color-hover);
     border-color: var(--button-border-color-hover);
   }
+  .starter-question {
+    @apply text-blue-600 !important;
+  }
 }
 
 #ocs-chat-window {
