@@ -9,7 +9,14 @@ from apps.service_providers.models import EmbeddingProviderModel
 class CollectionForm(forms.ModelForm):
     class Meta:
         model = Collection
-        fields = ["name", "is_index", "llm_provider", "embedding_provider_model", "is_remote_index"]
+        fields = [
+            "name",
+            "is_index",
+            "llm_provider",
+            "embedding_provider_model",
+            "is_remote_index",
+            "generate_citations",
+        ]
         labels = {
             "is_index": "Create file index",
             "is_remote_index": "Use the provider hosted index",
@@ -18,6 +25,9 @@ class CollectionForm(forms.ModelForm):
             "is_index": "If checked, the files will be indexed and searchable using RAG",
             "llm_provider": "The provider whose embedding model will be used for indexing",
             "embedding_provider_model": "The model to use to create embeddings for the files in this collection",
+            "generate_citations": (
+                "Allow files from this collection to be referenced in LLM responses and downloaded by users"
+            ),
         }
         widgets = {"is_index": forms.HiddenInput()}
 
@@ -71,9 +81,17 @@ class CollectionForm(forms.ModelForm):
     def clean(self):
         cleaned_data = super().clean()
         is_index = self.cleaned_data["is_index"]
-        llm_provider = self.cleaned_data["llm_provider"]
-        is_remote_index = self.cleaned_data["is_remote_index"]
-        embedding_provider_model = self.cleaned_data["embedding_provider_model"]
+        llm_provider = cleaned_data.get("llm_provider")
+        is_remote_index = cleaned_data["is_remote_index"]
+        embedding_provider_model = cleaned_data.get("embedding_provider_model")
+
+        if self.instance.id:
+            if not llm_provider:
+                llm_provider = self.instance.llm_provider
+                self.cleaned_data["llm_provider"] = llm_provider
+            if not embedding_provider_model:
+                embedding_provider_model = self.instance.embedding_provider_model
+                self.cleaned_data["embedding_provider_model"] = embedding_provider_model
 
         if is_index:
             if not llm_provider:

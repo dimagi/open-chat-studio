@@ -441,6 +441,12 @@ class LLMResponseWithPrompt(LLMResponse, HistoryMixin, OutputMessageTagMixin):
         # Tools setup
         tools = self._get_configured_tools(session=session, tool_callbacks=tool_callbacks)
         attachments = self._get_attachments(state)
+
+        expect_citations = True
+        if self.collection_index_id:
+            collection = Collection.objects.get(id=self.collection_index_id)
+            expect_citations = collection.generate_citations
+
         # Chat setup
         chat_adapter = ChatAdapter.for_pipeline(
             session=session,
@@ -450,6 +456,7 @@ class LLMResponseWithPrompt(LLMResponse, HistoryMixin, OutputMessageTagMixin):
             tools=tools,
             pipeline_state=state,
             disabled_tools=self.disabled_tools,
+            expect_citations=expect_citations,
         )
         allowed_tools = chat_adapter.get_allowed_tools()
         # TODO: tracing

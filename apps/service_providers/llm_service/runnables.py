@@ -162,9 +162,12 @@ class LLMChat(RunnableSerializable[str, ChainOutput]):
             llm_response = self._get_output_check_cancellation(input, merged_config)
             ai_message = llm_response.text
             ai_message_metadata = self.adapter.get_output_message_metadata(llm_response.cited_files)
-            ai_message = self.adapter.add_citation_section_from_cited_files(
-                ai_message, cited_files=llm_response.cited_files
-            )
+            if self.adapter.expect_citations:
+                ai_message = self.adapter.add_citation_section_from_cited_files(
+                    ai_message, cited_files=llm_response.cited_files
+                )
+            else:
+                ai_message = self.adapter.remove_file_citations(ai_message)
 
             result = ChainOutput(
                 output=ai_message, prompt_tokens=callback.prompt_tokens, completion_tokens=callback.completion_tokens
@@ -211,11 +214,14 @@ class LLMChat(RunnableSerializable[str, ChainOutput]):
         cited_files = []
         for token in chain.stream({**self._get_input(input), **context}, config):
             output += self._parse_output(token)
-            cited_files.extend(self._get_cited_files(token))
+
+            if self.adapter.expect_citations:
+                cited_files.extend(self._get_cited_files(token))
+
             if self._chat_is_cancelled():
                 break
 
-        return LlmChatResponse(text=output, cited_files=cited_files)
+        return LlmChatResponse(text=output, cited_files=set(cited_files))
 
     def _parse_output(self, output):
         return output

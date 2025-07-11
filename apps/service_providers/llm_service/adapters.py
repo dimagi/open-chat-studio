@@ -26,7 +26,10 @@ from apps.experiments.models import Experiment, ExperimentSession
 from apps.files.models import File
 from apps.service_providers.llm_service.main import LlmService, OpenAIAssistantRunnable
 from apps.service_providers.llm_service.prompt_context import PromptTemplateContext
-from apps.service_providers.llm_service.utils import populate_reference_section_from_citations
+from apps.service_providers.llm_service.utils import (
+    populate_reference_section_from_citations,
+    remove_citations_from_text,
+)
 
 if TYPE_CHECKING:
     from apps.pipelines.nodes.base import PipelineState
@@ -74,6 +77,7 @@ class ChatAdapter(BaseAdapter):
         disabled_tools: set[str] = None,
         input_formatter: str | None = None,
         save_message_metadata_only=False,
+        expect_citations: bool = True,
     ):
         self.session = session
         self.provider_model_name = provider_model_name
@@ -84,6 +88,7 @@ class ChatAdapter(BaseAdapter):
         self.tools = tools or []
         self.disabled_tools = disabled_tools
         self.input_formatter = input_formatter
+        self.expect_citations = expect_citations
 
         self.team = session.team
         self.template_context = template_context
@@ -114,6 +119,7 @@ class ChatAdapter(BaseAdapter):
         tools: list[BaseTool],
         pipeline_state: PipelineState,
         disabled_tools: set[str] = None,
+        expect_citations: bool = True,
     ) -> Self:
         extra_prompt_context = {
             "temp_state": pipeline_state.get("temp_state", {}),
@@ -136,6 +142,7 @@ class ChatAdapter(BaseAdapter):
             disabled_tools=disabled_tools,
             input_formatter="{input}",
             save_message_metadata_only=True,
+            expect_citations=expect_citations,
         )
 
     def get_chat_model(self):
@@ -163,6 +170,13 @@ class ChatAdapter(BaseAdapter):
 
     def add_citation_section_from_cited_files(self, ai_message: str, cited_files: list[File]) -> str:
         return populate_reference_section_from_citations(text=ai_message, cited_files=cited_files, session=self.session)
+
+    def remove_file_citations(self, ai_message: str) -> str:
+        """
+        Remove file citations from the AI message.
+        """
+
+        return remove_citations_from_text(ai_message)
 
 
 class AssistantAdapter(BaseAdapter):
