@@ -466,6 +466,9 @@ class MySerializer(serializers.ModelSerializer):
 - API key authentication
 - Cursor-based pagination
 
+## Common Practises
+See docs/developer_guides/standard_practises.md for some common practises
+
 ## Troubleshooting
 
 ### Common Issues
