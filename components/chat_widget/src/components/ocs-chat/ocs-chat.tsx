@@ -676,7 +676,7 @@ export class OcsChat {
                           {this.parsedStarterQuestions.map((question, index) => (
                             <div key={`starter-${index}`} class="flex justify-end">
                               <button
-                                class="starter-question max-w-xs lg:max-w-md text-left p-3 rounded-lg transition-colors duration-200 ml-12 border border-blue-500 hover:bg-blue-50 hover:border-blue-600"
+                                class="starter-question"
                                 onClick={() => this.handleStarterQuestionClick(question)}
                               >
                                 {question}
