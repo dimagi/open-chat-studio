@@ -3,16 +3,27 @@
 from django.db import migrations, models
 
 
+def set_generate_citations_true(apps, schema_editor):
+    """Set generate_citations=True for all LLMResponseWithPrompt nodes that have a collection_index_id"""
+    Node = apps.get_model('pipelines', 'Node')
+    
+    nodes_to_update = []
+    for idx, node in enumerate(Node.objects.filter(type='LLMResponseWithPrompt').iterator(100)):
+        node.params['generate_citations'] = True
+        nodes_to_update.append(node)
+        
+        if idx % 100 == 0:
+            nodes_to_update = []
+            Node.objects.bulk_update(nodes_to_update, ['params'])
+
+
 class Migration(migrations.Migration):
 
     dependencies = [
         ('documents', '0009_collection_embedding_provider_model_and_more'),
+        ('pipelines', '0018_add_max_results_node_param'),
     ]
 
     operations = [
-        migrations.AddField(
-            model_name='collection',
-            name='generate_citations',
-            field=models.BooleanField(default=True),
-        ),
+        migrations.RunPython(set_generate_citations_true, migrations.RunPython.noop),
     ]
