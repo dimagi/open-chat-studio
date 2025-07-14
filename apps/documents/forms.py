@@ -15,7 +15,6 @@ class CollectionForm(forms.ModelForm):
             "llm_provider",
             "embedding_provider_model",
             "is_remote_index",
-            "generate_citations",
         ]
         labels = {
             "is_index": "Create file index",
@@ -25,9 +24,6 @@ class CollectionForm(forms.ModelForm):
             "is_index": "If checked, the files will be indexed and searchable using RAG",
             "llm_provider": "The provider whose embedding model will be used for indexing",
             "embedding_provider_model": "The model to use to create embeddings for the files in this collection",
-            "generate_citations": (
-                "Allow files from this collection to be referenced in LLM responses and downloaded by users"
-            ),
         }
         widgets = {"is_index": forms.HiddenInput()}
 

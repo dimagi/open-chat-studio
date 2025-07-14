@@ -109,7 +109,6 @@ class Collection(BaseTeamModel, VersionsMixin):
     )
     openai_vector_store_id = models.CharField(blank=True, max_length=255)
     is_index = models.BooleanField(default=False)
-    generate_citations = models.BooleanField(default=True)
 
     objects = CollectionObjectManager()
 
@@ -147,7 +146,6 @@ class Collection(BaseTeamModel, VersionsMixin):
             fields=[
                 VersionField(group_name="General", name="name", raw_value=self.name),
                 VersionField(group_name="General", name="llm_provider", raw_value=self.llm_provider),
-                VersionField(group_name="General", name="generate_citations", raw_value=self.generate_citations),
                 VersionField(
                     group_name="General", name="embedding_provider_model", raw_value=self.embedding_provider_model
                 ),
