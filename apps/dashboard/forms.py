@@ -4,6 +4,7 @@ from django import forms
 from django.utils import timezone
 from django.utils.translation import gettext_lazy as _
 
+from apps.annotations.models import Tag, TagCategories
 from apps.channels.models import ChannelPlatform
 from apps.experiments.models import Experiment, Participant
 
@@ -64,11 +65,9 @@ class DashboardFilterForm(forms.Form):
         widget=forms.SelectMultiple(),
     )
 
-    participants = forms.MultipleChoiceField(
-        choices=[],
-        required=False,
-        widget=forms.SelectMultiple
-    )
+    participants = forms.MultipleChoiceField(choices=[], required=False, widget=forms.SelectMultiple)
+
+    tags = forms.MultipleChoiceField(choices=[], required=False, widget=forms.SelectMultiple())
 
     def __init__(self, *args, team=None, **kwargs):
         super().__init__(*args, **kwargs)
@@ -89,8 +88,11 @@ class DashboardFilterForm(forms.Form):
             ]
             self.fields["channels"].choices = platform_choices
             all_participants = Participant.objects.filter(team=team).values("id", "identifier")
-            self.fields["participants"].choices = [
-                (p["id"], p["identifier"]) for p in all_participants
+            self.fields["participants"].choices = [(str(p["id"]), p["identifier"]) for p in all_participants]
+
+            tags = Tag.objects.filter(team=team).exclude(category=TagCategories.EXPERIMENT_VERSION)
+            self.fields["tags"].choices = [
+                (str(t.id), t.name.split(":", 1)[1].strip() if ":" in t.name else t.name) for t in tags
             ]
 
         # Set default dates if not provided
@@ -157,6 +159,9 @@ class DashboardFilterForm(forms.Form):
 
         if data.get("participants"):
             params["participant_identifiers"] = data["participants"]
+
+        if data.get("tags"):
+            params["tags"] = data["tags"]
 
         return params
 

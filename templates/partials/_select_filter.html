@@ -1,0 +1,8 @@
+<select x-cloak class="w-full h-10" id="{{ field.id_for_label }}" name="{{ field.name }}" multiple>
+  {% if not field.field.required %}
+    <option value="">---------</option>
+  {% endif %}
+  {% for option in field %}
+    {{ option }}
+  {% endfor %}
+</select>

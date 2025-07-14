@@ -1,7 +1,8 @@
 from datetime import datetime, timedelta
 from typing import Any
 
-from django.db.models import Count, Max, Q
+from django.contrib.contenttypes.models import ContentType
+from django.db.models import Count, Exists, Max, OuterRef, Q
 from django.db.models.functions import TruncDate, TruncHour, TruncMonth, TruncWeek
 from django.urls import reverse
 from django.utils import timezone
@@ -42,7 +43,8 @@ class DashboardService:
         end_date: datetime | None = None,
         experiment_ids: list[int] | None = None,
         platform_names: list[str] | None = None,
-        participant_identifiers: list[str] | None = None
+        participant_identifiers: list[str] | None = None,
+        tags: list[str] | None = None,
     ) -> dict[str, Any]:
         """Get base querysets with common filters applied"""
 
@@ -79,6 +81,14 @@ class DashboardService:
             sessions = sessions.filter(participant__id__in=participant_identifiers)
             messages = messages.filter(chat__experiment_session__participant__id__in=participant_identifiers)
 
+        if tags:
+            tags = [int(t) for t in tags]
+            chat_message_ct = ContentType.objects.get_for_model(ChatMessage)
+            sessions = sessions.annotate(
+                has_tagged_messages=Exists(ChatMessage.objects.filter(chat=OuterRef("chat_id"), tags__id__in=tags))
+            ).filter(has_tagged_messages=True)
+
+            messages = messages.filter(tags__id__in=tags)
 
         return {
             "experiments": experiments,
