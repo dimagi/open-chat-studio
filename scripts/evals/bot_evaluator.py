@@ -39,6 +39,7 @@ class EvaluationResult:
     input_row_index: int
     input_text: str
     bot_response: str
+    expected_category: str
     expected_response: str
     evaluation_result: Any
     evaluation_reasoning: str
@@ -233,24 +234,37 @@ class BotEvaluator:
         self.max_concurrency = max_concurrency
         self.llm = ChatOpenAI(model=evaluator_model, temperature=0)
 
-        # Default evaluation prompt
+        # Load evaluation prompt from file or use custom prompt
         self.output_schema = EvaluationScoreOutput if self.mode == "score" else EvaluationBinaryOutput
-        self.eval_message = "User Input: {input_text}\n\nBot Response: {bot_response}\n\nEvaluate this response."
+        
+        if custom_prompt:
+            prompt_text = custom_prompt
+        else:
+            try:
+                with open("prompt.txt", "r") as f:
+                    prompt_text = f.read()
+            except FileNotFoundError:
+                prompt_text = self.output_schema.DEFAULT_PROMPT
+        
         self.evaluation_prompt = ChatPromptTemplate.from_messages(
             [
-                ("system", custom_prompt or self.output_schema.DEFAULT_PROMPT),
-                ("human", custom_eval_message or self.eval_message),
+                ("human", prompt_text),
             ]
         )
         self.evaluation_chain = self.evaluation_prompt | self.llm.with_structured_output(self.output_schema)
 
     async def evaluate_response(
-        self, input_text: str, bot_response: str, expected_output: str
+        self, scenario_text: str, bot_response: str, expected_category: str, expected_response: str
     ) -> EvaluationScoreOutput | EvaluationBinaryOutput:
         """Evaluate a single bot response"""
         try:
             result = await self.evaluation_chain.ainvoke(
-                {"input_text": input_text, "bot_response": bot_response, "expected_output": expected_output}
+                {
+                    "scenario": scenario_text or "",
+                    "actual_response": bot_response,
+                    "expected_category": expected_category or "",
+                    "expected_response": expected_response or "",
+                }
             )
             return result
         except Exception as e:
@@ -263,7 +277,9 @@ class BotEvaluator:
         experiment_id: str,
         api_client: OCSAPIClient,
         input_column: str = "input",
-        expected_output_column: str = None,
+        scenario_column: str = None,
+        expected_category_column: str = None,
+        expected_response_column: str = None,
         session_state_column: str = None,
         participant_data_column: str = None,
         history_column: str = None,
@@ -290,7 +306,9 @@ class BotEvaluator:
                 experiment_id=experiment_id,
                 api_client=api_client,
                 input_column=input_column,
-                expected_output_column=expected_output_column,
+                scenario_column=scenario_column,
+                expected_category_column=expected_category_column,
+                expected_response_column=expected_response_column,
                 session_state_column=session_state_column,
                 participant_data_column=participant_data_column,
                 history_column=history_column,
@@ -310,13 +328,16 @@ class BotEvaluator:
                 # Create error result
                 row = df.iloc[i]
                 input_text = str(row[input_column])
-                expected_output = self._get_optional_column(df, expected_output_column, row)
+                scenario_text = self._get_optional_column(df, scenario_column, row)
+                expected_category = self._get_optional_column(df, expected_category_column, row)
+                expected_response = self._get_optional_column(df, expected_response_column, row)
                 eval_result = self.output_schema.error(f"Processing failed: {str(result)}")
                 error_result = EvaluationResult(
                     input_row_index=i,
                     input_text=input_text,
                     bot_response=f"ERROR: {str(result)}",
-                    expected_response=expected_output,
+                    expected_category=expected_category or "",
+                    expected_response=expected_response or "",
                     evaluation_result=eval_result.result,
                     evaluation_reasoning=eval_result.reasoning,
                     response_time=0.0,
@@ -338,7 +359,9 @@ class BotEvaluator:
         experiment_id: str,
         api_client: OCSAPIClient,
         input_column: str,
-        expected_output_column: str,
+        scenario_column: str,
+        expected_category_column: str,
+        expected_response_column: str,
         session_state_column: str,
         participant_data_column: str,
         history_column: str,
@@ -347,7 +370,9 @@ class BotEvaluator:
         """Evaluate a single row with semaphore control"""
         async with semaphore:
             input_text = str(row[input_column])
-            expected_output = self._get_optional_column(df, expected_output_column, row)
+            scenario_text = self._get_optional_column(df, scenario_column, row)
+            expected_category = self._get_optional_column(df, expected_category_column, row)
+            expected_response = self._get_optional_column(df, expected_response_column, row)
             session_state = self._get_optional_column(df, session_state_column, row, json.loads) or {}
             participant_data = self._get_optional_column(df, participant_data_column, row, json.loads) or {}
             history_data = self._get_optional_column(df, history_column, row)
@@ -372,18 +397,17 @@ class BotEvaluator:
                     history_data=history_data,
                 )
 
-                # Evaluate response
-                evaluation_input = input_text
-                if expected_output:
-                    evaluation_input += "\n\nExpected Output: {expected_output}"
-
-                evaluation = await self.evaluate_response(evaluation_input, bot_response, expected_output)
+                # Evaluate response using the new template format
+                evaluation = await self.evaluate_response(
+                    scenario_text, bot_response, expected_category, expected_response
+                )
 
                 result = EvaluationResult(
                     input_row_index=index,
                     input_text=input_text,
                     bot_response=bot_response,
-                    expected_response=expected_output,
+                    expected_category=expected_category or "",
+                    expected_response=expected_response or "",
                     evaluation_result=evaluation.result,
                     evaluation_reasoning=evaluation.reasoning,
                     response_time=response_time,
@@ -398,9 +422,11 @@ class BotEvaluator:
                 logger.error(f"Error processing row {index + 1}: {e}")
                 eval_result = self.output_schema.error(f"Processing failed: {str(e)}")
                 result = EvaluationResult(
+                    input_row_index=index,
                     input_text=input_text,
                     bot_response=f"ERROR: {str(e)}",
-                    expected_response=expected_output,
+                    expected_category=expected_category or "",
+                    expected_response=expected_response or "",
                     evaluation_result=eval_result.result,
                     evaluation_reasoning=eval_result.reasoning,
                     response_time=0.0,
@@ -441,12 +467,24 @@ async def main():
     parser.add_argument("--experiment-id", required=True, help="Experiment/chatbot ID")
     parser.add_argument("--api-key", required=True, help="OCS API key")
     parser.add_argument("--base-url", default="https://chatbots.dimagi.com", help="OCS base URL")
-    parser.add_argument("--input-column", default="input", help="CSV column name for input text")
+    parser.add_argument("--input-column", default="Input from the partcipant", help="CSV column name for input text")
     parser.add_argument(
-        "--expected-output-column",
-        default="expected_output",
+        "--scenario-column",
+        default="Scenario text",
         required=False,
-        help="CSV column name for expected output",
+        help="CSV column name for scenario description",
+    )
+    parser.add_argument(
+        "--expected-category-column",
+        default="Response category",
+        required=False,
+        help="CSV column name for expected category (Correct, Incorrect, etc.)",
+    )
+    parser.add_argument(
+        "--expected-response-column",
+        default="Expected Response",
+        required=False,
+        help="CSV column name for expected response text",
     )
     parser.add_argument(
         "--session-data-column", default="session_data", required=False, help="CSV column name for session data (JSON)"
@@ -489,7 +527,9 @@ async def main():
             experiment_id=args.experiment_id,
             api_client=api_client,
             input_column=args.input_column,
-            expected_output_column=args.expected_output_column,
+            scenario_column=args.scenario_column,
+            expected_category_column=args.expected_category_column,
+            expected_response_column=args.expected_response_column,
             session_state_column=args.session_data_column,
             participant_data_column=args.participant_data_column,
             history_column=args.history_column,
