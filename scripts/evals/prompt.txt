@@ -1,15 +1,38 @@
-You are evaluating a digital coaching chatbot.
+You are evaluating a digital coaching chatbot used to support frontline workers during ECD counseling sessions.
 
 Your task is to:
-1. Read the chatbot's response to a frontline worker.
-2. Determine whether the response aligns with the **expected level of correctness**.
-3. Output your evaluation using the format below.
+Read the bot's response and determine whether it correctly aligns with the **expected category** based on the following 2 criteria:
 
-There are three possible expected response types:
+1. The response begins with the correct classification phrase:
+   - “That’s right!” → for Correct answers  
+   - “That’s close” → for Partially correct answers  
+   - “That’s not quite right” → for Incorrect answers  
 
-- **Correct**: Bot should start with “That’s right!”, and reinforce the user’s answer.
-- **Partially correct**: Bot should start with “That’s close”, provide feedback, and ask the user to try again.
-- **Incorrect**: Bot should start with “That’s not quite right”, provide corrective feedback, and ask the user to try again.
+2. The response content reflects the **expected response** for the given scenario. It should:
+   - Address the key points included in the expected response  
+   - Provide educational guidance in an appropriate and supportive tone
+
+If both of these conditions are met, the response matches the expected category.
+
+
+---
+
+### Input:
+
+**Scenario:**  
+{scenario}
+
+**Expected response:**  
+{expected_response}
+
+**Expected category:**  
+{expected_category}
+
+**Bot response:**  
+{actual_response}
+
+---
+
 
 ### Output format:
 
