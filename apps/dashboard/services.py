@@ -83,11 +83,9 @@ class DashboardService:
 
         if tags:
             tags = [int(t) for t in tags]
-            chat_message_ct = ContentType.objects.get_for_model(ChatMessage)
             sessions = sessions.annotate(
                 has_tagged_messages=Exists(ChatMessage.objects.filter(chat=OuterRef("chat_id"), tags__id__in=tags))
             ).filter(has_tagged_messages=True)
-
             messages = messages.filter(tags__id__in=tags)
 
         return {

@@ -88,11 +88,11 @@ class DashboardFilterForm(forms.Form):
             ]
             self.fields["channels"].choices = platform_choices
             all_participants = Participant.objects.filter(team=team).values("id", "identifier")
-            self.fields["participants"].choices = [(str(p["id"]), p["identifier"]) for p in all_participants]
+            self.fields["participants"].choices = [(p["id"], p["identifier"]) for p in all_participants]
 
             tags = Tag.objects.filter(team=team).exclude(category=TagCategories.EXPERIMENT_VERSION)
             self.fields["tags"].choices = [
-                (str(t.id), t.name.split(":", 1)[1].strip() if ":" in t.name else t.name) for t in tags
+                (t.id, t.name.split(":", 1)[1].strip() if ":" in t.name else t.name) for t in tags
             ]
 
         # Set default dates if not provided
