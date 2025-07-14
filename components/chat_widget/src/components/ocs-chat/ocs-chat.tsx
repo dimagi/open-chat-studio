@@ -669,22 +669,6 @@ export class OcsChat {
                           </div>
                         </div>
                       ))}
-
-                      {/* Starter Questions */}
-                      {this.parsedStarterQuestions.length > 0 && (
-                        <div class="space-y-2">
-                          {this.parsedStarterQuestions.map((question, index) => (
-                            <div key={`starter-${index}`} class="flex justify-end">
-                              <button
-                                class="starter-question"
-                                onClick={() => this.handleStarterQuestionClick(question)}
-                              >
-                                {question}
-                              </button>
-                            </div>
-                          ))}
-                        </div>
-                      )}
                     </div>
                   )}
                   {/* Regular Chat Messages */}
@@ -740,6 +724,22 @@ export class OcsChat {
                       </div>
                     </div>
                   )}
+                </div>
+              )}
+
+              {/* Starter Questions */}
+              {this.sessionId && this.showStarterQuestions && this.messages.length === 0 && !this.isTyping && (
+                <div class="p-4 space-y-2">
+                  {this.parsedStarterQuestions.map((question, index) => (
+                    <div key={`starter-${index}`} class="flex justify-end">
+                      <button
+                        class="starter-question"
+                        onClick={() => this.handleStarterQuestionClick(question)}
+                      >
+                        {question}
+                      </button>
+                    </div>
+                  ))}
                 </div>
               )}
 
