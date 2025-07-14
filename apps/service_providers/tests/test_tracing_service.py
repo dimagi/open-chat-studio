@@ -195,3 +195,14 @@ class TestTracingService:
         # Test with an active tracer
         mock_tracer.trace = {"name": "test"}
         assert tracing_service._active_tracers == [mock_tracer]
+
+    def test_add_add_output_message_tags_to_trace(self, tracing_service, mock_tracer):
+        trace_name = "test_trace"
+        session_id = "test_session"
+        user_id = "test_user"
+
+        with tracing_service.trace(trace_name, session_id, user_id):
+            raw_tags = [("tag1", "categoryA"), ("tag2", "categoryB")]
+            flat_tags = [f"{category}:{tag}" for tag, category in raw_tags]
+            tracing_service.add_output_message_tags_to_trace(flat_tags)
+            assert mock_tracer.tags == flat_tags

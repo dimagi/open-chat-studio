@@ -156,6 +156,7 @@ class ExperimentSessionsTable(tables.Table):
     versions = columns.Column(
         verbose_name="Versions", accessor="experiment_versions_from_prefetched_data", orderable=False
     )
+    state = columns.Column(verbose_name="State", accessor="status", orderable=True)
     actions = actions.ActionsColumn(
         actions=[
             actions.Action(

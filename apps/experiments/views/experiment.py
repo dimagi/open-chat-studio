@@ -489,7 +489,8 @@ def base_single_experiment_view(request, team_slug, experiment_id, template_name
         "channel_list": channel_list,
         "allow_copy": not experiment.child_links.exists(),
         "date_range_options": DATE_RANGE_OPTIONS,
-        "filter_columns": ["participant", "last_message", "first_message", "tags", "versions", "channels"],
+        "filter_columns": ["participant", "last_message", "first_message", "tags", "versions", "channels", "state"],
+        "state_list": SessionStatus.for_chatbots(),
         **_get_events_context(experiment, team_slug, request.origin),
     }
     if active_tab != "chatbots":
@@ -1231,12 +1232,15 @@ def _experiment_chat_ui(request, embedded=False):
     )
 
 
-def _get_available_languages_for_chat(session):
+def _get_languages_for_chat(session):
     available_language_codes = session.chat.translated_languages
     available_languages = [
         choice for choice in LANGUAGE_CHOICES if choice[0] == "" or choice[0] in available_language_codes
     ]
-    return available_languages
+    translatable_languages = [
+        choice for choice in LANGUAGE_CHOICES if choice[0] != "" and choice[0] not in available_language_codes
+    ]
+    return available_languages, translatable_languages
 
 
 @experiment_session_view()
@@ -1250,10 +1254,26 @@ def experiment_session_messages_view(request, team_slug: str, experiment_id: uui
     language = request.GET.get("language", "")
     show_original_translation = request.GET.get("show_original_translation") == "on"
     page_size = 100
-    messages_queryset = ChatMessage.objects.filter(chat=session.chat).all().order_by("created_at")
-    available_languages = _get_available_languages_for_chat(session)
+    messages_queryset = (
+        ChatMessage.objects.filter(chat=session.chat)
+        .order_by("created_at")
+        .prefetch_related(
+            Prefetch(
+                "tagged_items",
+                queryset=CustomTaggedItem.objects.select_related("tag", "user"),
+                to_attr="prefetched_tagged_items",
+            )
+        )
+    )
+
+    available_languages, translatable_languages = _get_languages_for_chat(session)
     has_missing_translations = False
-    translate_form = TranslateMessagesForm(team=request.team)
+    translate_form_all = TranslateMessagesForm(
+        team=request.team, translatable_languages=translatable_languages, is_translate_all_form=True
+    )
+    translate_form_remaining = TranslateMessagesForm(
+        team=request.team, translatable_languages=translatable_languages, is_translate_all_form=False
+    )
     default_message = "(message generated after last translation)"
 
     if search:
@@ -1290,7 +1310,8 @@ def experiment_session_messages_view(request, team_slug: str, experiment_id: uui
         "available_tags": [t.name for t in Tag.objects.filter(team__slug=team_slug, is_system_tag=False).all()],
         "has_missing_translations": has_missing_translations,
         "show_original_translation": show_original_translation,
-        "translate_form": translate_form,
+        "translate_form_all": translate_form_all,
+        "translate_form_remaining": translate_form_remaining,
         "default_message": default_message,
     }
 
@@ -1307,9 +1328,13 @@ def translate_messages_view(request, team_slug: str, experiment_id: uuid.UUID, s
     from apps.analysis.translation import translate_messages_with_llm
 
     session = request.experiment_session
-    language = request.POST.get("language")
     provider_model = request.POST.get("provider_model", "")
     valid_languages = [choice[0] for choice in LANGUAGE_CHOICES if choice[0]]
+    translate_all = request.POST.get("translate_all", "false") == "true"
+    if translate_all:
+        language = request.POST.get("target_language")
+    else:
+        language = request.POST.get("language")
 
     if not language or language not in valid_languages:
         messages.error(request, "No language selected for translation.")
@@ -1355,7 +1380,8 @@ def redirect_to_messages_view(request, session):
     params = {}
     search = request.POST.get("search", "").strip()
     show_original_translation = request.POST.get("show_original_translation", "")
-    params["language"] = request.POST.get("language", "")
+    language = request.POST.get("language", "")
+    params["language"] = language or request.POST.get("target_language", "")
     if search:
         params["search"] = search
     if show_original_translation:

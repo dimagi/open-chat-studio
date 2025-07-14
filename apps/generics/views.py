@@ -2,13 +2,14 @@ import json
 
 from django import views
 from django.contrib import messages
+from django.db.models import Prefetch
 from django.http import HttpResponseRedirect
 from django.shortcuts import get_object_or_404, redirect, render
 from django.template.response import TemplateResponse
 from django.urls import reverse
 from django.utils.translation import gettext
 
-from apps.annotations.models import Tag
+from apps.annotations.models import CustomTaggedItem, Tag
 from apps.experiments.decorators import experiment_session_view
 from apps.experiments.models import ExperimentSession
 from apps.files.forms import get_file_formset
@@ -118,7 +119,13 @@ def generic_home(request, team_slug: str, title: str, table_url_name: str, new_u
 def render_session_details(
     request, team_slug, experiment_id, session_id, active_tab, template_path, session_type="Experiment"
 ):
-    session = request.experiment_session
+    session = ExperimentSession.objects.prefetch_related(
+        Prefetch(
+            "chat__tagged_items",
+            queryset=CustomTaggedItem.objects.select_related("tag", "user"),
+            to_attr="prefetched_tagged_items",
+        )
+    ).get(external_id=session_id, team__slug=team_slug)
     experiment = request.experiment
 
     return TemplateResponse(
