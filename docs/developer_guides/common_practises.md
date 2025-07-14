@@ -1,4 +1,4 @@
-# Standard Practices
+# Common Practices
 
 ## Rendering Tags for Tagged Objects
 
