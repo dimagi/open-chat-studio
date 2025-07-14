@@ -146,7 +146,12 @@ export class OcsChat {
   private parseJSONProp(propValue: string | undefined, propName: string): string[] {
     try {
       if (propValue) {
-        return JSON.parse(propValue);
+        try {
+          return JSON.parse(propValue);
+        } catch {
+          const fixedValue = propValue.replace(/'/g, '"');
+          return JSON.parse(fixedValue);
+        }
       }
     } catch (error) {
       console.warn(`Failed to parse ${propName}:`, error);
