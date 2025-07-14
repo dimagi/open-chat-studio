@@ -293,16 +293,34 @@ class PipelineBot:
         save_input_to_history=True,
         pipeline=None,
     ) -> ChatMessage:
+        if save_input_to_history and save_run_to_history:
+            self._save_human_input_message(input_state)
         pipeline_to_use = pipeline or self.experiment.pipeline
         output = self._run_pipeline(input_state, pipeline_to_use)
 
         if save_run_to_history and self.session is not None:
             output = self._process_interrupts(output)
-            result = self._save_outputs(input_state, output, save_input_to_history)
+            result = self._save_outputs(input_state, output)
         else:
             result = ChatMessage(content=output)
         self._process_intents(output)
         return result
+
+    def _save_human_input_message(self, input_state: PipelineState):
+        metadata = {}
+        if input_state.get("input_message_metadata"):
+            metadata.update(input_state.input_message_metadata)
+
+        if self.trace_service:
+            trace_metadata = self.trace_service.get_trace_metadata()
+            if trace_metadata:
+                metadata.update(trace_metadata)
+
+        self._save_message_to_history(
+            input_state["messages"][-1],
+            ChatMessageType.HUMAN,
+            metadata=metadata
+        )
 
     def _get_input_state(self, attachments: list["Attachment"], user_input: str):
         attachments = attachments or []
@@ -356,16 +374,13 @@ class PipelineBot:
                 tags.append((TagCategories.SAFETY_LAYER_RESPONSE, tag_name))
         return output
 
-    def _save_outputs(self, input_state, output, save_input_to_history, extra_tags=None):
+    def _save_outputs(self, input_state, output, extra_tags=None):
         input_metadata = output.get("input_message_metadata", {})
         output_metadata = output.get("output_message_metadata", {})
         trace_metadata = self.trace_service.get_trace_metadata() if self.trace_service else None
         if trace_metadata:
             input_metadata.update(trace_metadata)
             output_metadata.update(trace_metadata)
-
-        if save_input_to_history:
-            self._save_message_to_history(input_state["messages"][-1], ChatMessageType.HUMAN, metadata=input_metadata)
 
         ai_message = self._save_message_to_history(
             output["messages"][-1],
