@@ -43,8 +43,8 @@ class DashboardService:
         end_date: datetime | None = None,
         experiment_ids: list[int] | None = None,
         platform_names: list[str] | None = None,
-        participant_identifiers: list[str] | None = None,
-        tags: list[str] | None = None,
+        participant_ids: list[str] | None = None,
+        tag_ids: list[str] | None = None,
     ) -> dict[str, Any]:
         """Get base querysets with common filters applied"""
 
@@ -76,13 +76,13 @@ class DashboardService:
             sessions = sessions.filter(experiment_channel__platform__in=platform_names)
             messages = messages.filter(chat__experiment_session__experiment_channel__platform__in=platform_names)
 
-        if participant_identifiers:
-            participants = participants.filter(id__in=participant_identifiers).distinct()
-            sessions = sessions.filter(participant__id__in=participant_identifiers)
-            messages = messages.filter(chat__experiment_session__participant__id__in=participant_identifiers)
+        if participant_ids:
+            participants = participants.filter(id__in=participant_ids)
+            sessions = sessions.filter(participant__id__in=participant_ids)
+            messages = messages.filter(chat__experiment_session__participant__id__in=participant_ids)
 
-        if tags:
-            tags = [int(t) for t in tags]
+        if tag_ids:
+            tags = [int(t) for t in tag_ids]
             sessions = sessions.annotate(
                 has_tagged_messages=Exists(ChatMessage.objects.filter(chat=OuterRef("chat_id"), tags__id__in=tags))
             ).filter(has_tagged_messages=True)

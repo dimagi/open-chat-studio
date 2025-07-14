@@ -158,10 +158,10 @@ class DashboardFilterForm(forms.Form):
             params["platform_names"] = data["channels"]
 
         if data.get("participants"):
-            params["participant_identifiers"] = data["participants"]
+            params["participant_ids"] = data["participants"]
 
         if data.get("tags"):
-            params["tags"] = data["tags"]
+            params["tag_ids"] = data["tags"]
 
         return params
 
