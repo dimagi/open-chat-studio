@@ -406,7 +406,6 @@ class DashboardService:
         querysets = self.get_filtered_queryset_base(**filters)
 
         # Get tags used in messages within the date range
-        from django.contrib.contenttypes.models import ContentType
 
         from apps.annotations.models import CustomTaggedItem
 
