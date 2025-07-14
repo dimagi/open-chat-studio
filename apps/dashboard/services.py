@@ -82,11 +82,10 @@ class DashboardService:
             messages = messages.filter(chat__experiment_session__participant__id__in=participant_ids)
 
         if tag_ids:
-            tags = [int(t) for t in tag_ids]
             sessions = sessions.annotate(
-                has_tagged_messages=Exists(ChatMessage.objects.filter(chat=OuterRef("chat_id"), tags__id__in=tags))
+                has_tagged_messages=Exists(ChatMessage.objects.filter(chat=OuterRef("chat_id"), tags__id__in=tag_ids))
             ).filter(has_tagged_messages=True)
-            messages = messages.filter(tags__id__in=tags)
+            messages = messages.filter(tags__id__in=tag_ids)
 
         return {
             "experiments": experiments,
