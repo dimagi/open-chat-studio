@@ -67,20 +67,6 @@ class DashboardFilterForm(forms.Form):
     def __init__(self, *args, team=None, **kwargs):
         super().__init__(*args, **kwargs)
 
-        if self.data:
-            if hasattr(self.data, "_mutable") and not self.data._mutable:
-                self.data._mutable = True
-
-            for key in ["experiments", "channels"]:
-                if key in self.data:
-                    values = self.data.getlist(key)
-                    if len(values) == 1 and "," in values[0]:
-                        values = values[0].split(",")
-                    self.data.setlist(key, values)
-
-            if hasattr(self.data, "_mutable"):
-                self.data._mutable = False
-
         if team:
             # Filter experiments and channels by team
             self.fields["experiments"].queryset = Experiment.objects.filter(
