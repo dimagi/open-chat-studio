@@ -13,8 +13,8 @@ def set_generate_citations_true(apps, schema_editor):
         nodes_to_update.append(node)
         
         if idx % 100 == 0:
-            nodes_to_update = []
             Node.objects.bulk_update(nodes_to_update, ['params'])
+            nodes_to_update = []
 
 
 class Migration(migrations.Migration):
