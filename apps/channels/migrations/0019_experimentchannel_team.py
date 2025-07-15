@@ -7,7 +7,7 @@ import django.db.models.deletion
 class Migration(migrations.Migration):
     dependencies = [
         ("teams", "0006_remove_invitation_role_remove_membership_role"),
-        ("channels", "0018_alter_experimentchannel_platform"),
+        ("bot_channels", "0018_alter_experimentchannel_platform"),
     ]
 
     operations = [

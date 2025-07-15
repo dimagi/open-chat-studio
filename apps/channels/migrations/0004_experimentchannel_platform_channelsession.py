@@ -7,7 +7,7 @@ import django.db.models.deletion
 class Migration(migrations.Migration):
     dependencies = [
         ("experiments", "0023_syntheticvoice_experiment_synthetic_voice"),
-        ("channels", "0003_alter_experimentchannel_extra_data"),
+        ("bot_channels", "0003_alter_experimentchannel_extra_data"),
     ]
 
     operations = [
@@ -30,7 +30,7 @@ class Migration(migrations.Migration):
                         null=True,
                         on_delete=django.db.models.deletion.CASCADE,
                         related_name="channel_sessions",
-                        to="channels.experimentchannel",
+                        to="bot_channels.experimentchannel",
                     ),
                 ),
                 (
