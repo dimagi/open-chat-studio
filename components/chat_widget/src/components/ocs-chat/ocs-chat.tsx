@@ -124,7 +124,6 @@ export class OcsChat {
   private textareaRef?: HTMLTextAreaElement;
   private chatWindowRef?: HTMLDivElement;
 
-  private defaultOcsLogo = '/favicon.ico';
 
   componentWillLoad() {
     this.loaded = this.visible;
