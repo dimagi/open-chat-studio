@@ -69,9 +69,14 @@ export class OcsChat {
   @Prop() apiBaseUrl?: string = "https://chatbots.dimagi.com";
 
   /**
-   * The text to display on the button.
+   * The text to display on the button (deprecated, use iconUrl for icon button or set to non-empty string to use text button).
    */
-  @Prop() buttonText: string = "Chat";
+  @Prop() buttonText?: string;
+
+  /**
+   * URL of the icon to display on the button. If not provided, uses the default OCS logo.
+   */
+  @Prop() iconUrl?: string;
 
   /**
    * Whether the chat widget is visible on load.
@@ -118,6 +123,8 @@ export class OcsChat {
   private messageListRef?: HTMLDivElement;
   private textareaRef?: HTMLTextAreaElement;
   private chatWindowRef?: HTMLDivElement;
+
+  private defaultOcsLogo = '/favicon.ico';
 
   componentWillLoad() {
     this.loaded = this.visible;
@@ -593,6 +600,48 @@ export class OcsChat {
     this.initializePosition();
   };
 
+  private getDefaultIconUrl(): string {
+    return `${this.getApiBaseUrl()}/static/images/favicons/favicon.svg`;
+  }
+  private renderButton() {
+    const hasText = this.buttonText && this.buttonText.trim();
+    const hasCustomIcon = this.iconUrl && this.iconUrl.trim();
+    const iconSrc = hasCustomIcon ? this.iconUrl : this.getDefaultIconUrl();
+
+    if (hasText) {
+      return (
+        <button
+          class="chat-btn-with-icon"
+          onClick={() => this.load()}
+          aria-label={`Open chat - ${this.buttonText}`}
+          title={this.buttonText}
+        >
+          <img
+            src={iconSrc}
+            alt=""
+            class="chat-btn-icon"
+          />
+          <span class="chat-btn-text">{this.buttonText}</span>
+        </button>
+      );
+    } else {
+      return (
+        <button
+          class="chat-icon-btn"
+          onClick={() => this.load()}
+          aria-label="Open chat"
+          title="Open chat"
+        >
+          <img
+            src={iconSrc}
+            alt="Chat"
+            class="chat-icon"
+          />
+        </button>
+      );
+    }
+  }
+
   render() {
     if (this.error) {
       return (
@@ -604,7 +653,7 @@ export class OcsChat {
 
     return (
       <Host>
-        <button class="btn" onClick={() => this.load()}>{this.buttonText}</button>
+        {this.renderButton()}
         {this.visible && (
           <div
             ref={(el) => this.chatWindowRef = el}

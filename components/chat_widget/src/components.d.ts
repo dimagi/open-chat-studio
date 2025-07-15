@@ -12,9 +12,9 @@ export namespace Components {
          */
         "apiBaseUrl"?: string;
         /**
-          * The text to display on the button.
+          * The text to display on the button (deprecated, use iconUrl for icon button or set to non-empty string to use text button).
          */
-        "buttonText": string;
+        "buttonText"?: string;
         /**
           * The ID of the chatbot to connect to.
          */
@@ -23,6 +23,10 @@ export namespace Components {
           * Whether the chat widget is initially expanded.
          */
         "expanded": boolean;
+        /**
+          * URL of the icon to display on the button. If not provided, uses the default OCS logo.
+         */
+        "iconUrl"?: string;
         /**
           * The initial position of the chat widget on the screen.
          */
@@ -59,7 +63,7 @@ declare namespace LocalJSX {
          */
         "apiBaseUrl"?: string;
         /**
-          * The text to display on the button.
+          * The text to display on the button (deprecated, use iconUrl for icon button or set to non-empty string to use text button).
          */
         "buttonText"?: string;
         /**
@@ -70,6 +74,10 @@ declare namespace LocalJSX {
           * Whether the chat widget is initially expanded.
          */
         "expanded"?: boolean;
+        /**
+          * URL of the icon to display on the button. If not provided, uses the default OCS logo.
+         */
+        "iconUrl"?: string;
         /**
           * The initial position of the chat widget on the screen.
          */
