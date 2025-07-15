@@ -239,7 +239,7 @@ class EndSessionTool(CustomBaseTool):
         "New messages will result in a new session being created."
     )
 
-    def action(self):
+    def action(self, *args, **kwargs):
         from apps.pipelines.nodes.base import Intents
 
         self.tool_callbacks.register_intent(Intents.END_SESSION)
