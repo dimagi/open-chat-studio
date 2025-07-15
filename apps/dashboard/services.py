@@ -195,33 +195,37 @@ class DashboardService:
 
         if not cached_data:
             querysets = self.get_filtered_queryset_base(**cache_filters)
-            experiments = (
-                querysets["experiments"]
+            # Pre-compute session stats
+            # The alternative for better performance would be to use a raw SQL Query
+            session_stats = (
+                querysets["sessions"]
+                .order_by()
+                .values("experiment_id")
                 .annotate(
-                    participants_count=Count(
-                        "sessions__participant", filter=Q(sessions__in=querysets["sessions"]), distinct=True
-                    ),
-                    sessions_count=Count("sessions", filter=Q(sessions__in=querysets["sessions"]), distinct=True),
-                    messages_count=Count(
-                        "sessions__chat__messages",
-                        filter=Q(sessions__chat__messages__in=querysets["messages"]),
-                        distinct=True,
-                    ),
+                    participants_count=Count("participant", distinct=True),
+                    sessions_count=Count("id", distinct=True),
+                    messages_count=Count("chat__messages", distinct=True),
                 )
-                .prefetch_related(
-                    Prefetch(
-                        "sessions",
-                        queryset=querysets["sessions"].filter(ended_at__isnull=False).only("created_at", "ended_at"),
-                        to_attr="prefetched_sessions",
-                    )
+            )
+
+            stats_dict = {stat["experiment_id"]: stat for stat in session_stats}
+
+            experiments_base = querysets["experiments"].prefetch_related(
+                Prefetch(
+                    "sessions",
+                    queryset=querysets["sessions"].filter(ended_at__isnull=False).only("created_at", "ended_at"),
+                    to_attr="prefetched_sessions",
                 )
             )
 
             performance_data = []
-            for experiment in experiments:
-                participants_count = experiment.participants_count
-                sessions_count = experiment.sessions_count
-                messages_count = experiment.messages_count
+            for experiment in experiments_base:
+                stats = stats_dict.get(
+                    experiment.id, {"participants_count": 0, "sessions_count": 0, "messages_count": 0}
+                )
+                participants_count = stats["participants_count"]
+                sessions_count = stats["sessions_count"]
+                messages_count = stats["messages_count"]
                 exp_sessions = getattr(experiment, "prefetched_sessions", [])
                 completed_sessions = [s for s in exp_sessions if s.ended_at]
                 durations = [
