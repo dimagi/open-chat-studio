@@ -2,7 +2,7 @@ from datetime import datetime, timedelta
 from typing import Any
 
 from django.contrib.contenttypes.models import ContentType
-from django.db.models import Avg, Count, Exists, DurationField, ExpressionWrapper, F, Max, OuterRef, Q
+from django.db.models import Avg, Count, DurationField, Exists, ExpressionWrapper, F, Max, OuterRef, Q
 from django.db.models.functions import TruncDate, TruncHour, TruncMonth, TruncWeek
 from django.urls import reverse
 from django.utils import timezone
@@ -86,7 +86,6 @@ class DashboardService:
                 has_tagged_messages=Exists(ChatMessage.objects.filter(chat=OuterRef("chat_id"), tags__id__in=tag_ids))
             ).filter(has_tagged_messages=True)
             messages = messages.filter(tags__id__in=tag_ids)
-
         return {
             "experiments": experiments,
             "sessions": sessions,
