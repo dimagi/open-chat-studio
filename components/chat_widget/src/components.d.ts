@@ -12,6 +12,10 @@ export namespace Components {
          */
         "apiBaseUrl"?: string;
         /**
+          * The shape of the chat button. 'default' maintains current behavior, 'round' makes it circular, 'square' makes it rectangular.
+         */
+        "buttonShape": 'default' | 'round' | 'square';
+        /**
           * The text to display on the button (deprecated, use iconUrl for icon button or set to non-empty string to use text button).
          */
         "buttonText"?: string;
@@ -62,6 +66,10 @@ declare namespace LocalJSX {
           * The base URL for the API (defaults to current origin).
          */
         "apiBaseUrl"?: string;
+        /**
+          * The shape of the chat button. 'default' maintains current behavior, 'round' makes it circular, 'square' makes it rectangular.
+         */
+        "buttonShape"?: 'default' | 'round' | 'square';
         /**
           * The text to display on the button (deprecated, use iconUrl for icon button or set to non-empty string to use text button).
          */

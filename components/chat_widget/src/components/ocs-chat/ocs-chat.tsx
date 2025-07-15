@@ -79,6 +79,11 @@ export class OcsChat {
   @Prop() iconUrl?: string;
 
   /**
+   * The shape of the chat button. 'default' maintains current behavior, 'round' makes it circular, 'square' makes it rectangular.
+   */
+  @Prop() buttonShape: 'default' | 'round' | 'square' = 'default';
+
+  /**
    * Whether the chat widget is visible on load.
    */
   @Prop({ mutable: true }) visible: boolean = false;
@@ -602,15 +607,40 @@ export class OcsChat {
   private getDefaultIconUrl(): string {
     return `${this.getApiBaseUrl()}/static/images/favicons/favicon.svg`;
   }
+
+  private getButtonClasses(): string {
+    const hasText = this.buttonText && this.buttonText.trim();
+
+    if (hasText) {
+      switch (this.buttonShape) {
+        case 'round':
+          return 'chat-btn-with-icon chat-btn-round';
+        case 'square':
+          return 'chat-btn-with-icon chat-btn-square';
+        default:
+          return 'chat-btn-with-icon';
+      }
+    } else {
+      switch (this.buttonShape) {
+        case 'square':
+          return 'chat-icon-btn chat-icon-btn-square';
+        case 'round':
+        default:
+          return 'chat-icon-btn';
+      }
+    }
+  }
+
   private renderButton() {
     const hasText = this.buttonText && this.buttonText.trim();
     const hasCustomIcon = this.iconUrl && this.iconUrl.trim();
     const iconSrc = hasCustomIcon ? this.iconUrl : this.getDefaultIconUrl();
+    const buttonClasses = this.getButtonClasses();
 
     if (hasText) {
       return (
         <button
-          class="chat-btn-with-icon"
+          class={buttonClasses}
           onClick={() => this.load()}
           aria-label={`Open chat - ${this.buttonText}`}
           title={this.buttonText}
@@ -626,7 +656,7 @@ export class OcsChat {
     } else {
       return (
         <button
-          class="chat-icon-btn"
+          class={buttonClasses}
           onClick={() => this.load()}
           aria-label="Open chat"
           title="Open chat"

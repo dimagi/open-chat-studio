@@ -91,12 +91,22 @@ textarea {
   color: var(--button-text-color, #111827);
   z-index: var(--chat-z-index, 50);
   min-height: 56px;
+  bottom: 1rem;
+  right: 1rem;
 }
 
 .chat-btn-with-icon:hover {
   background-color: var(--button-background-color-hover, #f3f4f6);
   color: var(--button-text-color-hover, #1d4ed8);
   box-shadow: 0 10px 25px rgba(0, 0, 0, 0.15);
+}
+
+.chat-btn-round {
+  @apply rounded-full;
+}
+
+.chat-btn-square {
+  @apply rounded-lg;
 }
 
 .chat-btn-icon {
@@ -107,9 +117,8 @@ textarea {
   @apply text-sm font-medium whitespace-nowrap;
 }
 
-/* Icon only button (circular) */
 .chat-icon-btn {
-  @apply fixed bottom-4 right-4 p-3 rounded-full shadow-lg border-0 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2 transition-all duration-200 ease-in-out transform hover:scale-105;
+  @apply fixed p-3 rounded-full shadow-lg border-0 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2 transition-all duration-200 ease-in-out transform hover:scale-105;
   background-color: var(--button-background-color, white);
   width: 60px;
   height: 60px;
@@ -119,6 +128,10 @@ textarea {
 .chat-icon-btn:hover {
   background-color: var(--button-background-color-hover, #f3f4f6);
   box-shadow: 0 10px 25px rgba(0, 0, 0, 0.15);
+}
+
+.chat-icon-btn-square {
+  @apply rounded-lg;
 }
 
 .chat-icon {
@@ -133,7 +146,7 @@ textarea {
   }
 
   .chat-btn-with-icon {
-    @apply bottom-6 right-6 px-3 py-2;
+    @apply px-3 py-2;
     min-height: 52px;
   }
 
