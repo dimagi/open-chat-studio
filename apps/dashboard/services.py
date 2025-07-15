@@ -315,12 +315,14 @@ class DashboardService:
         most_active = [self._format_participant_data(p) for p in participant_stats[:limit]]
 
         # Session length distribution
-        sessions = querysets["sessions"].filter(ended_at__isnull=False).values_list("created_at", "ended_at")
-        session_lengths = []
-        for created_at, ended_at in sessions:
-            if ended_at and created_at:
-                duration = (ended_at - created_at).total_seconds() / 60
-                session_lengths.append(duration)  # in minutes
+        session_lengths = (
+            querysets["sessions"]
+            .order_by()
+            .filter(ended_at__isnull=False)
+            .annotate(duration=ExpressionWrapper(F("ended_at") - F("created_at"), output_field=DurationField()))
+        ).values_list("duration", flat=True)
+
+        session_lengths = [duration.total_seconds() / 60 for duration in session_lengths]
 
         # Create histogram bins
         session_length_distribution = self._create_histogram(session_lengths, bins=10)
