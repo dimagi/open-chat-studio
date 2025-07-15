@@ -210,13 +210,19 @@ class DashboardService:
 
             stats_dict = {stat["experiment_id"]: stat for stat in session_stats}
 
+            date_filter = Q(sessions__chat__messages__created_at__gte=querysets["start_date"]) & Q(
+                sessions__chat__messages__created_at__lte=querysets["end_date"]
+            )
+
             experiments_base = querysets["experiments"].annotate(
-                completed_sessions_count=Count("sessions", filter=Q(sessions__ended_at__isnull=False), distinct=True),
+                completed_sessions_count=Count(
+                    "sessions", filter=Q(sessions__ended_at__isnull=False) & date_filter, distinct=True
+                ),
                 average_session_duration=Avg(
                     ExpressionWrapper(
                         F("sessions__ended_at") - F("sessions__created_at"), output_field=DurationField()
                     ),
-                    filter=Q(sessions__ended_at__isnull=False),
+                    filter=Q(sessions__ended_at__isnull=False) & date_filter,
                 ),
             )
 
