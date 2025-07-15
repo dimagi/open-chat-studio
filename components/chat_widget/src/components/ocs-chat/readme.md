@@ -17,8 +17,8 @@ For more information, see the [Open Chat Studio documentation](https://docs.open
 | `expanded`               | `expanded`     | Whether the chat widget is initially expanded.         | `boolean`                       | `false`                         |
 | `position`               | `position`     | The initial position of the chat widget on the screen. | `"center" \| "left" \| "right"` | `'right'`                       |
 | `visible`                | `visible`      | Whether the chat widget is visible on load.            | `boolean`                       | `false`                         |
-
-
+| `welcome-messages`       | `welcome-messages` | JSON array of messages to display when chat opens      | `string`                    | `""`                            |
+| `starter-questions`      | `starter-questions` | JSON array of clickable starter questions for users.   | `string`                   | `""`                            |
 ## CSS Custom Properties
 
 | Name                              | Description                      |
