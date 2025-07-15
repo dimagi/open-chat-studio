@@ -59,7 +59,8 @@ function dashboard() {
             channelBreakdown: false,
             botPerformance: false,
             userEngagement: false,
-            tagAnalytics: false
+            tagAnalytics: false,
+            averageResponseTime: false
         },
         
         activeFilterId: null,
@@ -319,7 +320,8 @@ function dashboard() {
                 this.loadChannelBreakdownChart(),
                 this.loadBotPerformanceData(),
                 this.loadUserEngagementData(),
-                this.loadTagAnalytics()
+                this.loadTagAnalytics(),
+                this.loadAverageResponseTimeChart()
             ]);
         },
         
@@ -503,6 +505,21 @@ function dashboard() {
             } catch (error) {
                 console.error('Error loading saved filter:', error);
                 this.showNotification('Error loading filter', 'error');
+            }
+        },
+
+        async loadAverageResponseTimeChart() {
+            this.setLoadingState('averageResponseTime', true);
+            try {
+                const data = await this.apiRequest('api/average-response-time/');
+                if (window.chartManager) {
+                    window.chartManager.renderAverageResponseTimeChart(data);
+                }
+            } catch (error) {
+                console.error('Error loading avg response time:', error);
+                this.showChartError('averageResponseTimeChart', 'Failed to load average response time');
+            } finally {
+                this.setLoadingState('averageResponseTime', false);
             }
         },
         
