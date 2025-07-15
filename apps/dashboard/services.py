@@ -1,7 +1,7 @@
 from datetime import datetime, timedelta
 from typing import Any
 
-from django.db.models import Count, Max, Prefetch, Q
+from django.db.models import Avg, Count, DurationField, ExpressionWrapper, F, Max, Q
 from django.db.models.functions import TruncDate, TruncHour, TruncMonth, TruncWeek
 from django.urls import reverse
 from django.utils import timezone
@@ -210,12 +210,14 @@ class DashboardService:
 
             stats_dict = {stat["experiment_id"]: stat for stat in session_stats}
 
-            experiments_base = querysets["experiments"].prefetch_related(
-                Prefetch(
-                    "sessions",
-                    queryset=querysets["sessions"].filter(ended_at__isnull=False).only("created_at", "ended_at"),
-                    to_attr="prefetched_sessions",
-                )
+            experiments_base = querysets["experiments"].annotate(
+                completed_sessions_count=Count("sessions", filter=Q(sessions__ended_at__isnull=False), distinct=True),
+                average_session_duration=Avg(
+                    ExpressionWrapper(
+                        F("sessions__ended_at") - F("sessions__created_at"), output_field=DurationField()
+                    ),
+                    filter=Q(sessions__ended_at__isnull=False),
+                ),
             )
 
             performance_data = []
@@ -226,15 +228,13 @@ class DashboardService:
                 participants_count = stats["participants_count"]
                 sessions_count = stats["sessions_count"]
                 messages_count = stats["messages_count"]
-                exp_sessions = getattr(experiment, "prefetched_sessions", [])
-                completed_sessions = [s for s in exp_sessions if s.ended_at]
-                durations = [
-                    (s.ended_at - s.created_at).total_seconds() / 60
-                    for s in completed_sessions
-                    if s.ended_at and s.created_at
-                ]
-                avg_duration = sum(durations) / len(durations) if durations else 0
-                completion_rate = (len(completed_sessions) / sessions_count) if sessions_count else 0
+                completed_sessions = experiment.completed_sessions_count
+                avg_duration = (
+                    experiment.average_session_duration.total_seconds() / 60
+                    if experiment.average_session_duration
+                    else 0
+                )
+                completion_rate = (completed_sessions / sessions_count) if sessions_count else 0
 
                 experiment_url = reverse(
                     "chatbots:single_chatbot_home",
