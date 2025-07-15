@@ -316,11 +316,7 @@ class PipelineBot:
             if trace_metadata:
                 metadata.update(trace_metadata)
 
-        self._save_message_to_history(
-            input_state["messages"][-1],
-            ChatMessageType.HUMAN,
-            metadata=metadata
-        )
+        self._save_message_to_history(input_state["messages"][-1], ChatMessageType.HUMAN, metadata=metadata)
 
     def _get_input_state(self, attachments: list["Attachment"], user_input: str):
         attachments = attachments or []
