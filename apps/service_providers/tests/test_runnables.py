@@ -11,7 +11,9 @@ from apps.annotations.models import TagCategories
 from apps.chat.models import Chat, ChatMessage, ChatMessageType
 from apps.custom_actions.models import CustomAction, CustomActionOperation
 from apps.experiments.models import AgentTools
+from apps.files.models import File
 from apps.service_providers.llm_service.history_managers import ExperimentHistoryManager
+from apps.service_providers.llm_service.prompt_context import PromptTemplateContext
 from apps.service_providers.llm_service.runnables import (
     AgentLLMChat,
     ChainOutput,
@@ -374,3 +376,50 @@ def test_cited_files_are_saved_in_metadata(session):
     # Assert that the file id is saved as a citation in the metadata of the AI message
     ai_message = session.chat.messages.get(message_type=ChatMessageType.AI)
     assert ai_message.metadata == {"cited_files": [file.id]}
+
+
+@pytest.mark.django_db()
+@pytest.mark.parametrize("expect_citations", [True, False])
+def test_citation_handling(expect_citations, session):
+    """
+    Test that references are included in the output when expected. When we do not expect file references, any citation
+    tags should be stripped and we should not see any file references in the output.
+    """
+    file1 = FileFactory(id=123, name="document1.pdf", team=session.team)
+    file2 = FileFactory(id=456, name="document2.txt", team=session.team)
+
+    # Mock the LLM response with citations
+    llm_response_text = "This is a fact <CIT 123 />. Another fact <CIT 456 />."
+
+    # Create a mock LLM service that returns the response with citations
+    llm_service = build_fake_llm_service(responses=[llm_response_text], token_counts=[30, 20])
+    session.experiment.get_llm_service = lambda: llm_service
+
+    adapter = ChatAdapter(
+        session=session,
+        provider_model_name="",
+        llm_service=llm_service,
+        temperature=0.7,
+        prompt_text="You are a helpful assistant",
+        max_token_limit=1000,
+        template_context=PromptTemplateContext(session=session),
+        expect_citations=expect_citations,
+    )
+
+    # Create runnable and invoke
+    history_manager = _get_history_manager(session)
+    runnable = SimpleLLMChat(adapter=adapter, history_manager=history_manager)
+
+    with patch.object(runnable, "_get_cited_files") as _get_cited_files:
+        _get_cited_files.return_value = [file1, file2]
+        result = runnable.invoke("Tell me about the documents")
+
+    if expect_citations:
+        # Quick check to see if references are included
+        assert "This is a fact [^1]. Another fact [^2]" in result.output
+        # Make sure the files are attached to the chat
+        assert File.objects.filter(chatattachment__chat=session.chat).exists() is True
+    else:
+        assert result.output == "This is a fact . Another fact ."
+        # Make sure the files are NOT attached to the chat
+        assert File.objects.filter(chatattachment__chat=session.chat).exists() is False

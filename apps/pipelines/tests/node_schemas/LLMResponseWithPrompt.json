@@ -119,6 +119,13 @@
       "ui:widget": "range",
       "type": "integer"
     },
+    "generate_citations": {
+      "default": true,
+      "description": "Allow files from this collection to be referenced in LLM responses and downloaded by users",
+      "title": "Generate Citations",
+      "type": "boolean",
+      "ui:widget": "toggle"
+    },
     "tools": {
       "description": "The tools to enable for the bot",
       "items": {
