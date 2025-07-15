@@ -131,7 +131,11 @@ class PipelineStartAction(EventActionHandlerBase):
         elif input_type == PipelineEventInputs.HISTORY_LAST_SUMMARY:
             messages = session.chat.get_langchain_messages_until_marker(marker=PipelineChatHistoryModes.SUMMARIZE)
         elif input_type == PipelineEventInputs.LAST_MESSAGE:
-            messages = [session.chat.messages.last().to_langchain_message()]
+            last_message = session.chat.messages.last()
+            if last_message:
+                messages = [last_message.to_langchain_message()]
+            else:
+                messages = []
 
         input = "\n".join(f"{message.type}: {message.content}" for message in messages)
         state = PipelineState(messages=[input], experiment_session=session)

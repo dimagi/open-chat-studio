@@ -219,18 +219,18 @@ def _pipeline_node_parameter_values(team, llm_providers, llm_provider_models):
 
 
 def _pipeline_node_default_values(llm_providers: list[dict], llm_provider_models: QuerySet):
-    """Returns the default values for each input type"""
-    llm_provider_model_id = None
+    llm_provider_model = None
     provider_id = None
     if len(llm_providers) > 0:
-        provider = llm_providers[0]
-        provider_id = provider["id"]
-        llm_provider_model_id = llm_provider_models.filter(type=provider["type"]).first()
+        for provider in llm_providers:
+            llm_provider_model = llm_provider_models.filter(type=provider["type"]).first()
+            if llm_provider_model:
+                provider_id = provider["id"]
+                break
 
     return {
-        # these keys must match field names on the node schemas
         "llm_provider_id": provider_id,
-        "llm_provider_model_id": llm_provider_model_id.id,
+        "llm_provider_model_id": llm_provider_model.id if llm_provider_model else None,
     }
 
 

@@ -6,6 +6,7 @@ from apps.service_providers.llm_service.utils import (
     detangle_file_ids,
     extract_file_ids_from_ocs_citations,
     populate_reference_section_from_citations,
+    remove_citations_from_text,
 )
 from apps.utils.factories.experiment import ExperimentSessionFactory
 from apps.utils.factories.files import FileFactory
@@ -110,3 +111,19 @@ def test_populate_reference_section_from_citations(text, file_setups, expected_o
     # Test the function
     result = populate_reference_section_from_citations(text, cited_files, session)
     assert result == expected_output
+
+
+@pytest.mark.parametrize(
+    ("input_text", "expected_output"),
+    [
+        ("No citations here", "No citations here"),
+        ("Here is a citation <CIT 123 />", "Here is a citation "),
+        ("<CIT 123 /> Here is a citation", " Here is a citation"),
+        ("Here is a <CIT 123 /> citation", "Here is a  citation"),
+        ("Multiple <CIT 123 /> citations <CIT 456 />", "Multiple  citations "),
+        ("", ""),
+        ("Text with no space<CIT 123 />around.", "Text with no spacearound."),
+    ],
+)
+def test_remove_citations_from_text(input_text, expected_output):
+    assert remove_citations_from_text(input_text) == expected_output

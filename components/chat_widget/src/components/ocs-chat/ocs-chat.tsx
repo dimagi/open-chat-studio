@@ -1,12 +1,9 @@
 import { Component, Host, h, Prop, State } from '@stencil/core';
 import {
-  ArrowLeftEndOnRectangleIcon,
-  ArrowRightEndOnRectangleIcon,
-  ArrowDownOnSquareIcon,
-  ViewfinderCircleIcon,
   XMarkIcon,
   ChevronDownIcon,
   ChevronUpIcon,
+  GripDotsVerticalIcon,
 } from './heroicons';
 
 interface ChatMessage {
@@ -49,6 +46,11 @@ interface ChatPollResponse {
   session_status: 'active' | 'ended';
 }
 
+interface PointerEvent {
+  clientX: number;
+  clientY: number;
+}
+
 @Component({
   tag: 'open-chat-studio-widget',
   styleUrl: 'ocs-chat.css',
@@ -86,6 +88,16 @@ export class OcsChat {
    */
   @Prop({ mutable: true }) expanded: boolean = false;
 
+  /**
+   * Welcome messages to display above starter questions (JSON array of strings)
+   */
+  @Prop() welcomeMessages?: string;
+
+  /**
+   * Array of starter questions that users can click to send (JSON array of strings)
+   */
+  @Prop() starterQuestions?: string;
+
   @State() loaded: boolean = false;
   @State() error: string = "";
   @State() messages: ChatMessage[] = [];
@@ -96,15 +108,24 @@ export class OcsChat {
   @State() pollingInterval?: any;
   @State() lastPollTime?: Date;
   @State() isTaskPolling: boolean = false;
+  @State() isDragging: boolean = false;
+  @State() dragOffset: { x: number; y: number } = { x: 0, y: 0 };
+  @State() windowPosition: { x: number; y: number } = { x: 0, y: 0 };
+  @State() showStarterQuestions: boolean = true;
+  @State() parsedWelcomeMessages: string[] = [];
+  @State() parsedStarterQuestions: string[] = [];
 
   private messageListRef?: HTMLDivElement;
   private textareaRef?: HTMLTextAreaElement;
+  private chatWindowRef?: HTMLDivElement;
 
   componentWillLoad() {
     this.loaded = this.visible;
     if (!this.chatbotId) {
       this.error = 'Chatbot ID is required';
     }
+    this.parseWelcomeMessages();
+    this.parseStarterQuestions();
   }
 
   componentDidLoad() {
@@ -112,10 +133,38 @@ export class OcsChat {
     if (this.visible && !this.sessionId) {
       this.startSession();
     }
+    this.initializePosition();
+    window.addEventListener('resize', this.handleWindowResize);
   }
 
   disconnectedCallback() {
     this.cleanup();
+    this.removeEventListeners();
+    window.removeEventListener('resize', this.handleWindowResize);
+  }
+
+  private parseJSONProp(propValue: string | undefined, propName: string): string[] {
+    try {
+      if (propValue) {
+        try {
+          return JSON.parse(propValue);
+        } catch {
+          const fixedValue = propValue.replace(/'/g, '"');
+          return JSON.parse(fixedValue);
+        }
+      }
+    } catch (error) {
+      console.warn(`Failed to parse ${propName}:`, error);
+    }
+    return [];
+  }
+
+  private parseWelcomeMessages() {
+    this.parsedWelcomeMessages = this.parseJSONProp(this.welcomeMessages, 'welcome messages');
+  }
+
+  private parseStarterQuestions() {
+    this.parsedStarterQuestions = this.parseJSONProp(this.starterQuestions, 'starter questions');
   }
 
   private cleanup() {
@@ -174,6 +223,9 @@ export class OcsChat {
   private async sendMessage(message: string): Promise<void> {
     if (!this.sessionId || !message.trim()) return;
 
+    // Hide starter questions on any user interaction
+    this.showStarterQuestions = false;
+
     try {
       // Add user message immediately
       const userMessage: ChatMessage = {
@@ -214,6 +266,10 @@ export class OcsChat {
       // Clear typing indicator on error
       this.isTyping = false;
     }
+  }
+
+  private handleStarterQuestionClick(question: string): void {
+    this.sendMessage(question);
   }
 
   private async pollTaskResponse(taskId: string): Promise<void> {
@@ -326,7 +382,6 @@ export class OcsChat {
     this.error = '';
   }
 
-
   private scrollToBottom(): void {
     setTimeout(() => {
       if (this.messageListRef) {
@@ -347,6 +402,14 @@ export class OcsChat {
     if (event.key === 'Enter' && !event.shiftKey) {
       event.preventDefault();
       this.sendMessage(this.messageInput);
+    }
+  }
+
+  private handleInputChange(event: Event): void {
+    this.messageInput = (event.target as HTMLTextAreaElement).value;
+    // Hide starter questions when user starts typing
+    if (this.messageInput.trim().length > 0) {
+      this.showStarterQuestions = false;
     }
   }
 
@@ -377,16 +440,158 @@ export class OcsChat {
   }
 
   getPositionClasses() {
-    const baseClasses = `fixed w-full sm:w-[450px] ${this.expanded ? 'h-5/6' : 'h-3/5'} bg-white border border-gray-200 shadow-lg rounded-lg overflow-hidden flex flex-col`;
-
-    const positionClasses = {
-      left: 'left-0 sm:left-5 bottom-0 sm:bottom-5',
-      right: 'right-0 sm:right-5 bottom-0 sm:bottom-5',
-      center: 'left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2'
-    }[this.position];
-
-    return `${baseClasses} ${positionClasses}`;
+    return `fixed w-full sm:w-[450px] ${this.expanded ? 'h-5/6' : 'h-3/5'} bg-white border border-gray-200 ${this.isDragging ? 'shadow-2xl cursor-grabbing' : 'shadow-lg transition-shadow duration-200'} rounded-lg overflow-hidden flex flex-col`;
   }
+
+  getPositionStyles() {
+    return {
+      left: `${this.windowPosition.x}px`,
+      top: `${this.windowPosition.y}px`,
+    };
+  }
+
+  private initializePosition(): void {
+    const windowWidth = window.innerWidth;
+    const windowHeight = window.innerHeight;
+    const chatWidth = windowWidth < 640 ? windowWidth : 450;
+    const chatHeight = this.expanded ? (windowHeight * 0.83) : (windowHeight * 0.6);
+    const isMobile = windowWidth < 640;
+
+    if (isMobile) {
+      this.windowPosition = { x: 0, y: 0 };
+      return;
+    }
+    const margin = 20;
+    switch (this.position) {
+      case 'left':
+        this.windowPosition = {
+          x: margin,
+          y: windowHeight - chatHeight - margin
+        };
+        break;
+      case 'right':
+        this.windowPosition = {
+          x: windowWidth - chatWidth - margin,
+          y: windowHeight - chatHeight - margin
+        };
+        break;
+      case 'center':
+        this.windowPosition = {
+          x: (windowWidth - chatWidth) / 2,
+          y: (windowHeight - chatHeight) / 2
+        };
+        break;
+    }
+  }
+
+  private getPointerCoordinates(event: MouseEvent | TouchEvent): PointerEvent | null {
+    if (event instanceof MouseEvent) {
+      return { clientX: event.clientX, clientY: event.clientY };
+    } else if (event instanceof TouchEvent && event.touches.length === 1) {
+      const touch = event.touches[0];
+      return { clientX: touch.clientX, clientY: touch.clientY };
+    }
+    return null;
+  }
+
+  private startDrag(pointer: PointerEvent): void {
+    if (!this.chatWindowRef) return;
+
+    this.isDragging = true;
+    const rect = this.chatWindowRef.getBoundingClientRect();
+    this.dragOffset = {
+      x: pointer.clientX - rect.left,
+      y: pointer.clientY - rect.top
+    };
+  }
+
+  private updateDragPosition(pointer: PointerEvent): void {
+    if (!this.isDragging) return;
+
+    const newX = pointer.clientX - this.dragOffset.x;
+    const newY = pointer.clientY - this.dragOffset.y;
+
+    // Constrain chatbox to window
+    const windowWidth = window.innerWidth;
+    const windowHeight = window.innerHeight;
+    const chatWidth = windowWidth < 640 ? windowWidth : 450;
+    const chatHeight = this.expanded ? (windowHeight * 0.83) : (windowHeight * 0.6);
+
+    this.windowPosition = {
+      x: Math.max(0, Math.min(newX, windowWidth - chatWidth)),
+      y: Math.max(0, Math.min(newY, windowHeight - chatHeight))
+    };
+  }
+
+  private endDrag(): void {
+    this.isDragging = false;
+    this.removeEventListeners();
+  }
+
+  private addEventListeners(): void {
+    document.addEventListener('mousemove', this.handleMouseMove);
+    document.addEventListener('mouseup', this.handleMouseUp);
+    document.addEventListener('touchmove', this.handleTouchMove, { passive: false });
+    document.addEventListener('touchend', this.handleTouchEnd);
+  }
+
+  private removeEventListeners(): void {
+    document.removeEventListener('mousemove', this.handleMouseMove);
+    document.removeEventListener('mouseup', this.handleMouseUp);
+    document.removeEventListener('touchmove', this.handleTouchMove);
+    document.removeEventListener('touchend', this.handleTouchEnd);
+  }
+
+  private handleMouseDown = (event: MouseEvent): void => {
+    if (window.innerWidth < 640) return;
+    if ((event.target as HTMLElement).closest('button')) return;
+
+    const pointer = this.getPointerCoordinates(event);
+    if (!pointer) return;
+
+    this.startDrag(pointer);
+    this.addEventListeners();
+    event.preventDefault();
+  };
+
+  private handleMouseMove = (event: MouseEvent): void => {
+    const pointer = this.getPointerCoordinates(event);
+    if (!pointer) return;
+
+    this.updateDragPosition(pointer);
+  };
+
+  private handleMouseUp = (): void => {
+    this.endDrag();
+  };
+
+  private handleTouchStart = (event: TouchEvent): void => {
+    if ((event.target as HTMLElement).closest('button')) return;
+    if (!this.chatWindowRef) return;
+
+    const pointer = this.getPointerCoordinates(event);
+    if (!pointer) return;
+
+    this.startDrag(pointer);
+    this.addEventListeners();
+    event.preventDefault();
+  };
+
+  private handleTouchMove = (event: TouchEvent): void => {
+    const pointer = this.getPointerCoordinates(event);
+    if (!pointer) return;
+
+    this.updateDragPosition(pointer);
+    event.preventDefault();
+  };
+
+  private handleTouchEnd = (): void => {
+    this.endDrag();
+  };
+
+  private handleWindowResize = (): void => {
+    this.initializePosition();
+  };
 
   render() {
     if (this.error) {
@@ -401,47 +606,23 @@ export class OcsChat {
       <Host>
         <button class="btn" onClick={() => this.load()}>{this.buttonText}</button>
         {this.visible && (
-          <div id="ocs-chat-window" class={this.getPositionClasses()}>
+          <div
+            ref={(el) => this.chatWindowRef = el}
+            id="ocs-chat-window"
+            class={this.getPositionClasses()}
+            style={this.getPositionStyles()}
+          >
             {/* Header */}
-            <div class="flex justify-between items-center px-2 py-2 border-b border-gray-100">
-              <div class="flex gap-1">
-                <button
-                  class={{
-                    'hidden sm:block p-1.5 rounded-md transition-colors duration-200 hover:bg-gray-100': true,
-                    'text-blue-600': this.position === 'left',
-                    'text-gray-500': this.position !== 'left'
-                  }}
-                  onClick={() => this.setPosition('left')}
-                  aria-label="Dock to left"
-                  title="Dock to left"
-                >
-                  <ArrowLeftEndOnRectangleIcon/>
-                </button>
-                <button
-                  class={{
-                    'p-1.5 rounded-md transition-colors duration-200 hover:bg-gray-100': true,
-                    'text-blue-600': this.position === 'center',
-                    'text-gray-500': this.position !== 'center'
-                  }}
-                  onClick={() => this.setPosition('center')}
-                  aria-label="Center"
-                  title="Center"
-                >
-                  <ViewfinderCircleIcon/>
-                </button>
-                <button
-                  class={{
-                    'p-1.5 rounded-md transition-colors duration-200 hover:bg-gray-100': true,
-                    'text-blue-600': this.position === 'right',
-                    'text-gray-500': this.position !== 'right'
-                  }}
-                  onClick={() => this.setPosition('right')}
-                  aria-label="Dock to right"
-                  title="Dock to right"
-                >
-                  <span class="hidden sm:block"><ArrowRightEndOnRectangleIcon/></span>
-                  <span class="sm:hidden"><ArrowDownOnSquareIcon/></span>
-                </button>
+            <div
+              class={`flex justify-between items-center px-2 py-2 border-b border-gray-100 sm:${this.isDragging ? 'cursor-grabbing' : 'cursor-grab'} active:bg-gray-50 sm:hover:bg-gray-25 transition-colors duration-150`}
+              onMouseDown={this.handleMouseDown}
+              onTouchStart={this.handleTouchStart}
+            >
+              {/* Drag indicator */}
+              <div class="hidden sm:flex gap-1">
+                <div class="flex gap-0.5 ml-2 pointer-events-none">
+                  <GripDotsVerticalIcon/>
+                </div>
               </div>
               <div class="flex gap-1">
                 <button
@@ -478,6 +659,19 @@ export class OcsChat {
                   ref={(el) => this.messageListRef = el}
                   class="flex-grow overflow-y-auto p-4 space-y-4"
                 >
+                  {this.showStarterQuestions && this.messages.length === 0 && !this.isTyping && (
+                    <div class="space-y-4">
+                      {/* Welcome Messages */}
+                      {this.parsedWelcomeMessages.map((message, index) => (
+                        <div key={`welcome-${index}`} class="flex justify-start">
+                          <div class="bg-gray-200 text-gray-800 max-w-xs lg:max-w-md px-4 py-2 rounded-lg">
+                            <div class="whitespace-pre-wrap">{message}</div>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                  {/* Regular Chat Messages */}
                   {this.messages.map((message, index) => (
                     <div
                       key={index}
@@ -533,6 +727,22 @@ export class OcsChat {
                 </div>
               )}
 
+              {/* Starter Questions */}
+              {this.sessionId && this.showStarterQuestions && this.messages.length === 0 && !this.isTyping && (
+                <div class="p-4 space-y-2">
+                  {this.parsedStarterQuestions.map((question, index) => (
+                    <div key={`starter-${index}`} class="flex justify-end">
+                      <button
+                        class="starter-question"
+                        onClick={() => this.handleStarterQuestionClick(question)}
+                      >
+                        {question}
+                      </button>
+                    </div>
+                  ))}
+                </div>
+              )}
+
               {/* Input Area */}
               {this.sessionId && (
                 <div class="border-t border-gray-200 p-4">
@@ -543,7 +753,7 @@ export class OcsChat {
                       rows={1}
                       placeholder="Type your message..."
                       value={this.messageInput}
-                      onInput={(e) => this.messageInput = (e.target as HTMLTextAreaElement).value}
+                      onInput={(e) => this.handleInputChange(e)}
                       onKeyPress={(e) => this.handleKeyPress(e)}
                       disabled={this.isTyping}
                     ></textarea>

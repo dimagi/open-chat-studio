@@ -42,6 +42,9 @@
     color: var(--button-text-color-hover);
     border-color: var(--button-border-color-hover);
   }
+  .starter-question {
+    @apply text-left p-3 rounded-lg duration-200 ml-12 border border-blue-500 hover:bg-blue-50 hover:border-blue-600 text-blue-600;
+  }
 }
 
 #ocs-chat-window {

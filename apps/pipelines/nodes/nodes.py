@@ -360,6 +360,11 @@ class LLMResponseWithPrompt(LLMResponse, HistoryMixin, OutputMessageTagMixin):
         description="The maximum number of results to retrieve from the index",
         json_schema_extra=UiSchema(widget=Widgets.range),
     )
+    generate_citations: bool = Field(
+        default=True,
+        description="Allow files from this collection to be referenced in LLM responses and downloaded by users",
+        json_schema_extra=UiSchema(widget=Widgets.toggle),
+    )
 
     tools: list[str] = Field(
         default_factory=list,
@@ -441,6 +446,7 @@ class LLMResponseWithPrompt(LLMResponse, HistoryMixin, OutputMessageTagMixin):
         # Tools setup
         tools = self._get_configured_tools(session=session, tool_callbacks=tool_callbacks)
         attachments = self._get_attachments(state)
+
         # Chat setup
         chat_adapter = ChatAdapter.for_pipeline(
             session=session,
@@ -450,6 +456,7 @@ class LLMResponseWithPrompt(LLMResponse, HistoryMixin, OutputMessageTagMixin):
             tools=tools,
             pipeline_state=state,
             disabled_tools=self.disabled_tools,
+            expect_citations=self.generate_citations,
         )
         allowed_tools = chat_adapter.get_allowed_tools()
         # TODO: tracing
@@ -486,7 +493,9 @@ class LLMResponseWithPrompt(LLMResponse, HistoryMixin, OutputMessageTagMixin):
         tools.extend(self.get_llm_service().attach_built_in_tools(self.built_in_tools, self.tool_config))
         if self.collection_index_id:
             collection = Collection.objects.get(id=self.collection_index_id)
-            tools.append(collection.get_search_tool(max_results=self.max_results))
+            tools.append(
+                collection.get_search_tool(max_results=self.max_results, generate_citations=self.generate_citations)
+            )
 
         return tools
 

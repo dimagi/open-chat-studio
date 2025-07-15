@@ -285,6 +285,12 @@ class ExperimentVersionForm(forms.Form):
 
 
 class TranslateMessagesForm(forms.Form):
+    target_language = forms.ChoiceField(
+        choices=[],
+        required=True,
+        label="Select Language",
+        widget=forms.Select(attrs={"class": "select select-bordered w-full", "id": "translation-language"}),
+    )
     provider_model = forms.ChoiceField(
         choices=[],
         required=True,
@@ -292,9 +298,25 @@ class TranslateMessagesForm(forms.Form):
         widget=forms.Select(attrs={"class": "select select-bordered w-full", "id": "translation-provider-model"}),
     )
 
-    def __init__(self, *args, team=None, **kwargs):
+    def __init__(self, *args, team, translatable_languages, is_translate_all_form=False, **kwargs):
         super().__init__(*args, **kwargs)
-        if team:
-            self.fields["provider_model"].choices = [
-                ("", "Choose a model for translation")
-            ] + get_dropdown_llm_model_choices(team)
+
+        self.fields["provider_model"].choices = [
+            ("", "Choose a model for translation")
+        ] + get_dropdown_llm_model_choices(team)
+
+        if is_translate_all_form:
+            self.fields["provider_model"].widget.attrs["id"] = "translation-provider-model-all"
+        else:
+            self.fields["provider_model"].widget.attrs["id"] = "translation-provider-model-remaining"
+
+        self.fields["target_language"].choices = [("", "Choose a language")] + [
+            (code, name) for code, name in translatable_languages if code
+        ]
+
+        if is_translate_all_form:
+            self.fields["target_language"].label = "Target Language for All Messages"
+            self.fields["provider_model"].label = "LLM Model for Translation"
+        else:
+            self.fields["target_language"].label = "Target Language for Remaining Messages"
+            self.fields["provider_model"].label = "LLM Model for Remaining Messages"
