@@ -12,6 +12,7 @@ import DOMPurify from 'dompurify';
 import {apiClient} from "../api/api";
 import { produce } from "immer";
 import { EditorView,ViewPlugin, Decoration, ViewUpdate, DecorationSet } from '@codemirror/view';
+import {ReactCodeMirrorProps} from "@uiw/react-codemirror/src";
 
 
 const githubDark = githubDarkInit({
@@ -290,7 +291,6 @@ function MultiSelectWidget(props: WidgetParams) {
 }
 
 export function CodeWidget(props: WidgetParams) {
-  const [isDarkMode, setIsDarkMode] = useState(false);
   const setNode = usePipelineStore((state) => state.setNode);
   const onChangeCallback = (value: string) => {
     setNode(props.nodeId, (old) => ({
@@ -304,22 +304,6 @@ export function CodeWidget(props: WidgetParams) {
       },
     }));
   };
-
-    useEffect(() => {
-        // Set dark / light mode
-      setIsDarkMode(document.documentElement.getAttribute("data-theme") === 'dark')
-      const observer = new MutationObserver(function(mutations) {
-        mutations.forEach(function(mutation) {
-          if (mutation.type === "attributes") {
-            setIsDarkMode(document.documentElement.getAttribute("data-theme") === 'dark')
-          }
-        });
-      });
-
-      observer.observe(document.documentElement, {attributes: true});
-
-    return () => observer.disconnect()
-  }, []);
 
   const modalId = useId();
   const openModal = () => (document.getElementById(modalId) as HTMLDialogElement)?.showModal()
@@ -356,7 +340,6 @@ export function CodeWidget(props: WidgetParams) {
         humanName={props.label}
         value={concatenate(props.paramValue)}
         onChange={onChangeCallback}
-        isDarkMode={isDarkMode}
         inputError={props.inputError}
         documentationLink={getDocumentationLink(props.nodeSchema)}
         readOnly={props.readOnly}
@@ -366,12 +349,11 @@ export function CodeWidget(props: WidgetParams) {
 }
 
 export function CodeModal(
-  { modalId, humanName, value, onChange, isDarkMode, inputError, documentationLink, readOnly }: {
+  { modalId, humanName, value, onChange, inputError, documentationLink, readOnly }: {
     modalId: string;
     humanName: string;
     value: string;
     onChange: (value: string) => void;
-    isDarkMode: boolean;
     inputError: string | undefined;
     documentationLink: string | null;
     readOnly: boolean;
@@ -406,14 +388,12 @@ export function CodeModal(
           {!readOnly && <GenerateCodeSection
             showGenerate={showGenerate}
             setShowGenerate={setShowGenerate}
-            isDarkMode={isDarkMode}
             onAccept={onChange}
             currentCode={value}
           />}
           <CodeNodeEditor
             value={value}
             onChange={onChange}
-            isDarkMode={isDarkMode}
             readOnly={readOnly}
             />
         </div>
@@ -432,13 +412,11 @@ export function CodeModal(
 function GenerateCodeSection({
   showGenerate,
   setShowGenerate,
-  isDarkMode,
   onAccept,
   currentCode,
 }: {
   showGenerate: boolean;
   setShowGenerate: (value: boolean) => void;
-  isDarkMode: boolean;
   onAccept: (value: string) => void;
   currentCode: string;
 }) {
@@ -498,7 +476,6 @@ function GenerateCodeSection({
           <CodeNodeEditor
             value={generated}
             onChange={setGenerated}
-            isDarkMode={isDarkMode}
             readOnly={false}
             />
         <div className={"my-2 join"}>
@@ -526,10 +503,9 @@ function GenerateCodeSection({
 }
 
 function CodeNodeEditor(
-  {value, onChange, isDarkMode, readOnly}: {
+  {value, onChange, readOnly}: {
     value: string;
     onChange: (value: string) => void;
-    isDarkMode: boolean;
     readOnly: boolean;
   }
 ) {
@@ -659,23 +635,9 @@ function CodeNodeEditor(
       EditorState.readOnly.of(true),
     ]
   }
-  return <CodeMirror
-    value={value}
-    onChange={onChange}
-    className="textarea textarea-bordered h-full w-full grow min-h-48"
-    height="100%"
-    width="100%"
-    theme={isDarkMode ? githubDark : githubLight}
-    extensions={extensions}
-    basicSetup={{
-      lineNumbers: true,
-      tabSize: 4,
-      indentOnInput: true,
-    }}
-  />
+
+  return <CodeMirrorEditor value={value} onChange={onChange} extensions={extensions} />;
 }
-
-
 
 export function TextModal(
   {modalId, humanName, name, value, onChange, readOnly}: {
@@ -1310,19 +1272,7 @@ function TextEditorModal({
 
         <div className="grow h-full w-full flex flex-col">
           <h4 className="mb-4 font-bold text-lg capitalize">{label}</h4>
-
-          <CodeMirror
-            value={value}
-            onChange={onChange}
-            height="100%"
-            theme={isDarkMode ? githubDark : githubLight}
-            extensions={extensions}
-            basicSetup={{
-              lineNumbers: true,
-              tabSize: 2,
-              indentOnInput: true,
-            }}
-          />
+          <CodeMirrorEditor value={value} onChange={onChange} extensions={extensions} />;
         </div>
 
         {inputError && <div className="text-red-500">{inputError}</div>}
@@ -1412,3 +1362,36 @@ const autocompleteVarTheme = (isDarkMode: boolean) =>
       fontWeight: "bold",
     },
   });
+
+function CodeMirrorEditor(props: ReactCodeMirrorProps) {
+  const [isDarkMode, setIsDarkMode] = useState(false);
+
+  useEffect(() => {
+    // Set dark / light mode
+    setIsDarkMode(document.documentElement.getAttribute("data-theme") === 'dark')
+    const observer = new MutationObserver(function(mutations) {
+      mutations.forEach(function(mutation) {
+        if (mutation.type === "attributes") {
+          setIsDarkMode(document.documentElement.getAttribute("data-theme") === 'dark')
+        }
+      });
+    });
+
+    observer.observe(document.documentElement, {attributes: true});
+    return () => observer.disconnect()
+  }, []);
+
+  const overrides = {
+    className: "textarea textarea-bordered h-full w-full grow min-h-48",
+    height: "100%",
+    width: "100%",
+    theme: isDarkMode ? githubDark : githubLight,
+    basicSetup: {
+      lineNumbers: true,
+      tabSize: 4,
+      indentOnInput: true,
+    }
+  }
+  const p = {...props, ...overrides}
+  return <CodeMirror {...p} />;
+}
