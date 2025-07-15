@@ -21,14 +21,14 @@
           <option :value="schema.title" x-text="schema.label || schema.title"></option>
         </template>
       </select>
-      <small class="form-text text-muted" x-show="selectedSchema && selectedSchema.description" x-text="selectedSchema.description"></small>
+      <small class="form-text text-muted" x-show="selectedSchema?.description" x-text="selectedSchema?.description"></small>
     </div>
 
     <!-- Dynamic Parameter Fields -->
     <div x-show="selectedSchema" class="mt-4">
       <h3 class="text-lg font-medium mb-3">{% translate "Evaluator Parameters" %}</h3>
       <div id="dynamic-params">
-        <template x-for="(field, fieldName) in selectedSchema.properties || {}" :key="fieldName">
+        <template x-for="(field, fieldName) in selectedSchema?.properties || {}" :key="fieldName">
           <div x-show="fieldName !== 'type'" class="fieldset w-full">
 
             <!-- LLM Provider Widget -->
