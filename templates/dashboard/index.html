@@ -180,6 +180,19 @@
           </div>
         </div>
       </div>
+
+      <!-- Avg Response Time chart -->
+      <div class="card bg-base-100 shadow-xl">
+        <div class="card-body">
+          <div class="card-title flex items-center justify-between">
+            <span>{% trans "Average Response Time" %}</span>
+            <div class="loading loading-spinner loading-sm" x-show="loadingStates.averageResponseTime"></div>
+          </div>
+          <div class="h-80">
+            <canvas id="averageResponseTimeChart"></canvas>
+          </div>
+        </div>
+      </div>
     </div>
 
   <!-- Bot Performance Table -->
