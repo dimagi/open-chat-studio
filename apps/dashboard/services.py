@@ -1,8 +1,9 @@
+from collections import defaultdict
 from datetime import datetime, timedelta
 from typing import Any
 
-from django.db.models import Count, Max, Q
-from django.db.models.functions import TruncDate, TruncHour, TruncMonth, TruncWeek
+from django.db.models import Count, F, Max, Q, Window
+from django.db.models.functions import Lead, TruncDate, TruncHour, TruncMonth, TruncWeek
 from django.urls import reverse
 from django.utils import timezone
 
@@ -419,6 +420,74 @@ class DashboardService:
             tag_stats[category][tag.name] += 1
 
         data = {"tag_categories": tag_stats, "total_tagged_messages": tagged_messages.count()}
+
+        DashboardCache.set_cached_data(self.team, cache_key, data)
+        return data
+
+    def get_average_response_time_data(self, granularity: str = "daily", **filters):
+        cache_key = f"average_response_time_{granularity}_{hash(str(sorted(filters.items())))}"
+        cached_data = DashboardCache.get_cached_data(self.team, cache_key)
+        if cached_data:
+            return cached_data
+
+        querysets = self.get_filtered_queryset_base(**filters)
+        messages = querysets["messages"]
+
+        trunc_func_class = self._get_trunc_function(granularity)
+
+        # Annotate messages with next_type, next_ai_message_created_at
+        annotated_messages_queryset = (
+            messages.annotate(
+                next_type=Window(
+                    expression=Lead("message_type"), partition_by=[F("chat_id")], order_by=F("created_at").asc()
+                ),
+                next_ai_message_created_at=Window(
+                    expression=Lead("created_at"), partition_by=[F("chat_id")], order_by=F("created_at").asc()
+                ),
+                period=trunc_func_class("created_at"),
+            )
+            .values(
+                "id",
+                "chat_id",
+                "message_type",
+                "created_at",
+                "updated_at",
+                "next_type",
+                "next_ai_message_created_at",
+                "period",
+            )
+            .order_by("period")
+        )
+
+        messages_list = list(annotated_messages_queryset)
+
+        filtered_rows_list = []
+        for row_dict in messages_list:
+            human_message_time = row_dict.get("created_at")
+            ai_message_time = row_dict.get("next_ai_message_created_at")
+            msg_type = row_dict.get("message_type")
+            next_message_type = row_dict.get("next_type")
+
+            if not human_message_time or not ai_message_time:
+                continue
+
+            if msg_type == ChatMessageType.HUMAN.value and next_message_type == ChatMessageType.AI.value:
+                filtered_rows_list.append(row_dict)
+
+        rows = filtered_rows_list
+        periods_data = defaultdict(list)
+
+        for row in rows:
+            period = row["period"]
+            human_message_time = row["created_at"]
+            ai_message_time = row["next_ai_message_created_at"]
+            response_time = (ai_message_time - human_message_time).total_seconds()
+            periods_data[period].append(response_time)
+
+        data = []
+        for period, times in sorted(periods_data.items()):
+            avg = sum(times) / len(times) if times else 0
+            data.append({"date": self._format_period(period), "avg_response_time_sec": round(avg, 2)})
 
         DashboardCache.set_cached_data(self.team, cache_key, data)
         return data
