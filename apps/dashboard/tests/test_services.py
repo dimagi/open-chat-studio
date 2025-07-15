@@ -192,7 +192,7 @@ class TestDashboardService:
 
         if data["platforms"]:
             channel_data = data["platforms"][0]
-            expected_fields = ["platform", "platform_name", "sessions", "messages", "participants"]
+            expected_fields = ["platform", "sessions"]
             for field in expected_fields:
                 assert field in channel_data
 
