@@ -193,3 +193,15 @@ jobs:
         environment-url: ${{ steps.deployment.outputs.environment_url }}
         deployment-id: ${{ steps.deployment.outputs.deployment_id }}
         state: 'failure'
+
+    - name: Create Sentry release
+      if: success()
+      uses: getsentry/action-release@v3
+      env:
+        SENTRY_AUTH_TOKEN: ${{ secrets.SENTRY_AUTH_TOKEN }}
+        SENTRY_ORG: ${{ secrets.SENTRY_ORG }}
+        SENTRY_PROJECT: ${{ secrets.SENTRY_PROJECT }}
+      with:
+        environment: "${{ env.DEPLOY_ENV == 'prod' && 'production' || 'development' }}"
+        ignore_empty: true
+        ignore_missing: true
