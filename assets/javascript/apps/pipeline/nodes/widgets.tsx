@@ -1276,7 +1276,6 @@ function TextEditorModal({
     highlightAutoCompleteVars(autocomplete_vars_list),
     autocompleteVarTheme(isDarkMode),
     EditorView.lineWrapping,
-    EditorView.editable.of(true)
   ];
   if (readOnly) {
     extensions = [
