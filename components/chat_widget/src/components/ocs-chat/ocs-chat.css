@@ -90,15 +90,6 @@ textarea {
   background-color: var(--button-background-color, white);
   color: var(--button-text-color, #111827);
   z-index: var(--chat-z-index, 50);
-  min-height: 56px;
-  bottom: 1rem;
-  right: 1rem;
-}
-
-.chat-btn-with-icon:hover {
-  background-color: var(--button-background-color-hover, #f3f4f6);
-  color: var(--button-text-color-hover, #1d4ed8);
-  box-shadow: 0 10px 25px rgba(0, 0, 0, 0.15);
 }
 
 .chat-btn-round {
@@ -123,11 +114,6 @@ textarea {
   width: 60px;
   height: 60px;
   z-index: var(--chat-z-index, 50);
-}
-
-.chat-icon-btn:hover {
-  background-color: var(--button-background-color-hover, #f3f4f6);
-  box-shadow: 0 10px 25px rgba(0, 0, 0, 0.15);
 }
 
 .chat-icon-btn-square {
