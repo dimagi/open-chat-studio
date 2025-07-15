@@ -267,7 +267,7 @@ function dashboard() {
             }
             
             const sanitizedParams = this.sanitizeParams({...this.filters, ...params});
-            const urlParams = new URLSearchParams(sanitizedParams);
+            const urlParams = new URLSearchParams();
 
             for (const [key, value] of Object.entries(sanitizedParams)) {
                 if (Array.isArray(value)) {
