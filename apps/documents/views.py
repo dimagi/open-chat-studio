@@ -388,6 +388,7 @@ class CreateCollectionFromAssistant(LoginAndTeamRequiredMixin, FormView, Permiss
         "title": "Create Collection from Assistant",
         "button_text": "Create Collection",
         "active_tab": "collections",
+        "title_help_content": render_help_with_link("", "migrate_from_assistant"),
     }
     object = None
 
