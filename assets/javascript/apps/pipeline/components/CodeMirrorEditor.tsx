@@ -198,14 +198,13 @@ export function PromptEditor(
     autocompleteVars: string[];
   }
 ) {
-  const isDarkMode = false;
   let extensions = [
     autocompletion({
       override: [textEditorVarCompletions(autocompleteVars)],
       activateOnTyping: true,
     }),
     highlightAutoCompleteVars(autocompleteVars),
-    autocompleteVarTheme(isDarkMode),
+    autocompleteVarTheme(),
     EditorView.lineWrapping,
   ];
   if (readOnly) {
@@ -287,14 +286,22 @@ function highlightAutoCompleteVars(autocompleteVars: string[]) {
   );
 }
 
-const autocompleteVarTheme = (isDarkMode: boolean) =>
-  EditorView.theme({
-    ".autocomplete-var-valid": {
-      color: isDarkMode ? "#93c5fd" : "navy",
+const autocompleteVarTheme = () =>
+  EditorView.baseTheme({
+    "&dark .autocomplete-var-valid": {
+      color: "#93c5fd",
       fontWeight: "bold",
     },
-    ".autocomplete-var-invalid": {
-      color: isDarkMode ? "#f87171" : "red",
+    "&light .autocomplete-var-valid": {
+      color: "navy",
+      fontWeight: "bold",
+    },
+    "&dark .autocomplete-var-invalid": {
+      color: "#f87171",
+      fontWeight: "bold",
+    },
+    "&light .autocomplete-var-invalid": {
+      color: "red",
       fontWeight: "bold",
     },
   });
