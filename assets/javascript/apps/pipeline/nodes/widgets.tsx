@@ -1,7 +1,7 @@
 import React, {ChangeEvent, ChangeEventHandler, ReactNode, useEffect, useId, useState,} from "react";
 import CodeMirror, {EditorState} from '@uiw/react-codemirror';
 import {python} from "@codemirror/lang-python";
-import {githubDark, githubLight} from "@uiw/codemirror-theme-github";
+import {githubDarkInit, githubLightInit} from "@uiw/codemirror-theme-github";
 import {CompletionContext, snippetCompletion as snip, autocompletion, Completion} from '@codemirror/autocomplete'
 import {TypedOption, LlmProviderModel, Option} from "../types/nodeParameterValues";
 import usePipelineStore from "../stores/pipelineStore";
@@ -12,6 +12,21 @@ import DOMPurify from 'dompurify';
 import {apiClient} from "../api/api";
 import { produce } from "immer";
 import { EditorView,ViewPlugin, Decoration, ViewUpdate, DecorationSet } from '@codemirror/view';
+
+
+const githubDark = githubDarkInit({
+  "settings": {
+    background: "oklch(22% 0.016 252.42)",
+    foreground: "oklch(97% 0.029 256.847)",
+    fontFamily: 'ui-sans-serif, system-ui, sans-serif, "Apple Color Emoji", "Segoe UI Emoji", "Segoe UI Symbol"'
+  }
+})
+
+const githubLight = githubLightInit({
+  "settings": {
+    fontFamily: 'ui-sans-serif, system-ui, sans-serif, "Apple Color Emoji", "Segoe UI Emoji", "Segoe UI Symbol"'
+  }
+})
 
 export function getWidget(name: string, params: PropertySchema) {
   switch (name) {
@@ -1388,14 +1403,6 @@ function highlightAutoCompleteVars(autocomplete_vars_list: string[]) {
 
 const autocompleteVarTheme = (isDarkMode: boolean) =>
   EditorView.theme({
-    ".cm-content": {
-      fontFamily:
-        'ui-sans-serif, system-ui, sans-serif, "Apple Color Emoji", "Segoe UI Emoji", "Segoe UI Symbol"',
-      backgroundColor: isDarkMode
-        ? "oklch(25.33% 0.016 252.42)"
-        : null,
-      color: isDarkMode ? "oklch(97.807% 0.029 256.847)" : null,
-    },
     ".autocomplete-var-valid": {
       color: isDarkMode ? "#93c5fd" : "navy",
       fontWeight: "bold",
