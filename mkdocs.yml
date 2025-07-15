@@ -67,6 +67,7 @@ nav:
   - Architecture:
     - Overview: architecture/index.md
   - Developer Guides:
+    - Common Practises: developer_guides/common_practises.md
     - Versioning: developer_guides/versioning.md
     - Changelog: developer_guides/changelog.md
     - Feature Flags: developer_guides/feature_flags.md
