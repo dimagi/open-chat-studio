@@ -1,4 +1,3 @@
-import logging
 from django.db.models import Case, DateTimeField, F, When
 from langchain.memory.prompt import SUMMARY_PROMPT
 from langchain.memory.summary import SummarizerMixin
