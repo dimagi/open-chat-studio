@@ -292,16 +292,16 @@ export function CodeWidget(props: WidgetParams) {
 
     useEffect(() => {
         // Set dark / light mode
-      setIsDarkMode(document.body.getAttribute("data-theme") === 'dark')
+      setIsDarkMode(document.documentElement.getAttribute("data-theme") === 'dark')
       const observer = new MutationObserver(function(mutations) {
         mutations.forEach(function(mutation) {
           if (mutation.type === "attributes") {
-            setIsDarkMode(document.body.getAttribute("data-theme") === 'dark')
+            setIsDarkMode(document.documentElement.getAttribute("data-theme") === 'dark')
           }
         });
       });
 
-      observer.observe(document.body, {attributes: true});
+      observer.observe(document.documentElement, {attributes: true});
 
     return () => observer.disconnect()
   }, []);
