@@ -1,6 +1,6 @@
 from django.apps import AppConfig
 
 
-class ChannelsAppConfig(AppConfig):
+class BotChannelsAppConfig(AppConfig):
     name = "apps.channels"
-    label = "ocs_channels"
+    label = "bot_channels"
