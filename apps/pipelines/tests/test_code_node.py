@@ -1,12 +1,14 @@
 import json
 
 import pytest
+from pydantic import ValidationError
 
 from apps.channels.datamodels import Attachment
 from apps.experiments.models import Participant, ParticipantData
 from apps.files.models import File
-from apps.pipelines.exceptions import PipelineNodeBuildError, PipelineNodeRunError
+from apps.pipelines.exceptions import PipelineNodeRunError
 from apps.pipelines.nodes.base import PipelineState
+from apps.pipelines.nodes.nodes import CodeNode, RenderTemplate
 from apps.pipelines.tests.utils import (
     code_node,
     create_runnable,
@@ -40,7 +42,7 @@ def main(input, **kwargs):
 """
 
 
-@django_db_with_data(available_apps=("apps.service_providers",))
+# @django_db_with_data(available_apps=("apps.service_providers",))
 @pytest.mark.parametrize(
     ("code", "input", "output"),
     [
@@ -50,18 +52,10 @@ def main(input, **kwargs):
         (IMPORTS, json.dumps({"a": "b"}), str(json.loads('{"a": "b"}'))),  # Importing json will work
     ],
 )
-def test_code_node(pipeline, experiment_session, code, input, output):
-    nodes = [
-        start_node(),
-        code_node(code),
-        end_node(),
-    ]
-    assert (
-        create_runnable(pipeline, nodes).invoke(PipelineState(messages=[input], experiment_session=experiment_session))[
-            "messages"
-        ][-1]
-        == output
-    )
+def test_code_node(code, input, output):
+    node = CodeNode(name="test", node_id="123", django_node=None, code=code)
+    node_output = node._process(input, PipelineState(outputs={}, experiment_session=None))
+    assert node_output.update["messages"][-1] == output
 
 
 EXTRA_FUNCTION = """
@@ -73,7 +67,6 @@ def main(input, **kwargs):
 """
 
 
-@django_db_with_data(available_apps=("apps.service_providers",))
 @pytest.mark.parametrize(
     ("code", "input", "error"),
     [
@@ -100,17 +93,11 @@ def main(input, **kwargs):
         ("import PyPDF2\ndef main(input):\n\treturn input", "", "No module named 'PyPDF2'"),
     ],
 )
-def test_code_node_build_errors(pipeline, code, input, error):
-    nodes = [
-        start_node(),
-        code_node(code),
-        end_node(),
-    ]
-    with pytest.raises(PipelineNodeBuildError, match=error):
-        create_runnable(pipeline, nodes).invoke(PipelineState(messages=[input]))["messages"][-1]
+def test_code_node_build_errors(code, input, error):
+    with pytest.raises(ValidationError, match=error):
+        CodeNode(name="test", node_id="123", django_node=None, code=code)
 
 
-@django_db_with_data(available_apps=("apps.service_providers",))
 @pytest.mark.parametrize(
     ("code", "input", "error"),
     [
@@ -122,19 +109,13 @@ def test_code_node_build_errors(pipeline, code, input, error):
         ("def main(input, **kwargs):\n\treturn f'Hello, {blah}!'", "", "name 'blah' is not defined"),
     ],
 )
-def test_code_node_runtime_errors(pipeline, experiment_session, code, input, error):
-    nodes = [
-        start_node(),
-        code_node(code),
-        end_node(),
-    ]
+def test_code_node_runtime_errors(code, input, error):
+    node = CodeNode(name="test", node_id="123", django_node=None, code=code)
     with pytest.raises(PipelineNodeRunError, match=error):
-        create_runnable(pipeline, nodes).invoke(PipelineState(messages=[input], experiment_session=experiment_session))[
-            "messages"
-        ][-1]
+        node._process(input, PipelineState(outputs={}, experiment_session=None))
 
 
-@django_db_with_data(available_apps=("apps.service_providers",))
+@pytest.mark.django_db()
 def test_get_participant_data(pipeline, experiment_session):
     ParticipantData.objects.create(
         team=experiment_session.team,
@@ -147,20 +128,12 @@ def test_get_participant_data(pipeline, experiment_session):
 def main(input, **kwargs):
     return get_participant_data()["fun_facts"]["body_type"]
 """
-    nodes = [
-        start_node(),
-        code_node(code),
-        end_node(),
-    ]
-    assert (
-        create_runnable(pipeline, nodes).invoke(PipelineState(experiment_session=experiment_session, messages=["hi"]))[
-            "messages"
-        ][-1]
-        == "robot"
-    )
+    node = CodeNode(name="test", node_id="123", django_node=None, code=code)
+    node_output = node._process("hi", PipelineState(outputs={}, experiment_session=experiment_session))
+    assert node_output.update["messages"][-1] == "robot"
 
 
-@django_db_with_data(available_apps=("apps.service_providers",))
+@pytest.mark.django_db()
 def test_update_participant_data(pipeline, experiment_session):
     output = "moody"
     participant_data = ParticipantData.objects.create(
@@ -177,27 +150,20 @@ def main(input, **kwargs):
     set_participant_data(data)
     return get_participant_data()["fun_facts"]["personality"]
 """
-    nodes = [
-        start_node(),
-        code_node(code),
-        end_node(),
-    ]
-    assert (
-        create_runnable(pipeline, nodes).invoke(PipelineState(experiment_session=experiment_session, messages=["hi"]))[
-            "messages"
-        ][-1]
-        == output
-    )
+    node = CodeNode(name="test", node_id="123", django_node=None, code=code)
+    node_output = node._process(input, PipelineState(outputs={}, experiment_session=experiment_session))
+    assert node_output.update["messages"][-1] == output
     participant_data.refresh_from_db()
     assert participant_data.data["fun_facts"]["personality"] == output
 
 
 @django_db_with_data(available_apps=("apps.service_providers",))
-def test_temp_state(pipeline, experiment_session):
+def test_temp_state_across_multiple_nodes(pipeline, experiment_session):
     output = "['fun loving', 'likes puppies']"
     code_set = f"""
 def main(input, **kwargs):
-    return set_temp_state_key("fun_facts", {output})
+    set_temp_state_key("fun_facts", {output})
+    return input
 """
     code_get = """
 def main(input, **kwargs):
@@ -209,15 +175,13 @@ def main(input, **kwargs):
         code_node(code_get),
         end_node(),
     ]
-    assert (
-        create_runnable(pipeline, nodes).invoke(PipelineState(experiment_session=experiment_session, messages=["hi"]))[
-            "messages"
-        ][-1]
-        == output
+    node_output = create_runnable(pipeline, nodes).invoke(
+        PipelineState(experiment_session=experiment_session, messages=["hi"])
     )
+    assert node_output["messages"][-1] == output
 
 
-@django_db_with_data(available_apps=("apps.service_providers",))
+@django_db_with_data(available_apps=("apps.service_providers", "apps.experiments", "apps.teams"))
 def test_temp_state_get_outputs(pipeline, experiment_session):
     # Temp state contains the outputs of the previous nodes
 
@@ -226,10 +190,10 @@ def test_temp_state_get_outputs(pipeline, experiment_session):
 def main(input, **kwargs):
     return str(get_temp_state_key("outputs"))
 """
-    template_node = render_template_node("<b>The input is: {{ input }}</b>")
+    template_node = render_template_node("<b>The input is: {{ input }}</b>", name="template")
     nodes = [
         start_node(),
-        passthrough_node(),
+        passthrough_node(name="passthrough"),
         template_node,
         code_node(code_get),
         end_node(),
@@ -240,53 +204,37 @@ def main(input, **kwargs):
         {
             "start": input,
             "passthrough": input,
-            template_node["params"]["name"]: f"<b>The input is: {input}</b>",
+            "template": f"<b>The input is: {input}</b>",
         }
     )
 
 
-@django_db_with_data(available_apps=("apps.service_providers",))
-def test_temp_state_set_outputs(pipeline, experiment_session):
-    input = "hello"
+def test_temp_state_set_outputs():
     code_set = """
 def main(input, **kwargs):
     set_temp_state_key("outputs", "foobar")
     return input
 """
-    nodes = [
-        start_node(),
-        code_node(code_set),
-        end_node(),
-    ]
+    node = CodeNode(name="test", node_id="123", django_node=None, code=code_set)
     with pytest.raises(PipelineNodeRunError, match="Cannot set the 'outputs' key of the temporary state"):
-        create_runnable(pipeline, nodes).invoke(PipelineState(experiment_session=experiment_session, messages=[input]))[
-            "messages"
-        ][-1]
+        node._process("hi", PipelineState(outputs={}, experiment_session=None))
 
 
-@django_db_with_data(available_apps=("apps.service_providers",))
-def test_temp_state_user_input(pipeline, experiment_session):
+def test_temp_state_user_input():
     # Temp state contains the user input
 
-    input = "hello"
+    user_input = "hello"
     code_get = """
 def main(input, **kwargs):
     return str(get_temp_state_key("user_input"))
 """
-    nodes = [
-        start_node(),
-        code_node(code_get),
-        end_node(),
-    ]
-    assert (
-        create_runnable(pipeline, nodes).invoke(PipelineState(experiment_session=experiment_session, messages=[input]))[
-            "messages"
-        ][-1]
-        == input
-    )
+    node = CodeNode(name="test", node_id="123", django_node=None, code=code_get)
+    state = PipelineState(messages=[user_input], outputs={}, experiment_session=None, temp_state={})
+    node_output = node.process(incoming_nodes=[], outgoing_nodes=[], state=state, config={})
+    assert node_output.update["messages"][-1] == user_input
 
 
-@django_db_with_data(available_apps=("apps.service_providers",))
+@pytest.mark.django_db()
 def test_read_attachments(pipeline, experiment_session):
     file = File.from_content("foo.txt", b"from file", "text/plain", experiment_session.team.id)
 
@@ -294,21 +242,19 @@ def test_read_attachments(pipeline, experiment_session):
 def main(input, **kwargs):
     return f'content {get_temp_state_key("attachments")[0].read_text()}'
 """
-    nodes = [
-        start_node(),
-        code_node(code_get),
-        end_node(),
-    ]
+    node = CodeNode(name="test", node_id="123", django_node=None, code=code_get)
     state = PipelineState(
+        outputs={},
         experiment_session=experiment_session,
         messages=["hi"],
-        attachments=[Attachment.from_file(file, "code_interpreter")],
+        attachments=[Attachment.from_file(file, "code_interpreter", experiment_session.id)],
+        temp_state={},
     )
-    assert create_runnable(pipeline, nodes).invoke(state)["messages"][-1] == "content from file"
-    File.objects.get(id=file.id)
+    node_output = node.process(incoming_nodes=[], outgoing_nodes=[], state=state, config={})
+    assert node_output.update["messages"][-1] == "content from file"
 
 
-@django_db_with_data(available_apps=("apps.service_providers",))
+@pytest.mark.django_db()
 def test_participant_data_proxy_get_includes_global_data(pipeline, experiment_session):
     """
     Test that the get method of ParticipantDataProxy returns a merged dictionary
@@ -328,20 +274,13 @@ def main(input, **kwargs):
     data = get_participant_data()
     return f"Name: {data.get('name')}, Color: {data.get('favorite_color')}"
     """
-    nodes = [
-        start_node(),
-        code_node(code),
-        end_node(),
-    ]
-    assert (
-        create_runnable(pipeline, nodes).invoke(PipelineState(experiment_session=experiment_session, messages=["hi"]))[
-            "messages"
-        ][-1]
-        == "Name: Dimagi, Color: green"
-    )
+    node = CodeNode(name="test", node_id="123", django_node=None, code=code)
+    state = PipelineState(messages=["hi"], outputs={}, experiment_session=experiment_session, temp_state={})
+    node_output = node.process(incoming_nodes=[], outgoing_nodes=[], state=state, config={})
+    assert node_output.update["messages"][-1] == "Name: Dimagi, Color: green"
 
 
-@django_db_with_data(available_apps=("apps.service_providers",))
+@pytest.mark.django_db()
 def test_participant_data_proxy_set_updates_global_data(pipeline, experiment_session):
     experiment_session.participant.name = "Original Boring Name"
     experiment_session.participant.save()
@@ -359,22 +298,15 @@ def main(input, **kwargs):
     updated = get_participant_data()
     return f"Name: {updated.get('name')}"
     """
-    nodes = [
-        start_node(),
-        code_node(code),
-        end_node(),
-    ]
-    assert (
-        create_runnable(pipeline, nodes).invoke(PipelineState(experiment_session=experiment_session, messages=["hi"]))[
-            "messages"
-        ][-1]
-        == "Name: Updated Exciting Name"
-    )
+    node = CodeNode(name="test", node_id="123", django_node=None, code=code)
+    state = PipelineState(messages=["hi"], outputs={}, experiment_session=experiment_session, temp_state={})
+    node_output = node.process(incoming_nodes=[], outgoing_nodes=[], state=state, config={})
+    assert node_output.update["messages"][-1] == "Name: Updated Exciting Name"
     experiment_session.participant.refresh_from_db()
     assert experiment_session.participant.name == "Updated Exciting Name"
 
 
-@django_db_with_data(available_apps=("apps.service_providers",))
+@pytest.mark.django_db()
 def test_render_template_with_context_keys(pipeline, experiment_session):
     participant = Participant.objects.create(
         identifier="participant_123",
@@ -395,25 +327,21 @@ def test_render_template_with_context_keys(pipeline, experiment_session):
         temp_state={"my_key": "example_key"},
         outputs={},
     )
-    nodes = [
-        start_node(),
-        render_template_node(
-            "input: {{input}}, temp_state.my_key: {{temp_state.my_key}}, "
-            "participant_id: {{participant_details.identifier}}, "
-            "participant_data: {{participant_data.custom_key}}"
-        ),
-        end_node(),
-    ]
-    result = create_runnable(pipeline, nodes).invoke(state)
-    expected = (
+    template = (
+        "input: {{input}}, temp_state.my_key: {{temp_state.my_key}}, "
+        "participant_id: {{participant_details.identifier}}, "
+        "participant_data: {{participant_data.custom_key}}"
+    )
+    node = RenderTemplate(name="test", node_id="123", django_node=None, template_string=template)
+    node_output = node.process(incoming_nodes=[], outgoing_nodes=[], state=state, config={})
+    assert node_output["messages"][-1] == (
         "input: Cycling, temp_state.my_key: example_key, "
         "participant_id: participant_123, "
         "participant_data: custom_value"
     )
-    assert result["messages"][-1] == expected
 
 
-@django_db_with_data(available_apps=("apps.service_providers",))
+@pytest.mark.django_db()
 def test_get_participant_schedules(pipeline, experiment_session):
     """
     Test that the get_participant_schedules function correctly retrieves
@@ -448,23 +376,13 @@ def main(input, **kwargs):
     schedules = get_participant_schedules()
     return f"Number of schedules: {len(schedules)}"
 """
-    nodes = [
-        start_node(),
-        code_node(code),
-        end_node(),
-    ]
-
-    assert (
-        (
-            create_runnable(pipeline, nodes).invoke(
-                PipelineState(experiment_session=experiment_session, messages=["hi"])
-            )["messages"][-1]
-        )
-        == "Number of schedules: 1"
-    )
+    node = CodeNode(name="test", node_id="123", django_node=None, code=code)
+    state = PipelineState(messages=["hi"], outputs={}, experiment_session=experiment_session, temp_state={})
+    node_output = node.process(incoming_nodes=[], outgoing_nodes=[], state=state, config={})
+    assert node_output.update["messages"][-1] == "Number of schedules: 1"
 
 
-@django_db_with_data(available_apps=("apps.service_providers",))
+@pytest.mark.django_db()
 def test_get_participant_schedules_empty(pipeline, experiment_session):
     """
     Test that the get_participant_schedules function returns an empty list
@@ -475,39 +393,36 @@ def main(input, **kwargs):
     schedules = get_participant_schedules()
     return f"Number of schedules: {len(schedules)}, Empty list: {schedules == []}"
 """
-    nodes = [
-        start_node(),
-        code_node(code),
-        end_node(),
-    ]
-    assert (
-        (
-            create_runnable(pipeline, nodes).invoke(
-                PipelineState(experiment_session=experiment_session, messages=["hi"])
-            )["messages"][-1]
-        )
-        == "Number of schedules: 0, Empty list: True"
-    )
+    node = CodeNode(name="test", node_id="123", django_node=None, code=code)
+    state = PipelineState(messages=["hi"], outputs={}, experiment_session=experiment_session, temp_state={})
+    node_output = node.process(incoming_nodes=[], outgoing_nodes=[], state=state, config={})
+    assert node_output.update["messages"][-1] == "Number of schedules: 0, Empty list: True"
 
 
-@django_db_with_data(available_apps=("apps.service_providers",))
+@pytest.mark.django_db()
 def test_get_and_set_session_state(pipeline, experiment_session):
     assert experiment_session.state.get("message_count") is None
-    input = "hello"
-    code_set = """
+    code = """
 def main(input, **kwargs):
     msg_count = get_session_state_key("message_count") or 1
     set_session_state_key("message_count", msg_count + 1)
     return input
     """
-    nodes = [
-        start_node(),
-        code_node(code_set),
-        end_node(),
-    ]
-    create_runnable(pipeline, nodes).invoke(PipelineState(experiment_session=experiment_session, messages=[input]))[
-        "messages"
-    ][-1]
-
+    node = CodeNode(name="test", node_id="123", django_node=None, code=code)
+    state = PipelineState(messages=["hi"], outputs={}, experiment_session=experiment_session, temp_state={})
+    node.process(incoming_nodes=[], outgoing_nodes=[], state=state, config={})
     experiment_session.refresh_from_db()
     assert experiment_session.state["message_count"] == 2
+
+
+def test_tags_mocked():
+    code_set = """
+def main(input, **kwargs):
+    add_session_tag("session-tag")
+    add_message_tag("message-tag")
+    return input
+    """
+    node = CodeNode(name="test", node_id="123", django_node=None, code=code_set)
+    output = node._process("hi", PipelineState(outputs={}, experiment_session=None))
+    assert output.update["output_message_tags"] == [("message-tag", None)]
+    assert output.update["session_tags"] == [("session-tag", None)]

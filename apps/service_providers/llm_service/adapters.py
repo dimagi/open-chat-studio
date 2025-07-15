@@ -10,6 +10,8 @@ Usage:
     Use the `for_experiment` or `for_pipeline` class methods to instantiate `ChatAdapter` or `AssistantAdapter`.
 """
 
+from __future__ import annotations
+
 from functools import cached_property
 from typing import TYPE_CHECKING, Self
 
@@ -24,8 +26,13 @@ from apps.experiments.models import Experiment, ExperimentSession
 from apps.files.models import File
 from apps.service_providers.llm_service.main import LlmService, OpenAIAssistantRunnable
 from apps.service_providers.llm_service.prompt_context import PromptTemplateContext
+from apps.service_providers.llm_service.utils import (
+    populate_reference_section_from_citations,
+    remove_citations_from_text,
+)
 
 if TYPE_CHECKING:
+    from apps.pipelines.nodes.base import PipelineState
     from apps.pipelines.nodes.nodes import AssistantNode, LLMResponseWithPrompt
     from apps.service_providers.models import LlmProviderModel
 
@@ -65,12 +72,12 @@ class ChatAdapter(BaseAdapter):
         temperature: float,
         prompt_text: str,
         max_token_limit: int,
+        template_context: PromptTemplateContext,
         tools: list[BaseTool] = None,
         disabled_tools: set[str] = None,
         input_formatter: str | None = None,
-        source_material_id: int | None = None,
         save_message_metadata_only=False,
-        collection_id: int | None = None,
+        expect_citations: bool = True,
     ):
         self.session = session
         self.provider_model_name = provider_model_name
@@ -81,10 +88,10 @@ class ChatAdapter(BaseAdapter):
         self.tools = tools or []
         self.disabled_tools = disabled_tools
         self.input_formatter = input_formatter
-        self.source_material_id = source_material_id
+        self.expect_citations = expect_citations
 
         self.team = session.team
-        self.template_context = PromptTemplateContext(session, source_material_id, collection_id)
+        self.template_context = template_context
         self.save_message_metadata_only = save_message_metadata_only
 
     @classmethod
@@ -96,22 +103,28 @@ class ChatAdapter(BaseAdapter):
             temperature=experiment.temperature,
             prompt_text=experiment.prompt_text,
             max_token_limit=experiment.max_token_limit,
+            template_context=PromptTemplateContext(session, experiment.source_material_id, None),
             tools=get_tools(session, experiment=experiment),
             disabled_tools=None,  # not supported for simple experiments
             input_formatter=experiment.input_formatter,
-            source_material_id=experiment.source_material_id,
         )
 
     @classmethod
     def for_pipeline(
         cls,
         session: ExperimentSession,
-        node: "LLMResponseWithPrompt",
+        node: LLMResponseWithPrompt,
         llm_service: LlmService,
-        provider_model: "LlmProviderModel",
+        provider_model: LlmProviderModel,
         tools: list[BaseTool],
+        pipeline_state: PipelineState,
         disabled_tools: set[str] = None,
+        expect_citations: bool = True,
     ) -> Self:
+        extra_prompt_context = {
+            "temp_state": pipeline_state.get("temp_state", {}),
+            "session_state": session.state or {},
+        }
         return cls(
             session=session,
             provider_model_name=provider_model.name,
@@ -119,12 +132,17 @@ class ChatAdapter(BaseAdapter):
             temperature=node.llm_temperature,
             prompt_text=node.prompt,
             max_token_limit=provider_model.max_token_limit,
+            template_context=PromptTemplateContext(
+                session,
+                source_material_id=node.source_material_id,
+                collection_id=node.collection_id,
+                extra=extra_prompt_context,
+            ),
             tools=tools,
             disabled_tools=disabled_tools,
             input_formatter="{input}",
-            source_material_id=node.source_material_id,
             save_message_metadata_only=True,
-            collection_id=node.collection_id,
+            expect_citations=expect_citations,
         )
 
     def get_chat_model(self):
@@ -149,6 +167,16 @@ class ChatAdapter(BaseAdapter):
 
         self.session.chat.attach_files(attachment_type="file_citation", files=cited_files)
         return {"cited_files": [file.id for file in cited_files]}
+
+    def add_citation_section_from_cited_files(self, ai_message: str, cited_files: list[File]) -> str:
+        return populate_reference_section_from_citations(text=ai_message, cited_files=cited_files, session=self.session)
+
+    def remove_file_citations(self, ai_message: str) -> str:
+        """
+        Remove file citations from the AI message.
+        """
+
+        return remove_citations_from_text(ai_message)
 
 
 class AssistantAdapter(BaseAdapter):
@@ -186,7 +214,7 @@ class AssistantAdapter(BaseAdapter):
         )
 
     @classmethod
-    def for_pipeline(cls, session: ExperimentSession, node: "AssistantNode", disabled_tools: set[str] = None) -> Self:
+    def for_pipeline(cls, session: ExperimentSession, node: AssistantNode, disabled_tools: set[str] = None) -> Self:
         assistant = OpenAiAssistant.objects.get(id=node.assistant_id)
         return cls(
             session=session,

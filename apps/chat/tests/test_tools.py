@@ -1,3 +1,5 @@
+import json
+import os
 from datetime import datetime
 from unittest import mock
 
@@ -9,16 +11,22 @@ from freezegun import freeze_time
 from apps.chat.agent import tools
 from apps.chat.agent.schemas import WeekdaysEnum
 from apps.chat.agent.tools import (
+    CITATION_PROMPT,
     TOOL_CLASS_MAP,
     DeleteReminderTool,
+    SearchIndexTool,
+    SearchToolConfig,
     UpdateParticipantDataTool,
     _move_datetime_to_new_weekday_and_time,
     create_schedule_message,
 )
 from apps.events.models import ScheduledMessage, TimePeriod
 from apps.experiments.models import AgentTools, Experiment
+from apps.files.models import FileChunkEmbedding
+from apps.utils.factories.documents import CollectionFactory
 from apps.utils.factories.events import EventActionFactory
 from apps.utils.factories.experiment import ExperimentSessionFactory
+from apps.utils.factories.files import FileFactory
 from apps.utils.time import pretty_date
 
 
@@ -379,9 +387,83 @@ class TestUpdateParticipantDataTool:
         assert session.participant_data_from_experiment == {"test": value}
 
 
+@pytest.mark.django_db()
+class TestSearchIndexTool:
+    def load_vector_data(self):
+        current_directory = os.path.dirname(os.path.abspath(__file__))
+        vector_data_file = os.path.join(current_directory, "data/vector_data.json")
+        with open(vector_data_file) as json_file:
+            return json.load(json_file)
+
+    @pytest.mark.parametrize("generate_citations", [True, False])
+    def test_action_returns_relevant_chunks(self, generate_citations, team, local_index_manager_mock):
+        collection = CollectionFactory(team=team)
+        file = FileFactory(team=team, name="the_greatness_of_fruit.txt")
+        vector_data = self.load_vector_data()
+
+        FileChunkEmbedding.objects.create(
+            team=team,
+            file=file,
+            collection=collection,
+            chunk_number=1,
+            text="Oranges are nice",
+            embedding=vector_data["Oranges are nice"],
+            page_number=0,
+        )
+        FileChunkEmbedding.objects.create(
+            team=team,
+            file=file,
+            collection=collection,
+            chunk_number=2,
+            text="Apples are great",
+            embedding=vector_data["Apples are great"],
+            page_number=0,
+        )
+        FileChunkEmbedding.objects.create(
+            team=team,
+            file=file,
+            collection=collection,
+            chunk_number=3,
+            text="Greatness is subjective",
+            embedding=vector_data["Greatness is subjective"],
+            page_number=0,
+        )
+
+        # The return value of get_embedding_vector is what determines the search results.
+        local_index_manager_mock.get_embedding_vector.return_value = vector_data["What are great fruit?"]
+        search_config = SearchToolConfig(index_id=collection.id, max_results=2, generate_citations=generate_citations)
+        result = SearchIndexTool(search_config=search_config).action(query="What are great fruit?")
+        if generate_citations:
+            expected_result = f"""
+# Retrieved chunks
+
+## File name: the_greatness_of_fruit.txt, file_id={file.id}
+### Content
+Apples are great
+
+## File name: the_greatness_of_fruit.txt, file_id={file.id}
+### Content
+Oranges are nice
+
+{CITATION_PROMPT}
+"""
+        else:
+            expected_result = f"""
+# Retrieved chunks
+
+## File name: the_greatness_of_fruit.txt, file_id={file.id}
+### Content
+Apples are great
+
+## File name: the_greatness_of_fruit.txt, file_id={file.id}
+### Content
+Oranges are nice
+
+
+"""
+        assert result == expected_result
+
+
 def test_tools_present():
-    non_user_facing_tools = [AgentTools.ATTACH_MEDIA]
     for tool in AgentTools.values:
-        if tool in non_user_facing_tools:
-            continue
         assert tool in TOOL_CLASS_MAP

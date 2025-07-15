@@ -15,8 +15,9 @@ class BannerAdmin(admin.ModelAdmin):
         "end_date",
         "is_active",
         "status_display",
+        "feature_flag_display",
     ]
-    list_filter = ["banner_type", "is_active", "location"]
+    list_filter = ["banner_type", "is_active", "location", "feature_flag"]
     search_fields = ["title", "message"]
     date_hierarchy = "end_date"
     list_editable = ["is_active", "location"]
@@ -31,8 +32,18 @@ class BannerAdmin(admin.ModelAdmin):
             },
         ),
         (
+            "Feature Flag",
+            {
+                "fields": ("feature_flag",),
+                "description": "Banner will only appear if the team has this feature flag enabled.",
+            },
+        ),
+        (
             "Duration",
-            {"fields": ("start_date", "end_date", "is_active"), "description": "Control when the banner is displayed"},
+            {
+                "fields": ("start_date", "end_date", "dismiss_timeout", "is_active"),
+                "description": "Control when the banner is displayed",
+            },
         ),
     )
 
@@ -62,3 +73,8 @@ class BannerAdmin(admin.ModelAdmin):
             return "Active"
 
     status_display.short_description = "Status"
+
+    def feature_flag_display(self, obj):
+        return obj.feature_flag.name if obj.feature_flag else "None"
+
+    feature_flag_display.short_description = "Feature Flag"

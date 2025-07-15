@@ -146,14 +146,17 @@ def session_chat_url(url_name, request, record, value):
 
 
 def _show_chat_button(request, record):
-    return record.participant.user == request.user and not record.is_complete() and record.experiment.is_editable()
+    return record.participant.user == request.user and not record.is_complete and record.experiment.is_editable
 
 
 class ExperimentSessionsTable(tables.Table):
     participant = columns.Column(accessor="participant", verbose_name="Participant", order_by="participant__identifier")
     last_message = columns.Column(accessor="last_message_created_at", verbose_name="Last Message", orderable=True)
     tags = columns.TemplateColumn(verbose_name="Tags", template_name="annotations/tag_ui.html", orderable=False)
-    versions = columns.Column(verbose_name="Versions", accessor="experiment_version_for_display", orderable=False)
+    versions = columns.Column(
+        verbose_name="Versions", accessor="experiment_versions_from_prefetched_data", orderable=False
+    )
+    state = columns.Column(verbose_name="State", accessor="status", orderable=True)
     actions = actions.ActionsColumn(
         actions=[
             actions.Action(

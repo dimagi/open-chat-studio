@@ -44,7 +44,7 @@ from apps.utils.base_experiment_table_view import BaseExperimentTableView
 def _get_alpine_context(request, experiment=None):
     """Add context required by the experiments/settings_content.html template."""
     exclude_services = [SyntheticVoice.OpenAIVoiceEngine]
-    if flag_is_active(request, "open_ai_voice_engine"):
+    if flag_is_active(request, "flag_open_ai_voice_engine"):
         exclude_services = []
     return {
         "voice_providers_types": dict(request.team.voiceprovider_set.values_list("id", "type")),
@@ -192,7 +192,6 @@ class EditChatbot(LoginAndTeamRequiredMixin, TemplateView, PermissionRequiredMix
 
 class CreateChatbotVersion(CreateExperimentVersion):
     permission_required = "experiments.add_experiment"
-    pk_url_kwarg = "experiment_id"
     template_name = "experiments/create_version_form.html"
 
     def get_success_url(self):

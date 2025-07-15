@@ -9,7 +9,6 @@ from django.core.exceptions import ValidationError
 from django.http import HttpResponse
 from django.test import RequestFactory, override_settings
 from django.urls import reverse
-from waffle.testutils import override_flag
 
 from apps.chat.channels import WebChannel
 from apps.chat.models import Chat
@@ -103,7 +102,6 @@ def test_create_experiment_creates_first_version(client, team_with_users):
     assert versioned_exp.is_default_version
 
 
-@override_flag("assistants", active=True)
 @pytest.mark.parametrize(
     ("with_assistant", "with_prompt", "with_llm_provider", "with_llm_model", "errors"),
     [
@@ -654,7 +652,9 @@ class TestCreateExperimentVersionView:
     def test_create_version_with_assistant(self, delay, messages, in_sync_with_openai, client):
         delay.return_value = "a7a82d12-0abe-4466-92c7-95e4ed8eaf5c"
         team = TeamWithUsersFactory()
-        experiment = ExperimentFactory(assistant=OpenAiAssistantFactory(), owner=team.members.first(), team=team)
+        experiment = ExperimentFactory(
+            assistant=OpenAiAssistantFactory(team=team), owner=team.members.first(), team=team
+        )
         client.force_login(experiment.owner)
         post_data = {"version_description": "Some description", "is_default_version": True}
         url = reverse("experiments:create_version", args=[experiment.team.slug, experiment.id])

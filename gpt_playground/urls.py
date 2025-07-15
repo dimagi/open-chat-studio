@@ -47,7 +47,9 @@ team_urlpatterns = [
     path("help/", include("apps.help.urls")),
     path("documents/", include("apps.documents.urls")),
     path("chatbots/", include("apps.chatbots.urls")),
+    path("dashboard/", include("apps.dashboard.urls", namespace="dashboard")),
     path("analysis/", include("apps.analysis.urls", namespace="analysis")),
+    path("evaluations/", include("apps.evaluations.urls")),
 ]
 
 urlpatterns = [
@@ -73,3 +75,8 @@ urlpatterns = [
     path("api/", include("apps.api.urls", namespace="api")),
     path("tz_detect/", include("tz_detect.urls")),
 ] + static(settings.MEDIA_URL, document_root=settings.MEDIA_ROOT)
+
+if settings.USE_DEBUG_TOOLBAR:
+    from debug_toolbar.toolbar import debug_toolbar_urls
+
+    urlpatterns.extend(debug_toolbar_urls())

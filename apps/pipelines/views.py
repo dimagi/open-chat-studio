@@ -35,6 +35,7 @@ from apps.teams.models import Flag
 from ..experiments.helpers import update_experiment_name_by_pipeline_id
 from ..generics.chips import Chip
 from ..generics.help import render_help_with_link
+from ..utils.prompt import PromptVars
 
 
 class PipelineHome(LoginAndTeamRequiredMixin, TemplateView, PermissionRequiredMixin):
@@ -133,6 +134,7 @@ def _pipeline_node_parameter_values(team, llm_providers, llm_provider_models):
     collections = (
         Collection.objects.working_versions_queryset().filter(team=team, is_index=False).values("id", "name").all()
     )
+    # Until OCS fully supports RAG, we can only use remote indexes
     collection_indexes = (
         Collection.objects.working_versions_queryset().filter(team=team, is_index=True).values("id", "name").all()
     )
@@ -182,6 +184,9 @@ def _pipeline_node_parameter_values(team, llm_providers, llm_provider_models):
                 _option(
                     value=collection["id"],
                     label=collection["name"],
+                    edit_url=reverse(
+                        "documents:single_collection_home", kwargs={"team_slug": team.slug, "pk": collection["id"]}
+                    ),
                 )
                 for collection in collections
             ]
@@ -192,6 +197,9 @@ def _pipeline_node_parameter_values(team, llm_providers, llm_provider_models):
                 _option(
                     value=index["id"],
                     label=index["name"],
+                    edit_url=reverse(
+                        "documents:single_collection_home", kwargs={"team_slug": team.slug, "pk": index["id"]}
+                    ),
                 )
                 for index in collection_indexes
             ]
@@ -206,22 +214,23 @@ def _pipeline_node_parameter_values(team, llm_providers, llm_provider_models):
             if provider.get("type")
         },
         OptionsSource.built_in_tools_config: BuiltInTools.get_tool_configs_by_provider(),
+        OptionsSource.text_editor_autocomplete_vars: PromptVars.get_all_prompt_vars(),
     }
 
 
 def _pipeline_node_default_values(llm_providers: list[dict], llm_provider_models: QuerySet):
-    """Returns the default values for each input type"""
-    llm_provider_model_id = None
+    llm_provider_model = None
     provider_id = None
     if len(llm_providers) > 0:
-        provider = llm_providers[0]
-        provider_id = provider["id"]
-        llm_provider_model_id = llm_provider_models.filter(type=provider["type"]).first()
+        for provider in llm_providers:
+            llm_provider_model = llm_provider_models.filter(type=provider["type"]).first()
+            if llm_provider_model:
+                provider_id = provider["id"]
+                break
 
     return {
-        # these keys must match field names on the node schemas
         "llm_provider_id": provider_id,
-        "llm_provider_model_id": llm_provider_model_id.id,
+        "llm_provider_model_id": llm_provider_model.id if llm_provider_model else None,
     }
 
 

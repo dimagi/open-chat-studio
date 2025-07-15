@@ -2,6 +2,7 @@ import logging
 import unicodedata
 import uuid
 from datetime import datetime
+from functools import cached_property
 from typing import cast
 from urllib.parse import parse_qs, urlparse
 
@@ -14,7 +15,9 @@ from django.contrib.auth.decorators import permission_required
 from django.contrib.auth.mixins import PermissionRequiredMixin
 from django.core.exceptions import PermissionDenied, ValidationError
 from django.db import transaction
-from django.db.models import Case, Count, IntegerField, When
+from django.db.models import Case, CharField, Count, IntegerField, Prefetch, Value, When
+from django.db.models.fields.json import KeyTextTransform
+from django.db.models.functions import Coalesce
 from django.http import FileResponse, Http404, HttpResponse, HttpResponseForbidden, HttpResponseRedirect
 from django.shortcuts import get_object_or_404, redirect, render
 from django.template.response import TemplateResponse
@@ -26,11 +29,13 @@ from django.views.decorators.clickjacking import xframe_options_exempt
 from django.views.decorators.csrf import csrf_exempt
 from django.views.decorators.http import require_GET, require_POST
 from django.views.generic import CreateView, UpdateView
+from django.views.generic.edit import FormView
 from django_tables2 import SingleTableView
 from field_audit.models import AuditAction
 from waffle import flag_is_active
 
-from apps.annotations.models import Tag
+from apps.analysis.const import LANGUAGE_CHOICES
+from apps.annotations.models import CustomTaggedItem, Tag
 from apps.assistants.sync import OpenAiSyncError, get_diff_with_openai_assistant, get_out_of_sync_files
 from apps.channels.datamodels import Attachment, AttachmentType
 from apps.channels.exceptions import ExperimentChannelException
@@ -54,13 +59,14 @@ from apps.experiments.decorators import (
 )
 from apps.experiments.email import send_chat_link_email, send_experiment_invitation
 from apps.experiments.exceptions import ChannelAlreadyUtilizedException
-from apps.experiments.filters import FIELD_TYPE_FILTERS, apply_dynamic_filters
+from apps.experiments.filters import DATE_RANGE_OPTIONS, FIELD_TYPE_FILTERS, apply_dynamic_filters
 from apps.experiments.forms import (
     ConsentForm,
     ExperimentForm,
     ExperimentInvitationForm,
     ExperimentVersionForm,
     SurveyCompletedForm,
+    TranslateMessagesForm,
 )
 from apps.experiments.helpers import get_real_user_or_none
 from apps.experiments.models import (
@@ -81,33 +87,30 @@ from apps.experiments.tables import (
     ParentExperimentRoutesTable,
     TerminalBotsTable,
 )
-from apps.experiments.tasks import async_create_experiment_version, async_export_chat, get_response_for_webchat_task
+from apps.experiments.task_utils import get_message_task_response
+from apps.experiments.tasks import (
+    async_create_experiment_version,
+    async_export_chat,
+    get_response_for_webchat_task,
+)
 from apps.experiments.views.prompt import PROMPT_DATA_SESSION_KEY
-from apps.files.forms import get_file_formset
 from apps.files.models import File
-from apps.files.views import BaseAddFileHtmxView, BaseDeleteFileView
 from apps.generics.chips import Chip
 from apps.generics.views import generic_home, paginate_session, render_session_details
+from apps.service_providers.models import LlmProvider, LlmProviderModel
 from apps.service_providers.utils import get_llm_provider_choices
 from apps.teams.decorators import login_and_team_required, team_required
 from apps.teams.mixins import LoginAndTeamRequiredMixin
 from apps.utils.base_experiment_table_view import BaseExperimentTableView
 
-DEFAULT_ERROR_MESSAGE = (
-    "Sorry something went wrong. This was likely an intermittent error related to load."
-    "Please try again, and wait a few minutes if this keeps happening."
-)
-
-CUSTOM_ERROR_MESSAGE = (
-    "The chatbot is currently unavailable. We are working hard to resolve the issue as quickly"
-    " as possible and apologize for any inconvenience. Thank you for your patience."
-)
-
 
 @login_and_team_required
 @permission_required("experiments.view_experiment", raise_exception=True)
 def experiments_home(request, team_slug: str):
-    return generic_home(request, team_slug, "Experiments", "experiments:table", "experiments:new")
+    show_modal = flag_is_active(request, "flag_chatbots")
+    return generic_home(
+        request, team_slug, "Experiments", "experiments:table", "experiments:new", show_modal_instead=show_modal
+    )
 
 
 class ExperimentTableView(BaseExperimentTableView):
@@ -127,9 +130,19 @@ class ExperimentSessionsTableView(LoginAndTeamRequiredMixin, SingleTableView, Pe
         query_set = (
             ExperimentSession.objects.with_last_message_created_at()
             .filter(team=self.request.team, experiment__id=self.kwargs["experiment_id"])
-            .select_related("participant__user")
+            .select_related("participant__user", "chat")
+            .prefetch_related(
+                "chat__tags",
+                "chat__messages__tags",
+                Prefetch(
+                    "chat__tagged_items",
+                    queryset=CustomTaggedItem.objects.select_related("tag", "user"),
+                    to_attr="prefetched_tagged_items",
+                ),
+            )
         )
-        query_set = apply_dynamic_filters(query_set, self.request)
+        timezone = self.request.session.get("detected_tz", None)
+        query_set = apply_dynamic_filters(query_set, self.request.GET, timezone)
         return query_set
 
 
@@ -225,16 +238,6 @@ class CreateExperiment(BaseExperimentView, CreateView):
     button_title = "Create"
     permission_required = "experiments.add_experiment"
 
-    def get_context_data(self, **kwargs):
-        context = super().get_context_data(**kwargs)
-        if "file_formset" not in context:
-            context["file_formset"] = self._get_file_formset()
-        return context
-
-    def _get_file_formset(self):
-        if flag_is_active(self.request, "experiment_rag"):
-            return get_file_formset(self.request)
-
     def get_initial(self):
         initial = super().get_initial()
         long_data = self.request.session.pop(PROMPT_DATA_SESSION_KEY, None)
@@ -242,22 +245,10 @@ class CreateExperiment(BaseExperimentView, CreateView):
             initial.update(long_data)
         return initial
 
-    def post(self, request, *args, **kwargs):
-        self.object = None
-        form = self.get_form()
-        file_formset = self._get_file_formset()
-        if form.is_valid() and (not file_formset or file_formset.is_valid()):
-            return self.form_valid(form, file_formset)
-        else:
-            return self.form_invalid(form, file_formset)
-
-    def form_valid(self, form, file_formset):
+    def form_valid(self, form):
         with transaction.atomic():
             form.instance.name = unicodedata.normalize("NFC", form.instance.name)
             self.object = form.save()
-            if file_formset:
-                files = file_formset.save(self.request)
-                self.object.files.set(files)
 
         task_id = async_create_experiment_version.delay(
             experiment_id=self.object.id, version_description="", make_default=True
@@ -267,8 +258,14 @@ class CreateExperiment(BaseExperimentView, CreateView):
 
         return HttpResponseRedirect(self.get_success_url())
 
-    def form_invalid(self, form, file_formset):
-        return self.render_to_response(self.get_context_data(form=form, file_formset=file_formset))
+    def form_invalid(self, form):
+        return self.render_to_response(self.get_context_data(form=form))
+
+    def dispatch(self, request, *args, **kwargs):
+        is_chatbot = kwargs.get("new_chatbot", False)
+        if not is_chatbot and flag_is_active(request, "flag_chatbots"):
+            return HttpResponseRedirect(reverse("chatbots:new", args=[request.team.slug]))
+        return super().dispatch(request, *args, **kwargs)
 
 
 class EditExperiment(BaseExperimentView, UpdateView):
@@ -296,7 +293,7 @@ class EditExperiment(BaseExperimentView, UpdateView):
 def _get_voice_provider_alpine_context(request):
     """Add context required by the experiments/experiment_form.html template."""
     exclude_services = [SyntheticVoice.OpenAIVoiceEngine]
-    if flag_is_active(request, "open_ai_voice_engine"):
+    if flag_is_active(request, "flag_open_ai_voice_engine"):
         exclude_services = []
 
     form_attrs = {"enctype": "multipart/form-data"}
@@ -332,54 +329,45 @@ def delete_experiment(request, team_slug: str, pk: int):
     return redirect("experiments:experiments_home", team_slug=team_slug)
 
 
-class AddFileToExperiment(BaseAddFileHtmxView):
-    @transaction.atomic()
-    def form_valid(self, form):
-        experiment = get_object_or_404(Experiment, team=self.request.team, pk=self.kwargs["pk"])
-        file = super().form_valid(form)
-        experiment.files.add(file)
-        return file
-
-    def get_delete_url(self, file):
-        return reverse("experiments:remove_file", args=[self.request.team.slug, self.kwargs["pk"], file.pk])
-
-
-class DeleteFileFromExperiment(BaseDeleteFileView):
-    pass
-
-
-class CreateExperimentVersion(LoginAndTeamRequiredMixin, CreateView):
+class CreateExperimentVersion(LoginAndTeamRequiredMixin, FormView, PermissionRequiredMixin):
     model = Experiment
     form_class = ExperimentVersionForm
     template_name = "experiments/create_version_form.html"
     title = "Create Experiment Version"
     button_title = "Create"
     permission_required = "experiments.add_experiment"
-    pk_url_kwarg = "experiment_id"
+
+    @cached_property
+    def object(self):
+        return get_object_or_404(Experiment, pk=self.kwargs["experiment_id"], team=self.request.team)
+
+    @cached_property
+    def latest_version(self):
+        return self.object.latest_version
 
     def get_form_kwargs(self) -> dict:
         form_kwargs = super().get_form_kwargs()
-        experiment = self.get_object()
-        if not experiment.has_versions:
+        if not self.latest_version:
             form_kwargs["initial"] = {"is_default_version": True}
         return form_kwargs
 
-    def get_context_data(self, *args, **kwargs):
-        context = super().get_context_data(*args, **kwargs)
-        working_experiment = self.get_object()
+    def get_context_data(self, **kwargs):
+        context = super().get_context_data(**kwargs)
+        working_experiment = self.object
         version = working_experiment.version_details
-        if prev_version := working_experiment.latest_version:
+        if self.latest_version:
             # Populate diffs
-            version.compare(prev_version.version_details)
+            version.compare(self.latest_version.version_details)
 
         context["version_details"] = version
+        context["has_versions"] = self.latest_version is not None
         context["experiment"] = working_experiment
         return context
 
     def form_valid(self, form):
         description = form.cleaned_data["version_description"]
         is_default = form.cleaned_data["is_default_version"]
-        working_version = Experiment.objects.get(id=self.kwargs["experiment_id"])
+        working_version = self.object
 
         if working_version.is_archived:
             raise PermissionDenied("Unable to version an archived experiment.")
@@ -405,7 +393,7 @@ class CreateExperimentVersion(LoginAndTeamRequiredMixin, CreateView):
 
     def _check_pipleline_and_assistant_for_errors(self) -> str:
         """Checks if the pipeline or assistant has errors before creating a new version."""
-        experiment = self.get_object()
+        experiment = self.object
 
         try:
             if self._is_assistant_out_of_sync(experiment):
@@ -500,6 +488,9 @@ def base_single_experiment_view(request, team_slug, experiment_id, template_name
         "field_type_filters": FIELD_TYPE_FILTERS,
         "channel_list": channel_list,
         "allow_copy": not experiment.child_links.exists(),
+        "date_range_options": DATE_RANGE_OPTIONS,
+        "filter_columns": ["participant", "last_message", "first_message", "tags", "versions", "channels", "state"],
+        "state_list": SessionStatus.for_chatbots(),
         **_get_events_context(experiment, team_slug, request.origin),
     }
     if active_tab != "chatbots":
@@ -526,7 +517,7 @@ def _get_events_context(experiment: Experiment, team_slug: str, origin=None):
                 Case(When(event_logs__status=EventLogStatusChoices.FAILURE, then=1), output_field=IntegerField())
             )
         )
-        .values("id", "experiment_id", "type", "action__action_type", "action__params", "failure_count")
+        .values("id", "experiment_id", "type", "action__action_type", "action__params", "failure_count", "is_active")
         .all()
     )
     timeout_events = (
@@ -544,6 +535,7 @@ def _get_events_context(experiment: Experiment, team_slug: str, origin=None):
             "action__params",
             "total_num_triggers",
             "failure_count",
+            "is_active",
         )
         .all()
     )
@@ -560,6 +552,7 @@ def _get_routes_context(experiment: Experiment, team_slug: str):
     return {
         "child_routes_table": ChildExperimentRoutesTable(experiment.child_links.filter(type=route_type).all()),
         "parent_routes_table": ParentExperimentRoutesTable(parent_links),
+        "first_parent_id": parent_links[0].parent_id if parent_links else None,
         "can_make_child_routes": len(parent_links) == 0,
     }
 
@@ -738,7 +731,7 @@ def _experiment_session_message(request, version_number: int, embedded=False):
     uploaded_files = request.FILES
     attachments = []
     created_files = []
-    for resource_type in ["code_interpreter", "file_search"]:
+    for resource_type in ["code_interpreter", "file_search", "ocs_attachments"]:
         if resource_type not in uploaded_files:
             continue
 
@@ -748,7 +741,7 @@ def _experiment_session_message(request, version_number: int, embedded=False):
         )
         for uploaded_file in uploaded_files.getlist(resource_type):
             new_file = File.objects.create(name=uploaded_file.name, file=uploaded_file, team=request.team)
-            attachments.append(Attachment.from_file(new_file, cast(AttachmentType, resource_type)))
+            attachments.append(Attachment.from_file(new_file, cast(AttachmentType, resource_type), session.id))
             created_files.append(new_file)
 
         tool_resource.files.add(*created_files)
@@ -786,35 +779,12 @@ def get_message_response(request, team_slug: str, experiment_id: uuid.UUID, sess
     experiment = request.experiment
     session = request.experiment_session
     last_message = ChatMessage.objects.filter(chat=session.chat).order_by("-created_at").first()
-    progress = Progress(AsyncResult(task_id)).get_info()
-    # don't render empty messages
-    skip_render = progress["complete"] and progress["success"] and not progress["result"]
-    if skip_render:
+    message_details = get_message_task_response(experiment, task_id)
+    if not message_details:
+        # don't render empty messages
         return HttpResponse()
 
-    message_details = {"message": None, "error_msg": False, "complete": progress["complete"]}
-    if progress["complete"] and progress["success"]:
-        result = progress["result"]
-        if message_id := result.get("message_id"):
-            message_details["message"] = ChatMessage.objects.get(id=message_id)
-        elif response := result.get("response"):
-            message_details["message"] = {"content": response}
-        if error := result.get("error"):
-            if not experiment.debug_mode_enabled:
-                if "Invalid parameter" in error:  # TODO: temporary
-                    message_details["error_msg"] = CUSTOM_ERROR_MESSAGE
-                else:
-                    message_details["error_msg"] = DEFAULT_ERROR_MESSAGE
-            else:
-                message_details["error_msg"] = error
-    elif progress["complete"]:
-        message_details["error_msg"] = DEFAULT_ERROR_MESSAGE
-
-    attached_files = []
-    message = message_details.get("message")
-    if isinstance(message, ChatMessage):
-        attached_files = message.get_attached_files()
-
+    attachments = message_details.pop("attachments", [])
     return TemplateResponse(
         request,
         "experiments/chat/chat_message_response.html",
@@ -823,9 +793,8 @@ def get_message_response(request, team_slug: str, experiment_id: uuid.UUID, sess
             "session": session,
             "task_id": task_id,
             "message_details": message_details,
-            "skip_render": skip_render,
             "last_message_datetime": last_message and last_message.created_at,
-            "attachments": attached_files,
+            "attachments": attachments,
         },
     )
 
@@ -1088,10 +1057,11 @@ def experiment_invitations(request, team_slug: str, experiment_id: int, origin="
 @permission_required("experiments.download_chats", raise_exception=True)
 @login_and_team_required
 def generate_chat_export(request, team_slug: str, experiment_id: str):
+    timezone = request.session.get("detected_tz", None)
     experiment = get_object_or_404(Experiment, id=experiment_id)
     parsed_url = urlparse(request.headers.get("HX-Current-URL"))
     query_params = parse_qs(parsed_url.query)
-    task_id = async_export_chat.delay(experiment_id, query_params)
+    task_id = async_export_chat.delay(experiment_id, query_params, timezone)
     return TemplateResponse(
         request, "experiments/components/exports.html", {"experiment": experiment, "task_id": task_id}
     )
@@ -1262,6 +1232,17 @@ def _experiment_chat_ui(request, embedded=False):
     )
 
 
+def _get_languages_for_chat(session):
+    available_language_codes = session.chat.translated_languages
+    available_languages = [
+        choice for choice in LANGUAGE_CHOICES if choice[0] == "" or choice[0] in available_language_codes
+    ]
+    translatable_languages = [
+        choice for choice in LANGUAGE_CHOICES if choice[0] != "" and choice[0] not in available_language_codes
+    ]
+    return available_languages, translatable_languages
+
+
 @experiment_session_view()
 @verify_session_access_cookie
 def experiment_session_messages_view(request, team_slug: str, experiment_id: uuid.UUID, session_id: str):
@@ -1270,10 +1251,43 @@ def experiment_session_messages_view(request, team_slug: str, experiment_id: uui
     experiment = request.experiment
     page = int(request.GET.get("page", 1))
     search = request.GET.get("search", "")
+    language = request.GET.get("language", "")
+    show_original_translation = request.GET.get("show_original_translation") == "on"
     page_size = 100
-    messages_queryset = ChatMessage.objects.filter(chat=session.chat).all().order_by("created_at")
+    messages_queryset = (
+        ChatMessage.objects.filter(chat=session.chat)
+        .order_by("created_at")
+        .prefetch_related(
+            Prefetch(
+                "tagged_items",
+                queryset=CustomTaggedItem.objects.select_related("tag", "user"),
+                to_attr="prefetched_tagged_items",
+            )
+        )
+    )
+
+    available_languages, translatable_languages = _get_languages_for_chat(session)
+    has_missing_translations = False
+    translate_form_all = TranslateMessagesForm(
+        team=request.team, translatable_languages=translatable_languages, is_translate_all_form=True
+    )
+    translate_form_remaining = TranslateMessagesForm(
+        team=request.team, translatable_languages=translatable_languages, is_translate_all_form=False
+    )
+    default_message = "(message generated after last translation)"
+
     if search:
         messages_queryset = messages_queryset.filter(tags__name__icontains=search).distinct()
+
+    if language:
+        messages_queryset = messages_queryset.annotate(
+            translation=Coalesce(
+                KeyTextTransform(language, "translations"),
+                Value(default_message),
+                output_field=CharField(),
+            )
+        )
+        has_missing_translations = messages_queryset.exclude(**{f"translations__{language}__isnull": False}).exists()
 
     total_messages = messages_queryset.count()
     total_pages = max(1, (total_messages + page_size - 1) // page_size)
@@ -1291,7 +1305,14 @@ def experiment_session_messages_view(request, team_slug: str, experiment_id: uui
         "page_size": page_size,
         "page_start_index": start_idx,
         "search": search,
+        "language": language,
+        "available_languages": available_languages,
         "available_tags": [t.name for t in Tag.objects.filter(team__slug=team_slug, is_system_tag=False).all()],
+        "has_missing_translations": has_missing_translations,
+        "show_original_translation": show_original_translation,
+        "translate_form_all": translate_form_all,
+        "translate_form_remaining": translate_form_remaining,
+        "default_message": default_message,
     }
 
     return TemplateResponse(
@@ -1299,6 +1320,79 @@ def experiment_session_messages_view(request, team_slug: str, experiment_id: uui
         "experiments/components/experiment_chat.html",
         context,
     )
+
+
+@experiment_session_view()
+@verify_session_access_cookie
+def translate_messages_view(request, team_slug: str, experiment_id: uuid.UUID, session_id: str):
+    from apps.analysis.translation import translate_messages_with_llm
+
+    session = request.experiment_session
+    provider_model = request.POST.get("provider_model", "")
+    valid_languages = [choice[0] for choice in LANGUAGE_CHOICES if choice[0]]
+    translate_all = request.POST.get("translate_all", "false") == "true"
+    if translate_all:
+        language = request.POST.get("target_language")
+    else:
+        language = request.POST.get("language")
+
+    if not language or language not in valid_languages:
+        messages.error(request, "No language selected for translation.")
+        return redirect_to_messages_view(request, session)
+    if not provider_model:
+        messages.error(request, "No LLM provider model selected.")
+        return redirect_to_messages_view(request, session)
+    try:
+        provider_id, model_id = provider_model.split(":", 1)
+
+        try:
+            llm_provider = LlmProvider.objects.get(id=provider_id, team=request.team)
+            llm_provider_model = LlmProviderModel.objects.get(id=model_id)
+        except (LlmProvider.DoesNotExist, LlmProviderModel.DoesNotExist):
+            messages.error(request, "Selected provider or model not found.")
+            return redirect_to_messages_view(request, session)
+
+        messages_to_translate = ChatMessage.objects.filter(chat=session.chat).exclude(
+            **{f"translations__{language}__isnull": False}
+        )
+        if not messages_to_translate.exists():
+            messages.info(request, "All messages already have translations for this language.")
+            return redirect_to_messages_view(request, session)
+        translate_messages_with_llm(
+            messages=list(messages_to_translate),
+            target_language=language,
+            llm_provider=llm_provider,
+            llm_provider_model=llm_provider_model,
+        )
+    except Exception as e:
+        logging.exception("Error translating messages")
+        messages.error(request, f"Translation failed: {str(e)}")
+        return redirect_to_messages_view(request, session)
+
+    return redirect_to_messages_view(request, session)
+
+
+def redirect_to_messages_view(request, session):
+    url = reverse(
+        "experiments:experiment_session_messages_view",
+        args=[request.team.slug, session.experiment.public_id, session.external_id],
+    )
+    params = {}
+    search = request.POST.get("search", "").strip()
+    show_original_translation = request.POST.get("show_original_translation", "")
+    language = request.POST.get("language", "")
+    params["language"] = language or request.POST.get("target_language", "")
+    if search:
+        params["search"] = search
+    if show_original_translation:
+        params["show_original_translation"] = show_original_translation
+
+    if params:
+        from urllib.parse import urlencode
+
+        url += "?" + urlencode(params)
+
+    return HttpResponseRedirect(url)
 
 
 @experiment_session_view(allowed_states=[SessionStatus.ACTIVE, SessionStatus.SETUP])
@@ -1401,6 +1495,27 @@ def download_file(request, team_slug: str, session_id: int, pk: int):
         raise Http404() from None
 
 
+@team_required
+def get_image_html(request, team_slug: str, session_id: int, pk: int):
+    """Return HTML for displaying an image attachment."""
+    resource = get_object_or_404(
+        File, id=pk, team__slug=team_slug, chatattachment__chat__experiment_session__id=session_id
+    )
+
+    if not resource.is_image:
+        raise Http404("File is not an image")
+
+    # Generate the image URL
+    image_url = reverse("experiments:download_file", args=[team_slug, session_id, pk])
+
+    # Return HTML for the image
+    html = format_html(
+        '<img src="{}" alt="{}" class="max-w-md max-h-64 rounded border shadow-sm mt-2">', image_url, resource.name
+    )
+
+    return HttpResponse(html)
+
+
 @require_POST
 @transaction.atomic
 @login_and_team_required
@@ -1477,3 +1592,35 @@ def get_release_status_badge(request, team_slug: str, experiment_id: int):
     experiment = get_object_or_404(Experiment, id=experiment_id, team=request.team)
     context = {"has_changes": experiment.compare_with_latest(), "experiment": experiment}
     return render(request, "experiments/components/unreleased_badge.html", context)
+
+
+@login_and_team_required
+@permission_required(("experiments.change_experiment", "pipelines.add_pipeline"))
+def migrate_experiment_view(request, team_slug, experiment_id):
+    from apps.pipelines.helper import convert_non_pipeline_experiment_to_pipeline
+
+    experiment = get_object_or_404(Experiment, id=experiment_id, team__slug=team_slug)
+    failed_url = reverse(
+        "experiments:single_experiment_home",
+        kwargs={"team_slug": team_slug, "experiment_id": experiment_id},
+    )
+    if experiment.parent_links.exists():
+        messages.error(
+            request, "Child experiments will be migrated along with their 'parent'. Please migrate the parent."
+        )
+        return redirect(failed_url)
+
+    try:
+        with transaction.atomic():
+            experiment = Experiment.objects.get(id=experiment_id)
+            convert_non_pipeline_experiment_to_pipeline(experiment)
+        messages.success(request, f'Successfully migrated experiment "{experiment.name}" to chatbot!')
+        return redirect("chatbots:single_chatbot_home", team_slug=team_slug, experiment_id=experiment_id)
+    except Exception:
+        logging.exception(
+            "Failed to migrate experiment to chatbot", details={"team_slug": team_slug, "experiment_id": experiment_id}
+        )
+        messages.error(request, "There was an error during the migration. Please try again later.")
+        return redirect(failed_url)
+
+    return redirect(failed_url)

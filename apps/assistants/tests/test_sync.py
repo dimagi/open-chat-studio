@@ -3,25 +3,25 @@ import re
 from io import BytesIO
 from unittest.mock import Mock, call, patch
 
-import openai
 import pytest
-from httpx import Response
-from openai import OpenAI
 from openai.pagination import SyncCursorPage
 
 from apps.assistants.models import ToolResources
 from apps.assistants.sync import (
     OpenAiSyncError,
+    _get_files_to_delete,
     _update_or_create_vector_store,
     delete_openai_assistant,
     get_out_of_sync_files,
     import_openai_assistant,
     push_assistant_to_openai,
+    remove_files_from_tool,
     sync_from_openai,
 )
-from apps.chat.agent import tools
-from apps.service_providers.llm_service.index_managers import OpenAIVectorStoreManager
+from apps.chat.agent.tools import TOOL_CLASS_MAP
+from apps.experiments.models import AgentTools
 from apps.utils.factories.assistants import OpenAiAssistantFactory
+from apps.utils.factories.documents import CollectionFactory
 from apps.utils.factories.files import FileFactory
 from apps.utils.factories.openai import AssistantFactory, FileObjectFactory
 from apps.utils.factories.service_provider_factories import LlmProviderFactory
@@ -30,6 +30,9 @@ from apps.utils.factories.service_provider_factories import LlmProviderFactory
 @dataclasses.dataclass
 class ObjectWithId:
     id: str
+
+
+LEGACY_EXPERIMENT_TOOLS = AgentTools.reminder_tools() + [AgentTools.UPDATE_PARTICIPANT_DATA]
 
 
 @pytest.mark.django_db()
@@ -92,7 +95,7 @@ def test_push_assistant_to_openai_update(mock_update, vs_retrieve, vs_files_list
 
     openai_files = FileObjectFactory.create_batch(2)
 
-    internal_tools = [tool_cls(experiment_session=None) for tool_cls in tools.TOOL_CLASS_MAP.values()]
+    internal_tools = [TOOL_CLASS_MAP[tool](experiment_session=None) for tool in LEGACY_EXPERIMENT_TOOLS]
     with patch("openai.resources.Files.create", side_effect=openai_files) as mock_file_create:
         push_assistant_to_openai(local_assistant, internal_tools=internal_tools)
     assert mock_update.called
@@ -102,7 +105,7 @@ def test_push_assistant_to_openai_update(mock_update, vs_retrieve, vs_files_list
     # Make sure that all tools in TOOL_CLASS_MAP was speceified
     tool_specs = mock_update.call_args_list[0].kwargs.get("tools")
     tool_names = set([tool_spec["function"]["name"] for tool_spec in tool_specs if "function" in tool_spec])
-    expected_tools = set(tools.TOOL_CLASS_MAP.keys())
+    expected_tools = set(LEGACY_EXPERIMENT_TOOLS)
     assert expected_tools - tool_names == set()
 
     assert file_batches.call_args_list == [
@@ -350,127 +353,39 @@ def test_vector_store_create_batch_files(create_file_batch, create_vector_store,
         assert create_file_batch.call_count == 0
 
 
-class TestVectorStoreManager:
-    @patch("openai.resources.vector_stores.file_batches.FileBatches.create")
-    def test_link_files_to_vector_store(self, mock_file_batches_create):
-        """Test linking files to vector store with and without chunking strategy"""
-        manager = OpenAIVectorStoreManager(OpenAI(api_key="fake_key"))
-        vector_store_id = "vs_123"
-        file_ids = [f"file_{i}" for i in range(600)]  # Create more than 500 files to test batching
+@pytest.mark.django_db()
+@patch("apps.assistants.sync.delete_file_from_openai")
+@patch("apps.assistants.sync.OpenAIRemoteIndexManager.delete_file_from_index")
+def test_remove_files_from_tool(delete_file, delete_file_from_openai):
+    collection = CollectionFactory()
+    resource = ToolResources.objects.create(
+        tool_type="file_search", assistant=OpenAiAssistantFactory(), extra={"vector_store_id": "vs-123"}
+    )
+    file1 = FileFactory(external_id="file1")
+    collection.files.add(file1)
 
-        # Test without chunking strategy
-        result = manager.link_files_to_vector_store(vector_store_id, file_ids)
-        assert result == vector_store_id
-        assert mock_file_batches_create.call_count == 2
-        mock_file_batches_create.assert_has_calls(
-            [
-                call(vector_store_id=vector_store_id, file_ids=file_ids[:500], chunking_strategy=None),
-                call(vector_store_id=vector_store_id, file_ids=file_ids[500:], chunking_strategy=None),
-            ]
-        )
+    file2 = FileFactory(external_id="file2")
+    resource.files.add(*[file1.id, file2.id])
 
-        # Reset mock for second test
-        mock_file_batches_create.reset_mock()
+    remove_files_from_tool(resource, files=[file1, file2])
+    delete_file_from_openai.assert_called_once()
+    assert delete_file_from_openai.mock_calls[0].args[1].external_id == "file2"
+    delete_file.assert_called_once_with(file_id="file1")
 
-        # Test with chunking strategy
-        chunk_size = 1000
-        chunk_overlap = 100
-        result = manager.link_files_to_vector_store(
-            vector_store_id, file_ids, chunk_size=chunk_size, chunk_overlap=chunk_overlap
-        )
-        assert result == vector_store_id
-        assert mock_file_batches_create.call_count == 2
 
-        expected_chunking_strategy = {
-            "type": "static",
-            "static": {
-                "max_chunk_size_tokens": chunk_size,
-                "chunk_overlap_tokens": chunk_overlap,
-            },
-        }
-        mock_file_batches_create.assert_has_calls(
-            [
-                call(
-                    vector_store_id=vector_store_id,
-                    file_ids=file_ids[:500],
-                    chunking_strategy=expected_chunking_strategy,
-                ),
-                call(
-                    vector_store_id=vector_store_id,
-                    file_ids=file_ids[500:],
-                    chunking_strategy=expected_chunking_strategy,
-                ),
-            ]
-        )
+@pytest.mark.django_db()
+def test_get_files_to_delete():
+    collection = CollectionFactory()
+    team = collection.team
+    resource = ToolResources.objects.create(
+        tool_type="file_search", assistant=OpenAiAssistantFactory(team=team), extra={"vector_store_id": "vs-123"}
+    )
+    file = FileFactory(external_id="file1")
+    collection.files.add(file)
+    resource.files.add(file)
 
-    @patch("openai.resources.vector_stores.VectorStores.retrieve")
-    def test_get(self, mock_retrieve):
-        """Test retrieving a vector store"""
-        manager = OpenAIVectorStoreManager(OpenAI(api_key="fake_key"))
-        vector_store_id = "vs_123"
-        expected_result = ObjectWithId(id=vector_store_id)
-        mock_retrieve.return_value = expected_result
+    assert len(list(_get_files_to_delete(team, resource.id))) == 0
 
-        result = manager.get(vector_store_id)
-        assert result == expected_result
-        mock_retrieve.assert_called_once_with(vector_store_id)
+    collection.files.through.objects.all().delete()  # Clear the collection files
 
-    @patch("openai.resources.vector_stores.VectorStores.create")
-    def test_create_vector_store(self, mock_create):
-        """Test creating a vector store with and without files"""
-        manager = OpenAIVectorStoreManager(OpenAI(api_key="fake_key"))
-        expected_id = "vs_123"
-        mock_create.return_value = ObjectWithId(id=expected_id)
-
-        # Test creating without files
-        result = manager.create_vector_store("test_store")
-        assert result == expected_id
-        mock_create.assert_called_once_with(name="test_store", file_ids=[])
-
-        # Test creating with files
-        mock_create.reset_mock()
-        file_ids = ["file1", "file2"]
-        result = manager.create_vector_store("test_store", file_ids=file_ids)
-        assert result == expected_id
-        mock_create.assert_called_once_with(name="test_store", file_ids=file_ids)
-
-    @patch("openai.resources.vector_stores.VectorStores.delete")
-    def test_delete_vector_store(self, mock_delete):
-        """Test deleting a vector store with different error scenarios"""
-        manager = OpenAIVectorStoreManager(OpenAI(api_key="fake_key"))
-        vector_store_id = "vs_123"
-
-        # Test successful deletion
-        manager.delete_vector_store(vector_store_id)
-        mock_delete.assert_called_once_with(vector_store_id=vector_store_id)
-
-        # Test not found error with fail_silently=True
-        mock_delete.reset_mock()
-        mock_delete.side_effect = openai.NotFoundError(
-            message="", response=Response(status_code=404, request=Mock()), body=None
-        )
-        manager.delete_vector_store(vector_store_id, fail_silently=True)
-        mock_delete.assert_called_once_with(vector_store_id=vector_store_id)
-
-        # Test not found error with fail_silently=False
-        with pytest.raises(openai.NotFoundError):
-            manager.delete_vector_store(vector_store_id, fail_silently=False)
-
-    @patch("openai.resources.vector_stores.files.Files.delete")
-    def test_delete_file(self, mock_delete):
-        """Test deleting a file from a vector store"""
-        manager = OpenAIVectorStoreManager(OpenAI(api_key="fake_key"))
-        vector_store_id = "vs_123"
-        file_id = "file_123"
-
-        # Test successful deletion
-        manager.delete_file(vector_store_id, file_id)
-        mock_delete.assert_called_once_with(vector_store_id=vector_store_id, file_id=file_id)
-
-        # Test handling of not found error
-        mock_delete.reset_mock()
-        mock_delete.side_effect = openai.NotFoundError(
-            message="", response=Response(status_code=404, request=Mock()), body=None
-        )
-        manager.delete_file(vector_store_id, file_id)  # Should not raise an exception
-        mock_delete.assert_called_once_with(vector_store_id=vector_store_id, file_id=file_id)
+    assert len(list(_get_files_to_delete(team, resource.id))) == 1

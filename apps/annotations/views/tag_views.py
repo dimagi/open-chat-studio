@@ -4,6 +4,7 @@ import unicodedata
 from django.contrib import messages
 from django.contrib.auth.mixins import PermissionRequiredMixin
 from django.contrib.contenttypes.models import ContentType
+from django.db.models import Prefetch
 from django.http import HttpResponse, HttpResponseForbidden
 from django.shortcuts import get_object_or_404, redirect, render
 from django.urls import reverse
@@ -12,7 +13,7 @@ from django.views.generic import CreateView, TemplateView, UpdateView
 from django_tables2 import SingleTableView
 
 from apps.annotations.forms import TagForm
-from apps.annotations.models import Tag, TagCategories
+from apps.annotations.models import CustomTaggedItem, Tag, TagCategories
 from apps.annotations.tables import TagTable
 from apps.teams.mixins import LoginAndTeamRequiredMixin
 
@@ -126,7 +127,14 @@ class TagUI(LoginAndTeamRequiredMixin, View, PermissionRequiredMixin):
         content_type = get_object_or_404(
             ContentType, app_label=request.GET.get("app"), model=request.GET.get("model_name")
         )
-        obj = content_type.get_object_for_this_type(id=object_id)
+        model_class = content_type.model_class()
+        obj = model_class.objects.prefetch_related(
+            Prefetch(
+                "tagged_items",
+                queryset=CustomTaggedItem.objects.select_related("tag", "user"),
+                to_attr="prefetched_tagged_items",
+            )
+        ).get(id=object_id)
 
         return render(
             request,

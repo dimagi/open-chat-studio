@@ -14,9 +14,14 @@
 {% endblock %}
 {% block app %}
   <section class="app-card">
-    <h3 class="pg-subtitle">
-      {% translate "Team Details" %}
-    </h3>
+    {% if not create %}
+      <div class="flex justify-between">
+        <h3 class="pg-subtitle">
+          {% translate "Team Details" %}
+        </h3>
+        <a href="{% url "single_team:feature_flags" request.team.slug %}" class="btn btn-primary">Manage Feature Flags</a>
+      </div>
+    {% endif %}
     <form method="post">
       {% csrf_token %}
       {% render_form_fields team_form %}
@@ -28,7 +33,7 @@
     </form>
   </section>
   {% if not create %}
-    {% with button_style="btn-outline" title_class="pg-subtitle" title="LLM Service Providers" subtitle="Large Language Model services"  %}
+    {% with button_style="btn-outline" title_class="pg-subtitle" title="LLM and Embedding Model Service Providers" subtitle="Large Language Model and Embedding model services"  %}
       {% has_perm "service_providers" "add_llmprovider" as allow_new %}
       {% url "service_providers:table" request.team.slug "llm" as table_url %}
       {% url "service_providers:llm_new" request.team.slug as new_object_url %}

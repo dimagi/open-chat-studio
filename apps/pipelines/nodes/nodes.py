@@ -17,8 +17,11 @@ from jinja2.sandbox import SandboxedEnvironment
 from langchain_core.messages import BaseMessage
 from langchain_core.prompts import MessagesPlaceholder, PromptTemplate
 from langchain_core.runnables import RunnableLambda, RunnablePassthrough
+from langchain_core.tools import BaseTool
 from langchain_openai.chat_models.base import OpenAIRefusalError
 from langchain_text_splitters import RecursiveCharacterTextSplitter
+from langgraph.constants import END
+from langgraph.types import Command, interrupt
 from pydantic import BaseModel, BeforeValidator, Field, create_model, field_serializer, field_validator, model_validator
 from pydantic import ValidationError as PydanticValidationError
 from pydantic.config import ConfigDict
@@ -32,7 +35,7 @@ from apps.chat.agent.tools import get_node_tools
 from apps.chat.conversation import compress_chat_history, compress_pipeline_chat_history
 from apps.documents.models import Collection
 from apps.experiments.models import BuiltInTools, ExperimentSession, ParticipantData
-from apps.pipelines.exceptions import PipelineNodeBuildError, PipelineNodeRunError
+from apps.pipelines.exceptions import AbortPipeline, PipelineNodeBuildError, PipelineNodeRunError, WaitForNextInput
 from apps.pipelines.models import PipelineChatHistory, PipelineChatHistoryModes, PipelineChatHistoryTypes
 from apps.pipelines.nodes.base import (
     NodeSchema,
@@ -44,11 +47,11 @@ from apps.pipelines.nodes.base import (
     Widgets,
     deprecated_node,
 )
+from apps.pipelines.nodes.tool_callbacks import ToolCallbacks
 from apps.pipelines.tasks import send_email_from_pipeline
 from apps.service_providers.exceptions import ServiceProviderConfigError
 from apps.service_providers.llm_service.adapters import AssistantAdapter, ChatAdapter
 from apps.service_providers.llm_service.history_managers import PipelineHistoryManager
-from apps.service_providers.llm_service.main import OpenAIBuiltinTool
 from apps.service_providers.llm_service.prompt_context import PromptTemplateContext
 from apps.service_providers.llm_service.runnables import (
     AgentAssistantChat,
@@ -58,6 +61,7 @@ from apps.service_providers.llm_service.runnables import (
     SimpleLLMChat,
 )
 from apps.service_providers.models import LlmProviderModel
+from apps.utils.langchain import dict_to_json_schema
 from apps.utils.prompt import OcsPromptTemplate, PromptVars, validate_prompt_variables
 
 OptionalInt = Annotated[int | None, BeforeValidator(lambda x: None if isinstance(x, str) and len(x) == 0 else x)]
@@ -140,6 +144,24 @@ class LLMResponseMixin(BaseModel):
     llm_temperature: float = Field(
         default=0.7, ge=0.0, le=2.0, title="Temperature", json_schema_extra=UiSchema(widget=Widgets.range)
     )
+
+    @model_validator(mode="after")
+    def validate_llm_model_deprecation(self):
+        try:
+            model = self.get_llm_provider_model()
+        except PipelineNodeBuildError as e:
+            raise PydanticCustomError(
+                "invalid_model",
+                str(e),
+                {"field": "llm_provider_id"},
+            ) from None
+        if model.deprecated:
+            raise PydanticCustomError(
+                "deprecated_model",
+                f"LLM provider model '{model.name}' is deprecated.",
+                {"field": "llm_provider_id"},
+            )
+        return self
 
     def get_llm_service(self):
         from apps.service_providers.models import LlmProvider
@@ -260,7 +282,7 @@ class LLMResponse(PipelineNode, LLMResponseMixin):
 
     model_config = ConfigDict(json_schema_extra=NodeSchema(label="LLM response"))
 
-    def _process(self, input, **kwargs) -> PipelineState:
+    def _process(self, input: str, state: PipelineState) -> PipelineState:
         llm = self.get_chat_model()
         output = llm.invoke(input, config=self._config)
         return PipelineState.from_node_output(node_name=self.name, node_id=self.node_id, output=output.content)
@@ -313,22 +335,37 @@ class LLMResponseWithPrompt(LLMResponse, HistoryMixin, OutputMessageTagMixin):
     )
     prompt: str = Field(
         default="You are a helpful assistant. Answer the user's query as best you can",
-        json_schema_extra=UiSchema(widget=Widgets.expandable_text),
+        json_schema_extra=UiSchema(
+            widget=Widgets.text_editor, options_source=OptionsSource.text_editor_autocomplete_vars
+        ),
     )
     collection_id: OptionalInt = Field(
         None,
         title="Media",
         json_schema_extra=UiSchema(
-            widget=Widgets.select, options_source=OptionsSource.collection, flag_required="pipelines-v2"
+            widget=Widgets.select, options_source=OptionsSource.collection, flag_required="flag_pipelines-v2"
         ),
     )
     collection_index_id: OptionalInt = Field(
         None,
         title="Collection Index",
         json_schema_extra=UiSchema(
-            widget=Widgets.select, options_source=OptionsSource.collection_index, flag_required="pipelines-v2"
+            widget=Widgets.select, options_source=OptionsSource.collection_index, flag_required="flag_pipelines-v2"
         ),
     )
+    max_results: OptionalInt = Field(
+        default=20,
+        ge=1,
+        le=100,
+        description="The maximum number of results to retrieve from the index",
+        json_schema_extra=UiSchema(widget=Widgets.range),
+    )
+    generate_citations: bool = Field(
+        default=True,
+        description="Allow files from this collection to be referenced in LLM responses and downloaded by users",
+        json_schema_extra=UiSchema(widget=Widgets.toggle),
+    )
+
     tools: list[str] = Field(
         default_factory=list,
         description="The tools to enable for the bot",
@@ -359,7 +396,9 @@ class LLMResponseWithPrompt(LLMResponse, HistoryMixin, OutputMessageTagMixin):
             "media": self.collection_id,
         }
         try:
-            validate_prompt_variables(context=context, prompt_key="prompt", known_vars=set(PromptVars.values))
+            # FUTURE TODO: add temp_state and session_state to PromptVars
+            known_vars = set(PromptVars.values) | PromptVars.pipeline_extra_known_vars()
+            validate_prompt_variables(context=context, prompt_key="prompt", known_vars=known_vars)
             return self
         except ValidationError as e:
             raise PydanticCustomError(
@@ -402,21 +441,22 @@ class LLMResponseWithPrompt(LLMResponse, HistoryMixin, OutputMessageTagMixin):
             max_token_limit=provider_model.max_token_limit,
             chat_model=chat_model,
         )
-        tools = get_node_tools(self.django_node, session, attachment_callback=history_manager.attach_file_id)
-        built_in_tools = self.built_in_tools
-        tools.extend(self.get_llm_service().attach_built_in_tools(built_in_tools, self.tool_config))
-        if self.collection_index_id:
-            collection = Collection.objects.get(id=self.collection_index_id)
-            builtin_tools = OpenAIBuiltinTool(type="file_search", vector_store_ids=[collection.openai_vector_store_id])
-            tools.append(builtin_tools)
+        tool_callbacks = ToolCallbacks()
 
+        # Tools setup
+        tools = self._get_configured_tools(session=session, tool_callbacks=tool_callbacks)
+        attachments = self._get_attachments(state)
+
+        # Chat setup
         chat_adapter = ChatAdapter.for_pipeline(
             session=session,
             node=self,
             llm_service=self.get_llm_service(),
             provider_model=provider_model,
             tools=tools,
+            pipeline_state=state,
             disabled_tools=self.disabled_tools,
+            expect_citations=self.generate_citations,
         )
         allowed_tools = chat_adapter.get_allowed_tools()
         # TODO: tracing
@@ -429,15 +469,35 @@ class LLMResponseWithPrompt(LLMResponse, HistoryMixin, OutputMessageTagMixin):
             chat = AgentLLMChat(adapter=chat_adapter, history_manager=history_manager)
         else:
             chat = SimpleLLMChat(adapter=chat_adapter, history_manager=history_manager)
-
         # Invoke runnable
-        result = chat.invoke(input=input)
+        result = chat.invoke(input=input, attachments=attachments)
         return PipelineState.from_node_output(
             node_name=self.name,
             node_id=self.node_id,
             output=result.output,
-            output_message_metadata=history_manager.output_message_metadata,
+            output_message_metadata={
+                **history_manager.output_message_metadata,
+                **tool_callbacks.output_message_metadata,
+            },
+            intents=tool_callbacks.intents,
         )
+
+    def _get_attachments(self, state: PipelineState) -> list:
+        return [att for att in state.get("temp_state", {}).get("attachments", [])]
+
+    def _get_configured_tools(
+        self, session: ExperimentSession | None, tool_callbacks: ToolCallbacks
+    ) -> list[dict | BaseTool]:
+        """Get instantiated tools for the given node configuration."""
+        tools = get_node_tools(self.django_node, session, tool_callbacks=tool_callbacks)
+        tools.extend(self.get_llm_service().attach_built_in_tools(self.built_in_tools, self.tool_config))
+        if self.collection_index_id:
+            collection = Collection.objects.get(id=self.collection_index_id)
+            tools.append(
+                collection.get_search_tool(max_results=self.max_results, generate_citations=self.generate_citations)
+            )
+
+        return tools
 
 
 class SendEmail(PipelineNode, OutputMessageTagMixin):
@@ -508,7 +568,7 @@ class BooleanNode(PipelineRouterNode):
     )
 
     def _process_conditional(self, state: PipelineState) -> tuple[Literal["true", "false"], bool]:
-        if self.input_equals == state["messages"][-1]:
+        if self.input_equals == state["node_input"]:
             return "true", False
         return "false", False
 
@@ -595,9 +655,8 @@ class RouterNode(RouterMixin, PipelineRouterNode, HistoryMixin):
             "prompt": self.prompt,
         }
         try:
-            validate_prompt_variables(
-                context=context, prompt_key="prompt", known_vars=set([PromptVars.PARTICIPANT_DATA])
-            )
+            known_vars = {PromptVars.PARTICIPANT_DATA.value} | PromptVars.pipeline_extra_known_vars()
+            validate_prompt_variables(context=context, prompt_key="prompt", known_vars=known_vars)
             return self
         except ValidationError as e:
             raise PydanticCustomError(
@@ -614,10 +673,13 @@ class RouterNode(RouterMixin, PipelineRouterNode, HistoryMixin):
             ]
         )
         session: ExperimentSession = state["experiment_session"]
-        node_input = state["messages"][-1]
-
+        node_input = state["node_input"]
         context = {"input": node_input}
-        context.update(PromptTemplateContext(session).get_context(prompt.input_variables))
+        extra_prompt_context = {
+            "temp_state": state.get("temp_state", {}),
+            "session_state": session.state or {},
+        }
+        context.update(PromptTemplateContext(session, extra=extra_prompt_context).get_context(prompt.input_variables))
 
         if self.history_type != PipelineChatHistoryTypes.NONE and session:
             input_messages = prompt.format_messages(**context)
@@ -786,32 +848,7 @@ class ExtractStructuredDataNodeMixin:
         return text_splitter.split_text(input)
 
     def get_tool_class(self, data: dict):
-        """Converts a dictionary to a JSON schema by first converting it to a Pydantic object and dumping it again.
-        The input should be in the format {"key": "description", "key2": [{"key": "description"}]}
-
-        Nested objects are not supported at the moment
-
-        Input example 1:
-        {"name": "the user's name", "surname": "the user's surname"}
-
-        Input example 2:
-        {"name": "the user's name", "pets": [{"name": "the pet's name": "type": "the type of animal"}]}
-
-        """
-
-        def _create_model_from_data(value_data, model_name: str):
-            pydantic_schema = {}
-            for key, value in value_data.items():
-                if isinstance(value, str):
-                    pydantic_schema[key] = (str | None, Field(description=value))
-                elif isinstance(value, list):
-                    model = _create_model_from_data(value[0], key.capitalize())
-                    pydantic_schema[key] = (list[model], Field(description=f"A list of {key}"))
-            return create_model(model_name, **pydantic_schema)
-
-        Model = _create_model_from_data(data, "CustomModel")
-        Model.description = ""
-        return Model
+        return dict_to_json_schema(data)
 
 
 class StructuredDataSchemaValidatorMixin:
@@ -1067,7 +1104,7 @@ class CodeNode(PipelineNode, OutputMessageTagMixin):
             raise PydanticCustomError("invalid_code", "{error}", {"error": exc.msg}) from None
         return value
 
-    def _process(self, input: str, state: PipelineState) -> PipelineState:
+    def _process(self, input: str, state: PipelineState) -> PipelineState | Command:
         function_name = "main"
         byte_code = compile_restricted(
             self.code,
@@ -1076,17 +1113,35 @@ class CodeNode(PipelineNode, OutputMessageTagMixin):
         )
 
         custom_locals = {}
-        custom_globals = self._get_custom_globals(self.node_id, state)
-        # TODO: tracing {"logger": self.logger}
+        output_state = PipelineState()
+        custom_globals = self._get_custom_globals(self.node_id, state, output_state)
         kwargs = {}
         try:
             exec(byte_code, custom_globals, custom_locals)
-            result = str(custom_locals[function_name](input, **kwargs))
+            result = custom_locals[function_name](input, **kwargs)
+        except WaitForNextInput:
+            return Command(goto=END)
+        except AbortPipeline as abort:
+            return interrupt(abort.to_json())
         except Exception as exc:
             raise PipelineNodeRunError(exc) from exc
-        return PipelineState.from_node_output(node_name=self.name, node_id=self.node_id, output=result)
 
-    def _get_custom_globals(self, node_id, state: PipelineState):
+        if isinstance(result, Command):
+            return result
+        return Command(
+            goto=self._outgoing_nodes,
+            update=PipelineState.from_node_output(
+                node_name=self.name, node_id=self.node_id, output=str(result), **output_state
+            ),
+        )
+
+    def _get_custom_globals(self, node_id, state: PipelineState, output_state: PipelineState) -> dict:
+        """
+        Args:
+            node_id: This node's ID
+            state: The input state. Do not modify this state.
+            output_state: An empty state dict to which state modifications should be made.
+        """
         from RestrictedPython.Eval import (
             default_guarded_getitem,
             default_guarded_getiter,
@@ -1095,7 +1150,11 @@ class CodeNode(PipelineNode, OutputMessageTagMixin):
         custom_globals = safe_globals.copy()
 
         participant_data_proxy = self.get_participant_data_proxy(state)
-        pipeline_state = PipelineState(state.copy())
+        pipeline_state = PipelineState.clone(state)
+
+        # copy this from input to output to create a consistent view within the code execution
+        output_state["temp_state"] = pipeline_state.get("temp_state") or {}
+
         # add this node into the state so that we can trace the path
         pipeline_state["outputs"] = {**state["outputs"], self.name: {"node_id": node_id}}
         custom_globals.update(
@@ -1110,16 +1169,42 @@ class CodeNode(PipelineNode, OutputMessageTagMixin):
                 "get_participant_data": participant_data_proxy.get,
                 "set_participant_data": participant_data_proxy.set,
                 "get_participant_schedules": participant_data_proxy.get_schedules,
-                "get_temp_state_key": self._get_temp_state_key(state),
-                "set_temp_state_key": self._set_temp_state_key(state),
+                "get_temp_state_key": self._get_temp_state_key(output_state),
+                "set_temp_state_key": self._set_temp_state_key(output_state),
                 "get_session_state_key": self._get_session_state_key(state["experiment_session"]),
                 "set_session_state_key": self._set_session_state_key(state["experiment_session"]),
                 "get_selected_route": pipeline_state.get_selected_route,
                 "get_node_path": pipeline_state.get_node_path,
                 "get_all_routes": pipeline_state.get_all_routes,
+                "add_message_tag": output_state.add_message_tag,
+                "add_session_tag": output_state.add_session_tag,
+                "get_node_output": pipeline_state.get_node_output_by_name,
+                # control flow
+                "abort_with_message": self._abort_pipeline(),
+                "require_node_outputs": self._require_node_outputs(state),
             }
         )
         return custom_globals
+
+    def _abort_pipeline(self):
+        def abort_pipeline(message, tag_name: str = None):
+            raise AbortPipeline(message, tag_name)
+
+        return abort_pipeline
+
+    def _require_node_outputs(self, state: PipelineState):
+        """A helper function to require inputs from a specific node"""
+
+        def require_node_outputs(*node_names):
+            if len(node_names) == 1 and isinstance(node_names[0], list):
+                node_names = node_names[0]
+            if not all(isinstance(name, str) for name in node_names):
+                raise PipelineNodeRunError("Node names passed to 'require_node_outputs' must be a string")
+            for node_name in node_names:
+                if node_name not in state["outputs"]:
+                    raise WaitForNextInput(f"Node '{node_name}' has not produced any output yet")
+
+        return require_node_outputs
 
     def _get_session_state_key(self, session: ExperimentSession):
         def get_session_state_key(key_name: str):

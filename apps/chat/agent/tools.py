@@ -1,12 +1,13 @@
 import logging
-from collections.abc import Callable
+from dataclasses import dataclass
 from datetime import datetime, timedelta
 from functools import cached_property
-from typing import TYPE_CHECKING, Any, Union
+from typing import TYPE_CHECKING, Any, ClassVar, Union
 
 from django.db import transaction, utils
 from langchain_community.utilities.openapi import OpenAPISpec
 from langchain_core.tools import BaseTool
+from pgvector.django import CosineDistance
 
 from apps.channels.models import ChannelPlatform
 from apps.chat.agent import schemas
@@ -15,12 +16,17 @@ from apps.chat.models import ChatAttachment
 from apps.events.forms import ScheduledMessageConfigForm
 from apps.events.models import ScheduledMessage, TimePeriod
 from apps.experiments.models import AgentTools, Experiment, ExperimentSession, ParticipantData
+from apps.files.models import FileChunkEmbedding
 from apps.pipelines.models import Node
+from apps.pipelines.nodes.tool_callbacks import ToolCallbacks
 from apps.utils.time import pretty_date
 
 if TYPE_CHECKING:
     from apps.assistants.models import OpenAiAssistant
+    from apps.pipelines.models import Node
 
+
+OCS_CITATION_PATTERN = r"<CIT\s+(?P<file_id>\d+)\s*/>"
 
 SUCCESSFUL_ATTACHMENT_MESSAGE: str = "File {file_id} ({name}) is attached to your response"
 
@@ -29,11 +35,52 @@ CREATE_LINK_TEXT = """You can use this markdown link to reference it in your res
     if it is an image.
 """
 
+CHUNK_TEMPLATE = """
+## File name: {file_name}, file_id={file_id}
+### Content
+{chunk}
+"""
+
+CITATION_PROMPT = """**CRITICAL REQUIREMENT - MANDATORY CITATIONS:**
+
+You MUST cite all information using this exact format: <CIT file-id />
+
+**Citation Rules:**
+- Place citations immediately after each sentence or claim that references retrieved content
+- Use the specific file ID from the source document
+- Example: "The revenue increased by 15% last quarter <CIT 123 />.". In this example, "123" is the file ID of the
+source document.
+- NEVER provide information from retrieved files without proper citations
+
+**Response Structure:**
+1. Answer the user's question thoroughly
+2. Support each claim with evidence from the files
+3. Ensure every factual statement includes a citation
+4. If no relevant information exists in the files, explicitly state this
+
+Failure to include proper citations will result in an incomplete response.
+"""
+
+
+@dataclass
+class SearchToolConfig:
+    index_id: int
+    max_results: int = 5
+    generate_citations: bool = True
+
+    def get_index(self):
+        from apps.documents.models import Collection
+
+        return Collection.objects.get(id=self.index_id)
+
 
 class CustomBaseTool(BaseTool):
+    requires_callbacks: ClassVar[bool] = False
+
     experiment_session: ExperimentSession | None = None
     # Some tools like the reminder requires a chat session id in order to get back to the user later
     requires_session: bool = False
+    tool_callbacks: ToolCallbacks | None = None
 
     def _run(self, *args, **kwargs):
         if self.requires_session and not self.experiment_session:
@@ -48,7 +95,7 @@ class CustomBaseTool(BaseTool):
         """Use the tool asynchronously."""
         raise NotImplementedError("custom_search does not support async")
 
-    def action(*args, **kwargs):
+    def action(self, *args, **kwargs):
         raise Exception("Not implemented")
 
 
@@ -183,12 +230,28 @@ class UpdateParticipantDataTool(CustomBaseTool):
         return "Success"
 
 
+class EndSessionTool(CustomBaseTool):
+    requires_callbacks: ClassVar[bool] = True
+    name: str = AgentTools.END_SESSION
+    description: str = (
+        "End the current chat session. "
+        "This will mark the session as completed. "
+        "New messages will result in a new session being created."
+    )
+
+    def action(self, *args, **kwargs):
+        from apps.pipelines.nodes.base import Intents
+
+        self.tool_callbacks.register_intent(Intents.END_SESSION)
+        return "Your intent to end the session has been registered."
+
+
 class AttachMediaTool(CustomBaseTool):
+    requires_callbacks: ClassVar[bool] = True
     name: str = AgentTools.ATTACH_MEDIA
     description: str = "Attach a media file to your response"
     requires_session: bool = True
     args_schema: type[schemas.AttachMediaSchema] = schemas.AttachMediaSchema
-    callback: Callable[[str], None]
 
     @cached_property
     def chat_attachment(self) -> ChatAttachment:
@@ -204,7 +267,7 @@ class AttachMediaTool(CustomBaseTool):
         try:
             file = File.objects.get(id=file_id)
             self.chat_attachment.files.add(file_id)
-            self.callback(file_id)
+            self.tool_callbacks.attach_file(file_id)
             response = SUCCESSFUL_ATTACHMENT_MESSAGE.format(file_id=file_id, name=file.name)
 
             if self.experiment_session.experiment_channel.platform == ChannelPlatform.WEB:
@@ -220,6 +283,49 @@ class AttachMediaTool(CustomBaseTool):
             return f"File '{file_id}' does not exist"
         except utils.IntegrityError:
             return f"Unable to attach file '{file_id}' to the message"
+
+
+class SearchIndexTool(CustomBaseTool):
+    name: str = AgentTools.SEARCH_INDEX
+    description: str = "Search files / source material for relevant information pertaining to the user's query"
+    requires_session: bool = False
+    args_schema: type[schemas.SearchIndexSchema] = schemas.SearchIndexSchema
+    search_config: SearchToolConfig
+
+    @transaction.atomic
+    def action(self, query: str) -> str:
+        """
+        Do a simple search for the top most relevant file chunks based on the query provided by the user. A little query
+        rewriting is automatically done by the LLM, since it decides what query to use when invoking this tool.
+        """
+        # - [ ] Generate references
+        index = self.search_config.get_index()
+        max_results = self.search_config.max_results
+
+        query_vector = index.get_query_vector(query)
+        # This query is automatically team scoped
+        embeddings = (
+            FileChunkEmbedding.objects.annotate(distance=CosineDistance("embedding", query_vector))
+            .filter(collection_id=index.id)
+            .order_by("distance")
+            .select_related("file")
+            .only("text", "file__name")[:max_results]
+        )
+        retrieved_chunks = "".join([self._format_result(embedding) for embedding in embeddings])
+        response_template = """
+# Retrieved chunks
+{retrieved_chunks}
+{citation_prompt}
+"""
+        citation_prompt = CITATION_PROMPT if self.search_config.generate_citations else ""
+        return response_template.format(retrieved_chunks=retrieved_chunks, citation_prompt=citation_prompt)
+
+    def _format_result(self, embedding: FileChunkEmbedding) -> str:
+        """
+        Format the result from the search index into a more structured format.
+        """
+
+        return CHUNK_TEMPLATE.format(file_name=embedding.file.name, file_id=embedding.file_id, chunk=embedding.text)
 
 
 def _move_datetime_to_new_weekday_and_time(date: datetime, new_weekday: int, new_hour: int, new_minute: int):
@@ -281,6 +387,9 @@ TOOL_CLASS_MAP = {
     AgentTools.RECURRING_REMINDER: RecurringReminderTool,
     AgentTools.DELETE_REMINDER: DeleteReminderTool,
     AgentTools.UPDATE_PARTICIPANT_DATA: UpdateParticipantDataTool,
+    AgentTools.END_SESSION: EndSessionTool,
+    AgentTools.ATTACH_MEDIA: AttachMediaTool,
+    AgentTools.SEARCH_INDEX: SearchIndexTool,
 }
 
 
@@ -298,25 +407,29 @@ def get_assistant_tools(assistant, experiment_session: ExperimentSession | None 
 
 
 def get_node_tools(
-    node: Node, experiment_session: ExperimentSession | None = None, attachment_callback: Callable | None = None
+    node: Node, experiment_session: ExperimentSession | None = None, tool_callbacks: ToolCallbacks | None = None
 ) -> list[BaseTool]:
-    tools = get_tool_instances(node.params.get("tools") or [], experiment_session)
-    tools.extend(get_custom_action_tools(node))
+    tool_names = node.params.get("tools") or []
     if node.requires_attachment_tool():
-        tools.append(AttachMediaTool(experiment_session=experiment_session, callback=attachment_callback))
-
+        tool_names.append(AgentTools.ATTACH_MEDIA)
+    tools = get_tool_instances(tool_names, experiment_session, tool_callbacks)
+    tools.extend(get_custom_action_tools(node))
     return tools
 
 
-def get_tool_instances(tools_list, experiment_session: ExperimentSession | None = None) -> list[BaseTool]:
+def get_tool_instances(
+    tools_list, experiment_session: ExperimentSession | None = None, tool_callbacks=None
+) -> list[BaseTool]:
     tools = []
     for tool_name in tools_list:
         tool_cls = TOOL_CLASS_MAP[tool_name]
-        tools.append(tool_cls(experiment_session=experiment_session))
+        if tool_cls.requires_callbacks and not tool_callbacks:
+            raise ValueError(f"Tool {tool_name} requires callbacks but none were provided")
+        tools.append(tool_cls(experiment_session=experiment_session, tool_callbacks=tool_callbacks))
     return tools
 
 
-def get_custom_action_tools(action_holder: Union[Experiment, "OpenAiAssistant"]) -> list[BaseTool]:
+def get_custom_action_tools(action_holder: Union[Experiment, "OpenAiAssistant", "Node"]) -> list[BaseTool]:
     operations = action_holder.get_custom_action_operations().select_related("custom_action__auth_provider").all()
     return list(filter(None, [get_tool_for_custom_action_operation(operation) for operation in operations]))
 

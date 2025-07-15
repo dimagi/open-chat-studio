@@ -17,7 +17,12 @@ from apps.assistants.models import OpenAiAssistant
 from apps.experiments.models import Experiment
 from apps.files.views import BaseAddFileHtmxView
 from apps.service_providers.forms import LlmProviderModelForm
-from apps.service_providers.models import LlmProviderModel, MessagingProviderType, VoiceProviderType
+from apps.service_providers.models import (
+    EmbeddingProviderModel,
+    LlmProviderModel,
+    MessagingProviderType,
+    VoiceProviderType,
+)
 from apps.utils.deletion import get_related_objects
 
 from ..generics.chips import Chip
@@ -143,7 +148,7 @@ class CreateServiceProvider(
 
     def get_form(self, data=None):
         forms_to_exclude = []
-        if not flag_is_active(self.request, "open_ai_voice_engine"):
+        if not flag_is_active(self.request, "flag_open_ai_voice_engine"):
             forms_to_exclude.append(VoiceProviderType.openai_voice_engine)
 
         if not settings.SLACK_ENABLED:
@@ -179,13 +184,15 @@ class LlmProviderView(CreateServiceProvider):
 
     @property
     def extra_context(self):
-        default_models_by_type = _get_models_by_type(LlmProviderModel.objects.filter(team=None))
-        custom_models_type_type = _get_models_by_type(LlmProviderModel.objects.filter(team=self.request.team))
+        default_llm_models_by_type = _get_models_by_type(LlmProviderModel.objects.filter(team=None))
+        embedding_models_by_type = _get_models_by_type(EmbeddingProviderModel.objects.filter(team=None))
+        custom_llm_models_type_type = _get_models_by_type(LlmProviderModel.objects.filter(team=self.request.team))
         return {
             "active_tab": "manage-team",
             "title": self.provider_type.label,
-            "default_models_by_type": default_models_by_type,
-            "custom_models_by_type": custom_models_type_type,
+            "default_llm_models_by_type": default_llm_models_by_type,
+            "custom_llm_models_by_type": custom_llm_models_type_type,
+            "embedding_models_by_type": embedding_models_by_type,
             "new_model_form": LlmProviderModelForm(self.request.team),
         }
 
@@ -214,7 +221,8 @@ def create_llm_provider_model(request, team_slug: str):
         request,
         "service_providers/components/custom_llm_models.html",
         {
-            "models_by_type": _get_models_by_type(LlmProviderModel.objects.filter(team=request.team)),
+            "llm_models_by_type": _get_models_by_type(LlmProviderModel.objects.filter(team=request.team)),
+            "embedding_models_by_type": _get_models_by_type(LlmProviderModel.objects.filter(team=request.team)),
             "for_type": form.cleaned_data["type"],
         },
     )

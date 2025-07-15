@@ -42,6 +42,26 @@ class TranscriptAnalysis(BaseTeamModel):
         help_text="The LLM model to use",
         verbose_name="LLM Model",
     )
+    translation_language = models.CharField(
+        max_length=3, blank=True, help_text="ISO 639-2/T language code for translation"
+    )
+    translation_llm_provider = models.ForeignKey(
+        "service_providers.LlmProvider",
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="translation_analyses",
+        verbose_name="Translation LLM Provider",
+    )
+    translation_llm_provider_model = models.ForeignKey(
+        "service_providers.LlmProviderModel",
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="translation_analyses",
+        help_text="The LLM model to use for translation",
+        verbose_name="Translation LLM Model",
+    )
 
     def __str__(self):
         return self.name

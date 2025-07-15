@@ -1,7 +1,8 @@
 import json
-from datetime import datetime
+from datetime import datetime, timedelta
 from enum import StrEnum
 
+import pytz
 from django.contrib.contenttypes.models import ContentType
 from django.db.models import Exists, OuterRef, Q, Subquery
 
@@ -24,6 +25,7 @@ class Operators(StrEnum):
     ANY_OF = "any of"
     ALL_OF = "all of"
     EXCLUDES = "excludes"
+    RANGE = "range"
 
 
 FIELD_TYPE_FILTERS = {
@@ -33,15 +35,24 @@ FIELD_TYPE_FILTERS = {
         Operators.DOES_NOT_CONTAIN,
         Operators.STARTS_WITH,
         Operators.ENDS_WITH,
+        Operators.ANY_OF,
     ],
-    "timestamp": [Operators.ON, Operators.BEFORE, Operators.AFTER],
+    "timestamp": [Operators.ON, Operators.BEFORE, Operators.AFTER, Operators.RANGE],
     "choice": [Operators.ANY_OF, Operators.ALL_OF, Operators.EXCLUDES],
 }
 
+DATE_RANGE_OPTIONS = [
+    {"label": "Last 1 Hour", "value": "1h"},
+    {"label": "Last 1 Day", "value": "1d"},
+    {"label": "Last 7 Days", "value": "7d"},
+    {"label": "Last 15 Days", "value": "15d"},
+    {"label": "Last 30 Days", "value": "30d"},
+]
 
-def apply_dynamic_filters(query_set, request, parsed_params=None):
+
+def apply_dynamic_filters(query_set, parsed_params, timezone):
     query_set = _prepare_queryset(query_set)
-    param_source = parsed_params if parsed_params is not None else request.GET
+    param_source = parsed_params
     filter_conditions = Q()
     filter_applied = False
 
@@ -57,7 +68,7 @@ def apply_dynamic_filters(query_set, request, parsed_params=None):
         filter_operator = filter_operator[0] if isinstance(filter_operator, list) else filter_operator
         filter_value = filter_value[0] if isinstance(filter_value, list) else filter_value
 
-        condition = build_filter_condition(filter_column, filter_operator, filter_value)
+        condition = build_filter_condition(filter_column, filter_operator, filter_value, timezone)
         if condition:
             filter_conditions &= condition
             filter_applied = True
@@ -91,21 +102,25 @@ def _prepare_queryset(queryset):
     return queryset
 
 
-def build_filter_condition(column, operator, value):
+def build_filter_condition(column, operator, value, timezone):
     if not value:
         return None
     if column == "participant":
         return build_participant_filter(operator, value)
     elif column == "last_message":
-        return build_timestamp_filter(operator, value, "last_message_created_at")
+        return build_timestamp_filter(operator, value, "last_message_created_at", timezone)
     elif column == "first_message":
-        return build_timestamp_filter(operator, value, "first_message_created_at")
+        return build_timestamp_filter(operator, value, "first_message_created_at", timezone)
     elif column == "tags":
         return build_tags_filter(operator, value)
     elif column == "versions":
         return build_versions_filter(operator, value)
     elif column == "channels":
         return build_channels_filter(operator, value)
+    elif column == "experiment":
+        return build_experiment_filter(operator, value)
+    elif column == "state":
+        return build_state_filter(operator, value)
     return None
 
 
@@ -121,20 +136,50 @@ def build_participant_filter(operator, value):
         return Q(participant__identifier__istartswith=value)
     elif operator == Operators.ENDS_WITH:
         return Q(participant__identifier__iendswith=value)
+    elif operator == Operators.ANY_OF:
+        value = json.loads(value)
+        return Q(participant__identifier__in=value)
     return None
 
 
-def build_timestamp_filter(operator, value, field=None):
-    """Build filter condition for timestamp"""
+def build_timestamp_filter(operator, value, field=None, timezone=None):
+    """Build filter condition for timestamp, supporting date and relative ranges like '1h', '7d'.
+    For 1d 24h are subtracted i.e sessions in the range of 24h are shown not based on the date"""
+
+    if not value or not field:
+        return None
+
     try:
-        date_value = datetime.strptime(value, "%Y-%m-%d").date()
-        if operator == Operators.ON:
-            return Q(**{f"{field}__date": date_value})
-        elif operator == Operators.BEFORE:
-            return Q(**{f"{field}__date__lt": date_value})
-        elif operator == Operators.AFTER:
-            return Q(**{f"{field}__date__gt": date_value})
-    except (ValueError, TypeError):
+        client_tz = pytz.timezone(timezone) if timezone else pytz.UTC
+        now_client = datetime.now(client_tz)
+        # Handle 'range' operator with relative time (e.g., '1h', '7d')
+        if operator == Operators.RANGE:
+            if not value.endswith(("h", "d", "m")):
+                return None
+            num = int(value[:-1])
+            unit = value[-1]
+
+            if unit == "h":
+                delta = timedelta(hours=num)
+            elif unit == "d":
+                delta = timedelta(days=num)
+            elif unit == "m":
+                delta = timedelta(minutes=num)
+
+            range_starting_client_time = now_client - delta
+            range_starting_utc_time = range_starting_client_time.astimezone(pytz.UTC)
+            return Q(**{f"{field}__gte": range_starting_utc_time})
+
+        else:
+            # No need to convert the date as we are passing only date and date shown on the UI is in client time only
+            date_value = datetime.fromisoformat(value)
+            if operator == Operators.ON:
+                return Q(**{f"{field}__date": date_value})
+            elif operator == Operators.BEFORE:
+                return Q(**{f"{field}__date__lt": date_value})
+            elif operator == Operators.AFTER:
+                return Q(**{f"{field}__date__gt": date_value})
+    except (ValueError, TypeError, pytz.UnknownTimeZoneError):
         pass
     return None
 
@@ -223,4 +268,47 @@ def build_channels_filter(operator, value):
             return ~Q(experiment_channel__platform__in=selected_values)
     except json.JSONDecodeError:
         pass
+    return None
+
+
+def build_experiment_filter(operator, value):
+    try:
+        selected_experiment_ids = json.loads(value)
+        if not selected_experiment_ids:
+            return None
+        # Convert to integers if they're strings
+        experiment_ids = []
+        for exp_id in selected_experiment_ids:
+            try:
+                experiment_ids.append(int(exp_id))
+            except (ValueError, TypeError):
+                continue
+
+        if not experiment_ids:
+            return None
+
+        if operator == Operators.ANY_OF:
+            return Q(experiment_id__in=experiment_ids)
+        elif operator == Operators.EXCLUDES:
+            return ~Q(experiment_id__in=experiment_ids)
+    except json.JSONDecodeError:
+        pass
+    return None
+
+
+def build_state_filter(operator, value):
+    try:
+        selected_values = json.loads(value)
+    except json.JSONDecodeError:
+        return None
+
+    if not selected_values:
+        return None
+
+    if operator == Operators.ANY_OF:
+        return Q(status__in=selected_values)
+
+    elif operator == Operators.EXCLUDES:
+        return ~Q(status__in=selected_values)
+
     return None

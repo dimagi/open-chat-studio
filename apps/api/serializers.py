@@ -55,7 +55,7 @@ class FileSerializer(serializers.ModelSerializer):
 
 
 class MessageSerializer(TaggitSerializer, serializers.ModelSerializer):
-    created_at = serializers.DateTimeField(read_only=True)
+    created_at = serializers.DateTimeField(read_only=True, required=False)
     role = serializers.ChoiceField(choices=["system", "user", "assistant"], source="message_type")
     content = serializers.CharField()
     metadata = serializers.JSONField(
@@ -191,9 +191,61 @@ class ParticipantDataUpdateRequest(serializers.Serializer):
     data = ParticipantExperimentData(many=True)
 
 
+class ChatStartSessionRequest(serializers.Serializer):
+    chatbot_id = serializers.UUIDField(label="Chatbot ID")
+    participant_id = serializers.CharField(
+        label="Participant ID",
+        required=False,
+        help_text="Optional participant identifier. If not provided, an anonymous participant will be created. "
+        "This field will be ignored if the request is not authenticated.",
+    )
+    session_data = serializers.DictField(
+        label="Initial session data",
+        required=False,
+        help_text="Optional initial state data for the session. "
+        "This field will be ignored if the request is not authenticated.",
+    )
+
+
+class ChatStartSessionResponse(serializers.Serializer):
+    session_id = serializers.UUIDField(label="Session ID")
+    chatbot = ExperimentSerializer(read_only=True)
+    participant = ParticipantSerializer(read_only=True)
+    seed_message_task_id = serializers.CharField(required=False, read_only=True)
+
+
+class ChatSendMessageRequest(serializers.Serializer):
+    message = serializers.CharField(label="Message content")
+
+
+class ChatSendMessageResponse(serializers.Serializer):
+    task_id = serializers.CharField(label="Task ID", help_text="The ID of the task that is processing the message")
+    status = serializers.ChoiceField(
+        choices=[("processing", "Processing"), ("completed", "Completed"), ("error", "Error")],
+        label="Processing status",
+    )
+    error = serializers.CharField(label="Error message", required=False)
+
+
+class ChatPollResponse(serializers.Serializer):
+    messages = MessageSerializer(many=True, label="New messages since last poll")
+    has_more = serializers.BooleanField(label="Whether there are more messages to fetch")
+    session_status = serializers.ChoiceField(
+        choices=[("active", "Active"), ("ended", "Ended")], label="Current session status"
+    )
+
+
 class TriggerBotMessageRequest(serializers.Serializer):
     identifier = serializers.CharField(label="Participant Identifier")
     platform = serializers.ChoiceField(choices=ChannelPlatform.choices, label="Participant Platform")
     experiment = serializers.UUIDField(label="Experiment ID")
     prompt_text = serializers.CharField(label="Prompt to go to bot")
     start_new_session = serializers.BooleanField(label="Starts a new session", required=False, default=False)
+    session_data = serializers.DictField(
+        help_text="Update session data. This will be merged with existing session data", required=False, default=dict
+    )
+    participant_data = serializers.DictField(
+        help_text="Update Participant data. This will be merged with existing participant data",
+        required=False,
+        default=dict,
+    )

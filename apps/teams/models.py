@@ -2,12 +2,14 @@ import uuid
 
 from django.conf import settings
 from django.contrib.auth.models import Group, Permission
+from django.core.exceptions import ValidationError
 from django.db import models
 from django.urls import reverse
 from django.utils.translation import gettext
 from field_audit import audit_fields
 from field_audit.models import AuditingManager
 from waffle import get_setting
+from waffle.managers import FlagManager
 from waffle.models import CACHE_EMPTY, AbstractUserFlag
 from waffle.utils import get_cache, keyfmt
 
@@ -144,6 +146,11 @@ class BaseTeamModel(BaseModel):
         abstract = True
 
 
+class FlagObjectManager(FlagManager, AuditingManager):
+    pass
+
+
+@audit_fields(*model_audit_fields.FLAG_FIELDS, audit_special_queryset_writes=True)
 class Flag(AbstractUserFlag):
     """Custom Waffle flag to support usage with teams.
 
@@ -157,6 +164,7 @@ class Flag(AbstractUserFlag):
         blank=True,
         help_text=gettext("Activate this flag for these teams."),
     )
+    objects = FlagObjectManager()
 
     def get_flush_keys(self, flush_keys=None):
         flush_keys = super().get_flush_keys(flush_keys)
@@ -207,3 +215,12 @@ class Flag(AbstractUserFlag):
         team_ids = set(self.teams.all().values_list("pk", flat=True))
         cache.add(cache_key, team_ids or CACHE_EMPTY)
         return team_ids
+
+    def clean(self):
+        # Custom validation logic to enforce naming convention
+        if not self.name.startswith("flag_"):
+            raise ValidationError(f"Flag name must start with 'flag_': {self.name}")
+
+    def save(self, *args, **kwargs):
+        self.full_clean()
+        super().save(*args, **kwargs)

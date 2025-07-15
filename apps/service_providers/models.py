@@ -139,8 +139,21 @@ class LlmProvider(BaseTeamModel, ProviderMixin):
         config = {k: v for k, v in self.config.items() if v}
         return self.type_enum.get_llm_service(config)
 
-    def get_index_manager(self):
-        return self.get_llm_service().get_index_manager()
+    def get_remote_index_manager(self, index_id: str):
+        return self.get_llm_service().get_remote_index_manager(index_id)
+
+    def get_local_index_manager(self, embedding_model_name: str):
+        """
+        Returns a LocalIndexManager for the given embedding model.
+        """
+        return self.get_llm_service().get_local_index_manager(embedding_model_name)
+
+    def create_remote_index(self, name: str, file_ids: list = None) -> str:
+        """
+        Creates a remote index with the given name and returns its ID.
+        If file_ids are provided, they will be linked to the index.
+        """
+        return self.get_llm_service().create_remote_index(name, file_ids)
 
 
 class LlmProviderModelManager(models.Manager):
@@ -179,6 +192,11 @@ class LlmProviderModel(BaseTeamModel):
         help_text="When the message history for a session exceeds this limit (in tokens), it will be compressed. "
         "If 0, compression will be disabled which may result in errors or high LLM costs.",
     )
+    deprecated = models.BooleanField(default=False)
+
+    @property
+    def display_name(self):
+        return f"{self.name} (Deprecated)" if self.deprecated else self.name
 
     objects = LlmProviderModelManager()
 
@@ -190,7 +208,7 @@ class LlmProviderModel(BaseTeamModel):
         ]
 
     def __str__(self):
-        label = f"{LlmProviderTypes[self.type].label}: {self.name}"
+        label = f"{LlmProviderTypes[self.type].label}: {self.display_name}"
         if self.is_custom():
             label = f"{label} (custom for {self.team.name})"
         return label
@@ -489,3 +507,34 @@ class TraceProvider(BaseTeamModel):
 
     def get_service(self) -> tracing.Tracer:
         return self.type_enum.get_service(self.config)
+
+
+class EmbeddingProviderModelManager(models.Manager):
+    def for_team(self, team):
+        return super().get_queryset().filter(models.Q(team=team) | models.Q(team__isnull=True))
+
+
+class EmbeddingProviderModel(BaseTeamModel):
+    type = models.CharField(max_length=255, choices=LlmProviderTypes.choices)
+    name = models.CharField(max_length=128, help_text="The name of the model. e.g. 'text-embedding-3-small'")
+    team = models.ForeignKey(
+        Team,
+        verbose_name=gettext("Team"),
+        on_delete=models.CASCADE,
+        null=True,
+        blank=True,
+    )
+
+    objects = EmbeddingProviderModelManager()
+
+    class Meta:
+        constraints = [
+            models.UniqueConstraint(fields=("team", "name", "type"), name="unique_team_name_type"),
+        ]
+
+    @property
+    def type_enum(self):
+        return LlmProviderTypes[str(self.type)]
+
+    def __str__(self):
+        return f"{self.name}"

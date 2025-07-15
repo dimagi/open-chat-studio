@@ -7,10 +7,11 @@ from apps.utils.time import pretty_date
 
 
 class PromptTemplateContext:
-    def __init__(self, session, source_material_id: int = None, collection_id: int = None):
+    def __init__(self, session, source_material_id: int = None, collection_id: int = None, extra: dict = None):
         self.session = session
         self.source_material_id = source_material_id
         self.collection_id = collection_id
+        self.extra = extra or {}
         self.context_cache = {}
         self.participant_data_proxy = ParticipantDataProxy(self.session)
 
@@ -27,10 +28,15 @@ class PromptTemplateContext:
         context = {}
         for key, factory in self.factories.items():
             # allow partial matches to support format specifiers
-            if any(key in var for var in variables):
+            if any(var.startswith(key) for var in variables):
                 if key not in self.context_cache:
                     self.context_cache[key] = factory()
                 context[key] = self.context_cache[key]
+
+        # add any extra context provided
+        for key, value in self.extra.items():
+            if key not in context:
+                context[key] = SafeAccessWrapper(value)
         return context
 
     def get_source_material(self):

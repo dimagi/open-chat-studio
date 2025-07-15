@@ -67,5 +67,12 @@ nav:
   - Architecture:
     - Overview: architecture/index.md
   - Developer Guides:
+    - Common Practises: developer_guides/common_practises.md
     - Versioning: developer_guides/versioning.md
     - Changelog: developer_guides/changelog.md
+    - Feature Flags: developer_guides/feature_flags.md
+    - Slack Channel Integration: developer_guides/slack_channel_integration.md
+    - Index Managers: developer_guides/index_managers.md
+  - Admin Guides:
+    - Overview: admin_guides/index.md
+    - Banners System: admin_guides/banners.md

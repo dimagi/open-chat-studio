@@ -31,7 +31,6 @@ from django_cryptography.fields import encrypt
 from field_audit import audit_fields
 from field_audit.models import AuditAction, AuditingManager
 
-from apps.annotations.models import Tag
 from apps.chat.models import Chat, ChatMessage, ChatMessageType
 from apps.custom_actions.mixins import CustomActionOperationMixin
 from apps.experiments import model_audit_fields
@@ -233,8 +232,7 @@ class SourceMaterial(BaseTeamModel, VersionsMixin):
         super().archive()
         self.experiment_set.update(source_material=None, audit_action=AuditAction.AUDIT)
 
-    @property
-    def version_details(self) -> VersionDetails:
+    def _get_version_details(self) -> VersionDetails:
         return VersionDetails(
             instance=self,
             fields=[
@@ -280,6 +278,18 @@ class SafetyLayer(BaseTeamModel, VersionsMixin):
 
     def get_absolute_url(self):
         return reverse("experiments:safety_edit", args=[self.team.slug, self.id])
+
+    def _get_version_details(self) -> VersionDetails:
+        return VersionDetails(
+            instance=self,
+            fields=[
+                VersionField(name="name", raw_value=self.name),
+                VersionField(name="prompt_text", raw_value=self.prompt_text),
+                VersionField(name="messages_to_review", raw_value=self.messages_to_review),
+                VersionField(name="default_response_to_user", raw_value=self.default_response_to_user),
+                VersionField(name="prompt_to_bot", raw_value=self.prompt_to_bot),
+            ],
+        )
 
 
 class SurveyObjectManager(VersionsObjectManagerMixin, models.Manager):
@@ -345,8 +355,7 @@ class Survey(BaseTeamModel, VersionsMixin):
         self.experiments_pre.update(pre_survey=None, audit_action=AuditAction.AUDIT)
         self.experiments_post.update(post_survey=None, audit_action=AuditAction.AUDIT)
 
-    @property
-    def version_details(self) -> VersionDetails:
+    def _get_version_details(self) -> VersionDetails:
         return VersionDetails(
             instance=self,
             fields=[
@@ -422,8 +431,7 @@ class ConsentForm(BaseTeamModel, VersionsMixin):
     def get_fields_to_exclude(self):
         return super().get_fields_to_exclude() + ["is_default"]
 
-    @property
-    def version_details(self) -> VersionDetails:
+    def _get_version_details(self) -> VersionDetails:
         return VersionDetails(
             instance=self,
             fields=[
@@ -546,15 +554,16 @@ class BuiltInTools(models.TextChoices):
                         "name": "allowed_domains",
                         "type": "expandable_text",
                         "label": "Allowed Domains",
-                        "helpText": "Add domains without https from which you want the search results. "
-                        "Use space to add multiple domains",
+                        "helpText": (
+                            "Only search these domains (e.g. example.com or example.com/blog). "
+                            "Separate entries with newlines."
+                        ),
                     },
                     {
                         "name": "blocked_domains",
                         "type": "expandable_text",
                         "label": "Blocked Domains",
-                        "helpText": "Add domains without https from which you don't want the search results."
-                        " Use space to add multiple domains",
+                        "helpText": "Exclude these domains from search. Separate entries with newlines.",
                     },
                 ],
             }
@@ -568,15 +577,20 @@ class AgentTools(models.TextChoices):
     MOVE_SCHEDULED_MESSAGE_DATE = "move-scheduled-message-date", gettext("Move Reminder Date")
     UPDATE_PARTICIPANT_DATA = "update-user-data", gettext("Update Participant Data")
     ATTACH_MEDIA = "attach-media", gettext("Attach Media")
+    END_SESSION = "end-session", gettext("End Session")
+    SEARCH_INDEX = "search-index", gettext("Search Index")
 
     @classmethod
     def reminder_tools(cls) -> list[Self]:
         return [cls.RECURRING_REMINDER, cls.ONE_OFF_REMINDER, cls.DELETE_REMINDER, cls.MOVE_SCHEDULED_MESSAGE_DATE]
 
     @staticmethod
-    def user_tool_choices() -> list["AgentTools"]:
+    def user_tool_choices(include_end_session: bool = True) -> list[tuple]:
         """Returns the set of tools that a user should be able to attach to the bot"""
-        return [(tool.value, tool.label) for tool in AgentTools if tool != AgentTools.ATTACH_MEDIA]
+        excluded_tools = [AgentTools.ATTACH_MEDIA, AgentTools.SEARCH_INDEX]
+        if not include_end_session:
+            excluded_tools.append(AgentTools.END_SESSION)
+        return [(tool.value, tool.label) for tool in AgentTools if tool not in excluded_tools]
 
 
 @audit_fields(*model_audit_fields.EXPERIMENT_FIELDS, audit_special_queryset_writes=True)
@@ -687,7 +701,6 @@ class Experiment(BaseTeamModel, VersionsMixin, CustomActionOperationMixin):
         default=VoiceResponseBehaviours.RECIPROCAL,
         help_text="This tells the bot when to reply with voice messages",
     )
-    files = models.ManyToManyField("files.File", blank=True)
     children = models.ManyToManyField(
         "Experiment", blank=True, through="ExperimentRoute", symmetrical=False, related_name="parents"
     )
@@ -720,6 +733,10 @@ class Experiment(BaseTeamModel, VersionsMixin, CustomActionOperationMixin):
     debug_mode_enabled = models.BooleanField(default=False)
     citations_enabled = models.BooleanField(default=True)
     create_version_task_id = models.CharField(max_length=128, blank=True)
+    file_uploads_enabled = models.BooleanField(
+        default=False,
+        help_text="Enables file attachments in the web chat interface.",
+    )
     objects = ExperimentObjectManager()
 
     class Meta:
@@ -740,6 +757,9 @@ class Experiment(BaseTeamModel, VersionsMixin, CustomActionOperationMixin):
                 name="unique_version_number_per_experiment",
             ),
         ]
+        indexes = [
+            models.Index(fields=["team", "is_archived", "working_version"]),
+        ]
 
     def __str__(self):
         if self.working_version is None:
@@ -747,8 +767,9 @@ class Experiment(BaseTeamModel, VersionsMixin, CustomActionOperationMixin):
         return f"{self.name} ({self.version_display})"
 
     def save(self, *args, **kwargs):
-        if self.working_version is None and self.is_default_version is True:
+        if self.working_version_id is None and self.is_default_version is True:
             raise ValueError("A working experiment cannot be a default version")
+        self._clear_version_cache()
         return super().save(*args, **kwargs)
 
     def get_absolute_url(self):
@@ -902,7 +923,6 @@ class Experiment(BaseTeamModel, VersionsMixin, CustomActionOperationMixin):
         self._copy_pipeline_to_new_version(new_version, is_copy)
         self._copy_custom_action_operations_to_new_version(new_experiment=new_version, is_copy=is_copy)
 
-        new_version.files.set(self.files.all())
         return new_version
 
     def get_fields_to_exclude(self):
@@ -1005,134 +1025,145 @@ class Experiment(BaseTeamModel, VersionsMixin, CustomActionOperationMixin):
     def is_participant_allowed(self, identifier: str):
         return identifier in self.participant_allowlist or self.team.members.filter(email=identifier).exists()
 
-    @property
-    def version_details(self) -> VersionDetails:
+    def _get_version_details(self) -> VersionDetails:
         """
         Returns a `Version` instance representing the experiment version.
         """
-        return VersionDetails(
-            instance=self,
-            fields=[
-                VersionField(group_name="General", name="name", raw_value=self.name),
-                VersionField(group_name="General", name="description", raw_value=self.description),
-                VersionField(group_name="General", name="seed_message", raw_value=self.seed_message),
-                VersionField(
-                    group_name="General",
-                    name="allowlist",
-                    raw_value=self.participant_allowlist,
-                    to_display=VersionFieldDisplayFormatters.format_array_field,
-                ),
-                # Language Model
-                VersionField(group_name="Language Model", name="prompt_text", raw_value=self.prompt_text),
-                VersionField(group_name="Language Model", name="llm_provider_model", raw_value=self.llm_provider_model),
-                VersionField(group_name="Language Model", name="llm_provider", raw_value=self.llm_provider),
-                VersionField(group_name="Language Model", name="temperature", raw_value=self.temperature),
-                # Safety
-                VersionField(
-                    group_name="Safety",
-                    name="safety_layers",
-                    queryset=self.safety_layers,
-                ),
-                VersionField(
-                    group_name="Safety",
-                    name="safety_violation_emails",
-                    raw_value=", ".join(self.safety_violation_notification_emails),
-                ),
-                VersionField(
-                    group_name="Safety",
-                    name="input_formatter",
-                    raw_value=self.input_formatter,
-                ),
-                # Consent
-                VersionField(group_name="Consent", name="consent_form", raw_value=self.consent_form),
-                VersionField(
-                    group_name="Consent",
-                    name="conversational_consent_enabled",
-                    raw_value=self.conversational_consent_enabled,
-                    to_display=VersionFieldDisplayFormatters.yes_no,
-                ),
-                # Surveys
-                VersionField(group_name="Surveys", name="pre-survey", raw_value=self.pre_survey),
-                VersionField(group_name="Surveys", name="post_survey", raw_value=self.post_survey),
-                # Voice
-                VersionField(group_name="Voice", name="voice_provider", raw_value=self.voice_provider),
-                VersionField(group_name="Voice", name="synthetic_voice", raw_value=self.synthetic_voice),
-                VersionField(
-                    group_name="Voice",
-                    name="voice_response_behaviour",
-                    raw_value=VoiceResponseBehaviours(self.voice_response_behaviour).label,
-                ),
-                VersionField(
-                    group_name="Voice",
-                    name="echo_transcript",
-                    raw_value=self.echo_transcript,
-                    to_display=VersionFieldDisplayFormatters.yes_no,
-                ),
-                VersionField(
-                    group_name="Voice",
-                    name="use_processor_bot_voice",
-                    raw_value=self.use_processor_bot_voice,
-                    to_display=VersionFieldDisplayFormatters.yes_no,
-                ),
-                # Source material
-                VersionField(
-                    group_name="Source Material",
-                    name="source_material",
-                    raw_value=self.source_material,
-                ),
-                # Tools
-                VersionField(
-                    group_name="Tools",
-                    name="tools",
-                    raw_value=set(self.tools),
-                    to_display=VersionFieldDisplayFormatters.format_tools,
-                ),
-                VersionField(
-                    group_name="Tools",
-                    name="custom_actions",
-                    queryset=self.get_custom_action_operations(),
-                    to_display=VersionFieldDisplayFormatters.format_custom_action_operation,
-                ),
+        fields = [
+            VersionField(group_name="General", name="name", raw_value=self.name),
+            VersionField(group_name="General", name="description", raw_value=self.description),
+            VersionField(group_name="General", name="seed_message", raw_value=self.seed_message),
+            VersionField(
+                group_name="General",
+                name="allowlist",
+                raw_value=self.participant_allowlist,
+                to_display=VersionFieldDisplayFormatters.format_array_field,
+            ),
+            # Consent
+            VersionField(group_name="Consent", name="consent_form", raw_value=self.consent_form),
+            VersionField(
+                group_name="Consent",
+                name="conversational_consent_enabled",
+                raw_value=self.conversational_consent_enabled,
+                to_display=VersionFieldDisplayFormatters.yes_no,
+            ),
+            # Surveys
+            VersionField(group_name="Surveys", name="pre-survey", raw_value=self.pre_survey),
+            VersionField(group_name="Surveys", name="post_survey", raw_value=self.post_survey),
+            # Voice
+            VersionField(group_name="Voice", name="voice_provider", raw_value=self.voice_provider),
+            VersionField(group_name="Voice", name="synthetic_voice", raw_value=self.synthetic_voice),
+            VersionField(
+                group_name="Voice",
+                name="voice_response_behaviour",
+                raw_value=VoiceResponseBehaviours(self.voice_response_behaviour).label,
+            ),
+            VersionField(
+                group_name="Voice",
+                name="echo_transcript",
+                raw_value=self.echo_transcript,
+                to_display=VersionFieldDisplayFormatters.yes_no,
+            ),
+            VersionField(
+                group_name="Voice",
+                name="use_processor_bot_voice",
+                raw_value=self.use_processor_bot_voice,
+                to_display=VersionFieldDisplayFormatters.yes_no,
+            ),
+            VersionField(group_name="Tracing", name="tracing_provider", raw_value=self.trace_provider),
+            # Triggers
+            VersionField(
+                group_name="Triggers",
+                name="static_triggers",
+                queryset=self.static_triggers.all(),
+                to_display=VersionFieldDisplayFormatters.format_trigger,
+            ),
+            VersionField(
+                group_name="Triggers",
+                name="timeout_triggers",
+                queryset=self.timeout_triggers.all(),
+                to_display=VersionFieldDisplayFormatters.format_trigger,
+            ),
+        ]
+        if self.assistant_id:
+            fields.append(
                 VersionField(
                     group_name="Assistant",
                     name="assistant",
                     raw_value=self.assistant,
                     to_display=VersionFieldDisplayFormatters.format_assistant,
                 ),
+            )
+        elif self.pipeline_id:
+            fields.append(
                 VersionField(
                     group_name="Pipeline",
                     name="pipeline",
                     raw_value=self.pipeline,
                     to_display=VersionFieldDisplayFormatters.format_pipeline,
                 ),
-                VersionField(group_name="Tracing", name="tracing_provider", raw_value=self.trace_provider),
-                # Triggers
-                VersionField(
-                    group_name="Triggers",
-                    name="static_triggers",
-                    queryset=self.static_triggers.all(),
-                    to_display=VersionFieldDisplayFormatters.format_trigger,
-                ),
-                VersionField(
-                    group_name="Triggers",
-                    name="timeout_triggers",
-                    queryset=self.timeout_triggers.all(),
-                    to_display=VersionFieldDisplayFormatters.format_trigger,
-                ),
-                # Routing
-                VersionField(
-                    group_name="Routing",
-                    name="routes",
-                    queryset=self.child_links.filter(type=ExperimentRouteType.PROCESSOR),
-                    to_display=VersionFieldDisplayFormatters.format_route,
-                ),
-                VersionField(
-                    group_name="Routing",
-                    name="terminal_bot",
-                    queryset=self.child_links.filter(type=ExperimentRouteType.TERMINAL),
-                    to_display=VersionFieldDisplayFormatters.format_route,
-                ),
-            ],
+            )
+        else:
+            fields.extend(
+                [
+                    VersionField(group_name="Language Model", name="prompt_text", raw_value=self.prompt_text),
+                    VersionField(
+                        group_name="Language Model", name="llm_provider_model", raw_value=self.llm_provider_model
+                    ),
+                    VersionField(group_name="Language Model", name="llm_provider", raw_value=self.llm_provider),
+                    VersionField(group_name="Language Model", name="temperature", raw_value=self.temperature),
+                    VersionField(
+                        group_name="Safety",
+                        name="safety_layers",
+                        queryset=self.safety_layers,
+                    ),
+                    VersionField(
+                        group_name="Safety",
+                        name="safety_violation_emails",
+                        raw_value=", ".join(self.safety_violation_notification_emails),
+                    ),
+                    VersionField(
+                        group_name="Safety",
+                        name="input_formatter",
+                        raw_value=self.input_formatter,
+                    ),
+                    # Source material
+                    VersionField(
+                        group_name="Source Material",
+                        name="source_material",
+                        raw_value=self.source_material,
+                    ),
+                    # Tools
+                    VersionField(
+                        group_name="Tools",
+                        name="tools",
+                        raw_value=set(self.tools),
+                        to_display=VersionFieldDisplayFormatters.format_tools,
+                    ),
+                    VersionField(
+                        group_name="Tools",
+                        name="custom_actions",
+                        queryset=self.get_custom_action_operations(),
+                        to_display=VersionFieldDisplayFormatters.format_custom_action_operation,
+                    ),
+                    # Routing
+                    VersionField(
+                        group_name="Routing",
+                        name="routes",
+                        queryset=self.child_links.filter(type=ExperimentRouteType.PROCESSOR),
+                        to_display=VersionFieldDisplayFormatters.format_route,
+                    ),
+                    VersionField(
+                        group_name="Routing",
+                        name="terminal_bot",
+                        queryset=self.child_links.filter(type=ExperimentRouteType.TERMINAL),
+                        to_display=VersionFieldDisplayFormatters.format_route,
+                    ),
+                ]
+            )
+        return VersionDetails(
+            instance=self,
+            fields=fields,
         )
 
     def get_assistant(self):
@@ -1253,8 +1284,7 @@ class ExperimentRoute(BaseTeamModel, VersionsMixin):
             description = f"{description} since {changed_fields} changed."
         return description
 
-    @property
-    def version_details(self) -> VersionDetails:
+    def _get_version_details(self) -> VersionDetails:
         return VersionDetails(
             instance=self,
             fields=[
@@ -1409,6 +1439,7 @@ class Participant(BaseTeamModel):
                 team=self.team,
             )
             .select_related("action")
+            .prefetch_related("attempts")
             .order_by("created_at")
         )
         if not include_inactive:
@@ -1506,6 +1537,10 @@ class SessionStatus(models.TextChoices):
     # CANCELLED = "cancelled", gettext("Cancelled")  # not used anywhere yet
     UNKNOWN = "unknown", gettext("Unknown")
 
+    @classmethod
+    def for_chatbots(cls):
+        return [cls.ACTIVE.value, cls.COMPLETE.value]
+
 
 class ExperimentSessionObjectManager(models.Manager):
     def with_last_message_created_at(self):
@@ -1552,6 +1587,7 @@ class ExperimentSession(BaseTeamModel):
 
     class Meta:
         ordering = ["-created_at"]
+        indexes = [models.Index(fields=["chat", "team"]), models.Index(fields=["chat", "team", "ended_at"])]
 
     def __str__(self):
         return f"ExperimentSession(id={self.external_id})"
@@ -1614,6 +1650,7 @@ class ExperimentSession(BaseTeamModel):
             return False
         return self.experiment_channel.experiment != self.experiment
 
+    @property
     def is_complete(self):
         return self.status == SessionStatus.COMPLETE
 
@@ -1652,6 +1689,7 @@ class ExperimentSession(BaseTeamModel):
 
             enqueue_static_triggers.delay(self.id, StaticTriggerType.CONVERSATION_END)
 
+    @transaction.atomic()
     def ad_hoc_bot_message(
         self,
         instruction_prompt: str,
@@ -1659,7 +1697,8 @@ class ExperimentSession(BaseTeamModel):
         fail_silently=True,
         use_experiment: Experiment | None = None,
     ):
-        """Sends a bot message to this session. The bot message will be crafted using `instruction_prompt` and
+        """Sends a bot message to this session and returns the trace data.
+        The bot message will be crafted using `instruction_prompt` and
         this session's history.
 
         Parameters:
@@ -1669,14 +1708,37 @@ class ExperimentSession(BaseTeamModel):
             use_experiment: The experiment whose data to use. This is useful for multi-bot setups where we want a
             specific child bot to handle the check-in.
         """
-        with current_team(self.team):
-            bot_message = self._bot_prompt_for_user(instruction_prompt, trace_info, use_experiment=use_experiment)
-            self.try_send_message(message=bot_message, fail_silently=fail_silently)
+        try:
+            with current_team(self.team):
+                experiment = use_experiment or self.experiment
+                trace_service = TracingService.create_for_experiment(experiment)
+                with trace_service.trace_or_span(
+                    name=f"{experiment.name} - {trace_info.name}",
+                    session_id=str(self.external_id),
+                    user_id=str(self.participant.identifier),
+                    inputs={"input": instruction_prompt},
+                    metadata=trace_info.metadata,
+                ):
+                    bot_message = self._bot_prompt_for_user(
+                        instruction_prompt, trace_info, use_experiment=use_experiment, trace_service=trace_service
+                    )
+                    self.try_send_message(message=bot_message)
+                    trace_service.set_current_span_outputs({"response": bot_message})
+                    trace_info = trace_service.get_trace_metadata()
+                return trace_info
+        except Exception as e:
+            log.exception(f"Could not send message to experiment session {self.id}. Reason: {e}")
+            if not fail_silently:
+                if trace_service:
+                    trace_metadata = trace_service.get_trace_metadata()
+                    e.trace_metadata = trace_metadata
+                raise e
 
     def _bot_prompt_for_user(
         self,
         instruction_prompt: str,
         trace_info: TraceInfo,
+        trace_service: TracingService,
         use_experiment: Experiment | None = None,
     ) -> str:
         """Sends the `instruction_prompt` along with the chat history to the LLM to formulate an appropriate prompt
@@ -1686,24 +1748,18 @@ class ExperimentSession(BaseTeamModel):
         from apps.service_providers.llm_service.history_managers import ExperimentHistoryManager
 
         experiment = use_experiment or self.experiment
-        trace_service = TracingService.create_for_experiment(self.experiment)
         history_manager = ExperimentHistoryManager(session=self, experiment=experiment, trace_service=trace_service)
         bot = EventBot(self, experiment, trace_info, history_manager)
         return bot.get_user_message(instruction_prompt)
 
-    def try_send_message(self, message: str, fail_silently=True):
+    def try_send_message(self, message: str):
         """Tries to send a message to this user session as the bot. Note that `message` will be send to the user
         directly. This is not an instruction to the bot.
         """
         from apps.chat.channels import ChannelBase
 
-        try:
-            channel = ChannelBase.from_experiment_session(self)
-            channel.send_message_to_user(message)
-        except Exception as e:
-            log.exception(f"Could not send message to experiment session {self.id}. Reason: {e}")
-            if not fail_silently:
-                raise e
+        channel = ChannelBase.from_experiment_session(self)
+        channel.send_message_to_user(message)
 
     @cached_property
     def participant_data_from_experiment(self) -> dict:
@@ -1723,17 +1779,16 @@ class ExperimentSession(BaseTeamModel):
         return self.experiment.get_working_version()
 
     @property
-    def experiment_version_for_display(self):
-        version_tags = list(
-            Tag.objects.filter(chatmessage__chat=self.chat, category=Chat.MetadataKeys.EXPERIMENT_VERSION)
-            .order_by("name")
-            .values_list("name", flat=True)
-            .distinct()
-        )
-        if not version_tags:
-            return ""
-
-        return ", ".join(version_tags)
+    def experiment_versions_from_prefetched_data(self):
+        if not hasattr(self.chat, "messages"):
+            return set()
+        version_tags = {
+            tag.name
+            for message in self.chat.messages.all()
+            for tag in message.tags.all()
+            if tag.category == Chat.MetadataKeys.EXPERIMENT_VERSION
+        }
+        return ", ".join(sorted(version_tags)) if version_tags else ""
 
     def get_experiment_version_number(self) -> int:
         """

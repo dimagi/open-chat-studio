@@ -68,6 +68,7 @@ class EventAction(BaseModel, VersionsMixin):
         if not self.id:
             return super().save(*args, **kwargs)
         else:
+            self._clear_version_cache()
             res = super().save(*args, **kwargs)
             handler = ACTION_HANDLERS[self.action_type]()
             handler.event_action_updated(self)
@@ -123,6 +124,7 @@ class StaticTrigger(BaseModel, VersionsMixin):
     )
     is_archived = models.BooleanField(default=False)
     objects = StaticTriggerObjectManager()
+    is_active = models.BooleanField(default=True)
 
     @property
     def trigger_type(self):
@@ -154,8 +156,7 @@ class StaticTrigger(BaseModel, VersionsMixin):
         new_instance.save()
         return new_instance
 
-    @property
-    def version_details(self):
+    def _get_version_details(self):
         action_param_versions = []
         static_trigger_type = StaticTriggerType(self.type).label.lower()
         event_action_type = EventActionType(self.action.action_type).label
@@ -191,6 +192,7 @@ class TimeoutTrigger(BaseModel, VersionsMixin):
     )
     is_archived = models.BooleanField(default=False)
     objects = TimeoutTriggerObjectManager()
+    is_active = models.BooleanField(default=True)
 
     @transaction.atomic()
     def create_new_version(self, new_experiment: Experiment, is_copy: bool = False):
@@ -327,8 +329,7 @@ class TimeoutTrigger(BaseModel, VersionsMixin):
     def get_fields_to_exclude(self):
         return super().get_fields_to_exclude() + ["action", "experiment", "event_logs"]
 
-    @property
-    def version_details(self) -> VersionDetails:
+    def _get_version_details(self) -> VersionDetails:
         event_action_type = EventActionType(self.action.action_type).label
         group_name = event_action_type
 
@@ -415,43 +416,62 @@ class ScheduledMessage(BaseTeamModel):
         inputs = [name, experiment_id, participant_id]
         return get_next_unique_id(ScheduledMessage, inputs, "external_id", length=5, model_instance=instance)
 
-    def safe_trigger(self):
-        """This wraps a call to the _trigger method in a try-catch block"""
+    def safe_trigger(self, attempt_number=1):
+        """Wraps _trigger with attempt tracking and retry"""
+        from apps.events.tasks import retry_scheduled_message
+
+        trigger_number = self.total_triggers
+        attempt = ScheduledMessageAttempt(
+            scheduled_message=self, trigger_number=trigger_number, attempt_number=attempt_number, team=self.team
+        )
+
         try:
-            self._trigger()
+            trace_metadata = self._trigger()
+            attempt.attempt_result = EventLogStatusChoices.SUCCESS
+            attempt.trace_info = trace_metadata
+            attempt.save()
+
         except Exception as e:
             logger.exception(f"An error occurred while trying to send scheduled message {self.id}. Error: {e}")
+            trace_metadata = getattr(e, "trace_metadata", {})
+            attempt.attempt_result = EventLogStatusChoices.FAILURE
+            attempt.log_message = str(e)
+            attempt.trace_info = trace_metadata
+            attempt.save()
+            if attempt_number < 3:
+                backoff_seconds = 2 ** (attempt_number - 1)
+                retry_scheduled_message.apply_async(args=[self.id, attempt_number + 1], countdown=backoff_seconds)
 
     def _trigger(self):
-        experiment_session = self.participant.get_latest_session(experiment=self.experiment)
-        if not experiment_session:
-            # Schedules probably created by the API
-            return
-
-        trace_info = TraceInfo(
-            name="scheduled message",
-            metadata={
-                "schedule_id": self.external_id,
-                "trigger_number": self.total_triggers,
-            },
-        )
-        experiment_session.ad_hoc_bot_message(
-            self.params["prompt_text"],
-            trace_info,
-            fail_silently=False,
-            use_experiment=self._get_experiment_to_generate_response(),
-        )
-
-        utc_now = timezone.now()
-        self.last_triggered_at = utc_now
-        self.total_triggers += 1
-        if self._should_mark_complete():
-            self.is_complete = True
-        else:
-            delta = relativedelta(**{self.params["time_period"]: self.params["frequency"]})
-            self.next_trigger_date = utc_now + delta
-
-        self.save()
+        try:
+            experiment_session = self.participant.get_latest_session(experiment=self.experiment)
+            if not experiment_session:
+                # Schedules probably created by the API
+                return
+            trace_info = TraceInfo(
+                name="scheduled message",
+                metadata={
+                    "schedule_id": self.external_id,
+                    "trigger_number": self.total_triggers,
+                },
+            )
+            trace_metadata = experiment_session.ad_hoc_bot_message(
+                self.params["prompt_text"],
+                trace_info,
+                fail_silently=False,
+                use_experiment=self._get_experiment_to_generate_response(),
+            )
+        finally:
+            utc_now = timezone.now()
+            self.last_triggered_at = utc_now
+            self.total_triggers += 1
+            if self._should_mark_complete():
+                self.is_complete = True
+            else:
+                delta = relativedelta(**{self.params["time_period"]: self.params["frequency"]})
+                self.next_trigger_date = utc_now + delta
+            self.save()
+        return trace_metadata or {}
 
     def _get_experiment_to_generate_response(self) -> Experiment:
         """
@@ -594,4 +614,36 @@ class ScheduledMessage(BaseTeamModel):
             "triggers_remaining": self.remaining_triggers,
             "is_complete": self.is_complete,
             "is_cancelled": self.is_cancelled,
+            "attempts": [
+                {
+                    "updated_at": a.updated_at,
+                    "trigger_number": a.trigger_number,
+                    "attempt_number": a.attempt_number,
+                    "attempt_result": a.attempt_result,
+                    "log_message": a.log_message,
+                    "trace_info": a.trace_info,
+                }
+                for a in self.attempts.all()
+            ],
         }
+
+
+class ScheduledMessageAttempt(BaseTeamModel):
+    scheduled_message = models.ForeignKey(
+        "ScheduledMessage",
+        on_delete=models.CASCADE,
+        related_name="attempts",
+    )
+    trigger_number = models.IntegerField()
+    attempt_number = models.IntegerField()
+    attempt_result = models.CharField(max_length=10, choices=EventLogStatusChoices.choices)
+    log_message = models.TextField(blank=True)
+    trace_info = models.JSONField(blank=True, null=True)
+
+    class Meta:
+        unique_together = ("scheduled_message", "trigger_number", "attempt_number")
+
+    def __str__(self):
+        return (
+            f"Attempt #{self.attempt_number} (Trigger {self.trigger_number}) for Schedule {self.scheduled_message_id}"
+        )

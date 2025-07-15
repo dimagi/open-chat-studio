@@ -8,13 +8,17 @@ import { HTMLStencilElement, JSXBase } from "@stencil/core/internal";
 export namespace Components {
     interface OpenChatStudioWidget {
         /**
-          * The URL of the bot to connect to.
+          * The base URL for the API (defaults to current origin).
          */
-        "botUrl": string;
+        "apiBaseUrl"?: string;
         /**
           * The text to display on the button.
          */
         "buttonText": string;
+        /**
+          * The ID of the chatbot to connect to.
+         */
+        "chatbotId": string;
         /**
           * Whether the chat widget is initially expanded.
          */
@@ -24,9 +28,17 @@ export namespace Components {
          */
         "position": 'left' | 'center' | 'right';
         /**
+          * Array of starter questions that users can click to send (JSON array of strings)
+         */
+        "starterQuestions"?: string;
+        /**
           * Whether the chat widget is visible on load.
          */
         "visible": boolean;
+        /**
+          * Welcome messages to display above starter questions (JSON array of strings)
+         */
+        "welcomeMessages"?: string;
     }
 }
 declare global {
@@ -43,13 +55,17 @@ declare global {
 declare namespace LocalJSX {
     interface OpenChatStudioWidget {
         /**
-          * The URL of the bot to connect to.
+          * The base URL for the API (defaults to current origin).
          */
-        "botUrl": string;
+        "apiBaseUrl"?: string;
         /**
           * The text to display on the button.
          */
         "buttonText"?: string;
+        /**
+          * The ID of the chatbot to connect to.
+         */
+        "chatbotId": string;
         /**
           * Whether the chat widget is initially expanded.
          */
@@ -59,9 +75,17 @@ declare namespace LocalJSX {
          */
         "position"?: 'left' | 'center' | 'right';
         /**
+          * Array of starter questions that users can click to send (JSON array of strings)
+         */
+        "starterQuestions"?: string;
+        /**
           * Whether the chat widget is visible on load.
          */
         "visible"?: boolean;
+        /**
+          * Welcome messages to display above starter questions (JSON array of strings)
+         */
+        "welcomeMessages"?: string;
     }
     interface IntrinsicElements {
         "open-chat-studio-widget": OpenChatStudioWidget;

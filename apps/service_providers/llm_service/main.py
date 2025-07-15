@@ -1,9 +1,10 @@
 import contextlib
 from io import BytesIO
 from time import sleep
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
 import pydantic
+from django.db.models import Q
 from langchain.agents.openai_assistant import OpenAIAssistantRunnable as BrokenOpenAIAssistantRunnable
 from langchain_anthropic import ChatAnthropic
 from langchain_core.callbacks import BaseCallbackHandler, CallbackManager, dispatch_custom_event
@@ -25,6 +26,10 @@ from apps.service_providers.llm_service.token_counters import (
     GeminiTokenCounter,
     OpenAITokenCounter,
 )
+from apps.service_providers.llm_service.utils import detangle_file_ids, extract_file_ids_from_ocs_citations
+
+if TYPE_CHECKING:
+    from apps.service_providers.llm_service.index_managers import IndexManager
 
 
 class OpenAIBuiltinTool(dict):
@@ -150,22 +155,45 @@ class LlmService(pydantic.BaseModel):
         output = output.get("output", "")
         if isinstance(output, list):
             return "\n".join([o["text"] for o in output])
+
         return output or ""
 
     def get_cited_files_parser(self):
         return self._default_cited_files_parser
 
-    def _default_cited_files_parser(self, token: str | dict) -> list[File]:
+    def _default_cited_files_parser(self, token: str | dict, team_id: int) -> list[File]:
         remote_file_ids = []
+        file_ids = []
         if isinstance(token, dict):
             outputs = token.get("output", "")
             if isinstance(outputs, list):
                 for output in outputs:
                     annotation_entries = output.get("annotations", [])
-                    remote_file_ids.extend([entry["file_id"] for entry in annotation_entries if "file_id" in entry])
-        return File.objects.filter(external_id__in=remote_file_ids).all()
+                    external_ids = [entry["file_id"] for entry in annotation_entries if "file_id" in entry]
+                    external_ids = detangle_file_ids(external_ids)
+                    remote_file_ids.extend(external_ids)
+            else:
+                file_ids.extend(extract_file_ids_from_ocs_citations(outputs))
 
-    def get_index_manager(self):
+        return File.objects.filter(Q(external_id__in=remote_file_ids) | Q(id__in=file_ids), team_id=team_id).all()
+
+    def get_remote_index_manager(self, index_id: str = None) -> "IndexManager":
+        raise NotImplementedError
+
+    def get_local_index_manager(self, embedding_model_name: str) -> "IndexManager":
+        raise NotImplementedError
+
+    def create_remote_index(self, name: str, file_ids: list = None) -> str:
+        """
+        Create a new vector store at the remote index service.
+
+        Args:
+            name: The name to assign to the new vector store.
+            file_ids: Optional list of remote file IDs to initially associate with the vector store.
+
+        Returns:
+            str: The unique identifier of the newly created vector store.
+        """
         raise NotImplementedError
 
 
@@ -174,7 +202,11 @@ class OpenAIGenericService(LlmService):
     openai_api_base: str
 
     def get_chat_model(self, llm_model: str, temperature: float) -> BaseChatModel:
-        model = ChatOpenAI(model=llm_model, temperature=temperature, **self._get_model_kwargs())
+        model = ChatOpenAI(
+            model=llm_model,
+            temperature=1 if llm_model.startswith(("o3", "o4")) else temperature,
+            **self._get_model_kwargs(),
+        )
         try:
             model.get_num_tokens_from_messages([HumanMessage("Hello")])
         except Exception:
@@ -232,10 +264,20 @@ class OpenAILlmService(OpenAIGenericService):
                 raise ValueError(f"Unsupported built-in tool for openai: '{tool_name}'")
         return tools
 
-    def get_index_manager(self):
-        from apps.service_providers.llm_service.index_managers import OpenAIVectorStoreManager
+    def get_remote_index_manager(self, index_id: str = None) -> "IndexManager":
+        from apps.service_providers.llm_service.index_managers import OpenAIRemoteIndexManager
 
-        return OpenAIVectorStoreManager(self.get_raw_client())
+        return OpenAIRemoteIndexManager(client=self.get_raw_client(), index_id=index_id)
+
+    def get_local_index_manager(self, embedding_model_name: str) -> "IndexManager":
+        from apps.service_providers.llm_service.index_managers import OpenAILocalIndexManager
+
+        return OpenAILocalIndexManager(client=self.get_raw_client(), embedding_model_name=embedding_model_name)
+
+    def create_remote_index(self, name: str, file_ids: list = None) -> str:
+        file_ids = file_ids or []
+        vector_store = self.get_raw_client().vector_stores.create(name=name, file_ids=file_ids)
+        return vector_store.id
 
 
 class AzureLlmService(LlmService):

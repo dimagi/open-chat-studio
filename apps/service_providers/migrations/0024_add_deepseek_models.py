@@ -17,6 +17,3 @@ class Migration(migrations.Migration):
     dependencies = [
         ('service_providers', '0023_remove_llmprovider_llm_models'),
     ]
-    operations = [
-        migrations.RunPython(add_deepseek_models),
-    ]

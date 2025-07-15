@@ -68,8 +68,6 @@ urlpatterns = [
     path("e/<int:experiment_id>/versions/status", views.version_create_status, name="check_version_creation_status"),
     path("e/<int:pk>/edit/", views.EditExperiment.as_view(), name="edit"),
     path("e/<int:pk>/delete/", views.delete_experiment, name="delete"),
-    path("e/<int:pk>/add_file/", views.AddFileToExperiment.as_view(), name="add_file"),
-    path("e/<int:pk>/delete_file/<int:file_id>/", views.DeleteFileFromExperiment.as_view(), name="remove_file"),
     path(
         "e/<int:experiment_id>/v/<int:version_number>/start_authed_web_session/",
         views.start_authed_web_session,
@@ -189,6 +187,7 @@ urlpatterns = [
         name="experiment_route_delete",
     ),
     path("<int:session_id>/file/<int:pk>/", views.download_file, name="download_file"),
+    path("<int:session_id>/image/<int:pk>/html/", views.get_image_html, name="get_image_html"),
     path(
         "e/<uuid:experiment_id>/verify_token/<str:token>/",
         views.verify_public_chat_token,
@@ -203,6 +202,16 @@ urlpatterns = [
         "e/<int:experiment_id>/release_status_badge",
         views.get_release_status_badge,
         name="get_release_status_badge",
+    ),
+    path(
+        "e/<int:experiment_id>/migrate/",
+        views.migrate_experiment_view,
+        name="migrate_experiment",
+    ),
+    path(
+        "experiment/<uuid:experiment_id>/session/<str:session_id>/translate-messages/",
+        views.translate_messages_view,
+        name="translate_messages",
     ),
 ]
 
