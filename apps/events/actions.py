@@ -133,12 +133,10 @@ class PipelineStartAction(EventActionHandlerBase):
             messages = session.chat.get_langchain_messages_until_marker(marker=PipelineChatHistoryModes.SUMMARIZE)
         elif input_type == PipelineEventInputs.LAST_MESSAGE:
             last_message = session.chat.messages.last()
-            if not last_message:
-                logging.warning(
-                    f"PipelineStartAction for session {session.id} was skipped because no last message was found."
-                )
-                return "Action skipped: No message found in chat history"
-            messages = [last_message.to_langchain_message()]
+            if last_message:
+                messages = [last_message.to_langchain_message()]
+            else:
+                messages = []
 
         input = "\n".join(f"{message.type}: {message.content}" for message in messages)
         state = PipelineState(messages=[input], experiment_session=session)
