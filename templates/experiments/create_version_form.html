@@ -1,4 +1,4 @@
-{% extends 'web/app/app_base.html' %}
+{% extends "web/app/app_base.html" %}
 {% load static %}
 {% load form_tags %}
 
@@ -47,7 +47,7 @@
         {% if version_details.fields_changed %}
           <h1 class="pg-subtitle pb-5">Changes since version {{ version_details.previous_instance.version_number }}</h1>
           <div class="p-5 border border-white rounded-lg">
-            {% include 'experiments/components/versions/compare.html' %}
+            {% include "experiments/components/versions/compare.html" %}
           </div>
         {% else %}
           <h2 class="pg-subtitle pb-5">No changes since version {{ version_details.previous_instance.version_number }}</h2>
