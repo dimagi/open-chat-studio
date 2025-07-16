@@ -208,25 +208,25 @@ class LLMChat(RunnableSerializable[str, ChainOutput]):
     def _get_output_check_cancellation(self, input, config) -> LlmChatResponse:
         chain = self._build_chain().with_config(run_name="get_llm_response")
 
-        output = ""
+        final_output = ""
         context = self._get_input_chain_context()
 
         cited_files = []
-        for token in chain.stream({**self._get_input(input), **context}, config):
-            output += self._parse_output(token)
+        for output in chain.stream({**self._get_input(input), **context}, config):
+            final_output += self._parse_output(output)
 
             if self.adapter.expect_citations:
-                cited_files.extend(self._get_cited_files(token))
+                cited_files.extend(self._get_cited_files(output))
 
             if self._chat_is_cancelled():
                 break
 
-        return LlmChatResponse(text=output, cited_files=set(cited_files))
+        return LlmChatResponse(text=final_output, cited_files=set(cited_files))
 
     def _parse_output(self, output):
         return output
 
-    def _get_cited_files(self, token: str | dict) -> list[File]:
+    def _get_cited_files(self, output: str | dict) -> list[File]:
         # Files are referenced by agents only
         return []
 
@@ -289,9 +289,9 @@ class AgentLLMChat(LLMChat):
         output_parser = self.adapter.get_llm_service().get_output_parser()
         return output_parser(output)
 
-    def _get_cited_files(self, token: str | dict) -> list[File]:
+    def _get_cited_files(self, output: str | dict) -> list[File]:
         cited_files_parser = self.adapter.get_llm_service().get_cited_files_parser()
-        return cited_files_parser(token, team_id=self.adapter.session.team_id)
+        return cited_files_parser(output, team_id=self.adapter.session.team_id)
 
     def _build_chain(self) -> Runnable[dict[str, Any], dict]:
         tools = self.adapter.get_allowed_tools()
