@@ -14,7 +14,7 @@ export namespace Components {
         /**
           * The shape of the chat button. 'default' maintains current behavior, 'round' makes it circular, 'square' makes it rectangular.
          */
-        "buttonShape": 'default' | 'round' | 'square';
+        "buttonShape": 'round' | 'square';
         /**
           * The text to display on the button (deprecated, use iconUrl for icon button or set to non-empty string to use text button).
          */
@@ -69,7 +69,7 @@ declare namespace LocalJSX {
         /**
           * The shape of the chat button. 'default' maintains current behavior, 'round' makes it circular, 'square' makes it rectangular.
          */
-        "buttonShape"?: 'default' | 'round' | 'square';
+        "buttonShape"?: 'round' | 'square';
         /**
           * The text to display on the button (deprecated, use iconUrl for icon button or set to non-empty string to use text button).
          */
