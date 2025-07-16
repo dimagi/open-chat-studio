@@ -9,7 +9,7 @@
     {% include 'account/components/social/social_accounts.html' %}
   </section>
   {% include 'account/components/api_keys.html' %}
-{% endblock %}
+{% endblock app %}
 {% block page_js %}
   <script>
     document.addEventListener('DOMContentLoaded', () => {
@@ -64,4 +64,4 @@
       }
     });
   </script>
-{% endblock %}
+{% endblock page_js %}
