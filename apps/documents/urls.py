@@ -27,6 +27,11 @@ urlpatterns = [
         views.get_collection_file_status,
         name="get_collection_file_status",
     ),
+
+    # document source
+    path("collections/<int:collection_id>/source/", views.CreateDocumentSource.as_view(), name="create_document_source"),
+    # path("collections/<int:collection_id>/source/<int:pk>/", views.EditDocumentSource, name="edit_document_source"),
+    # path("collections/<int:collection_id>/source/<int:pk>/delete/", views.DeleteDocumentSource, name="delete_document_source"),
 ]
 
 urlpatterns.extend(make_crud_urls(views, "Collection", "collection"))

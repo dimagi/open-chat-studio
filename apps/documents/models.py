@@ -8,6 +8,7 @@ from django.utils.translation import gettext_lazy as _
 from django_pydantic_field import SchemaField
 from field_audit import audit_fields
 from field_audit.models import AuditingManager
+from pydantic import HttpUrl
 
 from apps.chat.agent.tools import SearchIndexTool, SearchToolConfig
 from apps.documents.exceptions import IndexConfigurationException
@@ -34,7 +35,7 @@ class CollectionFileMetadata(pydantic.BaseModel):
 
 
 class GitHubSourceConfig(pydantic.BaseModel):
-    repo_url: str = pydantic.Field(description="GitHub repository URL")
+    repo_url: HttpUrl = pydantic.Field(description="GitHub repository URL")
     branch: str = pydantic.Field(default="main", description="Branch to sync from")
     file_pattern: str = pydantic.Field(default="*.md", description="File pattern to match (e.g., *.md, *.py)")
     path_filter: str = pydantic.Field(default="", description="Optional path prefix filter")
@@ -381,14 +382,9 @@ class DocumentSource(BaseTeamModel):
     source_type = models.CharField(max_length=20, choices=SourceType.choices, help_text="Type of document source")
     config = SchemaField(schema=DocumentSourceConfig, help_text="Configuration for the document source")
     auto_sync_enabled = models.BooleanField(
-        default=False, help_text="Whether to automatically sync this source on a schedule"
+        default=False, help_text="Automatically sync this source on a schedule"
     )
     last_sync = models.DateTimeField(null=True, blank=True, help_text="Timestamp of the last successful sync")
-
-    class Meta:
-        constraints = [
-            models.UniqueConstraint(fields=["team", "collection"], name="unique_document_source_per_collection")
-        ]
 
     def __str__(self) -> str:
         return f"{self.get_source_type_display()} source for {self.collection.name}"
