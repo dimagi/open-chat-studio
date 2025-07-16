@@ -304,6 +304,61 @@ class Collection(BaseTeamModel, VersionsMixin):
         self.openai_vector_store_id = ""
         self.save(update_fields=["openai_vector_store_id"])
 
+    def get_index_manager(self):
+        if self.is_index and self.is_remote_index:
+            return self.llm_provider.get_remote_index_manager(self.openai_vector_store_id)
+        else:
+            return self.llm_provider.get_local_index_manager(embedding_model_name=self.embedding_provider_model.name)
+
+    def get_query_vector(self, query: str) -> list[float]:
+        """Get the embedding vector for a query using the embedding provider model"""
+        if not self.embedding_provider_model:
+            raise IndexConfigurationException("Embedding provider model is missing this collection")
+
+        index_manager = self.get_index_manager()
+        return index_manager.get_embedding_vector(query)
+
+    def get_search_tool(self, max_results: int, generate_citations: bool = True) -> OpenAIBuiltinTool | SearchIndexTool:
+        """
+        Returns either the tool configuration. If the collection is a remote index, it returns the builtin file search
+        tool, otherwise it returns a SearchIndexTool.
+        """
+        if not self.is_index:
+            raise IndexConfigurationException("Non-indexed collections do not have search tools")
+
+        if self.is_remote_index:
+            return OpenAIBuiltinTool(
+                type="file_search",
+                vector_store_ids=[self.openai_vector_store_id],
+                max_num_results=max_results,
+            )
+
+        search_config = SearchToolConfig(
+            index_id=self.id, max_results=max_results, generate_citations=generate_citations
+        )
+        return SearchIndexTool(search_config=search_config)
+
+    def add_files_to_index(
+        self,
+        collection_files: Iterator[CollectionFile],
+        chunk_size: int = None,
+        chunk_overlap: int = None,
+    ):
+        index_manager = self.get_index_manager()
+        index_manager.add_files(collection_files, chunk_size=chunk_size, chunk_overlap=chunk_overlap)
+
+    def ensure_remote_index_created(self, file_ids: list[str] = None):
+        """
+        Ensure that the remote index is created for this collection if it is not already created.
+        This is used when the collection is created or when the version is created.
+        """
+        if not self.is_remote_index or self.openai_vector_store_id:
+            return
+
+        file_ids = file_ids or []
+        self.openai_vector_store_id = self.llm_provider.create_remote_index(name=self.index_name, file_ids=file_ids)
+        self.save(update_fields=["openai_vector_store_id"])
+
 
 class SourceType(models.TextChoices):
     GITHUB = "github", _("GitHub Repository")
@@ -372,58 +427,3 @@ class DocumentSourceSyncLog(models.Model):
     @property
     def total_files_processed(self) -> int:
         return self.files_added + self.files_updated + self.files_removed
-
-    def get_index_manager(self):
-        if self.is_index and self.is_remote_index:
-            return self.llm_provider.get_remote_index_manager(self.openai_vector_store_id)
-        else:
-            return self.llm_provider.get_local_index_manager(embedding_model_name=self.embedding_provider_model.name)
-
-    def get_query_vector(self, query: str) -> list[float]:
-        """Get the embedding vector for a query using the embedding provider model"""
-        if not self.embedding_provider_model:
-            raise IndexConfigurationException("Embedding provider model is missing this collection")
-
-        index_manager = self.get_index_manager()
-        return index_manager.get_embedding_vector(query)
-
-    def get_search_tool(self, max_results: int, generate_citations: bool = True) -> OpenAIBuiltinTool | SearchIndexTool:
-        """
-        Returns either the tool configuration. If the collection is a remote index, it returns the builtin file search
-        tool, otherwise it returns a SearchIndexTool.
-        """
-        if not self.is_index:
-            raise IndexConfigurationException("Non-indexed collections do not have search tools")
-
-        if self.is_remote_index:
-            return OpenAIBuiltinTool(
-                type="file_search",
-                vector_store_ids=[self.openai_vector_store_id],
-                max_num_results=max_results,
-            )
-
-        search_config = SearchToolConfig(
-            index_id=self.id, max_results=max_results, generate_citations=generate_citations
-        )
-        return SearchIndexTool(search_config=search_config)
-
-    def add_files_to_index(
-        self,
-        collection_files: Iterator[CollectionFile],
-        chunk_size: int = None,
-        chunk_overlap: int = None,
-    ):
-        index_manager = self.get_index_manager()
-        index_manager.add_files(collection_files, chunk_size=chunk_size, chunk_overlap=chunk_overlap)
-
-    def ensure_remote_index_created(self, file_ids: list[str] = None):
-        """
-        Ensure that the remote index is created for this collection if it is not already created.
-        This is used when the collection is created or when the version is created.
-        """
-        if not self.is_remote_index or self.openai_vector_store_id:
-            return
-
-        file_ids = file_ids or []
-        self.openai_vector_store_id = self.llm_provider.create_remote_index(name=self.index_name, file_ids=file_ids)
-        self.save(update_fields=["openai_vector_store_id"])
