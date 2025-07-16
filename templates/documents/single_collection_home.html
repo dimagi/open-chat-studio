@@ -55,7 +55,7 @@
         <h2 class="text-lg font-semibold">Files</h2>
         <div class="join">
           {% if collection.has_failed_index_uploads %}
-            <form class="join-item" action="{% url 'documents:retry_failed_uploads' team.slug collection.id %}" method="POST">
+            <form class="join-item" action="{% url 'documents:retry_failed_uploads' team.slug collection.id %}" method="post">
               {% csrf_token %}
               <button class="btn btn-sm btn-primary">
                 <i class="fa-solid fa-repeat"></i> Retry Failed Uploads
@@ -111,7 +111,7 @@
                   <i class="fa-solid fa-eye"></i>
                 </a>
               </div>
-              <form action="{% url 'documents:delete_collection_file' team.slug collection.id collection_file.file.id %}" method="POST" class="inline">
+              <form action="{% url 'documents:delete_collection_file' team.slug collection.id collection_file.file.id %}" method="post" class="inline">
                 {% csrf_token %}
                 <button type="submit" class="btn btn-sm">
                   <i class="fa-solid fa-trash"></i>
