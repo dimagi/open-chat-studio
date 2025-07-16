@@ -11,7 +11,7 @@
       transition: opacity 1s ease-out;
     }
   </style>
-{% endblock %}
+{% endblock page_head %}
 {% block app %}
   <section class="app-card">
     {% if not create %}
@@ -94,4 +94,4 @@
       {% include 'teams/components/delete_team_modal.html' %}
     {% endif %}
   {% endif %}
-{% endblock %}
+{% endblock app %}

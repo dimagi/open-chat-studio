@@ -9,14 +9,14 @@
 {% endblock %}
 {% block body %}
   {% block notifications %}
-  {% endblock %}
+  {% endblock notifications %}
   <section class="section">
     <div class="container flex flex-row">
       {% if request.user.is_authenticated %}
         <div class="w-64 hidden lg:flex">
           {% block sidebar-nav %}
             {% include "web/components/app_nav.html" %}
-          {% endblock %}
+          {% endblock sidebar-nav %}
         </div>
       {% endif %}
       <div class="w-full">

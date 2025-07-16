@@ -13,7 +13,7 @@
         {% with project_meta|get_title:page_title as title %}
           {% with project_meta|get_description:page_description as description %}
             {% with project_meta|get_image_url:page_image as image %}
-              <title>{% block page_title %}{{ title }}{% endblock %}</title>
+              <title>{% block page_title %}{{ title }}{% endblock page_title %}</title>
               <meta name="description" content="{{ description }}">
               <meta name="keywords" content="{{ project_meta.KEYWORDS }}">
       <!-- Twitter Card data -->
@@ -54,13 +54,13 @@
 
     <script src="{% static 'js/site-bundle.js'%}"></script>
     {% block page_head %}
-    {% endblock %}
+    {% endblock page_head %}
   </head>
   <body hx-headers='{"X-CSRFToken": "{{ csrf_token }}"}'>
     {% block body_wrapper %}
       {% block top_nav %}
         {% include 'web/components/top_nav.html' %}
-      {% endblock %}
+      {% endblock top_nav %}
       {% block messages %}
         {% include 'web/components/messages.html' %}
       {% endblock messages %}

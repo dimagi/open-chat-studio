@@ -17,7 +17,7 @@
       {% endif %}
     </ul>
   </div>
-{% endblock %}
+{% endblock breadcrumbs %}
 {% block form %}
   <div>
     {% render_form_fields form "name" "description" "consent_form" %}
@@ -123,7 +123,7 @@
       {% endif %}
     </div>
   {% endif %}
-{% endblock %}
+{% endblock form_actions %}
 {% block page_js %}
   {{ voice_providers_types|json_script:"voiceProviderTypes" }}
   {{ synthetic_voice_options|json_script:"voiceOptions" }}

@@ -9,7 +9,7 @@
       <li class="pg-breadcrumb-active" aria-current="page">{{ membership.user.get_display_name }}</li>
     </ol>
   </nav>
-{% endblock %}
+{% endblock breadcrumbs %}
 {% block app %}
   <section class="app-card">
     <div class="pg-columns">
@@ -51,4 +51,4 @@
     </div>
   </section>
   {% include 'teams/components/remove_member_modal.html' %}
-{% endblock %}
+{% endblock app %}
