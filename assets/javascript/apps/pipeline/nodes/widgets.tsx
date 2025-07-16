@@ -993,13 +993,9 @@ export function TextEditorWidget(props: WidgetParams) {
   const { parameterValues } = getCachedData();
   let autocomplete_vars_list: string[] = [];
   if (props.nodeSchema?.title === "LLMResponseWithPrompt") {
-    autocomplete_vars_list = Array.isArray(parameterValues.text_editor_autocomplete_vars_llm_node)
-      ? parameterValues.text_editor_autocomplete_vars_llm_node.map((v: Option) => v.value)
-      : [];
+    autocomplete_vars_list = getAutoCompleteList(parameterValues.text_editor_autocomplete_vars_llm_node)
   } else if (props.nodeSchema?.title === "RouterNode") {
-    autocomplete_vars_list = Array.isArray(parameterValues.text_editor_autocomplete_vars_router_node)
-      ? parameterValues.text_editor_autocomplete_vars_router_node.map((v: Option) => v.value)
-      : [];
+    autocomplete_vars_list = getAutoCompleteList(parameterValues.text_editor_autocomplete_vars_router_node)
   }
 
   const modalId = useId();
@@ -1105,4 +1101,8 @@ function TextEditorModal({
       </form>
     </dialog>
   );
+}
+
+function getAutoCompleteList(list: Array<Option>) {
+    return Array.isArray(list) ? list.map((v: Option) => v.value) : []
 }
