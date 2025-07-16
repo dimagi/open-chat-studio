@@ -152,12 +152,12 @@
         type: '{{ experiment_type }}',
 
         voiceProvider: null,
-        synthetic_voice: {{experiment.synthetic_voice_id|default:'null'}},
+        synthetic_voice: {{ experiment.synthetic_voice_id|default:'null' }},
         synthetic_voice_options: [],
 
         llmProviderId: null,
         llmProvider: null,
-        llm_provider_model: '{{experiment.llm_provider_model.id|default:form.llm_provider_model.value|default:'null'}}',
+        llm_provider_model: '{{ experiment.llm_provider_model.id|default:form.llm_provider_model.value|default:'null' }}',
         llm_provider_model_options: [],
 
         init() {

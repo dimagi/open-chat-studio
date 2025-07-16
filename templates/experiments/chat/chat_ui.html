@@ -1,7 +1,7 @@
 {% if embedded %}
-  {% url 'experiments:poll_messages_embed' team_slug=request.team.slug experiment_id=experiment.public_id session_id=session.external_id as poll_url%}
+  {% url 'experiments:poll_messages_embed' team_slug=request.team.slug experiment_id=experiment.public_id session_id=session.external_id as poll_url %}
 {% else %}
-  {% url 'experiments:poll_messages' team_slug=request.team.slug experiment_id=experiment.public_id session_id=session.external_id as poll_url%}
+  {% url 'experiments:poll_messages' team_slug=request.team.slug experiment_id=experiment.public_id session_id=session.external_id as poll_url %}
 {% endif %}
 <div id="message-list" class="chat-pane" data-url="{{ poll_url }}">
   {% if not session.has_display_messages %}
