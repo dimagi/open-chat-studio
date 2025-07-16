@@ -40,6 +40,9 @@ class GitHubSourceConfig(pydantic.BaseModel):
     file_pattern: str = pydantic.Field(default="*.md", description="File pattern to match (e.g., *.md, *.py)")
     path_filter: str = pydantic.Field(default="", description="Optional path prefix filter")
 
+    def __str__(self):
+        return f"{self.repo_url}"
+
 
 class ConfluenceSourceConfig(pydantic.BaseModel):
     base_url: str = pydantic.Field(description="Confluence base URL")
@@ -71,6 +74,7 @@ class FileStatus(models.TextChoices):
 class CollectionFile(models.Model):
     file = models.ForeignKey("files.File", on_delete=models.CASCADE)
     collection = models.ForeignKey("documents.Collection", on_delete=models.CASCADE)
+    document_source = models.ForeignKey("documents.DocumentSource", on_delete=models.CASCADE, null=True)
     status = models.CharField(max_length=64, choices=FileStatus.choices, blank=True)
     metadata = SchemaField(schema=CollectionFileMetadata, null=True)
 
@@ -385,6 +389,7 @@ class DocumentSource(BaseTeamModel):
         default=False, help_text="Automatically sync this source on a schedule"
     )
     last_sync = models.DateTimeField(null=True, blank=True, help_text="Timestamp of the last successful sync")
+    files = models.ManyToManyField("files.File", blank=False, through=CollectionFile, related_name="document_sources")
 
     def __str__(self) -> str:
         return f"{self.get_source_type_display()} source for {self.collection.name}"
