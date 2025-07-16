@@ -85,15 +85,18 @@ def single_collection_home(request, team_slug: str, pk: int):
         .values_list("count")
     )
 
-    collection_files = CollectionFile.objects.filter(collection=collection).annotate(
+    collection_files = CollectionFile.objects.filter(collection=collection, document_source=None).annotate(
         chunk_count=Subquery(chunk_count_query, output_field=IntegerField())
     )
+
+    document_sources = DocumentSource.objects.filter(collection=collection)
 
     collection_files_count = collection_files.count()
     context = {
         "collection": collection,
         "collection_files": collection_files,
         "collection_files_count": collection_files_count,
+        "document_sources": document_sources,
         "collections_supported_file_types": settings.SUPPORTED_FILE_TYPES["collections"],
         "file_search_supported_file_types": settings.SUPPORTED_FILE_TYPES["file_search"],
         "max_summary_length": settings.MAX_SUMMARY_LENGTH,
@@ -185,6 +188,7 @@ class CreateDocumentSource(LoginAndTeamRequiredMixin, CreateView, PermissionRequ
         })
 
     def form_valid(self, form):
+        self.object = form.save()
         return HttpResponse(headers={"HX-Redirect": self.get_success_url()})
 
 
