@@ -8,7 +8,6 @@ from asgiref.sync import async_to_sync
 from django.db import transaction, utils
 from langchain_community.utilities.openapi import OpenAPISpec
 from langchain_core.tools import BaseTool
-from langchain_mcp_adapters.client import MultiServerMCPClient
 from pgvector.django import CosineDistance
 
 from apps.channels.models import ChannelPlatform
@@ -417,33 +416,33 @@ def get_node_tools(
         tool_names.append(AgentTools.ATTACH_MEDIA)
     tools = get_tool_instances(tool_names, experiment_session, tool_callbacks)
     tools.extend(get_custom_action_tools(node))
-    tools.extend(get_mcp_server_tools(experiment_session.team))
+    # tools.extend(get_mcp_server_tools(experiment_session.team))
     return tools
 
 
-def get_mcp_server_tools(team):
-    tools = []
-    for server in team.mcpserver_set.all():
-        auth_client = server.auth_provider.get_auth_service().get_http_client()
-        tools.extend(get_tools_from_server(server, auth_client))
-    return tools
+# def get_mcp_server_tools(team):
+#     tools = []
+#     for server in team.mcpserver_set.all():
+#         auth_client = server.auth_provider.get_auth_service().get_http_client()
+#         tools.extend(get_tools_from_server(server, auth_client))
+#     return tools
 
 
-@async_to_sync
-async def get_tools_from_server(server, auth_client):
-    headers = {}
-    if server.auth_provider:
-        headers[auth_client.auth.key] = auth_client.auth.value
-    client = MultiServerMCPClient(
-        {
-            "gateway": {
-                "transport": server.transport_type,
-                "url": server.server_url,
-                "headers": headers,
-            }
-        }
-    )
-    return await client.get_tools()
+# @async_to_sync
+# async def get_tools_from_server(server, auth_client):
+#     headers = {}
+#     if server.auth_provider:
+#         headers[auth_client.auth.key] = auth_client.auth.value
+#     client = MultiServerMCPClient(
+#         {
+#             "gateway": {
+#                 "transport": server.transport_type,
+#                 "url": server.server_url,
+#                 "headers": headers,
+#             }
+#         }
+#     )
+#     return await client.get_tools()
 
 
 def get_tool_instances(
