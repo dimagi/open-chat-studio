@@ -5,7 +5,7 @@
   <script src="{% static 'js/app-bundle.js' %}"></script>
 {% endblock %}
 {% block top_nav %}
-  {% include 'web/components/top_nav_app.html' %}
+  {% include "web/components/top_nav_app.html" %}
 {% endblock %}
 {% block body %}
   {% block notifications %}
@@ -20,7 +20,7 @@
         </div>
       {% endif %}
       <div class="w-full">
-        {% include 'banners/banner.html' %}
+        {% include "banners/banner.html" %}
         {% block breadcrumbs %}
         {% endblock breadcrumbs %}
         {% block app %}

@@ -1,4 +1,4 @@
-{% extends 'web/app/app_base.html' %}
+{% extends "web/app/app_base.html" %}
 {% load static %}
 {% block page_js %}
   <script src="{% static 'js/editors-bundle.js' %}"></script>
@@ -23,11 +23,11 @@
       </div>
     </div>
     <div class="max-w-5xl mt-4 border rounded-2xl">
-      {% include 'participants/partials/participant_summary.html' %}
+      {% include "participants/partials/participant_summary.html" %}
     </div>
     <h3 class="text-base font-semibold leading-7 mt-8 pl-4">Experiments</h3>
     <div class="max-w-5xl mt-4 border rounded-2xl">
-      {% include 'participants/partials/participant_experiments.html' %}
+      {% include "participants/partials/participant_experiments.html" %}
     </div>
   </div>
 {% endblock %}
