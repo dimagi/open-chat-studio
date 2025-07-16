@@ -54,7 +54,7 @@
       {% include "files/partials/file_formset.html" with form_title="Code Interpreter Files" prefix="code_interpreter" %}
     </div>
     <div class="mt-2" x-show="builtinTools.indexOf('file_search') >= 0" x-cloak>
-      {% include "files/partials/file_formset.html"  with form_title="File Search Files" prefix="file_search" %}
+      {% include "files/partials/file_formset.html" with form_title="File Search Files" prefix="file_search" %}
     </div>
   {% endif %}
 {% endblock form %}
