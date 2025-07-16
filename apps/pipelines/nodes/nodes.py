@@ -20,6 +20,8 @@ from langchain_core.runnables import RunnableLambda, RunnablePassthrough
 from langchain_core.tools import BaseTool
 from langchain_openai.chat_models.base import OpenAIRefusalError
 from langchain_text_splitters import RecursiveCharacterTextSplitter
+from langgraph.constants import END
+from langgraph.types import Command, interrupt
 from pydantic import BaseModel, BeforeValidator, Field, create_model, field_serializer, field_validator, model_validator
 from pydantic import ValidationError as PydanticValidationError
 from pydantic.config import ConfigDict
@@ -33,7 +35,7 @@ from apps.chat.agent.tools import get_node_tools
 from apps.chat.conversation import compress_chat_history, compress_pipeline_chat_history
 from apps.documents.models import Collection
 from apps.experiments.models import BuiltInTools, ExperimentSession, ParticipantData
-from apps.pipelines.exceptions import PipelineNodeBuildError, PipelineNodeRunError
+from apps.pipelines.exceptions import AbortPipeline, PipelineNodeBuildError, PipelineNodeRunError, WaitForNextInput
 from apps.pipelines.models import PipelineChatHistory, PipelineChatHistoryModes, PipelineChatHistoryTypes
 from apps.pipelines.nodes.base import (
     NodeSchema,
@@ -59,6 +61,7 @@ from apps.service_providers.llm_service.runnables import (
     SimpleLLMChat,
 )
 from apps.service_providers.models import LlmProviderModel
+from apps.utils.langchain import dict_to_json_schema
 from apps.utils.prompt import OcsPromptTemplate, PromptVars, validate_prompt_variables
 
 OptionalInt = Annotated[int | None, BeforeValidator(lambda x: None if isinstance(x, str) and len(x) == 0 else x)]
@@ -332,7 +335,9 @@ class LLMResponseWithPrompt(LLMResponse, HistoryMixin, OutputMessageTagMixin):
     )
     prompt: str = Field(
         default="You are a helpful assistant. Answer the user's query as best you can",
-        json_schema_extra=UiSchema(widget=Widgets.expandable_text),
+        json_schema_extra=UiSchema(
+            widget=Widgets.text_editor, options_source=OptionsSource.text_editor_autocomplete_vars
+        ),
     )
     collection_id: OptionalInt = Field(
         None,
@@ -354,6 +359,11 @@ class LLMResponseWithPrompt(LLMResponse, HistoryMixin, OutputMessageTagMixin):
         le=100,
         description="The maximum number of results to retrieve from the index",
         json_schema_extra=UiSchema(widget=Widgets.range),
+    )
+    generate_citations: bool = Field(
+        default=True,
+        description="Allow files from this collection to be referenced in LLM responses and downloaded by users",
+        json_schema_extra=UiSchema(widget=Widgets.toggle),
     )
 
     tools: list[str] = Field(
@@ -436,6 +446,7 @@ class LLMResponseWithPrompt(LLMResponse, HistoryMixin, OutputMessageTagMixin):
         # Tools setup
         tools = self._get_configured_tools(session=session, tool_callbacks=tool_callbacks)
         attachments = self._get_attachments(state)
+
         # Chat setup
         chat_adapter = ChatAdapter.for_pipeline(
             session=session,
@@ -445,6 +456,7 @@ class LLMResponseWithPrompt(LLMResponse, HistoryMixin, OutputMessageTagMixin):
             tools=tools,
             pipeline_state=state,
             disabled_tools=self.disabled_tools,
+            expect_citations=self.generate_citations,
         )
         allowed_tools = chat_adapter.get_allowed_tools()
         # TODO: tracing
@@ -481,7 +493,9 @@ class LLMResponseWithPrompt(LLMResponse, HistoryMixin, OutputMessageTagMixin):
         tools.extend(self.get_llm_service().attach_built_in_tools(self.built_in_tools, self.tool_config))
         if self.collection_index_id:
             collection = Collection.objects.get(id=self.collection_index_id)
-            tools.append(collection.get_search_tool(max_results=self.max_results))
+            tools.append(
+                collection.get_search_tool(max_results=self.max_results, generate_citations=self.generate_citations)
+            )
 
         return tools
 
@@ -554,7 +568,7 @@ class BooleanNode(PipelineRouterNode):
     )
 
     def _process_conditional(self, state: PipelineState) -> tuple[Literal["true", "false"], bool]:
-        if self.input_equals == state["messages"][-1]:
+        if self.input_equals == state["node_input"]:
             return "true", False
         return "false", False
 
@@ -659,8 +673,7 @@ class RouterNode(RouterMixin, PipelineRouterNode, HistoryMixin):
             ]
         )
         session: ExperimentSession = state["experiment_session"]
-        node_input = state["messages"][-1]
-
+        node_input = state["node_input"]
         context = {"input": node_input}
         extra_prompt_context = {
             "temp_state": state.get("temp_state", {}),
@@ -835,32 +848,7 @@ class ExtractStructuredDataNodeMixin:
         return text_splitter.split_text(input)
 
     def get_tool_class(self, data: dict):
-        """Converts a dictionary to a JSON schema by first converting it to a Pydantic object and dumping it again.
-        The input should be in the format {"key": "description", "key2": [{"key": "description"}]}
-
-        Nested objects are not supported at the moment
-
-        Input example 1:
-        {"name": "the user's name", "surname": "the user's surname"}
-
-        Input example 2:
-        {"name": "the user's name", "pets": [{"name": "the pet's name": "type": "the type of animal"}]}
-
-        """
-
-        def _create_model_from_data(value_data, model_name: str):
-            pydantic_schema = {}
-            for key, value in value_data.items():
-                if isinstance(value, str):
-                    pydantic_schema[key] = (str | None, Field(description=value))
-                elif isinstance(value, list):
-                    model = _create_model_from_data(value[0], key.capitalize())
-                    pydantic_schema[key] = (list[model], Field(description=f"A list of {key}"))
-            return create_model(model_name, **pydantic_schema)
-
-        Model = _create_model_from_data(data, "CustomModel")
-        Model.description = ""
-        return Model
+        return dict_to_json_schema(data)
 
 
 class StructuredDataSchemaValidatorMixin:
@@ -1116,7 +1104,7 @@ class CodeNode(PipelineNode, OutputMessageTagMixin):
             raise PydanticCustomError("invalid_code", "{error}", {"error": exc.msg}) from None
         return value
 
-    def _process(self, input: str, state: PipelineState) -> PipelineState:
+    def _process(self, input: str, state: PipelineState) -> PipelineState | Command:
         function_name = "main"
         byte_code = compile_restricted(
             self.code,
@@ -1130,11 +1118,22 @@ class CodeNode(PipelineNode, OutputMessageTagMixin):
         kwargs = {}
         try:
             exec(byte_code, custom_globals, custom_locals)
-            result = str(custom_locals[function_name](input, **kwargs))
+            result = custom_locals[function_name](input, **kwargs)
+        except WaitForNextInput:
+            return Command(goto=END)
+        except AbortPipeline as abort:
+            return interrupt(abort.to_json())
         except Exception as exc:
             raise PipelineNodeRunError(exc) from exc
 
-        return PipelineState.from_node_output(node_name=self.name, node_id=self.node_id, output=result, **output_state)
+        if isinstance(result, Command):
+            return result
+        return Command(
+            goto=self._outgoing_nodes,
+            update=PipelineState.from_node_output(
+                node_name=self.name, node_id=self.node_id, output=str(result), **output_state
+            ),
+        )
 
     def _get_custom_globals(self, node_id, state: PipelineState, output_state: PipelineState) -> dict:
         """
@@ -1179,9 +1178,33 @@ class CodeNode(PipelineNode, OutputMessageTagMixin):
                 "get_all_routes": pipeline_state.get_all_routes,
                 "add_message_tag": output_state.add_message_tag,
                 "add_session_tag": output_state.add_session_tag,
+                "get_node_output": pipeline_state.get_node_output_by_name,
+                # control flow
+                "abort_with_message": self._abort_pipeline(),
+                "require_node_outputs": self._require_node_outputs(state),
             }
         )
         return custom_globals
+
+    def _abort_pipeline(self):
+        def abort_pipeline(message, tag_name: str = None):
+            raise AbortPipeline(message, tag_name)
+
+        return abort_pipeline
+
+    def _require_node_outputs(self, state: PipelineState):
+        """A helper function to require inputs from a specific node"""
+
+        def require_node_outputs(*node_names):
+            if len(node_names) == 1 and isinstance(node_names[0], list):
+                node_names = node_names[0]
+            if not all(isinstance(name, str) for name in node_names):
+                raise PipelineNodeRunError("Node names passed to 'require_node_outputs' must be a string")
+            for node_name in node_names:
+                if node_name not in state["outputs"]:
+                    raise WaitForNextInput(f"Node '{node_name}' has not produced any output yet")
+
+        return require_node_outputs
 
     def _get_session_state_key(self, session: ExperimentSession):
         def get_session_state_key(key_name: str):

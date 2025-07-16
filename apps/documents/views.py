@@ -1,4 +1,5 @@
 import logging
+from pathlib import Path
 
 from django.conf import settings
 from django.contrib import messages
@@ -10,6 +11,7 @@ from django.http import HttpResponse, HttpResponseRedirect
 from django.shortcuts import get_object_or_404, redirect, render
 from django.template.loader import render_to_string
 from django.urls import reverse
+from django.utils.translation import gettext as _
 from django.views import View
 from django.views.decorators.http import require_POST
 from django.views.generic import CreateView, FormView, ListView, TemplateView, UpdateView
@@ -95,6 +97,35 @@ def single_collection_home(request, team_slug: str, pk: int):
     return render(request, "documents/single_collection_home.html", context)
 
 
+class QueryView(LoginAndTeamRequiredMixin, TemplateView, PermissionRequiredMixin):
+    template_name = "documents/collection_query_view.html"
+    permission_required = "documents.view_collection"
+
+    def get_context_data(
+        self,
+        team_slug: str,
+        pk: str,
+    ):
+        return {
+            "active_tab": "collections",
+            "title": "Query Collection",
+            "collection": Collection.objects.get(id=pk, team__slug=team_slug),
+        }
+
+
+@login_and_team_required
+@permission_required("documents.view_collection", raise_exception=True)
+def query_collection(request, team_slug: str, pk: int):
+    collection = get_object_or_404(Collection.objects.select_related("team"), id=pk, team__slug=team_slug)
+    index_manager = collection.get_index_manager()
+    context = {
+        "chunks": index_manager.query(
+            index_id=pk, query=request.GET.get("query"), top_k=int(request.GET.get("top_k", 5))
+        ),
+    }
+    return render(request, "documents/collection_query_results.html", context)
+
+
 @login_and_team_required
 @permission_required("documents.change_collection")
 def manage_document_source(request, team_slug: str, pk: int):
@@ -166,11 +197,33 @@ def sync_document_source(request, team_slug: str, pk: int):
 @permission_required("documents.change_collection")
 def add_collection_files(request, team_slug: str, pk: int):
     collection = get_object_or_404(Collection, id=pk, team__slug=team_slug)
-    # Create files
+
+    supported_extensions = (
+        settings.SUPPORTED_FILE_TYPES["file_search"]
+        if collection.is_index
+        else settings.SUPPORTED_FILE_TYPES["collections"]
+    )
+    files = []
+    invalid_files = []
+
+    # Validate extensions
+    for uploaded_file in request.FILES.getlist("files"):
+        ext = Path(uploaded_file.name).suffix.lower()
+        if not ext or ext not in supported_extensions:
+            invalid_files.append(uploaded_file.name)
+        else:
+            files.append(uploaded_file)
+
+    # All files are unsupported
+    if not files:
+        messages.error(request, _("All selected files are invalid. Unsupported: ") + ", ".join(invalid_files))
+        return redirect("documents:single_collection_home", team_slug=team_slug, pk=pk)
+
     with transaction.atomic():
-        files = []
-        for uploaded_file in request.FILES.getlist("files"):
-            files.append(
+        # Create File objects
+        created_files = []
+        for uploaded_file in files:
+            created_files.append(
                 File.objects.create(
                     team=request.team,
                     name=uploaded_file.name,
@@ -193,13 +246,23 @@ def add_collection_files(request, team_slug: str, pk: int):
             )
 
         collection_files = CollectionFile.objects.bulk_create(
-            [CollectionFile(collection=collection, file=file, status=status, metadata=metadata) for file in files]
+            [
+                CollectionFile(collection=collection, file=file, status=status, metadata=metadata)
+                for file in created_files
+            ]
         )
 
     if collection.is_index:
         tasks.index_collection_files_task.delay([cf.id for cf in collection_files])
 
-    messages.success(request, f"Added {len(files)} files to collection")
+    # Notify on UI about unsupported files
+    if invalid_files:
+        messages.warning(
+            request, _("Some files were skipped because of unsupported extensions: ") + ", ".join(invalid_files)
+        )
+
+    messages.success(request, _(f"Added {len(created_files)} files to collection."))
+
     return redirect("documents:single_collection_home", team_slug=team_slug, pk=pk)
 
 
@@ -231,6 +294,36 @@ def delete_collection_file(request, team_slug: str, pk: int, file_id: int):
 
     messages.success(request, "File removed from collection")
     return redirect("documents:single_collection_home", team_slug=team_slug, pk=pk)
+
+
+@login_and_team_required
+@permission_required("documents.view_collection", raise_exception=True)
+def get_collection_file_status(request, team_slug: str, collection_id: int, pk: int):
+    chunk_count_query = (
+        FileChunkEmbedding.objects.filter(collection_id=OuterRef("collection_id"), file_id=OuterRef("file_id"))
+        .values("collection_id", "file_id")
+        .annotate(count=Count("id"))
+        .values_list("count")
+    )
+
+    collection_file = get_object_or_404(
+        CollectionFile.objects.annotate(
+            chunk_count=Subquery(chunk_count_query, output_field=IntegerField())
+        ).select_related("collection"),
+        collection_id=collection_id,
+        id=pk,
+        collection__team__slug=team_slug,
+    )
+
+    return render(
+        request,
+        "documents/collection_file_status_response.html",
+        {
+            "collection_file": collection_file,
+            "collection": collection_file.collection,
+            "team": request.team,
+        },
+    )
 
 
 class CollectionTableView(LoginAndTeamRequiredMixin, SingleTableView, PermissionRequiredMixin):
@@ -397,6 +490,7 @@ class CreateCollectionFromAssistant(LoginAndTeamRequiredMixin, FormView, Permiss
         "title": "Create Collection from Assistant",
         "button_text": "Create Collection",
         "active_tab": "collections",
+        "title_help_content": render_help_with_link("", "migrate_from_assistant"),
     }
     object = None
 

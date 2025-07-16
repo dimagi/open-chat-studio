@@ -31,7 +31,6 @@ from django_cryptography.fields import encrypt
 from field_audit import audit_fields
 from field_audit.models import AuditAction, AuditingManager
 
-from apps.annotations.models import Tag
 from apps.chat.models import Chat, ChatMessage, ChatMessageType
 from apps.custom_actions.mixins import CustomActionOperationMixin
 from apps.experiments import model_audit_fields
@@ -586,13 +585,12 @@ class AgentTools(models.TextChoices):
         return [cls.RECURRING_REMINDER, cls.ONE_OFF_REMINDER, cls.DELETE_REMINDER, cls.MOVE_SCHEDULED_MESSAGE_DATE]
 
     @staticmethod
-    def user_tool_choices() -> list[tuple]:
+    def user_tool_choices(include_end_session: bool = True) -> list[tuple]:
         """Returns the set of tools that a user should be able to attach to the bot"""
-        return [
-            (tool.value, tool.label)
-            for tool in AgentTools
-            if tool not in [AgentTools.ATTACH_MEDIA, AgentTools.SEARCH_INDEX]
-        ]
+        excluded_tools = [AgentTools.ATTACH_MEDIA, AgentTools.SEARCH_INDEX]
+        if not include_end_session:
+            excluded_tools.append(AgentTools.END_SESSION)
+        return [(tool.value, tool.label) for tool in AgentTools if tool not in excluded_tools]
 
 
 @audit_fields(*model_audit_fields.EXPERIMENT_FIELDS, audit_special_queryset_writes=True)
@@ -758,6 +756,9 @@ class Experiment(BaseTeamModel, VersionsMixin, CustomActionOperationMixin):
                 condition=Q(working_version__isnull=False),
                 name="unique_version_number_per_experiment",
             ),
+        ]
+        indexes = [
+            models.Index(fields=["team", "is_archived", "working_version"]),
         ]
 
     def __str__(self):
@@ -1438,6 +1439,7 @@ class Participant(BaseTeamModel):
                 team=self.team,
             )
             .select_related("action")
+            .prefetch_related("attempts")
             .order_by("created_at")
         )
         if not include_inactive:
@@ -1535,6 +1537,10 @@ class SessionStatus(models.TextChoices):
     # CANCELLED = "cancelled", gettext("Cancelled")  # not used anywhere yet
     UNKNOWN = "unknown", gettext("Unknown")
 
+    @classmethod
+    def for_chatbots(cls):
+        return [cls.ACTIVE.value, cls.COMPLETE.value]
+
 
 class ExperimentSessionObjectManager(models.Manager):
     def with_last_message_created_at(self):
@@ -1581,6 +1587,7 @@ class ExperimentSession(BaseTeamModel):
 
     class Meta:
         ordering = ["-created_at"]
+        indexes = [models.Index(fields=["chat", "team"]), models.Index(fields=["chat", "team", "ended_at"])]
 
     def __str__(self):
         return f"ExperimentSession(id={self.external_id})"
@@ -1643,6 +1650,7 @@ class ExperimentSession(BaseTeamModel):
             return False
         return self.experiment_channel.experiment != self.experiment
 
+    @property
     def is_complete(self):
         return self.status == SessionStatus.COMPLETE
 
@@ -1689,7 +1697,8 @@ class ExperimentSession(BaseTeamModel):
         fail_silently=True,
         use_experiment: Experiment | None = None,
     ):
-        """Sends a bot message to this session. The bot message will be crafted using `instruction_prompt` and
+        """Sends a bot message to this session and returns the trace data.
+        The bot message will be crafted using `instruction_prompt` and
         this session's history.
 
         Parameters:
@@ -1701,17 +1710,35 @@ class ExperimentSession(BaseTeamModel):
         """
         try:
             with current_team(self.team):
-                bot_message = self._bot_prompt_for_user(instruction_prompt, trace_info, use_experiment=use_experiment)
-                self.try_send_message(message=bot_message)
+                experiment = use_experiment or self.experiment
+                trace_service = TracingService.create_for_experiment(experiment)
+                with trace_service.trace_or_span(
+                    name=f"{experiment.name} - {trace_info.name}",
+                    session_id=str(self.external_id),
+                    user_id=str(self.participant.identifier),
+                    inputs={"input": instruction_prompt},
+                    metadata=trace_info.metadata,
+                ):
+                    bot_message = self._bot_prompt_for_user(
+                        instruction_prompt, trace_info, use_experiment=use_experiment, trace_service=trace_service
+                    )
+                    self.try_send_message(message=bot_message)
+                    trace_service.set_current_span_outputs({"response": bot_message})
+                    trace_info = trace_service.get_trace_metadata()
+                return trace_info
         except Exception as e:
             log.exception(f"Could not send message to experiment session {self.id}. Reason: {e}")
             if not fail_silently:
+                if trace_service:
+                    trace_metadata = trace_service.get_trace_metadata()
+                    e.trace_metadata = trace_metadata
                 raise e
 
     def _bot_prompt_for_user(
         self,
         instruction_prompt: str,
         trace_info: TraceInfo,
+        trace_service: TracingService,
         use_experiment: Experiment | None = None,
     ) -> str:
         """Sends the `instruction_prompt` along with the chat history to the LLM to formulate an appropriate prompt
@@ -1721,7 +1748,6 @@ class ExperimentSession(BaseTeamModel):
         from apps.service_providers.llm_service.history_managers import ExperimentHistoryManager
 
         experiment = use_experiment or self.experiment
-        trace_service = TracingService.create_for_experiment(self.experiment)
         history_manager = ExperimentHistoryManager(session=self, experiment=experiment, trace_service=trace_service)
         bot = EventBot(self, experiment, trace_info, history_manager)
         return bot.get_user_message(instruction_prompt)
@@ -1753,17 +1779,16 @@ class ExperimentSession(BaseTeamModel):
         return self.experiment.get_working_version()
 
     @property
-    def experiment_version_for_display(self):
-        version_tags = list(
-            Tag.objects.filter(chatmessage__chat=self.chat, category=Chat.MetadataKeys.EXPERIMENT_VERSION)
-            .order_by("name")
-            .values_list("name", flat=True)
-            .distinct()
-        )
-        if not version_tags:
-            return ""
-
-        return ", ".join(version_tags)
+    def experiment_versions_from_prefetched_data(self):
+        if not hasattr(self.chat, "messages"):
+            return set()
+        version_tags = {
+            tag.name
+            for message in self.chat.messages.all()
+            for tag in message.tags.all()
+            if tag.category == Chat.MetadataKeys.EXPERIMENT_VERSION
+        }
+        return ", ".join(sorted(version_tags)) if version_tags else ""
 
     def get_experiment_version_number(self) -> int:
         """

@@ -35,6 +35,7 @@ FIELD_TYPE_FILTERS = {
         Operators.DOES_NOT_CONTAIN,
         Operators.STARTS_WITH,
         Operators.ENDS_WITH,
+        Operators.ANY_OF,
     ],
     "timestamp": [Operators.ON, Operators.BEFORE, Operators.AFTER, Operators.RANGE],
     "choice": [Operators.ANY_OF, Operators.ALL_OF, Operators.EXCLUDES],
@@ -116,6 +117,10 @@ def build_filter_condition(column, operator, value, timezone):
         return build_versions_filter(operator, value)
     elif column == "channels":
         return build_channels_filter(operator, value)
+    elif column == "experiment":
+        return build_experiment_filter(operator, value)
+    elif column == "state":
+        return build_state_filter(operator, value)
     return None
 
 
@@ -131,6 +136,9 @@ def build_participant_filter(operator, value):
         return Q(participant__identifier__istartswith=value)
     elif operator == Operators.ENDS_WITH:
         return Q(participant__identifier__iendswith=value)
+    elif operator == Operators.ANY_OF:
+        value = json.loads(value)
+        return Q(participant__identifier__in=value)
     return None
 
 
@@ -260,4 +268,47 @@ def build_channels_filter(operator, value):
             return ~Q(experiment_channel__platform__in=selected_values)
     except json.JSONDecodeError:
         pass
+    return None
+
+
+def build_experiment_filter(operator, value):
+    try:
+        selected_experiment_ids = json.loads(value)
+        if not selected_experiment_ids:
+            return None
+        # Convert to integers if they're strings
+        experiment_ids = []
+        for exp_id in selected_experiment_ids:
+            try:
+                experiment_ids.append(int(exp_id))
+            except (ValueError, TypeError):
+                continue
+
+        if not experiment_ids:
+            return None
+
+        if operator == Operators.ANY_OF:
+            return Q(experiment_id__in=experiment_ids)
+        elif operator == Operators.EXCLUDES:
+            return ~Q(experiment_id__in=experiment_ids)
+    except json.JSONDecodeError:
+        pass
+    return None
+
+
+def build_state_filter(operator, value):
+    try:
+        selected_values = json.loads(value)
+    except json.JSONDecodeError:
+        return None
+
+    if not selected_values:
+        return None
+
+    if operator == Operators.ANY_OF:
+        return Q(status__in=selected_values)
+
+    elif operator == Operators.EXCLUDES:
+        return ~Q(status__in=selected_values)
+
     return None

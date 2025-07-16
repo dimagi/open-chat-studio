@@ -4,6 +4,7 @@
  */
 
 import TomSelect from "tom-select";
+import {formatDistanceToNow} from "date-fns";
 
 // Constants
 const DEFAULTS = {
@@ -266,7 +267,16 @@ function dashboard() {
             }
             
             const sanitizedParams = this.sanitizeParams({...this.filters, ...params});
-            const urlParams = new URLSearchParams(sanitizedParams);
+            const urlParams = new URLSearchParams();
+
+            for (const [key, value] of Object.entries(sanitizedParams)) {
+                if (Array.isArray(value)) {
+                    // Add each array item as separate parameter
+                    value.forEach(item => urlParams.append(key, item));
+                } else {
+                    urlParams.set(key, value);
+                }
+            }
             
             try {
                 const response = await fetch(`${endpoint}?${urlParams}`);
@@ -313,7 +323,6 @@ function dashboard() {
         async refreshAllCharts() {
             await Promise.all([
                 this.loadOverviewStats(),
-                this.loadActiveParticipantsChart(),
                 this.loadSessionAnalyticsChart(),
                 this.loadMessageVolumeChart(),
                 this.loadChannelBreakdownChart(),
@@ -365,35 +374,23 @@ function dashboard() {
             }
         },
         
-        async loadActiveParticipantsChart() {
-            this.setLoadingState('activeParticipants', true);
-            
-            try {
-                const data = await this.apiRequest('api/active-participants/');
-                if (window.chartManager) {
-                    window.chartManager.renderActiveParticipantsChart(data);
-                }
-            } catch (error) {
-                console.error('Error loading active participants chart:', error);
-                this.showChartError('activeParticipantsChart', 'Failed to load active participants data');
-            } finally {
-                this.setLoadingState('activeParticipants', false);
-            }
-        },
-        
         async loadSessionAnalyticsChart() {
+            this.setLoadingState('activeParticipants', true);
             this.setLoadingState('sessionAnalytics', true);
             
             try {
                 const data = await this.apiRequest('api/session-analytics/');
                 if (window.chartManager) {
-                    window.chartManager.renderSessionAnalyticsChart(data);
+                    window.chartManager.renderSessionAnalyticsChart(data.sessions);
+                    window.chartManager.renderActiveParticipantsChart(data.participants);
                 }
             } catch (error) {
                 console.error('Error loading session analytics chart:', error);
                 this.showChartError('sessionAnalyticsChart', 'Failed to load session analytics data');
+                this.showChartError('activeParticipantsChart', 'Failed to load session analytics data');
             } finally {
                 this.setLoadingState('sessionAnalytics', false);
+                this.setLoadingState('activeParticipants', false);
             }
         },
         
@@ -682,6 +679,10 @@ function dashboard() {
             const hours = Math.floor(minutes / 60);
             const mins = Math.round(minutes % 60);
             return `${hours}h ${mins}m`;
+        },
+
+        formatDate(date) {
+            return formatDistanceToNow(new Date(date));
         },
         
         getCSRFToken() {

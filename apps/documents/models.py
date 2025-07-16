@@ -387,7 +387,7 @@ class DocumentSourceSyncLog(models.Model):
         index_manager = self.get_index_manager()
         return index_manager.get_embedding_vector(query)
 
-    def get_search_tool(self, max_results: int) -> OpenAIBuiltinTool | SearchIndexTool:
+    def get_search_tool(self, max_results: int, generate_citations: bool = True) -> OpenAIBuiltinTool | SearchIndexTool:
         """
         Returns either the tool configuration. If the collection is a remote index, it returns the builtin file search
         tool, otherwise it returns a SearchIndexTool.
@@ -402,7 +402,9 @@ class DocumentSourceSyncLog(models.Model):
                 max_num_results=max_results,
             )
 
-        search_config = SearchToolConfig(index_id=self.id, max_results=max_results)
+        search_config = SearchToolConfig(
+            index_id=self.id, max_results=max_results, generate_citations=generate_citations
+        )
         return SearchIndexTool(search_config=search_config)
 
     def add_files_to_index(

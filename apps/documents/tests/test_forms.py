@@ -1,9 +1,12 @@
 from unittest.mock import Mock
 
 import pytest
+from django.db.models import Q
 
 from apps.documents.forms import CollectionForm
+from apps.service_providers.models import LlmProviderTypes
 from apps.utils.factories.service_provider_factories import EmbeddingProviderModelFactory, LlmProviderFactory
+from apps.utils.factories.team import TeamFactory
 
 
 @pytest.mark.django_db()
@@ -66,3 +69,30 @@ class TestCollectionForm:
         data = {"name": "name", "is_index": True, "llm_provider": llm_provider.id, "embedding_provider_model": None}
         form = CollectionForm(request=request, data=data)
         assert form.is_valid() is False, "Form should not be valid but it is!"
+
+    def test_show_providers_with_embedding_models(self, team):
+        """
+        Only providers that have embedding models should be shown in the form.
+        """
+        request = Mock(team=team)
+        openai_provider = LlmProviderFactory(team=team, type=LlmProviderTypes.openai)
+        LlmProviderFactory(team=team, type=LlmProviderTypes.perplexity)
+
+        # Global provider
+        EmbeddingProviderModelFactory(type=LlmProviderTypes.openai)
+
+        # Team specific providers
+        EmbeddingProviderModelFactory(team=team, type=LlmProviderTypes.openai)
+
+        team_b = TeamFactory()
+        EmbeddingProviderModelFactory(team=team_b, type=LlmProviderTypes.openai)
+
+        form = CollectionForm(request=request)
+        assert form.fields["llm_provider"].queryset.count() == 1
+        assert form.fields["llm_provider"].queryset.first() == openai_provider, (
+            "LlmProvider queryset should only contain OpenAI provider"
+        )
+
+        assert form.fields["llm_provider"].queryset.exclude(Q(team_id=None) | Q(team_id=team.id)).exists() is False, (
+            "Team specific models are not scoped to a team"
+        )

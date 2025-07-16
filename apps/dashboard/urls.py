@@ -8,7 +8,6 @@ urlpatterns = [
     path("", views.DashboardView.as_view(), name="index"),
     # API endpoints for chart data
     path("api/overview/", views.OverviewStatsApiView.as_view(), name="api_overview"),
-    path("api/active-participants/", views.ActiveParticipantsApiView.as_view(), name="api_active_participants"),
     path("api/session-analytics/", views.SessionAnalyticsApiView.as_view(), name="api_session_analytics"),
     path("api/message-volume/", views.MessageVolumeApiView.as_view(), name="api_message_volume"),
     path("api/bot-performance/", views.BotPerformanceApiView.as_view(), name="api_bot_performance"),

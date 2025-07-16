@@ -1,25 +1,44 @@
 from django import forms
+from django.db.models import Q, Subquery
 
 from apps.assistants.models import OpenAiAssistant, ToolResources
 from apps.documents.models import Collection, DocumentSource, DocumentSourceConfig, GitHubSourceConfig, SourceType
+from apps.service_providers.models import EmbeddingProviderModel
 
 
 class CollectionForm(forms.ModelForm):
     class Meta:
         model = Collection
-        fields = ["name", "is_index", "llm_provider", "embedding_provider_model", "is_remote_index"]
+        fields = [
+            "name",
+            "is_index",
+            "llm_provider",
+            "embedding_provider_model",
+            "is_remote_index",
+        ]
         labels = {
             "is_index": "Create file index",
+            "is_remote_index": "Use the provider hosted index",
         }
         help_texts = {
             "is_index": "If checked, the files will be indexed and searchable using RAG",
             "llm_provider": "The provider whose embedding model will be used for indexing",
-            "embedding_provider_model": "The model used to create embeddings",
+            "embedding_provider_model": "The model to use to create embeddings for the files in this collection",
         }
+        widgets = {"is_index": forms.HiddenInput()}
 
     def __init__(self, request, *args, **kwargs):
         super().__init__(*args, **kwargs)
-        self.fields["llm_provider"].queryset = request.team.llmprovider_set.all()
+        embedding_model_provider_queryset = EmbeddingProviderModel.objects.filter(
+            Q(team_id=None) | Q(team_id=request.team.id)
+        )
+
+        embedding_model_provider_types = embedding_model_provider_queryset.values_list("type").distinct()
+        self.fields["llm_provider"].queryset = request.team.llmprovider_set.filter(
+            type__in=Subquery(embedding_model_provider_types)
+        ).all()
+
+        self.fields["embedding_provider_model"].queryset = embedding_model_provider_queryset
         self.fields["embedding_provider_model"].widget.template_name = "django/forms/widgets/select_dynamic.html"
 
         # Alpine.js bindings
@@ -58,9 +77,17 @@ class CollectionForm(forms.ModelForm):
     def clean(self):
         cleaned_data = super().clean()
         is_index = self.cleaned_data["is_index"]
-        llm_provider = self.cleaned_data["llm_provider"]
-        is_remote_index = self.cleaned_data["is_remote_index"]
-        embedding_provider_model = self.cleaned_data["embedding_provider_model"]
+        llm_provider = cleaned_data.get("llm_provider")
+        is_remote_index = cleaned_data["is_remote_index"]
+        embedding_provider_model = cleaned_data.get("embedding_provider_model")
+
+        if self.instance.id:
+            if not llm_provider:
+                llm_provider = self.instance.llm_provider
+                self.cleaned_data["llm_provider"] = llm_provider
+            if not embedding_provider_model:
+                embedding_provider_model = self.instance.embedding_provider_model
+                self.cleaned_data["embedding_provider_model"] = embedding_provider_model
 
         if is_index:
             if not llm_provider:

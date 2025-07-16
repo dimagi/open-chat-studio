@@ -73,20 +73,8 @@ class OverviewStatsApiView(DashboardApiView):
         return self.json_response(stats)
 
 
-class ActiveParticipantsApiView(DashboardApiView):
-    """API endpoint for active participants chart data"""
-
-    def get(self, request, *args, **kwargs):
-        service = self.get_dashboard_service()
-        filter_params = self.get_filter_params()
-        granularity = request.GET.get("granularity", "daily")
-
-        data = service.get_active_participants_data(granularity=granularity, **filter_params)
-        return self.json_response(data)
-
-
 class SessionAnalyticsApiView(DashboardApiView):
-    """API endpoint for session analytics data"""
+    """API endpoint for session analytics data (active sessions and active participants)"""
 
     def get(self, request, *args, **kwargs):
         service = self.get_dashboard_service()

@@ -25,6 +25,10 @@
   .chat-message-system & {
     @apply text-slate-600;
   }
+
+  .chat-message-untranslated {
+    @apply text-gray-400 italic;
+  }
 }
 
 @utility chat-message-system {

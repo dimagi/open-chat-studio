@@ -17,6 +17,7 @@ from apps.experiments.models import (
     SyntheticVoice,
 )
 from apps.generics.help import render_help_with_link
+from apps.service_providers.utils import get_dropdown_llm_model_choices
 from apps.utils.prompt import PromptVars, validate_prompt_variables
 
 
@@ -281,3 +282,41 @@ class ExperimentVersionForm(forms.Form):
     class Meta:
         fields = ["version_description", "is_default_version"]
         help_texts = {"version_description": "A description of this version, or what changed from the previous version"}
+
+
+class TranslateMessagesForm(forms.Form):
+    target_language = forms.ChoiceField(
+        choices=[],
+        required=True,
+        label="Select Language",
+        widget=forms.Select(attrs={"class": "select select-bordered w-full", "id": "translation-language"}),
+    )
+    provider_model = forms.ChoiceField(
+        choices=[],
+        required=True,
+        label="Select LLM Provider Model",
+        widget=forms.Select(attrs={"class": "select select-bordered w-full", "id": "translation-provider-model"}),
+    )
+
+    def __init__(self, *args, team, translatable_languages, is_translate_all_form=False, **kwargs):
+        super().__init__(*args, **kwargs)
+
+        self.fields["provider_model"].choices = [
+            ("", "Choose a model for translation")
+        ] + get_dropdown_llm_model_choices(team)
+
+        if is_translate_all_form:
+            self.fields["provider_model"].widget.attrs["id"] = "translation-provider-model-all"
+        else:
+            self.fields["provider_model"].widget.attrs["id"] = "translation-provider-model-remaining"
+
+        self.fields["target_language"].choices = [("", "Choose a language")] + [
+            (code, name) for code, name in translatable_languages if code
+        ]
+
+        if is_translate_all_form:
+            self.fields["target_language"].label = "Target Language for All Messages"
+            self.fields["provider_model"].label = "LLM Model for Translation"
+        else:
+            self.fields["target_language"].label = "Target Language for Remaining Messages"
+            self.fields["provider_model"].label = "LLM Model for Remaining Messages"

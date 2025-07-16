@@ -9,7 +9,7 @@ from pydantic import ValidationError
 from apps.annotations.models import TagCategories
 from apps.chat.conversation import BasicConversation
 from apps.chat.exceptions import ChatException
-from apps.chat.models import ChatAttachment, ChatMessage, ChatMessageType
+from apps.chat.models import ChatMessage, ChatMessageType
 from apps.events.models import StaticTriggerType
 from apps.events.tasks import enqueue_static_triggers
 from apps.experiments.models import Experiment, ExperimentRoute, ExperimentSession, SafetyLayer
@@ -270,6 +270,7 @@ class SafetyBot:
 
 class PipelineBot:
     def __init__(self, session: ExperimentSession, experiment: Experiment, trace_service, disable_reminder_tools=False):
+        self.team = experiment.team
         self.experiment = experiment
         self.session = session
         self.trace_service = trace_service
@@ -294,24 +295,28 @@ class PipelineBot:
     ) -> ChatMessage:
         pipeline_to_use = pipeline or self.experiment.pipeline
         output = self._run_pipeline(input_state, pipeline_to_use)
+
         if save_run_to_history and self.session is not None:
+            output = self._process_interrupts(output)
             result = self._save_outputs(input_state, output, save_input_to_history)
         else:
             result = ChatMessage(content=output)
         self._process_intents(output)
         return result
 
-    def _get_input_state(self, attachments, user_input):
+    def _get_input_state(self, attachments: list["Attachment"], user_input: str):
         attachments = attachments or []
         serializable_attachments = [attachment.model_dump() for attachment in attachments]
         incoming_file_ids = []
+
         for attachment in attachments:
-            file = File.objects.get(id=attachment.id)
-            ChatAttachment.objects.create(chat=self.session.chat, tool_type="ocs_attachments")
+            file = File.objects.get(id=attachment.id, team_id=self.team.id)
             incoming_file_ids.append(file.id)
+
         input_message_metadata = {}
         if incoming_file_ids:
             input_message_metadata["ocs_attachment_file_ids"] = incoming_file_ids
+
         return PipelineState(
             messages=[user_input],
             experiment_session=self.session,
@@ -336,7 +341,22 @@ class PipelineBot:
         output = PipelineState(**raw_output).json_safe()
         return output
 
-    def _save_outputs(self, input_state, output, save_input_to_history):
+    def _process_interrupts(self, output):
+        if interrupt := output.get("interrupt"):
+            trace_info = TraceInfo(name="interrupt", metadata={"interrupt": interrupt})
+            output_message = EventBot(
+                session=self.session,
+                experiment=self.experiment,
+                trace_info=trace_info,
+                trace_service=self.trace_service,
+            ).get_user_message(interrupt["message"])
+            output["messages"].append(output_message)
+            if tag_name := interrupt["tag_name"]:
+                tags = output.setdefault("output_message_tags", [])
+                tags.append((TagCategories.SAFETY_LAYER_RESPONSE, tag_name))
+        return output
+
+    def _save_outputs(self, input_state, output, save_input_to_history, extra_tags=None):
         input_metadata = output.get("input_message_metadata", {})
         output_metadata = output.get("output_message_metadata", {})
         trace_metadata = self.trace_service.get_trace_metadata() if self.trace_service else None
@@ -356,6 +376,9 @@ class PipelineBot:
         ai_message.add_version_tag(
             version_number=self.experiment.version_number, is_a_version=self.experiment.is_a_version
         )
+        if self.trace_service and (tags := output.get("output_message_tags")):
+            flat_tags = [f"{category}:{tag}" for tag, category in tags]
+            self.trace_service.add_output_message_tags_to_trace(flat_tags)
 
         if session_tags := output.get("session_tags"):
             for tag, category in session_tags:
@@ -410,8 +433,21 @@ class EventBot:
     SYSTEM_PROMPT = textwrap.dedent(
         """
         Your role is to generate messages to send to users. These could be reminders
-        or prompts to help them complete their tasks. The text that you generate will be sent
+        or prompts to help them complete their tasks or error messages. The text that you generate will be sent
         to the user in a chat message.
+        
+        <example>
+        Input: Remember to brush your teeth.
+        Output: Don't forget to brush your teeth.
+        </example>
+        <example>
+        Input: Remind me about my appointment with Dr Niel at 5pm.
+        Output: Here is your reminder for your appointment with Dr Niel at 5pm.
+        </example>
+        <example>
+        Input: The message was inappropriate.
+        Output: Unfortunately I can't respond to your last message because it goes against my usage policy.
+        </example>
     
         You should generate the message in same language as the recent conversation history shown below.
         If there is no history use English.
@@ -424,6 +460,8 @@ class EventBot:
     
         #### Current date and time
         {current_datetime}
+        
+        Output only the final message, no additional text. Do not put the message in quotes.
         """
     )
 
@@ -433,11 +471,13 @@ class EventBot:
         experiment: Experiment,
         trace_info: TraceInfo,
         history_manager=None,
+        trace_service=None,
     ):
         self.session = session
         self.experiment = experiment or session.experiment_version
         self.history_manager = history_manager
         self.trace_info = trace_info
+        self.trace_service = trace_service
 
     def get_user_message(self, event_prompt: str) -> str:
         provider = self.llm_provider
@@ -449,19 +489,21 @@ class EventBot:
         service = provider.get_llm_service()
         llm = service.get_chat_model(model.name, 0.7)
 
-        if self.history_manager:
-            trace_service = self.history_manager.trace_service
-        else:
-            trace_service = TracingService.create_for_experiment(self.experiment)
+        if not self.trace_service:
+            self.trace_service = (
+                self.history_manager.trace_service
+                if self.history_manager
+                else TracingService.create_for_experiment(self.experiment)
+            )
 
-        with trace_service.trace_or_span(
+        with self.trace_service.trace_or_span(
             name=f"{self.experiment.name} - {self.trace_info.name}",
             session_id=str(self.session.external_id),
             user_id=str(self.session.participant.identifier),
             inputs={"input": event_prompt},
             metadata=self.trace_info.metadata,
         ):
-            config = trace_service.get_langchain_config()
+            config = self.trace_service.get_langchain_config()
             response = llm.invoke(
                 [
                     {"role": "system", "content": self.system_prompt},
@@ -469,7 +511,7 @@ class EventBot:
                 ],
                 config=config,
             )
-            trace_service.set_current_span_outputs({"response": response.content})
+            self.trace_service.set_current_span_outputs({"response": response.content})
 
             message = response.content
             if self.history_manager:

@@ -93,7 +93,8 @@
       "default": "You are a helpful assistant. Answer the user's query as best you can",
       "title": "Prompt",
       "type": "string",
-      "ui:widget": "expandable_text"
+      "ui:optionsSource": "text_editor_autocomplete_vars",
+      "ui:widget": "text_editor_widget"
     },
     "collection_id": {
       "default": null,
@@ -117,6 +118,13 @@
       "title": "Max Results",
       "ui:widget": "range",
       "type": "integer"
+    },
+    "generate_citations": {
+      "default": true,
+      "description": "Allow files from this collection to be referenced in LLM responses and downloaded by users",
+      "title": "Generate Citations",
+      "type": "boolean",
+      "ui:widget": "toggle"
     },
     "tools": {
       "description": "The tools to enable for the bot",
