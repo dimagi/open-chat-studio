@@ -1,4 +1,5 @@
 import logging
+from functools import cached_property
 from pathlib import Path
 
 from django.conf import settings
@@ -18,7 +19,12 @@ from django.views.generic import CreateView, FormView, ListView, TemplateView, U
 from django_tables2 import SingleTableView
 
 from apps.documents import tasks
-from apps.documents.forms import CollectionForm, CreateCollectionFromAssistantForm, DocumentSourceForm
+from apps.documents.forms import (
+    CollectionForm,
+    CreateCollectionFromAssistantForm,
+    DocumentSourceForm,
+    GithubDocumentSourceForm,
+)
 from apps.documents.models import (
     ChunkingStrategy,
     Collection,
@@ -26,6 +32,7 @@ from apps.documents.models import (
     CollectionFileMetadata,
     DocumentSource,
     FileStatus,
+    SourceType,
 )
 from apps.documents.tables import CollectionsTable
 from apps.files.models import File, FileChunkEmbedding
@@ -126,44 +133,59 @@ def query_collection(request, team_slug: str, pk: int):
     return render(request, "documents/collection_query_results.html", context)
 
 
-@login_and_team_required
-@permission_required("documents.change_collection")
-def manage_document_source(request, team_slug: str, pk: int):
-    """View for managing document source for a collection"""
-    collection = get_object_or_404(Collection.objects.select_related("team"), id=pk, team__slug=team_slug)
+class CreateDocumentSource(LoginAndTeamRequiredMixin, CreateView, PermissionRequiredMixin):
+    permission_required = "documents.add_documentsource"
+    template_name = "documents/document_source_form_dialog.html"
+    model = DocumentSource
+    form_class = DocumentSourceForm
 
-    # Only allow document sources for indexed collections
-    if not collection.is_index:
-        messages.error(request, "Document sources can only be configured for indexed collections.")
-        return redirect("documents:single_collection_home", team_slug=team_slug, pk=pk)
+    @property
+    def collection_id(self):
+        return self.kwargs["collection_id"]
 
-    # Get or create document source
-    document_source, created = DocumentSource.objects.get_or_create(
-        collection=collection,
-        defaults={
-            "team": collection.team,
-            "source_type": "github",  # Default to GitHub
-            "config": {"github": None, "confluence": None},
-            "auto_sync_enabled": False,
-        },
-    )
+    @property
+    def team_slug(self):
+        return self.kwargs["team_slug"]
 
-    if request.method == "POST":
-        form = DocumentSourceForm(collection, request.POST, instance=document_source)
-        if form.is_valid():
-            form.save()
-            messages.success(request, "Document source configuration saved successfully.")
-            return redirect("documents:single_collection_home", team_slug=team_slug, pk=pk)
-    else:
-        form = DocumentSourceForm(collection, instance=document_source)
+    @cached_property
+    def collection(self):
+        return get_object_or_404(Collection.objects.select_related("team"), id=self.collection_id, team__slug=self.team_slug)
 
-    context = {
-        "collection": collection,
-        "document_source": document_source,
-        "form": form,
-        "created": created,
-    }
-    return render(request, "documents/manage_document_source.html", context)
+    @property
+    def source_type(self):
+        request_data = self.request.GET if self.request.method == "GET" else self.request.POST
+        return request_data.get("source_type")
+
+    def get_form_class(self):
+        return GithubDocumentSourceForm if self.source_type == SourceType.GITHUB else DocumentSourceForm
+
+    def dispatch(self, request, *args, **kwargs):
+        if not self.collection.is_index:
+            messages.error(request, "Document sources can only be configured for indexed collections.")
+            return redirect("documents:single_collection_home", team_slug=self.team_slug, pk=self.collection_id)
+        return super().dispatch(request, *args, **kwargs)
+
+    def get_context_data(self, **kwargs):
+        return {
+            **super().get_context_data(**kwargs),
+            "collection": self.collection,
+        }
+
+    def get_form_kwargs(self):
+        return {**super().get_form_kwargs(), "collection": self.collection}
+
+    def get_initial(self):
+        return {
+            "source_type": self.source_type,
+        }
+
+    def get_success_url(self):
+        return reverse("documents:single_collection_home", kwargs={
+            "team_slug": self.team_slug, "pk": self.collection_id
+        })
+
+    def form_valid(self, form):
+        return HttpResponse(headers={"HX-Redirect": self.get_success_url()})
 
 
 @require_POST

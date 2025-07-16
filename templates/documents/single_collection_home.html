@@ -67,8 +67,21 @@
               <i class="fa-solid fa-plus"></i> Add Files
             </button>
           </div>
+          <div class="dropdown">
+            <div tabindex="0" role="button" class="join-item btn btn-sm btn-primary">Add Document Source</div>
+            <ul tabindex="0" class="dropdown-content menu bg-base-100 rounded-box z-1 w-52 p-2 shadow-sm">
+              <li><a
+                  hx-get="{% url "documents:create_document_source" team.slug collection.id %}?source_type=github"
+                  hx-target="#document_source_modal"
+                  hx-swap="innerHTML"
+              >GitHub</a></li>
+              <li><a>Confluence</a></li>
+            </ul>
+          </div>
         </div>
       </div>
+
+      <div id="document_source_modal"></div>
 
       {% include 'documents/file_upload_modal.html' %}
 
@@ -128,5 +141,3 @@
     </div>
   </div>
 {% endblock %}
-
-

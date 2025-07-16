@@ -1,0 +1,28 @@
+{% load i18n %}
+{% load form_tags %}
+
+<dialog id="new_document_source_modal" class="modal" open>
+  <div class="modal-box">
+    <form method="dialog">
+      <button class="btn btn-sm btn-circle btn-ghost absolute right-2 top-2">✕</button>
+    </form>
+    <h3 class="text-lg font-bold">Create a new Document Source</h3>
+    <form id="create-document-source-form"
+          hx-post="{% url 'documents:create_document_source' request.team.slug collection.id %}"
+          hx-target="#new_document_source_modal"
+          hx-swap="outerHTML"
+    >
+      {% csrf_token %}
+      {{ form.non_field_errors }}
+      {% render_form_fields form %}
+    </form>
+
+    <div class="modal-action">
+      <button type="submit" class="btn btn-primary" form="create-document-source-form">Save</button>
+      <form method="dialog">
+        <button class="btn">Cancel</button>
+      </form>
+    </div>
+
+  </div>
+</dialog>
