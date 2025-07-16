@@ -127,10 +127,6 @@ def trigger_bot_message(request):
 
     data = serializer.data
     platform = data["platform"]
-    if platform == ChannelPlatform.COMMCARE_CONNECT:
-        # CommCare Connect identifiers are case-sensitive
-        data["identifier"] = data["identifier"].upper()
-
     identifier = data["identifier"]
     experiment_public_id = data["experiment"]
 

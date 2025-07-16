@@ -288,15 +288,12 @@
               {% if perms.experiments.download_chats %}
                 {% include "experiments/components/exports.html" %}
               {% endif %}
+              {% include "evaluations/create_dataset_button.html" %}
               {% include "experiments/filters.html"%}
             </div>
           </div>
         </div>
-        <div id="sessions-table"
-             hx-get="{% url 'experiments:sessions-list' request.team.slug experiment.id %}"
-             hx-trigger="none"
-             hx-target="this"
-             hx-swap="innerHTML">
+        <div id="sessions-table" data-url="{% url 'experiments:sessions-list' request.team.slug experiment.id %}">
         </div>
       </div>
       </div>

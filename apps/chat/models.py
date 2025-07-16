@@ -131,6 +131,10 @@ class ChatMessage(BaseModel, TaggedModelMixin, UserCommentsMixin):
 
     class Meta:
         ordering = ["created_at"]
+        indexes = [
+            models.Index(fields=["chat", "created_at"]),
+            models.Index(fields=["chat", "message_type", "created_at"]),
+        ]
 
     @classmethod
     def make_summary_message(cls, message):
@@ -211,8 +215,7 @@ class ChatMessage(BaseModel, TaggedModelMixin, UserCommentsMixin):
         }
 
     def get_attached_files(self):
-        """For display purposes. Returns the tool resource files for which this message has references to. The
-        reference will be the file's external id
+        """Returns all files that are attached to this message. This is read from the message metadata.
 
         Message metadata example:
         {

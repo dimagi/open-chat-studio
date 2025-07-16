@@ -142,6 +142,21 @@ def get_llm_provider_choices(team) -> dict[int, dict[str, list[dict[str, Any]]]]
     return providers
 
 
+def get_dropdown_llm_model_choices(team) -> list[tuple[str, str]]:
+    """Get LLM provider model dropdown choices for the team"""
+    llm_providers = LlmProvider.objects.filter(team=team).all()
+    llm_provider_models_by_type = {}
+    for model in LlmProviderModel.objects.for_team(team):
+        llm_provider_models_by_type.setdefault(model.type, []).append(model)
+
+    model_choices = []
+    for provider in llm_providers:
+        for model in llm_provider_models_by_type.get(provider.type, []):
+            model_choices.append((f"{provider.id}:{model.id}", f"{provider.name} - {model!s}"))
+
+    return model_choices
+
+
 def get_embedding_provider_choices(team) -> dict[str, list[dict[str, Any]]]:
     """Group embedding models by LLM provider type for dynamic selection in forms"""
     provider_types = defaultdict(list)

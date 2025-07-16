@@ -13,6 +13,7 @@ class MockTracer(Tracer):
         super().__init__("mock", {})
         self.trace = None
         self.spans: dict[UUID, dict] = {}
+        self.tags = None
 
     @property
     def ready(self) -> bool:
@@ -72,3 +73,6 @@ class MockTracer(Tracer):
 
     def get_trace_metadata(self) -> dict[str, str]:
         return {"trace_id": str(self.trace["id"])}
+
+    def add_trace_tags(self, tags: list[str]) -> None:
+        self.tags = tags

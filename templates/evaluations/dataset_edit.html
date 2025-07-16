@@ -1,0 +1,44 @@
+{% extends 'generic/object_form.html' %}
+{% load i18n %}
+{% load static %}
+
+{% block post_form %}
+  <h2 class="pg-subtitle">{% trans "Dataset Messages" %}</h2>
+  <div id="dataset-messages-table"
+       hx-get="{% url 'evaluations:dataset_messages_table' request.team.slug object.id %}"
+       hx-trigger="load"
+       hx-target="this"
+       hx-swap="innerHTML">
+    <div class="text-center py-4">
+      <i class="fa-solid fa-spinner fa-spin"></i> {% trans "Loading messages..." %}
+    </div>
+  </div>
+
+  {% include "evaluations/components/add_message_form.html" %}
+
+  <dialog id="editMessageModal" class="modal"></dialog>
+{% endblock %}
+
+{% block page_js %}
+  {{ block.super }}
+  <script src="{% static 'js/editors-bundle.js' %}"></script>
+  <script>
+    SiteJS.editors.initJsonEditors();
+    document.addEventListener('htmx:afterRequest', function(event) {
+      if (event.detail.xhr.status === 200 && (event.detail.target.id === 'editMessageModal' || event.detail.requestConfig.verb === 'delete')) {
+        const tableContainer = document.getElementById('dataset-messages-table');
+        if (tableContainer) {
+          const tableUrl = tableContainer.getAttribute('hx-get');
+          htmx.ajax('GET', tableUrl, {
+            target: '#dataset-messages-table',
+            swap: 'innerHTML'
+          });
+        }
+
+        if (event.detail.target.id === 'editMessageModal') {
+          document.getElementById('editMessageModal').close();
+        }
+      }
+    });
+  </script>
+{% endblock %}

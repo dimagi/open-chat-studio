@@ -21,8 +21,6 @@
   "scripts": {
     "build": "stencil build --docs",
     "start": "stencil build --dev --watch --serve",
-    "test": "stencil test --spec --e2e",
-    "test.watch": "stencil test --spec --e2e --watchAll",
     "generate": "stencil generate",
     "use:npmReadme": "mv 'README.md' 'git.README.md' && cp 'src/components/ocs-chat/readme.md' 'README.md'",
     "use:gitReadme": "mv 'git.README.md' 'README.md'",

@@ -5,7 +5,6 @@
 {% load form_tags %}
 {% load django_tables2 %}
 {% block breadcrumbs %}
-
   <div class="text-sm breadcrumbs" aria-label="breadcrumbs">
     <ul>
       <li><a href="{% url 'documents:collection_home' request.team.slug %}">Collections</a></li>
@@ -38,6 +37,14 @@
               <i class="fa-solid fa-pencil"></i>
             </a>
           </div>
+          {% if collection.is_index and not collection.is_remote_index %}
+            <div class="tooltip" data-tip="Sematic Search">
+              <a class="btn btn-sm join-item"
+                 href="{% url 'documents:query_collection_view' team.slug collection.id %}">
+                <i class="fa-solid fa-magnifying-glass"></i>
+              </a>
+            </div>
+          {% endif %}
         </div>
       </div>
     </div>
@@ -71,32 +78,15 @@
             <div class="flex flex-col flex-1 gap-1">
               <div class="flex items-center gap-2">
                 {% if collection_file.status %}
-                  <div class="tooltip" data-tip="{{ collection_file.status_enum.label }}">
-                    {% if collection_file.status == 'pending' %}
-                      <span class="status"></span>
-                    {% elif collection_file.status == 'in_progress' %}
-                      <div class="inline-grid *:[grid-area:1/1]">
-                        <div aria-label="warning" class="status status-warning animate-ping"></div>
-                        <div aria-label="warning" class="status status-warning"></div>
-                      </div>
-                    {% elif collection_file.status == 'completed' %}
-                      <div class="inline-grid *:[grid-area:1/1]">
-                        <div aria-label="success" class="status status-success"></div>
-                      </div>
-                    {% else %}
-                      <div class="inline-grid *:[grid-area:1/1]">
-                        <div aria-label="error" class="status status-error"></div>
-                      </div>
-                    {% endif %}
-                  </div>
+                  {% include 'documents/collection_file_status.html' %}
                 {% endif %}
                 <span class="text-sm font-medium">{% include "generic/chip.html" with chip=collection_file.file.as_chip %}</span>
                 <div class="text-xs badge badge-ghost">{{ collection_file.file_size_mb }} MB</div>
               </div>
               {% if collection.is_index %}
                 {% if not collection.is_remote_index %}
-                  <div class="flex flex-row items-center gap-2">
-                    <span class="text-xs text-base-content/70">{{ collection_file.chunk_count }} chunks</span>
+                  <div id="chunk_count_{{ collection_file.id }}" class="flex flex-row items-center gap-2">
+                    <span class="text-xs text-base-content/70">{{ collection_file.chunk_count|default:0 }} chunks</span>
                   </div>
                 {% endif %}
                 <div class="flex flex-row items-center gap-2">

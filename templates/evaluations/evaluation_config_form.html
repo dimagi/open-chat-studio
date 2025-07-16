@@ -1,0 +1,13 @@
+{% extends "generic/object_form.html" %}
+{% load form_tags i18n %}
+
+{% block form %}
+  <div>
+    {{ form.non_field_errors }}
+
+    {% render_form_fields form "name" %}
+    {% render_form_fields form "dataset" %}
+    {% render_form_fields form "evaluators" %}
+  </div>
+{% endblock form %}
+

@@ -40,25 +40,6 @@ class TestDashboardApiViews:
             assert field in data
             assert isinstance(data[field], int | float)
 
-    def test_active_participants_api(
-        self, authenticated_client, team, experiment, participant, experiment_session, chat
-    ):
-        """Test active participants API endpoint"""
-        # Create test message
-        ChatMessage.objects.create(chat=chat, message_type=ChatMessageType.HUMAN, content="Test message")
-
-        url = reverse("dashboard:api_active_participants", kwargs={"team_slug": team.slug})
-        response = authenticated_client.get(url)
-
-        assert response.status_code == 200
-        data = response.json()
-
-        assert isinstance(data, list)
-        if data:  # If there's data
-            item = data[0]
-            assert "date" in item
-            assert "active_participants" in item
-
     def test_session_analytics_api(self, authenticated_client, team, experiment, participant, experiment_session):
         """Test session analytics API endpoint"""
         url = reverse("dashboard:api_session_analytics", kwargs={"team_slug": team.slug})
@@ -206,7 +187,6 @@ class TestDashboardSecurity:
         """Test that API endpoints require authentication"""
         api_endpoints = [
             "dashboard:api_overview",
-            "dashboard:api_active_participants",
             "dashboard:api_session_analytics",
             "dashboard:api_message_volume",
             "dashboard:api_bot_performance",

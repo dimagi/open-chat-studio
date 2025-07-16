@@ -66,18 +66,71 @@
           {% endif %}
         {% endif %}
       </div>
+
+          <!-- Cancel button -->
       {% if perms.experiments.change_participant %}
         <div>
-          <button class="btn btn-sm btn-ghost tooltip" data-tip="Cancel this schedule"
-                  {% if schedule.is_cancelled or schedule.is_complete %}disabled{% endif %}
-                  hx-post="{% url 'participants:cancel_schedule' request.team.slug participant_id schedule.external_id %}"
-                  hx-confirm="Are you sure you want to cancel this schedule?"
-                  hx-target="#schedule_{{ schedule.external_id }}"
-                  hx-swap="outerHTML">
+          <button
+            class="btn btn-sm btn-ghost tooltip"
+            data-tip="Cancel this schedule"
+            {% if schedule.is_cancelled or schedule.is_complete %}disabled{% endif %}
+            hx-post="{% url 'participants:cancel_schedule' request.team.slug participant_id schedule.external_id %}"
+            hx-confirm="Are you sure you want to cancel this schedule?"
+            hx-target="#schedule_{{ schedule.external_id }}"
+            hx-swap="outerHTML"
+          >
             <i class="fa-solid fa-ban"></i>
           </button>
         </div>
       {% endif %}
     </div>
   </div>
+
+  {% if schedule.attempts %}
+    <details class="mt-4 w-full mb-4">
+      <summary class="cursor-pointer font-semibold text-left ml-4">
+        Message Logs ({{ schedule.attempts|length }})
+      </summary>
+
+      <div class="mt-4 flex justify-center">
+        <div class="w-full max-w-5xl space-y-2">
+
+          <div class="flex w-full justify-between px-4 py-2 font-semibold text-sm">
+            <div class="w-40">Attempted At</div>
+            <div class="w-20">Trigger #</div>
+            <div class="w-20">Attempt #</div>
+            <div class="w-20">Result</div>
+            <div class="w-32">Log</div>
+            <div class="w-20">Trace</div>
+          </div>
+
+          {% for attempt in schedule.attempts %}
+            <div class="flex w-full justify-between px-4 py-2 border border-gray-600 rounded text-sm bg-gray-800">
+              <div class="w-40">{{ attempt.updated_at|date:"DATETIME_FORMAT" }}</div>
+              <div class="w-20">#{{ attempt.trigger_number }}</div>
+              <div class="w-20">#{{ attempt.attempt_number }}</div>
+              <div class="w-20">{{ attempt.attempt_result }}</div>
+              <div class="w-32">
+                {% if attempt.log_message %}
+                  <details>
+                    <summary class="cursor-pointer underline text-blue-400">View Log</summary>
+                  <pre class="mt-1 p-2 bg-gray-900 rounded text-xs text-gray-100 whitespace-pre-wrap">{{ attempt.log_message }}</pre>
+                  </details>
+                {% else %}
+                  —
+                {% endif %}
+              </div>
+              <div class="w-20">
+                {% if attempt.trace_info %}
+                  {% include "experiments/chat/components/trace_icons.html" with trace_infos=attempt.trace_info %}
+                {% else %}
+                  —
+                {% endif %}
+              </div>
+            </div>
+          {% endfor %}
+        </div>
+      </div>
+    </details>
+  {% endif %}
 </div>

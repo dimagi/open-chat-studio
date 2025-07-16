@@ -60,7 +60,15 @@ def fire_trigger(trigger_id, session_id):
 def poll_scheduled_messages():
     """Polls scheduled messages and triggers those that are due. After triggering, it updates the database with the
     new trigger details for each message."""
-
     messages = ScheduledMessage.objects.get_messages_to_fire()
     for message in messages:
         message.safe_trigger()
+
+
+@shared_task(ignore_result=True)
+def retry_scheduled_message(scheduled_message_id: int, attempt_number: int):
+    try:
+        message = ScheduledMessage.objects.get(id=scheduled_message_id)
+        message.safe_trigger(attempt_number=attempt_number)
+    except ScheduledMessage.DoesNotExist:
+        logger.warning(f"ScheduledMessage with id={scheduled_message_id} not found for retry.")

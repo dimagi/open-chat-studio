@@ -39,7 +39,7 @@ DEFAULT_LLM_PROVIDER_MODELS = {
         Model("claude-3-7-sonnet-20250219", k(200)),
         Model("claude-3-5-sonnet-latest", k(200)),
         Model("claude-3-5-haiku-latest", k(200), is_default=True),
-        Model("claude-3-opus-latest", k(200)),
+        Model("claude-3-opus-latest", k(200), deprecated=True),
         Model("claude-2.0", k(100), deprecated=True),
         Model("claude-2.1", k(200), deprecated=True),
         Model("claude-instant-1.2", k(100), deprecated=True),

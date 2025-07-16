@@ -17,6 +17,7 @@ EVENT_ADMIN_GROUP = "Event Admin"
 ASSISTANT_ADMIN_GROUP = "Assistant Admin"
 CHAT_VIEWER_GROUP = "Chat Viewer"
 PIPELINE_ADMIN_GROUP = "Pipeline Admin"
+EVALUATION_ADMIN_GROUP = "Evaluation Admin"
 
 NORMAL_USER_GROUPS = [
     EXPERIMENT_ADMIN_GROUP,
@@ -53,7 +54,14 @@ CONTENT_TYPES = {
     "channels": ["experimentchannel"],
     "chat": ["chat", "chatmessage", "chatattachment"],
     "custom_actions": ["customaction", "customactionoperation"],
-    "events": ["eventaction", "statictrigger", "timeouttrigger", "eventlog", "scheduledmessage"],
+    "events": [
+        "eventaction",
+        "statictrigger",
+        "timeouttrigger",
+        "eventlog",
+        "scheduledmessage",
+        "scheduledmessageattempt",
+    ],
     "experiments": [
         "consentform",
         "experiment",
@@ -83,6 +91,14 @@ CONTENT_TYPES = {
     "participants": [],
     "documents": ["collection"],
     "chatbots": [],
+    "evaluations": [
+        "evaluationconfig",
+        "evaluationrun",
+        "evaluator",
+        "evaluationdataset",
+        "evaluationmessage",
+        "evaluationresult",
+    ],
 }
 
 CUSTOM_PERMISSIONS = {"experiments": ["invite_participants", "download_chats"]}
@@ -194,6 +210,12 @@ GROUPS = [
         PIPELINE_ADMIN_GROUP,
         [
             AppPermSetDef("pipelines", ALL),
+        ],
+    ),
+    GroupDef(
+        EVALUATION_ADMIN_GROUP,
+        [
+            AppPermSetDef("evaluations", ALL),
         ],
     ),
 ]

@@ -9,6 +9,7 @@ from django.utils.translation import gettext
 from field_audit import audit_fields
 from field_audit.models import AuditingManager
 from waffle import get_setting
+from waffle.managers import FlagManager
 from waffle.models import CACHE_EMPTY, AbstractUserFlag
 from waffle.utils import get_cache, keyfmt
 
@@ -145,6 +146,11 @@ class BaseTeamModel(BaseModel):
         abstract = True
 
 
+class FlagObjectManager(FlagManager, AuditingManager):
+    pass
+
+
+@audit_fields(*model_audit_fields.FLAG_FIELDS, audit_special_queryset_writes=True)
 class Flag(AbstractUserFlag):
     """Custom Waffle flag to support usage with teams.
 
@@ -158,6 +164,7 @@ class Flag(AbstractUserFlag):
         blank=True,
         help_text=gettext("Activate this flag for these teams."),
     )
+    objects = FlagObjectManager()
 
     def get_flush_keys(self, flush_keys=None):
         flush_keys = super().get_flush_keys(flush_keys)

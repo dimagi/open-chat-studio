@@ -163,6 +163,12 @@ class LLMChat(RunnableSerializable[str, ChainOutput]):
             llm_response = self._get_output_check_cancellation(input, merged_config)
             ai_message = llm_response.text
             ai_message_metadata = self.adapter.get_output_message_metadata(llm_response.cited_files)
+            if self.adapter.expect_citations:
+                ai_message = self.adapter.add_citation_section_from_cited_files(
+                    ai_message, cited_files=llm_response.cited_files
+                )
+            else:
+                ai_message = self.adapter.remove_file_citations(ai_message)
 
             result = ChainOutput(
                 output=ai_message, prompt_tokens=callback.prompt_tokens, completion_tokens=callback.completion_tokens
@@ -212,7 +218,10 @@ class LLMChat(RunnableSerializable[str, ChainOutput]):
         try:
             async for token in stream:
                 output += self._parse_output(token)
-                cited_files.extend(self._get_cited_files(token))
+
+                if self.adapter.expect_citations:
+                    cited_files.extend(self._get_cited_files(token))
+
                 if await self._chat_is_cancelled():
                     break
         finally:
@@ -220,7 +229,7 @@ class LLMChat(RunnableSerializable[str, ChainOutput]):
             if hasattr(stream, "aclose"):
                 await stream.aclose()
 
-        return LlmChatResponse(text=output, cited_files=cited_files)
+        return LlmChatResponse(text=output, cited_files=set(cited_files))
 
     def _parse_output(self, output):
         return output
@@ -290,7 +299,7 @@ class AgentLLMChat(LLMChat):
 
     def _get_cited_files(self, token: str | dict) -> list[File]:
         cited_files_parser = self.adapter.get_llm_service().get_cited_files_parser()
-        return cited_files_parser(token)
+        return cited_files_parser(token, team_id=self.adapter.session.team_id)
 
     def _build_chain(self) -> Runnable[dict[str, Any], dict]:
         tools = self.adapter.get_allowed_tools()

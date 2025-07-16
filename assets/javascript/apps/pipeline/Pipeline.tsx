@@ -157,7 +157,6 @@ export default function Pipeline() {
         edgesFocusable={!readOnly}
         nodesDraggable={!readOnly}
         nodesConnectable={!readOnly}
-        draggable={!readOnly}
         nodes={nodes}
         edges={edges}
         onNodesChange={onNodesChange}

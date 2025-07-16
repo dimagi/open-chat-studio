@@ -5,6 +5,7 @@ export type SimplePipelineMessageResponse = {
 
 type TaskResult = {
   error?: string;
+  interrupt?: {message: string; tag_name: string};
   messages: string[];
   outputs: Outputs;
 } | string;

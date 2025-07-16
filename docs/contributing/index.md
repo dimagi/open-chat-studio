@@ -47,6 +47,15 @@ To contribute, pick a task from the [Good First Issues board](https://github.com
 
 Follow our [Pull Request guidelines](./pull_requests.md).
 
+## Agent support
+If you are using an agent other than Claude, consider creating a symbolic link to the CLAUDE.md file, but for your agent. For instance, to create a symlink for Gemini, run
+
+```bash
+ln -s CLAUDE.md GEMINI.md
+```
+
+Be sure add the new "file" to .gitignore.
+
 ## Getting Help
 
 If you have any questions or need assistance:

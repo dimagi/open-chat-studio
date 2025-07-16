@@ -76,7 +76,8 @@ dependencies = [
     "django-pydantic-field",
     "pgvector",
     "backoff",
-    "langchain-mcp-adapters"
+    "django-cors-headers>=4.7.0",
+    "langchain-mcp-adapters",
 ]
 
 [project.urls]

@@ -15,6 +15,7 @@ from apps.experiments.models import (
     ConsentForm,
     Experiment,
     ExperimentRoute,
+    ExperimentSession,
     ParticipantData,
     SafetyLayer,
     SyntheticVoice,
@@ -176,6 +177,7 @@ class TestExperimentSession:
                 "triggers_remaining": 1,
                 "prompt": "hi",
                 "is_cancelled": False,
+                "attempts": [],
             }
 
         expected_dict_version = [
@@ -310,9 +312,11 @@ class TestExperimentSession:
         assert len(participant.get_schedules_for_experiment(session.experiment)) == 2
 
     @pytest.mark.parametrize("use_custom_experiment", [False, True])
-    def test_scheduled_message_experiment(self, use_custom_experiment):
+    @patch.object(ExperimentSession, "ad_hoc_bot_message")
+    def test_scheduled_message_experiment(self, mock_ad_hoc, use_custom_experiment):
         """ScheduledMessages should use the experiment specified in the linked action's params"""
         custom_experiment = ExperimentFactory() if use_custom_experiment else None
+        mock_ad_hoc.return_value = {}
         session = ExperimentSessionFactory()
         event_action_kwargs = {"time_period": TimePeriod.DAYS, "experiment_id": session.experiment.id}
         if custom_experiment:
@@ -322,7 +326,6 @@ class TestExperimentSession:
         trigger_action = ScheduleTriggerAction()
         trigger_action.invoke(session, action=event_action)
 
-        session.ad_hoc_bot_message = Mock()
         message = ScheduledMessage.objects.get(action=event_action)
         message.participant.get_latest_session = lambda *args, **kwargs: session
         message.safe_trigger()
@@ -382,14 +385,14 @@ class TestExperimentSession:
 
     @pytest.mark.parametrize("fail_silently", [True, False])
     @patch("apps.chat.channels.ChannelBase.from_experiment_session")
-    @patch("apps.chat.bots.EventBot.get_user_message")
-    def test_ad_hoc_message(self, get_user_message, from_experiment_session, fail_silently, experiment_session):
+    @patch.object(ExperimentSession, "_bot_prompt_for_user")
+    def test_ad_hoc_message(self, mock_bot_prompt, from_experiment_session, fail_silently, experiment_session):
         mock_channel = Mock()
         mock_channel.send_message_to_user = Mock()
         if not fail_silently:
             mock_channel.send_message_to_user.side_effect = Exception("Cannot send message")
         from_experiment_session.return_value = mock_channel
-        get_user_message.return_value = "We're testing"
+        mock_bot_prompt.return_value = "We're testing"
 
         def _test():
             experiment_session.ad_hoc_bot_message(
@@ -405,17 +408,15 @@ class TestExperimentSession:
             _test()
 
     @patch("apps.chat.channels.ChannelBase.from_experiment_session")
-    @patch("apps.chat.bots.EventBot.get_user_message")
-    def test_ad_hoc_message_transaction_rollback(self, get_user_message, from_experiment_session, experiment_session):
+    @patch.object(ExperimentSession, "_bot_prompt_for_user")
+    def test_ad_hoc_message_transaction_rollback(self, mock_bot_prompt, from_experiment_session, experiment_session):
         """Test that the @transaction.atomic() decorator on ad_hoc_bot_message
         rolls back database changes when an exception occurs."""
-
         # Set up initial state
         initial_message_count = ChatMessage.objects.filter(chat=experiment_session.chat).count()
 
         # Mock the bot to return a message
-        get_user_message.return_value = "Test message"
-
+        mock_bot_prompt.return_value = "Test message"
         # Mock channel to create a message then raise an exception on send
         mock_channel = Mock()
         from_experiment_session.return_value = mock_channel
@@ -449,7 +450,9 @@ class TestExperimentSession:
             ([1], "v1"),
         ],
     )
-    def test_experiment_version_for_display(self, versions_chatted_to, expected_display_val, experiment_session):
+    def test_experiment_versions_from_prefetched_data(
+        self, versions_chatted_to, expected_display_val, experiment_session
+    ):
         for version in versions_chatted_to:
             message = ChatMessage.objects.create(
                 message_type=ChatMessageType.AI, content="", chat=experiment_session.chat
@@ -458,7 +461,7 @@ class TestExperimentSession:
                 f"v{version}", experiment_session.team, tag_category=TagCategories.EXPERIMENT_VERSION
             )
 
-        assert experiment_session.experiment_version_for_display == expected_display_val
+        assert experiment_session.experiment_versions_from_prefetched_data == expected_display_val
 
     @pytest.mark.parametrize("participant_data_injected", [True, False])
     def test_requires_participant_data(self, participant_data_injected):

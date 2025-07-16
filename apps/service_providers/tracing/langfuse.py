@@ -136,6 +136,11 @@ class LangFuseTracer(Tracer):
         else:
             return self.trace
 
+    def add_trace_tags(self, tags: list[str]) -> None:
+        if not self.ready:
+            raise ServiceNotInitializedException("Service not initialized.")
+        self.trace.update(tags=tags)
+
 
 class ClientManager:
     """This class manages the langfuse clients to avoid creating a new client for every request.

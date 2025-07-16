@@ -22,7 +22,9 @@ INSTRUCTIONS_HELP_TEXT = """
 class OpenAiAssistantForm(forms.ModelForm):
     builtin_tools = forms.MultipleChoiceField(widget=forms.CheckboxSelectMultiple, choices=get_assistant_tool_options())
     tools = forms.MultipleChoiceField(
-        widget=forms.CheckboxSelectMultiple, choices=AgentTools.user_tool_choices(), required=False
+        widget=forms.CheckboxSelectMultiple,
+        choices=AgentTools.user_tool_choices(include_end_session=False),
+        required=False,
     )
     custom_action_operations = forms.MultipleChoiceField(widget=forms.CheckboxSelectMultiple, required=False)
 

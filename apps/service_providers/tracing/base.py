@@ -90,6 +90,10 @@ class Tracer(ABC):
     def get_trace_metadata(self) -> dict[str, str]:
         return {}
 
+    @abstractmethod
+    def add_trace_tags(self, tags: list[str]) -> None:
+        raise NotImplementedError
+
 
 @dataclasses.dataclass
 class TraceInfo:

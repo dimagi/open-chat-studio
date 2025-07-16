@@ -1,7 +1,7 @@
 <div id="tag-ui-{{ object.id }}" class="text-gray-500">
   {% if not edit_mode %}
     <i class="fa-solid fa-tags"></i>
-    {% for tag in object.tags_json %}
+    {% for tag in object.prefetched_tags_json %}
       <div
         class="
                {% if not tag.is_system_tag %}

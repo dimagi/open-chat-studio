@@ -51,6 +51,9 @@ def handle_telegram_message(self, message_data: str, channel_external_id: uuid):
 @shared_task(bind=True, base=TaskbadgerTask, ignore_result=True)
 def handle_twilio_message(self, message_data: str, request_uri: str, signature: str):
     raw_data = json.loads(message_data)
+    if "Body" not in raw_data:
+        log.info(f"Received a Twilio status update, not a message: {raw_data}")
+        return
     message = TwilioMessage.parse(raw_data)
 
     channel_id_key = ""

@@ -146,7 +146,7 @@
       <div class="card bg-base-100 shadow-xl">
         <div class="card-body">
           <div class="card-title flex items-center justify-between">
-            <span>{% trans "Session Analytics" %}</span>
+            <span>{% trans "Active Sessions" %}</span>
             <div class="loading loading-spinner loading-sm" x-show="loadingStates.sessionAnalytics"></div>
           </div>
           <div class="h-80">
@@ -301,6 +301,7 @@
                   <th>{% trans "Participant" %}</th>
                   <th>{% trans "Messages" %}</th>
                   <th>{% trans "Sessions" %}</th>
+                  <th>{% trans "Last Activity" %}</th>
                 </tr>
               </thead>
               <tbody>
@@ -314,6 +315,7 @@
                     </td>
                     <td x-text="formatNumber(participant.total_messages)"></td>
                     <td x-text="formatNumber(participant.total_sessions)"></td>
+                    <td x-text="`${formatDate(participant.last_activity)} ago`"></td>
                   </tr>
                 </template>
               </tbody>

@@ -1,4 +1,3 @@
-import json
 from datetime import timedelta
 
 from django.test import RequestFactory, TestCase
@@ -6,7 +5,8 @@ from django.utils import timezone
 
 from apps.banners.models import Banner
 from apps.banners.services import BannerService
-from apps.teams.models import Flag, Team
+from apps.teams.models import Flag
+from apps.utils.factories.team import TeamFactory
 
 
 class BannerServiceTests(TestCase):
@@ -14,8 +14,8 @@ class BannerServiceTests(TestCase):
         self.factory = RequestFactory()
         self.now = timezone.now()
 
-        self.team_with_flag = Team.objects.create(id=1, name="Team With Flag")
-        self.team_without_flag = Team.objects.create(id=2, name="Team Without Flag")
+        self.team_with_flag = TeamFactory(name="Team With Flag")
+        self.team_without_flag = TeamFactory(name="Team Without Flag")
 
         self.test_flag = Flag.objects.create(name="flag_test_banner", everyone=False)
         self.test_flag.teams.add(self.team_with_flag)
@@ -82,7 +82,7 @@ class BannerServiceTests(TestCase):
         )
 
     def test_get_active_banners_no_location(self):
-        result = BannerService.get_active_banners("[]", None, None)
+        result = BannerService.get_active_banners([], None, None)
         banner_ids = [banner.id for banner in result]
 
         assert self.active_global_banner.id in banner_ids
@@ -92,7 +92,7 @@ class BannerServiceTests(TestCase):
         assert self.future_banner.id not in banner_ids
 
     def test_get_active_banners_with_location(self):
-        result = BannerService.get_active_banners("[]", "Pipelines", None)
+        result = BannerService.get_active_banners([], "Pipelines", None)
         banner_ids = [banner.id for banner in result]
 
         assert self.active_global_banner.id in banner_ids
@@ -102,34 +102,14 @@ class BannerServiceTests(TestCase):
         assert self.future_banner.id not in banner_ids
 
     def test_get_active_banners_with_dismissed_ids(self):
-        dismissed_ids = json.dumps([self.active_global_banner.id])
-        result = BannerService.get_active_banners(dismissed_ids, None, None)
+        result = BannerService.get_active_banners([self.active_global_banner.id], None, None)
         banner_ids = [banner.id for banner in result]
 
         assert self.active_global_banner.id not in banner_ids
 
-    def test_get_active_banners_invalid_json(self):
-        result = BannerService.get_active_banners("invalid json", None, None)
-        banner_ids = [banner.id for banner in result]
-
-        assert self.active_global_banner.id in banner_ids
-
-    def test_get_active_banners_empty_string_dismissed_ids(self):
-        result = BannerService.get_active_banners("", None, None)
-        banner_ids = [banner.id for banner in result]
-
-        assert self.active_global_banner.id in banner_ids
-
-    def test_get_active_banners_invalid_list_items(self):
-        dismissed_ids = json.dumps([1, "invalid", -1, 0])
-        result = BannerService.get_active_banners(dismissed_ids, None, None)
-        banner_ids = [banner.id for banner in result]
-
-        assert self.active_global_banner.id in banner_ids
-
     def test_get_active_banners_with_team_that_has_flag(self):
         """Test that banners with feature flags show for teams that have the flag enabled."""
-        result = BannerService.get_active_banners("[]", "global", self.team_with_flag)
+        result = BannerService.get_active_banners([], "global", self.team_with_flag)
         banner_ids = [banner.id for banner in result]
 
         assert self.active_global_banner.id in banner_ids
@@ -137,7 +117,7 @@ class BannerServiceTests(TestCase):
 
     def test_get_active_banners_with_team_without_flag(self):
         """Test that banners with feature flags don't show for teams without the flag."""
-        result = BannerService.get_active_banners("[]", "global", self.team_without_flag)
+        result = BannerService.get_active_banners([], "global", self.team_without_flag)
         banner_ids = [banner.id for banner in result]
 
         assert self.active_global_banner.id in banner_ids
