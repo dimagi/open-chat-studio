@@ -11,7 +11,6 @@ from django.utils.http import url_has_allowed_host_and_scheme
 from django.utils.translation import gettext_lazy as _
 from django.views.decorators.debug import sensitive_post_parameters
 from health_check.views import MainView
-from waffle import flag_is_active
 
 from apps.teams.decorators import check_superuser_team_access, login_and_team_required
 from apps.teams.models import Membership, Team
@@ -27,7 +26,7 @@ def home(request):
     if request.user.is_authenticated:
         team = request.team
         if team:
-            return _redirect_for_team_home(request, team)
+            return redirect("dashboard:index", team_slug=team.slug)
         else:
             messages.info(
                 request,
@@ -38,17 +37,9 @@ def home(request):
         return render(request, "web/landing_page.html")
 
 
-def _redirect_for_team_home(request, team):
-    if flag_is_active(request, "flag_team_dashboard"):
-        return redirect("dashboard:index", team_slug=team.slug)
-    if flag_is_active(request, "flag_chatbots"):
-        return HttpResponseRedirect(reverse("chatbots:chatbots_home", args=[team.slug]))
-    return HttpResponseRedirect(reverse("experiments:experiments_home", args=[team.slug]))
-
-
 @login_and_team_required
 def team_home(request, team_slug):
-    return _redirect_for_team_home(request, request.team)
+    return redirect("dashboard:index", team_slug=request.team.slug)
 
 
 class HealthCheck(MainView):
