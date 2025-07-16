@@ -26,7 +26,7 @@ class TestTracingService:
         assert not service.activated
         assert service.trace_name is None
         assert service.trace_id is None
-        assert service.session_external_id is None
+        assert service.session_id is None
         assert service.user_id is None
         assert service.span_stack == []
 
@@ -43,7 +43,7 @@ class TestTracingService:
         with tracing_service.trace(trace_name, session_id, user_id, {"input": "test"}):
             assert tracing_service.activated
             assert tracing_service.trace_name == trace_name
-            assert tracing_service.session_external_id == session_id
+            assert tracing_service.session_id == session_id
             assert tracing_service.user_id == user_id
             assert isinstance(tracing_service.trace_id, UUID)
             assert mock_tracer.trace is not None
@@ -70,7 +70,7 @@ class TestTracingService:
         assert not tracing_service.activated
         assert not tracing_service.trace_id
         assert not tracing_service.trace_name
-        assert not tracing_service.session_external_id
+        assert not tracing_service.session_id
         assert not tracing_service.user_id
         assert not tracing_service.outputs
         assert not tracing_service.span_stack

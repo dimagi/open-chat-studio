@@ -138,7 +138,7 @@ class PipelineStartAction(EventActionHandlerBase):
         trace_service = TracingService.create_for_experiment(session.experiment)
         with trace_service.trace(
             trace_name=f"{session.experiment.name} - event pipeline execution",
-            session_external_id=session.id,
+            session_id=session.id,
             user_id=session.participant.identifier,
             inputs={"input": input},
             metadata={"action_type": action.action_type, "action_id": action.id, "params": action.params},

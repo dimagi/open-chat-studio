@@ -358,11 +358,11 @@ class ChannelBase(ABC):
                 with self.trace_service.trace(
                     experiment_id=self.experiment.id,
                     trace_name=self.experiment.name,
-                    session_external_id=str(self.experiment_session.external_id),
+                    session_id=str(self.experiment_session.external_id),
                     user_id=self.participant_identifier,
                     inputs={"input": self.message.model_dump()},
                     participant_id=self._participant_id,
-                    session_id=self.experiment_session.id,
+                    session_id_fk=self.experiment_session.id,
                 ):
                     response = self._new_user_message()
                     self.trace_service.set_current_span_outputs({"response": response.content})

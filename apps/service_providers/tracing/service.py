@@ -28,13 +28,13 @@ class TracingService:
 
         self.trace_name: str | None = None
         self.trace_id: UUID | None = None
-        self.session_external_id: str | None = None
+        self.session_id: str | None = None
         self.user_id: str | None = None
         self.experiment_id: str | None = None
         self.start_time = None
         self._input_message_id = None
         self._output_message_id = None
-        self.session_id: int | None = (None,)
+        self.session_id_fk: int | None = None
         self.participant_id: int | None = None
 
     @classmethod
@@ -76,24 +76,24 @@ class TracingService:
     def trace(
         self,
         trace_name: str,
-        session_external_id: str,
+        session_id: str,
         user_id: str,
         inputs: dict[str, Any] | None = None,
         metadata: dict[str, str] | None = None,
         input_message_id: str | None = None,
         experiment_id: int | None = None,
-        session_id: int | None = None,
+        session_id_fk: int | None = None,
         participant_id: int | None = None,
     ):
         self.trace_id = uuid.uuid4()
         self.trace_name = trace_name
-        self.session_external_id = session_external_id
+        self.session_id = session_id
         self.user_id = user_id
         self.experiment_id = experiment_id
         self._start_time = timezone.now()
         self._input_message_id = input_message_id
         self.participant_id = participant_id
-        self.session_id = session_id
+        self.session_id_fk = session_id_fk
 
         try:
             self._start_traces(inputs, metadata)
@@ -107,9 +107,7 @@ class TracingService:
     def _start_traces(self, inputs: dict[str, Any] | None = None, metadata: dict[str, str] | None = None):
         for tracer in self._tracers:
             try:
-                tracer.start_trace(
-                    self.trace_name, self.trace_id, self.session_external_id, self.user_id, inputs, metadata
-                )
+                tracer.start_trace(self.trace_name, self.trace_id, self.session_id, self.user_id, inputs, metadata)
             except Exception:  # noqa BLE001
                 logger.exception("Error initializing tracer %s", tracer.__class__.__name__)
 
@@ -119,13 +117,13 @@ class TracingService:
                 tracer.end_trace(self.outputs.get(self.trace_id), error)
             except Exception:  # noqa BLE001
                 logger.exception("Error ending tracer %s", tracer.__class__.__name__)
-        if self._start_time and self._input_message_id and self._output_message_id:
+        if self._start_time and self.session_id_fk:
             end_time = timezone.now()
             duration = end_time - self._start_time
             duration_ms = int(duration.total_seconds() * 1000)
             Trace.objects.create(
                 experiment_id=self.experiment_id,
-                session_id=self.session_id,
+                session_id=self.session_id_fk,
                 participant_id=self.participant_id,
                 output_message_id=self._output_message_id,
                 duration=duration_ms,
@@ -212,8 +210,8 @@ class TracingService:
         metadata = {}
         if self.user_id:
             metadata["participant-id"] = self.user_id
-        if self.session_external_id:
-            metadata["session-id"] = self.session_external_id
+        if self.session_id:
+            metadata["session-id"] = self.session_id
         config = RunnableConfig(
             run_name=f"{span_name or 'OCS'} run",
             callbacks=tracer_callbacks + extra_callbacks,
@@ -286,7 +284,7 @@ class TracingService:
     def _reset(self) -> None:
         self.trace_id = None
         self.trace_name = None
-        self.session_external_id = None
+        self.session_id = None
         self.user_id = None
         self.outputs = defaultdict(dict)
         self.span_stack = []
