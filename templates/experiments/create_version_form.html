@@ -10,7 +10,7 @@
 {% block page_js %}
   {{ block.super }}
   <script src="{% static 'js/editors-bundle.js' %}"></script>
-{% endblock %}
+{% endblock page_js %}
 
 {% block breadcrumbs %}
   <div class="text-sm breadcrumbs" aria-label="breadcrumbs">
@@ -20,7 +20,7 @@
       <li class="pg-breadcrumb-active" aria-current="page">Create Version</li>
     </ul>
   </div>
-{% endblock %}
+{% endblock breadcrumbs %}
 
 {% block app %}
   <div class="app-card">
@@ -55,4 +55,4 @@
       {% endif %}
     {% endif %}
   </div>
-{% endblock %}
+{% endblock app %}

@@ -12,7 +12,7 @@
       <li class="pg-breadcrumb-active" aria-current="page">{{ experiment.name }}</li>
     </ul>
   </div>
-{% endblock %}
+{% endblock breadcrumbs %}
 {% block app %}
   <div class="app-card">
     <div class="flex">
@@ -302,4 +302,4 @@
       });
       window.addEventListener('hashchange', selectTabFromHash);
     </script>
-{% endblock %}
+{% endblock app %}

@@ -6,7 +6,7 @@
   {% if celery_job_id %}
     <script src="{% static 'celery_progress/celery_progress.js' %}"></script>
   {% endif %}
-{% endblock %}
+{% endblock page_head %}
 
 {% block breadcrumbs %}
   <div class="text-sm breadcrumbs" aria-label="breadcrumbs">
@@ -16,7 +16,7 @@
       <li class="pg-breadcrumb-active" aria-current="page">Run {{ evaluation_run.id }}</li>
     </ul>
   </div>
-{% endblock %}
+{% endblock breadcrumbs %}
 
 {% block app %}
   <div class="container mx-auto px-4 py-8">
@@ -95,4 +95,4 @@
       </div>
     {% endif %}
   </div>
-{% endblock %}
+{% endblock app %}
