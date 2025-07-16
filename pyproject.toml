@@ -140,6 +140,7 @@ dev = [
     "pytest-cov",
     "pytest-xdist",
     "django-debug-toolbar>=5.2.0",
+    "djlint>=1.36.4",
 ]
 docs = [
     "mkdocs-material>=9.6.12",
@@ -152,3 +153,9 @@ prod = [
 
 [tool.uv]
 default-groups = ["dev", "docs"]
+
+[tool.djlint]
+profile="django"
+format_attribute_template_tags=true
+use_gitignore=true
+indent=2
