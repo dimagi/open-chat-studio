@@ -3,10 +3,10 @@
 {% block page_head %}
   {{ block.super }}
   <script src="{% static 'js/app-bundle.js' %}"></script>
-{% endblock %}
+{% endblock page_head %}
 {% block top_nav %}
   {% include "web/components/top_nav_app.html" %}
-{% endblock %}
+{% endblock page_head %}
 {% block body %}
   {% block notifications %}
   {% endblock notifications %}
@@ -28,4 +28,4 @@
       </div>
     </div>
   </section>
-{% endblock %}
+{% endblock page_head %}

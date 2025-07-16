@@ -27,7 +27,7 @@
       {% render_form_fields team_form %}
       {% if create or request.team_membership.is_team_admin %}
         <div class="pg-inline-buttons">
-          <input class="btn btn-outline" type="submit" value="{% translate 'Save' %}">
+          <input class="btn btn-outline" type="submit" value="{% translate "Save" %}">
         </div>
       {% endif %}
     </form>
@@ -89,7 +89,7 @@
         <h3 class="pg-subtitle">
           {% translate "Danger Zone" %}
         </h3>
-        <label for="delete-modal" class="pg-button-danger modal-button">{% translate 'Delete Team' %}</label>
+        <label for="delete-modal" class="pg-button-danger modal-button">{% translate "Delete Team" %}</label>
       </section>
       {% include "teams/components/delete_team_modal.html" %}
     {% endif %}
