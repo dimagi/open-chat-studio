@@ -1,11 +1,11 @@
 {% extends "account/base.html" %}
 {% load i18n %}
 {% load form_tags %}
-{% block head_title %}{% translate "E-mail Addresses" %}{% endblock %}
+{% block head_title %}{% translate "E-mail Addresses" %}{% endblock head_title %}
 {% block content %}
   <h1 class="pg-title">{% translate "E-mail Addresses" %}</h1>
   {% if user.emailaddress_set.all %}
-    <p>{% translate 'The following e-mail addresses are associated with your account:' %}</p>
+    <p>{% translate "The following e-mail addresses are associated with your account:" %}</p>
     <form action="{% url 'account_email' %}" class="email_list" method="post">
       {% csrf_token %}
       <fieldset class="blockLabels">
@@ -29,15 +29,15 @@
           </div>
         {% endfor %}
         <div class="mt-2">
-          <button class="btn btn-primary" type="submit" name="action_primary">{% translate 'Make Primary' %}</button>
-          <button class="btn btn-outline" type="submit" name="action_send">{% translate 'Re-send Verification' %}</button>
-          <button class="pg-button-danger" type="submit" name="action_remove">{% translate 'Remove' %}</button>
+          <button class="btn btn-primary" type="submit" name="action_primary">{% translate "Make Primary" %}</button>
+          <button class="btn btn-outline" type="submit" name="action_send">{% translate "Re-send Verification" %}</button>
+          <button class="pg-button-danger" type="submit" name="action_remove">{% translate "Remove" %}</button>
         </div>
       </fieldset>
     </form>
   {% else %}
     <p>
-      <strong>{% translate 'Warning:' %}</strong> {% translate "You currently do not have any e-mail address set up. You should really add an e-mail address so you can receive notifications, reset your password, etc." %}
+      <strong>{% translate "Warning:" %}</strong> {% translate "You currently do not have any e-mail address set up. You should really add an e-mail address so you can receive notifications, reset your password, etc." %}
     </p>
   {% endif %}
   {% if can_add_email %}
@@ -51,7 +51,7 @@
       </div>
     </form>
   {% endif %}
-{% endblock %}
+{% endblock content %}
 {% block page_js %}
   <script type="text/javascript">
     (function () {
@@ -66,4 +66,4 @@
       }
     })();
   </script>
-{% endblock %}
+{% endblock page_js %}
