@@ -1,4 +1,4 @@
-{% extends 'web/app/app_base.html' %}
+{% extends "web/app/app_base.html" %}
 {% load form_tags %}
 {% block breadcrumbs %}
   <div class="text-sm breadcrumbs" aria-label="breadcrumbs">
@@ -8,7 +8,7 @@
       <li class="pg-breadcrumb-active" aria-current="page">Invitations</li>
     </ul>
   </div>
-{% endblock %}
+{% endblock breadcrumbs %}
 {% block app %}
   <div class="app-card">
     <h1 class="pg-title">{{ experiment_name }} Invitations</h1>
@@ -30,4 +30,4 @@
       {% endfor %}
     </ul>
   </div>
-{% endblock %}
+{% endblock app %}

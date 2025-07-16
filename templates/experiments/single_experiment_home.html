@@ -1,4 +1,4 @@
-{% extends 'web/app/app_base.html' %}
+{% extends "web/app/app_base.html" %}
 {% load waffle_tags %}
 {% load team_tags %}
 {% load static %}
@@ -53,7 +53,7 @@
       <li class="pg-breadcrumb-active" aria-current="page">{{ experiment.name }}</li>
     </ul>
   </div>
-{% endblock %}
+{% endblock breadcrumbs %}
 {% block app %}
   <div class="app-card">
     <div class="flex">
@@ -247,7 +247,7 @@
       </div>
     {% endif %}
     {% if bot_type_chip %}
-      {% include 'generic/chip.html' with chip=bot_type_chip %}
+      {% include "generic/chip.html" with chip=bot_type_chip %}
     {% endif %}
 
     {% if not can_make_child_routes %}
@@ -381,4 +381,4 @@
     });
     window.addEventListener('hashchange', selectTabFromHash);
   </script>
-{% endblock %}
+{% endblock app %}
