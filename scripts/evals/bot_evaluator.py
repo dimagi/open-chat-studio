@@ -1,4 +1,16 @@
-#!/usr/bin/env python3
+# /// script
+# requires-python = ">=3.11"
+# dependencies = [
+#    "aiohttp>=3.8.0",
+#    "pandas>=1.5.0",
+#    "langchain>=0.1.0",
+#    "langchain-openai>=0.1.0",
+#    "langchain-core>=0.1.0",
+#    "pydantic>=2.0.0",
+# ]
+# ///
+
+#!/usr/bin/env -S uv run --script
 """
 Bot Evaluation Script for Open Chat Studio
 
@@ -14,8 +26,10 @@ Usage:
 
 import argparse
 import asyncio
+import contextlib
 import json
 import logging
+import os
 import re
 import time
 import uuid
@@ -27,7 +41,6 @@ import pandas as pd
 from langchain_core.prompts import ChatPromptTemplate
 from langchain_openai import ChatOpenAI
 from pydantic import BaseModel, Field
-import contextlib
 
 # Configure logging
 logging.basicConfig(level=logging.WARN)
@@ -489,7 +502,7 @@ async def main():
     parser = argparse.ArgumentParser(description="Evaluate bot responses using OCS API")
     parser.add_argument("--csv", required=True, help="Path to CSV file with test data")
     parser.add_argument("--experiment-id", required=True, help="Experiment/chatbot ID")
-    parser.add_argument("--api-key", required=True, help="OCS API key")
+    parser.add_argument("--api-key", default=os.environ.get('OCS_API_KEY'), help="OCS API key")
     parser.add_argument("--base-url", default="https://chatbots.dimagi.com", help="OCS base URL")
     parser.add_argument("--input-column", default="Input from the partcipant", help="CSV column name for input text")
     parser.add_argument(

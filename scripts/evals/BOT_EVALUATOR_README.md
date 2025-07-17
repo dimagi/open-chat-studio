@@ -10,33 +10,36 @@ This script evaluates chatbot responses by sending inputs from a CSV dataset to 
 - **Comprehensive Results**: Generate detailed evaluation reports with scores, reasoning, and metrics
 - **Parallel Processing**: Efficient async/await implementation with configurable concurrency for faster evaluation
 
-## Installation
+## Setup
 
-1. Install required dependencies:
-```bash
-pip install -r requirements_evaluator.txt
-```
+1. Set up your OpenAI API key for the evaluator LLM:
+    
+   ```bash
+    export OPENAI_API_KEY="your-openai-api-key"
+    ```
 
-2. Set up your OpenAI API key for the evaluator LLM:
-```bash
-export OPENAI_API_KEY="your-openai-api-key"
-```
+2. Set up your OCS API key:
 
-## Usage
+    ```bash
+    export OCS_API_KEY="your-ocs-api-key"
+    ```
+   
+3. Install UV
 
-### Basic Usage
+See https://docs.astral.sh/uv/getting-started/installation/
 
-```bash
-python bot_evaluator.py \
+## Basic usage
+
+```shell
+uv run bot_evaluator.py \
   --csv example_dataset.csv \
-  --experiment-id "your-experiment-uuid" \
-  --api-key "your-ocs-api-key"
+  --experiment-id "your-experiment-uuid"
 ```
 
-### Advanced Usage
+## Advanced Usage
 
 ```bash
-python bot_evaluator.py \
+uv run bot_evaluator.py \
   --csv ~/Downloads/coach_dataset1.csv \
   --experiment-id "e2b4855f-8550-47ff-87d2-d92018676ff3" \
   --api-key $OCS_API_KEY \
