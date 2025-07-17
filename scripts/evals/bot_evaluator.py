@@ -16,6 +16,7 @@ import argparse
 import asyncio
 import json
 import logging
+import re
 import time
 import uuid
 from dataclasses import asdict, dataclass
@@ -26,6 +27,7 @@ import pandas as pd
 from langchain_core.prompts import ChatPromptTemplate
 from langchain_openai import ChatOpenAI
 from pydantic import BaseModel, Field
+import contextlib
 
 # Configure logging
 logging.basicConfig(level=logging.WARN)
@@ -226,7 +228,6 @@ class BotEvaluator:
         evaluator_model: str = "gpt-4o-mini",
         evaluation_mode: Literal["score", "binary"] = "score",
         custom_prompt: str = None,
-        custom_eval_message: str = None,
         max_concurrency: int = 10,
     ):
         self.evaluator_model = evaluator_model
@@ -324,11 +325,10 @@ class BotEvaluator:
         evaluation_results = []
         for i, result in enumerate(results):
             if isinstance(result, Exception):
-                logger.error(f"Task {i} failed with exception: {result}")
+                logger.error(f"Task {i} failed with exception: {result}", exc_info=result)
                 # Create error result
                 row = df.iloc[i]
                 input_text = str(row[input_column])
-                scenario_text = self._get_optional_column(df, scenario_column, row)
                 expected_category = self._get_optional_column(df, expected_category_column, row)
                 expected_response = self._get_optional_column(df, expected_response_column, row)
                 eval_result = self.output_schema.error(f"Processing failed: {str(result)}")
@@ -376,14 +376,9 @@ class BotEvaluator:
             session_state = self._get_optional_column(df, session_state_column, row, json.loads) or {}
             participant_data = self._get_optional_column(df, participant_data_column, row, json.loads) or {}
             history_data = self._get_optional_column(df, history_column, row)
+            print(history_column, history_data)
             if history_data:
-                try:
-                    history_data = json.loads(history_data)
-                except json.decoder.JSONDecodeError:
-                    history_data = [{"role": "assistant", "content": history_data}]
-                else:
-                    if isinstance(history_data, dict):
-                        history_data = [history_data]
+                history_data = await self._parse_history_data(history_data)
 
             logger.debug(f"Processing row {index + 1}/{total_rows}: {input_text[:50]}...")
 
@@ -434,6 +429,28 @@ class BotEvaluator:
                     timestamp=time.strftime("%Y-%m-%d %H:%M:%S"),
                 )
                 return result
+
+    async def _parse_history_data(self, history_data):
+        if not re.search(r'"role"\s*:', history_data):
+            # assume it's just a message
+            return [{"role": "assistant", "content": history_data}]
+
+        for data in [history_data, history_data.replace("\n", " ")]:
+            with contextlib.suppress(json.decoder.JSONDecodeError):
+                history_data = json.loads(data)
+                break
+
+        if isinstance(history_data, dict):
+            if {"role", "content"} - set(history_data):
+                raise Exception("Malformed history data. 'role' and 'content' keys are required.")
+            history_data = [history_data]
+        else:
+            for row in history_data:
+                if not isinstance(row, dict):
+                    raise Exception("Malformed history data. Each item must be a dictionary.")
+                if {"role", "content"} - set(row):
+                    raise Exception("Malformed history data. 'role' and 'content' keys are required.")
+        return history_data
 
     def _get_optional_column(self, df, column_name, row, converter=str):
         return converter(row[column_name]) if column_name and column_name in df.columns else None
@@ -496,12 +513,11 @@ async def main():
         help="CSV column name for participant data (JSON)",
     )
     parser.add_argument(
-        "--history-column", default="history", required=False, help="Previous session history data (JSON)"
+        "--history-column", default="History", required=False, help="Previous session history data (JSON)"
     )
     parser.add_argument("--output", default="evaluation_results.csv", help="Output CSV file")
     parser.add_argument("--evaluator-model", default="gpt-4o-mini", help="LLM model for evaluation")
     parser.add_argument("--custom-prompt", help="Custom evaluation prompt")
-    parser.add_argument("--custom-eval-message", help="Custom evaluation message")
     parser.add_argument("--eval-mode", choices=["score", "binary"], help="Evaluation Mode")
     parser.add_argument("--max-concurrency", type=int, default=10, help="Maximum number of concurrent evaluations")
     parser.add_argument("--verbose", action="store_true", help="Verbose output")
@@ -515,7 +531,6 @@ async def main():
         evaluator_model=args.evaluator_model,
         evaluation_mode=args.eval_mode,
         custom_prompt=args.custom_prompt,
-        custom_eval_message=args.custom_eval_message,
         max_concurrency=args.max_concurrency,
     )
 

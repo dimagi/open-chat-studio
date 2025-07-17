@@ -37,16 +37,9 @@ python bot_evaluator.py \
 
 ```bash
 python bot_evaluator.py \
-  --csv my_test_data.csv \
-  --experiment-id "123e4567-e89b-12d3-a456-426614174000" \
-  --api-key "your-ocs-api-key" \
-  --input-column "Input" \
-  --expected-output-column "Response" \
-  --participant-data-column "participant_data" \
-  --session-data-column "session_data" \
-  --history-column "Scenario text" \
-  --custom-prompt "$(cat prompt.txt)" \
-  --custom-eval-message "Bot response: {bot_response}\n\nExpected response: {expected_output}" \
+  --csv ~/Downloads/coach_dataset1.csv \
+  --experiment-id "e2b4855f-8550-47ff-87d2-d92018676ff3" \
+  --api-key $OCS_API_KEY \
   --eval-mode "binary" \
   --max-concurrency 5 \
   --verbose
@@ -58,11 +51,13 @@ python bot_evaluator.py \
 - `--experiment-id`: UUID of the OCS experiment/chatbot (required)
 - `--api-key`: Your OCS API key (required)
 - `--base-url`: OCS instance URL (default: https://chatbots.dimagi.com)
-- `--input-column`: CSV column name for input text (default: "input")
-- `--expected-output-column`: CSV column name for expected output (optional)
+- `--input-column`: CSV column name for input text (default: "Input from the partcipant")
+- `--scenario-column`: CSV column name for the 'scenario' (default: "Scenario text")
+- `--expected-category-column`: CSV column name for the expected response category (default: "Response category")
+- `--expected-response-column`: CSV column name for expected response (default: "Expected Response")
 - `--participant-data-column`: CSV column name for participant data (optional)
 - `--session-data-column`: CSV column name for session data (optional)
-- `--history-column`: CSV column name for conversation history (optional)
+- `--history-column`: CSV column name for conversation history. Data must be a string, JSON object with 'role' and 'content' keys, or list of JSON objects with 'role' and 'content' keys (optional)
 - `--output`: Output CSV file path (default: "evaluation_results.csv")
 - `--evaluator-model`: LLM model for evaluation (default: "gpt-4o-mini")
 - `--custom-prompt`: Custom evaluation prompt (optional)
