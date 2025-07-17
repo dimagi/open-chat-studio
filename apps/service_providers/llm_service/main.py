@@ -284,15 +284,6 @@ class OpenAIGenericService(LlmService):
             file_external_id = entry["file_id"]
             container_id = entry["container_id"]
 
-            # Check if file already exists in database
-            existing_file = File.objects.filter(
-                external_id=file_external_id, external_source="openai", team_id=team_id
-            ).first()
-
-            if existing_file:
-                generated_files.append(existing_file)
-                continue
-
             # Retrieve file content from OpenAI container
             try:
                 # Use direct HTTP request for container files until the library supports it and it is working with

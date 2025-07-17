@@ -116,6 +116,7 @@ def remove_citations_from_text(text: str) -> str:
 def get_openai_container_file_contents(
     container_id: str, openai_file_id: str, openai_api_key: str, openai_organization: str | None = None
 ) -> BytesIO:
+    # TODO: use the OpenAI Python client library when it supports container files
     headers = {"Authorization": f"Bearer {openai_api_key}", "OpenAI-Organization": openai_organization or ""}
     url = f"https://api.openai.com/v1/containers/{container_id}/files/{openai_file_id}/content"
 
