@@ -136,9 +136,13 @@ class ChannelBase(ABC):
         self.experiment_channel = experiment_channel
         self._experiment_session = experiment_session
         self._message: BaseMessage = None
-        participant = experiment_session.participant
-        self._participant_identifier = participant.identifier if experiment_session else None
-        self._participant_id = participant.id
+        if experiment_session:
+            participant = experiment_session.participant
+            self._participant_identifier = participant.identifier
+            self._participant_id = participant.id
+        else:
+            self._participant_identifier = None
+            self._participant_id = None
         self._is_user_message = False
 
         self.trace_service = TracingService.create_for_experiment(self.experiment)
