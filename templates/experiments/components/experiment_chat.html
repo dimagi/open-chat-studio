@@ -18,7 +18,7 @@
             hx-get="{% url 'experiments:experiment_session_messages_view' request.team.slug experiment.public_id experiment_session.external_id %}"
             hx-trigger="keyup changed delay:500ms"
             hx-target="#messages-container"
-            hx-include="[name='search'], [name='language'], [name='show_original_translation']"
+            hx-include="[name='search'], [name=experiment_session_messages_view'language'], [name='show_original_translation']"
           >
           {% if search %}
             <button
@@ -42,6 +42,7 @@
               hx-target="#messages-container"
               hx-include="[name='search'], [name='show_original_translation']"
               hx-trigger="change"
+              hx-indicator="#language-loading-spinner"
             >
               {% for lang_code, lang_name in available_languages %}
                 <option value="{{ lang_code }}" {% if request.GET.language == lang_code %}selected{% endif %}>
@@ -49,12 +50,15 @@
                 </option>
               {% endfor %}
             </select>
+            <div id="language-loading-spinner" class="htmx-show">
+              <span class="loading loading-spinner loading-sm"></span>
+              <span class="ml-2">Loading...</span>
+            </div>
           {% endif %}
 
           <label for="translate-all-messages-modal" class="btn btn-primary btn-sm">
             Translate Messages
           </label>
-
           <input type="checkbox" id="translate-all-messages-modal" class="modal-toggle" />
           <div class="modal">
             <div class="modal-box">
