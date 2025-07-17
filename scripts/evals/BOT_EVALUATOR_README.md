@@ -65,6 +65,8 @@ python bot_evaluator.py \
 - `--eval-mode`: Evaluation mode: "score" (1-10) or "binary" (true/false) (default: "score")
 - `--max-concurrency`: Maximum number of concurrent evaluations (default: 10)
 - `--verbose`: Enable detailed logging (optional)
+- `--validate`: Validate the input file. This won't do any evals, it will only output error messages if there are any.
+- `--limit`: Limit the number of rows that are processed to this number.
 
 ## CSV Format
 

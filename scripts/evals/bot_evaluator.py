@@ -285,6 +285,7 @@ class BotEvaluator:
         session_state_column: str = None,
         participant_data_column: str = None,
         history_column: str = None,
+        limit: int = None,
     ) -> list[EvaluationResult]:
         """Evaluate entire dataset with parallel processing"""
 
@@ -300,6 +301,8 @@ class BotEvaluator:
         # Create tasks for parallel processing
         tasks = []
         for index, row in df.iterrows():
+            if limit and index >= limit:
+                break
             task = self._evaluate_single_row(
                 semaphore=semaphore,
                 index=index,
@@ -526,6 +529,7 @@ async def main():
     parser.add_argument("--max-concurrency", type=int, default=10, help="Maximum number of concurrent evaluations")
     parser.add_argument("--verbose", action="store_true", help="Verbose output")
     parser.add_argument("--validate", action="store_true", help="Validate the dataset. This won't actually run the evals.")
+    parser.add_argument("--limit", type=int, help="Limit the number of rows that are processed.")
 
     args = parser.parse_args()
 
@@ -574,6 +578,7 @@ async def main():
             session_state_column=args.session_data_column,
             participant_data_column=args.participant_data_column,
             history_column=args.history_column,
+            limit=args.limit,
         )
 
         # Save results
