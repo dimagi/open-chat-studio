@@ -6,6 +6,7 @@ from langchain_core.agents import AgentAction, AgentFinish
 from langchain_core.exceptions import OutputParserException
 from langchain_core.messages import AIMessage, ToolCall
 
+from apps.experiments.models import ExperimentSession
 from apps.service_providers.llm_service.datamodels import LlmChatResponse
 
 original_parse = parse_ai_message_to_tool_action
@@ -79,19 +80,19 @@ def custom_parse_ai_message(message) -> list[AgentAction] | AgentFinish:
     return actions
 
 
-def parse_output_for_anthropic(output, team_id: int, include_citations: bool = True) -> LlmChatResponse:
+def parse_output_for_anthropic(output, session: ExperimentSession, include_citations: bool = True) -> LlmChatResponse:
     if output is None or isinstance(output, str):
         return LlmChatResponse(text=output or "")
 
     if isinstance(output, list):
         chat_response = LlmChatResponse(text="")
         for item in output:
-            chat_response += parse_output_for_anthropic(item, include_citations=include_citations, team_id=team_id)
+            chat_response += parse_output_for_anthropic(item, session=session, include_citations=include_citations)
         return chat_response
 
     if isinstance(output, dict):
         if "output" in output:
-            return parse_output_for_anthropic(output["output"], include_citations=include_citations, team_id=team_id)
+            return parse_output_for_anthropic(output["output"], session=session, include_citations=include_citations)
         elif output.get("type") == "text":
             text = output.get("text", "")
             for citation in output.get("citations", []):

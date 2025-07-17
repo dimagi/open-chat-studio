@@ -1,6 +1,7 @@
 import dataclasses
 from collections.abc import Sequence
 from datetime import datetime
+from io import BytesIO
 from unittest import mock
 from unittest.mock import patch
 
@@ -25,7 +26,7 @@ from apps.service_providers.tracing import TracingService
 from apps.utils.factories.channels import ChannelPlatform, ExperimentChannelFactory
 from apps.utils.factories.experiment import ExperimentSessionFactory
 from apps.utils.factories.files import FileFactory
-from apps.utils.langchain import build_fake_llm_service
+from apps.utils.langchain import FakeOpenAILlmService, build_fake_llm_service
 from apps.utils.time import pretty_date
 
 
@@ -358,7 +359,7 @@ def test_cited_files_are_saved_in_metadata(session):
             }
         ]
     )
-    llm_service = build_fake_llm_service(responses=[response], token_counts=[])
+    llm_service = build_fake_llm_service(responses=[response], token_counts=[], llm_service_class=FakeOpenAILlmService)
     session.experiment.get_llm_service = lambda: llm_service
 
     history_manager = _get_history_manager(session)
@@ -375,7 +376,7 @@ def test_cited_files_are_saved_in_metadata(session):
 
     # Assert that the file id is saved as a citation in the metadata of the AI message
     ai_message = session.chat.messages.get(message_type=ChatMessageType.AI)
-    assert ai_message.metadata == {"cited_files": [file.id]}
+    assert ai_message.metadata == {"cited_files": [file.id], "openai_file_ids": []}
 
 
 @pytest.mark.django_db()
@@ -421,3 +422,54 @@ def test_citation_handling(expect_citations, session):
         assert result.output == "This is a fact . Another fact ."
         # Make sure the files are NOT attached to the chat
         assert File.objects.filter(chatattachment__chat=session.chat).exists() is False
+
+
+@pytest.mark.django_db()
+def test_openai_generated_files_are_attached_to_the_message(session):
+    """ """
+    response = AIMessageChunk(
+        content=[
+            {
+                "type": "text",
+                "text": "[Here's](sandbox:/mnt/data/image.png) an image",
+                "annotations": [
+                    {
+                        "file_id": "cfile_ext_123",
+                        "type": "container_file_citation",
+                        "filename": "image.png",
+                        "container_id": "container_123",
+                    }
+                ],
+            }
+        ]
+    )
+
+    # Create a mock LLM service that returns the response with citations
+    llm_service = build_fake_llm_service(
+        responses=[response],
+        token_counts=[30, 20],
+        llm_service_class=FakeOpenAILlmService,
+    )
+    session.experiment.get_llm_service = lambda: llm_service
+
+    adapter = ChatAdapter(
+        session=session,
+        provider_model_name="",
+        llm_service=llm_service,
+        temperature=0.7,
+        prompt_text="You are a helpful assistant",
+        max_token_limit=1000,
+        template_context=PromptTemplateContext(session=session),
+    )
+
+    # Create runnable and invoke
+    history_manager = _get_history_manager(session)
+    runnable = AgentLLMChat(adapter=adapter, history_manager=history_manager)
+
+    with patch("apps.service_providers.llm_service.main.get_openai_container_file_contents") as mock_get:
+        mock_get.return_value = BytesIO(b"fake file content")
+        result = runnable.invoke("Give me an image")
+
+    created_file = File.objects.last()
+    download_link = created_file.download_link(session.id)
+    assert result.output == f"[Here's]({download_link}) an image"

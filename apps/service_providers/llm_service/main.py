@@ -1,8 +1,10 @@
 import contextlib
+import logging
+import re
 from io import BytesIO
 from time import sleep
 from typing import TYPE_CHECKING, Any
-import httpx
+
 import pydantic
 from django.db.models import Q
 from langchain.agents.openai_assistant import OpenAIAssistantRunnable as BrokenOpenAIAssistantRunnable
@@ -18,6 +20,7 @@ from openai import OpenAI
 from openai._base_client import SyncAPIClient
 from pydantic import BaseModel
 
+from apps.experiments.models import ExperimentSession
 from apps.files.models import File
 from apps.service_providers.llm_service.callbacks import TokenCountingCallbackHandler
 from apps.service_providers.llm_service.datamodels import LlmChatResponse
@@ -27,7 +30,13 @@ from apps.service_providers.llm_service.token_counters import (
     GeminiTokenCounter,
     OpenAITokenCounter,
 )
-from apps.service_providers.llm_service.utils import detangle_file_ids, extract_file_ids_from_ocs_citations
+from apps.service_providers.llm_service.utils import (
+    detangle_file_ids,
+    extract_file_ids_from_ocs_citations,
+    get_openai_container_file_contents,
+)
+
+logger = logging.getLogger("ocs.llm_service")
 
 if TYPE_CHECKING:
     from apps.service_providers.llm_service.index_managers import IndexManager
@@ -152,35 +161,30 @@ class LlmService(pydantic.BaseModel):
     def get_output_parser(self):
         return self._default_parser
 
-    def _default_parser(self, llm_output, team_id: int, include_citations: bool = True) -> LlmChatResponse:
+    def _default_parser(
+        self, llm_output, session: ExperimentSession, include_citations: bool = True
+    ) -> LlmChatResponse:
         llm_outputs = llm_output.get("output", "")
         final_text = ""
         cited_file_ids_remote = []
         cited_file_ids = []
         cited_files = []
         generated_files: list[File] = []
-
         if isinstance(llm_outputs, list):
             for output in llm_outputs:
                 # Populate text
                 final_text = "\n".join([final_text, output.get("text", "")]).strip()
 
-
                 annotations = output.get("annotations", [])
-                # Get file references
                 if include_citations:
                     external_ids = self.get_cited_file_ids(annotations)
                     cited_file_ids_remote.extend(external_ids)
 
-                generated_files.extend(self.get_generated_files(annotations, team_id))
+                generated_files.extend(self.get_generated_files(annotations, session.team_id))
 
                 # Replace generated file links with actual file download links
-                import re
                 for generated_file in generated_files:
-                    # Pattern to match sandbox file links
-                    pattern = rf"\[([^\]]+)\]\(sandbox:/mnt/data/{re.escape(generated_file.name)}\)"
-                    replacement = f"[{generated_file.name}]({generated_file.file.url})"
-                    final_text = re.sub(pattern, replacement, final_text)
+                    final_text = self.replace_file_links(text=final_text, file=generated_file, session=session)
         else:
             final_text = llm_outputs
             # This path is followed when OCS citations are injected into the output
@@ -188,7 +192,7 @@ class LlmService(pydantic.BaseModel):
 
         if include_citations:
             cited_files = File.objects.filter(
-                Q(external_id__in=cited_file_ids_remote) | Q(id__in=cited_file_ids), team_id=team_id
+                Q(external_id__in=cited_file_ids_remote) | Q(id__in=cited_file_ids), team_id=session.team_id
             ).all()
 
         parsed_output = LlmChatResponse(text=final_text, cited_files=cited_files, generated_files=generated_files)
@@ -216,8 +220,14 @@ class LlmService(pydantic.BaseModel):
     def get_cited_file_ids(self, annotation_entries: list[dict]) -> list[str]:
         return []
 
-    def get_generated_files(self, annotation_entries: list[dict]) -> list[File]:
+    def get_generated_files(self, annotation_entries: list[dict], team_id: int) -> list[File]:
         return []
+
+    def replace_file_links(self, text: str, file: File) -> str:
+        """
+        Replace file links in the text with actual download links.
+        """
+        return text
 
 
 class OpenAIGenericService(LlmService):
@@ -263,53 +273,57 @@ class OpenAIGenericService(LlmService):
         Create file records for all generated files in the output.
         """
         generated_files = []
-        
+
         for entry in annotation_entries:
             if entry.get("type") != "container_file_citation":
                 continue
-                
+
             file_external_id = entry["file_id"]
             container_id = entry["container_id"]
-            
+
             # Check if file already exists in database
             existing_file = File.objects.filter(
-                external_id=file_external_id,
-                external_source="openai",
-                team_id=team_id
+                external_id=file_external_id, external_source="openai", team_id=team_id
             ).first()
-            
+
             if existing_file:
                 generated_files.append(existing_file)
                 continue
-            
+
             # Retrieve file content from OpenAI container
             try:
-                # Use direct HTTP request for container files
-                headers = {
-                    'Authorization': f'Bearer {self.openai_api_key}',
-                    'OpenAI-Organization': self.openai_organization
-                }
-                
-                url = f"https://api.openai.com/v1/containers/{container_id}/files/{file_external_id}/content"
-                response = httpx.get(url, headers=headers, stream=True)
-                response.raise_for_status()
-                
+                # Use direct HTTP request for container files until the library supports it and it is working with
+                # langchain
+
                 # Create new File instance
+                file_contents = get_openai_container_file_contents(
+                    container_id,
+                    openai_file_id=file_external_id,
+                    openai_api_key=self.openai_api_key,
+                    openai_organization=self.openai_organization,
+                )
                 new_file = File.from_external_source(
                     filename=entry["filename"],
-                    external_file=BytesIO(response.content),
+                    external_file=file_contents,
                     external_id=file_external_id,
                     external_source="openai",
-                    team_id=team_id
+                    team_id=team_id,
                 )
                 generated_files.append(new_file)
-                
-            except Exception as e:
-                # Log error but continue processing other files
+
+            except Exception:
+                logger.exception(f"Failed to retrieve file {file_external_id} from OpenAI")
                 continue
-        
+
         return generated_files
 
+    def replace_file_links(self, text: str, file: File, session: ExperimentSession) -> str:
+        """
+        Replace file links in the text with actual download links.
+        """
+        pattern = rf"\(sandbox:/mnt/data/{re.escape(file.name)}\)"
+        replacement = f"({file.download_link(session.id)})"
+        return re.sub(pattern, replacement, text)
 
 
 class OpenAILlmService(OpenAIGenericService):

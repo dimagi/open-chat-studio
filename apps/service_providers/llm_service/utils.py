@@ -1,4 +1,7 @@
 import re
+from io import BytesIO
+
+import httpx
 
 from apps.experiments.models import ExperimentSession
 from apps.files.models import File
@@ -108,3 +111,13 @@ def remove_citations_from_text(text: str) -> str:
 
     citation_pattern = re.compile(OCS_CITATION_PATTERN)
     return citation_pattern.sub("", text)
+
+
+def get_openai_container_file_contents(
+    container_id: str, openai_file_id: str, openai_api_key: str, openai_organization: str | None = None
+) -> BytesIO:
+    headers = {"Authorization": f"Bearer {openai_api_key}", "OpenAI-Organization": openai_organization or ""}
+    url = f"https://api.openai.com/v1/containers/{container_id}/files/{openai_file_id}/content"
+    response = httpx.get(url, headers=headers)
+    response.raise_for_status()
+    return BytesIO(response.content)
