@@ -378,7 +378,6 @@ class BotEvaluator:
             session_state = self._get_optional_column(df, session_state_column, row, json.loads) or {}
             participant_data = self._get_optional_column(df, participant_data_column, row, json.loads) or {}
             history_data = self._get_optional_column(df, history_column, row)
-            print(history_column, history_data)
             if history_data:
                 history_data = await self._parse_history_data(history_data)
 
