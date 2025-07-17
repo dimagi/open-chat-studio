@@ -438,7 +438,7 @@ class DashboardService:
 
         avg_response_stats = (
             Trace.objects.filter(session__in=sessions)
-            .annotate(period=trunc_func("session__created_at"))
+            .annotate(period=trunc_func("timestamp"))
             .values("period")
             .annotate(avg_duration_ms=Avg("duration"))
             .order_by("period")

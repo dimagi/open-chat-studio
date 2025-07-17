@@ -1,9 +1,8 @@
 from django.db import models
 
-from apps.utils.models import BaseModel
 
-
-class Trace(BaseModel):
+class Trace(models.Model):
+    timestamp = models.DateTimeField(auto_now_add=True)
     experiment = models.ForeignKey(
         "experiments.Experiment", on_delete=models.SET_NULL, null=True, related_name="traces"
     )
@@ -13,8 +12,13 @@ class Trace(BaseModel):
     participant = models.ForeignKey(
         "experiments.Participant", on_delete=models.SET_NULL, null=True, related_name="traces"
     )
-    input_message_id = models.CharField(max_length=255, blank=True)
-    output_message_id = models.CharField(max_length=255, blank=True)
+    input_message = models.ForeignKey(
+        "chat.ChatMessage", on_delete=models.SET_NULL, null=True, blank=True, related_name="input_message_trace"
+    )
+    output_message = models.ForeignKey(
+        "chat.ChatMessage", on_delete=models.SET_NULL, null=True, blank=True, related_name="output_message_trace"
+    )
+    team = models.ForeignKey("teams.team", on_delete=models.SET_NULL, null=True, related_name="traces")
     duration = models.IntegerField()
 
     def __str__(self):
