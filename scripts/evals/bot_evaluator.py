@@ -48,6 +48,7 @@ class EvaluationResult:
     response_time: float
     session_id: str
     timestamp: str
+    model: str
 
 
 class EvaluationScoreOutput(BaseModel):
@@ -343,6 +344,7 @@ class BotEvaluator:
                     response_time=0.0,
                     session_id="",
                     timestamp=time.strftime("%Y-%m-%d %H:%M:%S"),
+                    model=self.evaluator_model,
                 )
                 evaluation_results.append(error_result)
             else:
@@ -408,6 +410,7 @@ class BotEvaluator:
                     response_time=response_time,
                     session_id=session_id,
                     timestamp=time.strftime("%Y-%m-%d %H:%M:%S"),
+                    model=self.evaluator_model,
                 )
 
                 logger.debug(f"Row {index + 1} completed - Result: {evaluation.result}")
@@ -427,6 +430,7 @@ class BotEvaluator:
                     response_time=0.0,
                     session_id="",
                     timestamp=time.strftime("%Y-%m-%d %H:%M:%S"),
+                    model=self.evaluator_model,
                 )
                 return result
 
@@ -516,7 +520,7 @@ async def main():
         "--history-column", default="History", required=False, help="Previous session history data (JSON)"
     )
     parser.add_argument("--output", default="evaluation_results.csv", help="Output CSV file")
-    parser.add_argument("--evaluator-model", default="gpt-4o-mini", help="LLM model for evaluation")
+    parser.add_argument("--evaluator-model", default="gpt-4.1-mini", help="LLM model for evaluation")
     parser.add_argument("--custom-prompt", help="Custom evaluation prompt")
     parser.add_argument("--eval-mode", choices=["score", "binary"], help="Evaluation Mode")
     parser.add_argument("--max-concurrency", type=int, default=10, help="Maximum number of concurrent evaluations")
