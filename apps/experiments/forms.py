@@ -310,9 +310,12 @@ class TranslateMessagesForm(forms.Form):
         else:
             self.fields["provider_model"].widget.attrs["id"] = "translation-provider-model-remaining"
 
-        self.fields["target_language"].choices = [("", "Choose a language")] + [
-            (code, name) for code, name in translatable_languages if code
-        ]
+        language_choices = [(code, name) for code, name in translatable_languages if code]
+        if any(code == "eng" for code, _ in translatable_languages):
+            self.fields["target_language"].choices = language_choices
+            self.fields["target_language"].initial = "eng"
+        else:
+            self.fields["target_language"].choices = [("", "Choose a language")] + language_choices
 
         if is_translate_all_form:
             self.fields["target_language"].label = "Target Language for All Messages"
