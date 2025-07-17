@@ -262,6 +262,9 @@ class OpenAIGenericService(LlmService):
             "openai_api_base": self.openai_api_base,
         }
 
+    def attach_built_in_tools(self, built_in_tools: list[str], config: dict[str, BaseModel] = None) -> list:
+        return []
+
     def get_cited_file_ids(self, annotation_entries: list[dict]) -> list[str]:
         external_ids = [
             entry["file_id"] for entry in annotation_entries if "file_id" in entry and entry["type"] == "file_citation"
