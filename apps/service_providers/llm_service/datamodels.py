@@ -12,7 +12,7 @@ class LlmChatResponse(BaseModel):
 
     This model is additive, meaning that two instances can be combined
     to create a new instance that contains the combined text and files.
-    This is useful for aggregating responses from multiple LLM calls or messages.
+    This is useful for aggregating streamed responses.
     """
 
     text: str
