@@ -20,6 +20,7 @@ from pydantic import BaseModel
 
 from apps.files.models import File
 from apps.service_providers.llm_service.callbacks import TokenCountingCallbackHandler
+from apps.service_providers.llm_service.datamodels import LlmChatResponse
 from apps.service_providers.llm_service.parsers import parse_output_for_anthropic
 from apps.service_providers.llm_service.token_counters import (
     AnthropicTokenCounter,
@@ -151,31 +152,35 @@ class LlmService(pydantic.BaseModel):
     def get_output_parser(self):
         return self._default_parser
 
-    def _default_parser(self, output):
-        output = output.get("output", "")
-        if isinstance(output, list):
-            return "\n".join([o["text"] for o in output])
+    def _default_parser(self, llm_output, team_id: int, include_citations: bool = True) -> LlmChatResponse:
+        llm_outputs = llm_output.get("output", "")
+        final_text = ""
+        cited_file_ids_remote = []
+        cited_file_ids = []
+        cited_files = []
 
-        return output or ""
+        if isinstance(llm_outputs, list):
+            for output in llm_outputs:
+                # Populate text
+                final_text = "\n".join([final_text, output.get("text", "")]).strip()
 
-    def get_cited_files_parser(self):
-        return self._default_cited_files_parser
+                # Get file references
+                if include_citations:
+                    external_ids = self.get_cited_file_ids(output.get("annotations", []))
+                    cited_file_ids_remote.extend(external_ids)
 
-    def _default_cited_files_parser(self, token: str | dict, team_id: int) -> list[File]:
-        remote_file_ids = []
-        file_ids = []
-        if isinstance(token, dict):
-            outputs = token.get("output", "")
-            if isinstance(outputs, list):
-                for output in outputs:
-                    annotation_entries = output.get("annotations", [])
-                    external_ids = [entry["file_id"] for entry in annotation_entries if "file_id" in entry]
-                    external_ids = detangle_file_ids(external_ids)
-                    remote_file_ids.extend(external_ids)
-            else:
-                file_ids.extend(extract_file_ids_from_ocs_citations(outputs))
+        else:
+            final_text = llm_outputs
+            # This path is followed when OCS citations are injected into the output
+            cited_file_ids.extend(extract_file_ids_from_ocs_citations(llm_outputs))
 
-        return File.objects.filter(Q(external_id__in=remote_file_ids) | Q(id__in=file_ids), team_id=team_id).all()
+        if include_citations:
+            cited_files = File.objects.filter(
+                Q(external_id__in=cited_file_ids_remote) | Q(id__in=cited_file_ids), team_id=team_id
+            ).all()
+
+        parsed_output = LlmChatResponse(text=final_text, cited_files=cited_files, generated_files=[])
+        return parsed_output
 
     def get_remote_index_manager(self, index_id: str = None) -> "IndexManager":
         raise NotImplementedError
@@ -195,6 +200,9 @@ class LlmService(pydantic.BaseModel):
             str: The unique identifier of the newly created vector store.
         """
         raise NotImplementedError
+
+    def get_cited_file_ids(self, annotation_entries: list[dict]) -> list[str]:
+        return []
 
 
 class OpenAIGenericService(LlmService):
@@ -228,6 +236,12 @@ class OpenAIGenericService(LlmService):
             "openai_api_key": self.openai_api_key,
             "openai_api_base": self.openai_api_base,
         }
+
+    def get_cited_file_ids(self, annotation_entries: list[dict]) -> list[str]:
+        external_ids = [
+            entry["file_id"] for entry in annotation_entries if "file_id" in entry and entry["type"] == "file_citation"
+        ]
+        return detangle_file_ids(external_ids)
 
 
 class OpenAILlmService(OpenAIGenericService):

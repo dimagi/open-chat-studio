@@ -385,8 +385,8 @@ def test_citation_handling(expect_citations, session):
     Test that references are included in the output when expected. When we do not expect file references, any citation
     tags should be stripped and we should not see any file references in the output.
     """
-    file1 = FileFactory(id=123, name="document1.pdf", team=session.team)
-    file2 = FileFactory(id=456, name="document2.txt", team=session.team)
+    FileFactory(id=123, name="document1.pdf", team=session.team)
+    FileFactory(id=456, name="document2.txt", team=session.team)
 
     # Mock the LLM response with citations
     llm_response_text = "This is a fact <CIT 123 />. Another fact <CIT 456 />."
@@ -408,11 +408,9 @@ def test_citation_handling(expect_citations, session):
 
     # Create runnable and invoke
     history_manager = _get_history_manager(session)
-    runnable = SimpleLLMChat(adapter=adapter, history_manager=history_manager)
+    runnable = AgentLLMChat(adapter=adapter, history_manager=history_manager)
 
-    with patch.object(runnable, "_get_cited_files") as _get_cited_files:
-        _get_cited_files.return_value = [file1, file2]
-        result = runnable.invoke("Tell me about the documents")
+    result = runnable.invoke("Tell me about the documents")
 
     if expect_citations:
         # Quick check to see if references are included
