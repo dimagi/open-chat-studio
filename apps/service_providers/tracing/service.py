@@ -1,11 +1,11 @@
 import logging
+import time
 import uuid
 from collections import defaultdict
 from contextlib import contextmanager
 from typing import TYPE_CHECKING, Any, Self
 from uuid import UUID
 
-from django.utils import timezone
 from langchain_core.runnables import RunnableConfig
 
 from ...trace.models import Trace
@@ -20,7 +20,7 @@ logger = logging.getLogger("ocs.tracing")
 
 
 class TracingService:
-    def __init__(self, tracers: list[Tracer]):
+    def __init__(self, tracers: list[Tracer], experiment_id: int | None = None, team_id: int | None = None):
         self._tracers = tracers
 
         self.outputs: dict[UUID, dict] = defaultdict(dict)
@@ -30,12 +30,13 @@ class TracingService:
         self.trace_id: UUID | None = None
         self.session_id: str | None = None
         self.user_id: str | None = None
-        self.experiment_id: str | None = None
+        self.experiment_id: int | None = experiment_id
         self.start_time = None
         self._input_message_id = None
         self._output_message_id = None
         self.session_id_fk: int | None = None
         self.participant_id: int | None = None
+        self.team_id: int | None = team_id
 
     @classmethod
     def empty(cls) -> Self:
@@ -50,7 +51,7 @@ class TracingService:
             except Exception as e:  # noqa: BLE001
                 logger.error(f"Error setting up trace service: {e}")
 
-        return cls(tracers)
+        return cls(tracers, experiment_id=experiment.id, team_id=experiment.team_id)
 
     @property
     def activated(self):
@@ -90,7 +91,7 @@ class TracingService:
         self.session_id = session_id
         self.user_id = user_id
         self.experiment_id = experiment_id
-        self._start_time = timezone.now()
+        self._start_time = time.time()
         self._input_message_id = input_message_id
         self.participant_id = participant_id
         self.session_id_fk = session_id_fk
@@ -118,16 +119,25 @@ class TracingService:
             except Exception:  # noqa BLE001
                 logger.exception("Error ending tracer %s", tracer.__class__.__name__)
         if self._start_time and self.session_id_fk:
-            end_time = timezone.now()
-            duration = end_time - self._start_time
-            duration_ms = int(duration.total_seconds() * 1000)
-            Trace.objects.create(
-                experiment_id=self.experiment_id,
-                session_id=self.session_id_fk,
-                participant_id=self.participant_id,
-                output_message_id=self._output_message_id,
-                duration=duration_ms,
-            )
+            try:
+                end_time = time.time()
+                duration = end_time - self._start_time
+                duration_ms = int(duration * 1000)
+                Trace.objects.create(
+                    experiment_id=self.experiment_id,
+                    session_id=self.session_id_fk,
+                    participant_id=self.participant_id,
+                    output_message_id=self._output_message_id,
+                    duration=duration_ms,
+                    team_id=self.team_id,
+                )
+            except Exception:
+                logger.exception(
+                    "Error saving trace in DB | experiment_id=%s, session_id=%s, output_message_id=%s",
+                    self.experiment_id,
+                    self.session_id_fk,
+                    self._output_message_id,
+                )
         self._reset()
 
     @contextmanager
