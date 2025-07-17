@@ -372,14 +372,14 @@ class BotEvaluator:
         """Evaluate a single row with semaphore control"""
         async with semaphore:
             input_text = str(row[input_column])
-            scenario_text = self._get_optional_column(df, scenario_column, row)
-            expected_category = self._get_optional_column(df, expected_category_column, row)
-            expected_response = self._get_optional_column(df, expected_response_column, row)
-            session_state = self._get_optional_column(df, session_state_column, row, json.loads) or {}
-            participant_data = self._get_optional_column(df, participant_data_column, row, json.loads) or {}
-            history_data = self._get_optional_column(df, history_column, row)
+            scenario_text = _get_optional_column(df, scenario_column, row)
+            expected_category = _get_optional_column(df, expected_category_column, row)
+            expected_response = _get_optional_column(df, expected_response_column, row)
+            session_state = _get_optional_column(df, session_state_column, row, json.loads) or {}
+            participant_data = _get_optional_column(df, participant_data_column, row, json.loads) or {}
+            history_data = _get_optional_column(df, history_column, row)
             if history_data:
-                history_data = await self._parse_history_data(history_data)
+                history_data = _parse_history_data(history_data)
 
             logger.debug(f"Processing row {index + 1}/{total_rows}: {input_text[:50]}...")
 
@@ -433,31 +433,6 @@ class BotEvaluator:
                 )
                 return result
 
-    async def _parse_history_data(self, history_data):
-        if not re.search(r'"role"\s*:', history_data):
-            # assume it's just a message
-            return [{"role": "assistant", "content": history_data}]
-
-        for data in [history_data, history_data.replace("\n", " ")]:
-            with contextlib.suppress(json.decoder.JSONDecodeError):
-                history_data = json.loads(data)
-                break
-
-        if isinstance(history_data, dict):
-            if {"role", "content"} - set(history_data):
-                raise Exception("Malformed history data. 'role' and 'content' keys are required.")
-            history_data = [history_data]
-        else:
-            for row in history_data:
-                if not isinstance(row, dict):
-                    raise Exception("Malformed history data. Each item must be a dictionary.")
-                if {"role", "content"} - set(row):
-                    raise Exception("Malformed history data. 'role' and 'content' keys are required.")
-        return history_data
-
-    def _get_optional_column(self, df, column_name, row, converter=str):
-        return converter(row[column_name]) if column_name and column_name in df.columns else None
-
     def save_results(self, results: list[EvaluationResult], output_file: str):
         """Save evaluation results to CSV"""
         df = pd.DataFrame([asdict(result) for result in results])
@@ -479,6 +454,32 @@ class BotEvaluator:
         logger.info(f"  Average Response Time: {avg_response_time:.2f}s")
         logger.info(f"  Total Evaluations: {len(results)}")
 
+
+def _parse_history_data(history_data):
+    if not re.search(r'"role"\s*:', history_data):
+        # assume it's just a message
+        return [{"role": "assistant", "content": history_data}]
+
+    for data in [history_data, history_data.replace("\n", " ")]:
+        with contextlib.suppress(json.decoder.JSONDecodeError):
+            history_data = json.loads(data)
+            break
+
+    if isinstance(history_data, dict):
+        if {"role", "content"} - set(history_data):
+            raise Exception("Malformed history data. 'role' and 'content' keys are required.")
+        history_data = [history_data]
+    else:
+        for row in history_data:
+            if not isinstance(row, dict):
+                raise Exception("Malformed history data. Each item must be a dictionary.")
+            if {"role", "content"} - set(row):
+                raise Exception("Malformed history data. 'role' and 'content' keys are required.")
+    return history_data
+
+
+def _get_optional_column(df, column_name, row, converter=str):
+    return converter(row[column_name]) if column_name and column_name in df.columns else None
 
 async def main():
     """Main function"""
@@ -524,10 +525,32 @@ async def main():
     parser.add_argument("--eval-mode", choices=["score", "binary"], help="Evaluation Mode")
     parser.add_argument("--max-concurrency", type=int, default=10, help="Maximum number of concurrent evaluations")
     parser.add_argument("--verbose", action="store_true", help="Verbose output")
+    parser.add_argument("--validate", action="store_true", help="Validate the dataset. This won't actually run the evals.")
 
     args = parser.parse_args()
 
     logger.setLevel(logging.DEBUG if args.verbose else logging.INFO)
+
+    if args.validate:
+        df = pd.read_csv(args.csv)
+
+        if args.input_column not in df.columns:
+            raise ValueError(f"Input column '{args.input_column}' not found in CSV")
+
+        for index, row in df.iterrows():
+            try:
+                str(row[args.input_column])
+                _get_optional_column(df, args.scenario_column, row)
+                _get_optional_column(df, args.expected_category_column, row)
+                _get_optional_column(df, args.expected_response_column, row)
+                _get_optional_column(df, args.session_data_column, row, json.loads) or {}
+                _get_optional_column(df, args.participant_data_column, row, json.loads) or {}
+                history_data = _get_optional_column(df, args.history_column, row)
+                if history_data:
+                    _parse_history_data(history_data)
+            except Exception as e:
+                print(f"Error with row {index}: {e}")
+        return
 
     # Initialize evaluator
     evaluator = BotEvaluator(
