@@ -26,7 +26,11 @@ This script evaluates chatbot responses by sending inputs from a CSV dataset to 
    
 3. Install UV
 
-See https://docs.astral.sh/uv/getting-started/installation/
+   See https://docs.astral.sh/uv/getting-started/installation/
+
+4. Copy the evaluator file
+
+   You can get the script by cloning the OCS repo and checking out the `sk/evals-poc` branch or you can copy the script from GitHub: [bot_evaluator.py](https://github.com/dimagi/open-chat-studio/blob/sk/evals-poc/scripts/evals/bot_evaluator.py)
 
 ## Basic usage
 
