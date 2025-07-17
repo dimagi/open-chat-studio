@@ -161,7 +161,7 @@ class ChatAdapter(BaseAdapter):
         return self.session.chat.metadata.get("cancelled", False)
 
     def get_output_message_metadata(self, cited_files: set[File], generated_files: set[File]) -> dict:
-        """`cited_files` is a list of files that are cited in the response whereas generated files are those genrated
+        """`cited_files` is a list of files that are cited in the response whereas generated files are those generated
         by the LLM
         """
         self.session.chat.attach_files(attachment_type="file_citation", files=cited_files)

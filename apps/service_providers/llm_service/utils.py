@@ -118,6 +118,7 @@ def get_openai_container_file_contents(
 ) -> BytesIO:
     headers = {"Authorization": f"Bearer {openai_api_key}", "OpenAI-Organization": openai_organization or ""}
     url = f"https://api.openai.com/v1/containers/{container_id}/files/{openai_file_id}/content"
-    response = httpx.get(url, headers=headers)
-    response.raise_for_status()
-    return BytesIO(response.content)
+
+    with httpx.stream("GET", url, headers=headers, timeout=30) as response:
+        response.raise_for_status()
+        return BytesIO(response.read())
