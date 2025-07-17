@@ -18,7 +18,8 @@
             hx-get="{% url 'experiments:experiment_session_messages_view' request.team.slug experiment.public_id experiment_session.external_id %}"
             hx-trigger="keyup changed delay:500ms"
             hx-target="#messages-container"
-            hx-include="[name='search'], [name='language'], [name='show_original_translation']"          >
+            hx-include="[name='search'], [name='language'], [name='show_original_translation']"
+          >
           {% if search %}
             <button
               class="btn btn-ghost btn-sm"
