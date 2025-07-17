@@ -2,7 +2,7 @@ import contextlib
 from io import BytesIO
 from time import sleep
 from typing import TYPE_CHECKING, Any
-
+import httpx
 import pydantic
 from django.db.models import Q
 from langchain.agents.openai_assistant import OpenAIAssistantRunnable as BrokenOpenAIAssistantRunnable
@@ -158,17 +158,29 @@ class LlmService(pydantic.BaseModel):
         cited_file_ids_remote = []
         cited_file_ids = []
         cited_files = []
+        generated_files: list[File] = []
 
         if isinstance(llm_outputs, list):
             for output in llm_outputs:
                 # Populate text
                 final_text = "\n".join([final_text, output.get("text", "")]).strip()
 
+
+                annotations = output.get("annotations", [])
                 # Get file references
                 if include_citations:
-                    external_ids = self.get_cited_file_ids(output.get("annotations", []))
+                    external_ids = self.get_cited_file_ids(annotations)
                     cited_file_ids_remote.extend(external_ids)
 
+                generated_files.extend(self.get_generated_files(annotations, team_id))
+
+                # Replace generated file links with actual file download links
+                import re
+                for generated_file in generated_files:
+                    # Pattern to match sandbox file links
+                    pattern = rf"\[([^\]]+)\]\(sandbox:/mnt/data/{re.escape(generated_file.name)}\)"
+                    replacement = f"[{generated_file.name}]({generated_file.file.url})"
+                    final_text = re.sub(pattern, replacement, final_text)
         else:
             final_text = llm_outputs
             # This path is followed when OCS citations are injected into the output
@@ -179,7 +191,7 @@ class LlmService(pydantic.BaseModel):
                 Q(external_id__in=cited_file_ids_remote) | Q(id__in=cited_file_ids), team_id=team_id
             ).all()
 
-        parsed_output = LlmChatResponse(text=final_text, cited_files=cited_files, generated_files=[])
+        parsed_output = LlmChatResponse(text=final_text, cited_files=cited_files, generated_files=generated_files)
         return parsed_output
 
     def get_remote_index_manager(self, index_id: str = None) -> "IndexManager":
@@ -202,6 +214,9 @@ class LlmService(pydantic.BaseModel):
         raise NotImplementedError
 
     def get_cited_file_ids(self, annotation_entries: list[dict]) -> list[str]:
+        return []
+
+    def get_generated_files(self, annotation_entries: list[dict]) -> list[File]:
         return []
 
 
@@ -242,6 +257,59 @@ class OpenAIGenericService(LlmService):
             entry["file_id"] for entry in annotation_entries if "file_id" in entry and entry["type"] == "file_citation"
         ]
         return detangle_file_ids(external_ids)
+
+    def get_generated_files(self, annotation_entries: list[dict], team_id: int) -> list[File]:
+        """
+        Create file records for all generated files in the output.
+        """
+        generated_files = []
+        
+        for entry in annotation_entries:
+            if entry.get("type") != "container_file_citation":
+                continue
+                
+            file_external_id = entry["file_id"]
+            container_id = entry["container_id"]
+            
+            # Check if file already exists in database
+            existing_file = File.objects.filter(
+                external_id=file_external_id,
+                external_source="openai",
+                team_id=team_id
+            ).first()
+            
+            if existing_file:
+                generated_files.append(existing_file)
+                continue
+            
+            # Retrieve file content from OpenAI container
+            try:
+                # Use direct HTTP request for container files
+                headers = {
+                    'Authorization': f'Bearer {self.openai_api_key}',
+                    'OpenAI-Organization': self.openai_organization
+                }
+                
+                url = f"https://api.openai.com/v1/containers/{container_id}/files/{file_external_id}/content"
+                response = httpx.get(url, headers=headers, stream=True)
+                response.raise_for_status()
+                
+                # Create new File instance
+                new_file = File.from_external_source(
+                    filename=entry["filename"],
+                    external_file=BytesIO(response.content),
+                    external_id=file_external_id,
+                    external_source="openai",
+                    team_id=team_id
+                )
+                generated_files.append(new_file)
+                
+            except Exception as e:
+                # Log error but continue processing other files
+                continue
+        
+        return generated_files
+
 
 
 class OpenAILlmService(OpenAIGenericService):
