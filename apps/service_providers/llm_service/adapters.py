@@ -164,8 +164,10 @@ class ChatAdapter(BaseAdapter):
         """`cited_files` is a list of files that are cited in the response whereas generated files are those generated
         by the LLM
         """
-        self.session.chat.attach_files(attachment_type="file_citation", files=cited_files)
-        self.session.chat.attach_files(attachment_type="openai_file_ids", files=generated_files)
+        if cited_files:
+            self.session.chat.attach_files(attachment_type="file_citation", files=cited_files)
+        if generated_files:
+            self.session.chat.attach_files(attachment_type="openai_file_ids", files=generated_files)
         return {
             "cited_files": [file.id for file in cited_files],
             "openai_file_ids": [file.external_id for file in generated_files],
