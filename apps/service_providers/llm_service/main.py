@@ -195,7 +195,9 @@ class LlmService(pydantic.BaseModel):
                 Q(external_id__in=cited_file_ids_remote) | Q(id__in=cited_file_ids), team_id=session.team_id
             ).all()
 
-        parsed_output = LlmChatResponse(text=final_text, cited_files=cited_files, generated_files=generated_files)
+        parsed_output = LlmChatResponse(
+            text=final_text, cited_files=set(cited_files), generated_files=set(generated_files)
+        )
         return parsed_output
 
     def get_remote_index_manager(self, index_id: str = None) -> "IndexManager":
