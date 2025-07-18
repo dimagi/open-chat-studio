@@ -223,7 +223,7 @@ class LlmService(pydantic.BaseModel):
     def get_generated_files(self, annotation_entries: list[dict], team_id: int) -> list[File]:
         return []
 
-    def replace_file_links(self, text: str, file: File) -> str:
+    def replace_file_links(self, text: str, file: File, session: ExperimentSession) -> str:
         """
         Replace file links in the text with actual download links.
         """
