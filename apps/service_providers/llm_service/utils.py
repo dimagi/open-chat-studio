@@ -7,7 +7,7 @@ from apps.experiments.models import ExperimentSession
 from apps.files.models import File
 
 
-def detangle_file_ids(file_ids: str) -> list[str]:
+def detangle_file_ids(file_ids: list[str]) -> list[str]:
     """
     There is a bug in the OpenAI API where separate file ids are sometimes returned concatenated together.
 
