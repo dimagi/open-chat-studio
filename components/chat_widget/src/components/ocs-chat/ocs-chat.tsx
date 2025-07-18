@@ -69,9 +69,19 @@ export class OcsChat {
   @Prop() apiBaseUrl?: string = "https://chatbots.dimagi.com";
 
   /**
-   * The text to display on the button.
+   * The text to display on the button (deprecated, use iconUrl for icon button or set to non-empty string to use text button).
    */
-  @Prop() buttonText: string = "Chat";
+  @Prop() buttonText?: string;
+
+  /**
+   * URL of the icon to display on the button. If not provided, uses the default OCS logo.
+   */
+  @Prop() iconUrl?: string;
+
+  /**
+   * The shape of the chat button. 'default' maintains current behavior, 'round' makes it circular, 'square' makes it rectangular.
+   */
+  @Prop() buttonShape: 'round' | 'square';
 
   /**
    * Whether the chat widget is visible on load.
@@ -118,6 +128,7 @@ export class OcsChat {
   private messageListRef?: HTMLDivElement;
   private textareaRef?: HTMLTextAreaElement;
   private chatWindowRef?: HTMLDivElement;
+
 
   componentWillLoad() {
     this.loaded = this.visible;
@@ -593,6 +604,74 @@ export class OcsChat {
     this.initializePosition();
   };
 
+  private getDefaultIconUrl(): string {
+    return `${this.getApiBaseUrl()}/static/images/favicons/favicon.svg`;
+  }
+
+  private getButtonClasses(): string {
+    const hasText = this.buttonText && this.buttonText.trim();
+
+    if (hasText) {
+      switch (this.buttonShape) {
+        case 'round':
+          return 'chat-btn-with-icon chat-btn-round';
+        case 'square':
+          return 'chat-btn-with-icon chat-btn-square';
+        default:
+          return 'chat-btn-with-icon chat-btn-square';
+      }
+    } else {
+      switch (this.buttonShape) {
+        case 'square':
+          return 'chat-icon-btn chat-icon-btn-square';
+        case 'round':
+          return 'chat-icon-btn';
+        default:
+          return 'chat-icon-btn chat-icon-btn-square';
+      }
+    }
+  }
+
+  private renderButton() {
+    const hasText = this.buttonText && this.buttonText.trim();
+    const hasCustomIcon = this.iconUrl && this.iconUrl.trim();
+    const iconSrc = hasCustomIcon ? this.iconUrl : this.getDefaultIconUrl();
+    const buttonClasses = this.getButtonClasses();
+
+    if (hasText) {
+      return (
+        <button
+          class={buttonClasses}
+          onClick={() => this.load()}
+          aria-label={`Open chat - ${this.buttonText}`}
+          title={this.buttonText}
+        >
+          <img
+            src={iconSrc}
+            alt=""
+            class="chat-btn-icon"
+          />
+          <span class="chat-btn-text">{this.buttonText}</span>
+        </button>
+      );
+    } else {
+      return (
+        <button
+          class={buttonClasses}
+          onClick={() => this.load()}
+          aria-label="Open chat"
+          title="Open chat"
+        >
+          <img
+            src={iconSrc}
+            alt="Chat"
+            class="chat-icon"
+          />
+        </button>
+      );
+    }
+  }
+
   render() {
     if (this.error) {
       return (
@@ -604,7 +683,7 @@ export class OcsChat {
 
     return (
       <Host>
-        <button class="btn" onClick={() => this.load()}>{this.buttonText}</button>
+        {this.renderButton()}
         {this.visible && (
           <div
             ref={(el) => this.chatWindowRef = el}
