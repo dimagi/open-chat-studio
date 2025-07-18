@@ -19,10 +19,18 @@
     <script>
         document.addEventListener('DOMContentLoaded', function() {
             function updateDismissedBanners(bannerId, bannerExpiry) {
-                let cookieName = `dismissed_banner_${bannerId}`;
-                const dismissed = SiteJS.app.Cookies.get(cookieName);
-                if (!dismissed) {
-                    SiteJS.app.Cookies.set(cookieName, 1, { expires: Number(bannerExpiry) });
+                try {
+                    let cookieName = `dismissed_banner_${bannerId}`;
+                    const dismissed = SiteJS.app.Cookies.get(cookieName);
+                    if (!dismissed) {
+                        SiteJS.app.Cookies.set(cookieName, 1, { expires: Number(bannerExpiry) });
+                    }
+                } catch (error) {
+                    if (error instanceof TypeError) {
+                        console.error('TypeError in updateDismissedBanners:', error.message);
+                    } else {
+                        throw error;
+                    }
                 }
             }
             document.querySelectorAll('.dismiss-banner').forEach(button => {

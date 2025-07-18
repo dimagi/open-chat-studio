@@ -1252,9 +1252,20 @@ def experiment_session_messages_view(request, team_slug: str, experiment_id: uui
     page = int(request.GET.get("page", 1))
     search = request.GET.get("search", "")
     language = request.GET.get("language", "")
-    show_original_translation = request.GET.get("show_original_translation") == "on"
+    show_original_translation = request.GET.get("show_original_translation") == "on" and language
     page_size = 100
-    messages_queryset = ChatMessage.objects.filter(chat=session.chat).all().order_by("created_at")
+    messages_queryset = (
+        ChatMessage.objects.filter(chat=session.chat)
+        .order_by("created_at")
+        .prefetch_related(
+            Prefetch(
+                "tagged_items",
+                queryset=CustomTaggedItem.objects.select_related("tag", "user"),
+                to_attr="prefetched_tagged_items",
+            )
+        )
+    )
+
     available_languages, translatable_languages = _get_languages_for_chat(session)
     has_missing_translations = False
     translate_form_all = TranslateMessagesForm(
