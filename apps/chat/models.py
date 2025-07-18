@@ -230,7 +230,7 @@ class ChatMessage(BaseModel, TaggedModelMixin, UserCommentsMixin):
         external_ids = []
         ids = []
 
-        metadata_key = ["openai_file_ids", "ocs_attachment_file_ids", "cited_files"]
+        metadata_key = ["openai_file_ids", "ocs_attachment_file_ids", "cited_files", "generated_files"]
         for source in metadata_key:
             # openai_file_ids is a list of external ids
             id_list = external_ids if source == "openai_file_ids" else ids

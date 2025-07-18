@@ -1,10 +1,13 @@
 import re
+from io import BytesIO
+
+import httpx
 
 from apps.experiments.models import ExperimentSession
 from apps.files.models import File
 
 
-def detangle_file_ids(file_ids: str) -> list[str]:
+def detangle_file_ids(file_ids: list[str]) -> list[str]:
     """
     There is a bug in the OpenAI API where separate file ids are sometimes returned concatenated together.
 
@@ -108,3 +111,15 @@ def remove_citations_from_text(text: str) -> str:
 
     citation_pattern = re.compile(OCS_CITATION_PATTERN)
     return citation_pattern.sub("", text)
+
+
+def get_openai_container_file_contents(
+    container_id: str, openai_file_id: str, openai_api_key: str, openai_organization: str | None = None
+) -> BytesIO:
+    # TODO: use the OpenAI Python client library when it supports container files
+    headers = {"Authorization": f"Bearer {openai_api_key}", "OpenAI-Organization": openai_organization or ""}
+    url = f"https://api.openai.com/v1/containers/{container_id}/files/{openai_file_id}/content"
+
+    with httpx.stream("GET", url, headers=headers, timeout=30) as response:
+        response.raise_for_status()
+        return BytesIO(response.read())

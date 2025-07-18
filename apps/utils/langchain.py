@@ -17,7 +17,7 @@ from langchain_core.utils.pydantic import TypeBaseModel, is_basemodel_subclass
 from openai import OpenAI
 from pydantic import BaseModel, ConfigDict, Field, create_model
 
-from apps.service_providers.llm_service import LlmService
+from apps.service_providers.llm_service import LlmService, OpenAIGenericService
 from apps.service_providers.llm_service.callbacks import TokenCountingCallbackHandler
 from apps.service_providers.llm_service.main import OpenAIAssistantRunnable
 from apps.service_providers.llm_service.token_counters import TokenCounter
@@ -123,6 +123,37 @@ class FakeLlmService(LlmService):
         return []
 
 
+class FakeOpenAILlmService(OpenAIGenericService):
+    llm: Any
+    token_counter: TokenCounter
+    model_config = ConfigDict(arbitrary_types_allowed=True)
+
+    def get_chat_model(self, llm_model: str, temperature: float):
+        return self.llm
+
+    def get_assistant(self, assistant_id: str, as_agent=False):
+        client = OpenAI(api_key="fake_key", base_url="https://fake.com")
+        return OpenAIAssistantRunnable(assistant_id=assistant_id, as_agent=as_agent, client=client)
+
+    def get_callback_handler(self, model: str) -> BaseCallbackHandler:
+        return TokenCountingCallbackHandler(self.token_counter)
+
+    def attach_built_in_tools(self, built_in_tools: list[str], config: dict = None) -> list:
+        return []
+
+    @property
+    def openai_api_key(self) -> str:
+        return "api_key-123"
+
+    @property
+    def openai_api_base(self) -> str:
+        return "openai_api_base"
+
+    @property
+    def openai_organization(self) -> str:
+        return "openai_organization"
+
+
 class FakeAssistant(RunnableSerializable[dict, OutputType]):
     responses: list
     i: int = 0
@@ -194,9 +225,9 @@ def mock_llm(responses: list[Any], token_counts: list[int] = None):
         yield service
 
 
-def build_fake_llm_service(responses, token_counts, fake_llm=None):
+def build_fake_llm_service(responses, token_counts, fake_llm=None, llm_service_class=FakeLlmService):
     fake_llm = fake_llm or FakeLlmSimpleTokenCount(responses=responses)
-    return FakeLlmService(llm=fake_llm, token_counter=FakeTokenCounter(token_counts=token_counts))
+    return llm_service_class(llm=fake_llm, token_counter=FakeTokenCounter(token_counts=token_counts))
 
 
 def build_fake_llm_echo_service(token_counts=None, include_system_message=True):
