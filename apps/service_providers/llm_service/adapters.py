@@ -170,7 +170,7 @@ class ChatAdapter(BaseAdapter):
             self.session.chat.attach_files(attachment_type="code_interpreter", files=generated_files)
         return {
             "cited_files": [file.id for file in cited_files],
-            "openai_file_ids": [file.external_id for file in generated_files],
+            "generated_files": [file.external_id for file in generated_files],
         }
 
     def add_citation_section_from_cited_files(self, ai_message: str, cited_files: list[File]) -> str:
