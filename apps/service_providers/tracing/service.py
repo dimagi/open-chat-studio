@@ -14,6 +14,7 @@ from .callback import wrap_callback
 
 if TYPE_CHECKING:
     from langchain.callbacks.base import BaseCallbackHandler
+    from ...experiments.models import ExperimentSession
 
 
 logger = logging.getLogger("ocs.tracing")
@@ -59,7 +60,12 @@ class TracingService:
 
     @contextmanager
     def trace_or_span(
-        self, name: str, session_id: str, user_id: str, inputs: dict[str, Any], metadata: dict[str, Any] | None = None
+        self,
+        name: str,
+        session: "ExperimentSession",
+        user_id: str,
+        inputs: dict[str, Any],
+        metadata: dict[str, Any] | None = None,
     ):
         """Context manager for tracing or spanning.
 
@@ -67,7 +73,7 @@ class TracingService:
         otherwise it will start a span.
         """
         if not self.trace_id:
-            with self.trace(name, session_id, user_id, inputs, metadata):
+            with self.trace(name, session.external_id, user_id, inputs, metadata):
                 yield self
         else:
             with self.span(name, inputs, metadata):
@@ -77,24 +83,23 @@ class TracingService:
     def trace(
         self,
         trace_name: str,
-        session_id: str,
+        session: "ExperimentSession",
         user_id: str,
         inputs: dict[str, Any] | None = None,
         metadata: dict[str, str] | None = None,
         input_message_id: str | None = None,
         experiment_id: int | None = None,
-        session_id_fk: int | None = None,
         participant_id: int | None = None,
     ):
         self.trace_id = uuid.uuid4()
         self.trace_name = trace_name
-        self.session_id = session_id
+        self.session_id = session.external_id
         self.user_id = user_id
         self.experiment_id = experiment_id
         self._start_time = time.time()
         self._input_message_id = input_message_id
         self.participant_id = participant_id
-        self.session_id_fk = session_id_fk
+        self.session_id_fk = session.id
 
         try:
             self._start_traces(inputs, metadata)
