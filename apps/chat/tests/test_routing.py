@@ -48,7 +48,7 @@ def test_experiment_routing_with_tracing():
     session = ExperimentSessionFactory(experiment=experiment)
     trace_service = TracingService([MockTracer()])
     with (
-        trace_service.trace("test", "123", "bob"),
+        trace_service.trace("test", session, "bob"),
         mock_llm(responses=["anything", "How can I help today?"], token_counts=[0]) as fake_service,
     ):
         bot = TopicBot(session, experiment, trace_service)

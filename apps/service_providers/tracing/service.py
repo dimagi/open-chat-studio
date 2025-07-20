@@ -74,7 +74,7 @@ class TracingService:
         otherwise it will start a span.
         """
         if not self.trace_id:
-            with self.trace(name, session.external_id, user_id, inputs, metadata):
+            with self.trace(name, session, user_id, inputs, metadata):
                 yield self
         else:
             with self.span(name, inputs, metadata):
