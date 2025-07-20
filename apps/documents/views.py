@@ -90,6 +90,35 @@ def single_collection_home(request, team_slug: str, pk: int):
     return render(request, "documents/single_collection_home.html", context)
 
 
+class QueryView(LoginAndTeamRequiredMixin, TemplateView, PermissionRequiredMixin):
+    template_name = "documents/collection_query_view.html"
+    permission_required = "documents.view_collection"
+
+    def get_context_data(
+        self,
+        team_slug: str,
+        pk: str,
+    ):
+        return {
+            "active_tab": "collections",
+            "title": "Query Collection",
+            "collection": Collection.objects.get(id=pk, team__slug=team_slug),
+        }
+
+
+@login_and_team_required
+@permission_required("documents.view_collection", raise_exception=True)
+def query_collection(request, team_slug: str, pk: int):
+    collection = get_object_or_404(Collection.objects.select_related("team"), id=pk, team__slug=team_slug)
+    index_manager = collection.get_index_manager()
+    context = {
+        "chunks": index_manager.query(
+            index_id=pk, query=request.GET.get("query"), top_k=int(request.GET.get("top_k", 5))
+        ),
+    }
+    return render(request, "documents/collection_query_results.html", context)
+
+
 @require_POST
 @login_and_team_required
 @permission_required("documents.change_collection")
@@ -388,6 +417,7 @@ class CreateCollectionFromAssistant(LoginAndTeamRequiredMixin, FormView, Permiss
         "title": "Create Collection from Assistant",
         "button_text": "Create Collection",
         "active_tab": "collections",
+        "title_help_content": render_help_with_link("", "migrate_from_assistant"),
     }
     object = None
 

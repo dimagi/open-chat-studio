@@ -24,6 +24,11 @@ class PromptVars(models.TextChoices):
         all_vars = base_vars + list(PromptVars.pipeline_extra_known_vars())
         return [{"label": v, "value": v} for v in all_vars]
 
+    @staticmethod
+    def get_router_prompt_vars() -> list[dict]:
+        prompt_vars = {"participant_data"} | PromptVars.pipeline_extra_known_vars()
+        return [{"label": v, "value": v} for v in prompt_vars]
+
 
 PROMPT_VARS_REQUIRED_BY_TOOL = {
     AgentTools.DELETE_REMINDER: [PromptVars.PARTICIPANT_DATA],

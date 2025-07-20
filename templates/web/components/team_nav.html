@@ -60,15 +60,13 @@
       </ul>
     </li>
   {% endpartialdef experiment-menu %}
-  {% flag "flag_team_dashboard" %}
-    <li>
-      <a href="{% url 'dashboard:index' request.team.slug %}"
-         {% if active_tab == 'dashboard' %}class="menu-active"{% endif %}>
-        <i class="fa fa-bar-chart-o" aria-hidden="true"></i></i>
-      {% translate "Dashboard" %}
-    </a>
-    </li>
-  {% endflag %}
+  <li>
+    <a href="{% url 'dashboard:index' request.team.slug %}"
+       {% if active_tab == 'dashboard' %}class="menu-active"{% endif %}>
+      <i class="fa fa-bar-chart-o" aria-hidden="true"></i></i>
+    {% translate "Dashboard" %}
+  </a>
+  </li>
   {% flag "flag_chatbots" %}
     <li>
       <a href="{% url 'chatbots:chatbots_home' request.team.slug %}" {% if active_tab == 'chatbots' %}class="menu-active"{% endif %}>

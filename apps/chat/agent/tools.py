@@ -66,6 +66,7 @@ Failure to include proper citations will result in an incomplete response.
 class SearchToolConfig:
     index_id: int
     max_results: int = 5
+    generate_citations: bool = True
 
     def get_index(self):
         from apps.documents.models import Collection
@@ -238,7 +239,7 @@ class EndSessionTool(CustomBaseTool):
         "New messages will result in a new session being created."
     )
 
-    def action(self):
+    def action(self, *args, **kwargs):
         from apps.pipelines.nodes.base import Intents
 
         self.tool_callbacks.register_intent(Intents.END_SESSION)
@@ -311,11 +312,13 @@ class SearchIndexTool(CustomBaseTool):
             .only("text", "file__name")[:max_results]
         )
         retrieved_chunks = "".join([self._format_result(embedding) for embedding in embeddings])
-        return f"""
+        response_template = """
 # Retrieved chunks
 {retrieved_chunks}
-{CITATION_PROMPT}
+{citation_prompt}
 """
+        citation_prompt = CITATION_PROMPT if self.search_config.generate_citations else ""
+        return response_template.format(retrieved_chunks=retrieved_chunks, citation_prompt=citation_prompt)
 
     def _format_result(self, embedding: FileChunkEmbedding) -> str:
         """
