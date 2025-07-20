@@ -44,7 +44,7 @@ def test_save_input_to_history(save_input_to_history, pipeline: Pipeline, sessio
 @django_db_transactional()
 def test_save_trace_metadata(pipeline: Pipeline, session: ExperimentSession):
     trace_service = TracingService([MockTracer()])
-    with trace_service.trace("test", "123", "bob"):
+    with trace_service.trace("test", session, "bob"):
         bot = PipelineBot(session=session, experiment=session.experiment, trace_service=trace_service)
         bot.process_input("Hi")
     human_message = session.chat.messages.filter(message_type=ChatMessageType.HUMAN).first()
