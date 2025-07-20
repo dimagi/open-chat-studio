@@ -428,7 +428,7 @@ class DashboardService:
 
             tag_stats[category][tag.name] += 1
 
-        data = {"tag_categories": tag_stats, "total_tagged_messages": tagged_messages.count()}
+        data = {"tag_categories": tag_stats, "total_tagged_messages": total_tagged}
 
         DashboardCache.set_cached_data(self.team, cache_key, data)
         return data
