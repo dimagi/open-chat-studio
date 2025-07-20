@@ -136,16 +136,14 @@ class ChannelBase(ABC):
         self.experiment_channel = experiment_channel
         self._experiment_session = experiment_session
         self._message: BaseMessage = None
-        if experiment_session:
-            participant = experiment_session.participant
-            self._participant_identifier = participant.identifier
-            self._participant_id = participant.id
-        else:
-            self._participant_identifier = None
-            self._participant_id = None
-        self._is_user_message = False
-
+        self._participant_identifier = experiment_session.participant.identifier if experiment_session else None
         self.trace_service = TracingService.create_for_experiment(self.experiment)
+
+    @property
+    def participant_id(self) -> int | None:
+        if self.experiment_session:
+            return self.experiment_session.participant.id
+        return None
 
     @classmethod
     def start_new_session(
@@ -365,7 +363,7 @@ class ChannelBase(ABC):
                     session=self.experiment_session,
                     user_id=self.participant_identifier,
                     inputs={"input": self.message.model_dump()},
-                    participant_id=self._participant_id,
+                    participant_id=self.participant_id,
                 ):
                     response = self._new_user_message()
                     self.trace_service.set_current_span_outputs({"response": response.content})
