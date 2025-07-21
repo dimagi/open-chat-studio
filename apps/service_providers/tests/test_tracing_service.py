@@ -14,7 +14,7 @@ class TestTracingService:
 
     @pytest.fixture()
     def tracing_service(self, mock_tracer):
-        return TracingService([mock_tracer])
+        return TracingService([mock_tracer], 1, 1)
 
     @pytest.fixture()
     def empty_tracing_service(self):
@@ -29,7 +29,7 @@ class TestTracingService:
         return mock
 
     def test_initialization(self, mock_tracer):
-        service = TracingService([mock_tracer])
+        service = TracingService([mock_tracer], 1, 1)
         assert service._tracers == [mock_tracer]
         assert not service.activated
         assert service.trace_name is None
@@ -211,3 +211,7 @@ class TestTracingService:
             flat_tags = [f"{category}:{tag}" for tag, category in raw_tags]
             tracing_service.add_output_message_tags_to_trace(flat_tags)
             assert mock_tracer.tags == flat_tags
+
+    def test_tracing_service_raises_error_when_ids_none_and_tracers_nonempty(mock_tracer):
+        with pytest.raises(ValueError, match="Tracers must be empty if experiment_id or team_id is None"):
+            TracingService(tracers=[mock_tracer], experiment_id=None, team_id=None)

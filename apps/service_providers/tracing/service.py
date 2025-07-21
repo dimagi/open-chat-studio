@@ -9,6 +9,7 @@ from uuid import UUID
 from langchain_core.runnables import RunnableConfig
 
 from apps.trace.models import Trace
+
 from .base import Tracer
 from .callback import wrap_callback
 
@@ -22,7 +23,7 @@ logger = logging.getLogger("ocs.tracing")
 
 
 class TracingService:
-    def __init__(self, tracers: list[Tracer], experiment_id: int | None = None, team_id: int | None = None):
+    def __init__(self, tracers: list[Tracer], experiment_id: int, team_id: int):
         self._tracers = tracers
 
         self.outputs: dict[UUID, dict] = defaultdict(dict)
@@ -40,9 +41,12 @@ class TracingService:
         self.participant_id: int | None = None
         self.team_id: int | None = team_id
 
+        if (self.experiment_id is None or self.team_id is None) and self._tracers:
+            raise ValueError("Tracers must be empty if experiment_id or team_id is None")
+
     @classmethod
     def empty(cls) -> Self:
-        return cls([])
+        return cls([], None, None)
 
     @classmethod
     def create_for_experiment(cls, experiment) -> Self:

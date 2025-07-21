@@ -46,7 +46,7 @@ def test_experiment_routing(with_default, routing_response, expected_tag):
 def test_experiment_routing_with_tracing():
     experiment = _make_experiment_with_routing()
     session = ExperimentSessionFactory(experiment=experiment)
-    trace_service = TracingService([MockTracer()])
+    trace_service = TracingService([MockTracer()], 1, 1)
     with (
         trace_service.trace("test", session, "bob"),
         mock_llm(responses=["anything", "How can I help today?"], token_counts=[0]) as fake_service,
