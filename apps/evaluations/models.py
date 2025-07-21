@@ -257,13 +257,14 @@ class EvaluationRun(BaseTeamModel):
         for result in results:
             table_by_message[result.message.id].update(
                 {
-                    result.message.input.get("role", "Input"): result.message.input.get("content", ""),
-                    result.message.output.get("role", "Output"): result.message.output.get("content", ""),
-                    **{f"{key}": value for key, value in result.message.context.items()},
+                    "Dataset Input": result.message.input.get("content", ""),
+                    "Dataset Output": result.message.output.get("content", ""),
+                    "Generated Response": result.output.get("generated_response", ""),
                     **{
                         f"{key} ({result.evaluator.name})": value
                         for key, value in result.output.get("result", {}).items()
                     },
+                    **{f"{key}": value for key, value in result.message.context.items()},
                 }
             )
             if result.output.get("error"):
