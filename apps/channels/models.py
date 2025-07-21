@@ -43,7 +43,7 @@ class ChannelPlatform(models.TextChoices):
         """Returns a dictionary of available platforms for this team. Available platforms will have a `True` value"""
         from apps.service_providers.models import MessagingProvider
 
-        all_platforms = cls.as_list(exclude=[cls.API, cls.WEB])
+        all_platforms = cls.as_list(exclude=[cls.API, cls.WEB, cls.EVALUATIONS])
         platform_availability = {platform: False for platform in all_platforms}
         platform_availability[cls.TELEGRAM] = True
 
