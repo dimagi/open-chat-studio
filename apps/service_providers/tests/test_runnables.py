@@ -376,7 +376,7 @@ def test_cited_files_are_saved_in_metadata(session):
 
     # Assert that the file id is saved as a citation in the metadata of the AI message
     ai_message = session.chat.messages.get(message_type=ChatMessageType.AI)
-    assert ai_message.metadata == {"cited_files": [file.id], "openai_file_ids": []}
+    assert ai_message.metadata == {"cited_files": [file.id], "generated_files": []}
 
 
 @pytest.mark.django_db()
