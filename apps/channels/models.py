@@ -31,11 +31,12 @@ class ChannelPlatform(models.TextChoices):
     API = "api", "API"
     SLACK = "slack", "Slack"
     COMMCARE_CONNECT = "commcare_connect", "CommCare Connect"
+    EVALUATIONS = "evaluations", "Evaluations"
 
     @classmethod
     def team_global_platforms(cls):
         """These platforms should only ever have one channel per team"""
-        return [cls.API, cls.WEB]
+        return [cls.API, cls.WEB, cls.EVALUATIONS]
 
     @classmethod
     def for_dropdown(cls, used_platforms, team) -> dict:
@@ -121,6 +122,7 @@ class ChannelPlatform(models.TextChoices):
         platforms_with_labels = [platform.label for platform in platforms]
         platforms_with_labels.append(cls.API.label)
         platforms_with_labels.append(cls.WEB.label)
+        platforms_with_labels.append(cls.EVALUATIONS.label)
         return sorted(platforms_with_labels)
 
 
@@ -141,6 +143,12 @@ class ExperimentChannelObjectManager(AuditingManager):
 
     def get_team_web_channel(self, team):
         channel, _ = self.get_or_create(team=team, platform=ChannelPlatform.WEB, name=f"{team.slug}-web-channel")
+        return channel
+
+    def get_team_evaluations_channel(self, team):
+        channel, _ = self.get_or_create(
+            team=team, platform=ChannelPlatform.EVALUATIONS, name=f"{team.slug}-evaluations-channel"
+        )
         return channel
 
 
