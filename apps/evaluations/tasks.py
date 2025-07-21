@@ -14,39 +14,38 @@ from apps.teams.utils import current_team
 logger = logging.getLogger("ocs.evaluations")
 
 
-@shared_task(bind=True)
-def run_single_evaluation_task(self, evaluation_run_id, evaluator_id, message_id):
+@shared_task
+def evaluate_single_message_task(evaluation_run_id, evaluator_ids, message_id):
     """
-    Run a single evaluation for one evaluator on one message.
+    Run all evaluations over a single message.
     First runs the message through the bot, then runs the evaluator.
     """
     evaluation_run = EvaluationRun.objects.select_related("team").get(id=evaluation_run_id)
 
     with current_team(evaluation_run.team):
-        evaluator = Evaluator.objects.get(id=evaluator_id)
         message = EvaluationMessage.objects.get(id=message_id)
+        bot_response = _run_bot_generation(evaluation_run.team, message)
 
-        try:
-            # TODO: run the generation once before calling this item
-            bot_response = _run_bot_generation(evaluation_run.team, message)
-
-            result = evaluator.run(message, bot_response)
-            EvaluationResult.objects.create(
-                message=message,
-                run=evaluation_run,
-                evaluator=evaluator,
-                output=result.model_dump(),
-                team=evaluation_run.team,
-            )
-        except Exception as e:
-            logger.exception(f"Error running evaluator {evaluator.id} on message {message.id}: {e}")
-            EvaluationResult.objects.create(
-                message=message,
-                run=evaluation_run,
-                evaluator=evaluator,
-                output={"error": str(e)},
-                team=evaluation_run.team,
-            )
+        for evaluator_id in evaluator_ids:
+            evaluator = Evaluator.objects.get(id=evaluator_id)
+            try:
+                result = evaluator.run(message, bot_response)
+                EvaluationResult.objects.create(
+                    message=message,
+                    run=evaluation_run,
+                    evaluator=evaluator,
+                    output=result.model_dump(),
+                    team=evaluation_run.team,
+                )
+            except Exception as e:
+                logger.exception(f"Error running evaluator {evaluator.id} on message {message.id}: {e}")
+                EvaluationResult.objects.create(
+                    message=message,
+                    run=evaluation_run,
+                    evaluator=evaluator,
+                    output={"error": str(e)},
+                    team=evaluation_run.team,
+                )
 
 
 def _run_bot_generation(team, message: EvaluationMessage) -> str:
@@ -157,11 +156,15 @@ def run_evaluation_task(self, evaluation_run_id):
                 evaluation_run.save(update_fields=["finished_at", "status", "job_id"])
                 return
 
+            # Each message needs a generation.
+            # Each evaluator does not
+            # -> generate responses for each message
+            # -> evaluate those responses
+
             # Create chord with group and callback
             chord_result = chord(
-                run_single_evaluation_task.s(evaluation_run_id, evaluator.id, message.id)
+                evaluate_single_message_task.s(evaluation_run_id, [e.id for e in evaluators], message.id)
                 for message in messages
-                for evaluator in evaluators
             )(mark_evaluation_complete.s(evaluation_run_id))
 
             chord_result.parent.save()

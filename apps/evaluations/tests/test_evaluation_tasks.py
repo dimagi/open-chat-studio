@@ -4,7 +4,7 @@ import pytest
 
 from apps.channels.models import ChannelPlatform, ExperimentChannel
 from apps.evaluations.models import EvaluationResult
-from apps.evaluations.tasks import _run_bot_generation, run_single_evaluation_task
+from apps.evaluations.tasks import _run_bot_generation, evaluate_single_message_task
 from apps.experiments.models import ExperimentSession, Participant
 from apps.utils.factories.evaluations import (
     EvaluationConfigFactory,
@@ -101,10 +101,10 @@ def test_run_bot_generation(handle_evaluation_message_mock, hardcoded_experiment
 @pytest.mark.django_db()
 @patch("apps.channels.tasks.handle_evaluation_message")
 @patch("apps.evaluations.models.Evaluator.run")
-def test_run_single_evaluation_task_with_bot_generation(
+def test_evaluate_single_message_with_bot_generation(
     evaluator_run_mock, handle_evaluation_message_mock, hardcoded_experiment, evaluation_run, evaluation_message
 ):
-    """Test that run_single_evaluation_task calls bot generation before evaluation"""
+    """Test that evaluate_single_message calls bot generation before evaluation"""
     from apps.chat.models import ChatMessage
 
     run, evaluator = evaluation_run
@@ -115,7 +115,7 @@ def test_run_single_evaluation_task_with_bot_generation(
     evaluator_run_mock.return_value = Mock(model_dump=Mock(return_value={"score": 0.8}))
 
     # Run the evaluation task
-    run_single_evaluation_task(run.id, evaluator.id, evaluation_message.id)
+    evaluate_single_message_task(run.id, evaluator.id, evaluation_message.id)
 
     # Verify bot generation was called
     handle_evaluation_message_mock.assert_called_once()
@@ -131,7 +131,7 @@ def test_run_single_evaluation_task_with_bot_generation(
 @pytest.mark.django_db()
 @patch("apps.channels.tasks.handle_evaluation_message")
 @patch("apps.evaluations.models.Evaluator.run")
-def test_run_single_evaluation_task_handles_bot_generation_error(
+def test_evaluate_single_message_handles_bot_generation_error(
     evaluator_run_mock, handle_evaluation_message_mock, hardcoded_experiment, evaluation_run, evaluation_message
 ):
     """Test that evaluation continues even if bot generation fails"""
@@ -142,7 +142,7 @@ def test_run_single_evaluation_task_handles_bot_generation_error(
     evaluator_run_mock.return_value = Mock(model_dump=Mock(return_value={"score": 0.8}))
 
     # Run the evaluation task - should not fail
-    run_single_evaluation_task(run.id, evaluator.id, evaluation_message.id)
+    evaluate_single_message_task(run.id, evaluator.id, evaluation_message.id)
 
     # Verify evaluator was still called despite bot error
     evaluator_run_mock.assert_called_once_with(evaluation_message)
