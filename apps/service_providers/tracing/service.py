@@ -8,14 +8,14 @@ from uuid import UUID
 
 from langchain_core.runnables import RunnableConfig
 
-from ...trace.models import Trace
+from apps.trace.models import Trace
 from .base import Tracer
 from .callback import wrap_callback
 
 if TYPE_CHECKING:
     from langchain.callbacks.base import BaseCallbackHandler
 
-    from ...experiments.models import ExperimentSession
+    from apps.experiments.models import ExperimentSession
 
 
 logger = logging.getLogger("ocs.tracing")
