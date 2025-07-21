@@ -5,7 +5,7 @@ from django.contrib.auth.decorators import login_required, permission_required
 from django.contrib.auth.mixins import PermissionRequiredMixin
 from django.core.exceptions import PermissionDenied, ValidationError
 from django.db import transaction
-from django.http import HttpResponse, HttpResponseBadRequest
+from django.http import HttpResponse, HttpResponseBadRequest, JsonResponse
 from django.shortcuts import get_object_or_404, render, resolve_url
 from django.template.loader import render_to_string
 from django.urls import reverse
@@ -238,3 +238,14 @@ def delete_llm_provider_model(request, team_slug: str, pk: int):
     except ValidationError as ex:
         return HttpResponseBadRequest(", ".join(ex.messages).encode("utf-8"))
     return HttpResponse()
+
+
+def get_provider_models(request, team_slug):
+    provider = request.GET.get("llm_provider")
+    models = get_models_by_provider(provider)
+    return JsonResponse({"models": models})
+
+
+def get_models_by_provider(provider):
+    model_objects = LlmProviderModel.objects.filter(type=provider)
+    return [{"value": model.id, "label": model.name} for model in model_objects]

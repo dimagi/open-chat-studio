@@ -153,7 +153,6 @@ def get_dropdown_llm_model_choices(team) -> list[tuple[str, str]]:
     for provider in llm_providers:
         for model in llm_provider_models_by_type.get(provider.type, []):
             model_choices.append((f"{provider.id}:{model.id}", f"{provider.name} - {model!s}"))
-    breakpoint()
     return model_choices
 
 
@@ -181,6 +180,7 @@ def get_first_llm_provider_model(llm_provider, team_id):
             return model
     except LlmProviderModel.DoesNotExist:
         return None
+
 
 def get_llm_provider_by_team(team):
     return LlmProvider.objects.filter(team=team).order_by("id")
