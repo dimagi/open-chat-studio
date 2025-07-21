@@ -67,7 +67,6 @@ class TestTracingService:
 
     def test_end_traces(self, tracing_service, mock_tracer, mock_session):
         trace_name = "test_trace"
-        session_id = "test_session"
         user_id = "test_user"
         with tracing_service.trace(trace_name, mock_session, user_id):
             # Add some data to verify reset
