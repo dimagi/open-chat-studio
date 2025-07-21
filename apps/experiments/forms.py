@@ -17,7 +17,8 @@ from apps.experiments.models import (
     SyntheticVoice,
 )
 from apps.generics.help import render_help_with_link
-from apps.service_providers.utils import get_dropdown_llm_model_choices
+from apps.service_providers.utils import get_dropdown_llm_model_choices, get_llm_provider_choices, \
+    get_llm_provider_by_team
 from apps.utils.prompt import PromptVars, validate_prompt_variables
 
 
@@ -291,24 +292,25 @@ class TranslateMessagesForm(forms.Form):
         label="Select Language",
         widget=forms.Select(attrs={"class": "select select-bordered w-full", "id": "translation-language"}),
     )
-    provider_model = forms.ChoiceField(
+    llm_provider = forms.ChoiceField(
         choices=[],
         required=True,
-        label="Select LLM Provider Model",
+        label="Select LLM Provider",
         widget=forms.Select(attrs={"class": "select select-bordered w-full", "id": "translation-provider-model"}),
     )
 
     def __init__(self, *args, team, translatable_languages, is_translate_all_form=False, **kwargs):
         super().__init__(*args, **kwargs)
+        providers = get_llm_provider_by_team(team)
 
-        self.fields["provider_model"].choices = [
-            ("", "Choose a model for translation")
-        ] + get_dropdown_llm_model_choices(team)
+        self.fields["provider_model"].choices = [("", "Choose a model for translation")] + list(
+            providers.values_list("id", "type")
+        )
 
         if is_translate_all_form:
-            self.fields["provider_model"].widget.attrs["id"] = "translation-provider-model-all"
+            self.fields["llm_provider"].widget.attrs["id"] = "translation-provider-model-all"
         else:
-            self.fields["provider_model"].widget.attrs["id"] = "translation-provider-model-remaining"
+            self.fields["llm_provider"].widget.attrs["id"] = "translation-provider-model-remaining"
 
         language_choices = [(code, name) for code, name in translatable_languages if code]
         if any(code == "eng" for code, _ in translatable_languages):
@@ -319,7 +321,7 @@ class TranslateMessagesForm(forms.Form):
 
         if is_translate_all_form:
             self.fields["target_language"].label = "Target Language for All Messages"
-            self.fields["provider_model"].label = "LLM Model for Translation"
+            self.fields["llm_provider"].label = "LLM Provider for Translation"
         else:
             self.fields["target_language"].label = "Target Language for Remaining Messages"
-            self.fields["provider_model"].label = "LLM Model for Remaining Messages"
+            self.fields["llm_provider"].label = "LLM Provider for Remaining Messages"
