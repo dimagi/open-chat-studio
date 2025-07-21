@@ -64,6 +64,7 @@ class EvaluationMessage(BaseModel):
     input = models.JSONField(default=dict)
     output = models.JSONField(default=dict)
     context = models.JSONField(default=dict)
+    history = models.JSONField(default=list)  # List of message objects with message_type, content, summary
 
     metadata = models.JSONField(default=dict)
 
@@ -97,7 +98,7 @@ class EvaluationMessage(BaseModel):
 
         for session_id, messages in messages_by_session.items():
             # Iterate per session so history gets cleared
-            history = []
+            history = []  # List of message dicts
             i = 0
             while i < len(messages) - 1:
                 current_msg = messages[i]
@@ -111,8 +112,8 @@ class EvaluationMessage(BaseModel):
                         output=EvaluationMessageContent(content=next_msg.content, role="ai").model_dump(),
                         context={
                             "current_datetime": current_msg.created_at.isoformat(),
-                            "history": "\n".join(history),
                         },
+                        history=[msg.copy() for msg in history],  # Store as JSON list
                         metadata={
                             "session_id": session_id,
                             "experiment_id": str(session.experiment.public_id),
@@ -120,8 +121,20 @@ class EvaluationMessage(BaseModel):
                     )
                     new_messages.append(evaluation_message)
 
-                    history.append(f"{current_msg.get_message_type_display()}: {current_msg.content}")
-                    history.append(f"{next_msg.get_message_type_display()}: {next_msg.content}")
+                    history.append(
+                        {
+                            "message_type": current_msg.message_type,
+                            "content": current_msg.content,
+                            "summary": getattr(current_msg, "summary", None),
+                        }
+                    )
+                    history.append(
+                        {
+                            "message_type": next_msg.message_type,
+                            "content": next_msg.content,
+                            "summary": getattr(next_msg, "summary", None),
+                        }
+                    )
 
                     i += 2
                 else:
@@ -149,6 +162,25 @@ class EvaluationMessage(BaseModel):
             content=self.output["content"],
             additional_kwargs={"id": self.id, "chat_message_id": self.expected_output_chat_message_id},
         )
+
+    @property
+    def full_history(self) -> str:
+        """
+        Generate a full history string from the JSON history data.
+        This is used for backward compatibility with the LlmEvaluator.
+        """
+        if not self.history:
+            return ""
+
+        history_lines = []
+        for message in self.history:
+            message_type = message.get("message_type", "")
+            content = message.get("content", "")
+            # Use ChatMessage's get_message_type_display method
+            display_type = ChatMessage(message_type=message_type).get_message_type_display()
+            history_lines.append(f"{display_type}: {content}")
+
+        return "\n".join(history_lines)
 
 
 class EvaluationDataset(BaseTeamModel):

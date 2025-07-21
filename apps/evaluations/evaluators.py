@@ -62,7 +62,7 @@ class LlmEvaluator(LLMResponseMixin, BaseEvaluator):
     prompt: str = Field(
         description=(
             "The prompt template to use for evaluation. "
-            "Available variables: {input.content}, {output.content}, {context.[context_parameter]}"
+            "Available variables: {input.content}, {output.content}, {context.[context_parameter]}, {full_history}"
         ),
         json_schema_extra=UiSchema(widget=Widgets.expandable_text),
     )
@@ -90,6 +90,7 @@ class LlmEvaluator(LLMResponseMixin, BaseEvaluator):
             input=SafeAccessWrapper(input),
             output=SafeAccessWrapper(output),
             context=SafeAccessWrapper(message.context),
+            full_history=message.full_history,
         )
         result = llm.invoke(formatted_prompt)
         return EvaluatorResult(result=result)

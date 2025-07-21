@@ -28,12 +28,23 @@ def test_create_messages_from_sessions_includes_history():
 
     assert eval_messages[0].input == {"content": "session1 message1 human", "role": "human"}
     assert eval_messages[0].output == {"content": "session1 message1 ai", "role": "ai"}
-    assert eval_messages[0].context["history"] == ""
 
     assert eval_messages[1].input == {"content": "session1 message2 human", "role": "human"}
     assert eval_messages[1].output == {"content": "session1 message2 ai", "role": "ai"}
-    assert eval_messages[1].context["history"] == "Human: session1 message1 human\nAI: session1 message1 ai"
 
     assert eval_messages[2].input == {"content": "session2 message1 human", "role": "human"}
     assert eval_messages[2].output == {"content": "session2 message1 ai", "role": "ai"}
-    assert eval_messages[2].context["history"] == ""
+
+    # Test JSON history field
+    assert eval_messages[0].history == []
+    assert eval_messages[0].full_history == ""
+
+    assert len(eval_messages[1].history) == 2
+    assert eval_messages[1].history[0]["message_type"] == ChatMessageType.HUMAN
+    assert eval_messages[1].history[0]["content"] == "session1 message1 human"
+    assert eval_messages[1].history[1]["message_type"] == ChatMessageType.AI
+    assert eval_messages[1].history[1]["content"] == "session1 message1 ai"
+    assert eval_messages[1].full_history == "Human: session1 message1 human\nAI: session1 message1 ai"
+
+    assert eval_messages[2].history == []
+    assert eval_messages[2].full_history == ""

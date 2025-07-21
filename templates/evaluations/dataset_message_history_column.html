@@ -1,0 +1,17 @@
+{% load i18n %}
+<div class="text-xs">
+  {% if record.history %}
+    <div class="space-y-1">
+      {% for message in record.history %}
+        <div class="text-xs">
+          <span class="font-medium">
+            {% if message.message_type == "human" %}Human{% elif message.message_type == "ai" %}AI{% else %}{{ message.message_type|title }}{% endif %}:
+          </span>
+          <span class="text-gray-500">{{ message.content|truncatewords:15 }}</span>
+        </div>
+      {% endfor %}
+    </div>
+  {% else %}
+    <span class="text-gray-400">{% trans "No history" %}</span>
+  {% endif %}
+</div>

@@ -217,6 +217,11 @@ class DatasetMessagesTable(tables.Table):
         verbose_name="Context",
         orderable=False,
     )
+    history = TemplateColumn(
+        template_name="evaluations/dataset_message_history_column.html",
+        verbose_name="History",
+        orderable=False,
+    )
     source = TemplateColumn(
         template_name="evaluations/dataset_message_source_column.html",
         verbose_name="Source",
@@ -244,7 +249,7 @@ class DatasetMessagesTable(tables.Table):
 
     class Meta:
         model = EvaluationMessage
-        fields = ("human_message_content", "ai_message_content", "context", "source", "actions")
+        fields = ("human_message_content", "ai_message_content", "context", "history", "source", "actions")
         row_attrs = settings.DJANGO_TABLES2_ROW_ATTRS
         orderable = False
         empty_text = "No messages in this dataset yet."
