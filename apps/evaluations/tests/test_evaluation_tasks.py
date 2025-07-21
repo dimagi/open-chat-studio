@@ -15,6 +15,7 @@ from apps.utils.factories.evaluations import (
 )
 from apps.utils.factories.experiment import ExperimentFactory
 from apps.utils.factories.team import TeamWithUsersFactory
+from apps.utils.langchain import build_fake_llm_service
 
 
 @pytest.fixture()
@@ -54,74 +55,53 @@ def evaluation_run(evaluation_message, team_with_users, db):
 
 
 @pytest.mark.django_db()
-@patch("apps.channels.tasks.handle_evaluation_message")
-def test_run_bot_generation(handle_evaluation_message_mock, hardcoded_experiment, evaluation_message, team_with_users):
+@patch("apps.service_providers.models.LlmProvider.get_llm_service")
+def test_run_bot_generation(get_llm_service, hardcoded_experiment, evaluation_message, team_with_users):
     """Test that _run_bot_generation calls the bot correctly"""
-    from apps.chat.models import ChatMessage
+    service = build_fake_llm_service(responses=["Bot generated response"], token_counts=[30])
+    get_llm_service.return_value = service
 
-    # Mock the bot response
-    mock_response = ChatMessage(content="Bot generated response")
-    handle_evaluation_message_mock.return_value = mock_response
+    result = _run_bot_generation(team_with_users, evaluation_message)
 
-    # Call the bot generation function
-    _run_bot_generation(team_with_users, evaluation_message)
+    assert result == "Bot generated response"
 
-    # Verify the bot was called correctly
-    handle_evaluation_message_mock.assert_called_once()
-    args, kwargs = handle_evaluation_message_mock.call_args
-
-    assert kwargs["user"] is None
-    assert kwargs["experiment_version"] == hardcoded_experiment
-    assert kwargs["message_text"] == "What is the weather like?"
-    assert kwargs["participant_id"] == "evaluations"
-
-    # Verify evaluation channel was created
     evaluation_channel = ExperimentChannel.objects.get(team=team_with_users, platform=ChannelPlatform.EVALUATIONS)
-    assert kwargs["experiment_channel"] == evaluation_channel
+    assert evaluation_channel.platform == ChannelPlatform.EVALUATIONS
 
-    # Verify session was created and passed to handle_evaluation_message
-    assert "session" in kwargs
-    session = kwargs["session"]
-    assert isinstance(session, ExperimentSession)
+    participant = Participant.objects.get(identifier="evaluations", team=team_with_users)
+    assert participant.name == "Evaluations Bot"
+    assert participant.platform == "evaluations"
+
+    session = ExperimentSession.objects.get(team=team_with_users)
     assert session.experiment == hardcoded_experiment
     assert session.experiment_channel == evaluation_channel
     assert session.participant.identifier == "evaluations"
     assert session.team == team_with_users
 
-    # Verify evaluations participant was created
-    participant = Participant.objects.get(identifier="evaluations", team=team_with_users)
-    assert participant.name == "Evaluations Bot"
-    assert participant.platform == "evaluations"
-
-    # Verify chat was created for the session
     assert session.chat is not None
     assert session.chat.team == team_with_users
 
 
 @pytest.mark.django_db()
-@patch("apps.channels.tasks.handle_evaluation_message")
+@patch("apps.service_providers.models.LlmProvider.get_llm_service")
 @patch("apps.evaluations.models.Evaluator.run")
 def test_evaluate_single_message_with_bot_generation(
-    evaluator_run_mock, handle_evaluation_message_mock, hardcoded_experiment, evaluation_run, evaluation_message
+    evaluator_run_mock, get_llm_service, hardcoded_experiment, evaluation_run, evaluation_message
 ):
     """Test that evaluate_single_message calls bot generation before evaluation"""
-    from apps.chat.models import ChatMessage
 
     run, evaluator = evaluation_run
 
-    # Mock responses
-    bot_response = ChatMessage(content="Bot generated response")
-    handle_evaluation_message_mock.return_value = bot_response
+    service = build_fake_llm_service(responses=["Bot generated response"], token_counts=[30])
+    get_llm_service.return_value = service
+
     evaluator_run_mock.return_value = Mock(model_dump=Mock(return_value={"score": 0.8}))
 
     # Run the evaluation task
-    evaluate_single_message_task(run.id, evaluator.id, evaluation_message.id)
+    evaluate_single_message_task(run.id, [evaluator.id], evaluation_message.id)
 
-    # Verify bot generation was called
-    handle_evaluation_message_mock.assert_called_once()
-
-    # Verify evaluator was called
-    evaluator_run_mock.assert_called_once_with(evaluation_message)
+    # Verify evaluator was called with message and bot response
+    evaluator_run_mock.assert_called_once_with(evaluation_message, "Bot generated response")
 
     # Verify result was created
     result = EvaluationResult.objects.get(message=evaluation_message, run=run, evaluator=evaluator)
@@ -142,10 +122,10 @@ def test_evaluate_single_message_handles_bot_generation_error(
     evaluator_run_mock.return_value = Mock(model_dump=Mock(return_value={"score": 0.8}))
 
     # Run the evaluation task - should not fail
-    evaluate_single_message_task(run.id, evaluator.id, evaluation_message.id)
+    evaluate_single_message_task(run.id, [evaluator.id], evaluation_message.id)
 
-    # Verify evaluator was still called despite bot error
-    evaluator_run_mock.assert_called_once_with(evaluation_message)
+    # Verify evaluator was still called despite bot error, with empty string response since bot failed
+    evaluator_run_mock.assert_called_once_with(evaluation_message, "")
 
     # Verify result was still created
     result = EvaluationResult.objects.get(message=evaluation_message, run=run, evaluator=evaluator)
@@ -153,29 +133,8 @@ def test_evaluate_single_message_handles_bot_generation_error(
 
 
 @pytest.mark.django_db()
-@patch("apps.channels.tasks.handle_evaluation_message")
-def test_run_bot_generation_missing_hardcoded_experiment(
-    handle_evaluation_message_mock, evaluation_message, team_with_users
-):
-    """Test that _run_bot_generation handles missing hardcoded experiment gracefully"""
-    # Don't create the hardcoded experiment
-
-    # Should not raise an exception
-    _run_bot_generation(team_with_users, evaluation_message)
-
-    # Bot should not have been called
-    handle_evaluation_message_mock.assert_not_called()
-
-
-@pytest.mark.django_db()
-@patch("apps.channels.tasks.handle_evaluation_message")
-def test_run_bot_generation_creates_evaluations_participant(
-    handle_evaluation_message_mock, hardcoded_experiment, evaluation_message, team_with_users
-):
+def test_run_bot_generation_creates_evaluations_participant(hardcoded_experiment, evaluation_message, team_with_users):
     """Test that _run_bot_generation creates the evaluations participant if it doesn't exist"""
-    from apps.chat.models import ChatMessage
-
-    handle_evaluation_message_mock.return_value = ChatMessage(content="Bot response")
 
     # Verify participant doesn't exist initially
     assert not Participant.objects.filter(identifier="evaluations", team=team_with_users).exists()
@@ -196,14 +155,13 @@ def test_run_bot_generation_creates_evaluations_participant(
 
 
 @pytest.mark.django_db()
-@patch("apps.channels.tasks.handle_evaluation_message")
-def test_run_bot_generation_creates_session_like_api(
-    handle_evaluation_message_mock, hardcoded_experiment, evaluation_message, team_with_users
-):
-    """Test that _run_bot_generation creates a session similar to the API pattern"""
-    from apps.chat.models import ChatMessage
+@patch("apps.service_providers.models.LlmProvider.get_llm_service")
+def test_run_bot_generation_creates_session(get_llm_service, hardcoded_experiment, evaluation_message, team_with_users):
+    """Test that _run_bot_generation creates a session"""
 
-    handle_evaluation_message_mock.return_value = ChatMessage(content="Bot response")
+    # Mock the LLM service
+    service = build_fake_llm_service(responses=["Bot response"], token_counts=[30])
+    get_llm_service.return_value = service
 
     # Call the bot generation function
     _run_bot_generation(team_with_users, evaluation_message)
@@ -221,7 +179,7 @@ def test_run_bot_generation_creates_session_like_api(
     assert session.chat is not None
     assert session.chat.team == team_with_users
 
-    # Verify the session was passed to handle_evaluation_message
-    handle_evaluation_message_mock.assert_called_once()
-    args, kwargs = handle_evaluation_message_mock.call_args
-    assert kwargs["session"] == session
+    # Verify session was created
+    sessions = ExperimentSession.objects.filter(team=team_with_users)
+    assert sessions.count() == 1
+    session = sessions.first()

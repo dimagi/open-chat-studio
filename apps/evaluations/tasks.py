@@ -24,7 +24,7 @@ def evaluate_single_message_task(evaluation_run_id, evaluator_ids, message_id):
 
     with current_team(evaluation_run.team):
         message = EvaluationMessage.objects.get(id=message_id)
-        bot_response = _run_bot_generation(evaluation_run.team, message)
+        bot_response = _run_bot_generation(evaluation_run.team, message) or ""
 
         for evaluator_id in evaluator_ids:
             evaluator = Evaluator.objects.get(id=evaluator_id)
@@ -109,7 +109,7 @@ def _run_bot_generation(team, message: EvaluationMessage) -> str:
     except Exception as e:
         logger.exception(f"Error generating bot response for evaluation message {message.id}: {e}")
         # Don't fail the entire evaluation if bot generation fails
-        pass
+        return None
 
 
 @shared_task
