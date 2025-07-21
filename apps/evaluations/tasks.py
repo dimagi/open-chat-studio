@@ -5,6 +5,7 @@ from typing import cast
 from celery import chord, shared_task
 
 from apps.channels.models import ChannelPlatform
+from apps.chat.models import ChatMessage, ChatMessageType
 from apps.evaluations.models import EvaluationMessage, EvaluationResult, EvaluationRun, EvaluationRunStatus, Evaluator
 from apps.teams.utils import current_team
 
@@ -79,8 +80,19 @@ def _run_bot_generation(team, message: EvaluationMessage):
             chat=chat,
         )
 
-        # TODO: Populate history on the session with the history from the EvaluationMessage?
-        #  -- Do this by populating the chat with the history from the message by creating new ChatMessage objects
+        # Populate history on the chat with the history from the EvaluationMessage
+        if message.history:
+            history_messages = [
+                ChatMessage(
+                    chat=chat,
+                    message_type=history_entry.get("message_type", ChatMessageType.HUMAN),
+                    content=history_entry.get("content", ""),
+                    summary=history_entry.get("summary"),
+                )
+                for history_entry in message.history
+            ]
+            ChatMessage.objects.bulk_create(history_messages)
+
         # TODO: Populate participant data?
 
         # Extract the input message content
