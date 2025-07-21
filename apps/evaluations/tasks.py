@@ -4,9 +4,11 @@ from typing import cast
 
 from celery import chord, shared_task
 
-from apps.channels.models import ChannelPlatform
-from apps.chat.models import ChatMessage, ChatMessageType
+from apps.channels.models import ChannelPlatform, ExperimentChannel
+from apps.channels.tasks import handle_evaluation_message
+from apps.chat.models import Chat, ChatMessage, ChatMessageType
 from apps.evaluations.models import EvaluationMessage, EvaluationResult, EvaluationRun, EvaluationRunStatus, Evaluator
+from apps.experiments.models import Experiment, ExperimentSession, Participant
 from apps.teams.utils import current_team
 
 logger = logging.getLogger("ocs.evaluations")
@@ -25,11 +27,10 @@ def run_single_evaluation_task(self, evaluation_run_id, evaluator_id, message_id
         message = EvaluationMessage.objects.get(id=message_id)
 
         try:
-            # Call the bot first to generate a response
-            _run_bot_generation(evaluation_run.team, message)
+            # TODO: run the generation once before calling this item
+            bot_response = _run_bot_generation(evaluation_run.team, message)
 
-            # Then run the evaluator
-            result = evaluator.run(message)
+            result = evaluator.run(message, bot_response)
             EvaluationResult.objects.create(
                 message=message,
                 run=evaluation_run,
@@ -48,18 +49,13 @@ def run_single_evaluation_task(self, evaluation_run_id, evaluator_id, message_id
             )
 
 
-def _run_bot_generation(team, message: EvaluationMessage):
+def _run_bot_generation(team, message: EvaluationMessage) -> str:
     """
     Run the evaluation message through the bot to generate a response.
     """
-    from apps.channels.models import ExperimentChannel
-    from apps.channels.tasks import handle_evaluation_message
-    from apps.chat.models import Chat
-    from apps.experiments.models import Experiment, ExperimentSession, Participant
-
     try:
         # Get the hardcoded experiment version
-        # TODO: update this.
+        # TODO: update this based on the actual experiment we want from the config
         experiment = Experiment.objects.get(public_id="abcbaf2c-c5a5-4ba6-802a-83a1e825d762")
 
         # TODO: Do we get the participant from the EvaluationMessage?
@@ -105,8 +101,11 @@ def _run_bot_generation(team, message: EvaluationMessage):
             message_text=input_content,
             session=session,
         )
+        response_content = bot_response.content
+        logger.info(f"Bot generated response for evaluation message {message.id}: {response_content}")
 
-        logger.info(f"Bot generated response for evaluation message {message.id}: {bot_response.content}")
+        # TODO, delete the ExperimentSession and all the generated ChatMessages here?
+        return response_content
 
     except Exception as e:
         logger.exception(f"Error generating bot response for evaluation message {message.id}: {e}")

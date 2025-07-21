@@ -39,8 +39,8 @@ class Evaluator(BaseTeamModel):
         module = importlib.import_module("apps.evaluations.evaluators")
         return getattr(module, self.type)
 
-    def run(self, message: EvaluationMessage) -> EvaluatorResult:
-        return self.evaluator(**self.params).run(message)
+    def run(self, message: EvaluationMessage, generated_response: str) -> EvaluatorResult:
+        return self.evaluator(**self.params).run(message, generated_response)
 
     def get_absolute_url(self):
         return reverse("evaluations:evaluator_edit", args=[self.team.slug, self.id])
