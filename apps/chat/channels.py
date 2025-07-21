@@ -359,7 +359,6 @@ class ChannelBase(ABC):
 
             try:
                 with self.trace_service.trace(
-                    experiment_id=self.experiment.id,
                     trace_name=self.experiment.name,
                     session=self.experiment_session,
                     user_id=self.participant_identifier,

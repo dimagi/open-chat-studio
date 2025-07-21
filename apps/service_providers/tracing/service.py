@@ -88,17 +88,13 @@ class TracingService:
         user_id: str,
         inputs: dict[str, Any] | None = None,
         metadata: dict[str, str] | None = None,
-        input_message_id: str | None = None,
-        experiment_id: int | None = None,
         participant_id: int | None = None,
     ):
         self.trace_id = uuid.uuid4()
         self.trace_name = trace_name
         self.session_id = session.external_id
         self.user_id = user_id
-        self.experiment_id = experiment_id
         self._start_time = time.time()
-        self._input_message_id = input_message_id
         self.participant_id = participant_id
         self.session_id_fk = session.id
 
