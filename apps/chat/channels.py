@@ -1312,17 +1312,15 @@ class EvaluationChannel(ChannelBase):
         self,
         experiment: Experiment,
         experiment_channel: ExperimentChannel,
-        experiment_session: ExperimentSession | None = None,
-        user=None,
+        experiment_session: ExperimentSession,
     ):
         super().__init__(experiment, experiment_channel, experiment_session)
-        self.user = user
-        if not self.user and not self.experiment_session:
-            raise ChannelException("EvaluationChannel requires either an existing session or a user")
+        if not self.experiment_session:
+            raise ChannelException("EvaluationChannel requires an existing session")
 
     @property
     def participant_user(self):
-        return super().participant_user or self.user
+        return super().participant_user
 
     def send_text_to_user(self, bot_message: str):
         # The bot cannot send messages to this client, since evaluations are run internally
