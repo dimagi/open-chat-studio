@@ -12,7 +12,7 @@ class Model:
     token_limit: int
     is_default: bool = False
     deprecated: bool = False
-    is_translation_default:bool = False
+    is_translation_default: bool = False
 
 
 def k(n: int) -> int:
@@ -122,8 +122,17 @@ DEFAULT_EMBEDDING_PROVIDER_MODELS = {
 def get_default_model(provider_type: str) -> Model:
     return next((m for m in DEFAULT_LLM_PROVIDER_MODELS[provider_type] if m.is_default), None)
 
-def get_default_translation_model(provider_type: str) -> Model:
-    return next((m for m in DEFAULT_LLM_PROVIDER_MODELS[provider_type] if m.is_translation_default), None)
+
+def get_default_translation_models_by_provider() -> dict:
+    """
+    Returns a dict mapping provider types to their default translation model name.
+    """
+    defaults = {}
+    for provider_type, models in DEFAULT_LLM_PROVIDER_MODELS.items():
+        default_model = next((m for m in models if getattr(m, "is_translation_default", False)), None)
+        if default_model:
+            defaults[provider_type] = default_model.name
+    return defaults
 
 
 @transaction.atomic()
