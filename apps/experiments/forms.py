@@ -17,8 +17,9 @@ from apps.experiments.models import (
     SyntheticVoice,
 )
 from apps.generics.help import render_help_with_link
-from apps.service_providers.utils import get_dropdown_llm_model_choices, get_llm_provider_choices, \
-    get_llm_provider_by_team
+from apps.service_providers.llm_service.default_models import get_default_translation_models_by_provider
+from apps.service_providers.utils import get_llm_provider_by_team
+from apps.service_providers.views import get_models_by_provider
 from apps.utils.prompt import PromptVars, validate_prompt_variables
 
 
@@ -296,6 +297,12 @@ class TranslateMessagesForm(forms.Form):
         choices=[],
         required=True,
         label="Select LLM Provider",
+        widget=forms.Select(attrs={"class": "select select-bordered w-full", "id": "translation-provider"}),
+    )
+    llm_provider_model = forms.ChoiceField(
+        choices=[],
+        required=True,
+        label="Select LLM Model",
         widget=forms.Select(attrs={"class": "select select-bordered w-full", "id": "translation-provider-model"}),
     )
 
@@ -309,11 +316,21 @@ class TranslateMessagesForm(forms.Form):
         if provider_choices:
             self.fields["llm_provider"].choices = provider_choices
             self.fields["llm_provider"].initial = provider_choices[0][0]
+            models_list = get_models_by_provider(provider_choices[0][1])
+            model_choices = [(model["value"], model["label"]) for model in models_list]
+            self.fields["llm_provider_model"].choices = model_choices
+            default_model_name_dict = get_default_translation_models_by_provider()
+            default_model_name = default_model_name_dict.get(provider_choices[0][1])
+            default_model_value = next((value for value, label in model_choices if label == default_model_name), None)
+            if default_model_value is not None:
+                self.fields["llm_provider_model"].initial = default_model_value
 
         if is_translate_all_form:
-            self.fields["llm_provider"].widget.attrs["id"] = "translation-provider-model-all"
+            self.fields["llm_provider"].widget.attrs["id"] = "translation-provider-all"
+            self.fields["llm_provider_model"].widget.attrs["id"] = "translation-provider-model-all"
         else:
-            self.fields["llm_provider"].widget.attrs["id"] = "translation-provider-model-remaining"
+            self.fields["llm_provider"].widget.attrs["id"] = "translation-provider-remaining"
+            self.fields["llm_provider_model"].widget.attrs["id"] = "translation-provider-model-remaining"
 
         language_choices = [(code, name) for code, name in translatable_languages if code]
         if any(code == "eng" for code, _ in translatable_languages):
