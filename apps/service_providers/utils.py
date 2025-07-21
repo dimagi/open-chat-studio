@@ -183,4 +183,4 @@ def get_first_llm_provider_model(llm_provider, team_id):
         return None
 
 def get_llm_provider_by_team(team):
-    return LlmProvider.objects.filter(team=team)
+    return LlmProvider.objects.filter(team=team).order_by("id")

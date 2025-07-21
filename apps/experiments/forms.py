@@ -301,11 +301,14 @@ class TranslateMessagesForm(forms.Form):
 
     def __init__(self, *args, team, translatable_languages, is_translate_all_form=False, **kwargs):
         super().__init__(*args, **kwargs)
-        providers = get_llm_provider_by_team(team)
 
-        self.fields["provider_model"].choices = [("", "Choose a model for translation")] + list(
-            providers.values_list("id", "type")
-        )
+        providers = get_llm_provider_by_team(team)
+        provider_choices = list(providers.values_list("id", "type"))
+
+        self.fields["llm_provider"].choices = [("", "Choose a model for translation")] + provider_choices
+        if provider_choices:
+            self.fields["llm_provider"].choices = provider_choices
+            self.fields["llm_provider"].initial = provider_choices[0][0]
 
         if is_translate_all_form:
             self.fields["llm_provider"].widget.attrs["id"] = "translation-provider-model-all"
