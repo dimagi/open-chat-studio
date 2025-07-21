@@ -5,7 +5,7 @@ import pytest
 
 from apps.evaluations.evaluators import LlmEvaluator
 from apps.evaluations.models import EvaluationConfig, EvaluationRun
-from apps.evaluations.tasks import run_evaluation_task
+from apps.evaluations.tasks import run_single_evaluation_task
 from apps.utils.factories.evaluations import (
     EvaluationConfigFactory,
     EvaluationDatasetFactory,
@@ -59,15 +59,13 @@ def test_running_evaluator(get_llm_service, llm_provider, llm_provider_model):
 
     evaluation_run = EvaluationRun.objects.create(team=evaluation_config.team, config=evaluation_config)
 
-    with mock.patch("apps.evaluations.tasks.ProgressRecorder"):
-        run_evaluation_task(evaluation_run.id)
+    for message in dataset.messages.all():
+        run_single_evaluation_task(evaluation_run.id, evaluator.id, message.id)
 
     evaluation_run.refresh_from_db()
     results = evaluation_run.results.all()
 
     assert len(results) == 2
-
-    assert evaluation_run.status == "completed"
 
     assert "result" in results[0].output
     assert "sentiment" in results[0].output["result"]
@@ -122,14 +120,12 @@ def test_context_variables_in_prompt(get_llm_service, llm_provider, llm_provider
 
     evaluation_run = EvaluationRun.objects.create(team=evaluation_config.team, config=evaluation_config)
 
-    with mock.patch("apps.evaluations.tasks.ProgressRecorder"):
-        run_evaluation_task(evaluation_run.id)
+    for message in dataset.messages.all():
+        run_single_evaluation_task(evaluation_run.id, evaluator.id, message.id)
 
     evaluation_run.refresh_from_db()
     results = evaluation_run.results.all()
-
     assert len(results) == 2
-    assert evaluation_run.status == "completed"
 
     result_1 = next(r for r in results if r.message.input["content"] == "Hello, I need help")
     result_2 = next(r for r in results if r.message.input["content"] == "Help me please")
