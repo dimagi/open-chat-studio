@@ -1300,3 +1300,30 @@ def _start_experiment_session(
         enqueue_static_triggers.delay(session.id, StaticTriggerType.PARTICIPANT_JOINED_EXPERIMENT)
     enqueue_static_triggers.delay(session.id, StaticTriggerType.CONVERSATION_START)
     return session
+
+
+class EvaluationChannel(ChannelBase):
+    """Message Handler for Evaluations"""
+
+    voice_replies_supported = False
+    supported_message_types = [MESSAGE_TYPES.TEXT]
+
+    def __init__(
+        self,
+        experiment: Experiment,
+        experiment_channel: ExperimentChannel,
+        experiment_session: ExperimentSession | None = None,
+        user=None,
+    ):
+        super().__init__(experiment, experiment_channel, experiment_session)
+        self.user = user
+        if not self.user and not self.experiment_session:
+            raise ChannelException("EvaluationChannel requires either an existing session or a user")
+
+    @property
+    def participant_user(self):
+        return super().participant_user or self.user
+
+    def send_text_to_user(self, bot_message: str):
+        # The bot cannot send messages to this client, since evaluations are run internally
+        pass
