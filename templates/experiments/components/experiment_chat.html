@@ -75,7 +75,7 @@
                   class="btn btn-primary"
                   hx-post="{% url 'experiments:translate_messages' request.team.slug experiment.public_id experiment_session.external_id %}"
                   hx-vals='{"translate_all": "true"}'
-                  hx-include="[name='search'], #translation-provider-model-all, [name='target_language']"
+                  hx-include="[name='search'], #translation-provider-all, [name='target_language'], #translation-provider-model-all"
                   hx-target="#messages-container"
                   hx-indicator="#chat-message-untranslated"
                   onclick="document.getElementById('translate-all-messages-modal').checked = false;"
@@ -125,7 +125,7 @@
                       {% endfor %}</strong>
                     </p>
 
-                    {% render_form_fields translate_form_remaining "provider_model" %}
+                    {% render_form_fields translate_form_remaining "llm_provider" "llm_provider_model" %}
                     <p class="pb-4">This action may take a few moments to complete.</p>
                     <div class="modal-action">
                       <button
@@ -133,7 +133,7 @@
                         class="btn btn-primary"
                         hx-post="{% url 'experiments:translate_messages' request.team.slug experiment.public_id experiment_session.external_id %}"
                         hx-vals='{"language": "{{ language }}"}'
-                        hx-include="[name='search'], [name='language'], [name='show_original_translation'], #translation-provider-model-remaining"
+                        hx-include="[name='search'], [name='language'], [name='show_original_translation'], #translation-provider-remaining, #translation-provider-model-remaining"
                         hx-target="#messages-container"
                         hx-indicator="#chat-message-untranslated"
                         onclick="document.getElementById('translate-remaining-messages-modal').checked = false;"
@@ -330,3 +330,110 @@
     </div>
   </div>
 </div>
+{{ default_translation_models_by_providers|json_script:"default-translation-models-dict" }}
+<script>
+  if (!window.defaultTranslationModels) {
+    window.defaultTranslationModels = JSON.parse(
+      document.getElementById('default-translation-models-dict').textContent
+    );
+  }
+/**
+ * @param {string} providerSelectId - ID of the provider select element
+ * @param {string} modelSelectId - ID of the model select element
+ */
+  function setupTranslationFormBehavior(providerSelectId, modelSelectId) {
+    console.log(providerSelectId)
+    const providerSelect = document.getElementById(providerSelectId);
+    const modelSelect = document.getElementById(modelSelectId);
+
+    if (!providerSelect || !modelSelect) {
+      console.error(`Elements not found!`);
+      return;
+    }
+
+    providerSelect.addEventListener("change", async function () {
+      const providerId = this.value;
+      const providerText = this.options[this.selectedIndex].text;
+
+      modelSelect.innerHTML = "<option>Loading...</option>";
+      modelSelect.disabled = true;
+
+      try {
+        const url = "{% url 'service_providers:get_provider_models' request.team.slug %}?llm_provider=" + providerText;
+        const fetchOptions = {
+          method: 'GET',
+          credentials: 'same-origin',
+          headers: {
+            'Accept': 'application/json'
+          }
+        };
+        const App = SiteJS.app;
+        fetchOptions.headers['X-CSRFToken'] = App.Cookies.get('csrftoken');
+
+        const response = await fetch(url, fetchOptions);
+        if (!response.ok) {
+          throw new Error(`HTTP error! status: ${response.status}`);
+        }
+
+        const data = await response.json();
+            // Clear and rebuild options
+        modelSelect.innerHTML = "";
+
+            // Add default option
+        const defaultOption = document.createElement("option");
+        defaultOption.value = "";
+        defaultOption.textContent = "Choose a model for translation";
+        modelSelect.appendChild(defaultOption);
+
+        if (data.models && Array.isArray(data.models)) {
+          data.models.forEach(({ value, label }) => {
+            const option = document.createElement("option");
+            option.value = value;
+            option.textContent = label;
+            modelSelect.appendChild(option);
+          });
+
+          const defaultModelForProvider = window.defaultTranslationModels[providerText];
+          if (defaultModelForProvider) {
+            const defaultOption = [...modelSelect.options].find(
+              option => option.text === defaultModelForProvider
+            );
+            if (defaultOption) {
+              modelSelect.value = defaultOption.value;
+            } else {
+              console.warn(`Default model not found in fetched list`);
+            }
+          } else {
+            console.warn(` No default model configured for provider:`, providerText);
+          }
+        }
+      } catch (err) {
+        console.error(`Failed to fetch models:`, err);
+        modelSelect.innerHTML = "<option>No models available</option>";
+      } finally {
+        modelSelect.disabled = false;
+      }
+    });
+
+  }
+
+  function initializeTranslationForms() {
+    // Set up translate all form
+    setupTranslationFormBehavior(
+      "translation-provider-all",
+      "translation-provider-model-all"
+    );
+
+    // Set up remaining messages form
+    setupTranslationFormBehavior(
+      "translation-provider-remaining",
+      "translation-provider-model-remaining"
+    );
+  }
+
+  if (document.readyState === 'loading') {
+    document.addEventListener('DOMContentLoaded', initializeTranslationForms);
+  } else {
+    initializeTranslationForms();
+  }
+</script>
