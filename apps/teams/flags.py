@@ -42,8 +42,6 @@ class Flags(FlagInfo, Enum):
         True,
     )
 
-    TEAM_DASHBOARD = ("flag_team_dashboard", "Enables new team dashboard with analytics and overview", "")
-
     OPEN_AI_VOICE_ENGINE = ("flag_open_ai_voice_engine", "Enables OpenAI voice synthesis for audio responses", "")
 
     SESSION_ANALYSIS = ("flag_session-analysis", "Enables detailed session analysis and reporting", "")

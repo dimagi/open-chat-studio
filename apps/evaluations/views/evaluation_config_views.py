@@ -140,11 +140,8 @@ class EvaluationResultHome(LoginAndTeamRequiredMixin, TemplateView, PermissionRe
         }
 
         # Show progress if running, otherwise show results table
-        if (
-            evaluation_run.status in [EvaluationRunStatus.PENDING, EvaluationRunStatus.PROCESSING]
-            and evaluation_run.job_id
-        ):
-            context["celery_job_id"] = evaluation_run.job_id
+        if evaluation_run.status in [EvaluationRunStatus.PENDING, EvaluationRunStatus.PROCESSING]:
+            context["group_job_id"] = evaluation_run.job_id
         else:
             context["table_url"] = reverse(
                 "evaluations:evaluation_results_table",

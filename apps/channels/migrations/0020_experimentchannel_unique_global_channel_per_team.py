@@ -4,7 +4,7 @@ from django.db import migrations, models
 
 
 def migrate_team_global_channels(apps, schema_editor):
-    ExperimentChannel = apps.get_model("channels", "ExperimentChannel")
+    ExperimentChannel = apps.get_model("bot_channels", "ExperimentChannel")
     ExperimentSession = apps.get_model("experiments", "ExperimentSession")
     Team = apps.get_model("teams", "Team")
 
@@ -26,7 +26,7 @@ def migrate_team_global_channels(apps, schema_editor):
 class Migration(migrations.Migration):
     atomic = False
     dependencies = [
-        ("channels", "0019_experimentchannel_team"),
+        ("bot_channels", "0019_experimentchannel_team"),
     ]
 
     operations = [

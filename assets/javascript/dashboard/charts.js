@@ -221,6 +221,65 @@ class ChartManager {
             options: options
         });
     }
+
+    renderAverageResponseTimeChart(data) {
+        const ctx = document.getElementById('averageResponseTimeChart');
+        if (!ctx) return;
+
+        this.destroyChart('averageResponseTime');
+
+        const labels = data?.map(item => this.formatDateLabel(item.date)) || [];
+
+        const chartData = {
+            labels: labels,
+            datasets: [
+                {
+                    label: 'Average Response Time (sec)',
+                    data: data?.map(item => item.avg_response_time_sec) || [],
+                    borderColor: this.colorPalette.warning,
+                    backgroundColor: this.colorPalette.warning + '80',
+                    fill: false,
+                    tension: 0.3
+                }
+            ]
+        };
+
+        const options = {
+            ...this.defaultOptions,
+            plugins: {
+                ...this.defaultOptions.plugins,
+                title: {
+                    display: true,
+                    text: 'Average Response Time'
+                },
+                tooltip: {
+                    callbacks: {
+                        label: function (context) {
+                            const sec = context.parsed.y || 0;
+                            return `Avg Response Time: ${sec.toFixed(2)} sec`;
+                        }
+                    }
+                }
+            },
+            scales: {
+                ...this.defaultOptions.scales,
+                y: {
+                    ...this.defaultOptions.scales.y,
+                    title: {
+                        display: true,
+                        text: 'Seconds'
+                    },
+                    beginAtZero: true
+                }
+            }
+        };
+
+        this.charts.averageResponseTime = new Chart(ctx, {
+            type: 'line',
+            data: chartData,
+            options: options
+        });
+    }
     
     renderChannelBreakdownChart(data) {
         const ctx = document.getElementById('channelBreakdownChart');

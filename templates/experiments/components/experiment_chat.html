@@ -42,6 +42,7 @@
               hx-target="#messages-container"
               hx-include="[name='search'], [name='show_original_translation']"
               hx-trigger="change"
+              hx-indicator="#language-loading-spinner"
             >
               {% for lang_code, lang_name in available_languages %}
                 <option value="{{ lang_code }}" {% if request.GET.language == lang_code %}selected{% endif %}>
@@ -49,6 +50,10 @@
                 </option>
               {% endfor %}
             </select>
+            <div id="language-loading-spinner" class="htmx-show">
+              <span class="loading loading-spinner loading-sm"></span>
+              <span class="ml-2">Loading...</span>
+            </div>
           {% endif %}
 
           <label for="translate-all-messages-modal" class="btn btn-primary btn-sm">
