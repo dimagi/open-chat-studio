@@ -1,4 +1,7 @@
-import React, {ChangeEvent, ChangeEventHandler, ReactNode, useId, useState,} from "react";
+import React, {ChangeEvent, ChangeEventHandler, ReactNode, useId, useState,useMemo} from "react";
+import CreatableSelect from "react-select/creatable";
+
+import { useStore } from "zustand";
 import {LlmProviderModel, Option, TypedOption} from "../types/nodeParameterValues";
 import usePipelineStore from "../stores/pipelineStore";
 import {classNames, concatenate, getCachedData, getDocumentationLink, getSelectOptions} from "../utils";
@@ -762,6 +765,32 @@ export function HistoryTypeWidget(props: WidgetParams) {
   const historyName = concatenate(props.nodeParams["history_name"]);
   const historyNameError = props.getNodeFieldError(props.nodeId, "history_name");
 
+  const nodes = usePipelineStore((state) => state.nodes);
+
+  const historyNameOptions = useMemo(() => {
+    const historyNames = new Set<string>();
+    nodes.forEach((node) => {
+      const type = node?.data?.type;
+      const params = node?.data?.params;
+      const isRelevantType = type === "LLMResponseWithPrompt" || type === "RouterNode";
+      if (isRelevantType && params?.history_name?.trim()) {
+        historyNames.add(params.history_name);
+      }
+    });
+    return Array.from(historyNames).map((name) => ({ label: name, value: name }));
+  }, [nodes]);
+
+  const handleHistoryNameChange = (selected: any) => {
+    const value = selected?.value || "";
+    const syntheticEvent = {
+      target: {
+        name: "history_name",
+        value,
+      },
+    };
+    props.updateParamValue?.(syntheticEvent as React.ChangeEvent<HTMLInputElement>);
+  };
+
   return (
     <>
       <div className="flex join">
@@ -782,13 +811,21 @@ export function HistoryTypeWidget(props: WidgetParams) {
         </InputField>
         {historyType == "named" && (
           <InputField label="History Name" help_text={props.helpText}>
-            <input
-              className="input join-item"
-              name="history_name"
-              onChange={props.updateParamValue}
-              value={historyName || ""}
-              readOnly={props.readOnly}
-            ></input>
+            <div className="w-64">
+              <CreatableSelect
+                isClearable
+                onChange={handleHistoryNameChange}
+                value={historyName ? { label: historyName, value: historyName } : null}
+                options={historyNameOptions}
+                placeholder="Select or create..."
+                styles={{
+                    control: (base) => ({
+                      ...base,
+                      minHeight: '40px'
+                    })
+                  }}
+              />
+            </div>
           </InputField>
         )}
       </div>
