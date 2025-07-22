@@ -92,7 +92,7 @@
                     {% if filter.is_default %}<i class="fas fa-star ml-1 text-yellow-500"></i>{% endif %}
                     <button type="button" class="btn btn-xs btn-ghost hover:text-red-500 ml-1"
                             @click="deleteSavedFilter({{ filter.id }}, '{{ filter.filter_name }}')"
-                            title="{% trans \"Delete filter\" %}">
+                            title="{% trans "Delete filter" %}">
                       <i class="fas fa-times"></i>
                     </button>
                   </div>
