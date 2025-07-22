@@ -386,6 +386,10 @@ class LLMResponseWithPrompt(LLMResponse, HistoryMixin, OutputMessageTagMixin):
         description="Configuration for builtin tools",
         json_schema_extra=UiSchema(widget=Widgets.none),
     )
+    history_type: PipelineChatHistoryTypes = Field(
+        PipelineChatHistoryTypes.GLOBAL,
+        json_schema_extra=UiSchema(widget=Widgets.history, enum_labels=PipelineChatHistoryTypes.labels),
+    )
 
     @model_validator(mode="after")
     def check_prompt_variables(self) -> Self:
@@ -649,6 +653,10 @@ class RouterNode(RouterMixin, PipelineRouterNode, HistoryMixin):
         json_schema_extra=UiSchema(
             widget=Widgets.text_editor, options_source=OptionsSource.text_editor_autocomplete_vars_router_node
         ),
+    )
+    history_type: PipelineChatHistoryTypes = Field(
+        PipelineChatHistoryTypes.NODE,
+        json_schema_extra=UiSchema(widget=Widgets.history, enum_labels=PipelineChatHistoryTypes.labels),
     )
 
     @model_validator(mode="after")
