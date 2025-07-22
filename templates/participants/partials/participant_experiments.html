@@ -16,7 +16,7 @@
         data-redirect-url="{% url 'participants:single-participant-home-with-experiment' participant.team.slug participant.id experiment.id %}#{{ experiment.id }}"
       >
         <td class="whitespace-nowrap px-3 py-4 text-sm text-gray-500">
-          <a>
+          <a id="{{ experiment.id }}">>
             {% include "generic/chip.html" with chip=experiment.as_chip %}
           </a>
         </td>
