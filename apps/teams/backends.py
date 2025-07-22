@@ -99,6 +99,7 @@ CONTENT_TYPES = {
         "evaluationmessage",
         "evaluationresult",
     ],
+    "trace": ["trace"],
 }
 
 CUSTOM_PERMISSIONS = {"experiments": ["invite_participants", "download_chats"]}

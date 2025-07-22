@@ -14,6 +14,7 @@ urlpatterns = [
     path("api/user-engagement/", views.UserEngagementApiView.as_view(), name="api_user_engagement"),
     path("api/channel-breakdown/", views.ChannelBreakdownApiView.as_view(), name="api_channel_breakdown"),
     path("api/tag-analytics/", views.TagAnalyticsApiView.as_view(), name="api_tag_analytics"),
+    path("api/average-response-time/", views.AverageResponseTimeApiView.as_view(), name="api_average_response_time"),
     # Filter management
     path("filters/save/", views.SaveFilterView.as_view(), name="save_filter"),
     path("filters/load/<int:filter_id>/", views.LoadFilterView.as_view(), name="load_filter"),

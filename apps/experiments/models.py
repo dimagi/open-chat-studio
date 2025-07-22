@@ -1714,7 +1714,7 @@ class ExperimentSession(BaseTeamModel):
                 trace_service = TracingService.create_for_experiment(experiment)
                 with trace_service.trace_or_span(
                     name=f"{experiment.name} - {trace_info.name}",
-                    session_id=str(self.external_id),
+                    session=self,
                     user_id=str(self.participant.identifier),
                     inputs={"input": instruction_prompt},
                     metadata=trace_info.metadata,
