@@ -65,9 +65,11 @@ class DashboardFilterForm(forms.Form):
         widget=forms.SelectMultiple(),
     )
 
-    participants = forms.MultipleChoiceField(choices=[], required=False, widget=forms.SelectMultiple)
+    participants = forms.ModelMultipleChoiceField(
+        queryset=Participant.objects.none(), required=False, widget=forms.SelectMultiple()
+    )
 
-    tags = forms.MultipleChoiceField(choices=[], required=False, widget=forms.SelectMultiple())
+    tags = forms.ModelMultipleChoiceField(queryset=Tag.objects.none(), required=False, widget=forms.SelectMultiple())
 
     def __init__(self, *args, team=None, **kwargs):
         super().__init__(*args, **kwargs)
@@ -87,13 +89,10 @@ class DashboardFilterForm(forms.Form):
                 (label_to_value[label], label) for label in available_platform_labels if label in label_to_value
             ]
             self.fields["channels"].choices = platform_choices
-            all_participants = Participant.objects.filter(team=team).values("id", "identifier")
-            self.fields["participants"].choices = [(p["id"], p["identifier"]) for p in all_participants]
-
-            tags = Tag.objects.filter(team=team).exclude(category=TagCategories.EXPERIMENT_VERSION)
-            self.fields["tags"].choices = [
-                (t.id, t.name.split(":", 1)[1].strip() if ":" in t.name else t.name) for t in tags
-            ]
+            self.fields["participants"].queryset = Participant.objects.filter(team=team)
+            self.fields["tags"].queryset = Tag.objects.filter(team=team).exclude(
+                category=TagCategories.EXPERIMENT_VERSION
+            )
 
         # Set default dates if not provided
         if not self.data.get("start_date") and not self.data.get("end_date"):
