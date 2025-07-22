@@ -55,7 +55,6 @@ dependencies = [
     "pyTelegramBotAPI==4.12.0",
     "pydantic",
     "pydub", # Audio transcription
-    "pypdf",
     "RestrictedPython",
     "sentry-sdk",
     "slack-bolt",
@@ -72,7 +71,6 @@ dependencies = [
     "requests>=2.32.3",
     "urllib3>=2.3.0",
     "pycryptodome",
-    "python-docx",
     "django-pydantic-field",
     "pgvector",
     "backoff",
