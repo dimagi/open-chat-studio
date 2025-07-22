@@ -6,7 +6,7 @@ from django.db import migrations
 class Migration(migrations.Migration):
     dependencies = [
         ("chat", "0002_chat_external_chat_id"),
-        ("channels", "0004_experimentchannel_platform_channelsession"),
+        ("bot_channels", "0004_experimentchannel_platform_channelsession"),
     ]
 
     # operations removed along with ChannelSession model

@@ -1,4 +1,5 @@
 import logging
+import time
 import uuid
 from collections import defaultdict
 from contextlib import contextmanager
@@ -7,18 +8,22 @@ from uuid import UUID
 
 from langchain_core.runnables import RunnableConfig
 
+from apps.trace.models import Trace
+
 from .base import Tracer
 from .callback import wrap_callback
 
 if TYPE_CHECKING:
     from langchain.callbacks.base import BaseCallbackHandler
 
+    from apps.experiments.models import ExperimentSession
+
 
 logger = logging.getLogger("ocs.tracing")
 
 
 class TracingService:
-    def __init__(self, tracers: list[Tracer]):
+    def __init__(self, tracers: list[Tracer], experiment_id: int, team_id: int):
         self._tracers = tracers
 
         self.outputs: dict[UUID, dict] = defaultdict(dict)
@@ -28,10 +33,20 @@ class TracingService:
         self.trace_id: UUID | None = None
         self.session_id: str | None = None
         self.user_id: str | None = None
+        self.experiment_id: int | None = experiment_id
+        self.start_time = None
+        self._input_message_id = None
+        self._output_message_id = None
+        self.session_id_fk: int | None = None
+        self.participant_id: int | None = None
+        self.team_id: int | None = team_id
+
+        if (self.experiment_id is None or self.team_id is None) and self._tracers:
+            raise ValueError("Tracers must be empty if experiment_id or team_id is None")
 
     @classmethod
     def empty(cls) -> Self:
-        return cls([])
+        return cls([], None, None)
 
     @classmethod
     def create_for_experiment(cls, experiment) -> Self:
@@ -42,7 +57,7 @@ class TracingService:
             except Exception as e:  # noqa: BLE001
                 logger.error(f"Error setting up trace service: {e}")
 
-        return cls(tracers)
+        return cls(tracers, experiment_id=experiment.id, team_id=experiment.team_id)
 
     @property
     def activated(self):
@@ -50,7 +65,12 @@ class TracingService:
 
     @contextmanager
     def trace_or_span(
-        self, name: str, session_id: str, user_id: str, inputs: dict[str, Any], metadata: dict[str, Any] | None = None
+        self,
+        name: str,
+        session: "ExperimentSession",
+        user_id: str,
+        inputs: dict[str, Any],
+        metadata: dict[str, Any] | None = None,
     ):
         """Context manager for tracing or spanning.
 
@@ -58,7 +78,7 @@ class TracingService:
         otherwise it will start a span.
         """
         if not self.trace_id:
-            with self.trace(name, session_id, user_id, inputs, metadata):
+            with self.trace(name, session, user_id, inputs, metadata):
                 yield self
         else:
             with self.span(name, inputs, metadata):
@@ -68,15 +88,19 @@ class TracingService:
     def trace(
         self,
         trace_name: str,
-        session_id: str,
+        session: "ExperimentSession",
         user_id: str,
         inputs: dict[str, Any] | None = None,
         metadata: dict[str, str] | None = None,
+        participant_id: int | None = None,
     ):
         self.trace_id = uuid.uuid4()
         self.trace_name = trace_name
-        self.session_id = session_id
+        self.session_id = session.external_id
         self.user_id = user_id
+        self._start_time = time.time()
+        self.participant_id = participant_id
+        self.session_id_fk = session.id
 
         try:
             self._start_traces(inputs, metadata)
@@ -100,6 +124,26 @@ class TracingService:
                 tracer.end_trace(self.outputs.get(self.trace_id), error)
             except Exception:  # noqa BLE001
                 logger.exception("Error ending tracer %s", tracer.__class__.__name__)
+        if self._start_time and self.session_id_fk:
+            try:
+                end_time = time.time()
+                duration = end_time - self._start_time
+                duration_ms = int(duration * 1000)
+                Trace.objects.create(
+                    experiment_id=self.experiment_id,
+                    session_id=self.session_id_fk,
+                    participant_id=self.participant_id,
+                    output_message_id=self._output_message_id,
+                    duration=duration_ms,
+                    team_id=self.team_id,
+                )
+            except Exception:
+                logger.exception(
+                    "Error saving trace in DB | experiment_id=%s, session_id=%s, output_message_id=%s",
+                    self.experiment_id,
+                    self.session_id_fk,
+                    self._output_message_id,
+                )
         self._reset()
 
     @contextmanager
@@ -274,3 +318,6 @@ class TracingService:
                 tracer.add_trace_tags(tags)
             except Exception:
                 logger.exception(f"Tracer {tracer.__class__.__name__} failed to add tags.")
+
+    def set_output_message_id(self, output_message_id: str) -> None:
+        self._output_message_id = output_message_id

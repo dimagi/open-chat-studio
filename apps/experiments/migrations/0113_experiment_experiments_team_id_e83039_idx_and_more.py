@@ -8,7 +8,7 @@ class Migration(migrations.Migration):
 
     dependencies = [
         ('assistants', '0013_openaiassistant_allow_file_downloads'),
-        ('channels', '0021_alter_experimentchannel_platform'),
+        ('bot_channels', '0021_alter_experimentchannel_platform'),
         ('chat', '0019_chatmessage_chat_chatme_chat_id_45c5e0_idx'),
         ('experiments', '0112_experiment_file_uploads_enabled'),
         ('pipelines', '0018_add_max_results_node_param'),
