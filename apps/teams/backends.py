@@ -51,7 +51,7 @@ class TeamBackend(ModelBackend):
 CONTENT_TYPES = {
     "assistants": ["openaiassistant", "toolresources"],
     "banners": ["banner"],
-    "channels": ["experimentchannel"],
+    "bot_channels": ["experimentchannel"],
     "chat": ["chat", "chatmessage", "chatattachment"],
     "custom_actions": ["customaction", "customactionoperation"],
     "events": [
@@ -99,6 +99,7 @@ CONTENT_TYPES = {
         "evaluationmessage",
         "evaluationresult",
     ],
+    "trace": ["trace"],
 }
 
 CUSTOM_PERMISSIONS = {"experiments": ["invite_participants", "download_chats"]}
@@ -180,7 +181,7 @@ GROUPS = [
         EXPERIMENT_ADMIN_GROUP,
         [
             AppPermSetDef("experiments", ALL),
-            AppPermSetDef("channels", ALL),
+            AppPermSetDef("bot_channels", ALL),
             AppPermSetDef("annotations", ALL),
             CustomPermissionSetDef("experiments", CUSTOM_PERMISSIONS["experiments"]),
             CustomPermissionSetDef("documents", ALL),

@@ -23,7 +23,7 @@ def set_participant_platform(apps, schema_editor):
 
 class Migration(migrations.Migration):
     dependencies = [
-        ("channels", "0017_alter_experimentchannel_platform"),
+        ("bot_channels", "0017_alter_experimentchannel_platform"),
         ("experiments", "0083_remove_experiment_no_activity_config_and_more"),
         ("teams", "0006_remove_invitation_role_remove_membership_role"),
     ]

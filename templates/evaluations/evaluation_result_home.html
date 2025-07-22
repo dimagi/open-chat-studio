@@ -3,7 +3,7 @@
 
 {% block page_head %}
   {{ block.super }}
-  {% if celery_job_id %}
+  {% if group_job_id %}
     <script src="{% static 'celery_progress/celery_progress.js' %}"></script>
   {% endif %}
 {% endblock page_head %}
@@ -72,8 +72,8 @@
       </div>
     </div>
 
-    {% if celery_job_id %}
-      {% include "analysis/components/progress.html" %}
+    {% if group_job_id %}
+      {% include "evaluations/components/progress.html" %}
     {% elif evaluation_run.status == "completed" %}
       <div class="mb-6">
         <h2 class="text-lg font-semibold mb-4">Results</h2>

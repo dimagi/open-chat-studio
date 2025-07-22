@@ -1,4 +1,6 @@
 import contextlib
+import logging
+import re
 from io import BytesIO
 from time import sleep
 from typing import TYPE_CHECKING, Any
@@ -18,15 +20,23 @@ from openai import OpenAI
 from openai._base_client import SyncAPIClient
 from pydantic import BaseModel
 
+from apps.experiments.models import ExperimentSession
 from apps.files.models import File
 from apps.service_providers.llm_service.callbacks import TokenCountingCallbackHandler
+from apps.service_providers.llm_service.datamodels import LlmChatResponse
 from apps.service_providers.llm_service.parsers import parse_output_for_anthropic
 from apps.service_providers.llm_service.token_counters import (
     AnthropicTokenCounter,
     GeminiTokenCounter,
     OpenAITokenCounter,
 )
-from apps.service_providers.llm_service.utils import detangle_file_ids, extract_file_ids_from_ocs_citations
+from apps.service_providers.llm_service.utils import (
+    detangle_file_ids,
+    extract_file_ids_from_ocs_citations,
+    get_openai_container_file_contents,
+)
+
+logger = logging.getLogger("ocs.llm_service")
 
 if TYPE_CHECKING:
     from apps.service_providers.llm_service.index_managers import IndexManager
@@ -151,31 +161,44 @@ class LlmService(pydantic.BaseModel):
     def get_output_parser(self):
         return self._default_parser
 
-    def _default_parser(self, output):
-        output = output.get("output", "")
-        if isinstance(output, list):
-            return "\n".join([o["text"] for o in output])
+    def _default_parser(
+        self, llm_output, session: ExperimentSession, include_citations: bool = True
+    ) -> LlmChatResponse:
+        llm_outputs = llm_output.get("output", "")
+        final_text = ""
+        cited_file_ids_remote = []
+        cited_file_ids = []
+        cited_files = []
+        generated_files: list[File] = []
+        if isinstance(llm_outputs, list):
+            for output in llm_outputs:
+                # Populate text
+                final_text = "\n".join([final_text, output.get("text", "")]).strip()
 
-        return output or ""
+                annotations = output.get("annotations", [])
+                if include_citations:
+                    external_ids = self.get_cited_file_ids(annotations)
+                    cited_file_ids_remote.extend(external_ids)
 
-    def get_cited_files_parser(self):
-        return self._default_cited_files_parser
+                generated_files.extend(self.get_generated_files(annotations, session.team_id))
 
-    def _default_cited_files_parser(self, token: str | dict, team_id: int) -> list[File]:
-        remote_file_ids = []
-        file_ids = []
-        if isinstance(token, dict):
-            outputs = token.get("output", "")
-            if isinstance(outputs, list):
-                for output in outputs:
-                    annotation_entries = output.get("annotations", [])
-                    external_ids = [entry["file_id"] for entry in annotation_entries if "file_id" in entry]
-                    external_ids = detangle_file_ids(external_ids)
-                    remote_file_ids.extend(external_ids)
-            else:
-                file_ids.extend(extract_file_ids_from_ocs_citations(outputs))
+                # Replace generated file links with actual file download links
+                for generated_file in generated_files:
+                    final_text = self.replace_file_links(text=final_text, file=generated_file, session=session)
+        else:
+            final_text = llm_outputs
+            # This path is followed when OCS citations are injected into the output
+            cited_file_ids.extend(extract_file_ids_from_ocs_citations(llm_outputs))
 
-        return File.objects.filter(Q(external_id__in=remote_file_ids) | Q(id__in=file_ids), team_id=team_id).all()
+        if include_citations:
+            cited_files = File.objects.filter(
+                Q(external_id__in=cited_file_ids_remote) | Q(id__in=cited_file_ids), team_id=session.team_id
+            ).all()
+
+        parsed_output = LlmChatResponse(
+            text=final_text, cited_files=set(cited_files), generated_files=set(generated_files)
+        )
+        return parsed_output
 
     def get_remote_index_manager(self, index_id: str = None) -> "IndexManager":
         raise NotImplementedError
@@ -195,6 +218,18 @@ class LlmService(pydantic.BaseModel):
             str: The unique identifier of the newly created vector store.
         """
         raise NotImplementedError
+
+    def get_cited_file_ids(self, annotation_entries: list[dict]) -> list[str]:
+        return []
+
+    def get_generated_files(self, annotation_entries: list[dict], team_id: int) -> list[File]:
+        return []
+
+    def replace_file_links(self, text: str, file: File, session: ExperimentSession) -> str:
+        """
+        Replace file links in the text with actual download links.
+        """
+        return text
 
 
 class OpenAIGenericService(LlmService):
@@ -228,6 +263,63 @@ class OpenAIGenericService(LlmService):
             "openai_api_key": self.openai_api_key,
             "openai_api_base": self.openai_api_base,
         }
+
+    def attach_built_in_tools(self, built_in_tools: list[str], config: dict[str, BaseModel] = None) -> list:
+        return []
+
+    def get_cited_file_ids(self, annotation_entries: list[dict]) -> list[str]:
+        external_ids = [
+            entry["file_id"] for entry in annotation_entries if "file_id" in entry and entry["type"] == "file_citation"
+        ]
+        return detangle_file_ids(external_ids)
+
+    def get_generated_files(self, annotation_entries: list[dict], team_id: int) -> list[File]:
+        """
+        Create file records for all generated files in the output.
+        """
+        generated_files = []
+
+        for entry in annotation_entries:
+            if entry.get("type") != "container_file_citation":
+                continue
+
+            file_external_id = entry["file_id"]
+            container_id = entry["container_id"]
+
+            # Retrieve file content from OpenAI container
+            try:
+                # Use direct HTTP request for container files until the library supports it and it is working with
+                # langchain
+
+                # Create new File instance
+                file_contents = get_openai_container_file_contents(
+                    container_id,
+                    openai_file_id=file_external_id,
+                    openai_api_key=self.openai_api_key,
+                    openai_organization=self.openai_organization,
+                )
+                new_file = File.from_external_source(
+                    filename=entry["filename"],
+                    external_file=file_contents,
+                    external_id=file_external_id,
+                    external_source="openai",
+                    team_id=team_id,
+                )
+                generated_files.append(new_file)
+
+            except Exception:
+                logger.exception(f"Failed to retrieve file {file_external_id} from OpenAI")
+                continue
+
+        return generated_files
+
+    def replace_file_links(self, text: str, file: File, session: ExperimentSession) -> str:
+        """
+        Replace file links in the text with actual download links.
+        """
+        pattern = rf"\(sandbox:/mnt/data/{re.escape(file.name)}\)"
+        replacement = f"({file.download_link(session.id)})"
+        return re.sub(pattern, replacement, text)
 
 
 class OpenAILlmService(OpenAIGenericService):

@@ -990,10 +990,7 @@ function BuiltInToolsWidget(props: WidgetParams) {
 }
 
 export function TextEditorWidget(props: WidgetParams) {
-  const { parameterValues } = getCachedData();
-  const autocomplete_vars_list: string[] = Array.isArray(parameterValues.text_editor_autocomplete_vars)
-  ? parameterValues.text_editor_autocomplete_vars.map((v: Option) => v.value) : [];
-
+  const autocomplete_vars_list: string[] = getAutoCompleteList(getSelectOptions(props.schema));
   const modalId = useId();
   const setNode = usePipelineStore((state) => state.setNode);
 
@@ -1097,4 +1094,8 @@ function TextEditorModal({
       </form>
     </dialog>
   );
+}
+
+function getAutoCompleteList(list: Array<Option>) {
+    return Array.isArray(list) ? list.map((v: Option) => v.value) : []
 }
