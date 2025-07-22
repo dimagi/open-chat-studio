@@ -8,7 +8,7 @@
         <div class="p-6">
             <form method="post" enctype="multipart/form-data">
                 {% csrf_token %}
-                {% render_form_fields form %}
+                {% render_form_fields form "name" "description" "query_file" "provider_model" "translation_language" "translation_provider_model" "sessions" %}
 
                 <div class="mt-6">
                     <button type="submit" class="bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded">
