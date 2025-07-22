@@ -1,7 +1,6 @@
 import React, {ChangeEvent, ChangeEventHandler, ReactNode, useId, useState,useMemo} from "react";
 import CreatableSelect from "react-select/creatable";
 
-import { useStore } from "zustand";
 import {LlmProviderModel, Option, TypedOption} from "../types/nodeParameterValues";
 import usePipelineStore from "../stores/pipelineStore";
 import {classNames, concatenate, getCachedData, getDocumentationLink, getSelectOptions} from "../utils";
