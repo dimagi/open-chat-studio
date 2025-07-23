@@ -313,8 +313,6 @@ class LocalIndexManager(IndexManager, metaclass=ABCMeta):
     def delete_files_from_index(self, files: list[File]):
         for file in files:
             FileChunkEmbedding.objects.filter(file=file).delete()
-            file.external_id = ""
-        File.objects.bulk_update(files, fields=["external_id"])
 
 
 class OpenAILocalIndexManager(LocalIndexManager):
