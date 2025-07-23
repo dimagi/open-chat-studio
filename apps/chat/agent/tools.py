@@ -1,4 +1,5 @@
 import logging
+from collections import defaultdict
 from dataclasses import dataclass
 from datetime import datetime, timedelta
 from functools import cached_property
@@ -18,6 +19,7 @@ from apps.events.forms import ScheduledMessageConfigForm
 from apps.events.models import ScheduledMessage, TimePeriod
 from apps.experiments.models import AgentTools, Experiment, ExperimentSession, ParticipantData
 from apps.files.models import FileChunkEmbedding
+from apps.pipelines.helper import get_mcp_tools
 from apps.pipelines.models import Node
 from apps.pipelines.nodes.tool_callbacks import ToolCallbacks
 from apps.utils.time import pretty_date
@@ -416,7 +418,26 @@ def get_node_tools(
         tool_names.append(AgentTools.ATTACH_MEDIA)
     tools = get_tool_instances(tool_names, experiment_session, tool_callbacks)
     tools.extend(get_custom_action_tools(node))
+    tools.extend(get_mcp_tool_instances(node, experiment_session.team))
     return tools
+
+
+def get_mcp_tool_instances(node: Node, team):
+    """Fetch tools from MCP servers based on the selected tools in the node parameters."""
+    mcp_tools = get_mcp_tools(node)
+    if not mcp_tools:
+        return []
+
+    server_tools = defaultdict(list)
+    for mcp_tool in mcp_tools:
+        server_tools[mcp_tool.server_id].append(mcp_tool.tool_name)
+
+    final_tool_instances = []
+    for server in team.mcpserver_set.filter(id__in=server_tools.keys()):
+        remote_tools = server.fetch_tools()
+        tool_instances = [tool for tool in remote_tools if tool.name in server_tools[server.id]]
+        final_tool_instances.extend(tool_instances)
+    return final_tool_instances
 
 
 def get_tool_instances(
