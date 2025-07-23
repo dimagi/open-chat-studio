@@ -11,8 +11,23 @@ from apps.evaluations.models import (
     EvaluationMessage,
     EvaluationMessageContent,
     Evaluator,
+    ExperimentVersionSelection,
 )
 from apps.experiments.models import Experiment, ExperimentSession
+
+
+class ExperimentChoiceField(forms.ChoiceField):
+    def __init__(self, queryset, *args, **kwargs):
+        self.queryset = queryset
+        # Add sentinel values first
+        choices = [
+            (ExperimentVersionSelection.LATEST_WORKING.value, ExperimentVersionSelection.LATEST_WORKING.label),
+            (ExperimentVersionSelection.LATEST_PUBLISHED.value, ExperimentVersionSelection.LATEST_PUBLISHED.label),
+        ]
+        if queryset is not None:
+            choices.extend((str(obj.pk), str(obj)) for obj in queryset)
+        kwargs["choices"] = choices
+        super().__init__(*args, **kwargs)
 
 
 class EvaluationConfigForm(forms.ModelForm):
@@ -25,19 +40,19 @@ class EvaluationConfigForm(forms.ModelForm):
         widget=forms.Select(attrs={"class": "select w-full"}),
         label="Chatbot",
     )
+    experiment_version = None  # Created dynamically based on the queryset
 
     class Meta:
         model = EvaluationConfig
-        fields = ("name", "dataset", "evaluators", "experiment_version")
+        fields = [
+            "name",
+            "evaluators",
+            "dataset",
+            "experiment_version",
+            "base_experiment",
+        ]
         widgets = {
             "evaluators": forms.CheckboxSelectMultiple(),
-            "experiment_version": forms.Select(attrs={"class": "select w-full"}),
-        }
-        labels = {
-            "experiment_version": "Chatbot version",
-        }
-        help_texts = {
-            "experiment_version": "Specific chatbot version to use for generation",
         }
 
     def __init__(self, team, *args, **kwargs):
@@ -46,23 +61,43 @@ class EvaluationConfigForm(forms.ModelForm):
 
         self.fields["dataset"].queryset = EvaluationDataset.objects.filter(team=team)
         self.fields["evaluators"].queryset = Evaluator.objects.filter(team=team)
+        self.fields["experiment_version"].queryset = Experiment.objects.filter(team=team)
 
         self.fields["experiment"].queryset = Experiment.objects.filter(
             team=team, working_version__isnull=True
         ).order_by("name")
 
-        self.fields["experiment_version"].queryset = Experiment.objects.filter(team=team)
-        self.fields["experiment_version"].empty_label = "Select a version..."
-        self.fields["experiment_version"].required = False
+        experiment_version_queryset = None
 
-        if self.instance and self.instance.experiment_version:
-            experiment_version = self.instance.experiment_version
-            working_version_id = experiment_version.working_version_id or experiment_version.id
-            working_experiment = Experiment.objects.filter(team=self.team, id=working_version_id).first()
+        if self.instance and self.instance.pk:
+            if self.instance.experiment_version:
+                # For specific version, set experiment field based on the experiment_version
+                experiment_version = self.instance.experiment_version
+                working_version_id = experiment_version.working_version_id or experiment_version.id
+                working_experiment = Experiment.objects.filter(team=self.team, id=working_version_id).first()
 
-            if working_experiment:
-                self.initial["experiment"] = working_experiment
-                self.fields["experiment_version"].queryset = self._get_version_choices(working_experiment)
+                if working_experiment:
+                    self.initial["experiment"] = working_experiment
+                    # Filter the experiment_version queryset to only show versions for this experiment
+                    experiment_version_queryset = self._get_version_choices(working_experiment)
+
+            elif self.instance.base_experiment:
+                # For sentinel values, set experiment and convert sentinel type to string
+                self.initial["experiment"] = self.instance.base_experiment
+                # Filter the experiment_version queryset to only show versions for this experiment
+                experiment_version_queryset = self._get_version_choices(self.instance.base_experiment)
+                if self.instance.version_selection_type == ExperimentVersionSelection.LATEST_WORKING:
+                    self.initial["experiment_version"] = ExperimentVersionSelection.LATEST_WORKING.value
+                elif self.instance.version_selection_type == ExperimentVersionSelection.LATEST_PUBLISHED:
+                    self.initial["experiment_version"] = ExperimentVersionSelection.LATEST_PUBLISHED.value
+
+        self.fields["experiment_version"] = ExperimentChoiceField(
+            queryset=experiment_version_queryset,
+            required=False,
+            widget=forms.Select(attrs={"class": "select w-full"}),
+            label="Chatbot version",
+            help_text="Choose a chatbot version",
+        )
 
     def _get_version_choices(self, experiment):
         """Get all versions for a specific experiment including working version"""
@@ -76,18 +111,54 @@ class EvaluationConfigForm(forms.ModelForm):
 
     def clean(self):
         cleaned_data = super().clean()
-        experiment = cleaned_data.get("experiment")
+
         experiment_version = cleaned_data.get("experiment_version")
+        experiment = cleaned_data.get("experiment")
 
-        # If experiment_version is selected, validate it belongs to the selected experiment
-        if experiment_version and experiment:
-            expected_working_version_id = experiment.working_version_id or experiment.id
-            actual_working_version_id = experiment_version.working_version_id or experiment_version.id
-
-            if expected_working_version_id != actual_working_version_id:
-                raise forms.ValidationError("The selected version does not belong to the selected experiment.")
+        if experiment_version in {
+            ExperimentVersionSelection.LATEST_WORKING,
+            ExperimentVersionSelection.LATEST_PUBLISHED,
+        }:
+            if experiment_version == ExperimentVersionSelection.LATEST_WORKING:
+                cleaned_data["version_selection_type"] = ExperimentVersionSelection.LATEST_WORKING
+                cleaned_data["experiment_version"] = None
+            elif experiment_version == ExperimentVersionSelection.LATEST_PUBLISHED:
+                cleaned_data["version_selection_type"] = ExperimentVersionSelection.LATEST_PUBLISHED
+                cleaned_data["experiment_version"] = None
+        else:
+            cleaned_data["version_selection_type"] = ExperimentVersionSelection.SPECIFIC
+            try:
+                if experiment.id == int(experiment_version):
+                    cleaned_data["experiment_version"] = Experiment.objects.get(team=self.team, id=experiment_version)
+                else:
+                    cleaned_data["experiment_version"] = Experiment.objects.get(
+                        team=self.team, working_version_id=experiment.id, id=experiment_version
+                    )
+            except Experiment.DoesNotExist:
+                self.add_error("experiment_version", "This experiment version was not found")
 
         return cleaned_data
+
+    def save(self, commit=True):
+        instance = super().save(commit=False)
+        cleaned_data = self.cleaned_data
+        instance.version_selection_type = cleaned_data["version_selection_type"]
+        instance.experiment_version = cleaned_data["experiment_version"]
+
+        # Set base_experiment for sentinel values
+        experiment = cleaned_data.get("experiment")
+        if experiment and cleaned_data["version_selection_type"] in [
+            ExperimentVersionSelection.LATEST_WORKING,
+            ExperimentVersionSelection.LATEST_PUBLISHED,
+        ]:
+            instance.base_experiment = experiment
+        else:
+            instance.base_experiment = None
+
+        if commit:
+            instance.save()
+            self.save_m2m()
+        return instance
 
 
 class EvaluatorForm(forms.ModelForm):

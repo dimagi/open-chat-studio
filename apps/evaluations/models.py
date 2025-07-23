@@ -13,11 +13,20 @@ from langchain_core.messages import AIMessage, BaseMessage, HumanMessage
 from pydantic import BaseModel as PydanticBaseModel
 
 from apps.chat.models import ChatMessage, ChatMessageType
+from apps.experiments.models import Experiment
 from apps.teams.models import BaseTeamModel, Team
 from apps.utils.models import BaseModel
 
 if TYPE_CHECKING:
     from apps.evaluations.evaluators import EvaluatorResult
+
+
+class ExperimentVersionSelection(models.TextChoices):
+    """Choices for experiment version selection including sentinel values"""
+
+    SPECIFIC = "specific", "Specific Version"
+    LATEST_WORKING = "latest_working", "Latest Working Version"
+    LATEST_PUBLISHED = "latest_published", "Latest Published Version"
 
 
 class Evaluator(BaseTeamModel):
@@ -208,10 +217,51 @@ class EvaluationConfig(BaseTeamModel):
         blank=True,
         help_text=("Specific chatbot version to use for evaluation. If not set, will skip generation."),
     )
-    # TODO: get latest published / latest working
+    # Store the base experiment for sentinel value resolution
+    base_experiment = models.ForeignKey(
+        "experiments.Experiment",
+        on_delete=models.CASCADE,
+        null=True,
+        blank=True,
+        related_name="evaluations_as_base",
+        help_text=("Base chatbot used when experiment_version is a sentinel value."),
+    )
+    # Store sentinel value if using latest working/published
+    version_selection_type = models.CharField(
+        max_length=50,
+        choices=ExperimentVersionSelection.choices,
+        default=ExperimentVersionSelection.SPECIFIC,
+        help_text=("Type of version selection: specific, latest_working, or latest_published"),
+    )
 
     def __str__(self):
         return f"EvaluationConfig ({self.name})"
+
+    def get_resolved_experiment_version(self):
+        """Resolve the actual experiment version based on selection type"""
+        if self.version_selection_type == ExperimentVersionSelection.SPECIFIC:
+            return self.experiment_version
+
+        if not self.base_experiment:
+            return None
+
+        if self.version_selection_type == ExperimentVersionSelection.LATEST_WORKING:
+            # Get the working version (the one with working_version_id=None)
+            working_version_id = self.base_experiment.working_version_id or self.base_experiment.id
+            return Experiment.objects.filter(team=self.team, id=working_version_id).first()
+
+        elif self.version_selection_type == ExperimentVersionSelection.LATEST_PUBLISHED:
+            # Get the latest published version (highest version_number with is_default_version=True)
+            working_version_id = self.base_experiment.working_version_id or self.base_experiment.id
+            return (
+                Experiment.objects.filter(
+                    team=self.team, working_version_id=working_version_id, is_default_version=True
+                )
+                .order_by("-version_number")
+                .first()
+            )
+
+        return None
 
     def get_absolute_url(self):
         return reverse("evaluations:evaluation_runs_home", args=[self.team.slug, self.id])
