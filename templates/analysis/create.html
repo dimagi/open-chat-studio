@@ -58,8 +58,6 @@ Solution Quality,Rate the quality of the solution provided by the bot on a scale
 
     {{ session_limit|json_script:"sessionLimit" }}
     <script>
-    // When select_all is checked, enable all session checkboxes, but discard it from the POST request
-    // Otherwise the user needs to manually select sessions
         document.addEventListener('alpine:init', () => {
             Alpine.data('analysis', () => ({
                 sessionLimit: parseInt(JSON.parse(document.getElementById("sessionLimit").textContent)),
