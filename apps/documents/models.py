@@ -377,10 +377,10 @@ class SyncStatus(models.TextChoices):
 
 
 class DocumentSource(BaseTeamModel):
-    collection = models.OneToOneField(
+    collection = models.ForeignKey(
         Collection,
         on_delete=models.CASCADE,
-        related_name="document_source",
+        related_name="document_sources",
         help_text="The collection this document source belongs to",
     )
     source_type = models.CharField(max_length=20, choices=SourceType.choices, help_text="Type of document source")
