@@ -1,4 +1,4 @@
-{% extends 'web/app/app_base.html' %}
+{% extends "web/app/app_base.html" %}
 {% load form_tags %}
 {% block app %}
     <div class="app-card max-w-5xl mx-auto">
@@ -37,7 +37,7 @@
                 {% endblock form %}
                 {% block form_actions %}
                     <input type="submit" class="btn btn-primary mt-2" value="Save">
-                {% endblock %}
+                {% endblock form_actions %}
             </form>
             {% block post_form %}
             {% endblock post_form %}
@@ -77,4 +77,4 @@
             }))
         });
     </script>
-{% endblock %}
+{% endblock app %}

@@ -6,7 +6,7 @@
             <button class="btn btn-sm btn-circle btn-ghost absolute right-2 top-2">✕</button>
         </form>
         <span><span class="font-bold text-lg mb-4" x-text="filesRemaining"></span> files remaining</span>
-        <form class="mt-2 flex flex-col" action="{% url 'documents:add_collection_files' team.slug collection.id %}" method="POST" enctype="multipart/form-data">
+        <form class="mt-2 flex flex-col" action="{% url 'documents:add_collection_files' team.slug collection.id %}" method="post" enctype="multipart/form-data">
             {% csrf_token %}
             <input
                 x-ref="fileUpload"

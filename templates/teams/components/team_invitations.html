@@ -9,15 +9,15 @@
         {% render_form_fields invitation_form %}
         {{ invitation_form.non_field_errors }}
         <div class="pg-inline-buttons mt-2">
-          <input class="btn btn-outline" type="submit" value="{% translate 'Send Invitation' %}">
+          <input class="btn btn-outline" type="submit" value="{% translate "Send Invitation" %}">
         </div>
       </form>
     </section>
   {% endif %}
   <section class="app-card">
     {% if pending_invitations.count %}
-      <h3 class='pg-subtitle'>{% translate "Pending Invitations" %}</h3>
-      <div class='table-responsive'>
+      <h3 class="pg-subtitle">{% translate "Pending Invitations" %}</h3>
+      <div class="table-responsive">
         <table class="table pg-table">
           <thead>
             <tr>
@@ -29,7 +29,7 @@
           </thead>
           <tbody>
             {% for invitation in pending_invitations %}
-              {% include 'teams/components/invitation_row.html' %}
+              {% include "teams/components/invitation_row.html" %}
             {% endfor %}
           </tbody>
         </table>

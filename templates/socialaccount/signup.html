@@ -3,7 +3,7 @@
 {% load i18n %}
 {% load form_tags %}
 
-{% block page_title %}{% translate "Sign Up" %}{% endblock %}
+{% block page_title %}{% translate "Sign Up" %}{% endblock page_title %}
 
 {% block body %}
   <div class="flex justify-center my-8 ">
@@ -21,8 +21,8 @@
         {% if redirect_field_value %}
           <input type="hidden" name="{{ redirect_field_name }}" value="{{ redirect_field_value }}"/>
         {% endif %}
-        <button class="btn btn-primary" type="submit">{% translate "Sign Up" %} &raquo;</button>
+        <button class="btn btn-primary" type="submit">{% translate "Sign Up" %} »</button>
       </form>
     </div>
   </div>
-{% endblock %}
+{% endblock body %}

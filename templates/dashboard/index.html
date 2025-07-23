@@ -76,6 +76,16 @@
             {% with field=filter_form.experiments %}{% partial "select_filter" %}
             {% endwith %}
           </div>
+          <div class="form-control col-span-2">
+            <label class="label label-text">{% trans "Participants" %}</label>
+            {% with field=filter_form.participants %}{% partial "select_filter" %}{% endwith %}
+          </div>
+          <div class="form-control col-span-2">
+            <label class="label label-text">{% trans "Tags" %}</label>
+            {% with field=filter_form.tags %}
+              {% partial "select_filter" %}
+            {% endwith %}
+          </div>
         </form>
 
       <!-- Saved Filters -->
@@ -92,7 +102,7 @@
                     {% if filter.is_default %}<i class="fas fa-star ml-1 text-yellow-500"></i>{% endif %}
                     <button type="button" class="btn btn-xs btn-ghost hover:text-red-500 ml-1"
                             @click="deleteSavedFilter({{ filter.id }}, '{{ filter.filter_name }}')"
-                            title="{% trans 'Delete filter' %}">
+                            title="{% trans "Delete filter" %}">
                       <i class="fas fa-times"></i>
                     </button>
                   </div>

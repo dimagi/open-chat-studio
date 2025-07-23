@@ -4,7 +4,7 @@
 {% block page_head %}
   {{ block.super }}
   <script src="{% static 'celery_progress/celery_progress.js' %}"></script>
-{% endblock %}
+{% endblock page_head %}
 
 {% block breadcrumbs %}
   <div class="text-sm breadcrumbs" aria-label="breadcrumbs">
@@ -13,7 +13,7 @@
       <li class="pg-breadcrumb-active" aria-current="page">Analysis {{ object.name }}</li>
     </ul>
   </div>
-{% endblock %}
+{% endblock breadcrumbs %}
 
 {% block app %}
   <div class="container mx-auto px-4 py-8">
@@ -123,4 +123,4 @@
       </div>
     </div>
   </div>
-{% endblock %}
+{% endblock app %}

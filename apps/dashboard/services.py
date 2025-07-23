@@ -1,7 +1,8 @@
 from datetime import datetime, timedelta
 from typing import Any
 
-from django.db.models import Avg, Count, DurationField, ExpressionWrapper, F, Max, Q
+from django.contrib.contenttypes.models import ContentType
+from django.db.models import Avg, Count, DurationField, Exists, ExpressionWrapper, F, Max, OuterRef, Q
 from django.db.models.functions import TruncDate, TruncHour, TruncMonth, TruncWeek
 from django.urls import reverse
 from django.utils import timezone
@@ -43,6 +44,8 @@ class DashboardService:
         end_date: datetime | None = None,
         experiment_ids: list[int] | None = None,
         platform_names: list[str] | None = None,
+        participant_ids: list[str] | None = None,
+        tag_ids: list[str] | None = None,
     ) -> dict[str, Any]:
         """Get base querysets with common filters applied"""
 
@@ -74,6 +77,16 @@ class DashboardService:
             sessions = sessions.filter(experiment_channel__platform__in=platform_names)
             messages = messages.filter(chat__experiment_session__experiment_channel__platform__in=platform_names)
 
+        if participant_ids:
+            participants = participants.filter(id__in=participant_ids)
+            sessions = sessions.filter(participant__id__in=participant_ids)
+            messages = messages.filter(chat__experiment_session__participant__id__in=participant_ids)
+
+        if tag_ids:
+            sessions = sessions.annotate(
+                has_tagged_messages=Exists(ChatMessage.objects.filter(chat=OuterRef("chat_id"), tags__id__in=tag_ids))
+            ).filter(has_tagged_messages=True)
+            messages = messages.filter(tags__id__in=tag_ids)
         return {
             "experiments": experiments,
             "sessions": sessions,
@@ -399,7 +412,6 @@ class DashboardService:
         querysets = self.get_filtered_queryset_base(**filters)
 
         # Get tags used in messages within the date range
-        from django.contrib.contenttypes.models import ContentType
 
         from apps.annotations.models import CustomTaggedItem
 

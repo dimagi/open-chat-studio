@@ -1,4 +1,4 @@
-{% extends 'generic/object_form.html' %}
+{% extends "generic/object_form.html" %}
 {% load form_tags %}
 {% load i18n %}
 
@@ -129,7 +129,7 @@
       </div>
     </div> <!-- End of loaded content div -->
   </div> <!-- End of datasetBuilder div -->
-{% endblock %}
+{% endblock form %}
 
 {% block page_js %}
   <script>
@@ -309,4 +309,4 @@
 
 
   </script>
-{% endblock %}
+{% endblock page_js %}
