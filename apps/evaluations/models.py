@@ -237,7 +237,7 @@ class EvaluationConfig(BaseTeamModel):
     def __str__(self):
         return f"EvaluationConfig ({self.name})"
 
-    def get_resolved_experiment_version(self):
+    def get_generation_experiment_version(self):
         """Resolve the actual experiment version based on selection type"""
         if self.version_selection_type == ExperimentVersionSelection.SPECIFIC:
             return self.experiment_version
