@@ -129,7 +129,7 @@ def get_default_translation_models_by_provider() -> dict:
     """
     defaults = {}
     for provider_type, models in DEFAULT_LLM_PROVIDER_MODELS.items():
-        default_model = next((m for m in models if getattr(m, "is_translation_default", False)), None)
+        default_model = next((m for m in models if m.is_translation_default), None)
         if default_model:
             defaults[provider_type] = default_model.name
     return defaults
