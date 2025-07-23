@@ -187,13 +187,13 @@ def get_llm_provider_by_team(team):
 
 
 def get_models_by_provider(provider, team):
-    model_objects = LlmProviderModel.objects.filter(type=provider, team=team)
-    return [{"value": model.id, "label": model.name} for model in model_objects]
+    model_objects = LlmProviderModel.objects.for_team(team).filter(type=provider)
+    return [{"value": model.id, "label": model.display_name} for model in model_objects]
 
 
 def get_models_by_team_grouped_by_provider(team):
     provider_types = LlmProvider.objects.filter(team=team).values_list("type", flat=True)
-    model_objects = LlmProviderModel.objects.filter(type__in=provider_types, team=team)
+    model_objects = LlmProviderModel.objects.for_team(team).filter(type__in=provider_types)
     provider_dict = defaultdict(list)
     for model in model_objects:
         provider_dict[model.type].append(model.display_name)
