@@ -77,9 +77,12 @@ class DocumentSourceManager:
         except Exception as e:
             duration = time.time() - start_time
             error_msg = str(e)
-            logger.exception("Document Source Sync failed", extra={
-                "document_source_id": self.document_source.id,
-            })
+            logger.exception(
+                "Document Source Sync failed",
+                extra={
+                    "document_source_id": self.document_source.id,
+                },
+            )
 
             if sync_log:
                 sync_log.status = SyncStatus.FAILED
@@ -136,7 +139,7 @@ class DocumentSourceManager:
             ]
 
             if files_to_remove:
-                bulk_delete_collection_files(self.collection, files_to_remove)
+                self._remove_files(files_to_remove)
                 result.files_removed += len(files_to_remove)
 
             if files_to_index:
@@ -179,6 +182,9 @@ class DocumentSourceManager:
 
         collection_file.status = FileStatus.PENDING
         collection_file.save(update_fields=["status"])
+
+    def _remove_files(self, connection_files: list[CollectionFile]):
+        bulk_delete_collection_files(self.collection, connection_files)
 
     def _extract_filename(self, document: Document, identifier: str) -> str:
         """Extract a suitable filename from document metadata or identifier"""
