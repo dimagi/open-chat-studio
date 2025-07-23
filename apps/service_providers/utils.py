@@ -184,3 +184,17 @@ def get_first_llm_provider_model(llm_provider, team_id):
 
 def get_llm_provider_by_team(team):
     return LlmProvider.objects.filter(team=team).order_by("id")
+
+
+def get_models_by_provider(provider, team):
+    model_objects = LlmProviderModel.objects.filter(type=provider, team=team)
+    return [{"value": model.id, "label": model.name} for model in model_objects]
+
+
+def get_models_by_team_grouped_by_provider(team):
+    provider_types = LlmProvider.objects.filter(team=team).values_list("type", flat=True)
+    model_objects = LlmProviderModel.objects.filter(type__in=provider_types, team=team)
+    provider_dict = defaultdict(list)
+    for model in model_objects:
+        provider_dict[model.type].append(model.display_name)
+    return dict(provider_dict)
