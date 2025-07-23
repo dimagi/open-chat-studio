@@ -227,6 +227,18 @@ export class OcsChat {
     this.showStarterQuestions = false;
 
     try {
+      // If this is the first user message and there are welcome messages,
+      // add them to chat history as assistant messages
+      if (this.messages.length === 0 && this.parsedWelcomeMessages.length > 0) {
+        const now = new Date();
+        const welcomeMessages: ChatMessage[] = this.parsedWelcomeMessages.map((welcomeMsg, index) => ({
+          created_at: new Date(now.getTime() - (this.parsedWelcomeMessages.length - index) * 1000).toISOString(),
+          role: 'assistant' as const,
+          content: welcomeMsg,
+          attachments: []
+        }));
+        this.messages = [...this.messages, ...welcomeMessages];
+      }
       // Add user message immediately
       const userMessage: ChatMessage = {
         created_at: new Date().toISOString(),
@@ -659,7 +671,7 @@ export class OcsChat {
                   ref={(el) => this.messageListRef = el}
                   class="flex-grow overflow-y-auto p-4 space-y-4"
                 >
-                  {this.showStarterQuestions && this.messages.length === 0 && !this.isTyping && (
+                  {this.messages.length === 0 && !this.isTyping && this.parsedWelcomeMessages.length > 0 && (
                     <div class="space-y-4">
                       {/* Welcome Messages */}
                       {this.parsedWelcomeMessages.map((message, index) => (
@@ -711,7 +723,6 @@ export class OcsChat {
                       </div>
                     </div>
                   ))}
-
                   {/* Typing Indicator */}
                   {this.isTyping && (
                     <div class="flex justify-start">
