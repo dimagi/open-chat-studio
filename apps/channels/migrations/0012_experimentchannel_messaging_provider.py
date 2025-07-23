@@ -7,7 +7,7 @@ import django.db.models.deletion
 class Migration(migrations.Migration):
     dependencies = [
         ("service_providers", "0008_messagingprovider"),
-        ("channels", "0011_delete_channelsession"),
+        ("bot_channels", "0011_delete_channelsession"),
     ]
 
     operations = [

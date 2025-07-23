@@ -2,7 +2,7 @@
                                                                                             flex-wrap: nowrap;">
     {% for experiment in experiments %}
         <li>
-            <a @click.stop="setPrompt({{experiment.id}})">{{ experiment.name }}</a>
+            <a @click.stop="setPrompt({{ experiment.id }})">{{ experiment.name }}</a>
         </li>
     {% endfor %}
 </ul>

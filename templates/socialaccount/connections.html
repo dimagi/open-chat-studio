@@ -1,14 +1,14 @@
 {% extends "web/app/app_base.html" %}
 {% load i18n %}
-{% block page_title %}{% translate "Account Connections" %}{% endblock %}
+{% block page_title %}{% translate "Account Connections" %}{% endblock page_title %}
 {% block sidebar-nav %}
-  {% with 'profile' as active_tab %}
+  {% with "profile" as active_tab %}
     {{ block.super }}
   {% endwith %}
-{% endblock %}
+{% endblock sidebar-nav %}
 {% block app %}
   <div class="app-card">
-    <p class="text-right"><a href="{% url 'users:user_profile' %}">{% translate '← Return to Profile' %}</a></p>
+    <p class="text-right"><a href="{% url 'users:user_profile' %}">{% translate "← Return to Profile" %}</a></p>
     <h1 class="pg-title">{% translate "Account Connections" %}</h1>
     {% if form.accounts %}
       <p>{% blocktranslate %}You can sign in to your account using any of the following third party accounts:{% endblocktranslate %}</p>
@@ -29,17 +29,17 @@
               </div>
             {% endwith %}
           {% endfor %}
-          <button type="submit" class="pg-button-danger mt-2">{% translate 'Remove' %}</button>
+          <button type="submit" class="pg-button-danger mt-2">{% translate "Remove" %}</button>
         </fieldset>
       </form>
       <hr>
     {% else %}
-      <p>{% translate 'You currently have no social network accounts connected to this account.' %}</p>
+      <p>{% translate "You currently have no social network accounts connected to this account." %}</p>
     {% endif %}
-    <h2 class="mt-3 pg-subtitle">{% translate 'Add a 3rd Party Account' %}</h2>
+    <h2 class="mt-3 pg-subtitle">{% translate "Add a 3rd Party Account" %}</h2>
     <ul class="socialaccount_providers pg-content">
       {% include "socialaccount/snippets/provider_list.html" with process="connect" %}
     </ul>
     {% include "socialaccount/snippets/login_extra.html" %}
   </div>
-{% endblock %}
+{% endblock app %}

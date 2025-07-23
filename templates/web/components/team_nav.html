@@ -60,15 +60,13 @@
       </ul>
     </li>
   {% endpartialdef experiment-menu %}
-  {% flag "flag_team_dashboard" %}
-    <li>
-      <a href="{% url 'dashboard:index' request.team.slug %}"
-         {% if active_tab == 'dashboard' %}class="menu-active"{% endif %}>
-        <i class="fa fa-bar-chart-o" aria-hidden="true"></i></i>
-      {% translate "Dashboard" %}
-    </a>
-    </li>
-  {% endflag %}
+  <li>
+    <a href="{% url 'dashboard:index' request.team.slug %}"
+       {% if active_tab == 'dashboard' %}class="menu-active"{% endif %}>
+      <i class="fa fa-bar-chart-o" aria-hidden="true"></i>
+    {% translate "Dashboard" %}
+  </a>
+  </li>
   {% flag "flag_chatbots" %}
     <li>
       <a href="{% url 'chatbots:chatbots_home' request.team.slug %}" {% if active_tab == 'chatbots' %}class="menu-active"{% endif %}>
@@ -114,14 +112,14 @@
       <li>
         <a href="{% url 'documents:collection_home' request.team.slug %}"
            {% if active_tab == 'collections' %}class="menu-active"{% endif %}>
-          <i class="fa fa-folder" aria-hidden="true"></i></i>
+          <i class="fa fa-folder" aria-hidden="true"></i>
         {% translate "Collections" %}
       </a>
       <ul>
         <li>
           <a href="{% url 'files:file_home' request.team.slug %}"
              {% if active_tab == 'files' %}class="menu-active"{% endif %}>
-            <i class="fa fa-folder" aria-hidden="true"></i></i>
+            <i class="fa fa-folder" aria-hidden="true"></i>
           {% translate "Files" %}
         </a>
       </li>
@@ -133,7 +131,7 @@
     <li>
       <a href="{% url 'participants:participant_home' request.team.slug %}"
          {% if active_tab == 'participants' %}class="menu-active"{% endif %}>
-        <i class="fa fa-users" aria-hidden="true"></i></i>
+        <i class="fa fa-users" aria-hidden="true"></i>
       {% translate "Participants" %}
     </a>
     </li>

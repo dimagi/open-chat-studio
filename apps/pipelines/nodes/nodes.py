@@ -336,7 +336,7 @@ class LLMResponseWithPrompt(LLMResponse, HistoryMixin, OutputMessageTagMixin):
     prompt: str = Field(
         default="You are a helpful assistant. Answer the user's query as best you can",
         json_schema_extra=UiSchema(
-            widget=Widgets.text_editor, options_source=OptionsSource.text_editor_autocomplete_vars
+            widget=Widgets.text_editor, options_source=OptionsSource.text_editor_autocomplete_vars_llm_node
         ),
     )
     collection_id: OptionalInt = Field(
@@ -385,6 +385,10 @@ class LLMResponseWithPrompt(LLMResponse, HistoryMixin, OutputMessageTagMixin):
         default_factory=dict,
         description="Configuration for builtin tools",
         json_schema_extra=UiSchema(widget=Widgets.none),
+    )
+    history_type: PipelineChatHistoryTypes = Field(
+        PipelineChatHistoryTypes.GLOBAL,
+        json_schema_extra=UiSchema(widget=Widgets.history, enum_labels=PipelineChatHistoryTypes.labels),
     )
 
     @model_validator(mode="after")
@@ -646,7 +650,13 @@ class RouterNode(RouterMixin, PipelineRouterNode, HistoryMixin):
     prompt: str = Field(
         default="You are an extremely helpful router",
         min_length=1,
-        json_schema_extra=UiSchema(widget=Widgets.expandable_text),
+        json_schema_extra=UiSchema(
+            widget=Widgets.text_editor, options_source=OptionsSource.text_editor_autocomplete_vars_router_node
+        ),
+    )
+    history_type: PipelineChatHistoryTypes = Field(
+        PipelineChatHistoryTypes.NODE,
+        json_schema_extra=UiSchema(widget=Widgets.history, enum_labels=PipelineChatHistoryTypes.labels),
     )
 
     @model_validator(mode="after")

@@ -174,7 +174,7 @@
 {{ field_type_filters|json_script:"field-type-filters" }}
 {{ date_range_options|json_script:"date-range-options" }}
 {{ filter_columns|json_script:"filter-columns-data" }}
-{{ state_list|json_script:"state-data"}}
+{{ state_list|json_script:"state-data" }}
 {% if experiment_list %}{{ experiment_list|json_script:"experiment-list-data" }}{% else %}<script id="experiment-list-data" type="application/json">[]</script>{% endif %}
 <script>
   const tags = JSON.parse(document.getElementById('available-tags-data').textContent);

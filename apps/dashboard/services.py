@@ -1,7 +1,8 @@
 from datetime import datetime, timedelta
 from typing import Any
 
-from django.db.models import Avg, Count, DurationField, ExpressionWrapper, F, Max, Q
+from django.contrib.contenttypes.models import ContentType
+from django.db.models import Avg, Count, DurationField, Exists, ExpressionWrapper, F, Max, OuterRef, Q
 from django.db.models.functions import TruncDate, TruncHour, TruncMonth, TruncWeek
 from django.urls import reverse
 from django.utils import timezone
@@ -11,6 +12,7 @@ from apps.chat.models import ChatMessage, ChatMessageType
 from apps.experiments.models import Experiment, ExperimentSession, Participant
 
 from ..annotations.models import TagCategories
+from ..trace.models import Trace
 from .models import DashboardCache
 
 
@@ -42,6 +44,8 @@ class DashboardService:
         end_date: datetime | None = None,
         experiment_ids: list[int] | None = None,
         platform_names: list[str] | None = None,
+        participant_ids: list[str] | None = None,
+        tag_ids: list[str] | None = None,
     ) -> dict[str, Any]:
         """Get base querysets with common filters applied"""
 
@@ -73,6 +77,16 @@ class DashboardService:
             sessions = sessions.filter(experiment_channel__platform__in=platform_names)
             messages = messages.filter(chat__experiment_session__experiment_channel__platform__in=platform_names)
 
+        if participant_ids:
+            participants = participants.filter(id__in=participant_ids)
+            sessions = sessions.filter(participant__id__in=participant_ids)
+            messages = messages.filter(chat__experiment_session__participant__id__in=participant_ids)
+
+        if tag_ids:
+            sessions = sessions.annotate(
+                has_tagged_messages=Exists(ChatMessage.objects.filter(chat=OuterRef("chat_id"), tags__id__in=tag_ids))
+            ).filter(has_tagged_messages=True)
+            messages = messages.filter(tags__id__in=tag_ids)
         return {
             "experiments": experiments,
             "sessions": sessions,
@@ -398,7 +412,6 @@ class DashboardService:
         querysets = self.get_filtered_queryset_base(**filters)
 
         # Get tags used in messages within the date range
-        from django.contrib.contenttypes.models import ContentType
 
         from apps.annotations.models import CustomTaggedItem
 
@@ -428,6 +441,36 @@ class DashboardService:
             tag_stats[category][tag.name] += 1
 
         data = {"tag_categories": tag_stats, "total_tagged_messages": total_tagged}
+
+        DashboardCache.set_cached_data(self.team, cache_key, data)
+        return data
+
+    def get_average_response_time_data(self, granularity: str = "daily", **filters) -> list[dict[str, Any]]:
+        """Calculate average response time per period based on Trace table"""
+        cache_key = f"average_response_time_{granularity}_{hash(str(sorted(filters.items())))}"
+        cached_data = DashboardCache.get_cached_data(self.team, cache_key)
+        if cached_data:
+            return cached_data
+
+        querysets = self.get_filtered_queryset_base(**filters)
+        sessions = querysets["sessions"]
+
+        trunc_func = self._get_trunc_function(granularity)
+
+        avg_response_stats = (
+            Trace.objects.filter(session__in=sessions)
+            .annotate(period=trunc_func("timestamp"))
+            .values("period")
+            .annotate(avg_duration_ms=Avg("duration"))
+            .order_by("period")
+        )
+
+        data = []
+
+        for stat in avg_response_stats:
+            period_str = self._format_period(stat["period"])
+            avg_sec = stat["avg_duration_ms"] / 1000 if stat["avg_duration_ms"] else 0
+            data.append({"date": period_str, "avg_response_time_sec": round(avg_sec, 2)})
 
         DashboardCache.set_cached_data(self.team, cache_key, data)
         return data

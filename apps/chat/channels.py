@@ -138,8 +138,13 @@ class ChannelBase(ABC):
         self._message: BaseMessage = None
         self._participant_identifier = experiment_session.participant.identifier if experiment_session else None
         self._is_user_message = False
-
         self.trace_service = TracingService.create_for_experiment(self.experiment)
+
+    @property
+    def participant_id(self) -> int | None:
+        if self.experiment_session:
+            return self.experiment_session.participant.id
+        return None
 
     @classmethod
     def start_new_session(
@@ -355,12 +360,14 @@ class ChannelBase(ABC):
             try:
                 with self.trace_service.trace(
                     trace_name=self.experiment.name,
-                    session_id=str(self.experiment_session.external_id),
+                    session=self.experiment_session,
                     user_id=self.participant_identifier,
                     inputs={"input": self.message.model_dump()},
+                    participant_id=self.participant_id,
                 ):
                     response = self._new_user_message()
                     self.trace_service.set_current_span_outputs({"response": response.content})
+                    self.trace_service.set_output_message_id(response.id)
                     return response
             except GenerationCancelled:
                 return ChatMessage(content="", message_type=ChatMessageType.AI)

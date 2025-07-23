@@ -8,6 +8,7 @@ from typing import TYPE_CHECKING, Literal, Self
 from django.conf import settings
 from django.db import models
 from django.urls import reverse
+from django.utils import timezone
 from langchain_core.messages import AIMessage, BaseMessage, HumanMessage
 from pydantic import BaseModel as PydanticBaseModel
 
@@ -211,6 +212,12 @@ class EvaluationRun(BaseTeamModel):
 
     def get_absolute_url(self):
         return reverse("evaluations:evaluation_results_home", args=[self.team.slug, self.config_id, self.pk])
+
+    def mark_complete(self, save=True):
+        self.finished_at = timezone.now()
+        self.status = EvaluationRunStatus.COMPLETED
+        if save:
+            self.save(update_fields=["finished_at", "status"])
 
     def get_table_data(self):
         results = self.results.select_related("message", "evaluator").all()

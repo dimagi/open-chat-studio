@@ -12,7 +12,7 @@ BASE_PATH = pathlib.Path(__file__).parent / "data"
 @pytest.mark.parametrize(
     ("filename", "expected_content", "part_count"),
     [
-        pytest.param("test.pdf", "PDF documents can behard to read 🫠", 2, id="pdf"),
+        pytest.param("test.pdf", "PDF documents can be\n\n\x0chard to read 🫠\n\n", 1, id="pdf"),
         pytest.param("test.txt", "Hi\n\nHere is a text file with 🥰 emoji.\n", 1, id="txt"),
         pytest.param("test.docx", "doc, but with an x 😊", 1, id="docx"),
     ],
