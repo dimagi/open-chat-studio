@@ -125,13 +125,16 @@ def get_default_model(provider_type: str) -> Model:
 
 def get_default_translation_models_by_provider() -> dict:
     """
-    Returns a dict mapping provider types to their default translation model name.
+    Returns a dict mapping provider labels (e.g., "OpenAI") to their default translation model name.
     """
+    from apps.service_providers.models import LlmProviderTypes
+
     defaults = {}
     for provider_type, models in DEFAULT_LLM_PROVIDER_MODELS.items():
         default_model = next((m for m in models if m.is_translation_default), None)
         if default_model:
-            defaults[provider_type] = default_model.name
+            provider_label = str(LlmProviderTypes[provider_type].label)
+            defaults[provider_label] = default_model.name
     return defaults
 
 
