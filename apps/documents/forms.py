@@ -5,7 +5,7 @@ from django.db.models import Q, Subquery
 
 from apps.assistants.models import OpenAiAssistant, ToolResources
 from apps.documents.models import Collection, DocumentSource, DocumentSourceConfig, GitHubSourceConfig, SourceType
-from apps.service_providers.models import EmbeddingProviderModel
+from apps.service_providers.models import AuthProvider, AuthProviderType, EmbeddingProviderModel
 from apps.utils.urlvalidate import InvalidURL, validate_user_input_url
 
 
@@ -143,6 +143,11 @@ class GithubDocumentSourceForm(DocumentSourceForm):
         help_text="GitHub repository URL (e.g., https://github.com/user/repo)",
         widget=forms.URLInput(attrs={"placeholder": "https://github.com/user/repo"}),
     )
+    auth_provider = forms.ModelChoiceField(
+        queryset=AuthProvider.objects.none(),
+        label="Authentication Provider",
+        help_text="GitHub requires Bearer Auth"
+    )
     github_branch = forms.CharField(
         initial="main",
         label="Branch",
@@ -162,6 +167,13 @@ class GithubDocumentSourceForm(DocumentSourceForm):
         help_text="Optional path prefix to filter files (e.g., docs/)",
         widget=forms.TextInput(attrs={"placeholder": "docs/"}),
     )
+
+    def __init__(self, collection, *args, **kwargs):
+        super().__init__(collection, *args, **kwargs)
+        self.fields["auth_provider"].queryset = AuthProvider.objects.filter(
+            team_id=collection.team_id,
+            type=AuthProviderType.bearer
+        )
 
     def clean_github_repo_url(self):
         github_repo_url = self.cleaned_data["github_repo_url"]

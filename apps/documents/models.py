@@ -422,6 +422,7 @@ class DocumentSource(BaseTeamModel):
     sync_task_id = models.CharField(
         max_length=40, blank=True, default="", help_text="System ID of the sync task, if present."
     )
+    auth_provider = models.ForeignKey("service_providers.AuthProvider", on_delete=models.PROTECT, blank=True, null=True)
 
     def __str__(self) -> str:
         return f"{self.get_source_type_display()} source for {self.collection.name}"
