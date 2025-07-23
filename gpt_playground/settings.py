@@ -738,5 +738,5 @@ CORS_ALLOWED_METHODS = [
 # Additional CORS settings for security
 CORS_PREFLIGHT_MAX_AGE = 86400  # Cache preflight for 24 hours
 
-# Disable POST request size limit
-DATA_UPLOAD_MAX_NUMBER_FIELDS = None
+# Analytics settings
+ANALYTICS_MAX_SESSIONS = 500
