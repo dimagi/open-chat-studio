@@ -193,7 +193,7 @@ TEMPLATES = [
     },
 ]
 
-WSGI_APPLICATION = "gpt_playground.wsgi.application"
+ASGI_APPLICATION = "gpt_playground.asgi.application"
 
 FORM_RENDERER = "django.forms.renderers.TemplatesSetting"
 FORMS_URLFIELD_ASSUME_HTTPS = True
