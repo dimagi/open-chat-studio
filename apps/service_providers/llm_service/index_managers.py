@@ -30,7 +30,6 @@ class IndexManager(metaclass=ABCMeta):
     ):
         pass
 
-    @abstractmethod
     def delete_files(self, files: list[File]):
         """
         Remove files from the remote index service.

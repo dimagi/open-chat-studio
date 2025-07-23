@@ -1,4 +1,4 @@
-from apps.documents.models import CollectionFile
+from apps.documents.models import Collection, CollectionFile
 from apps.files.models import File
 from apps.utils.deletion import get_related_m2m_objects
 
@@ -24,7 +24,7 @@ def delete_collection_file(collection_file: CollectionFile):
         file.delete_or_archive()
 
 
-def bulk_delete_collection_files(collection, collection_files: list[CollectionFile]):
+def bulk_delete_collection_files(collection: Collection, collection_files: list[CollectionFile]):
     """Bulk delete collection files. This handles the file deletion
     as well as removing the file from the collection index if necessary."""
     files = [collection_file.file for collection_file in collection_files]
@@ -43,7 +43,13 @@ def bulk_delete_collection_files(collection, collection_files: list[CollectionFi
             index_manager.delete_files(files=full_delete)
 
         file_ids = {file.id for file in full_delete}
-        files_with_versions = File.objects.filter(working_version__in=full_delete).values("working_version__id").distinct()
+        files_with_versions = set(
+            File.objects.filter(working_version__in=full_delete)
+            .values_list("working_version__id", flat=True)
+            .distinct()
+        )
         to_delete = file_ids - files_with_versions
-        File.objects.filter(id__in=to_delete).delete()
-        File.objects.filter(id__in=files_with_versions).update(is_archived=True)
+        if to_delete:
+            File.objects.filter(id__in=to_delete).delete()
+        if files_with_versions:
+            File.objects.filter(id__in=files_with_versions).update(is_archived=True)
