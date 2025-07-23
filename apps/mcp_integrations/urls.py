@@ -6,5 +6,5 @@ from . import views
 app_name = "mcp_integrations"
 
 urlpatterns = [
-    path("<int:pk>/refresh_tools", views.refresh_tools_view, name="refresh_tools"),
+    path("<int:pk>/refresh_tools", views.trigger_refresh_view, name="refresh_tools"),
 ] + make_crud_urls(views, "McpServer")
