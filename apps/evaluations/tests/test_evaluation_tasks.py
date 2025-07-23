@@ -3,8 +3,8 @@ from unittest.mock import Mock, patch
 import pytest
 
 from apps.channels.models import ChannelPlatform, ExperimentChannel
-from apps.evaluations.models import EvaluationResult
-from apps.evaluations.tasks import _run_bot_generation, evaluate_single_message_task
+from apps.evaluations.models import EvaluationResult, ExperimentVersionSelection
+from apps.evaluations.tasks import evaluate_single_message_task, run_bot_generation
 from apps.experiments.models import ExperimentSession, Participant
 from apps.utils.factories.evaluations import (
     EvaluationConfigFactory,
@@ -19,16 +19,13 @@ from apps.utils.langchain import build_fake_llm_service
 
 
 @pytest.fixture()
-def team_with_users(db):
+def team_with_users():
     return TeamWithUsersFactory()
 
 
 @pytest.fixture()
-def hardcoded_experiment(team_with_users, db):
-    """Create the hardcoded experiment that the bot should use"""
-    return ExperimentFactory(
-        public_id="abcbaf2c-c5a5-4ba6-802a-83a1e825d762", team=team_with_users, name="Bot Generation Experiment"
-    )
+def experiment(team_with_users, db):
+    return ExperimentFactory()
 
 
 @pytest.fixture()
@@ -56,12 +53,12 @@ def evaluation_run(evaluation_message, team_with_users, db):
 
 @pytest.mark.django_db()
 @patch("apps.service_providers.models.LlmProvider.get_llm_service")
-def test_run_bot_generation(get_llm_service, hardcoded_experiment, evaluation_message, team_with_users):
+def test_run_bot_generation(get_llm_service, experiment, evaluation_message, team_with_users):
     """Test that _run_bot_generation calls the bot correctly"""
     service = build_fake_llm_service(responses=["Bot generated response"], token_counts=[30])
     get_llm_service.return_value = service
 
-    result = _run_bot_generation(team_with_users, evaluation_message)
+    result = run_bot_generation(team_with_users, evaluation_message, experiment)
 
     assert result == "Bot generated response"
 
@@ -73,7 +70,7 @@ def test_run_bot_generation(get_llm_service, hardcoded_experiment, evaluation_me
     assert participant.platform == "evaluations"
 
     session = ExperimentSession.objects.get(team=team_with_users)
-    assert session.experiment == hardcoded_experiment
+    assert session.experiment == experiment
     assert session.experiment_channel == evaluation_channel
     assert session.participant.identifier == "evaluations"
     assert session.team == team_with_users
@@ -86,11 +83,15 @@ def test_run_bot_generation(get_llm_service, hardcoded_experiment, evaluation_me
 @patch("apps.service_providers.models.LlmProvider.get_llm_service")
 @patch("apps.evaluations.models.Evaluator.run")
 def test_evaluate_single_message_with_bot_generation(
-    evaluator_run_mock, get_llm_service, hardcoded_experiment, evaluation_run, evaluation_message
+    evaluator_run_mock, get_llm_service, experiment, evaluation_run, evaluation_message
 ):
     """Test that evaluate_single_message calls bot generation before evaluation"""
 
     run, evaluator = evaluation_run
+    config = run.config
+    config.version_selection_type = ExperimentVersionSelection.SPECIFIC
+    config.experiment_version = experiment
+    config.save()
 
     service = build_fake_llm_service(responses=["Bot generated response"], token_counts=[30])
     get_llm_service.return_value = service
@@ -112,7 +113,7 @@ def test_evaluate_single_message_with_bot_generation(
 @patch("apps.channels.tasks.handle_evaluation_message")
 @patch("apps.evaluations.models.Evaluator.run")
 def test_evaluate_single_message_handles_bot_generation_error(
-    evaluator_run_mock, handle_evaluation_message_mock, hardcoded_experiment, evaluation_run, evaluation_message
+    evaluator_run_mock, handle_evaluation_message_mock, evaluation_run, evaluation_message
 ):
     """Test that evaluation continues even if bot generation fails"""
     run, evaluator = evaluation_run
@@ -133,14 +134,19 @@ def test_evaluate_single_message_handles_bot_generation_error(
 
 
 @pytest.mark.django_db()
-def test_run_bot_generation_creates_evaluations_participant(hardcoded_experiment, evaluation_message, team_with_users):
+@patch("apps.service_providers.models.LlmProvider.get_llm_service")
+def test_run_bot_generation_creates_evaluations_participant(
+    get_llm_service, experiment, evaluation_message, team_with_users
+):
     """Test that _run_bot_generation creates the evaluations participant if it doesn't exist"""
+    service = build_fake_llm_service(responses=["Bot generated response"], token_counts=[30])
+    get_llm_service.return_value = service
 
     # Verify participant doesn't exist initially
     assert not Participant.objects.filter(identifier="evaluations", team=team_with_users).exists()
 
     # Run bot generation
-    _run_bot_generation(team_with_users, evaluation_message)
+    run_bot_generation(team_with_users, evaluation_message, experiment)
 
     # Verify participant was created
     participant = Participant.objects.get(identifier="evaluations", team=team_with_users)
@@ -148,7 +154,7 @@ def test_run_bot_generation_creates_evaluations_participant(hardcoded_experiment
     assert participant.platform == "evaluations"
 
     # Run again - should get the same participant
-    _run_bot_generation(team_with_users, evaluation_message)
+    run_bot_generation(team_with_users, evaluation_message, experiment)
 
     # Should still be only one participant
     assert Participant.objects.filter(identifier="evaluations", team=team_with_users).count() == 1
@@ -156,7 +162,7 @@ def test_run_bot_generation_creates_evaluations_participant(hardcoded_experiment
 
 @pytest.mark.django_db()
 @patch("apps.service_providers.models.LlmProvider.get_llm_service")
-def test_run_bot_generation_creates_session(get_llm_service, hardcoded_experiment, evaluation_message, team_with_users):
+def test_run_bot_generation_creates_session(get_llm_service, experiment, evaluation_message, team_with_users):
     """Test that _run_bot_generation creates a session"""
 
     # Mock the LLM service
@@ -164,7 +170,7 @@ def test_run_bot_generation_creates_session(get_llm_service, hardcoded_experimen
     get_llm_service.return_value = service
 
     # Call the bot generation function
-    _run_bot_generation(team_with_users, evaluation_message)
+    run_bot_generation(team_with_users, evaluation_message, experiment)
 
     # Verify session was created
     sessions = ExperimentSession.objects.filter(team=team_with_users)
@@ -172,7 +178,7 @@ def test_run_bot_generation_creates_session(get_llm_service, hardcoded_experimen
     session = sessions.first()
 
     # Verify session has correct properties (like API pattern)
-    assert session.experiment == hardcoded_experiment
+    assert session.experiment == experiment
     assert session.participant.identifier == "evaluations"
     assert session.participant.platform == "evaluations"
     assert session.experiment_channel.platform == ChannelPlatform.EVALUATIONS
