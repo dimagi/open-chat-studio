@@ -198,7 +198,6 @@ def get_models_by_team_grouped_by_provider(team):
     provider_dict = defaultdict(list)
     for model in model_objects:
         type_enum = LlmProviderTypes[model.type]
-        provider_label = str(type_enum.label)
-        provider_dict[provider_label].append(model.display_name)
+        provider_dict[type_enum.label].append(model.display_name)
 
     return dict(provider_dict)
