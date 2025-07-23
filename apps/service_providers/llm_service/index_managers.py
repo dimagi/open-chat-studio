@@ -30,8 +30,25 @@ class IndexManager(metaclass=ABCMeta):
     ):
         pass
 
+    @abstractmethod
+    def delete_files(self, files: list[File]):
+        """
+        Remove files from the remote index service.
 
-class RemoteIndexManager(metaclass=ABCMeta):
+        Depending on the service implementation, this may only disassociate files
+        from the vector store or completely delete them from remote storage.
+
+        Args:
+            files: List of File instances to delete from the remote service.
+        """
+        self.delete_files_from_index(files)
+
+    @abstractmethod
+    def delete_files_from_index(self, files: list[File]):
+        """Disassociates the file with the vector store"""
+
+
+class RemoteIndexManager(IndexManager, metaclass=ABCMeta):
     """
     Abstract base class for managing vector stores in remote indexing services.
 
@@ -93,23 +110,6 @@ class RemoteIndexManager(metaclass=ABCMeta):
             file: The File instance to upload to the remote service.
         """
         ...
-
-    @abstractmethod
-    def delete_files(self, files: list[File]):
-        """
-        Remove files from the remote index service.
-
-        Depending on the service implementation, this may only disassociate files
-        from the vector store or completely delete them from remote storage.
-
-        Args:
-            files: List of File instances to delete from the remote service.
-        """
-        ...
-
-    @abstractmethod
-    def delete_file_from_index(self, file_id: str):
-        """Disassociates the file with the vector store"""
 
     def add_files(
         self,
@@ -178,8 +178,12 @@ class OpenAIRemoteIndexManager(RemoteIndexManager):
         with contextlib.suppress(openai.NotFoundError):
             self.client.vector_stores.delete(vector_store_id=self.index_id)
 
-    def delete_file_from_index(self, file_id: str):
+    def delete_files_from_index(self, files: list[File]):
         """Disassociates the file with the vector store"""
+        for file in files:
+            self.delete_file_from_index(file.external_id)
+
+    def delete_file_from_index(self, file_id: str):
         try:
             self.client.vector_stores.files.delete(vector_store_id=self.index_id, file_id=file_id)
         except Exception:
@@ -231,7 +235,7 @@ class OpenAIRemoteIndexManager(RemoteIndexManager):
         File.objects.bulk_update(files, fields=["external_id"])
 
 
-class LocalIndexManager(metaclass=ABCMeta):
+class LocalIndexManager(IndexManager, metaclass=ABCMeta):
     """
     Abstract base class for managing local embedding operations.
 
@@ -306,16 +310,7 @@ class LocalIndexManager(metaclass=ABCMeta):
         documents = text_splitter.create_documents([file.read_content()])
         return [doc.page_content for doc in documents]
 
-    def delete_files(self, files: list[File]):
-        """
-        Remove files from the local index.
-
-        This method should handle the deletion of file embeddings and any associated
-        metadata in the local index.
-
-        Args:
-            files: List of File instances to delete from the local index.
-        """
+    def delete_files_from_index(self, files: list[File]):
         for file in files:
             FileChunkEmbedding.objects.filter(file=file).delete()
             file.external_id = ""
