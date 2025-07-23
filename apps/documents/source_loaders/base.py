@@ -1,10 +1,10 @@
 from abc import ABC, abstractmethod
 from dataclasses import dataclass
-from typing import Any
+from typing import Any, Iterator
 
 from langchain_core.documents import Document
 
-from apps.documents.models import Collection
+from apps.documents.models import Collection, CollectionFile
 
 
 @dataclass
@@ -31,32 +31,12 @@ class BaseDocumentLoader(ABC):
         self.collection = collection
 
     @abstractmethod
-    def load_documents(self) -> list[Document]:
+    def load_documents(self) -> Iterator[Document]:
         """
         Load documents from the external source.
 
         Returns:
             List of LangChain Document objects
-        """
-        pass
-
-    @abstractmethod
-    def get_source_metadata(self) -> dict[str, Any]:
-        """
-        Get metadata about the source (e.g., last modified time, version info).
-
-        Returns:
-            Dictionary containing source metadata
-        """
-        pass
-
-    @abstractmethod
-    def validate_config(self) -> tuple[bool, str]:
-        """
-        Validate the loader configuration.
-
-        Returns:
-            Tuple of (is_valid, error_message)
         """
         pass
 
@@ -73,23 +53,15 @@ class BaseDocumentLoader(ABC):
         """
         return document.metadata.get("source", "")
 
-    def should_update_document(self, document: Document, existing_metadata: dict) -> bool:
+    def should_update_document(self, document: Document, existing_file: CollectionFile) -> bool:
         """
         Determine if a document should be updated based on metadata comparison.
 
         Args:
             document: New document from source
-            existing_metadata: Metadata from previously synced version
+            existing_file: Existing CollectionFile object
 
         Returns:
             True if document should be updated
         """
-        # Default implementation: compare last modified times if available
-        new_modified = document.metadata.get("last_modified")
-        old_modified = existing_metadata.get("last_modified")
-
-        if new_modified and old_modified:
-            return new_modified != old_modified
-
-        # If no modification time, assume update needed
         return True
