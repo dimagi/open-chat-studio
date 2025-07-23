@@ -21,6 +21,7 @@ class McpServerForm(forms.ModelForm):
         super().__init__(*args, **kwargs)
         self.fields["auth_provider"].queryset = request.team.authprovider_set.all()
         if not self.instance.id:
+            # Don't show tools when creating a new MCP server
             del self.fields["available_tools"]
         else:
             self.fields["available_tools"].widget.attrs["readonly"] = True

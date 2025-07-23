@@ -43,7 +43,6 @@ class McpServer(BaseTeamModel):
     def sync_tools(self):
         """
         Fetch tools from the MCP server and update the available_tools field.
-        This method should be called after creating or updating the MCP server.
         """
         tools = self.fetch_tools()
         self.available_tools = [tool.name for tool in tools]
