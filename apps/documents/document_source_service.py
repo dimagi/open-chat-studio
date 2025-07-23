@@ -1,6 +1,7 @@
 import logging
 import time
 
+from django.core.files.base import ContentFile
 from django.db import transaction
 from django.utils import timezone
 from langchain_core.documents import Document
@@ -16,6 +17,7 @@ from apps.documents.models import (
 )
 from apps.documents.source_loaders.base import SyncResult
 from apps.documents.source_loaders.registry import create_loader
+from apps.documents.utils import bulk_delete_collection_files
 from apps.files.models import File
 
 logger = logging.getLogger(__name__)
@@ -49,16 +51,8 @@ class DocumentSourceManager:
                 self.document_source.source_type, self.document_source.source_config.model_dump(), self.collection
             )
 
-            is_valid, error_msg = loader.validate_config()
-            if not is_valid:
-                raise ValueError(f"Invalid configuration: {error_msg}")
-
-            # Load documents from source
             logger.info(f"Loading documents from {self.document_source.source_type} source")
-            documents = loader.load_documents()
-
-            # Sync documents with collection
-            result = self._sync_documents(documents, loader)
+            result = self._sync_documents(loader)
 
             # Update sync log
             duration = time.time() - start_time
@@ -96,49 +90,45 @@ class DocumentSourceManager:
 
             return SyncResult(success=False, error_message=error_msg, duration_seconds=duration)
 
-    def _sync_documents(self, documents: list[Document], loader) -> SyncResult:
+    def _sync_documents(self, loader) -> SyncResult:
         """
         Sync documents with the collection, handling additions, updates, and removals.
 
         Args:
-            documents: List of documents from the source
             loader: Document loader instance
 
         Returns:
             SyncResult with statistics
         """
         result = SyncResult(success=True)
+        documents = loader.load_documents()
 
         with transaction.atomic():
-            # Get existing files for this collection that are from document sources
-            existing_files = File.objects.filter(
-                collections=self.collection, external_source__startswith=self.document_source.source_type
-            )
+            existing_files = CollectionFile.objects.filter(
+                collection=self.collection, document_source=self.document_source
+            ).select_related("file")
 
-            # Create mapping of document identifiers to existing files
             existing_files_map = {}
             for file in existing_files:
-                # Extract identifier from external_source
                 if file.external_source:
-                    existing_files_map[file.external_source] = file
+                    existing_files_map[file.external_id] = file
 
-            # Track which files we've seen in this sync
             seen_identifiers = set()
 
-            # Process each document
+            files_to_index = []
             for document in documents:
                 identifier = loader.get_document_identifier(document)
                 seen_identifiers.add(identifier)
 
                 if identifier in existing_files_map:
-                    # File exists, check if it needs updating
                     existing_file = existing_files_map[identifier]
-                    if loader.should_update_document(document, existing_file.metadata or {}):
+                    if loader.should_update_document(document, existing_file):
                         self._update_file(existing_file, document, identifier)
+                        files_to_index.append(existing_file.id)
                         result.files_updated += 1
                 else:
-                    # New file, create it
-                    self._create_file(document, identifier)
+                    new_file = self._create_file(document, identifier)
+                    files_to_index.append(new_file.id)
                     result.files_added += 1
 
             # Remove files that are no longer in the source
@@ -146,62 +136,46 @@ class DocumentSourceManager:
                 file for identifier, file in existing_files_map.items() if identifier not in seen_identifiers
             ]
 
-            for file in files_to_remove:
-                self._remove_file(file)
-                result.files_removed += 1
+            bulk_delete_collection_files(self.collection, files_to_remove)
+            result.files_removed += len(files_to_remove)
+
+            self._index_files(files_to_index)
 
         return result
 
     def _create_file(self, document: Document, identifier: str):
         """Create a new file from a document"""
-        # Extract filename from document metadata or identifier
         filename = self._extract_filename(document, identifier)
-
-        # Create File object
-        file = File.objects.create(
-            team=self.collection.team,
-            name=filename,
-            content=document.page_content.encode("utf-8"),
-            content_type="text/plain",
-            external_id="",  # Not using external storage
-            external_source=identifier,
-            metadata=document.metadata,
+        content_file = ContentFile(document.page_content.encode("utf-8"))
+        file = File.from_external_source(
+            filename=filename,
+            external_file=content_file,
+            external_id=identifier,
+            external_source=document.metadata.get("source_type"),
+            team_id=self.document_source.team_id
         )
 
         # Create CollectionFile relationship
         collection_file = CollectionFile.objects.create(
             collection=self.collection,
+            document_source=self.document_source,
             file=file,
             status=FileStatus.PENDING,
             metadata=CollectionFileMetadata(chunking_strategy=ChunkingStrategy(chunk_size=800, chunk_overlap=400)),
         )
+        return collection_file
 
-        # If collection is indexed, trigger indexing
-        if self.collection.is_index:
-            self._index_file(collection_file)
-
-    def _update_file(self, existing_file: File, document: Document, identifier: str):
+    def _update_file(self, collection_file: CollectionFile, document: Document, identifier: str):
         """Update an existing file with new document content"""
-        existing_file.content = document.page_content.encode("utf-8")
-        existing_file.metadata = document.metadata
-        existing_file.save(update_fields=["content", "metadata"])
+        content_file = ContentFile(document.page_content.encode("utf-8"))
+        exiting_file = collection_file.file
+        exiting_file.file = content_file
+        exiting_file.content_size = content_file.size
+        exiting_file.metadata = document.metadata
+        exiting_file.save(update_fields=["content", "metadata"])
 
-        # If collection is indexed, re-index the file
-        if self.collection.is_index:
-            collection_file = CollectionFile.objects.get(collection=self.collection, file=existing_file)
-            collection_file.status = FileStatus.PENDING
-            collection_file.save(update_fields=["status"])
-            self._index_file(collection_file)
-
-    def _remove_file(self, file: File):
-        """Remove a file that's no longer in the source"""
-        # Remove from collection
-        CollectionFile.objects.filter(collection=self.collection, file=file).delete()
-
-        # If file is not used by other collections, archive it
-        if not file.collections.exclude(id=self.collection.id).exists():
-            file.is_archived = True
-            file.save(update_fields=["is_archived"])
+        collection_file.status = FileStatus.PENDING
+        collection_file.save(update_fields=["status"])
 
     def _extract_filename(self, document: Document, identifier: str) -> str:
         """Extract a suitable filename from document metadata or identifier"""
@@ -220,12 +194,11 @@ class DocumentSourceManager:
 
         return "document.txt"
 
-    def _index_file(self, collection_file: CollectionFile):
+    def _index_files(self, file_ids: list[int]):
         """Trigger indexing for a collection file"""
         from apps.documents.tasks import index_collection_files_task
 
-        # Queue the file for indexing
-        index_collection_files_task.delay([collection_file.id])
+        index_collection_files_task.delay(file_ids)
 
 
 def sync_document_source(document_source: DocumentSource) -> SyncResult:
