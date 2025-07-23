@@ -47,6 +47,11 @@ urlpatterns = [
         views.delete_document_source,
         name="delete_document_source",
     ),
+    path(
+        "collections/<int:collection_id>/source/<int:pk>/sync/",
+        views.sync_document_source,
+        name="sync_document_source",
+    ),
 ]
 
 urlpatterns.extend(make_crud_urls(views, "Collection", "collection"))

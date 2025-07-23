@@ -248,27 +248,27 @@ def delete_document_source(request, team_slug: str, collection_id: int, pk: int)
 @require_POST
 @login_and_team_required
 @permission_required("documents.change_collection")
-def sync_document_source(request, team_slug: str, pk: int):
+def sync_document_source(request, team_slug: str, collection_id: int, pk: int):
     """Trigger manual sync of a document source"""
-    collection = get_object_or_404(Collection.objects.select_related("team"), id=pk, team__slug=team_slug)
+    document_source = get_object_or_404(DocumentSource, id=pk, collection_id=collection_id, team__slug=team_slug)
 
-    try:
-        document_source = collection.document_source
+    if document_source.sync_task_id:
+        messages.warning(request, "This document source is already syncing.")
+        return HttpResponse()
 
-        # Trigger sync task
-        from apps.documents.tasks import sync_document_source_task
-
-        sync_document_source_task.delay(document_source.id)
-
-        messages.success(request, "Document source sync has been queued. This may take a few minutes.")
-
-    except DocumentSource.DoesNotExist:
-        messages.error(request, "No document source configured for this collection.")
-    except Exception as e:
-        logger.error(f"Error triggering document source sync: {str(e)}")
-        messages.error(request, "Failed to trigger sync. Please try again.")
-
-    return redirect("documents:single_collection_home", team_slug=team_slug, pk=pk)
+    task = sync_document_source_task.delay(document_source.id)
+    document_source.sync_task_id = task.task_id
+    document_source.save(update_fields=["sync_task_id"])
+    messages.success(request, "Document source sync has been queued. This may take a few minutes.")
+    return render(
+        request,
+        "documents/partials/document_source.html",
+        context={
+            "collection": document_source.collection,
+            "team": request.team,
+            "document_source": document_source,
+        },
+    )
 
 
 @require_POST
