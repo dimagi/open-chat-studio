@@ -109,8 +109,8 @@ class DocumentSourceManager:
 
             existing_files_map = {}
             for file in existing_files:
-                if file.external_source:
-                    existing_files_map[file.external_id] = file
+                if file.file.external_id:
+                    existing_files_map[file.file.external_id] = file
 
             seen_identifiers = set()
 
@@ -139,7 +139,8 @@ class DocumentSourceManager:
                 bulk_delete_collection_files(self.collection, files_to_remove)
                 result.files_removed += len(files_to_remove)
 
-            self._index_files(files_to_index)
+            if files_to_index:
+                self._index_files(files_to_index)
 
         return result
 
@@ -152,7 +153,8 @@ class DocumentSourceManager:
             external_file=content_file,
             external_id=identifier,
             external_source=document.metadata.get("source_type"),
-            team_id=self.document_source.team_id
+            team_id=self.document_source.team_id,
+            metadata=document.metadata,
         )
 
         # Create CollectionFile relationship
@@ -167,12 +169,13 @@ class DocumentSourceManager:
 
     def _update_file(self, collection_file: CollectionFile, document: Document, identifier: str):
         """Update an existing file with new document content"""
-        content_file = ContentFile(document.page_content.encode("utf-8"))
+        filename = self._extract_filename(document, identifier)
+        content_file = ContentFile(document.page_content.encode("utf-8"), name=filename)
         exiting_file = collection_file.file
         exiting_file.file = content_file
         exiting_file.content_size = content_file.size
         exiting_file.metadata = document.metadata
-        exiting_file.save(update_fields=["content", "metadata"])
+        exiting_file.save()
 
         collection_file.status = FileStatus.PENDING
         collection_file.save(update_fields=["status"])

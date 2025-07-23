@@ -52,7 +52,7 @@ class File(BaseTeamModel, VersionsMixin):
         return f"{self.name}"
 
     @classmethod
-    def from_external_source(cls, filename, external_file, external_id, external_source, team_id):
+    def from_external_source(cls, filename, external_file, external_id, external_source, team_id, metadata: dict = None):
         if existing := File.objects.filter(
             external_id=external_id, external_source=external_source, team_id=team_id
         ).first():
@@ -68,16 +68,17 @@ class File(BaseTeamModel, VersionsMixin):
             # leading '.' is included
             filename = f"{filename}{extension}"
 
-        return cls.from_content(filename, file_content_bytes, content_type, team_id, external_id, external_source)
+        return cls.from_content(filename, file_content_bytes, content_type, team_id, external_id, external_source, metadata)
 
     @classmethod
-    def from_content(cls, filename, content, content_type, team_id, external_id="", external_source=""):
+    def from_content(cls, filename, content, content_type, team_id, external_id="", external_source="", metadata: dict = None):
         new_file = File(
             name=filename,
             external_id=external_id,
             external_source=external_source,
             team_id=team_id,
             content_type=content_type,
+            metadata=metadata or {}
         )
 
         if content:

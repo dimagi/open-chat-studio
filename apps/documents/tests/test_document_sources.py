@@ -44,23 +44,39 @@ def document_source(collection, github_config):
 
 
 class MockLoader(BaseDocumentLoader):
+    def __init__(self, collection: Collection, mock_documents: list):
+        super().__init__(collection, Mock(), Mock())
+        self.mock_documents = mock_documents
+
     @classmethod
     def for_document_source(cls, collection, document_source) -> Self:
-        return cls(collection, Mock(), Mock())
+        return cls(
+            collection,
+            [
+                Mock(
+                    page_content="# Test Document",
+                    metadata={
+                        "source": "test.md",
+                        "sha": "abc123",
+                        "source_type": "test",
+                    },
+                )
+            ],
+        )
 
     def load_documents(self) -> Iterator[Document]:
-        return iter([
-            Mock(page_content="# Test Document", metadata={
-                "source": "test.md", "sha": "abc123", "source_type": "test",
-            })
-        ])
+        return iter(self.mock_documents)
+
+    def should_update_document(self, document: Document, existing_file: CollectionFile) -> bool:
+        new_sha = document.metadata.get("sha")
+        old_sha = existing_file.file.metadata.get("sha")
+        return new_sha != old_sha
 
 
 @pytest.mark.django_db()
 class TestDocumentSourceManager:
     @patch("apps.documents.document_source_service.create_loader")
-    def test_sync_collection_success(self, create_loader, document_source):
-        collection = document_source.collection
+    def test_sync_collection_success(self, create_loader, collection, document_source):
         create_loader.return_value = MockLoader.for_document_source(collection, document_source)
 
         manager = DocumentSourceManager(document_source)
@@ -77,8 +93,58 @@ class TestDocumentSourceManager:
         assert file.name == "test.md"
         assert file.content_type == "text/markdown"
         assert file.file.read() == b"# Test Document"
+        assert "sha" in file.metadata
 
         manager._index_files.assert_called_once()
+
+    @patch("apps.documents.document_source_service.create_loader")
+    def test_sync_collection_update_existing(self, create_loader, collection, document_source):
+        mock_docs = [
+            Mock(page_content="# Test Document", metadata={"source": "test.md", "sha": "abc123", "source_type": "test"})
+        ]
+        create_loader.return_value = MockLoader(collection, mock_docs)
+
+        manager = DocumentSourceManager(document_source)
+        manager._index_files = Mock()
+        manager._update_file = Mock(wraps=manager._update_file)
+        result = manager.sync_collection()
+
+        assert result.success
+        assert result.files_added == 1
+        manager._update_file.assert_not_called()
+        manager._index_files.assert_called_once()
+        manager._index_files.reset_mock()
+
+        # 2nd call with same files doesn't change anything
+        result = manager.sync_collection()
+        assert result.success
+        assert result.files_added == 0
+        assert result.files_updated == 0
+        assert result.files_removed == 0
+        manager._update_file.assert_not_called()
+        manager._index_files.assert_not_called()
+
+        mock_docs = [
+            Mock(
+                page_content="# Test Document updated",
+                metadata={"source": "test.md", "sha": "abc1234", "source_type": "test"},
+            )
+        ]
+        create_loader.return_value = MockLoader(collection, mock_docs)
+        # 3rd call with updated file calls update
+        result = manager.sync_collection()
+        assert result.success
+        assert result.files_added == 0
+        assert result.files_updated == 1
+        assert result.files_removed == 0
+        manager._update_file.assert_called_once()
+        manager._index_files.assert_called_once()
+
+        files = list(CollectionFile.objects.filter(collection=collection))
+        assert len(files) == 1
+        assert files[0].status == FileStatus.PENDING
+        file = files[0].file
+        assert file.file.read() == b"# Test Document updated"
 
     def test_sync_log_created(self, document_source):
         initial_count = DocumentSourceSyncLog.objects.count()
