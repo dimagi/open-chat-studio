@@ -4,6 +4,7 @@ from datetime import datetime, timedelta
 from functools import cached_property
 from typing import TYPE_CHECKING, Any, ClassVar, Union
 
+from asgiref.sync import async_to_sync
 from django.db import transaction, utils
 from langchain_community.utilities.openapi import OpenAPISpec
 from langchain_core.tools import BaseTool
@@ -91,9 +92,10 @@ class CustomBaseTool(BaseTool):
             logging.exception(e)
             return "Something went wrong"
 
+    @async_to_sync
     async def _arun(self, *args, **kwargs) -> str:
         """Use the tool asynchronously."""
-        raise NotImplementedError("custom_search does not support async")
+        return self._run(*args, **kwargs)
 
     def action(self, *args, **kwargs):
         raise Exception("Not implemented")
