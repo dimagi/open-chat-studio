@@ -330,105 +330,72 @@
     </div>
   </div>
 </div>
+{{ llm_provider_models_dict|json_script:"provider-models-dict" }}
 {{ default_translation_models_by_providers|json_script:"default-translation-models-dict" }}
+
 <script>
-  if (!window.defaultTranslationModels) {
-    window.defaultTranslationModels = JSON.parse(
-      document.getElementById('default-translation-models-dict').textContent
+  window.hasMissingTranslations = {{ has_missing_translations|yesno:"true,false" }};
+  if (!window.providerModels) {
+    window.providerModels = JSON.parse(
+      document.getElementById("provider-models-dict").textContent
     );
   }
-/**
- * @param {string} providerSelectId - ID of the provider select element
- * @param {string} modelSelectId - ID of the model select element
- */
+
+  if (!window.defaultTranslationModels) {
+    window.defaultTranslationModels = JSON.parse(
+      document.getElementById("default-translation-models-dict").textContent
+    );
+  }
+
   function setupTranslationFormBehavior(providerSelectId, modelSelectId) {
-    console.log(providerSelectId)
     const providerSelect = document.getElementById(providerSelectId);
     const modelSelect = document.getElementById(modelSelectId);
-
     if (!providerSelect || !modelSelect) {
-      console.error(`Elements not found!`);
+      console.error(`Elements not found for ${providerSelectId} or ${modelSelectId}`);
       return;
     }
-
-    providerSelect.addEventListener("change", async function () {
-      const providerId = this.value;
+    providerSelect.addEventListener("change", function () {
       const providerText = this.options[this.selectedIndex].text;
+      const providerType = providerText.substring(
+        providerText.lastIndexOf('(') + 1,
+        providerText.lastIndexOf(')')
+      );
 
-      modelSelect.innerHTML = "<option>Loading...</option>";
-      modelSelect.disabled = true;
+      const models = window.providerModels[providerType] || [];
 
-      try {
-        const url = "{% url 'service_providers:get_provider_models' request.team.slug %}?llm_provider=" + providerText;
-        const fetchOptions = {
-          method: 'GET',
-          credentials: 'same-origin',
-          headers: {
-            'Accept': 'application/json'
-          }
-        };
-        const App = SiteJS.app;
-        fetchOptions.headers['X-CSRFToken'] = App.Cookies.get('csrftoken');
+      // Clear and rebuild model options
+      modelSelect.innerHTML = "";
 
-        const response = await fetch(url, fetchOptions);
-        if (!response.ok) {
-          throw new Error(`HTTP error! status: ${response.status}`);
+      const defaultOption = document.createElement("option");
+      defaultOption.value = "";
+      defaultOption.textContent = "Choose a model for translation";
+      modelSelect.appendChild(defaultOption);
+
+      models.forEach(modelName => {
+        const option = document.createElement("option");
+        option.value = modelName;
+        option.textContent = modelName;
+        modelSelect.appendChild(option);
+      });
+
+      // Select default model for provider if available
+      const defaultModel = window.defaultTranslationModels[providerType];
+      if (defaultModel) {
+        const defaultOption = [...modelSelect.options].find(
+          option => option.text === defaultModel
+        );
+        if (defaultOption) {
+          modelSelect.value = defaultOption.value;
         }
-
-        const data = await response.json();
-            // Clear and rebuild options
-        modelSelect.innerHTML = "";
-
-            // Add default option
-        const defaultOption = document.createElement("option");
-        defaultOption.value = "";
-        defaultOption.textContent = "Choose a model for translation";
-        modelSelect.appendChild(defaultOption);
-
-        if (data.models && Array.isArray(data.models)) {
-          data.models.forEach(({ value, label }) => {
-            const option = document.createElement("option");
-            option.value = value;
-            option.textContent = label;
-            modelSelect.appendChild(option);
-          });
-
-          const defaultModelForProvider = window.defaultTranslationModels[providerText];
-          if (defaultModelForProvider) {
-            const defaultOption = [...modelSelect.options].find(
-              option => option.text === defaultModelForProvider
-            );
-            if (defaultOption) {
-              modelSelect.value = defaultOption.value;
-            } else {
-              console.warn(`Default model not found in fetched list`);
-            }
-          } else {
-            console.warn(` No default model configured for provider:`, providerText);
-          }
-        }
-      } catch (err) {
-        console.error(`Failed to fetch models:`, err);
-        modelSelect.innerHTML = "<option>No models available</option>";
-      } finally {
-        modelSelect.disabled = false;
       }
     });
-
   }
 
   function initializeTranslationForms() {
-    // Set up translate all form
-    setupTranslationFormBehavior(
-      "translation-provider-all",
-      "translation-provider-model-all"
-    );
-
-    // Set up remaining messages form
-    setupTranslationFormBehavior(
-      "translation-provider-remaining",
-      "translation-provider-model-remaining"
-    );
+    setupTranslationFormBehavior("translation-provider-all", "translation-provider-model-all");
+    if(hasMissingTranslations) {
+      setupTranslationFormBehavior("translation-provider-remaining", "translation-provider-model-remaining");
+    }
   }
 
   if (document.readyState === 'loading') {
