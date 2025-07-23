@@ -1317,7 +1317,7 @@ def experiment_session_messages_view(request, team_slug: str, experiment_id: uui
         "default_translation_models_by_providers": get_default_translation_models_by_provider(),
         "llm_provider_models_dict": get_models_by_team_grouped_by_provider(request.team),
     }
-q
+
     return TemplateResponse(
         request,
         "experiments/components/experiment_chat.html",
