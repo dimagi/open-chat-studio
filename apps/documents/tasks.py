@@ -156,6 +156,10 @@ def sync_document_source_task(document_source_id: int):
 
     try:
         document_source = DocumentSource.objects.get(id=document_source_id)
+    except DocumentSource.DoesNotExist:
+        return
+
+    try:
         result = sync_document_source(document_source)
 
         if result.success:
@@ -166,11 +170,16 @@ def sync_document_source_task(document_source_id: int):
             )
         else:
             logger.error(f"Document source sync failed for {document_source}: {result.error_message}")
+    except Exception:
+        logger.exception(
+            "Unexpected error syncing document source",
+            extra={
+                "document_source": document_source_id,
+            },
+        )
 
-    except DocumentSource.DoesNotExist:
-        logger.error(f"Document source {document_source_id} does not exist")
-    except Exception as e:
-        logger.error(f"Unexpected error syncing document source {document_source_id}: {str(e)}")
+    document_source.sync_task_id = ""
+    document_source.save(update_fields=["sync_task_id"])
 
 
 @shared_task(base=TaskbadgerTask, ignore_result=True)
