@@ -20,7 +20,7 @@ from apps.documents.source_loaders.registry import create_loader
 from apps.documents.utils import bulk_delete_collection_files
 from apps.files.models import File
 
-logger = logging.getLogger(__name__)
+logger = logging.getLogger("ocs.document_source")
 
 
 class DocumentSourceManager:
@@ -46,10 +46,7 @@ class DocumentSourceManager:
                 document_source=self.document_source, status=SyncStatus.IN_PROGRESS
             )
 
-            # Validate configuration
-            loader = create_loader(
-                self.document_source.source_type, self.document_source.source_config.model_dump(), self.collection
-            )
+            loader = create_loader(self.collection, self.document_source)
 
             logger.info(f"Loading documents from {self.document_source.source_type} source")
             result = self._sync_documents(loader)
@@ -80,7 +77,9 @@ class DocumentSourceManager:
         except Exception as e:
             duration = time.time() - start_time
             error_msg = str(e)
-            logger.error(f"Sync failed: {error_msg}")
+            logger.exception("Document Source Sync failed", extra={
+                "document_source_id": self.document_source.id,
+            })
 
             if sync_log:
                 sync_log.status = SyncStatus.FAILED
@@ -136,8 +135,9 @@ class DocumentSourceManager:
                 file for identifier, file in existing_files_map.items() if identifier not in seen_identifiers
             ]
 
-            bulk_delete_collection_files(self.collection, files_to_remove)
-            result.files_removed += len(files_to_remove)
+            if files_to_remove:
+                bulk_delete_collection_files(self.collection, files_to_remove)
+                result.files_removed += len(files_to_remove)
 
             self._index_files(files_to_index)
 

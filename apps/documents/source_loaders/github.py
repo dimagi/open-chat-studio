@@ -1,32 +1,37 @@
 import fnmatch
 import logging
-from typing import Any, Iterator
+from typing import Iterator, Self
 
 from langchain_community.document_loaders.github import GithubFileLoader
 from langchain_core.documents import Document
 
-from apps.documents.models import Collection, CollectionFile, GitHubSourceConfig
+from apps.documents.models import CollectionFile, GitHubSourceConfig
 from apps.documents.source_loaders.base import BaseDocumentLoader
+from apps.service_providers.models import AuthProviderType
 
 logger = logging.getLogger(__name__)
 
 
-class GitHubDocumentLoader(BaseDocumentLoader):
+class GitHubDocumentLoader(BaseDocumentLoader[GitHubSourceConfig]):
     """Document loader for GitHub repositories"""
 
-    def __init__(self, config: GitHubSourceConfig, collection: Collection):
-        super().__init__(config.model_dump(), collection)
-        self.github_config = config
+    @classmethod
+    def for_document_source(cls, collection, document_source) -> Self:
+        auth_provider = document_source.auth_provider
+        assert auth_provider.type == AuthProviderType.bearer
+        assert auth_provider.config.get("token")
+        return cls(collection, document_source.config.github, auth_provider)
 
     def load_documents(self) -> Iterator[Document]:
         """Load documents from GitHub repository"""
         try:
-            owner, repo = self.github_config.extract_repo_info()
+            owner, repo = self.config.extract_repo_info()
 
             # Create the GithubFileLoader
             loader = GithubFileLoader(
                 repo=f"{owner}/{repo}",
-                branch=self.github_config.branch,
+                access_token=self.auth_provider.config.get("token"),
+                branch=self.config.branch,
                 file_filter=self._matches_pattern,
             )
 
@@ -36,8 +41,8 @@ class GitHubDocumentLoader(BaseDocumentLoader):
                     {
                         "collection_id": self.collection.id,
                         "source_type": "github",
-                        "repo_url": self.github_config.repo_url,
-                        "branch": self.github_config.branch,
+                        "repo_url": self.config.repo_url,
+                        "branch": self.config.branch,
                     }
                 )
                 yield document
@@ -48,9 +53,9 @@ class GitHubDocumentLoader(BaseDocumentLoader):
 
     def _matches_pattern(self, file_path: str) -> bool:
         """Check if the file path matches the configured filters"""
-        if self.github_config.path_filter and not file_path.startswith(self.github_config.path_filter):
+        if self.config.path_filter and not file_path.startswith(self.config.path_filter):
             return False
-        patterns = [p.strip() for p in self.github_config.file_pattern.split(",")]
+        patterns = [p.strip() for p in self.config.file_pattern.split(",")]
         return any(fnmatch.fnmatch(file_path, pattern) for pattern in patterns)
 
     def should_update_document(self, document: Document, existing_file: CollectionFile) -> bool:

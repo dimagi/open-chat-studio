@@ -1,6 +1,6 @@
 from abc import ABC, abstractmethod
 from dataclasses import dataclass
-from typing import Any, Iterator
+from typing import Any, Generic, Iterator, Self, TypeVar
 
 from langchain_core.documents import Document
 
@@ -23,12 +23,21 @@ class SyncResult:
         return self.files_added + self.files_updated + self.files_removed
 
 
-class BaseDocumentLoader(ABC):
+ConfigType = TypeVar('ConfigType')
+
+
+class BaseDocumentLoader(ABC, Generic[ConfigType]):
     """Abstract base class for document loaders"""
 
-    def __init__(self, config: dict, collection: Collection):
-        self.config = config
+    def __init__(self, collection: Collection, config: ConfigType, auth_provider: Any = None):
         self.collection = collection
+        self.config = config
+        self.auth_provider = auth_provider
+
+    @classmethod
+    @abstractmethod
+    def for_document_source(cls, collection, document_source) -> Self:
+        pass
 
     @abstractmethod
     def load_documents(self) -> Iterator[Document]:

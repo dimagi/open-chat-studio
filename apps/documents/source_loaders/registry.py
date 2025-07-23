@@ -32,30 +32,17 @@ class LoaderRegistry:
 LoaderRegistry.register(SourceType.GITHUB, GitHubDocumentLoader)
 
 
-def create_loader(source_type: str, config: dict, collection) -> BaseDocumentLoader:
+def create_loader(collection, document_source) -> BaseDocumentLoader:
     """
     Factory function to create a document loader.
 
     Args:
-        source_type: Type of source (github, confluence, etc.)
-        config: Configuration for the loader
         collection: Collection instance
+        document_source: DocumentSource instance
 
     Returns:
         Configured document loader instance
     """
+    source_type = document_source.source_type
     loader_class = LoaderRegistry.get_loader_class(source_type)
-
-    # Convert config dict to appropriate config object based on source type
-    if source_type == SourceType.GITHUB:
-        from apps.documents.models import GitHubSourceConfig
-
-        config_obj = GitHubSourceConfig(**config)
-        return loader_class(config_obj, collection)
-    elif source_type == SourceType.CONFLUENCE:
-        from apps.documents.models import ConfluenceSourceConfig
-
-        config_obj = ConfluenceSourceConfig(**config)
-        return loader_class(config_obj, collection)
-    else:
-        raise ValueError(f"Unknown source type: {source_type}")
+    return loader_class.for_document_source(collection, document_source)
