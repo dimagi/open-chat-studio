@@ -318,22 +318,7 @@ def delete_collection_file(request, team_slug: str, pk: int, file_id: int):
         CollectionFile.objects.select_related("collection", "file"), collection_id=pk, file_id=file_id
     )
 
-    file = collection_file.file
-    collection = collection_file.collection
-    collection_file.delete()
-
-    if file.is_used():
-        if collection.is_index:
-            # Remove it from the index only
-            index_manager = collection.get_index_manager()
-            index_manager.delete_file_from_index(file_id=file.external_id)
-    else:
-        # Nothing else is using it
-        if collection.is_index:
-            index_manager = collection.get_index_manager()
-            index_manager.delete_files(files=[file])
-
-        collection_file.file.delete_or_archive()
+    delete_collection_file(collection_file)
 
     messages.success(request, "File removed from collection")
     return redirect("documents:single_collection_home", team_slug=team_slug, pk=pk)
