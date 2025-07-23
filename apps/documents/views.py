@@ -14,7 +14,7 @@ from django.template.loader import render_to_string
 from django.urls import reverse
 from django.utils.translation import gettext as _
 from django.views import View
-from django.views.decorators.http import require_POST
+from django.views.decorators.http import require_http_methods, require_POST
 from django.views.generic import CreateView, FormView, ListView, TemplateView, UpdateView
 from django_tables2 import SingleTableView
 
@@ -233,6 +233,16 @@ class EditDocumentSource(BaseDocumentSourceView, UpdateView):
 
     def get_context_data(self, **kwargs):
         return super().get_context_data(**kwargs)
+
+
+@require_http_methods(["DELETE"])
+@login_and_team_required
+@permission_required("documents.change_collection")
+def delete_document_source(request, team_slug: str, collection_id: int, pk: int):
+    document_source = get_object_or_404(DocumentSource, id=pk, collection_id=collection_id, team__slug=team_slug)
+    # TODO more thorough delete
+    document_source.delete()
+    return HttpResponse()
 
 
 @require_POST
