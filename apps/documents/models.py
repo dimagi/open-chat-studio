@@ -8,7 +8,7 @@ from django.utils.translation import gettext_lazy as _
 from django_pydantic_field import SchemaField
 from field_audit import audit_fields
 from field_audit.models import AuditingManager
-from pydantic import HttpUrl
+from pydantic import HttpUrl, field_validator
 
 from apps.chat.agent.tools import SearchIndexTool, SearchToolConfig
 from apps.documents.exceptions import IndexConfigurationException
@@ -41,7 +41,29 @@ class GitHubSourceConfig(pydantic.BaseModel):
     path_filter: str = pydantic.Field(default="", description="Optional path prefix filter")
 
     def __str__(self):
-        return f"{self.repo_url}"
+        owner, repo = self.extract_repo_info()
+        return f"{owner}/{repo}"
+
+    @field_validator("repo_url")
+    @classmethod
+    def ensure_foobar(cls, value):
+        if value.host != "github.com" or value.scheme != "https":
+            raise ValueError(f"'{value}' is not a valid GitHub repository URL'")
+        GitHubSourceConfig._extract_repo_info(value)
+        return value
+
+    def extract_repo_info(self) -> tuple[str, str]:
+        """Extract owner and repo name from GitHub URL"""
+        return GitHubSourceConfig._extract_repo_info(self.repo_url)
+
+    @staticmethod
+    def _extract_repo_info(repo_url: HttpUrl) -> tuple[str, str]:
+        path = repo_url.path.lstrip("/")
+        parts = path.split("/")
+        if len(parts) >= 2:
+            return parts[0], parts[1]
+        else:
+            raise ValueError(f"Unable to extract owner/repo from URL: {repo_url}")
 
 
 class ConfluenceSourceConfig(pydantic.BaseModel):
@@ -369,6 +391,13 @@ class SourceType(models.TextChoices):
     GITHUB = "github", _("GitHub Repository")
     CONFLUENCE = "confluence", _("Confluence Space")
 
+    @property
+    def css_logo(self):
+        return {
+            SourceType.GITHUB: "fa-brands fa-github",
+            SourceType.CONFLUENCE: "fa-brands fa-confluence",
+        }[self]
+
 
 class SyncStatus(models.TextChoices):
     SUCCESS = "success", _("Success")
@@ -393,6 +422,10 @@ class DocumentSource(BaseTeamModel):
 
     def __str__(self) -> str:
         return f"{self.get_source_type_display()} source for {self.collection.name}"
+
+    @property
+    def source_type_enum(self):
+        return SourceType(self.source_type)
 
     @property
     def source_config(self):

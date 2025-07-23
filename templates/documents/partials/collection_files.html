@@ -1,0 +1,59 @@
+{% for collection_file in collection_files %}
+  <div class="flex items-center justify-between p-3 bg-base-200 rounded-lg">
+    <div class="flex flex-col flex-1 gap-1">
+      <div class="flex items-center gap-2">
+        {% if collection_file.status %}
+          {% include "documents/collection_file_status.html" %}
+        {% endif %}
+        <span
+            class="text-sm font-medium">{% include "generic/chip.html" with chip=collection_file.file.as_chip %}</span>
+        <div class="text-xs badge badge-ghost">{{ collection_file.file_size_mb }} MB</div>
+      </div>
+      {% if collection.is_index %}
+        {% if not collection.is_remote_index %}
+          <div id="chunk_count_{{ collection_file.id }}" class="flex flex-row items-center gap-2">
+            <span class="text-xs text-base-content/70">{{ collection_file.chunk_count|default:0 }} chunks</span>
+          </div>
+        {% endif %}
+        <div class="flex flex-row items-center gap-2">
+          <span class="text-xs text-base-content/70">Chunking Strategy:</span>
+          <div class="badge badge-sm badge-ghost">Size: {{ collection_file.chunking_strategy.chunk_size }} tokens</div>
+          <div class="badge badge-sm badge-ghost">Overlap: {{ collection_file.chunking_strategy.chunk_overlap }}
+            tokens
+          </div>
+        </div>
+      {% else %}
+        <span
+            class="text-xs text-base-content/70">{{ collection_file.file.summary|default:'No summary available' }}</span>
+      {% endif %}
+    </div>
+    <div class="flex items-center gap-2 ml-4">
+      {% if collection.is_index and not collection.is_remote_index and collection_file.chunk_count %}
+        <div class="tooltip" data-tip="View chunks">
+          <a href="{% url 'documents:file_chunks' team.slug collection.id collection_file.file.id %}"
+             class="btn btn-sm">
+            <i class="fa fa-puzzle-piece" aria-hidden="true"></i>
+          </a>
+        </div>
+      {% endif %}
+      <div class="tooltip" data-tip="View file">
+        <a href="{% url 'files:base' team.slug collection_file.file.id %}" class="btn btn-sm">
+          <i class="fa-solid fa-eye"></i>
+        </a>
+      </div>
+      {% if allow_delete %}
+      <form action="{% url 'documents:delete_collection_file' team.slug collection.id collection_file.file.id %}"
+            method="post" class="inline">
+        {% csrf_token %}
+        <button type="submit" class="btn btn-sm">
+          <i class="fa-solid fa-trash"></i>
+        </button>
+      </form>
+    {% endif %}
+    </div>
+  </div>
+{% empty %}
+  <div class="text-center text-base-content/60">
+    No files
+  </div>
+{% endfor %}

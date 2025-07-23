@@ -78,23 +78,10 @@ class CollectionHome(LoginAndTeamRequiredMixin, TemplateView, PermissionRequired
 def single_collection_home(request, team_slug: str, pk: int):
     collection = get_object_or_404(Collection.objects.select_related("team"), id=pk, team__slug=team_slug)
 
-    chunk_count_query = (
-        FileChunkEmbedding.objects.filter(collection_id=OuterRef("collection_id"), file_id=OuterRef("file_id"))
-        .values("collection_id", "file_id")
-        .annotate(count=Count("id"))
-        .values_list("count")
-    )
-
-    collection_files = CollectionFile.objects.filter(collection=collection, document_source=None).annotate(
-        chunk_count=Subquery(chunk_count_query, output_field=IntegerField())
-    )
-
     document_sources = DocumentSource.objects.filter(collection=collection)
-
-    collection_files_count = collection_files.count()
+    collection_files_count = CollectionFile.objects.filter(collection=collection).count()
     context = {
         "collection": collection,
-        "collection_files": collection_files,
         "collection_files_count": collection_files_count,
         "document_sources": document_sources,
         "collections_supported_file_types": settings.SUPPORTED_FILE_TYPES["collections"],
@@ -103,8 +90,29 @@ def single_collection_home(request, team_slug: str, pk: int):
         "max_files_per_collection": settings.MAX_FILES_PER_COLLECTION,
         "files_remaining": settings.MAX_FILES_PER_COLLECTION - collection_files_count,
         "max_file_size_mb": settings.MAX_FILE_SIZE_MB,
+        "document_source_types": list(SourceType),
     }
     return render(request, "documents/single_collection_home.html", context)
+
+
+@login_and_team_required
+def collection_files_view(request, team_slug: str, collection_id: int, document_source_id: int = None):
+    collection = get_object_or_404(Collection, id=collection_id, team__slug=team_slug)
+    chunk_count_query = (
+        FileChunkEmbedding.objects.filter(collection_id=OuterRef("collection_id"), file_id=OuterRef("file_id"))
+        .values("collection_id", "file_id")
+        .annotate(count=Count("id"))
+        .values_list("count")
+    )
+    collection_files = CollectionFile.objects.filter(collection=collection, document_source_id=document_source_id).annotate(
+        chunk_count=Subquery(chunk_count_query, output_field=IntegerField())
+    )
+    context = {
+        "collection": collection,
+        "collection_files": collection_files,
+        "allow_delete": document_source_id is None,
+    }
+    return render(request, "documents/partials/collection_files.html", context)
 
 
 class QueryView(LoginAndTeamRequiredMixin, TemplateView, PermissionRequiredMixin):
@@ -172,6 +180,7 @@ class CreateDocumentSource(LoginAndTeamRequiredMixin, CreateView, PermissionRequ
         return {
             **super().get_context_data(**kwargs),
             "collection": self.collection,
+            "source_type": SourceType(self.source_type),
         }
 
     def get_form_kwargs(self):

@@ -13,6 +13,12 @@ urlpatterns = [
     path(
         "collections/<int:pk>/files/<int:file_id>/delete", views.delete_collection_file, name="delete_collection_file"
     ),
+    path("collections/<int:collection_id>/files/", views.collection_files_view, name="collection_files_list"),
+    path(
+        "collections/<int:collection_id>/<int:document_source_id>/files/",
+        views.collection_files_view,
+        name="document_source_files_list",
+    ),
     path(
         "collections/<int:collection_id>/files/<int:file_id>/chunks",
         views.FileChunkEmbeddingListView.as_view(),
@@ -27,9 +33,10 @@ urlpatterns = [
         views.get_collection_file_status,
         name="get_collection_file_status",
     ),
-
     # document source
-    path("collections/<int:collection_id>/source/", views.CreateDocumentSource.as_view(), name="create_document_source"),
+    path(
+        "collections/<int:collection_id>/source/", views.CreateDocumentSource.as_view(), name="create_document_source"
+    ),
     # path("collections/<int:collection_id>/source/<int:pk>/", views.EditDocumentSource, name="edit_document_source"),
     # path("collections/<int:collection_id>/source/<int:pk>/delete/", views.DeleteDocumentSource, name="delete_document_source"),
 ]
