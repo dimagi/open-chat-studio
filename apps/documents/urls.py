@@ -37,8 +37,11 @@ urlpatterns = [
     path(
         "collections/<int:collection_id>/source/", views.CreateDocumentSource.as_view(), name="create_document_source"
     ),
-    # path("collections/<int:collection_id>/source/<int:pk>/", views.EditDocumentSource, name="edit_document_source"),
-    # path("collections/<int:collection_id>/source/<int:pk>/delete/", views.DeleteDocumentSource, name="delete_document_source"),
+    path(
+        "collections/<int:collection_id>/source/<int:pk>/",
+        views.EditDocumentSource.as_view(),
+        name="edit_document_source",
+    ),
 ]
 
 urlpatterns.extend(make_crud_urls(views, "Collection", "collection"))

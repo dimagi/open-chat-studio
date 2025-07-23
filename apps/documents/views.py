@@ -149,8 +149,7 @@ def query_collection(request, team_slug: str, pk: int):
     return render(request, "documents/collection_query_results.html", context)
 
 
-class CreateDocumentSource(LoginAndTeamRequiredMixin, CreateView, PermissionRequiredMixin):
-    permission_required = "documents.add_documentsource"
+class BaseDocumentSourceView(LoginAndTeamRequiredMixin, PermissionRequiredMixin):
     template_name = "documents/document_source_form_dialog.html"
     model = DocumentSource
     form_class = DocumentSourceForm
@@ -169,19 +168,26 @@ class CreateDocumentSource(LoginAndTeamRequiredMixin, CreateView, PermissionRequ
             Collection.objects.select_related("team"), id=self.collection_id, team__slug=self.team_slug
         )
 
-    @property
-    def source_type(self):
-        request_data = self.request.GET if self.request.method == "GET" else self.request.POST
-        return request_data.get("source_type")
-
     def get_form_class(self):
         return GithubDocumentSourceForm if self.source_type == SourceType.GITHUB else DocumentSourceForm
+
+    @property
+    def source_type(self):
+        raise NotImplementedError
 
     def dispatch(self, request, *args, **kwargs):
         if not self.collection.is_index:
             messages.error(request, "Document sources can only be configured for indexed collections.")
             return redirect("documents:single_collection_home", team_slug=self.team_slug, pk=self.collection_id)
         return super().dispatch(request, *args, **kwargs)
+
+    def get_form_kwargs(self):
+        return {**super().get_form_kwargs(), "collection": self.collection}
+
+    def get_success_url(self):
+        return reverse(
+            "documents:single_collection_home", kwargs={"team_slug": self.team_slug, "pk": self.collection_id}
+        )
 
     def get_context_data(self, **kwargs):
         return {
@@ -190,25 +196,43 @@ class CreateDocumentSource(LoginAndTeamRequiredMixin, CreateView, PermissionRequ
             "source_type": SourceType(self.source_type),
         }
 
-    def get_form_kwargs(self):
-        return {**super().get_form_kwargs(), "collection": self.collection}
-
-    def get_initial(self):
-        return {
-            "source_type": self.source_type,
-        }
-
-    def get_success_url(self):
-        return reverse(
-            "documents:single_collection_home", kwargs={"team_slug": self.team_slug, "pk": self.collection_id}
-        )
-
     def form_valid(self, form):
         self.object = form.save()
         task = sync_document_source_task.delay(self.object.id)
         self.object.sync_task_id = task.task_id
         self.object.save(update_fields=["sync_task_id"])
         return HttpResponse(headers={"HX-Redirect": self.get_success_url()})
+
+
+class CreateDocumentSource(BaseDocumentSourceView, CreateView):
+    permission_required = "documents.add_documentsource"
+    template_name = "documents/document_source_form_dialog.html"
+    model = DocumentSource
+    form_class = DocumentSourceForm
+
+    @property
+    def source_type(self):
+        request_data = self.request.GET if self.request.method == "GET" else self.request.POST
+        return request_data.get("source_type")
+
+    def get_initial(self):
+        return {
+            "source_type": self.source_type,
+        }
+
+
+class EditDocumentSource(BaseDocumentSourceView, UpdateView):
+    permission_required = "documents.change_documentsource"
+
+    def get_queryset(self):
+        return DocumentSource.objects.filter(team=self.request.team)
+
+    @property
+    def source_type(self):
+        return self.object.source_type
+
+    def get_context_data(self, **kwargs):
+        return super().get_context_data(**kwargs)
 
 
 @require_POST

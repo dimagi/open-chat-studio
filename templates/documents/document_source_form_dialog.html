@@ -8,8 +8,14 @@
     </form>
     <h3 class="text-lg font-bold"><i class="{{ source_type.css_logo }}"></i> Import data from {{ source_type.label }}</h3>
     <form id="create-document-source-form"
+          {% if object %}
+          hx-post="{% url 'documents:edit_document_source' request.team.slug collection.id object.id %}"
+          {% else %}
           hx-post="{% url 'documents:create_document_source' request.team.slug collection.id %}"
+          {% endif %}
           hx-target="#new_document_source_modal"
+          hx-disabled-elt="input, select, button[type='submit']"
+          hx-indicator="#form_saving_{{ document_source.id }}"
           hx-swap="outerHTML"
     >
       {% csrf_token %}
@@ -18,6 +24,7 @@
     </form>
 
     <div class="modal-action">
+      <span id="form_saving_{{ document_source.id }}" class="htmx-indicator loading loading-spinner loading-sm"></span>
       <button type="submit" class="btn btn-primary" form="create-document-source-form">Save</button>
       <form method="dialog">
         <button class="btn">Cancel</button>

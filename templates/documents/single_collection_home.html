@@ -25,10 +25,13 @@
             {% endif %}
           </div>
           <div class="text-sm text-base-content/60 mt-1">
-            <span>
-              <i class="fa fa-file-o" aria-hidden="true"></i> <span class="font-bold">{{ collection_files_count }}</span> uploaded, <span class="font-bold">{{ files_remaining }}</span> remaining
-            </span>
+            <i class="fa fa-file-o" aria-hidden="true"></i> <span class="font-bold">{{ collection_files_count }}</span> uploaded, <span class="font-bold">{{ files_remaining }}</span> remaining
           </div>
+          {% if collection_files_count == max_files_per_collection %}
+            <div class="text-sm text-base-content/60 mt-1">
+              <i class="fa-solid fa-triangle-exclamation text-warning" aria-hidden="true"></i> File limit reached
+            </div>
+          {% endif %}
         </div>
         <div class="join flex items-center">
           <div class="tooltip" data-tip="Edit">
@@ -61,13 +64,15 @@
               </button>
             </form>
           {% endif %}
-          <div {% if collection_files_count == max_files_per_collection %} class="tooltip"  data-tip="File limit reached" {% endif %}>
-            <button class="join-item btn btn-sm btn-primary" {% if collection_files_count == max_files_per_collection %} disabled {% endif %} onclick="chooseFilesModal.showModal()">
-              <i class="fa-regular fa-file"></i> Add Files
-            </button>
-          </div>
-          <div class="dropdown" {% if collection_files_count == max_files_per_collection %} class="tooltip"  data-tip="File limit reached" {% endif %}>
-            <div tabindex="0" role="button" class="join-item btn btn-sm btn-primary"><i class="fa-solid fa-upload"></i> Add Document Source</div>
+          <button class="join-item btn btn-sm btn-primary" {% if collection_files_count == max_files_per_collection %} disabled {% endif %} onclick="chooseFilesModal.showModal()">
+            <i class="fa-regular fa-file"></i> Add Files
+          </button>
+          <div class="dropdown">
+            <div tabindex="0" role="button" class="join-item btn btn-sm btn-primary"
+              {% if collection_files_count == max_files_per_collection %} disabled {% endif %}
+            >
+              <i class="fa-solid fa-upload"></i> Add Document Source
+            </div>
             <ul tabindex="0" class="dropdown-content menu bg-base-100 rounded-box z-1 w-52 p-2 shadow-sm">
               {% for source_type in document_source_types %}
               <li><a
@@ -91,6 +96,15 @@
           <h2 class="text-lg font-semibold">
             <i class="{{ document_source.source_type_enum.css_logo }}" title="{{ document_source.get_source_type_display }}"></i>
             {{ document_source.source_config }}
+            <a
+                class="btn btn-ghost btn-sm"
+                hx-get="{% url "documents:edit_document_source" team.slug collection.id document_source.id %}"
+                hx-target="#document_source_modal"
+                hx-swap="innerHTML"
+                hx-indicator="#form_loading_{{ document_source.id }}"
+                hx-disabled-elt="this"
+            ><i class="fa-solid fa-pencil"></i></a>
+            <span id="form_loading_{{ document_source.id }}" class="htmx-indicator loading loading-spinner loading-sm"></span>
           </h2>
           {% include "documents/partials/document_source_status.html" %}
         </div>

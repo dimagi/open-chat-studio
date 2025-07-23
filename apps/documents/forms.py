@@ -112,9 +112,13 @@ class CollectionForm(forms.ModelForm):
 
 
 class DocumentSourceForm(forms.ModelForm):
+    requires_auth = True
+    allowed_auth_types = []
+    auth_provider_help = ""
+
     class Meta:
         model = DocumentSource
-        fields = ["source_type", "auto_sync_enabled"]
+        fields = ["source_type", "auto_sync_enabled", "auth_provider"]
         labels = {
             "auto_sync_enabled": "Auto Sync",
         }
@@ -122,7 +126,22 @@ class DocumentSourceForm(forms.ModelForm):
 
     def __init__(self, collection, *args, **kwargs):
         self.collection = collection
+        instance = kwargs.get("instance")
+        initial = kwargs.get("initial")
+        if instance and initial is not None:
+            object_data = self._get_config_from_instance(instance).model_dump()
+            kwargs["initial"] = {**object_data, **initial}
         super().__init__(*args, **kwargs)
+        if not self.requires_auth:
+            del self.fields["auth_provider"]
+        else:
+            self.fields["auth_provider"].help_text = self.auth_provider_help
+            self.fields["auth_provider"].queryset = AuthProvider.objects.filter(
+                team_id=collection.team_id, type__in=self.allowed_auth_types
+            )
+
+    def _get_config_from_instance(self, instance):
+        raise NotImplementedError
 
     def save(self, commit=True):
         instance = super().save(commit=False)
@@ -136,42 +155,40 @@ class DocumentSourceForm(forms.ModelForm):
 
 
 class GithubDocumentSourceForm(DocumentSourceForm):
-    github_repo_url = forms.URLField(
+    requires_auth = True
+    allowed_auth_types = [AuthProviderType.bearer]
+    auth_provider_help = "GitHub requires Bearer Auth"
+
+    repo_url = forms.URLField(
         label="Repository URL",
         help_text="GitHub repository URL (e.g., https://github.com/user/repo)",
         widget=forms.URLInput(attrs={"placeholder": "https://github.com/user/repo"}),
     )
-    auth_provider = forms.ModelChoiceField(
-        queryset=AuthProvider.objects.none(), label="Authentication Provider", help_text="GitHub requires Bearer Auth"
-    )
-    github_branch = forms.CharField(
+    branch = forms.CharField(
         initial="main",
         label="Branch",
         help_text="Git branch to sync from",
         widget=forms.TextInput(attrs={"placeholder": "main"}),
     )
-    github_file_pattern = forms.CharField(
+    file_pattern = forms.CharField(
         required=False,
         initial="*.md",
         label="File Pattern",
         help_text="File patterns to include (comma-separated, e.g., *.md, *.txt)",
         widget=forms.TextInput(attrs={"placeholder": "*.md, *.txt"}),
     )
-    github_path_filter = forms.CharField(
+    path_filter = forms.CharField(
         required=False,
         label="Path Filter",
         help_text="Optional path prefix to filter files (e.g., docs/)",
         widget=forms.TextInput(attrs={"placeholder": "docs/"}),
     )
 
-    def __init__(self, collection, *args, **kwargs):
-        super().__init__(collection, *args, **kwargs)
-        self.fields["auth_provider"].queryset = AuthProvider.objects.filter(
-            team_id=collection.team_id, type=AuthProviderType.bearer
-        )
+    def _get_config_from_instance(self, instance):
+        return instance.config.github
 
     def clean_github_repo_url(self):
-        github_repo_url = self.cleaned_data["github_repo_url"]
+        github_repo_url = self.cleaned_data["repo_url"]
         try:
             validate_user_input_url(github_repo_url, strict=not settings.DEBUG)
         except InvalidURL as e:
@@ -190,10 +207,10 @@ class GithubDocumentSourceForm(DocumentSourceForm):
         if self.errors:
             return cleaned_data
 
-        repo_url = cleaned_data.get("github_repo_url")
-        branch = cleaned_data.get("github_branch", "main")
-        file_pattern = cleaned_data.get("github_file_pattern", "")
-        path_filter = cleaned_data.get("github_path_filter", "")
+        repo_url = cleaned_data.get("repo_url")
+        branch = cleaned_data.get("branch", "main")
+        file_pattern = cleaned_data.get("file_pattern", "")
+        path_filter = cleaned_data.get("path_filter", "")
 
         try:
             github_config = GitHubSourceConfig(
