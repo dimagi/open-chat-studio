@@ -5,7 +5,7 @@
       <div class="w-64 hidden lg:flex">
         {% block sidebar-nav %}
           {% include "web/components/app_nav.html" %}
-        {% endblock %}
+        {% endblock sidebar-nav %}
       </div>
     {% endif %}
     <div class="w-full h-screen flex flex-col">
@@ -21,7 +21,7 @@
           </div>
         </div>
       {% endif %}
-      {% include 'experiments/chat/chat_ui.html' %}
+      {% include "experiments/chat/chat_ui.html" %}
     </div>
   </div>
-{% endblock %}
+{% endblock body_wrapper %}

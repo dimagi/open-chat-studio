@@ -1,4 +1,4 @@
-{% extends 'web/app/app_base.html' %}
+{% extends "web/app/app_base.html" %}
 {% load waffle_tags %}
 {% load team_tags %}
 {% load static %}
@@ -53,7 +53,7 @@
       <li class="pg-breadcrumb-active" aria-current="page">{{ experiment.name }}</li>
     </ul>
   </div>
-{% endblock %}
+{% endblock breadcrumbs %}
 {% block app %}
   <div class="app-card">
     <div class="flex">
@@ -247,7 +247,7 @@
       </div>
     {% endif %}
     {% if bot_type_chip %}
-      {% include 'generic/chip.html' with chip=bot_type_chip %}
+      {% include "generic/chip.html" with chip=bot_type_chip %}
     {% endif %}
 
     {% if not can_make_child_routes %}
@@ -289,7 +289,7 @@
                 {% include "experiments/components/exports.html" %}
               {% endif %}
               {% include "evaluations/create_dataset_button.html" %}
-              {% include "experiments/filters.html"%}
+              {% include "experiments/filters.html" %}
             </div>
           </div>
         </div>
@@ -337,7 +337,7 @@
       </div>
       <div role="tabpanel" class="tab-content" id="content-terminal_bots">
         <div class="app-card">
-          {% if terminal_bots_table.data|length == 0 and experiment.is_editable%}
+          {% if terminal_bots_table.data|length == 0 and experiment.is_editable %}
             <a class="btn btn-sm btn-outline btn-primary mb-2" href="{% url 'experiments:experiment_route_new' team.slug experiment.id 'terminal' %}"><i class="fa-regular fa-plus"></i> Add terminal bot</a>
           {% endif %}
           {% render_table terminal_bots_table %}
@@ -381,4 +381,4 @@
     });
     window.addEventListener('hashchange', selectTabFromHash);
   </script>
-{% endblock %}
+{% endblock app %}

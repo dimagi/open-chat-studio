@@ -1,4 +1,4 @@
-{% extends 'web/app/app_base.html' %}
+{% extends "web/app/app_base.html" %}
 {% load static %}
 
 {% block breadcrumbs %}
@@ -9,7 +9,7 @@
             <li class="pg-breadcrumb-active" aria-current="page">Inspect</li>
         </ul>
     </div>
-{% endblock %}
+{% endblock breadcrumbs %}
 
 {% block app %}
     <div class="app-card">
@@ -62,4 +62,4 @@
         <h2 class="text-lg font-semibold">Search Results</h2>
         <div id="query-results" class="grid grid-cols-1 gap-4 mt-2"></div>
     </div>
-{% endblock %}
+{% endblock app %}

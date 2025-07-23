@@ -19,9 +19,9 @@
       text-decoration: none;
     }
   </style>
-{% endblock %}
+{% endblock extrastyle %}
 {% block title %}{% if subtitle %}{{ subtitle }} | {% endif %}{{ title }} |
-  {{ site_title|default:_('Django site admin') }}{% endblock %}
+  {{ site_title|default:_('Django site admin') }}{% endblock title %}
 
 {% block branding %}
   <div id="site-name"><a href="{% url 'admin:index' %}">{{ site_header|default:_('Django administration') }}</a></div>
@@ -34,6 +34,6 @@
       Expires in {{ temporary_superuser_access.admin_site|timeuntil }}
     </div>
   {% endif %}
-{% endblock %}
+{% endblock branding %}
 
-{% block nav-global %}{% endblock %}
+{% block nav-global %}{% endblock nav-global %}

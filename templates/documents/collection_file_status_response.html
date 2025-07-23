@@ -1,4 +1,4 @@
-{% include 'documents/collection_file_status.html' %}
+{% include "documents/collection_file_status.html" %}
 
 {% if collection.is_index and not collection.is_remote_index %}
   <div id="chunk_count_{{ collection_file.id }}" class="flex flex-row items-center gap-2" hx-swap-oob="outerHTML">

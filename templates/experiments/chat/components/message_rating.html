@@ -1,11 +1,11 @@
-<div class="flex flex-row gap-1" id="rating-{{message.id}}">
+<div class="flex flex-row gap-1" id="rating-{{ message.id }}">
     {% if message.rating %}
         <div class="text-sm">{{ message.rating }}</div>
     {% elif message.id %}
         <button
             hx-post="{% url 'experiments:rate_message' team_slug=team_slug message_id=message.id rating='👍' %}"
             hx-swap="outerHTML"
-            hx-target="#rating-{{message.id}}"
+            hx-target="#rating-{{ message.id }}"
             class="text-sm p-1 rounded-md hover:bg-gray-50"
             title="Good response">
             👍
@@ -13,7 +13,7 @@
         <button
             hx-post="{% url 'experiments:rate_message' team_slug=team_slug message_id=message.id rating='👎' %}"
             hx-swap="outerHTML"
-            hx-target="#rating-{{message.id}}"
+            hx-target="#rating-{{ message.id }}"
             class="text-sm p-1 rounded-md hover:bg-gray-50"
             title="Bad response">
             👎
