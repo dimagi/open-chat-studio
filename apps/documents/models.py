@@ -419,6 +419,9 @@ class DocumentSource(BaseTeamModel):
     )
     last_sync = models.DateTimeField(null=True, blank=True, help_text="Timestamp of the last successful sync")
     files = models.ManyToManyField("files.File", blank=False, through=CollectionFile, related_name="document_sources")
+    sync_task_id = models.CharField(
+        max_length=40, blank=True, default="", help_text="System ID of the sync task, if present."
+    )
 
     def __str__(self) -> str:
         return f"{self.get_source_type_display()} source for {self.collection.name}"

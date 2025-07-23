@@ -35,6 +35,7 @@ from apps.documents.models import (
     SourceType,
 )
 from apps.documents.tables import CollectionsTable
+from apps.documents.tasks import sync_document_source_task
 from apps.files.models import File, FileChunkEmbedding
 from apps.generics import actions
 from apps.generics.chips import Chip
@@ -98,18 +99,22 @@ def single_collection_home(request, team_slug: str, pk: int):
 @login_and_team_required
 def collection_files_view(request, team_slug: str, collection_id: int, document_source_id: int = None):
     collection = get_object_or_404(Collection, id=collection_id, team__slug=team_slug)
+    document_source = None
+    if document_source_id:
+        document_source = get_object_or_404(DocumentSource, id=document_source_id, team__slug=team_slug)
     chunk_count_query = (
         FileChunkEmbedding.objects.filter(collection_id=OuterRef("collection_id"), file_id=OuterRef("file_id"))
         .values("collection_id", "file_id")
         .annotate(count=Count("id"))
         .values_list("count")
     )
-    collection_files = CollectionFile.objects.filter(collection=collection, document_source_id=document_source_id).annotate(
+    collection_files = CollectionFile.objects.filter(collection=collection, document_source=document_source).annotate(
         chunk_count=Subquery(chunk_count_query, output_field=IntegerField())
     )
     context = {
         "collection": collection,
         "collection_files": collection_files,
+        "document_source": document_source,
         "allow_delete": document_source_id is None,
     }
     return render(request, "documents/partials/collection_files.html", context)
@@ -198,6 +203,9 @@ class CreateDocumentSource(LoginAndTeamRequiredMixin, CreateView, PermissionRequ
 
     def form_valid(self, form):
         self.object = form.save()
+        task = sync_document_source_task.delay(self.object.id)
+        self.object.sync_task_id = task.task_id
+        self.object.save(update_fields=["sync_task_id"])
         return HttpResponse(headers={"HX-Redirect": self.get_success_url()})
 
 
