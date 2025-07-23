@@ -356,10 +356,7 @@
     }
     providerSelect.addEventListener("change", function () {
       const providerText = this.options[this.selectedIndex].text;
-      const providerType = providerText.substring(
-        providerText.lastIndexOf('(') + 1,
-        providerText.lastIndexOf(')')
-      );
+      const providerType = providerText.split(":")[0].trim();
 
       const models = window.providerModels[providerType] || [];
 
