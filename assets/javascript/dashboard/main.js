@@ -33,7 +33,9 @@ function dashboard() {
             date_range: DEFAULTS.DATE_RANGE,
             granularity: DEFAULTS.GRANULARITY,
             experiments: [],
-            channels: []
+            channels: [],
+            participants: [],
+            tags: [],
         },
         
         overviewStats: [],
@@ -82,6 +84,8 @@ function dashboard() {
         setupTomSelect() {
             this.initializeTomSelect('id_experiments', 'experiments', 'Select chatbots...');
             this.initializeTomSelect('id_channels', 'channels', 'Select channels...');
+            this.initializeTomSelect('id_participants', 'participants', 'Select participants...');
+            this.initializeTomSelect('id_tags', 'tags', 'Select tags...');
         },
         
         initializeTomSelect(elementId, filterKey, placeholder = null) {
@@ -150,7 +154,7 @@ function dashboard() {
             const filtersFromURL = {};
             
             for (const [key, value] of urlParams.entries()) {
-                if (key === 'experiments' || key === 'channels') {
+                if (key === 'experiments' || key === 'channels' || key === 'participants' || key === 'tags') {
                     // Handle multi-select fields
                     if (filtersFromURL[key]) {
                         if (!Array.isArray(filtersFromURL[key])) {
@@ -250,7 +254,9 @@ function dashboard() {
                 date_range: DEFAULTS.DATE_RANGE,
                 granularity: DEFAULTS.GRANULARITY,
                 experiments: [],
-                channels: []
+                channels: [],
+                participants: [],
+                tags: [],
             };
             
             this.activeFilterId = null;
@@ -746,7 +752,7 @@ function dashboard() {
         },
         
         clearTomSelectInstances() {
-            ['id_experiments', 'id_channels'].forEach(id => {
+            ['id_experiments', 'id_channels', 'id_participants', 'id_tags'].forEach(id => {
                 const element = document.getElementById(id);
                 if (element && element.tomselect) {
                     element.tomselect.clear();
