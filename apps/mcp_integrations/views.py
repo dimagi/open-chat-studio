@@ -97,3 +97,14 @@ class DeleteMcpServer(LoginAndTeamRequiredMixin, PermissionRequiredMixin, View):
         messages.success(request, "MCP Server Deleted")
         return HttpResponse()
 
+
+@login_required
+@permission_required("mcp_integrations.change_mcpserver", raise_exception=True)
+def refresh_tools_view(request, team_slug: str, pk: int):
+    """
+    View to refresh tools for a specific MCP server.
+    """
+    mcp_server = get_object_or_404(McpServer, id=pk, team__slug=team_slug, team=request.team)
+    sync_tools_task.delay(mcp_server.id)
+    messages.success(request, "Tool refresh has been queued.")
+    return redirect(reverse("single_team:manage_team", args=[team_slug]))

@@ -100,6 +100,8 @@ CONTENT_TYPES = {
         "evaluationresult",
     ],
     "trace": ["trace"],
+    "mcp_integrations": ["mcpserver"],
+
 }
 
 CUSTOM_PERMISSIONS = {"experiments": ["invite_participants", "download_chats"]}
