@@ -1,6 +1,7 @@
 from abc import ABC, abstractmethod
+from collections.abc import Iterator
 from dataclasses import dataclass
-from typing import Any, Generic, Iterator, Self, TypeVar
+from typing import Any, Generic, Self, TypeVar
 
 from langchain_core.documents import Document
 
@@ -23,7 +24,7 @@ class SyncResult:
         return self.files_added + self.files_updated + self.files_removed
 
 
-ConfigType = TypeVar('ConfigType')
+ConfigType = TypeVar("ConfigType")
 
 
 class BaseDocumentLoader(ABC, Generic[ConfigType]):

@@ -1,6 +1,7 @@
 import fnmatch
 import logging
-from typing import Iterator, Self
+from collections.abc import Iterator
+from typing import Self
 
 from langchain_community.document_loaders.github import GithubFileLoader
 from langchain_core.documents import Document

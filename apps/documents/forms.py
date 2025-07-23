@@ -118,9 +118,7 @@ class DocumentSourceForm(forms.ModelForm):
         labels = {
             "auto_sync_enabled": "Auto Sync",
         }
-        widgets = {
-            "source_type": forms.HiddenInput()
-        }
+        widgets = {"source_type": forms.HiddenInput()}
 
     def __init__(self, collection, *args, **kwargs):
         self.collection = collection
@@ -144,9 +142,7 @@ class GithubDocumentSourceForm(DocumentSourceForm):
         widget=forms.URLInput(attrs={"placeholder": "https://github.com/user/repo"}),
     )
     auth_provider = forms.ModelChoiceField(
-        queryset=AuthProvider.objects.none(),
-        label="Authentication Provider",
-        help_text="GitHub requires Bearer Auth"
+        queryset=AuthProvider.objects.none(), label="Authentication Provider", help_text="GitHub requires Bearer Auth"
     )
     github_branch = forms.CharField(
         initial="main",
@@ -171,8 +167,7 @@ class GithubDocumentSourceForm(DocumentSourceForm):
     def __init__(self, collection, *args, **kwargs):
         super().__init__(collection, *args, **kwargs)
         self.fields["auth_provider"].queryset = AuthProvider.objects.filter(
-            team_id=collection.team_id,
-            type=AuthProviderType.bearer
+            team_id=collection.team_id, type=AuthProviderType.bearer
         )
 
     def clean_github_repo_url(self):
@@ -204,7 +199,7 @@ class GithubDocumentSourceForm(DocumentSourceForm):
             github_config = GitHubSourceConfig(
                 repo_url=repo_url, branch=branch, file_pattern=file_pattern, path_filter=path_filter
             )
-        except pydantic.ValidationError as e:
+        except pydantic.ValidationError:
             raise forms.ValidationError("Invalid config") from None
 
         cleaned_data["config"] = DocumentSourceConfig(github=github_config)

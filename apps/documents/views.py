@@ -165,7 +165,9 @@ class CreateDocumentSource(LoginAndTeamRequiredMixin, CreateView, PermissionRequ
 
     @cached_property
     def collection(self):
-        return get_object_or_404(Collection.objects.select_related("team"), id=self.collection_id, team__slug=self.team_slug)
+        return get_object_or_404(
+            Collection.objects.select_related("team"), id=self.collection_id, team__slug=self.team_slug
+        )
 
     @property
     def source_type(self):
@@ -197,9 +199,9 @@ class CreateDocumentSource(LoginAndTeamRequiredMixin, CreateView, PermissionRequ
         }
 
     def get_success_url(self):
-        return reverse("documents:single_collection_home", kwargs={
-            "team_slug": self.team_slug, "pk": self.collection_id
-        })
+        return reverse(
+            "documents:single_collection_home", kwargs={"team_slug": self.team_slug, "pk": self.collection_id}
+        )
 
     def form_valid(self, form):
         self.object = form.save()
