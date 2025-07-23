@@ -112,6 +112,7 @@ PROJECT_APPS = [
     "apps.dashboard",
     "apps.evaluations",
     "apps.trace",
+    "apps.mcp_integrations",
 ]
 
 SPECIAL_APPS = ["debug_toolbar"] if USE_DEBUG_TOOLBAR else []
