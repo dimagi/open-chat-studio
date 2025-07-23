@@ -737,3 +737,6 @@ CORS_ALLOWED_METHODS = [
 
 # Additional CORS settings for security
 CORS_PREFLIGHT_MAX_AGE = 86400  # Cache preflight for 24 hours
+
+# Analytics settings
+ANALYTICS_MAX_SESSIONS = 750
