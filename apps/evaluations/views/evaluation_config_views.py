@@ -2,9 +2,11 @@ import csv
 
 from django.contrib.auth.decorators import permission_required
 from django.contrib.auth.mixins import PermissionRequiredMixin
+from django.db.models import Q
 from django.http import HttpResponse, HttpResponseRedirect
-from django.shortcuts import get_object_or_404
+from django.shortcuts import get_object_or_404, render
 from django.urls import reverse
+from django.views.decorators.http import require_http_methods
 from django.views.generic import CreateView, TemplateView, UpdateView
 from django_tables2 import SingleTableView, columns, tables
 
@@ -12,6 +14,8 @@ from apps.evaluations.forms import EvaluationConfigForm
 from apps.evaluations.models import EvaluationConfig, EvaluationRun, EvaluationRunStatus
 from apps.evaluations.tables import EvaluationConfigTable, EvaluationRunTable
 from apps.evaluations.utils import get_evaluators_with_schema
+from apps.experiments.models import Experiment
+from apps.teams.decorators import login_and_team_required
 from apps.teams.mixins import LoginAndTeamRequiredMixin
 
 
@@ -213,3 +217,66 @@ def download_evaluation_run_csv(request, team_slug, evaluation_pk, evaluation_ru
         writer.writerow([row.get(header, "") for header in headers])
 
     return response
+
+
+@login_and_team_required
+@require_http_methods(["GET"])
+def load_experiment_versions(request, team_slug: str):
+    """HTMX endpoint to load version choices for a selected chatbot"""
+    experiment_id = request.GET.get("experiment")
+
+    if not experiment_id:
+        # Return empty version select if no chatbot selected
+        context = {
+            "empty_message": "First select a chatbot above",
+            "field_name": "experiment_version",
+            "field_id": "id_experiment_version",
+            "versions": [],
+        }
+        return render(request, "evaluations/partials/version_select.html", context)
+
+    try:
+        # Get the chatbot and verify it belongs to the team
+        experiment = Experiment.objects.get(
+            id=experiment_id,
+            team=request.team,
+            working_version__isnull=True,  # Only working versions
+        )
+
+        working_version_id = experiment.working_version_id or experiment.id
+        versions = (
+            Experiment.objects.filter(team=request.team)
+            .filter(Q(working_version_id=working_version_id) | Q(id=working_version_id))
+            .order_by("-version_number")
+        )
+
+        version_choices = []
+        for version in versions:
+            if version.working_version_id is None:  # This is the working version
+                label = f"{version.name} (Current working version)"
+            elif version.is_default_version:  # This is the default published version
+                label = f"v{version.version_number} (Current published version)"
+            else:
+                label = f"v{version.version_number}"
+
+            version_choices.append({"value": version.id, "label": label})
+
+        context = {
+            "empty_message": "Select a version...",
+            "field_name": "experiment_version",
+            "field_id": "id_experiment_version",
+            "versions": version_choices,
+            "help_text": (
+                "Specific chatbot version to use for evaluation. If not set, the current working version will be used."
+            ),
+        }
+        return render(request, "evaluations/partials/version_select.html", context)
+
+    except Experiment.DoesNotExist:
+        context = {
+            "empty_message": "Chatbot not found",
+            "field_name": "experiment_version",
+            "field_id": "id_experiment_version",
+            "versions": [],
+        }
+        return render(request, "evaluations/partials/version_select.html", context)

@@ -2,6 +2,7 @@ import importlib
 import json
 
 from django import forms
+from django.db.models import Q
 from pydantic import ValidationError as PydanticValidationError
 
 from apps.evaluations.models import (
@@ -11,22 +12,82 @@ from apps.evaluations.models import (
     EvaluationMessageContent,
     Evaluator,
 )
-from apps.experiments.models import ExperimentSession
+from apps.experiments.models import Experiment, ExperimentSession
 
 
 class EvaluationConfigForm(forms.ModelForm):
+    # Add a helper field for selecting the base chatbot first
+    experiment = forms.ModelChoiceField(
+        queryset=Experiment.objects.none(),
+        required=False,
+        empty_label="Select a chatbot for generation...",
+        help_text="Select the chatbot to run generation against",
+        widget=forms.Select(attrs={"class": "select w-full"}),
+        label="Chatbot",
+    )
+
     class Meta:
         model = EvaluationConfig
-        fields = ("name", "dataset", "evaluators")
+        fields = ("name", "dataset", "evaluators", "experiment_version")
         widgets = {
             "evaluators": forms.CheckboxSelectMultiple(),
+            "experiment_version": forms.Select(attrs={"class": "select w-full"}),
+        }
+        labels = {
+            "experiment_version": "Chatbot version",
+        }
+        help_texts = {
+            "experiment_version": "Specific chatbot version to use for generation",
         }
 
     def __init__(self, team, *args, **kwargs):
         super().__init__(*args, **kwargs)
         self.team = team
+
         self.fields["dataset"].queryset = EvaluationDataset.objects.filter(team=team)
         self.fields["evaluators"].queryset = Evaluator.objects.filter(team=team)
+
+        self.fields["experiment"].queryset = Experiment.objects.filter(
+            team=team, working_version__isnull=True
+        ).order_by("name")
+
+        self.fields["experiment_version"].queryset = Experiment.objects.filter(team=team)
+        self.fields["experiment_version"].empty_label = "Select a version..."
+        self.fields["experiment_version"].required = False
+
+        if self.instance and self.instance.experiment_version:
+            experiment_version = self.instance.experiment_version
+            working_version_id = experiment_version.working_version_id or experiment_version.id
+            working_experiment = Experiment.objects.filter(team=self.team, id=working_version_id).first()
+
+            if working_experiment:
+                self.initial["experiment"] = working_experiment
+                self.fields["experiment_version"].queryset = self._get_version_choices(working_experiment)
+
+    def _get_version_choices(self, experiment):
+        """Get all versions for a specific experiment including working version"""
+
+        working_version_id = experiment.working_version_id or experiment.id
+        return (
+            Experiment.objects.filter(team=self.team)
+            .filter(Q(working_version_id=working_version_id) | Q(id=working_version_id))
+            .order_by("-version_number")
+        )
+
+    def clean(self):
+        cleaned_data = super().clean()
+        experiment = cleaned_data.get("experiment")
+        experiment_version = cleaned_data.get("experiment_version")
+
+        # If experiment_version is selected, validate it belongs to the selected experiment
+        if experiment_version and experiment:
+            expected_working_version_id = experiment.working_version_id or experiment.id
+            actual_working_version_id = experiment_version.working_version_id or experiment_version.id
+
+            if expected_working_version_id != actual_working_version_id:
+                raise forms.ValidationError("The selected version does not belong to the selected experiment.")
+
+        return cleaned_data
 
 
 class EvaluatorForm(forms.ModelForm):

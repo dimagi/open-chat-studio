@@ -201,6 +201,14 @@ class EvaluationConfig(BaseTeamModel):
     name = models.CharField(max_length=255)
     evaluators = models.ManyToManyField(Evaluator)
     dataset = models.ForeignKey(EvaluationDataset, on_delete=models.CASCADE)
+    experiment_version = models.ForeignKey(
+        "experiments.Experiment",
+        on_delete=models.CASCADE,
+        null=True,
+        blank=True,
+        help_text=("Specific chatbot version to use for evaluation. If not set, will skip generation."),
+    )
+    # TODO: get latest published / latest working
 
     def __str__(self):
         return f"EvaluationConfig ({self.name})"

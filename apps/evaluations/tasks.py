@@ -24,7 +24,13 @@ def evaluate_single_message_task(evaluation_run_id, evaluator_ids, message_id):
 
     with current_team(evaluation_run.team):
         message = EvaluationMessage.objects.get(id=message_id)
-        bot_response = _run_bot_generation(evaluation_run.team, message) or ""
+        # Only run bot generation if an experiment version is configured
+        if evaluation_run.config.experiment_version:  # TODO: get correct version (current published / working)
+            bot_response = (
+                _run_bot_generation(evaluation_run.team, message, evaluation_run.config.experiment_version) or ""
+            )
+        else:
+            bot_response = ""
 
         for evaluator_id in evaluator_ids:
             evaluator = Evaluator.objects.get(id=evaluator_id)
@@ -48,15 +54,11 @@ def evaluate_single_message_task(evaluation_run_id, evaluator_ids, message_id):
                 )
 
 
-def _run_bot_generation(team, message: EvaluationMessage) -> str:
+def _run_bot_generation(team, message: EvaluationMessage, experiment: Experiment) -> str:
     """
     Run the evaluation message through the bot to generate a response.
     """
     try:
-        # Get the hardcoded experiment version
-        # TODO: update this based on the actual experiment we want from the config
-        experiment = Experiment.objects.get(public_id="abcbaf2c-c5a5-4ba6-802a-83a1e825d762")
-
         # TODO: Do we get the participant from the EvaluationMessage?
         participant, _ = Participant.objects.get_or_create(
             identifier="evaluations",
