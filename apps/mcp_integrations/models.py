@@ -48,13 +48,20 @@ class McpServer(BaseTeamModel):
         self.available_tools = [tool.name for tool in tools]
         self.save(update_fields=["available_tools"])
 
-    @async_to_sync
-    async def fetch_tools(self):
+    def fetch_tools(self):
+        """
+        Fetch tools from the MCP server
+        """
         headers = {}
         if self.auth_provider:
-            auth_client = self.auth_provider.get_auth_service().get_http_client()
-            headers[auth_client.auth.key] = auth_client.auth.value
+            auth_service = self.auth_provider.get_auth_service()
+            headers |= auth_service.get_auth_headers()
 
+        print("Auth headers:", headers)
+        return self._fetch_tools_from_mcp_server(headers)
+
+    @async_to_sync
+    async def _fetch_tools_from_mcp_server(self, headers: dict):
         client = MultiServerMCPClient(
             {
                 "gateway": {
