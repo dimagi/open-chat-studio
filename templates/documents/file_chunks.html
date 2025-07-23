@@ -1,4 +1,4 @@
-{% extends 'web/app/app_base.html' %}
+{% extends "web/app/app_base.html" %}
 {% load static %}
 
 {% block breadcrumbs %}
@@ -9,7 +9,7 @@
       <li class="pg-breadcrumb-active" aria-current="page">{{ file.name }} Chunks</li>
     </ul>
   </div>
-{% endblock %}
+{% endblock breadcrumbs %}
 
 {% block app %}
   <div class="app-card">
@@ -61,7 +61,7 @@
         </div>
       </div>
 
-      {% include 'documents/partials/pagination_controls.html' %}
+      {% include "documents/partials/pagination_controls.html" %}
 
       <div class="grid grid-cols-1 gap-4">
         {% for chunk in chunks %}
@@ -100,5 +100,5 @@
   </div>
 
   <!-- Pagination -->
-  {% include 'documents/partials/pagination_controls.html' %}
-{% endblock %}
+  {% include "documents/partials/pagination_controls.html" %}
+{% endblock app %}

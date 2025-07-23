@@ -1,4 +1,4 @@
-{% extends 'web/app/app_base.html' %}
+{% extends "web/app/app_base.html" %}
 {% load waffle_tags %}
 {% load team_tags %}
 {% load static %}
@@ -12,7 +12,7 @@
       <li class="pg-breadcrumb-active" aria-current="page">{{ experiment.name }}</li>
     </ul>
   </div>
-{% endblock %}
+{% endblock breadcrumbs %}
 {% block app %}
   <div class="app-card">
     <div class="flex">
@@ -228,7 +228,7 @@
               {% if perms.experiments.download_chats %}
                 {% include "experiments/components/exports.html" %}
               {% endif %}
-              {% include "experiments/filters.html"%}
+              {% include "experiments/filters.html" %}
             </div>
           </div>
         </div>
@@ -243,7 +243,7 @@
              class="watchVersionChange"
              hx-trigger="load, version-changed"
              hx-target="this"
-             hx-get="{% url 'chatbots:versions-list' request.team.slug experiment.id  %}"
+             hx-get="{% url 'chatbots:versions-list' request.team.slug experiment.id %}"
              hx-swap="innerHTML">
         </div>
       </div>
@@ -302,4 +302,4 @@
       });
       window.addEventListener('hashchange', selectTabFromHash);
     </script>
-{% endblock %}
+{% endblock app %}
