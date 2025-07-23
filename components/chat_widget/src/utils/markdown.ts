@@ -8,40 +8,6 @@ marked.setOptions({
 });
 
 /**
- * Renders markdown content to sanitized HTML
- * @param content - The markdown content to render
- * @returns Sanitized HTML string
- */
-export async function renderMarkdown(content: string): Promise<string> {
-  if (!content || typeof content !== 'string') {
-    return '';
-  }
-
-  try {
-    const html = await marked(content);
-    return DOMPurify.sanitize(html, {
-      ALLOWED_TAGS: [
-        'p', 'br', 'strong', 'b', 'em', 'i', 'u', 'code', 'pre',
-        'ul', 'ol', 'li', 'h1', 'h2', 'h3', 'h4', 'h5', 'h6',
-        'blockquote', 'a', 'img', 'hr', 'table', 'thead', 'tbody',
-        'tr', 'td', 'th', 'del', 'ins', 'sub', 'sup'
-      ],
-      ALLOWED_ATTR: [
-        'href', 'target', 'rel', 'class', 'src', 'alt', 'title',
-        'width', 'height', 'align', 'colspan', 'rowspan'
-      ],
-      ALLOWED_URI_REGEXP: /^(?:(?:https?|ftp|mailto):|[^a-z]|[a-z+.\-]+(?:[^a-z+.\-:]|$))/i,
-      ADD_ATTR: ['target'],
-      FORBID_TAGS: ['script', 'style', 'form', 'input', 'button'],
-      FORBID_ATTR: ['onclick', 'onload', 'onerror', 'onmouseover'],
-    });
-  } catch (error) {
-    console.error('Error rendering markdown:', error);
-    return DOMPurify.sanitize(content);
-  }
-}
-
-/**
  * Post-processes rendered HTML to add additional attributes
  * This is called after DOMPurify to ensure external links open in new tabs
  */
@@ -69,11 +35,6 @@ export function postProcessMarkdownHTML(html: string): string {
     console.error('Error post-processing markdown HTML:', error);
     return html;
   }
-}
-
-export async function renderMarkdownComplete(content: string): Promise<string> {
-  const html = await renderMarkdown(content);
-  return postProcessMarkdownHTML(html);
 }
 
 
