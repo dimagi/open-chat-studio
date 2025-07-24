@@ -1143,6 +1143,10 @@ components:
         identifier:
           type: string
           maxLength: 320
+        remote_id:
+          type: string
+          nullable: true
+          maxLength: 255
     ParticipantDataUpdateRequest:
       type: object
       properties:
