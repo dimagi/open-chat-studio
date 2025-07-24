@@ -1310,7 +1310,7 @@ class Participant(BaseTeamModel):
     public_id = models.UUIDField(default=uuid.uuid4, unique=True)
     user = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.CASCADE, null=True, blank=True)
     platform = models.CharField(max_length=32)
-    remote_id = models.CharField(max_length=255, blank=True)
+    remote_id = models.CharField(max_length=255, blank=True, null=True)
 
     class Meta:
         ordering = ["platform", "identifier"]

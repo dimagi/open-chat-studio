@@ -13,6 +13,6 @@ class Migration(migrations.Migration):
         migrations.AddField(
             model_name='participant',
             name='remote_id',
-            field=models.CharField(blank=True, max_length=255),
+            field=models.CharField(blank=True, null=True, max_length=255),
         ),
     ]
