@@ -96,7 +96,7 @@ class TracingService:
     ):
         self.trace_id = uuid.uuid4()
         self.trace_name = trace_name
-        self.session_id = session.external_id
+        self.session_id = str(session.external_id)
         self.user_id = user_id
         self._start_time = time.time()
         self.participant_id = participant_id
