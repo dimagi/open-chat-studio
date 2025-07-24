@@ -24,9 +24,19 @@ def delete_collection_file(collection_file: CollectionFile):
         file.delete_or_archive()
 
 
-def bulk_delete_collection_files(collection: Collection, collection_files: list[CollectionFile]):
+def bulk_delete_collection_files(
+    collection: Collection, collection_files: list[CollectionFile], is_index_deletion=False
+):
     """Bulk delete collection files. This handles the file deletion
-    as well as removing the file from the collection index if necessary."""
+    as well as removing the file from the collection index if necessary.
+
+    Arguments:
+        collection (Collection): The collection which the files belong to.
+        collection_files (list[CollectionFile]): The collection files to delete.
+        is_index_deletion (bool, optional): Whether this deletion is part of a full index deletion.
+            Setting this to `True` will avoid removing the files from a remote index since
+            the index is going to be deleted anyway.
+    """
     files = [collection_file.file for collection_file in collection_files]
     files_in_use = get_related_m2m_objects(files)
 
@@ -36,7 +46,9 @@ def bulk_delete_collection_files(collection: Collection, collection_files: list[
     index_only_delete = [file for file in files if file in files_in_use]
     full_delete = [file for file in files if file not in files_in_use]
     if index_only_delete and collection.is_index:
-        index_manager.delete_files_from_index(files=index_only_delete)
+        if not collection.is_remote_index or not is_index_deletion:
+            # skip this for remote indexes that are going to be deleted
+            index_manager.delete_files_from_index(files=index_only_delete)
 
     if full_delete:
         if collection.is_index:
