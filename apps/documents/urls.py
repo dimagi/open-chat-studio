@@ -11,7 +11,9 @@ urlpatterns = [
     path("collections/<int:pk>/query", views.query_collection, name="collection_query"),
     path("collections/<int:pk>/add_files", views.add_collection_files, name="add_collection_files"),
     path(
-        "collections/<int:pk>/files/<int:file_id>/delete", views.delete_collection_file, name="delete_collection_file"
+        "collections/<int:pk>/files/<int:file_id>/delete",
+        views.delete_collection_file_view,
+        name="delete_collection_file",
     ),
     path("collections/<int:collection_id>/files/", views.collection_files_view, name="collection_files_list"),
     path(

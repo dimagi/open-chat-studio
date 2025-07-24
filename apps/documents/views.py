@@ -36,6 +36,7 @@ from apps.documents.models import (
 )
 from apps.documents.tables import CollectionsTable
 from apps.documents.tasks import sync_document_source_task
+from apps.documents.utils import delete_collection_file
 from apps.files.models import File, FileChunkEmbedding
 from apps.generics import actions
 from apps.generics.chips import Chip
@@ -349,7 +350,7 @@ def add_collection_files(request, team_slug: str, pk: int):
 @login_and_team_required
 @permission_required("documents.change_collection")
 @transaction.atomic()
-def delete_collection_file(request, team_slug: str, pk: int, file_id: int):
+def delete_collection_file_view(request, team_slug: str, pk: int, file_id: int):
     collection_file = get_object_or_404(
         CollectionFile.objects.select_related("collection", "file"), collection_id=pk, file_id=file_id
     )
