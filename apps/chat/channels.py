@@ -310,6 +310,8 @@ class ChannelBase(ABC):
             channel_cls = SlackChannel
         elif platform == "commcare_connect":
             channel_cls = CommCareConnectChannel
+        elif platform == "evaluations":
+            channel_cls = EvaluationChannel
         else:
             raise Exception(f"Unsupported platform type {platform}")
         return channel_cls

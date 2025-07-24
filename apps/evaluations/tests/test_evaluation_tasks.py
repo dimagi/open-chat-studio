@@ -93,6 +93,9 @@ def test_evaluate_single_message_with_bot_generation(
     config.experiment_version = experiment
     config.save()
 
+    run.generation_experiment = config.get_generation_experiment_version()
+    run.save()
+
     service = build_fake_llm_service(responses=["Bot generated response"], token_counts=[30])
     get_llm_service.return_value = service
 
