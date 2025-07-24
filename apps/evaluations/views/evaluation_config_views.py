@@ -222,11 +222,9 @@ def download_evaluation_run_csv(request, team_slug, evaluation_pk, evaluation_ru
 @login_and_team_required
 @require_http_methods(["GET"])
 def load_experiment_versions(request, team_slug: str):
-    """HTMX endpoint to load version choices for a selected chatbot"""
     experiment_id = request.GET.get("experiment")
 
     if not experiment_id:
-        # Return empty version select if no chatbot selected
         context = {
             "empty_message": "First select a chatbot above",
             "field_name": "experiment_version",
@@ -236,7 +234,6 @@ def load_experiment_versions(request, team_slug: str):
         return render(request, "evaluations/partials/version_select.html", context)
 
     try:
-        # Get the chatbot and verify it belongs to the team
         experiment = Experiment.objects.get(
             id=experiment_id,
             team=request.team,
@@ -258,9 +255,7 @@ def load_experiment_versions(request, team_slug: str):
             "field_name": "experiment_version",
             "field_id": "id_experiment_version",
             "versions": version_choices,
-            "help_text": (
-                "Specific chatbot version to use for evaluation. If not set, the current working version will be used."
-            ),
+            "help_text": "Specific chatbot version to use for evaluation.",
         }
         return render(request, "evaluations/partials/version_select.html", context)
 

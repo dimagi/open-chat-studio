@@ -132,6 +132,10 @@ class EvaluationConfigForm(forms.ModelForm):
         experiment_version = cleaned_data.get("experiment_version")
         experiment = cleaned_data.get("experiment")
 
+        if experiment and not experiment_version:
+            self.add_error("experiment_version", "Please select a version")
+            return cleaned_data
+
         if experiment_version in {
             ExperimentVersionSelection.LATEST_WORKING,
             ExperimentVersionSelection.LATEST_PUBLISHED,
