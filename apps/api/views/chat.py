@@ -119,7 +119,7 @@ def chat_start_session(request):
             )
 
         participant, created = Participant.objects.get_or_create(
-            identifier=participant_id, team=team, platform=ChannelPlatform.API, defaults={"user": user, "remote_id":remote_id}
+            identifier=participant_id, team=team, platform=ChannelPlatform.API, defaults={"user": user, "remote_id": remote_id}
         )
     else:
         participant = Participant.create_anonymous(team, ChannelPlatform.API, remote_id)
@@ -129,6 +129,9 @@ def chat_start_session(request):
         participant.save(update_fields=["remote_id"])
 
     if name:
+        if participant.name != name:
+            participant.name = name
+            participant.save(update_fields=["name"])
         participant_data, _ = ParticipantData.objects.get_or_create(
             participant=participant,
             experiment=experiment,
