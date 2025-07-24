@@ -16,17 +16,34 @@ from apps.evaluations.models import (
 from apps.experiments.models import Experiment, ExperimentSession
 
 
+def get_experiment_version_choices(experiment_queryset):
+    """
+    Get experiment version choices including sentinel values and specific versions.
+    Returns consistent (value, label) tuples that can be used by both forms and views.
+    """
+    choices = [
+        (ExperimentVersionSelection.LATEST_WORKING.value, ExperimentVersionSelection.LATEST_WORKING.label),
+        (ExperimentVersionSelection.LATEST_PUBLISHED.value, ExperimentVersionSelection.LATEST_PUBLISHED.label),
+    ]
+
+    # Add specific versions if queryset provided
+    if experiment_queryset is not None:
+        for version in experiment_queryset:
+            label = str(version)
+            if version.working_version_id is None:  # This is the working version
+                continue  # Ignore it as we have "LATEST_WORKING" as a special value
+            elif version.is_default_version:  # This is the default published version
+                label = f"{label} (Current published version)"
+
+            choices.append((version.id, label))
+
+    return choices
+
+
 class ExperimentChoiceField(forms.ChoiceField):
     def __init__(self, queryset, *args, **kwargs):
         self.queryset = queryset
-        # Add sentinel values first
-        choices = [
-            (ExperimentVersionSelection.LATEST_WORKING.value, ExperimentVersionSelection.LATEST_WORKING.label),
-            (ExperimentVersionSelection.LATEST_PUBLISHED.value, ExperimentVersionSelection.LATEST_PUBLISHED.label),
-        ]
-        if queryset is not None:
-            choices.extend((str(obj.pk), str(obj)) for obj in queryset)
-        kwargs["choices"] = choices
+        kwargs["choices"] = get_experiment_version_choices(queryset)
         super().__init__(*args, **kwargs)
 
 

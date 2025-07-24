@@ -10,8 +10,8 @@ from django.views.decorators.http import require_http_methods
 from django.views.generic import CreateView, TemplateView, UpdateView
 from django_tables2 import SingleTableView, columns, tables
 
-from apps.evaluations.forms import EvaluationConfigForm
-from apps.evaluations.models import EvaluationConfig, EvaluationRun, EvaluationRunStatus, ExperimentVersionSelection
+from apps.evaluations.forms import EvaluationConfigForm, get_experiment_version_choices
+from apps.evaluations.models import EvaluationConfig, EvaluationRun, EvaluationRunStatus
 from apps.evaluations.tables import EvaluationConfigTable, EvaluationRunTable
 from apps.evaluations.utils import get_evaluators_with_schema
 from apps.experiments.models import Experiment
@@ -250,26 +250,8 @@ def load_experiment_versions(request, team_slug: str):
             .order_by("-version_number")
         )
 
-        version_choices = [
-            {
-                "value": ExperimentVersionSelection.LATEST_WORKING.value,
-                "label": ExperimentVersionSelection.LATEST_WORKING.label,
-            },
-            {
-                "value": ExperimentVersionSelection.LATEST_PUBLISHED.value,
-                "label": ExperimentVersionSelection.LATEST_PUBLISHED.label,
-            },
-        ]
-
-        # Add specific versions
-        for version in versions:
-            label = str(version)
-            if version.working_version_id is None:  # This is the working version
-                label = f"{label} (Current working version)"
-            elif version.is_default_version:  # This is the default published version
-                label = f"{label} (Current published version)"
-
-            version_choices.append({"value": version.id, "label": label})
+        choices = get_experiment_version_choices(versions)
+        version_choices = [{"value": value, "label": label} for value, label in choices]
 
         context = {
             "empty_message": "Select a version...",
