@@ -3,10 +3,8 @@ from unittest import mock
 import pytest
 from django.conf import settings
 
-from apps.assistants.models import ToolResources
 from apps.files.models import FileChunkEmbedding
 from apps.service_providers.llm_service.index_managers import LocalIndexManager, RemoteIndexManager
-from apps.utils.factories.assistants import OpenAiAssistantFactory
 from apps.utils.factories.documents import CollectionFactory
 from apps.utils.factories.files import FileFactory
 from apps.utils.factories.service_provider_factories import LlmProviderFactory
@@ -136,46 +134,19 @@ class TestCollection:
         # Verify original embeddings still exist and are unchanged
         assert FileChunkEmbedding.objects.filter(collection=collection).count() == 2
 
-    @pytest.mark.parametrize("is_index", [True, False])
-    @mock.patch("apps.documents.models.Collection._remove_remote_index")
-    def test_archive_collection(self, _remove_remote_index, is_index):
+    @mock.patch("apps.documents.tasks.delete_collection_task.delay")
+    def test_archive_collection(self, delete_collection_task):
         """Test that a collection can be archived"""
-        provider = LlmProviderFactory() if is_index else None
-        collection = CollectionFactory(is_index=is_index, openai_vector_store_id="vs-123", llm_provider=provider)
+        collection = CollectionFactory(openai_vector_store_id="vs-123")
         file = FileFactory(external_id="remote-file-123")
         collection.files.add(file)
 
         # Archive the collection
         collection.archive()
 
-        # Check that the collection and files are archived and files cleared
-        file.refresh_from_db()
+        # Check that the collection is archived
         assert collection.is_archived
-
-        for file in collection.files.all():
-            assert file.is_archived
-
-        if is_index:
-            _remove_remote_index.assert_called_once()
-        else:
-            _remove_remote_index.assert_not_called()
-
-    @mock.patch("apps.documents.models.Collection._remove_remote_index")
-    def test_archive_collection_does_not_archive_files_in_use(self, _remove_index):
-        """Test that a collection can be archived"""
-        collection = CollectionFactory()
-        file = FileFactory(external_id="remote-file-123")
-        collection.files.add(file)
-        resource = ToolResources.objects.create(assistant=OpenAiAssistantFactory())
-        resource.files.add(file)
-
-        # Archive the collection
-        collection.archive()
-
-        # Check that only the collection is archived, not the file
-        assert collection.is_archived
-        file.refresh_from_db()
-        assert file.is_archived is False
+        delete_collection_task.assert_called_once()
 
     def test_remove_remote_index(self, remote_index_manager_mock):
         """Test that the index can be removed"""
