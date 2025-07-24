@@ -1,8 +1,10 @@
 import logging
 from collections.abc import Iterable
+from datetime import timedelta
 from typing import cast
 
 from celery import chord, shared_task
+from django.utils import timezone
 
 from apps.channels.models import ChannelPlatform, ExperimentChannel
 from apps.channels.tasks import handle_evaluation_message
@@ -19,6 +21,7 @@ def evaluate_single_message_task(evaluation_run_id, evaluator_ids, message_id):
     """
     Run all evaluations over a single message.
     First runs the message through the bot, then runs the evaluator.
+    ExperimentSessions created in this task are deleted periodically by cleanup_old_evaluation_data
     """
     evaluation_run = EvaluationRun.objects.select_related("team").get(id=evaluation_run_id)
 
@@ -103,7 +106,6 @@ def run_bot_generation(team, message: EvaluationMessage, experiment: Experiment)
         response_content = bot_response.content
         logger.info(f"Bot generated response for evaluation message {message.id}: {response_content}")
 
-        # TODO, delete the ExperimentSession and all the generated ChatMessages here?
         return response_content
 
     except Exception as e:
@@ -156,11 +158,6 @@ def run_evaluation_task(self, evaluation_run_id):
                 evaluation_run.save(update_fields=["finished_at", "status", "job_id"])
                 return
 
-            # Each message needs a generation.
-            # Each evaluator does not
-            # -> generate responses for each message
-            # -> evaluate those responses
-
             # Create chord with group and callback
             chord_result = chord(
                 evaluate_single_message_task.s(evaluation_run_id, [e.id for e in evaluators], message.id)
@@ -179,3 +176,23 @@ def run_evaluation_task(self, evaluation_run_id):
         evaluation_run.error_message = str(e)
         evaluation_run.job_id = ""
         evaluation_run.save(update_fields=["status", "error_message", "job_id"])
+
+
+@shared_task
+def cleanup_old_evaluation_data():
+    """Delete ExperimentSessions that were created during evaluation runs and
+    are older than one week.
+
+    """
+    one_week_ago = timezone.now() - timedelta(days=7)
+    old_evaluation_sessions = ExperimentSession.objects.filter(
+        experiment_channel__platform=ChannelPlatform.EVALUATIONS, created_at__lt=one_week_ago
+    )
+
+    sessions_count = old_evaluation_sessions.count()
+    if sessions_count == 0:
+        logger.info("No old evaluation sessions found to cleanup")
+        return
+    deleted_sessions = old_evaluation_sessions.delete()
+
+    logger.info(f"Cleanup completed: deleted {deleted_sessions[0]} evaluation sessions")
