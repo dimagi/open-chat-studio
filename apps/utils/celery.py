@@ -13,3 +13,7 @@ class TaskbadgerTaskWrapper:
             if total:
                 kwargs["value_max"] = total
             self.task.update(**kwargs)
+
+    def increment_total(self, count: int = 1):
+        if self.task:
+            self.task.set_value_max(self.task.value_max + count)

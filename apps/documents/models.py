@@ -12,15 +12,13 @@ from pydantic import HttpUrl, field_validator
 
 from apps.chat.agent.tools import SearchIndexTool, SearchToolConfig
 from apps.documents.exceptions import IndexConfigurationException
-from apps.documents.tasks import delete_document_source_task
+from apps.documents.tasks import delete_collection_task, delete_document_source_task
 from apps.experiments.versioning import VersionDetails, VersionField, VersionsMixin, VersionsObjectManagerMixin
-from apps.files.models import File
 from apps.service_providers.llm_service.main import OpenAIBuiltinTool
 from apps.service_providers.models import EmbeddingProviderModel
 from apps.teams.models import BaseTeamModel
 from apps.utils.conversions import bytes_to_megabytes
 from apps.utils.deletion import (
-    get_related_m2m_objects,
     get_related_pipeline_experiments_queryset,
     get_related_pipelines_queryset,
 )
@@ -289,20 +287,7 @@ class Collection(BaseTeamModel, VersionsMixin):
             return False
 
         super().archive()
-
-        files = list(self.files.all())
-        # Remove the references to the files in the collection
-        CollectionFile.objects.filter(collection=self).delete()
-
-        # Cleanup conditionally
-        files_with_references = get_related_m2m_objects(files)
-        unused_files = [file for file in files if file not in files_with_references]
-        unused_file_ids = [file.id for file in unused_files]
-
-        if self.is_index and self.openai_vector_store_id:
-            self._remove_remote_index(unused_files)
-
-        File.objects.filter(id__in=unused_file_ids).update(is_archived=True)
+        delete_collection_task.delay(self.id)
         return True
 
     def has_failed_index_uploads(self) -> bool:
@@ -323,12 +308,10 @@ class Collection(BaseTeamModel, VersionsMixin):
             status__in=[FileStatus.PENDING, FileStatus.IN_PROGRESS],
         ).exists()
 
-    def _remove_remote_index(self, remote_files_to_remove: list[File]):
+    def remove_remote_index(self):
         """Remove the index backend"""
         manager = self.get_index_manager()
         manager.delete_remote_index()
-        manager.delete_files(remote_files_to_remove)
-
         self.openai_vector_store_id = ""
         self.save(update_fields=["openai_vector_store_id"])
 
@@ -406,6 +389,10 @@ class SyncStatus(models.TextChoices):
     IN_PROGRESS = "in_progress", _("In Progress")
 
 
+class DocumentSourceManager(VersionsObjectManagerMixin):
+    pass
+
+
 class DocumentSource(BaseTeamModel, VersionsMixin):
     collection = models.ForeignKey(
         Collection,
@@ -430,6 +417,8 @@ class DocumentSource(BaseTeamModel, VersionsMixin):
         related_name="versions",
     )
     is_archived = models.BooleanField(default=False)
+
+    objects = DocumentSourceManager()
 
     def __str__(self) -> str:
         return f"{self.get_source_type_display()} source for {self.collection.name}"

@@ -182,17 +182,13 @@ class TestCollection:
         collection = CollectionFactory(
             is_index=True, is_remote_index=True, openai_vector_store_id="vs-123", llm_provider=LlmProviderFactory()
         )
-        file = FileFactory(external_id="remote-file-123")
-        collection.files.add(file)
 
         # Invoke the remove_index method
-        collection._remove_remote_index([file])
+        collection.remove_remote_index()
 
         # Check that the vector store ID is cleared and the index is removed
         assert collection.openai_vector_store_id == ""
-        file.refresh_from_db()
         remote_index_manager_mock.delete_remote_index.assert_called_once()
-        remote_index_manager_mock.delete_files.assert_called_once()
 
     def test_get_index_manager_returns_correct_manager(self):
         """Remote indexes should return a remote index manager whereas local indexes should return a local one"""
