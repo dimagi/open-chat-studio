@@ -18,6 +18,7 @@ from apps.experiments.models import (
 )
 from apps.generics.help import render_help_with_link
 from apps.service_providers.llm_service.default_models import get_default_translation_models_by_provider
+from apps.service_providers.models import LlmProviderTypes
 from apps.service_providers.utils import get_llm_provider_by_team, get_models_by_provider
 from apps.utils.prompt import PromptVars, validate_prompt_variables
 
@@ -309,19 +310,18 @@ class TranslateMessagesForm(forms.Form):
         super().__init__(*args, **kwargs)
 
         providers = get_llm_provider_by_team(team)
-        provider_choices = [(provider.id, f"{provider.name} ({provider.type})") for provider in providers]
+        provider_choices = [(provider.id, str(provider)) for provider in providers]
 
         self.fields["llm_provider"].choices = [("", "Choose a model for translation")] + provider_choices
         if provider_choices:
             self.fields["llm_provider"].choices = provider_choices
             self.fields["llm_provider"].initial = provider_choices[0][0]
-            provider_display_name = provider_choices[0][1]
-            provider_type = provider_display_name.split("(")[-1].rstrip(")")
-            models_list = get_models_by_provider(provider_type, team)
+            first_provider = providers[0]
+            models_list = get_models_by_provider(first_provider.type, team)
             model_choices = [(model["value"], model["label"]) for model in models_list]
             self.fields["llm_provider_model"].choices = model_choices
             default_model_name_dict = get_default_translation_models_by_provider()
-            default_model_name = default_model_name_dict.get(provider_type)
+            default_model_name = default_model_name_dict.get(str(LlmProviderTypes[first_provider.type].label))
             default_model_value = next((value for value, label in model_choices if label == default_model_name), None)
             if default_model_value is not None:
                 self.fields["llm_provider_model"].initial = default_model_value

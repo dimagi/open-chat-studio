@@ -24,8 +24,8 @@ DEFAULT_LLM_PROVIDER_MODELS = {
         Model("o4-mini", 200000),
         Model("o3", 200000),
         Model("o3-mini", 200000),
-        Model("gpt-4.1", 1000000),
-        Model("gpt-4.1-mini", 1000000, is_default=True, is_translation_default=True),
+        Model("gpt-4.1", 1000000, is_translation_default=True),
+        Model("gpt-4.1-mini", 1000000, is_default=True),
         Model("gpt-4.1-nano", 1000000),
         Model("gpt-4o-mini", 128000),
         Model("gpt-4o", 128000),
@@ -36,10 +36,10 @@ DEFAULT_LLM_PROVIDER_MODELS = {
     ],
     "anthropic": [
         Model("claude-sonnet-4-20250514", k(200)),
-        Model("claude-opus-4-20250514", k(200)),
+        Model("claude-opus-4-20250514", k(200), is_translation_default=True),
         Model("claude-3-7-sonnet-20250219", k(200)),
         Model("claude-3-5-sonnet-latest", k(200)),
-        Model("claude-3-5-haiku-latest", k(200), is_default=True, is_translation_default=True),
+        Model("claude-3-5-haiku-latest", k(200), is_default=True),
         Model("claude-3-opus-latest", k(200), deprecated=True),
         Model("claude-2.0", k(100), deprecated=True),
         Model("claude-2.1", k(200), deprecated=True),
@@ -48,8 +48,8 @@ DEFAULT_LLM_PROVIDER_MODELS = {
     "openai": [
         Model("o4-mini", 200000),
         Model("o4-mini-high", 200000),
-        Model("gpt-4.1", 1000000),
-        Model("gpt-4.1-mini", 1000000, is_default=True, is_translation_default=True),
+        Model("gpt-4.1", 1000000, is_translation_default=True),
+        Model("gpt-4.1-mini", 1000000, is_default=True),
         Model("gpt-4.1-nano", 1000000),
         Model("o3", 128000),
         Model("o3-mini", 128000),
@@ -86,9 +86,9 @@ DEFAULT_LLM_PROVIDER_MODELS = {
         Model("mixtral-8x7b-32768", 32768),
     ],
     "perplexity": [
-        Model("sonar", 128000, is_translation_default=True, is_default=True),
+        Model("sonar", 128000, is_default=True),
         Model("sonar-pro", 200000),
-        Model("sonar-reasoning", 128000),
+        Model("sonar-reasoning", 128000, is_translation_default=True),
         Model("sonar-reasoning-pro", 128000),
         Model("sonar-deep-research", 128000),
         Model("llama-3.1-sonar-small-128k-online", 127072, deprecated=True),
@@ -100,12 +100,12 @@ DEFAULT_LLM_PROVIDER_MODELS = {
         Model("llama-3.1-70b-instruct", 131072),
     ],
     "deepseek": [
-        Model("deepseek-chat", 128000, is_default=True, is_translation_default=True),
-        Model("deepseek-reaoner", 128000),
+        Model("deepseek-chat", 128000, is_default=True),
+        Model("deepseek-reaoner", 128000, is_translation_default=True),
     ],
     "google": [
-        Model("gemini-2.5-flash", 1048576, is_default=True, is_translation_default=True),
-        Model("gemini-2.5-pro", 1048576),
+        Model("gemini-2.5-flash", 1048576, is_default=True),
+        Model("gemini-2.5-pro", 1048576, is_translation_default=True),
         Model("gemini-2.0-flash", 1048576),
         Model("gemini-1.5-flash", 1048576),
         Model("gemini-1.5-flash-8b", 1048576),
@@ -125,13 +125,16 @@ def get_default_model(provider_type: str) -> Model:
 
 def get_default_translation_models_by_provider() -> dict:
     """
-    Returns a dict mapping provider types to their default translation model name.
+    Returns a dict mapping provider labels (e.g., "OpenAI") to their default translation model name.
     """
+    from apps.service_providers.models import LlmProviderTypes
+
     defaults = {}
     for provider_type, models in DEFAULT_LLM_PROVIDER_MODELS.items():
         default_model = next((m for m in models if m.is_translation_default), None)
         if default_model:
-            defaults[provider_type] = default_model.name
+            provider_label = LlmProviderTypes[provider_type].label
+            defaults[provider_label] = default_model.name
     return defaults
 
 
