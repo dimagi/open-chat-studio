@@ -65,8 +65,10 @@ def check_session_access(request, session):
             name="StartChatSession",
             summary="Start a new chat session for an experiment",
             value={
-                "experiment_id": "123e4567-e89b-12d3-a456-426614174000",
+                "chatbot_id": "123e4567-e89b-12d3-a456-426614174000",
                 "session_data": {"source": "widget", "page_url": "https://example.com"},
+                "remote_id": "abc",
+                "name":"participant_name"
             },
         ),
     ],
