@@ -67,8 +67,8 @@ def check_session_access(request, session):
             value={
                 "chatbot_id": "123e4567-e89b-12d3-a456-426614174000",
                 "session_data": {"source": "widget", "page_url": "https://example.com"},
-                "remote_id": "abc",
-                "name": "participant_name",
+                "participant_remote_id": "abc",
+                "participant_name": "participant_name",
             },
         ),
     ],
@@ -87,8 +87,8 @@ def chat_start_session(request):
     experiment_id = data["chatbot_id"]
     participant_id = data.get("participant_id")
     session_data = data.get("session_data", {})
-    remote_id = data.get("remote_id")
-    name = data.get("name")
+    remote_id = data.get("participant_remote_id")
+    name = data.get("participant_name")
 
     # First, check if this is a public experiment
     experiment = get_object_or_404(Experiment, public_id=experiment_id)

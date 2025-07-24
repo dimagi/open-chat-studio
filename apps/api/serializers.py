@@ -205,10 +205,10 @@ class ChatStartSessionRequest(serializers.Serializer):
         help_text="Optional initial state data for the session. "
         "This field will be ignored if the request is not authenticated.",
     )
-    remote_id = serializers.CharField(
+    participant_remote_id = serializers.CharField(
         label="Remote Id", required=False, help_text="Optional ID for the participant from remote systems"
     )
-    name = serializers.CharField(label="Name", required=False, help_text="Optional participant name")
+    participant_name = serializers.CharField(label="Name", required=False, help_text="Optional participant name")
 
 
 class ChatStartSessionResponse(serializers.Serializer):
