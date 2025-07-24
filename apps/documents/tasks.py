@@ -239,9 +239,6 @@ def delete_collection_task(self, collection_id: int):
             bulk_delete_collection_files(collection, page.object_list, is_index_deletion=True)
         tb_task.set_progress(page.number, paginator.num_pages)
 
-    for document_source in collection.document_sources.all():
-        _delete_document_source(document_source, tb_task, is_index_deletion=True)
-
     if collection.is_index and collection.openai_vector_store_id:
         collection.remove_remote_index()
 
@@ -271,17 +268,11 @@ def delete_document_source_task(self, document_source_id: int):
         return
 
     tb_task = TaskbadgerTaskWrapper(self.taskbadger_task)
-    tb_task.set_total(0)
-    _delete_document_source(document_source, tb_task)
-
-
-def _delete_document_source(document_source: DocumentSource, tb_task: TaskbadgerTaskWrapper, is_index_deletion=False):
     paginator = Paginator(document_source.collectionfile_set.all(), per_page=100, orphans=25)
-    tb_task.increment_total(paginator.num_pages)
     for page in paginator:
         with transaction.atomic():
-            bulk_delete_collection_files(document_source.collection, page.object_list, is_index_deletion)
-        tb_task.set_progress(page.number)
+            bulk_delete_collection_files(document_source.collection, page.object_list)
+        tb_task.set_progress(page.number, paginator.num_pages)
 
     if not document_source.has_versions:
         document_source.delete()

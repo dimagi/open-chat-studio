@@ -288,6 +288,9 @@ class Collection(BaseTeamModel, VersionsMixin):
             return False
 
         super().archive()
+        for doc_source in self.document_sources.all():
+            doc_source.archive(delete_files=False)
+
         delete_collection_task.delay(self.id)
         return True
 
@@ -437,11 +440,12 @@ class DocumentSource(BaseTeamModel, VersionsMixin):
             return self.config.confluence
         return None
 
-    def archive(self):
+    def archive(self, delete_files=True):
         from apps.documents.tasks import delete_document_source_task
 
         super().archive()
-        delete_document_source_task.delay(self.id)
+        if delete_files:
+            delete_document_source_task.delay(self.id)
 
 
 class DocumentSourceSyncLog(models.Model):
