@@ -4,12 +4,23 @@ from itertools import groupby
 
 import openai
 from celery.app import shared_task
+from django.core.paginator import Paginator
+from django.db import transaction
 from django.db.models import QuerySet
 from taskbadger.celery import Task as TaskbadgerTask
 
 from apps.assistants.models import OpenAiAssistant
-from apps.documents.models import ChunkingStrategy, Collection, CollectionFile, CollectionFileMetadata, FileStatus
+from apps.documents.models import (
+    ChunkingStrategy,
+    Collection,
+    CollectionFile,
+    CollectionFileMetadata,
+    DocumentSource,
+    FileStatus,
+)
+from apps.documents.utils import bulk_delete_collection_files
 from apps.service_providers.models import LlmProvider
+from apps.utils.celery import TaskbadgerTaskWrapper
 
 logger = logging.getLogger("ocs.documents.tasks.link_files_to_index")
 
@@ -152,7 +163,6 @@ def create_collection_from_assistant_task(collection_id: int, assistant_id: int)
 def sync_document_source_task(document_source_id: int):
     """Sync a specific document source"""
     from apps.documents.document_source_service import sync_document_source
-    from apps.documents.models import DocumentSource
 
     try:
         document_source = DocumentSource.objects.get(id=document_source_id)
@@ -182,7 +192,7 @@ def sync_document_source_task(document_source_id: int):
     document_source.save(update_fields=["sync_task_id"])
 
 
-@shared_task(base=TaskbadgerTask, ignore_result=True)
+@shared_task(ignore_result=True)
 def sync_all_document_sources_task():
     """Sync all document sources that have auto_sync_enabled=True"""
     from apps.documents.document_source_service import sync_all_auto_enabled_sources
@@ -197,3 +207,38 @@ def sync_all_document_sources_task():
 
     except Exception as e:
         logger.error(f"Unexpected error during auto-sync: {str(e)}")
+
+
+@shared_task(
+    bind=True,
+    base=TaskbadgerTask,
+    acks_late=True,
+    ignore_result=True,
+    autoretry_for=(Exception,),
+    retry_kwargs={"max_retries": 3, "countdown": 60},
+)
+def delete_document_source_task(self, document_source_id: int):
+    """Delete or archive a DocumentSource and it's files"""
+    try:
+        document_source = DocumentSource.objects.select_related("collection").get(id=document_source_id)
+    except DocumentSource.DoesNotExist:
+        return
+
+    if not document_source.is_archived:
+        logger.warning(
+            "Attempting to delete resources from an unarchived document source",
+            extra={
+                "document_source": document_source_id,
+            },
+        )
+        return
+
+    tb_task = TaskbadgerTaskWrapper(self.taskbadger_task)
+    paginator = Paginator(document_source.files.all(), per_page=100, orphans=25)
+    for page in paginator:
+        with transaction.atomic():
+            bulk_delete_collection_files(document_source.collection, page.object_list)
+        tb_task.set_progress(page.number, paginator.num_pages)
+
+    if not document_source.has_versions:
+        document_source.delete()

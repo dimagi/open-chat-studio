@@ -80,7 +80,7 @@ class CollectionHome(LoginAndTeamRequiredMixin, TemplateView, PermissionRequired
 def single_collection_home(request, team_slug: str, pk: int):
     collection = get_object_or_404(Collection.objects.select_related("team"), id=pk, team__slug=team_slug)
 
-    document_sources = DocumentSource.objects.filter(collection=collection)
+    document_sources = DocumentSource.objects.working_versions_queryset().filter(collection=collection)
     collection_files_count = CollectionFile.objects.filter(collection=collection).count()
     context = {
         "collection": collection,
@@ -241,8 +241,7 @@ class EditDocumentSource(BaseDocumentSourceView, UpdateView):
 @permission_required("documents.change_collection")
 def delete_document_source(request, team_slug: str, collection_id: int, pk: int):
     document_source = get_object_or_404(DocumentSource, id=pk, collection_id=collection_id, team__slug=team_slug)
-    # TODO more thorough delete
-    document_source.delete()
+    document_source.archive()
     return HttpResponse()
 
 

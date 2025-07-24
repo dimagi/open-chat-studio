@@ -12,6 +12,7 @@ from pydantic import HttpUrl, field_validator
 
 from apps.chat.agent.tools import SearchIndexTool, SearchToolConfig
 from apps.documents.exceptions import IndexConfigurationException
+from apps.documents.tasks import delete_document_source_task
 from apps.experiments.versioning import VersionDetails, VersionField, VersionsMixin, VersionsObjectManagerMixin
 from apps.files.models import File
 from apps.service_providers.llm_service.main import OpenAIBuiltinTool
@@ -445,6 +446,10 @@ class DocumentSource(BaseTeamModel, VersionsMixin):
         elif self.source_type == SourceType.CONFLUENCE:
             return self.config.confluence
         return None
+
+    def archive(self):
+        super().archive()
+        delete_document_source_task.delay(self.id)
 
 
 class DocumentSourceSyncLog(models.Model):
