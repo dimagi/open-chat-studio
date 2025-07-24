@@ -12,7 +12,6 @@ from pydantic import HttpUrl, field_validator
 
 from apps.chat.agent.tools import SearchIndexTool, SearchToolConfig
 from apps.documents.exceptions import IndexConfigurationException
-from apps.documents.tasks import delete_collection_task, delete_document_source_task
 from apps.experiments.versioning import VersionDetails, VersionField, VersionsMixin, VersionsObjectManagerMixin
 from apps.service_providers.llm_service.main import OpenAIBuiltinTool
 from apps.service_providers.models import EmbeddingProviderModel
@@ -280,6 +279,8 @@ class Collection(BaseTeamModel, VersionsMixin):
         """
         Archive the collection with its files and remove the index and the files at the remote service, if it has one
         """
+        from apps.documents.tasks import delete_collection_task
+
         if self.get_related_nodes_queryset().exists():
             return False
 
@@ -437,6 +438,8 @@ class DocumentSource(BaseTeamModel, VersionsMixin):
         return None
 
     def archive(self):
+        from apps.documents.tasks import delete_document_source_task
+
         super().archive()
         delete_document_source_task.delay(self.id)
 
