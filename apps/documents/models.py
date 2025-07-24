@@ -405,7 +405,7 @@ class SyncStatus(models.TextChoices):
     IN_PROGRESS = "in_progress", _("In Progress")
 
 
-class DocumentSource(BaseTeamModel):
+class DocumentSource(BaseTeamModel, VersionsMixin):
     collection = models.ForeignKey(
         Collection,
         on_delete=models.CASCADE,
@@ -414,15 +414,21 @@ class DocumentSource(BaseTeamModel):
     )
     source_type = models.CharField(max_length=20, choices=SourceType.choices, help_text="Type of document source")
     config = SchemaField(schema=DocumentSourceConfig, help_text="Configuration for the document source")
-    auto_sync_enabled = models.BooleanField(
-        default=False, help_text="Automatically sync this source on a schedule"
-    )
+    auto_sync_enabled = models.BooleanField(default=False, help_text="Automatically sync this source on a schedule")
     last_sync = models.DateTimeField(null=True, blank=True, help_text="Timestamp of the last successful sync")
     files = models.ManyToManyField("files.File", blank=False, through=CollectionFile, related_name="document_sources")
     sync_task_id = models.CharField(
         max_length=40, blank=True, default="", help_text="System ID of the sync task, if present."
     )
     auth_provider = models.ForeignKey("service_providers.AuthProvider", on_delete=models.PROTECT, blank=True, null=True)
+    working_version = models.ForeignKey(
+        "self",
+        on_delete=models.CASCADE,
+        null=True,
+        blank=True,
+        related_name="versions",
+    )
+    is_archived = models.BooleanField(default=False)
 
     def __str__(self) -> str:
         return f"{self.get_source_type_display()} source for {self.collection.name}"
