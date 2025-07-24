@@ -268,7 +268,10 @@ class EvaluationConfig(BaseTeamModel):
 
     def run(self) -> EvaluationRun:
         """Runs the evaluation asynchronously using Celery"""
-        run = EvaluationRun.objects.create(team=self.team, config=self, status=EvaluationRunStatus.PENDING)
+        generation_experiment = self.get_generation_experiment_version()
+        run = EvaluationRun.objects.create(
+            team=self.team, config=self, generation_experiment=generation_experiment, status=EvaluationRunStatus.PENDING
+        )
 
         from apps.evaluations.tasks import run_evaluation_task
 
@@ -288,6 +291,13 @@ class EvaluationRunStatus(models.TextChoices):
 
 class EvaluationRun(BaseTeamModel):
     config = models.ForeignKey(EvaluationConfig, on_delete=models.CASCADE)
+    generation_experiment = models.ForeignKey(
+        "experiments.Experiment",
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        help_text="The experiment version used for generation during this evaluation run",
+    )
     created_at = models.DateTimeField(auto_now_add=True)
     finished_at = models.DateTimeField(null=True, blank=True)
     user = models.ForeignKey(

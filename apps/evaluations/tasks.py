@@ -28,7 +28,7 @@ def evaluate_single_message_task(evaluation_run_id, evaluator_ids, message_id):
     with current_team(evaluation_run.team):
         message = EvaluationMessage.objects.get(id=message_id)
         # Only run bot generation if an experiment version is configured
-        generation_experiment = evaluation_run.config.get_generation_experiment_version()
+        generation_experiment = evaluation_run.generation_experiment
         bot_response = ""
         if generation_experiment is not None:
             bot_response = run_bot_generation(evaluation_run.team, message, generation_experiment) or ""
