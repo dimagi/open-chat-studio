@@ -205,8 +205,8 @@ def test_start_chat_session_with_remote_id_and_name(team_with_users, authed_clie
 
     data = {
         "chatbot_id": experiment.public_id,
-        "remote_id": remote_id,
-        "name": name,
+        "participant_remote_id": remote_id,
+        "participant_name": name,
         "session_data": session_state,
     }
 

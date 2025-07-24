@@ -129,8 +129,8 @@ paths:
                   session_data:
                     source: widget
                     page_url: https://example.com
-                  remote_id: abc
-                  name: participant_name
+                  participant_remote_id: abc
+                  participant_name: participant_name
                 summary: Start a new chat session for an experiment
         required: true
       security:
@@ -149,8 +149,8 @@ paths:
                     session_data:
                       source: widget
                       page_url: https://example.com
-                    remote_id: abc
-                    name: participant_name
+                    participant_remote_id: abc
+                    participant_name: participant_name
                   summary: Start a new chat session for an experiment
           description: ''
   /api/experiments/:
@@ -800,11 +800,12 @@ components:
           title: Initial session data
           description: Optional initial state data for the session. This field will
             be ignored if the request is not authenticated.
-        remote_id:
+        participant_remote_id:
           type: string
           description: Optional ID for the participant from remote systems
-        name:
+        participant_name:
           type: string
+          title: Paricipant Name
           description: Optional participant name
       required:
       - chatbot_id
