@@ -57,7 +57,6 @@ class McpServer(BaseTeamModel):
             auth_service = self.auth_provider.get_auth_service()
             headers |= auth_service.get_auth_headers()
 
-        print("Auth headers:", headers)
         return self._fetch_tools_from_mcp_server(headers)
 
     @async_to_sync
