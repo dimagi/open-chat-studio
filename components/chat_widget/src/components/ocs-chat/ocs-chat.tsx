@@ -5,6 +5,7 @@ import {
   ChevronUpIcon,
   GripDotsVerticalIcon,
 } from './heroicons';
+import { renderMarkdownSync as renderMarkdownComplete } from '../../utils/markdown';
 
 interface ChatMessage {
   created_at: string;
@@ -677,7 +678,10 @@ export class OcsChat {
                       {this.parsedWelcomeMessages.map((message, index) => (
                         <div key={`welcome-${index}`} class="flex justify-start">
                           <div class="bg-gray-200 text-gray-800 max-w-xs lg:max-w-md px-4 py-2 rounded-lg">
-                            <div class="whitespace-pre-wrap">{message}</div>
+                            <div
+                              class="chat-markdown"
+                              innerHTML={renderMarkdownComplete(message)}
+                            ></div>
                           </div>
                         </div>
                       ))}
@@ -701,7 +705,10 @@ export class OcsChat {
                           'bg-gray-100 text-gray-600 text-sm': message.role === 'system'
                         }}
                       >
-                        <div class="whitespace-pre-wrap">{message.content}</div>
+                        <div
+                          class="chat-markdown"
+                          innerHTML={renderMarkdownComplete(message.content)}
+                        ></div>
                         {message.attachments && message.attachments.length > 0 && (
                           <div class="mt-2 space-y-1">
                             {message.attachments.map((attachment, attachmentIndex) => (
