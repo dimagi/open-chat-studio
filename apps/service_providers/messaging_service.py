@@ -309,7 +309,7 @@ class SlackService(MessagingService):
 
     slack_team_id: str
     slack_installation_id: int
-    _client: WebClient | None
+    _client: WebClient | None = pydantic.PrivateAttr(default=None)
 
     def send_text_message(
         self, message: str, from_: str, to: str, platform: ChannelPlatform, thread_ts: str = None, **kwargs
