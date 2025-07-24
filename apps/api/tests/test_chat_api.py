@@ -214,7 +214,7 @@ def test_start_chat_session_with_remote_id_and_name(team_with_users, authed_clie
     assert response.status_code == 201
     response_json = response.json()
 
-    participant = Participant.objects.get(identifier=response["participant"]["identifier"])
+    participant = Participant.objects.get(identifier=response_json["participant"]["identifier"])
     assert response_json["participant"]["remote_id"] == remote_id
 
     participant_data = ParticipantData.objects.get(participant=participant, experiment=experiment, team=team_with_users)
