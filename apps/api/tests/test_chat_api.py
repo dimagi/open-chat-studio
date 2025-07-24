@@ -195,7 +195,8 @@ def test_start_chat_session_with_auth(team_with_users, authed_client, experiment
     response = authed_client.post(url, data=data, format="json")
     assert response.status_code == 201
 
-@pytest.mark.django_db
+
+@pytest.mark.django_db()
 def test_start_chat_session_with_remote_id_and_name(team_with_users, authed_client, experiment):
     url = reverse("api:chat:start-session")
     remote_id = "test-remote-id-123"
@@ -213,8 +214,8 @@ def test_start_chat_session_with_remote_id_and_name(team_with_users, authed_clie
     assert response.status_code == 201
     response_json = response.json()
 
-    participant = Participant.objects.get(identifier=remote_id)
-    assert response_json["participant"]["identifier"] == remote_id
+    participant = Participant.objects.get(identifier=response["participant"]["identifier"])
+    assert response_json["participant"]["remote_id"] == remote_id
 
     participant_data = ParticipantData.objects.get(participant=participant, experiment=experiment, team=team_with_users)
     assert participant_data.data.get("name") == name

@@ -1320,7 +1320,12 @@ class Participant(BaseTeamModel):
     def create_anonymous(cls, team: Team, platform: str, remote_id: str = None) -> "Participant":
         public_id = str(uuid.uuid4())
         return cls.objects.create(
-            team=team, platform=platform, identifier=f"anon:{public_id}", public_id=public_id, name="Anonymous", remote_id=remote_id
+            team=team,
+            platform=platform,
+            identifier=f"anon:{public_id}",
+            public_id=public_id,
+            name="Anonymous",
+            remote_id=remote_id,
         )
 
     @property
