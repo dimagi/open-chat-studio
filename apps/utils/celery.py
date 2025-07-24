@@ -5,15 +5,15 @@ class TaskbadgerTaskWrapper:
 
     def set_total(self, count: int):
         if self.task:
-            self.task.set_value(count)
+            self.task.safe_update(value=count)
 
     def set_progress(self, progress: int, total: int = None):
         if self.task:
             kwargs = {"value": progress}
             if total:
                 kwargs["value_max"] = total
-            self.task.update(**kwargs)
+            self.task.safe_update(**kwargs)
 
     def increment_total(self, count: int = 1):
         if self.task:
-            self.task.set_value_max(self.task.value_max + count)
+            self.task.safe_update(value_max=self.task.value_max + count)
