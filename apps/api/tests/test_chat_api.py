@@ -47,7 +47,7 @@ def test_start_chat_session(team_with_users, api_client, experiment):
             "version_number": 1,
             "versions": [],
         },
-        "participant": {"identifier": mock.ANY},
+        "participant": {"identifier": mock.ANY, "remote_id": None},
     }
     assert response_json["participant"]["identifier"].startswith("anon:")
 

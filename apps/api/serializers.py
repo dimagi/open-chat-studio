@@ -34,7 +34,7 @@ class ExperimentSerializer(serializers.ModelSerializer):
 class ParticipantSerializer(serializers.ModelSerializer):
     class Meta:
         model = Participant
-        fields = ["identifier"]
+        fields = ["identifier", "remote_id"]
 
 
 class TeamSerializer(serializers.ModelSerializer):
