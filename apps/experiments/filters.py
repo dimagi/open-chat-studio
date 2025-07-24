@@ -121,6 +121,8 @@ def build_filter_condition(column, operator, value, timezone):
         return build_experiment_filter(operator, value)
     elif column == "state":
         return build_state_filter(operator, value)
+    elif column == "remote_id":
+        return build_remote_id_filter(operator, value)
     return None
 
 
@@ -310,5 +312,21 @@ def build_state_filter(operator, value):
 
     elif operator == Operators.EXCLUDES:
         return ~Q(status__in=selected_values)
+
+    return None
+
+
+def build_remote_id_filter(operator, value):
+    try:
+        selected_values = json.loads(value)
+    except json.JSONDecodeError:
+        return None
+
+    if not selected_values:
+        return None
+    if operator == Operators.ANY_OF:
+        return Q(participant__remote_id__in=selected_values)
+    elif operator == Operators.EXCLUDES:
+        return ~Q(participant__remote_id__in=selected_values)
 
     return None
