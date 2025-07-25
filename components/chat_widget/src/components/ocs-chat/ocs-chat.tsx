@@ -124,15 +124,28 @@ export class OcsChat {
     this.loaded = this.visible;
     if (!this.chatbotId) {
       this.error = 'Chatbot ID is required';
+      return;
+    }
+    // Always try to load existing session if localStorage is available
+    if (this.isLocalStorageAvailable()) {
+      const { sessionId, messages } = this.loadSessionFromStorage();
+      if (sessionId && messages) {
+        this.sessionId = sessionId;
+        this.messages = messages;
+        this.showStarterQuestions = messages.length === 0;
+      }
     }
     this.parseWelcomeMessages();
     this.parseStarterQuestions();
   }
 
   componentDidLoad() {
-    // Auto-start session if visible on load
+    // Only auto-start session if we don't have an existing one
     if (this.visible && !this.sessionId) {
       this.startSession();
+    } else if (this.visible && this.sessionId) {
+      // Resume polling for existing session
+      this.startPolling();
     }
     this.initializePosition();
     window.addEventListener('resize', this.handleWindowResize);
@@ -205,6 +218,7 @@ export class OcsChat {
 
       const data: ChatStartSessionResponse = await response.json();
       this.sessionId = data.session_id;
+      this.saveSessionToStorage();
 
       // Handle seed message if present
       if (data.seed_message_task_id) {
@@ -248,6 +262,7 @@ export class OcsChat {
         attachments: []
       };
       this.messages = [...this.messages, userMessage];
+      this.saveSessionToStorage();
       this.messageInput = '';
       this.scrollToBottom();
 
@@ -311,6 +326,7 @@ export class OcsChat {
 
         if (data.status === 'complete' && data.message) {
           this.messages = [...this.messages, data.message];
+          this.saveSessionToStorage();
           this.scrollToBottom();
           // Task polling complete, clear typing indicator and resume message polling
           this.isTyping = false;
@@ -381,6 +397,7 @@ export class OcsChat {
 
       if (data.messages.length > 0) {
         this.messages = [...this.messages, ...data.messages];
+        this.saveSessionToStorage();
         this.scrollToBottom();
         this.focusInput();
       }
@@ -606,6 +623,92 @@ export class OcsChat {
     this.initializePosition();
   };
 
+  private getStorageKeys() {
+    return {
+      sessionId: `ocs-chat-session-${this.chatbotId}`,
+      messages: `ocs-chat-messages-${this.chatbotId}`,
+      lastActivity: `ocs-chat-activity-${this.chatbotId}`
+    };
+  }
+
+  private saveSessionToStorage(): void {
+    const keys = this.getStorageKeys();
+    try {
+      if (this.sessionId) {
+        localStorage.setItem(keys.sessionId, this.sessionId);
+        localStorage.setItem(keys.lastActivity, new Date().toISOString());
+      }
+      localStorage.setItem(keys.messages, JSON.stringify(this.messages));
+    } catch (error) {
+      console.warn('Failed to save chat session to localStorage:', error);
+    }
+  }
+
+  private loadSessionFromStorage(): { sessionId?: string; messages: ChatMessage[] } {
+    const keys = this.getStorageKeys();
+    try {
+      const sessionId = localStorage.getItem(keys.sessionId) || undefined;
+      const messagesJson = localStorage.getItem(keys.messages);
+      const messages = messagesJson ? JSON.parse(messagesJson) : [];
+
+      const lastActivity = localStorage.getItem(keys.lastActivity);
+      if (lastActivity) {
+        const lastActivityDate = new Date(lastActivity);
+        const hoursSinceActivity = (Date.now() - lastActivityDate.getTime()) / (1000 * 60 * 60);
+        if (hoursSinceActivity > 24) {
+          this.clearSessionStorage();
+          return { messages: [] };
+        }
+      }
+
+      return { sessionId, messages };
+    } catch (error) {
+      // fall back to starting a new session
+      console.warn('Failed to load chat session from localStorage, starting new session:', error);
+      return { messages: [] };
+    }
+  }
+
+  private clearSessionStorage(): void {
+    const keys = this.getStorageKeys();
+    try {
+      localStorage.removeItem(keys.sessionId);
+      localStorage.removeItem(keys.messages);
+      localStorage.removeItem(keys.lastActivity);
+    } catch (error) {
+      console.warn('Failed to clear chat session from localStorage:', error);
+    }
+  }
+
+  private isLocalStorageAvailable(): boolean {
+    try {
+      const testKey = '__ocs_test__';
+      localStorage.setItem(testKey, 'test');
+      localStorage.removeItem(testKey);
+      return true;
+    } catch {
+      return false;
+    }
+  }
+
+  private async startNewChat(): Promise<void> {
+    try {
+      // Clear current session from storage (if available)
+      this.clearSessionStorage();
+    } catch (error) {
+      // If clearing storage fails, continue anyway
+      console.warn('Could not clear localStorage, continuing with new session:', error);
+    }
+    this.sessionId = undefined;
+    this.messages = [];
+    this.showStarterQuestions = true;
+    this.isTyping = false;
+    this.error = '';
+    this.cleanup();
+
+    await this.startSession();
+  }
+
   render() {
     if (this.error) {
       return (
@@ -637,7 +740,19 @@ export class OcsChat {
                   <GripDotsVerticalIcon/>
                 </div>
               </div>
-              <div class="flex gap-1">
+              <div></div>
+              <div class="flex gap-1 items-center">
+                {/* New Chat button */}
+                {this.sessionId && (
+                  <button
+                    class="px-3 py-1 text-sm bg-blue-500 hover:bg-blue-600 text-white rounded-md transition-colors duration-200 pointer-events-auto"
+                    onClick={() => this.startNewChat()}
+                    title="Start new chat"
+                    aria-label="Start new chat"
+                  >
+                    New Chat
+                  </button>
+                )}
                 <button
                   class="p-1.5 rounded-md transition-colors duration-200 hover:bg-gray-100 text-gray-500"
                   onClick={() => this.toggleSize()}
