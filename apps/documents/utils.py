@@ -38,9 +38,9 @@ def bulk_delete_collection_files(
             the index is going to be deleted anyway.
     """
     files = [collection_file.file for collection_file in collection_files]
-    files_in_use = get_related_m2m_objects(files)
-
     CollectionFile.objects.filter(id__in=[file.id for file in collection_files]).delete()
+
+    files_in_use = get_related_m2m_objects(files)
 
     index_manager = collection.get_index_manager()
     index_only_delete = [file for file in files if file in files_in_use]
@@ -62,6 +62,6 @@ def bulk_delete_collection_files(
         )
         to_delete = file_ids - files_with_versions
         if to_delete:
-            File.objects.filter(id__in=to_delete).delete()
+            File.objects.get_all().filter(id__in=to_delete).delete()
         if files_with_versions:
             File.objects.filter(id__in=files_with_versions).update(is_archived=True)

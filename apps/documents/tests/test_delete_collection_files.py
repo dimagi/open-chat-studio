@@ -84,3 +84,15 @@ class TestBulkDeleteCollectionFiles:
 
             file1.refresh_from_db()
             assert file1.is_archived
+
+    def test_delete_files_full(self, team_with_users):
+        collection = CollectionFactory(team=team_with_users, is_index=False)
+        file1 = FileFactory(team=team_with_users)
+
+        collection.files.add(file1)
+        collection_files = list(CollectionFile.objects.filter(collection=collection))
+
+        bulk_delete_collection_files(collection, collection_files)
+
+        assert CollectionFile.objects.filter(collection=collection).count() == 0
+        assert not File.objects.filter(id=file1.id).exists()

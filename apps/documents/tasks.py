@@ -232,7 +232,7 @@ def delete_collection_task(self, collection_id: int):
         )
         return
 
-    tb_task = TaskbadgerTaskWrapper(self.taskbadger_task)
+    tb_task = TaskbadgerTaskWrapper(self)
     paginator = Paginator(collection.collectionfile_set.all(), per_page=100, orphans=25)
     for page in paginator:
         with transaction.atomic():
@@ -254,7 +254,7 @@ def delete_collection_task(self, collection_id: int):
 def delete_document_source_task(self, document_source_id: int):
     """Delete or archive a DocumentSource and it's files"""
     try:
-        document_source = DocumentSource.objects.select_related("collection").get(id=document_source_id)
+        document_source = DocumentSource.objects.get_all().select_related("collection").get(id=document_source_id)
     except DocumentSource.DoesNotExist:
         return
 
@@ -267,7 +267,7 @@ def delete_document_source_task(self, document_source_id: int):
         )
         return
 
-    tb_task = TaskbadgerTaskWrapper(self.taskbadger_task)
+    tb_task = TaskbadgerTaskWrapper(self)
     paginator = Paginator(document_source.collectionfile_set.all(), per_page=100, orphans=25)
     for page in paginator:
         with transaction.atomic():
