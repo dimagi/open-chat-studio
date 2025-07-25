@@ -112,8 +112,8 @@ class DocumentSourceManager:
 
             existing_files_map = {}
             for file in existing_files:
-                if file.file.external_id:
-                    existing_files_map[file.file.external_id] = file
+                if file.external_id:
+                    existing_files_map[file.external_id] = file
 
             seen_identifiers = set()
 
@@ -151,11 +151,9 @@ class DocumentSourceManager:
         """Create a new file from a document"""
         filename = self._extract_filename(document, identifier)
         content_file = ContentFile(document.page_content.encode("utf-8"))
-        file = File.from_external_source(
+        file = File.create(
             filename=filename,
-            external_file=content_file,
-            external_id=identifier,
-            external_source=document.metadata.get("source_type"),
+            file_obj=content_file,
             team_id=self.document_source.team_id,
             metadata=document.metadata,
         )
@@ -167,6 +165,7 @@ class DocumentSourceManager:
             file=file,
             status=FileStatus.PENDING,
             metadata=CollectionFileMetadata(chunking_strategy=ChunkingStrategy(chunk_size=800, chunk_overlap=400)),
+            external_id=identifier,
         )
         return collection_file
 

@@ -60,24 +60,20 @@ class File(BaseTeamModel, VersionsMixin):
         ).first():
             return existing
 
-        file_content_bytes = external_file.read() if external_file else None
+        return cls.create(filename, external_file, team_id, external_id, external_source, metadata)
+
+    @classmethod
+    def create(cls, filename, file_obj, team_id, external_id="", external_source="", metadata: dict = None):
+        content = file_obj.read() if file_obj else None
 
         content_type = mimetypes.guess_type(filename)[0]
-        if not content_type and external_file:
+        if not content_type and content:
             # typically means the filename doesn't have an extension
-            content_type = magic.from_buffer(file_content_bytes, mime=True)
+            content_type = magic.from_buffer(content, mime=True)
             extension = mimetypes.guess_extension(content_type)
             # leading '.' is included
             filename = f"{filename}{extension}"
 
-        return cls.from_content(
-            filename, file_content_bytes, content_type, team_id, external_id, external_source, metadata
-        )
-
-    @classmethod
-    def from_content(
-        cls, filename, content, content_type, team_id, external_id="", external_source="", metadata: dict = None
-    ):
         new_file = File(
             name=filename,
             external_id=external_id,

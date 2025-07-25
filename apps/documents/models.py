@@ -97,6 +97,7 @@ class CollectionFile(models.Model):
     document_source = models.ForeignKey("documents.DocumentSource", on_delete=models.CASCADE, null=True)
     status = models.CharField(max_length=64, choices=FileStatus.choices, blank=True)
     metadata = SchemaField(schema=CollectionFileMetadata, null=True)
+    external_id = models.CharField(max_length=255, blank=True, help_text="ID of file in document source")
 
     def __str__(self) -> str:
         return f"{self.file.name} in {self.collection.name}"
