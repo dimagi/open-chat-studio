@@ -196,7 +196,11 @@ class Collection(BaseTeamModel, VersionsMixin):
                 VersionField(
                     group_name="General", name="embedding_provider_model", raw_value=self.embedding_provider_model
                 ),
-                VersionField(group_name="General", name="files", queryset=self.files.all()),
+                VersionField(
+                    group_name="General",
+                    name="files",
+                    queryset=self.files.filter(collectionfile__document_source=None).all(),
+                ),
             ],
         )
 
@@ -217,15 +221,29 @@ class Collection(BaseTeamModel, VersionsMixin):
         new_version.openai_vector_store_id = ""
         new_version.save()
 
-        file_versions: dict[int, int] = {}
-        for file in self.files.iterator(chunk_size=15):
-            file_version = file.create_new_version(save=False)
-            file_version.external_id = ""
-            file_version.external_source = ""
-            file_version.save()
-            file_versions[file.id] = file_version.id
+        def _version_files(file_queryset, new_object_version, through_defaults: dict = None):
+            for file in file_queryset.iterator(chunk_size=50):
+                file_version = file.create_new_version(save=False)
+                file_version.external_id = ""
+                file_version.external_source = ""
+                file_version.save()
+                file_versions[file.id] = file_version.id
+            new_object_version.files.add(*list(file_versions.values()), through_defaults=through_defaults)
 
-        new_version.files.add(*list(file_versions.values()))
+        file_versions: dict[int, int] = {}
+        _version_files(self.files.filter(collectionfile__document_source=None), new_version)
+
+        for document_source in self.document_sources.all():
+            doc_source_version = document_source.create_new_version(save=False)
+            doc_source_version.collection = new_version
+            doc_source_version.save()
+            _version_files(
+                document_source.files,
+                doc_source_version,
+                through_defaults={
+                    "collection": new_version,
+                },
+            )
 
         if self.is_index:
             # Create a new vector store at llm service for the new version of the collection.
@@ -393,7 +411,7 @@ class SyncStatus(models.TextChoices):
     IN_PROGRESS = "in_progress", _("In Progress")
 
 
-class DocumentSourceManager(VersionsObjectManagerMixin):
+class DocumentSourceManager(VersionsObjectManagerMixin, models.Manager):
     pass
 
 
@@ -439,6 +457,16 @@ class DocumentSource(BaseTeamModel, VersionsMixin):
         elif self.source_type == SourceType.CONFLUENCE:
             return self.config.confluence
         return None
+
+    def _get_version_details(self) -> VersionDetails:
+        return VersionDetails(
+            instance=self,
+            fields=[
+                VersionField(name="source_type", raw_value=self.source_type),
+                VersionField(name="config", raw_value=self.source_config),
+                VersionField(name="files", queryset=self.files.all()),
+            ],
+        )
 
     def archive(self, delete_files=True):
         from apps.documents.tasks import delete_document_source_task

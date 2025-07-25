@@ -5,23 +5,9 @@ from django.conf import settings
 
 from apps.files.models import FileChunkEmbedding
 from apps.service_providers.llm_service.index_managers import LocalIndexManager, RemoteIndexManager
-from apps.utils.factories.documents import CollectionFactory
+from apps.utils.factories.documents import CollectionFactory, DocumentSourceFactory
 from apps.utils.factories.files import FileFactory
 from apps.utils.factories.service_provider_factories import LlmProviderFactory
-
-
-@pytest.mark.django_db()
-class TestNode:
-    def test_create_new_version(self):
-        collection = CollectionFactory()
-        file = FileFactory()
-        collection.files.add(file)
-
-        collection_v = collection.create_new_version()
-
-        assert file.versions.count() == 1
-
-        assert collection_v.files.first() == file.versions.first()
 
 
 @pytest.mark.django_db()
@@ -50,6 +36,32 @@ class TestCollection:
 
         # Vector store ID should be None for non-indexed collections
         assert new_version.openai_vector_store_id == ""
+
+    def test_create_new_version_with_document_source(self):
+        """Test basic version creation without vector store"""
+        collection = CollectionFactory(is_index=False)
+        document_source = DocumentSourceFactory(collection=collection)
+
+        file1 = FileFactory()
+        file2 = FileFactory()
+        document_source.files.add(file1, file2, through_defaults={"collection": collection})
+
+        new_collection_version = collection.create_new_version()
+        document_source.refresh_from_db()
+        assert document_source.versions.count() == 1
+        new_doc_source_version = document_source.versions.all()[0]
+
+        assert new_doc_source_version.working_version == document_source
+        assert new_doc_source_version.collection_id == new_collection_version.id
+
+        assert new_doc_source_version.files.count() == 2
+        assert new_collection_version.files.count() == 2
+        for file_version in new_collection_version.files.all():
+            assert file_version.working_version_id is not None
+
+        # check that collection_files have the correct document_source version
+        for collection_file in new_collection_version.collectionfile_set.all():
+            assert collection_file.document_source_id == new_doc_source_version.id
 
     @pytest.mark.usefixtures("remote_index_manager_mock")
     @mock.patch("apps.documents.tasks.index_collection_files")
