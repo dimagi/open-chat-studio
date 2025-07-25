@@ -319,3 +319,33 @@ class TestDynamicFilters:
             params["filter_0_value"] = json.dumps([SessionStatus.ACTIVE.value])
             filtered = apply_dynamic_filters(session_queryset, params, timezone)
             assert all(s.status != SessionStatus.ACTIVE for s in filtered)
+
+        @pytest.mark.django_db()
+        def test_remote_id_filters(sessions_with_statuses):
+            """
+            Test remote_id filter with ANY_OF and EXCLUDES.
+            """
+            sessions = sessions_with_statuses
+            session_queryset = sessions[0].experiment.sessions.all()
+
+            remote_ids = list(session_queryset.values_list("remote_id", flat=True))
+            test_id = remote_ids[0]
+
+            params = {
+                "filter_0_column": "remote_id",
+                "filter_0_operator": Operators.ANY_OF,
+                "filter_0_value": json.dumps([test_id]),
+            }
+
+            factory = RequestFactory()
+            request = factory.get("/")
+            attach_session_middleware_to_request(request)
+            timezone = request.session.get("detected_tz", None)
+
+            filtered = apply_dynamic_filters(session_queryset, params, timezone)
+            assert all(s.remote_id == test_id for s in filtered)
+
+            params["filter_0_operator"] = Operators.EXCLUDES
+            params["filter_0_value"] = json.dumps([test_id])
+            filtered = apply_dynamic_filters(session_queryset, params, timezone)
+            assert all(s.remote_id != test_id for s in filtered)
