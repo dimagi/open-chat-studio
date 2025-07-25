@@ -3,6 +3,14 @@
 @tailwind utilities;
 
 :host {
+  /**
+    * @prop --button-background-color: Button background color
+    * @prop --button-background-color-hover: Button background color on hover
+    * @prop --button-text-color: Button text color
+    * @prop --button-text-color-hover: Button text color on hover
+    * @prop --button-border-color: Button border color
+    * @prop --button-border-color-hover: Button border color on hover
+    */
   --button-background-color: white;
   --button-background-color-hover: #f3f4f6;
   --button-text-color: #111827;
@@ -14,17 +22,6 @@
 }
 
 @layer components {
-  .btn {
-    @apply py-2.5 px-5 me-2 mb-2 text-sm font-medium focus:outline-none rounded-lg border;
-    background-color: var(--button-background-color);
-    color: var(--button-text-color);
-    border-color: var(--button-border-color);
-  }
-  .btn:hover {
-    background-color: var(--button-background-color-hover);
-    color: var(--button-text-color-hover);
-    border-color: var(--button-border-color-hover);
-  }
   .starter-question {
     @apply text-left p-3 rounded-lg duration-200 ml-12 border border-blue-500 hover:bg-blue-50 hover:border-blue-600 text-blue-600;
   }
@@ -48,8 +45,8 @@
 
   .chat-icon-btn {
     @apply p-3 rounded-full;
-    width: 60px;
-    height: 60px;
+    width: w-14;
+    height: w-16;
   }
 
   /* Shape variations */
