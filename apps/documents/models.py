@@ -136,10 +136,6 @@ class Collection(BaseTeamModel, VersionsMixin):
         bytes = self.files.aggregate(bytes=models.Sum("content_size"))["bytes"] or 0
         return bytes_to_megabytes(bytes)
 
-    @property
-    def file_names(self) -> list[str]:
-        return list(self.files.values_list("name", flat=True))
-
     def _get_version_details(self) -> VersionDetails:
         return VersionDetails(
             instance=self,
