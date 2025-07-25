@@ -187,6 +187,9 @@ class DocumentSourceManager:
 
     def _extract_filename(self, document: Document, identifier: str) -> str:
         """Extract a suitable filename from document metadata or identifier"""
+        if path := document.metadata.get("path"):
+            return path
+
         # Try to get filename from metadata
         if "source" in document.metadata:
             source = document.metadata["source"]
@@ -200,7 +203,7 @@ class DocumentSourceManager:
             if len(parts) > 2:
                 return parts[-1] or "document.txt"
 
-        return "document.txt"
+        return "unknown_filename"
 
     def _index_files(self, file_ids: list[int]):
         """Trigger indexing for a collection file"""
