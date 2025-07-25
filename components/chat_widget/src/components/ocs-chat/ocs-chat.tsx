@@ -79,9 +79,9 @@ export class OcsChat {
   @Prop() iconUrl?: string;
 
   /**
-   * The shape of the chat button. 'default' maintains current behavior, 'round' makes it circular, 'square' makes it rectangular.
+   * The shape of the chat button. 'round' makes it circular, 'square' keeps it rectangular.
    */
-  @Prop() buttonShape: 'round' | 'square';
+  @Prop() buttonShape: 'round' | 'square' = 'square';
 
   /**
    * Whether the chat widget is visible on load.
@@ -617,8 +617,6 @@ export class OcsChat {
           return 'chat-btn-with-icon chat-btn-round';
         case 'square':
           return 'chat-btn-with-icon chat-btn-square';
-        default:
-          return 'chat-btn-with-icon chat-btn-square';
       }
     } else {
       switch (this.buttonShape) {
@@ -626,8 +624,6 @@ export class OcsChat {
           return 'chat-icon-btn chat-icon-btn-square';
         case 'round':
           return 'chat-icon-btn';
-        default:
-          return 'chat-icon-btn chat-icon-btn-square';
       }
     }
   }
