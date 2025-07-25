@@ -610,22 +610,9 @@ export class OcsChat {
 
   private getButtonClasses(): string {
     const hasText = this.buttonText && this.buttonText.trim();
-
-    if (hasText) {
-      switch (this.buttonShape) {
-        case 'round':
-          return 'chat-btn-with-icon chat-btn-round';
-        case 'square':
-          return 'chat-btn-with-icon chat-btn-square';
-      }
-    } else {
-      switch (this.buttonShape) {
-        case 'square':
-          return 'chat-icon-btn chat-icon-btn-square';
-        case 'round':
-          return 'chat-icon-btn';
-      }
-    }
+    const baseClass = hasText ? 'chat-btn-text' : 'chat-btn-icon';
+    const shapeClass = this.buttonShape === 'round' ? 'round' : '';
+    return `${baseClass} ${shapeClass}`.trim();
   }
 
   private renderButton() {
@@ -642,12 +629,8 @@ export class OcsChat {
           aria-label={`Open chat - ${this.buttonText}`}
           title={this.buttonText}
         >
-          <img
-            src={iconSrc}
-            alt=""
-            class="chat-btn-icon"
-          />
-          <span class="chat-btn-text">{this.buttonText}</span>
+          <img src={iconSrc} alt="" />
+          <span>{this.buttonText}</span>
         </button>
       );
     } else {
@@ -658,11 +641,7 @@ export class OcsChat {
           aria-label="Open chat"
           title="Open chat"
         >
-          <img
-            src={iconSrc}
-            alt="Chat"
-            class="chat-icon"
-          />
+          <img src={iconSrc} alt="Chat" />
         </button>
       );
     }

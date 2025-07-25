@@ -26,44 +26,51 @@
     @apply text-left p-3 rounded-lg duration-200 ml-12 border border-blue-500 hover:bg-blue-50 hover:border-blue-600 text-blue-600;
   }
 
-  /* Shared button styles */
-  .chat-btn-with-icon,
-  .chat-icon-btn {
-    @apply fixed shadow-lg border-0 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2 transition-all duration-200 ease-in-out transform hover:scale-105;
+  .chat-btn-text,
+  .chat-btn-icon {
+    @apply fixed shadow-lg border-0 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2 transition-all duration-200 ease-in-out transform hover:scale-105 rounded-full;
     background-color: var(--button-background-color, white);
     z-index: var(--chat-z-index, 50);
   }
 
-  .chat-btn-with-icon {
-    @apply px-4 py-3 rounded-full flex items-center gap-2;
+  /* Button with text and icon */
+  .chat-btn-text {
+    @apply px-4 py-3 flex items-center gap-2;
     color: var(--button-text-color, #111827);
     min-height: 56px;
   }
-  .chat-btn-with-icon:hover {
+
+  .chat-btn-text:hover {
     color: var(--button-text-color-hover, #1d4ed8);
   }
 
-  .chat-icon-btn {
-    @apply p-3 rounded-full;
-    width: w-14;
-    height: w-16;
-  }
-
-  /* Shape variations */
-  .chat-btn-square,
-  .chat-icon-btn-square {
-    @apply rounded-lg;
-  }
-
-  /* Icon and text styles */
-  .chat-btn-icon {
-    @apply w-6 h-6 object-contain flex-shrink-0;
-  }
-  .chat-btn-text {
+  .chat-btn-text span {
     @apply text-sm font-medium whitespace-nowrap;
   }
-  .chat-icon {
+
+  .chat-btn-text img {
+    @apply w-6 h-6 object-contain flex-shrink-0;
+  }
+
+  /* Icon-only button */
+  .chat-btn-icon {
+    @apply p-3;
+    width: 56px;
+    height: 56px;
+  }
+
+  .chat-btn-icon img {
     @apply w-full h-full object-contain;
+  }
+
+  .chat-btn-text,
+  .chat-btn-icon {
+    @apply rounded-lg; /* Default square shape */
+  }
+
+  .chat-btn-text.round,
+  .chat-btn-icon.round {
+    @apply rounded-full;
   }
 }
 
@@ -96,18 +103,22 @@ textarea {
   .max-w-xs {
     max-width: 85%;
   }
-  .chat-icon-btn {
+
+  .chat-btn-icon {
     width: 56px;
     height: 56px;
   }
-  .chat-btn-with-icon {
+
+  .chat-btn-text {
     @apply px-3 py-2;
     min-height: 52px;
   }
-  .chat-btn-icon {
+
+  .chat-btn-text img {
     @apply w-5 h-5;
   }
-  .chat-btn-text {
+
+  .chat-btn-text span {
     @apply text-xs;
   }
 }
