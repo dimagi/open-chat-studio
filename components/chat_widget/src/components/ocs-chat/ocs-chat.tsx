@@ -740,20 +740,19 @@ export class OcsChat {
                   <GripDotsVerticalIcon/>
                 </div>
               </div>
-
-              {/* New Chat button */}
-              {this.sessionId && (
-                <button
-                  class="px-3 py-1 text-sm bg-blue-500 hover:bg-blue-600 text-white rounded-md transition-colors duration-200 pointer-events-auto"
-                  onClick={() => this.startNewChat()}
-                  title="Start new chat"
-                  aria-label="Start new chat"
-                >
-                  New Chat
-                </button>
-              )}
-
-              <div class="flex gap-1">
+              <div></div>
+              <div class="flex gap-1 items-center">
+                {/* New Chat button */}
+                {this.sessionId && (
+                  <button
+                    class="px-3 py-1 text-sm bg-blue-500 hover:bg-blue-600 text-white rounded-md transition-colors duration-200 pointer-events-auto"
+                    onClick={() => this.startNewChat()}
+                    title="Start new chat"
+                    aria-label="Start new chat"
+                  >
+                    New Chat
+                  </button>
+                )}
                 <button
                   class="p-1.5 rounded-md transition-colors duration-200 hover:bg-gray-100 text-gray-500"
                   onClick={() => this.toggleSize()}
