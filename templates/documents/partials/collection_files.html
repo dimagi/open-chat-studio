@@ -1,6 +1,6 @@
 {% if document_source %}
-  <div id="document_source_status_{{ document_source.id }}" hx-swap-oob="true"></div>
-  {% include "documents/partials/document_source_status.html" %}
+  <div id="document_source_status_{{ document_source.id }}" hx-swap-oob="true">
+    {% include "documents/partials/document_source_status.html" %}
   </div>
 {% endif %}
 <div
@@ -8,7 +8,8 @@
       hx-get="{% url "documents:document_source_files_list" request.team.slug collection.id document_source.id %}"
       hx-trigger="every 5s"
       hx-swap="outerHTML"
-    {% endif %}>
+    {% endif %}
+>
   {% for collection_file in collection_files %}
     <div class="flex items-center justify-between p-3 bg-base-200 rounded-lg">
       <div class="flex flex-col flex-1 gap-1">

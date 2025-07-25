@@ -1,11 +1,11 @@
-<div id="document_source_status_{{ document_source.id }}">
+<div id="document_source_status_{{ document_source.id }}" class="text-xs">
 {% if document_source.last_sync %}
   {% if document_source.sync_task_id %}
     <div aria-label="Syncing" class="status status-accent animate-ping"></div>
-    <span class="text-xs text-base-content/70">Syncing. Previous Sync: </span>
+    <span>Syncing. Previous Sync: </span>
   {% else %}
     <div aria-label="Success" class="status status-success"></div>
-    <span class="text-xs text-base-content/70">Last Sync: </span>
+    <span>Last Sync: </span>
   {% endif %}
   <time datetime="{{ document_source.last_sync.isoformat }}" title="{{ document_source.last_sync.isoformat }}">
     {{ document_source.last_sync|date:"DATETIME_FORMAT" }}
@@ -16,10 +16,10 @@
       <div aria-label="Syncing" class="status status-accent animate-ping"></div>
       <div aria-label="Syncing" class="status status-accent"></div>
     </div>
-    <span class="text-xs text-base-content/70">Syncing</span>
+    <span>Syncing</span>
   {% else %}
     <span class="status"></span>
-    <span class="text-xs text-base-content/70">Not yet synced</span>
+    <span>Not yet synced</span>
   {% endif %}
 {% endif %}
 </div>
