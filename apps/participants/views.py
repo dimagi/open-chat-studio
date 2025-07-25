@@ -168,7 +168,7 @@ def cancel_schedule(request, team_slug: str, participant_id: int, schedule_id: s
 
 @permission_required("experiments.view_participant")
 @login_and_team_required
-def participants_data_by_experiment(request, team_slug: str, experiment_id: int):
+def participant_identifiers_by_experiment(request, team_slug: str, experiment_id: int):
     identifiers = list(
         Participant.objects.filter(team__slug=team_slug, experimentsession__experiment_id=experiment_id)
         .values_list("identifier", "remote_id")

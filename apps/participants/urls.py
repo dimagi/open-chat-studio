@@ -29,8 +29,8 @@ urlpatterns = [
     ),
     path(
         "participants/identifiers/<int:experiment_id>/",
-        views.participants_data_by_experiment,
-        name="participant_data",
+        views.participant_identifiers_by_experiment,
+        name="participant_identifier",
     ),
     path("participants/identifiers/", views.all_participant_identifiers, name="all_participant_identifiers"),
 ]
