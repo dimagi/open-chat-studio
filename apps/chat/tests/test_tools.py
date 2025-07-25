@@ -1,12 +1,14 @@
 import json
 import os
 from datetime import datetime
+from inspect import signature
 from unittest import mock
 
 import pytest
 import pytz
 from django.utils import timezone
 from freezegun import freeze_time
+from langchain_core.tools import StructuredTool
 
 from apps.chat.agent import tools
 from apps.chat.agent.schemas import WeekdaysEnum
@@ -17,6 +19,7 @@ from apps.chat.agent.tools import (
     SearchIndexTool,
     SearchToolConfig,
     UpdateParticipantDataTool,
+    _convert_to_sync_function,
     _move_datetime_to_new_weekday_and_time,
     create_schedule_message,
 )
@@ -467,3 +470,25 @@ Oranges are nice
 def test_tools_present():
     for tool in AgentTools.values:
         assert tool in TOOL_CLASS_MAP
+
+
+def test_convert_to_sync_function():
+    """Test that an async tool is converted to a sync function and that the signature is preserved."""
+
+    async def async_func(url: str, method: str = "GET"):
+        return f"{method} {url}"
+
+    async_tool = StructuredTool(
+        name="test-tool",
+        description="test-description",
+        args_schema={},
+        response_format="content_and_artifact",
+        func=None,
+        coroutine=async_func,
+    )
+
+    sync_tool = _convert_to_sync_function(async_tool)
+    assert sync_tool.coroutine is None
+    assert sync_tool.func is not None
+    assert str(signature(sync_tool.func)) == "(url: str, method: str = 'GET')"
+    assert sync_tool.func("https://example.com", "GET") == "GET https://example.com"
