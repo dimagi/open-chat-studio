@@ -18,13 +18,13 @@ class TestMcpServer:
         tool1 = Mock()
         tool1.name = "Tool1"
         tool2 = Mock()
-        tool2.name = "Tool2"
+        tool2.name = "T" * 300  # Exceeds max length for CharField, but this will be truncated
         with patch("apps.mcp_integrations.models.McpServer._fetch_tools_from_mcp_server") as mock_fetch:
             mock_fetch.return_value = [tool1, tool2]
             server.sync_tools()
 
         server.refresh_from_db()
-        assert server.available_tools == ["Tool1", "Tool2"]
+        assert server.available_tools == ["Tool1", "T" * 255]  # Should truncate to max length
         assert server.tool_count > 0
 
     def test_fetch_tools_with_auth(self, team):

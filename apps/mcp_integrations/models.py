@@ -1,3 +1,5 @@
+import logging
+
 from asgiref.sync import async_to_sync
 from django.contrib.postgres.fields import ArrayField
 from django.db import models
@@ -5,6 +7,8 @@ from django.urls import reverse
 from langchain_mcp_adapters.client import MultiServerMCPClient
 
 from apps.teams.models import BaseTeamModel
+
+logger = logging.getLogger("ocs.mcp_integrations")
 
 
 class TransportType(models.TextChoices):
@@ -45,7 +49,7 @@ class McpServer(BaseTeamModel):
         Fetch tools from the MCP server and update the available_tools field.
         """
         tools = self.fetch_tools()
-        self.available_tools = [tool.name for tool in tools]
+        self.available_tools = [tool.name[:255] for tool in tools]
         self.save(update_fields=["available_tools"])
 
     def fetch_tools(self):
@@ -61,13 +65,17 @@ class McpServer(BaseTeamModel):
 
     @async_to_sync
     async def _fetch_tools_from_mcp_server(self, headers: dict):
-        client = MultiServerMCPClient(
-            {
-                "gateway": {
-                    "transport": self.transport_type,
-                    "url": self.server_url,
-                    "headers": headers,
+        try:
+            client = MultiServerMCPClient(
+                {
+                    "gateway": {
+                        "transport": self.transport_type,
+                        "url": self.server_url,
+                        "headers": headers,
+                    }
                 }
-            }
-        )
-        return await client.get_tools()
+            )
+            return await client.get_tools()
+        except Exception:
+            logger.exception(f"Error fetching tools from MCP server {self.name}")
+            return []

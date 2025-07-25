@@ -1,7 +1,9 @@
 from django import forms
+from django.conf import settings
 
 from apps.mcp_integrations.models import McpServer
 from apps.service_providers.models import AuthProvider
+from apps.utils.urlvalidate import InvalidURL, validate_user_input_url
 
 
 class McpServerForm(forms.ModelForm):
@@ -25,3 +27,12 @@ class McpServerForm(forms.ModelForm):
             del self.fields["available_tools"]
         else:
             self.fields["available_tools"].widget.attrs["readonly"] = True
+
+    def clean_server_url(self):
+        server_url = self.cleaned_data["server_url"]
+        try:
+            validate_user_input_url(server_url, strict=not settings.DEBUG)
+        except InvalidURL as e:
+            raise forms.ValidationError(f"The server URL is invalid: {str(e)}") from None
+
+        return server_url
