@@ -157,6 +157,7 @@ class ExperimentSessionsTable(tables.Table):
         verbose_name="Versions", accessor="experiment_versions_from_prefetched_data", orderable=False
     )
     state = columns.Column(verbose_name="State", accessor="status", orderable=True)
+    remote_id = columns.Column(verbose_name="Remote Id", accessor="participant.remote_id")
     actions = actions.ActionsColumn(
         actions=[
             actions.Action(
