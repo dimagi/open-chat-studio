@@ -368,11 +368,9 @@ def delete_collection_file_view(request, team_slug: str, pk: int, file_id: int):
     collection_file = get_object_or_404(
         CollectionFile.objects.select_related("collection", "file"), collection_id=pk, file_id=file_id
     )
-
     delete_collection_file(collection_file)
-
     messages.success(request, "File removed from collection")
-    return redirect("documents:single_collection_home", team_slug=team_slug, pk=pk)
+    return HttpResponse()
 
 
 @login_and_team_required

@@ -13,7 +13,7 @@
 {% else %}
   <div class="grid grid-cols-1 gap-4">
   {% for collection_file in collection_files %}
-    <div class="flex items-center justify-between p-3 bg-base-200 rounded-lg">
+    <div id="collection_file_{{ collection_file.id }}" class="flex items-center justify-between p-3 bg-base-200 rounded-lg">
       <div class="flex flex-col flex-1 gap-1">
         <div class="flex items-center gap-2">
           {% if collection_file.status %}
@@ -57,11 +57,15 @@
           </a>
         </div>
         {% if allow_delete %}
-          <form action="{% url 'documents:delete_collection_file' team.slug collection.id collection_file.file.id %}"
-                method="post" class="inline">
+          <form hx-post="{% url 'documents:delete_collection_file' team.slug collection.id collection_file.file.id %}"
+                hx-target="#collection_file_{{ collection_file.id }}"
+                hx-swap="outerHTML"
+                hx-disabled-elt="find button"
+                class="inline">
             {% csrf_token %}
             <button type="submit" class="btn btn-sm">
-              <i class="fa-solid fa-trash"></i>
+              <i class="fa-solid fa-trash htmx-hide"></i>
+              <span class="loading loading-spinner loading-xs htmx-show"></span>
             </button>
           </form>
         {% endif %}
