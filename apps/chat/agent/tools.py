@@ -432,7 +432,7 @@ def get_mcp_tool_instances(node: Node, team: Team):
     server_tools = defaultdict(list)
     for tool in mcp_tools:
         mcp_server_id, tool_name = tool.split(":")
-        server_tools[mcp_server_id].append(tool_name)
+        server_tools[int(mcp_server_id)].append(tool_name)
 
     final_tool_instances = []
     for server in team.mcpserver_set.filter(id__in=server_tools.keys()):
