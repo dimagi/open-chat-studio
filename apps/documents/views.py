@@ -7,7 +7,7 @@ from django.contrib import messages
 from django.contrib.auth.decorators import permission_required
 from django.contrib.auth.mixins import PermissionRequiredMixin
 from django.db import transaction
-from django.db.models import Count, IntegerField, OuterRef, Subquery
+from django.db.models import Case, CharField, Count, Func, IntegerField, OuterRef, Subquery, Value, When
 from django.http import HttpResponse, HttpResponseRedirect
 from django.shortcuts import get_object_or_404, redirect, render
 from django.template.loader import render_to_string
@@ -109,8 +109,23 @@ def collection_files_view(request, team_slug: str, collection_id: int, document_
         .annotate(count=Count("id"))
         .values_list("count")
     )
-    collection_files = CollectionFile.objects.filter(collection=collection, document_source=document_source).annotate(
-        chunk_count=Subquery(chunk_count_query, output_field=IntegerField())
+    collection_files = (
+        CollectionFile.objects.filter(collection=collection, document_source=document_source)
+        .annotate(
+            chunk_count=Subquery(chunk_count_query, output_field=IntegerField()),
+            # Extract directory part
+            directory=Case(
+                When(
+                    file__name__contains="/",
+                    then=Func("file__name", Value("/[^/]*$"), Value("/"), function="regexp_replace"),
+                ),
+                default=Value(""),
+                output_field=CharField(),
+            ),
+            # Determine if it's a subdirectory file
+            depth=Func("file__name", Value("/"), function="regexp_count"),
+        )
+        .order_by("directory", "depth", "file__name")
     )
     context = {
         "collection": collection,
