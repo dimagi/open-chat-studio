@@ -23,7 +23,7 @@ class TestDeleteFileFromAssistant:
             assistant=assistant, tool_type="code_interpreter", extra={"vector_store_id": "vs-123"}
         )
 
-    @patch("apps.assistants.sync.OpenAIRemoteIndexManager.delete_files_from_index")
+    @patch("apps.assistants.sync.OpenAIRemoteIndexManager.delete_file_from_index")
     def test_delete_file_removes_relationship_and_keeps_file_when_used_elsewhere(
         self, delete_file, assistant, resource, client
     ):
