@@ -232,7 +232,7 @@ class TestDeleteCollectionFile:
             # Verify OpenAI file deletion was NOT called since file is still used
             remote_index_manager_mock.delete_files.assert_not_called()
 
-            remote_index_manager_mock.delete_file_from_index.assert_called()
+            remote_index_manager_mock.delete_files_from_index.assert_called()
 
             # Verify file still exists and is still linked to assistant
             file.refresh_from_db()

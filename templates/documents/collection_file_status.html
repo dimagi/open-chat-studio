@@ -7,9 +7,12 @@
        hx-swap="outerHTML"
      {% endif %}>
   {% if collection_file.status == 'pending' %}
-    <span class="status"></span>
+    <div class="inline-grid *:[grid-area:1/1]">
+      <div aria-label="pending" class="status animate-ping"></div>
+      <div aria-label="pending" class="status"></div>
+    </div>
   {% elif collection_file.status == 'in_progress' %}
-    <div class="loading loading-spinner loading-sm"></div>
+    <span class="loading loading-spinner loading-xs"></span>
   {% elif collection_file.status == 'completed' %}
     <div aria-label="success" class="status status-success"></div>
   {% else %}

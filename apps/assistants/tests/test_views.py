@@ -52,7 +52,7 @@ class TestDeleteFileFromAssistant:
         delete_file.assert_called_once_with(file_id="file_123")
 
     @patch("apps.assistants.sync.delete_file_from_openai")
-    @patch("apps.assistants.sync.OpenAIRemoteIndexManager.delete_file_from_index")
+    @patch("apps.assistants.sync.OpenAIRemoteIndexManager.delete_files_from_index")
     def test_delete_file_removes_file_when_no_other_references(
         self, delete_file, mock_delete_from_openai, assistant, resource, client
     ):

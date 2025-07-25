@@ -4,12 +4,23 @@ from itertools import groupby
 
 import openai
 from celery.app import shared_task
+from django.core.paginator import Paginator
+from django.db import transaction
 from django.db.models import QuerySet
 from taskbadger.celery import Task as TaskbadgerTask
 
 from apps.assistants.models import OpenAiAssistant
-from apps.documents.models import ChunkingStrategy, Collection, CollectionFile, CollectionFileMetadata, FileStatus
+from apps.documents.models import (
+    ChunkingStrategy,
+    Collection,
+    CollectionFile,
+    CollectionFileMetadata,
+    DocumentSource,
+    FileStatus,
+)
+from apps.documents.utils import bulk_delete_collection_files
 from apps.service_providers.models import LlmProvider
+from apps.utils.celery import TaskbadgerTaskWrapper
 
 logger = logging.getLogger("ocs.documents.tasks.link_files_to_index")
 
@@ -146,3 +157,116 @@ def create_collection_from_assistant_task(collection_id: int, assistant_id: int)
             CollectionFile.objects.filter(file__in=file_without_remote_ids).values_list("id", flat=True)
         )
         index_collection_files_task(collection_file_ids=file_ids_to_index)
+
+
+@shared_task(ignore_result=True)
+def sync_document_source_task(document_source_id: int):
+    """Sync a specific document source"""
+    from apps.documents.document_source_service import sync_document_source
+
+    try:
+        document_source = DocumentSource.objects.get(id=document_source_id)
+    except DocumentSource.DoesNotExist:
+        return
+
+    try:
+        result = sync_document_source(document_source)
+
+        if result.success:
+            logger.info(
+                f"Document source sync completed for {document_source}: "
+                f"{result.files_added} added, {result.files_updated} updated, "
+                f"{result.files_removed} removed"
+            )
+        else:
+            logger.error(f"Document source sync failed for {document_source}: {result.error_message}")
+    except Exception:
+        logger.exception(
+            "Unexpected error syncing document source",
+            extra={
+                "document_source": document_source_id,
+            },
+        )
+
+    document_source.sync_task_id = ""
+    document_source.save(update_fields=["sync_task_id"])
+
+
+@shared_task(ignore_result=True)
+def sync_all_document_sources_task():
+    """Sync all document sources that have auto_sync_enabled=True"""
+    auto_sources = DocumentSource.objects.filter(
+        auto_sync_enabled=True,
+        collection__is_index=True,  # Only sync indexed collections
+    ).values_list("id", flat=True)
+
+    sync_document_source_task.map(auto_sources).delay()
+
+
+@shared_task(
+    bind=True,
+    base=TaskbadgerTask,
+    acks_late=True,
+    ignore_result=True,
+    autoretry_for=(Exception,),
+    retry_kwargs={"max_retries": 3, "countdown": 60},
+)
+def delete_collection_task(self, collection_id: int):
+    try:
+        collection = Collection.objects.get(id=collection_id)
+    except Collection.DoesNotExist:
+        return
+
+    if not collection.is_archived:
+        logger.warning(
+            "Attempting to delete an unarchived collection",
+            extra={
+                "collection": collection,
+            },
+        )
+        return
+
+    tb_task = TaskbadgerTaskWrapper(self)
+    paginator = Paginator(collection.collectionfile_set.all(), per_page=100, orphans=25)
+    for page in paginator:
+        with transaction.atomic():
+            bulk_delete_collection_files(collection, page.object_list, is_index_deletion=True)
+        tb_task.set_progress(page.number, paginator.num_pages)
+
+    if collection.is_index and collection.openai_vector_store_id:
+        collection.remove_remote_index()
+
+
+@shared_task(
+    bind=True,
+    base=TaskbadgerTask,
+    acks_late=True,
+    ignore_result=True,
+    autoretry_for=(Exception,),
+    retry_kwargs={"max_retries": 3, "countdown": 60},
+)
+def delete_document_source_task(self, document_source_id: int):
+    """Delete or archive a DocumentSource and it's files"""
+    try:
+        document_source = DocumentSource.objects.get_all().select_related("collection").get(id=document_source_id)
+    except DocumentSource.DoesNotExist:
+        return
+
+    if not document_source.is_archived:
+        logger.warning(
+            "Attempting to delete resources from an unarchived document source",
+            extra={
+                "document_source": document_source_id,
+            },
+        )
+        return
+
+    tb_task = TaskbadgerTaskWrapper(self)
+    paginator = Paginator(document_source.collectionfile_set.all(), per_page=100, orphans=25)
+    for page in paginator:
+        with transaction.atomic():
+            bulk_delete_collection_files(document_source.collection, page.object_list)
+        tb_task.set_progress(page.number, paginator.num_pages)
+
+    if not document_source.has_versions:
+        document_source.delete()

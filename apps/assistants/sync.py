@@ -406,7 +406,7 @@ def _sync_tool_resource_files_from_openai(file_ids, ocs_resource):
         remove_files_from_tool(ocs_resource, unused_files_objects)
 
 
-def remove_files_from_tool(ocs_resource: ToolResources, files: list[int]):
+def remove_files_from_tool(ocs_resource: ToolResources, files: list[File]):
     """
     Remove files from the tool resource and delete them if they are not used elsewhere.
     """

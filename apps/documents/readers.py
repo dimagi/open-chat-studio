@@ -62,11 +62,13 @@ def markitdown_read(file_obj) -> Document:
         result = md.convert(BytesIO(file_obj.read()))
         return Document(parts=[DocumentPart(content=result.markdown)])
     except UnsupportedFormatException:
-        return Document(parts=[DocumentPart(content=file_obj.read().decode())])
+        return plaintext_reader(file_obj)
     except UnicodeDecodeError as e:
         raise FileReadException("Unable to decode file contents to text") from e
 
 
-READERS = {
-    None: markitdown_read,
-}
+def plaintext_reader(file_obj) -> Document:
+    return Document(parts=[DocumentPart(content=file_obj.read().decode())])
+
+
+READERS = {None: markitdown_read, "text/markdown": plaintext_reader}
