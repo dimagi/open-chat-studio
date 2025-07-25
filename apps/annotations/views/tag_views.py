@@ -4,7 +4,6 @@ import unicodedata
 from django.contrib import messages
 from django.contrib.auth.mixins import PermissionRequiredMixin
 from django.contrib.contenttypes.models import ContentType
-from django.contrib.postgres.search import TrigramSimilarity
 from django.db.models import Prefetch, Q
 from django.http import HttpResponse, HttpResponseForbidden
 from django.shortcuts import get_object_or_404, redirect, render
@@ -17,6 +16,7 @@ from apps.annotations.forms import TagForm
 from apps.annotations.models import CustomTaggedItem, Tag, TagCategories
 from apps.annotations.tables import TagTable
 from apps.teams.mixins import LoginAndTeamRequiredMixin
+from apps.utils.search import similarity_search
 
 
 class TagHome(LoginAndTeamRequiredMixin, TemplateView, PermissionRequiredMixin):
@@ -109,11 +109,14 @@ class TagTableView(SingleTableView):
 
         search = self.request.GET.get("search")
         if search:
-            queryset = (
-                queryset.annotate(similarity=TrigramSimilarity("name", search))
-                .filter(Q(similarity__gt=0.1) | Q(name__icontains=search))
-                .order_by("-similarity")
+            queryset = similarity_search(
+                queryset,
+                search_phase=search,
+                columns=["name"],
+                extra_conditions=Q(name__icontains=search),
+                score=0.1,
             )
+
         return queryset
 
 
