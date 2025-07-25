@@ -22,6 +22,7 @@ from apps.chat.agent.tools import (
     _convert_to_sync_tool,
     _move_datetime_to_new_weekday_and_time,
     create_schedule_message,
+    get_mcp_tool_instances,
 )
 from apps.events.models import ScheduledMessage, TimePeriod
 from apps.experiments.models import AgentTools, Experiment
@@ -30,6 +31,8 @@ from apps.utils.factories.documents import CollectionFactory
 from apps.utils.factories.events import EventActionFactory
 from apps.utils.factories.experiment import ExperimentSessionFactory
 from apps.utils.factories.files import FileFactory
+from apps.utils.factories.mcp_integrations import MCPServerFactory
+from apps.utils.factories.pipelines import NodeFactory
 from apps.utils.time import pretty_date
 
 
@@ -492,3 +495,29 @@ def test_convert_to_sync_tool():
     assert sync_tool.func is not None
     assert str(signature(sync_tool.func)) == "(url: str, method: str = 'GET')"
     assert sync_tool.func("https://example.com", "GET") == "GET https://example.com"
+
+
+@pytest.mark.django_db()
+@mock.patch("apps.mcp_integrations.models.McpServer.fetch_tools")
+def test_get_mcp_tool_instances(fetch_tools, team):
+    async def async_func(url: str, method: str = "GET"):
+        return f"{method} {url}"
+
+    fetch_tools.return_value = [
+        StructuredTool(
+            name="test-tool",
+            description="test-description",
+            args_schema={},
+            response_format="content_and_artifact",
+            func=None,
+            coroutine=async_func,
+        )
+    ]
+    server = MCPServerFactory(team=team)
+    node = NodeFactory(
+        params={
+            "mcp_tools": [f"{server.id}:test-tool"],
+        }
+    )
+    tools = get_mcp_tool_instances(node, team)
+    assert len(tools) == 1
