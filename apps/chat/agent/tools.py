@@ -20,9 +20,9 @@ from apps.events.forms import ScheduledMessageConfigForm
 from apps.events.models import ScheduledMessage, TimePeriod
 from apps.experiments.models import AgentTools, Experiment, ExperimentSession, ParticipantData
 from apps.files.models import FileChunkEmbedding
-from apps.pipelines.helper import get_mcp_tools
 from apps.pipelines.models import Node
 from apps.pipelines.nodes.tool_callbacks import ToolCallbacks
+from apps.teams.models import Team
 from apps.utils.time import pretty_date
 
 if TYPE_CHECKING:
@@ -95,7 +95,6 @@ class CustomBaseTool(BaseTool):
             logging.exception(e)
             return "Something went wrong"
 
-    @async_to_sync
     async def _arun(self, *args, **kwargs) -> str:
         """Use the tool asynchronously."""
         return self._run(*args, **kwargs)
@@ -423,23 +422,22 @@ def get_node_tools(
     return tools
 
 
-def get_mcp_tool_instances(node: Node, team):
+def get_mcp_tool_instances(node: Node, team: Team):
     """Fetch tools from MCP servers based on the selected tools in the node parameters."""
 
-    mcp_tools = get_mcp_tools(node)
+    mcp_tools = node.params.get("mcp_tools", [])
     if not mcp_tools:
         return []
 
     server_tools = defaultdict(list)
-    for mcp_tool in mcp_tools:
-        server_tools[mcp_tool.server_id].append(mcp_tool.tool_name)
+    for tool in mcp_tools:
+        mcp_server_id, tool_name = tool.split(":")
+        server_tools[mcp_server_id].append(tool_name)
 
     final_tool_instances = []
     for server in team.mcpserver_set.filter(id__in=server_tools.keys()):
         remote_tools = server.fetch_tools()
-        tool_instances = [
-            _convert_to_sync_function(tool) for tool in remote_tools if tool.name in server_tools[server.id]
-        ]
+        tool_instances = [_convert_to_sync_tool(tool) for tool in remote_tools if tool.name in server_tools[server.id]]
         final_tool_instances.extend(tool_instances)
 
     return final_tool_instances
@@ -475,7 +473,7 @@ def get_tool_for_custom_action_operation(custom_action_operation) -> BaseTool | 
     return function_def.build_tool(auth_service)
 
 
-def _convert_to_sync_function(tool: StructuredTool) -> StructuredTool:
+def _convert_to_sync_tool(tool: StructuredTool) -> StructuredTool:
     tool.func = _create_sync_wrapper(tool.coroutine)
     tool.coroutine = None
     return tool

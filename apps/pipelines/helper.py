@@ -1,16 +1,9 @@
-from __future__ import annotations
-
 import copy
-from typing import TYPE_CHECKING
 from uuid import uuid4
 
 from field_audit.models import AuditAction
 
-from apps.pipelines.datamodels import MCPServerTool
 from apps.pipelines.flow import FlowNode, FlowNodeData
-
-if TYPE_CHECKING:
-    from apps.pipelines.models import Node
 
 
 def duplicate_pipeline_with_new_ids(pipeline_data):
@@ -329,19 +322,3 @@ def _get_start_and_end_nodes(start_x=100, end_x=800):
         ),
     )
     return end_node, start_node
-
-
-def get_mcp_tools(node: Node) -> list[MCPServerTool]:
-    """
-    Parses the node parameters to extract MCP server tools.
-    """
-    mcp_tools = node.params.get("mcp_tools", [])
-    if not mcp_tools:
-        return []
-
-    tools = []
-    for tool in mcp_tools:
-        mcp_server_id, tool_name = tool.split(":")
-        tools.append(MCPServerTool(server_id=mcp_server_id, tool_name=tool_name))
-
-    return tools

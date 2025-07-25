@@ -19,7 +19,7 @@ from apps.chat.agent.tools import (
     SearchIndexTool,
     SearchToolConfig,
     UpdateParticipantDataTool,
-    _convert_to_sync_function,
+    _convert_to_sync_tool,
     _move_datetime_to_new_weekday_and_time,
     create_schedule_message,
 )
@@ -472,8 +472,8 @@ def test_tools_present():
         assert tool in TOOL_CLASS_MAP
 
 
-def test_convert_to_sync_function():
-    """Test that an async tool is converted to a sync function and that the signature is preserved."""
+def test_convert_to_sync_tool():
+    """Test that an async tool is converted to a sync tool and that the function's signature is preserved."""
 
     async def async_func(url: str, method: str = "GET"):
         return f"{method} {url}"
@@ -487,7 +487,7 @@ def test_convert_to_sync_function():
         coroutine=async_func,
     )
 
-    sync_tool = _convert_to_sync_function(async_tool)
+    sync_tool = _convert_to_sync_tool(async_tool)
     assert sync_tool.coroutine is None
     assert sync_tool.func is not None
     assert str(signature(sync_tool.func)) == "(url: str, method: str = 'GET')"
