@@ -4,7 +4,6 @@ import time
 from typing import TYPE_CHECKING, Any, Literal
 
 import openai
-from asgiref.sync import async_to_sync, sync_to_async
 from django.db import transaction
 from google.ai.generativelanguage_v1beta.types import Tool as GenAITool
 from langchain.agents import AgentExecutor, create_tool_calling_agent
@@ -202,29 +201,22 @@ class LLMChat(RunnableSerializable[str, ChainOutput]):
     def _get_input(self, input: str):
         return {self.input_key: self.adapter.format_input(input)}
 
-    @async_to_sync
-    async def _get_output_check_cancellation(self, input, config) -> LlmChatResponse:
+    def _get_output_check_cancellation(self, input, config) -> LlmChatResponse:
         chain = self._build_chain().with_config(run_name="get_llm_response")
         context = self._get_input_chain_context()
 
         chat_response = LlmChatResponse(text="")
-        stream = chain.astream({**self._get_input(input), **context}, config)
-        try:
-            async for output in stream:
-                chat_response += self._parse_output(output)
-                if await self._chat_is_cancelled():
-                    break
-        finally:
-            # Ensure the async generator is properly closed
-            if hasattr(stream, "aclose"):
-                await stream.aclose()
+        for output in chain.stream({**self._get_input(input), **context}, config):
+            chat_response += self._parse_output(output)
+            if self._chat_is_cancelled():
+                break
 
         return chat_response
 
     def _parse_output(self, output) -> LlmChatResponse:
         return LlmChatResponse(text=output)
 
-    async def _chat_is_cancelled(self):
+    def _chat_is_cancelled(self):
         if self.cancelled:
             return True
 
@@ -234,7 +226,7 @@ class LLMChat(RunnableSerializable[str, ChainOutput]):
 
         self.last_cancel_check = time.time()
 
-        self.cancelled = await sync_to_async(self.adapter.check_cancellation)()
+        self.cancelled = self.adapter.check_cancellation()
         return self.cancelled
 
     def _build_chain(self) -> Runnable[dict[str, Any], Any]:

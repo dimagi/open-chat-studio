@@ -1,3 +1,4 @@
+import functools
 import logging
 from collections import defaultdict
 from dataclasses import dataclass
@@ -8,7 +9,7 @@ from typing import TYPE_CHECKING, Any, ClassVar, Union
 from asgiref.sync import async_to_sync
 from django.db import transaction, utils
 from langchain_community.utilities.openapi import OpenAPISpec
-from langchain_core.tools import BaseTool
+from langchain_core.tools import BaseTool, StructuredTool
 from pgvector.django import CosineDistance
 
 from apps.channels.models import ChannelPlatform
@@ -424,6 +425,7 @@ def get_node_tools(
 
 def get_mcp_tool_instances(node: Node, team):
     """Fetch tools from MCP servers based on the selected tools in the node parameters."""
+
     mcp_tools = get_mcp_tools(node)
     if not mcp_tools:
         return []
@@ -435,8 +437,11 @@ def get_mcp_tool_instances(node: Node, team):
     final_tool_instances = []
     for server in team.mcpserver_set.filter(id__in=server_tools.keys()):
         remote_tools = server.fetch_tools()
-        tool_instances = [tool for tool in remote_tools if tool.name in server_tools[server.id]]
+        tool_instances = [
+            _convert_to_sync_function(tool) for tool in remote_tools if tool.name in server_tools[server.id]
+        ]
         final_tool_instances.extend(tool_instances)
+
     return final_tool_instances
 
 
@@ -468,3 +473,19 @@ def get_tool_for_custom_action_operation(custom_action_operation) -> BaseTool | 
     method = spec.get_methods_for_path(path)[0]
     function_def = openapi_spec_op_to_function_def(spec, path, method)
     return function_def.build_tool(auth_service)
+
+
+def _convert_to_sync_function(tool: StructuredTool) -> StructuredTool:
+    tool.func = _create_sync_wrapper(tool.coroutine)
+    tool.coroutine = None
+    return tool
+
+
+def _create_sync_wrapper(coroutine_func):
+    """Create a synchronous wrapper that preserves the original function signature."""
+
+    @functools.wraps(coroutine_func)
+    def sync_wrapper(*args, **kwargs):
+        return async_to_sync(coroutine_func)(*args, **kwargs)
+
+    return sync_wrapper
