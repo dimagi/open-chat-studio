@@ -153,6 +153,7 @@ class CreateDataset(LoginAndTeamRequiredMixin, CreateView, PermissionRequiredMix
                 "tags",
                 "versions",
                 "channels",
+                "remote_id",
             ],
         }
 

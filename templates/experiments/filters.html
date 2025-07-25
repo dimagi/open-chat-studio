@@ -265,23 +265,16 @@
         })
           .then(res => res.json())
           .then(data => {
-            let identifiers = [];
-            let remoteIds = [];
+            const identifiers = data.map(d => d[0]).filter(id => id != null);
+            const remoteIds = data.map(d => d[1]).filter(id => id != null);
 
-            if (hasExperiment) {
-              identifiers = data.map(d => d[0]).filter(id => id != null);
-              remoteIds = data.map(d => d[1]).filter(id => id != null);
-              this.filterData.columns.remote_id.options = remoteIds;
-            } else {
-              identifiers = data.filter(id => id != null);
-            }
             this.filterData.columns.participant.options = identifiers;
+            this.filterData.columns.remote_id.options = remoteIds;
 
-            // Update filters
             this.filterData.filters.forEach(filter => {
               if (filter.column === 'participant') {
                 filter.filteredOptions = [...identifiers];
-              } else if (hasExperiment && filter.column === 'remote_id') {
+              } else if (filter.column === 'remote_id') {
                 filter.filteredOptions = [...remoteIds];
               }
             });
