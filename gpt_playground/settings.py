@@ -16,6 +16,7 @@ from datetime import timedelta
 from pathlib import Path
 
 import environ
+from celery.schedules import crontab
 from django.utils.translation import gettext_lazy
 
 # Build paths inside the project like this: BASE_DIR / 'subdir'.
@@ -449,6 +450,11 @@ SCHEDULED_TASKS = {
     "dashboard.tasks.cleanup_expired_cache_entries": {
         "task": "apps.dashboard.tasks.cleanup_expired_cache_entries",
         "schedule": timedelta(days=1),
+    },
+    "documents.tasks.sync_all_document_sources_task": {
+        # sync doc sources once per week
+        "task": "apps.documents.tasks.sync_all_document_sources_task",
+        "schedule": crontab(minute="0", hour="0", day_of_week="0"),
     },
 }
 

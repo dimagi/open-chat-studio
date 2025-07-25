@@ -224,28 +224,3 @@ def sync_document_source(document_source: DocumentSource) -> SyncResult:
     """
     manager = DocumentSourceManager(document_source)
     return manager.sync_collection()
-
-
-def sync_all_auto_enabled_sources() -> list[SyncResult]:
-    """
-    Sync all document sources that have auto_sync_enabled=True.
-
-    Returns:
-        List of SyncResult objects for each synced source
-    """
-    results = []
-
-    auto_sources = DocumentSource.objects.filter(
-        auto_sync_enabled=True,
-        collection__is_index=True,  # Only sync indexed collections
-    ).select_related("collection", "collection__team")
-
-    for source in auto_sources:
-        try:
-            result = sync_document_source(source)
-            results.append(result)
-        except Exception as e:
-            logger.error(f"Failed to sync document source {source.id}: {str(e)}")
-            results.append(SyncResult(success=False, error_message=str(e)))
-
-    return results

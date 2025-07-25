@@ -159,7 +159,7 @@ def create_collection_from_assistant_task(collection_id: int, assistant_id: int)
         index_collection_files_task(collection_file_ids=file_ids_to_index)
 
 
-@shared_task(base=TaskbadgerTask, ignore_result=True)
+@shared_task(ignore_result=True)
 def sync_document_source_task(document_source_id: int):
     """Sync a specific document source"""
     from apps.documents.document_source_service import sync_document_source
@@ -195,18 +195,12 @@ def sync_document_source_task(document_source_id: int):
 @shared_task(ignore_result=True)
 def sync_all_document_sources_task():
     """Sync all document sources that have auto_sync_enabled=True"""
-    from apps.documents.document_source_service import sync_all_auto_enabled_sources
+    auto_sources = DocumentSource.objects.filter(
+        auto_sync_enabled=True,
+        collection__is_index=True,  # Only sync indexed collections
+    ).values_list("id", flat=True)
 
-    try:
-        results = sync_all_auto_enabled_sources()
-
-        successful_syncs = sum(1 for r in results if r.success)
-        failed_syncs = len(results) - successful_syncs
-
-        logger.info(f"Auto-sync completed: {successful_syncs} successful, {failed_syncs} failed")
-
-    except Exception as e:
-        logger.error(f"Unexpected error during auto-sync: {str(e)}")
+    sync_document_source_task.map(auto_sources).delay()
 
 
 @shared_task(
