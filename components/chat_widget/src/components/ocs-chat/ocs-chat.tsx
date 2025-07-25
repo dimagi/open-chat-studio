@@ -124,15 +124,28 @@ export class OcsChat {
     this.loaded = this.visible;
     if (!this.chatbotId) {
       this.error = 'Chatbot ID is required';
+      return;
+    }
+    // Always try to load existing session if localStorage is available
+    if (this.isLocalStorageAvailable()) {
+      const { sessionId, messages } = this.loadSessionFromStorage();
+      if (sessionId && messages) {
+        this.sessionId = sessionId;
+        this.messages = messages;
+        this.showStarterQuestions = messages.length === 0;
+      }
     }
     this.parseWelcomeMessages();
     this.parseStarterQuestions();
   }
 
   componentDidLoad() {
-    // Auto-start session if visible on load
+    // Only auto-start session if we don't have an existing one
     if (this.visible && !this.sessionId) {
       this.startSession();
+    } else if (this.visible && this.sessionId) {
+      // Resume polling for existing session
+      this.startPolling();
     }
     this.initializePosition();
     window.addEventListener('resize', this.handleWindowResize);
