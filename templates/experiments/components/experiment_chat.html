@@ -75,7 +75,7 @@
                   class="btn btn-primary"
                   hx-post="{% url 'experiments:translate_messages' request.team.slug experiment.public_id experiment_session.external_id %}"
                   hx-vals='{"translate_all": "true"}'
-                  hx-include="[name='search'], #translation-provider-model-all, [name='target_language']"
+                  hx-include="[name='search'], #translation-provider-all, [name='target_language'], #translation-provider-model-all"
                   hx-target="#messages-container"
                   hx-indicator="#chat-message-untranslated"
                   onclick="document.getElementById('translate-all-messages-modal').checked = false;"
@@ -125,7 +125,7 @@
                       {% endfor %}</strong>
                     </p>
 
-                    {% render_form_fields translate_form_remaining "provider_model" %}
+                    {% render_form_fields translate_form_remaining "llm_provider" "llm_provider_model" %}
                     <p class="pb-4">This action may take a few moments to complete.</p>
                     <div class="modal-action">
                       <button
@@ -133,7 +133,7 @@
                         class="btn btn-primary"
                         hx-post="{% url 'experiments:translate_messages' request.team.slug experiment.public_id experiment_session.external_id %}"
                         hx-vals='{"language": "{{ language }}"}'
-                        hx-include="[name='search'], [name='language'], [name='show_original_translation'], #translation-provider-model-remaining"
+                        hx-include="[name='search'], [name='language'], [name='show_original_translation'], #translation-provider-remaining, #translation-provider-model-remaining"
                         hx-target="#messages-container"
                         hx-indicator="#chat-message-untranslated"
                         onclick="document.getElementById('translate-remaining-messages-modal').checked = false;"
@@ -330,3 +330,74 @@
     </div>
   </div>
 </div>
+{{ llm_provider_models_dict|json_script:"provider-models-dict" }}
+{{ default_translation_models_by_providers|json_script:"default-translation-models-dict" }}
+
+<script>
+  window.hasMissingTranslations = {{ has_missing_translations|yesno:"true,false" }};
+  if (!window.providerModels) {
+    window.providerModels = JSON.parse(
+      document.getElementById("provider-models-dict").textContent
+    );
+  }
+
+  if (!window.defaultTranslationModels) {
+    window.defaultTranslationModels = JSON.parse(
+      document.getElementById("default-translation-models-dict").textContent
+    );
+  }
+
+  function setupTranslationFormBehavior(providerSelectId, modelSelectId) {
+    const providerSelect = document.getElementById(providerSelectId);
+    const modelSelect = document.getElementById(modelSelectId);
+    if (!providerSelect || !modelSelect) {
+      console.error(`Elements not found for ${providerSelectId} or ${modelSelectId}`);
+      return;
+    }
+    providerSelect.addEventListener("change", function () {
+      const providerText = this.options[this.selectedIndex].text;
+      const providerType = providerText.split(":")[0].trim();
+
+      const models = window.providerModels[providerType] || [];
+
+      // Clear and rebuild model options
+      modelSelect.innerHTML = "";
+
+      const defaultOption = document.createElement("option");
+      defaultOption.value = "";
+      defaultOption.textContent = "Choose a model for translation";
+      modelSelect.appendChild(defaultOption);
+
+      models.forEach(modelName => {
+        const option = document.createElement("option");
+        option.value = modelName;
+        option.textContent = modelName;
+        modelSelect.appendChild(option);
+      });
+
+      // Select default model for provider if available
+      const defaultModel = window.defaultTranslationModels[providerType];
+      if (defaultModel) {
+        const defaultOption = [...modelSelect.options].find(
+          option => option.text === defaultModel
+        );
+        if (defaultOption) {
+          modelSelect.value = defaultOption.value;
+        }
+      }
+    });
+  }
+
+  function initializeTranslationForms() {
+    setupTranslationFormBehavior("translation-provider-all", "translation-provider-model-all");
+    if(hasMissingTranslations) {
+      setupTranslationFormBehavior("translation-provider-remaining", "translation-provider-model-remaining");
+    }
+  }
+
+  if (document.readyState === 'loading') {
+    document.addEventListener('DOMContentLoaded', initializeTranslationForms);
+  } else {
+    initializeTranslationForms();
+  }
+</script>

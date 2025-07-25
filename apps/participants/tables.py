@@ -10,7 +10,7 @@ class ParticipantTable(tables.Table):
 
     class Meta:
         model = Participant
-        fields = ("name", "platform", "identifier", "created_at")
+        fields = ("name", "platform", "identifier", "created_at", "remote_id")
         row_attrs = settings.DJANGO_TABLES2_ROW_ATTRS
         empty_text = "No participants found."
         order_by = ("-created_at", "name", "identifier")

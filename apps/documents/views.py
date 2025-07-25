@@ -414,6 +414,8 @@ class CollectionTableView(LoginAndTeamRequiredMixin, SingleTableView, Permission
         queryset = Collection.objects.filter(team=self.request.team, is_version=False).order_by("-created_at")
         if search := self.request.GET.get("search"):
             queryset = similarity_search(queryset, search_phase=search, columns=["name"])
+
+        queryset = queryset.annotate(file_count=Count("files"))
         return queryset
 
 
