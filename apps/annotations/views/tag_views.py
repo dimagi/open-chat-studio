@@ -4,7 +4,8 @@ import unicodedata
 from django.contrib import messages
 from django.contrib.auth.mixins import PermissionRequiredMixin
 from django.contrib.contenttypes.models import ContentType
-from django.db.models import Prefetch
+from django.contrib.postgres.search import TrigramSimilarity
+from django.db.models import Prefetch, Q
 from django.http import HttpResponse, HttpResponseForbidden
 from django.shortcuts import get_object_or_404, redirect, render
 from django.urls import reverse
@@ -28,6 +29,7 @@ class TagHome(LoginAndTeamRequiredMixin, TemplateView, PermissionRequiredMixin):
             "title": "Tags",
             "new_object_url": reverse("annotations:tag_new", args=[team_slug]),
             "table_url": reverse("annotations:tag_table", args=[team_slug]),
+            "enable_search": True,
         }
 
 
@@ -103,7 +105,16 @@ class TagTableView(SingleTableView):
     template_name = "table/single_table.html"
 
     def get_queryset(self):
-        return Tag.objects.filter(team=self.request.team)
+        queryset = Tag.objects.filter(team=self.request.team)
+
+        search = self.request.GET.get("search")
+        if search:
+            queryset = (
+                queryset.annotate(similarity=TrigramSimilarity("name", search))
+                .filter(Q(similarity__gt=0.1) | Q(name__icontains=search))
+                .order_by("-similarity")
+            )
+        return queryset
 
 
 class UnlinkTag(LoginAndTeamRequiredMixin, View, PermissionRequiredMixin):
