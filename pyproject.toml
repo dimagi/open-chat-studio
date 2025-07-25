@@ -76,6 +76,7 @@ dependencies = [
     "backoff",
     "django-cors-headers>=4.7.0",
     "markitdown[pdf, docx, xlsx, xls, outlook, pptx]",
+    "langchain-mcp-adapters",
 ]
 
 [project.urls]
@@ -147,7 +148,7 @@ docs = [
 
 prod = [
     "gunicorn",
-    "gevent",
+    "uvicorn[standard]",
 ]
 
 [tool.uv]

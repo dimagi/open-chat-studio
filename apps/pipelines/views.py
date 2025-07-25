@@ -157,6 +157,12 @@ def _pipeline_node_parameter_values(team, llm_providers, llm_provider_models):
     for _custom_action_name, operations_disp in get_custom_action_operation_choices(team):
         custom_action_operations.extend(operations_disp)
 
+    mcp_tools = [
+        (f"{server.id}:{tool}", f"{server.name}: {tool}")
+        for server in team.mcpserver_set.all()
+        for tool in server.available_tools
+    ]
+
     return {
         "LlmProviderId": [_option(provider["id"], provider["name"], provider["type"]) for provider in llm_providers],
         "LlmProviderModelId": [
@@ -205,6 +211,7 @@ def _pipeline_node_parameter_values(team, llm_providers, llm_provider_models):
             ]
         ),
         OptionsSource.agent_tools: [_option(value, label) for value, label in AgentTools.user_tool_choices()],
+        OptionsSource.mcp_tools: [_option(value, label) for value, label in mcp_tools],
         OptionsSource.custom_actions: [_option(val, display_val) for val, display_val in custom_action_operations],
         OptionsSource.built_in_tools: {
             provider["type"].lower(): [

@@ -208,7 +208,6 @@ class LLMChat(RunnableSerializable[str, ChainOutput]):
         chat_response = LlmChatResponse(text="")
         for output in chain.stream({**self._get_input(input), **context}, config):
             chat_response += self._parse_output(output)
-
             if self._chat_is_cancelled():
                 break
 

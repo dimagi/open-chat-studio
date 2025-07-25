@@ -154,6 +154,7 @@ def chip_action(
     required_permissions: list = None,
     display_condition: callable = None,
     url_factory: Callable[[Any, Any, Any, Any], str] = None,
+    icon_class="fa-solid fa-external-link",
 ):
     """Action to display a chip-style link that links to another page.
 
@@ -177,7 +178,7 @@ def chip_action(
         url_factory=url_factory,
         label=label,
         label_factory=label_factory,
-        icon_class="fa-solid fa-external-link",
+        icon_class=icon_class,
         button_style="",
         required_permissions=required_permissions,
         display_condition=display_condition,
