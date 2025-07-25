@@ -1,15 +1,17 @@
 {% if document_source %}
-  <div id="document_source_status_{{ document_source.id }}" hx-swap-oob="true">
-    {% include "documents/partials/document_source_status.html" %}
+  <div id="document_source_header_{{ document_source.id }}" hx-swap-oob="true">
+    {% include "documents/partials/document_source_header.html" %}
   </div>
 {% endif %}
-<div
-    {% if document_source and document_source.sync_task_id %}
-      hx-get="{% url "documents:document_source_files_list" request.team.slug collection.id document_source.id %}"
-      hx-trigger="every 5s"
-      hx-swap="outerHTML"
-    {% endif %}
->
+{% if document_source and document_source.sync_task_id %}
+  <div hx-get="{% url "documents:document_source_files_list" request.team.slug collection.id document_source.id %}"
+       hx-trigger="every 5s"
+       hx-swap="outerHTML"
+  >
+    <span class="loading loading-spinner"></span>
+  </div>
+{% else %}
+  <div class="grid grid-cols-1 gap-4">
   {% for collection_file in collection_files %}
     <div class="flex items-center justify-between p-3 bg-base-200 rounded-lg">
       <div class="flex flex-col flex-1 gap-1">
@@ -66,8 +68,11 @@
       </div>
     </div>
   {% empty %}
-    <div class="text-center text-base-content/60">
-      No files
+    <div class="flex items-center justify-between p-3 bg-base-200 rounded-lg">
+      <div class="text-center text-base-content/60">
+        No files
+      </div>
     </div>
   {% endfor %}
-</div>
+  </div>
+{% endif %}

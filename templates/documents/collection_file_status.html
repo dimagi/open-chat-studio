@@ -12,10 +12,7 @@
       <div aria-label="pending" class="status"></div>
     </div>
   {% elif collection_file.status == 'in_progress' %}
-    <div class="inline-grid *:[grid-area:1/1]">
-      <div aria-label="In Progress" class="status status-accent animate-ping"></div>
-      <div aria-label="In Progress" class="status status-accent"></div>
-    </div>
+    <span class="loading loading-spinner loading-xs"></span>
   {% elif collection_file.status == 'completed' %}
     <div aria-label="success" class="status status-success"></div>
   {% else %}

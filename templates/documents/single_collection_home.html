@@ -90,19 +90,17 @@
       <div id="document_source_modal"></div>
       {% include "documents/file_upload_modal.html" %}
 
-    <div class="grid grid-cols-1 gap-4">
-      {% for document_source in document_sources %}
-        {% include "documents/partials/document_source.html" %}
-      {% endfor %}
-    </div>
-
       <div class="grid grid-cols-1 gap-4">
-        <h2 class="text-lg font-semibold"><i class="fa-regular fa-file"></i> Files</h2>
-        <div hx-get="{% url "documents:collection_files_list" request.team.slug collection.id %}"
-             hx-trigger="load"
-        >
-          <span class="loading loading-spinner"></span>
-        </div>
+        {% for document_source in document_sources %}
+          {% include "documents/partials/document_source.html" %}
+        {% endfor %}
+      </div>
+
+      <h2 class="text-lg font-semibold"><i class="fa-regular fa-file"></i> Files</h2>
+      <div hx-get="{% url "documents:collection_files_list" request.team.slug collection.id %}"
+           hx-trigger="load"
+      >
+        <span class="loading loading-spinner"></span>
       </div>
     </div>
   </div>
