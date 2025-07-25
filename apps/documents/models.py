@@ -44,7 +44,7 @@ class GitHubSourceConfig(pydantic.BaseModel):
 
     @field_validator("repo_url")
     @classmethod
-    def ensure_foobar(cls, value):
+    def validate_repo_url(cls, value):
         if value.host != "github.com" or value.scheme != "https":
             raise ValueError(f"'{value}' is not a valid GitHub repository URL'")
         GitHubSourceConfig._extract_repo_info(value)
@@ -67,8 +67,6 @@ class GitHubSourceConfig(pydantic.BaseModel):
 class ConfluenceSourceConfig(pydantic.BaseModel):
     base_url: str = pydantic.Field(description="Confluence base URL")
     space_key: str = pydantic.Field(description="Confluence space key")
-    username: str = pydantic.Field(description="Confluence username")
-    api_token: str = pydantic.Field(description="Confluence API token")
     page_filter: str = pydantic.Field(default="", description="Optional page title filter")
 
 

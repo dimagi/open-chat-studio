@@ -165,7 +165,7 @@ class TestDeleteCollectionFile:
             # Verify file is deleted/archived since it's not used elsewhere
             mock_delete_archive.assert_called_once()
 
-    def test_delete_files_from_indexed_collection_not_used_by_assistant(
+    def test_delete_file_from_indexed_collection_not_used_by_assistant(
         self, team_with_user, client, remote_index_manager_mock
     ):
         """Test deleting a file from an indexed collection when file is not used by an assistant."""
@@ -196,7 +196,7 @@ class TestDeleteCollectionFile:
             # Verify file is deleted/archived since it's not used elsewhere
             mock_delete_archive.assert_called_once()
 
-    def test_delete_files_from_indexed_collection_used_by_assistant(
+    def test_delete_file_from_indexed_collection_used_by_assistant(
         self, team_with_user, client, remote_index_manager_mock
     ):
         """Test deleting a file from an indexed collection when file is also used by another object."""
