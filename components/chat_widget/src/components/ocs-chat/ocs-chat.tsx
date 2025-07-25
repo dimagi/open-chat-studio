@@ -218,6 +218,7 @@ export class OcsChat {
 
       const data: ChatStartSessionResponse = await response.json();
       this.sessionId = data.session_id;
+      this.saveSessionToStorage();
 
       // Handle seed message if present
       if (data.seed_message_task_id) {
@@ -261,6 +262,7 @@ export class OcsChat {
         attachments: []
       };
       this.messages = [...this.messages, userMessage];
+      this.saveSessionToStorage();
       this.messageInput = '';
       this.scrollToBottom();
 
@@ -324,6 +326,7 @@ export class OcsChat {
 
         if (data.status === 'complete' && data.message) {
           this.messages = [...this.messages, data.message];
+          this.saveSessionToStorage();
           this.scrollToBottom();
           // Task polling complete, clear typing indicator and resume message polling
           this.isTyping = false;
@@ -394,6 +397,7 @@ export class OcsChat {
 
       if (data.messages.length > 0) {
         this.messages = [...this.messages, ...data.messages];
+        this.saveSessionToStorage();
         this.scrollToBottom();
         this.focusInput();
       }
