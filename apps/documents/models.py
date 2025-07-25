@@ -198,6 +198,11 @@ class Collection(BaseTeamModel, VersionsMixin):
                     name="files",
                     queryset=self.files.filter(collectionfile__document_source=None).all(),
                 ),
+                VersionField(
+                    group_name="Document Sources",
+                    name="files",
+                    queryset=self.document_sources.all(),
+                ),
             ],
         )
 
@@ -440,7 +445,7 @@ class DocumentSource(BaseTeamModel, VersionsMixin):
     objects = DocumentSourceManager()
 
     def __str__(self) -> str:
-        return f"{self.get_source_type_display()} source for {self.collection.name}"
+        return f"{self.get_source_type_display()}: {self.source_config}"
 
     @property
     def source_type_enum(self):
@@ -459,7 +464,7 @@ class DocumentSource(BaseTeamModel, VersionsMixin):
         return VersionDetails(
             instance=self,
             fields=[
-                VersionField(name="source_type", raw_value=self.source_type),
+                VersionField(name="source_type", raw_value=self.get_source_type_display()),
                 VersionField(name="config", raw_value=self.source_config),
                 VersionField(name="files", queryset=self.files.all()),
             ],
