@@ -13,11 +13,20 @@ from langchain_core.messages import AIMessage, BaseMessage, HumanMessage
 from pydantic import BaseModel as PydanticBaseModel
 
 from apps.chat.models import ChatMessage, ChatMessageType
+from apps.experiments.models import Experiment
 from apps.teams.models import BaseTeamModel, Team
 from apps.utils.models import BaseModel
 
 if TYPE_CHECKING:
     from apps.evaluations.evaluators import EvaluatorResult
+
+
+class ExperimentVersionSelection(models.TextChoices):
+    """Choices for experiment version selection including sentinel values"""
+
+    SPECIFIC = "specific", "Specific Version"
+    LATEST_WORKING = "latest_working", "Latest Working Version"
+    LATEST_PUBLISHED = "latest_published", "Latest Published Version"
 
 
 class Evaluator(BaseTeamModel):
@@ -39,8 +48,8 @@ class Evaluator(BaseTeamModel):
         module = importlib.import_module("apps.evaluations.evaluators")
         return getattr(module, self.type)
 
-    def run(self, message: EvaluationMessage) -> EvaluatorResult:
-        return self.evaluator(**self.params).run(message)
+    def run(self, message: EvaluationMessage, generated_response: str) -> EvaluatorResult:
+        return self.evaluator(**self.params).run(message, generated_response)
 
     def get_absolute_url(self):
         return reverse("evaluations:evaluator_edit", args=[self.team.slug, self.id])
@@ -64,6 +73,7 @@ class EvaluationMessage(BaseModel):
     input = models.JSONField(default=dict)
     output = models.JSONField(default=dict)
     context = models.JSONField(default=dict)
+    history = models.JSONField(default=list)  # List of message objects with message_type, content, summary
 
     metadata = models.JSONField(default=dict)
 
@@ -97,7 +107,7 @@ class EvaluationMessage(BaseModel):
 
         for session_id, messages in messages_by_session.items():
             # Iterate per session so history gets cleared
-            history = []
+            history = []  # List of message dicts
             i = 0
             while i < len(messages) - 1:
                 current_msg = messages[i]
@@ -111,8 +121,8 @@ class EvaluationMessage(BaseModel):
                         output=EvaluationMessageContent(content=next_msg.content, role="ai").model_dump(),
                         context={
                             "current_datetime": current_msg.created_at.isoformat(),
-                            "history": "\n".join(history),
                         },
+                        history=[msg.copy() for msg in history],  # Store as JSON list
                         metadata={
                             "session_id": session_id,
                             "experiment_id": str(session.experiment.public_id),
@@ -120,8 +130,20 @@ class EvaluationMessage(BaseModel):
                     )
                     new_messages.append(evaluation_message)
 
-                    history.append(f"{current_msg.get_message_type_display()}: {current_msg.content}")
-                    history.append(f"{next_msg.get_message_type_display()}: {next_msg.content}")
+                    history.append(
+                        {
+                            "message_type": current_msg.message_type,
+                            "content": current_msg.content,
+                            "summary": getattr(current_msg, "summary", None),
+                        }
+                    )
+                    history.append(
+                        {
+                            "message_type": next_msg.message_type,
+                            "content": next_msg.content,
+                            "summary": getattr(next_msg, "summary", None),
+                        }
+                    )
 
                     i += 2
                 else:
@@ -150,6 +172,25 @@ class EvaluationMessage(BaseModel):
             additional_kwargs={"id": self.id, "chat_message_id": self.expected_output_chat_message_id},
         )
 
+    @property
+    def full_history(self) -> str:
+        """
+        Generate a full history string from the JSON history data.
+        This is used for backward compatibility with the LlmEvaluator.
+        """
+        if not self.history:
+            return ""
+
+        history_lines = []
+        for message in self.history:
+            message_type = message.get("message_type", "")
+            content = message.get("content", "")
+            # Use ChatMessage's get_message_type_display method
+            display_type = ChatMessage(message_type=message_type).get_message_type_display()
+            history_lines.append(f"{display_type}: {content}")
+
+        return "\n".join(history_lines)
+
 
 class EvaluationDataset(BaseTeamModel):
     name = models.CharField(max_length=255)
@@ -169,16 +210,68 @@ class EvaluationConfig(BaseTeamModel):
     name = models.CharField(max_length=255)
     evaluators = models.ManyToManyField(Evaluator)
     dataset = models.ForeignKey(EvaluationDataset, on_delete=models.CASCADE)
+    experiment_version = models.ForeignKey(
+        "experiments.Experiment",
+        on_delete=models.CASCADE,
+        null=True,
+        blank=True,
+        help_text=("Specific chatbot version to use for evaluation. If not set, will skip generation."),
+    )
+    # Store the base experiment for sentinel value resolution
+    base_experiment = models.ForeignKey(
+        "experiments.Experiment",
+        on_delete=models.CASCADE,
+        null=True,
+        blank=True,
+        related_name="evaluations_as_base",
+        help_text=("Base chatbot used when experiment_version is a sentinel value."),
+    )
+    # Store sentinel value if using latest working/published
+    version_selection_type = models.CharField(
+        max_length=50,
+        choices=ExperimentVersionSelection.choices,
+        default=ExperimentVersionSelection.SPECIFIC,
+        help_text=("Type of version selection: specific, latest_working, or latest_published"),
+    )
 
     def __str__(self):
         return f"EvaluationConfig ({self.name})"
+
+    def get_generation_experiment_version(self):
+        """Resolve the actual experiment version based on selection type"""
+        if self.version_selection_type == ExperimentVersionSelection.SPECIFIC:
+            return self.experiment_version
+
+        if not self.base_experiment:
+            return None
+
+        if self.version_selection_type == ExperimentVersionSelection.LATEST_WORKING:
+            # Get the working version (the one with working_version_id=None)
+            working_version_id = self.base_experiment.working_version_id or self.base_experiment.id
+            return Experiment.objects.filter(team=self.team, id=working_version_id).first()
+
+        elif self.version_selection_type == ExperimentVersionSelection.LATEST_PUBLISHED:
+            # Get the latest published version (highest version_number with is_default_version=True)
+            working_version_id = self.base_experiment.working_version_id or self.base_experiment.id
+            return (
+                Experiment.objects.filter(
+                    team=self.team, working_version_id=working_version_id, is_default_version=True
+                )
+                .order_by("-version_number")
+                .first()
+            )
+
+        return None
 
     def get_absolute_url(self):
         return reverse("evaluations:evaluation_runs_home", args=[self.team.slug, self.id])
 
     def run(self) -> EvaluationRun:
         """Runs the evaluation asynchronously using Celery"""
-        run = EvaluationRun.objects.create(team=self.team, config=self, status=EvaluationRunStatus.PENDING)
+        generation_experiment = self.get_generation_experiment_version()
+        run = EvaluationRun.objects.create(
+            team=self.team, config=self, generation_experiment=generation_experiment, status=EvaluationRunStatus.PENDING
+        )
 
         from apps.evaluations.tasks import run_evaluation_task
 
@@ -198,6 +291,13 @@ class EvaluationRunStatus(models.TextChoices):
 
 class EvaluationRun(BaseTeamModel):
     config = models.ForeignKey(EvaluationConfig, on_delete=models.CASCADE)
+    generation_experiment = models.ForeignKey(
+        "experiments.Experiment",
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        help_text="The experiment version used for generation during this evaluation run",
+    )
     created_at = models.DateTimeField(auto_now_add=True)
     finished_at = models.DateTimeField(null=True, blank=True)
     user = models.ForeignKey(
@@ -225,13 +325,14 @@ class EvaluationRun(BaseTeamModel):
         for result in results:
             table_by_message[result.message.id].update(
                 {
-                    result.message.input.get("role", "Input"): result.message.input.get("content", ""),
-                    result.message.output.get("role", "Output"): result.message.output.get("content", ""),
-                    **{f"{key}": value for key, value in result.message.context.items()},
+                    "Dataset Input": result.message.input.get("content", ""),
+                    "Dataset Output": result.message.output.get("content", ""),
+                    "Generated Response": result.output.get("generated_response", ""),
                     **{
                         f"{key} ({result.evaluator.name})": value
                         for key, value in result.output.get("result", {}).items()
                     },
+                    **{f"{key}": value for key, value in result.message.context.items()},
                 }
             )
             if result.output.get("error"):

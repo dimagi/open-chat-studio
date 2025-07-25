@@ -65,6 +65,16 @@
               </a>{% if not forloop.last %}, {% endif %}
             {% endfor %}
           </p>
+          {% if evaluation_run.generation_experiment %}
+            <p><strong>Generation Chatbot:</strong>
+              <a href="{% url 'chatbots:single_chatbot_home' request.team.slug evaluation_run.generation_experiment.id %}" class="link">
+                {{ evaluation_run.generation_experiment.name }}
+                {% if evaluation_run.generation_experiment.version_display %}({{ evaluation_run.generation_experiment.version_display }}){% endif %}
+              </a>
+            </p>
+          {% else %}
+            <p><strong>Generation Chatbot:</strong> <span class="text-gray-500">None configured</span></p>
+          {% endif %}
           {% if evaluation_run.error_message %}
             <p><strong>Error:</strong> <span class="text-error">{{ evaluation_run.error_message }}</span></p>
           {% endif %}

@@ -452,9 +452,11 @@ def base_single_experiment_view(request, team_slug, experiment_id, template_name
     user_sessions = (
         ExperimentSession.objects.with_last_message_created_at()
         .filter(participant__user=request.user, experiment=experiment)
-        .exclude(experiment_channel__platform=ChannelPlatform.API)
+        .exclude(experiment_channel__platform__in=[ChannelPlatform.API, ChannelPlatform.EVALUATIONS])
     )
-    channels = experiment.experimentchannel_set.exclude(platform__in=[ChannelPlatform.WEB, ChannelPlatform.API]).all()
+    channels = experiment.experimentchannel_set.exclude(
+        platform__in=[ChannelPlatform.WEB, ChannelPlatform.API, ChannelPlatform.EVALUATIONS]
+    ).all()
     used_platforms = {channel.platform_enum for channel in channels}
     available_platforms = ChannelPlatform.for_dropdown(used_platforms, experiment.team)
     platform_forms = {}

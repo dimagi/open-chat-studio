@@ -111,7 +111,9 @@ def test_available_channels(slack_enabled, messaging_provider_types, channels_en
     for provider_type in messaging_provider_types:
         _build_provider(provider_type, team=experiment.team)
 
-    all_platforms = ChannelPlatform.as_list(exclude=[ChannelPlatform.API, ChannelPlatform.WEB])
+    all_platforms = ChannelPlatform.as_list(
+        exclude=[ChannelPlatform.API, ChannelPlatform.WEB, ChannelPlatform.EVALUATIONS]
+    )
     expected_status = {platform: False for platform in all_platforms}
     for platform in channels_enabled:
         expected_status[platform] = True
@@ -149,3 +151,19 @@ def test_is_active_for_team_does_not_create_missing_flag(experiment):
     is_active = flag.is_active_for_team(experiment.team)
     assert is_active is False
     assert flag.id is None
+
+
+@pytest.mark.django_db()
+def test_get_team_evaluations_channel(team_with_users):
+    """Test that get_team_evaluations_channel creates and returns a team evaluations channel"""
+    team = team_with_users
+
+    # Should create a new evaluations channel
+    channel = ExperimentChannel.objects.get_team_evaluations_channel(team)
+    assert channel.platform == ChannelPlatform.EVALUATIONS
+    assert channel.team == team
+    assert channel.name == f"{team.slug}-evaluations-channel"
+
+    # Should return the same channel on subsequent calls
+    channel2 = ExperimentChannel.objects.get_team_evaluations_channel(team)
+    assert channel.id == channel2.id

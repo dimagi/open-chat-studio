@@ -3,7 +3,14 @@ from django.urls import reverse
 from django.utils.safestring import mark_safe
 from django_tables2 import TemplateColumn, columns, tables
 
-from apps.evaluations.models import EvaluationConfig, EvaluationDataset, EvaluationMessage, EvaluationRun, Evaluator
+from apps.evaluations.models import (
+    EvaluationConfig,
+    EvaluationDataset,
+    EvaluationMessage,
+    EvaluationRun,
+    Evaluator,
+    ExperimentVersionSelection,
+)
 from apps.evaluations.utils import get_evaluator_type_display
 from apps.experiments.models import ExperimentSession
 from apps.generics import actions
@@ -16,6 +23,11 @@ class EvaluationConfigTable(tables.Table):
             "a": {"class": "link"},
         },
         orderable=True,
+    )
+    generation_chatbot = columns.Column(
+        verbose_name="Generation Chatbot",
+        orderable=False,
+        empty_values=(),  # Don't show "—" for empty values, let render method handle it
     )
     actions = actions.ActionsColumn(
         actions=[
@@ -46,12 +58,25 @@ class EvaluationConfigTable(tables.Table):
 
         return mark_safe(f'<ul class="list-disc list-inside">{"".join(items)}</ul>')
 
+    def render_generation_chatbot(self, record):
+        if record.version_selection_type == ExperimentVersionSelection.LATEST_WORKING:
+            return f"{record.base_experiment.name} (Latest Working)"
+        elif record.version_selection_type == ExperimentVersionSelection.LATEST_PUBLISHED:
+            return f"{record.base_experiment.name} (Latest Published)"
+        elif record.experiment_version:
+            version_display = (
+                f" ({record.experiment_version.version_display})" if record.experiment_version.version_display else ""
+            )
+            return f"{record.experiment_version.name}{version_display}"
+        return "—"
+
     class Meta:
         model = EvaluationConfig
         fields = (
             "name",
             "evaluators",
             "dataset",
+            "generation_chatbot",
             "actions",
         )
         row_attrs = settings.DJANGO_TABLES2_ROW_ATTRS
@@ -202,19 +227,24 @@ class EvaluationSessionsSelectionTable(tables.Table):
 
 
 class DatasetMessagesTable(tables.Table):
-    human_message_content = columns.Column(
-        accessor="input__content",
+    human_message_content = TemplateColumn(
+        template_name="evaluations/dataset_message_human_column.html",
         verbose_name="Human Message",
         orderable=False,
     )
-    ai_message_content = columns.Column(
-        accessor="output__content",
+    ai_message_content = TemplateColumn(
+        template_name="evaluations/dataset_message_ai_column.html",
         verbose_name="AI Message",
         orderable=False,
     )
     context = TemplateColumn(
         template_name="evaluations/dataset_message_context_column.html",
         verbose_name="Context",
+        orderable=False,
+    )
+    history = TemplateColumn(
+        template_name="evaluations/dataset_message_history_column.html",
+        verbose_name="History",
         orderable=False,
     )
     source = TemplateColumn(
@@ -244,7 +274,7 @@ class DatasetMessagesTable(tables.Table):
 
     class Meta:
         model = EvaluationMessage
-        fields = ("human_message_content", "ai_message_content", "context", "source", "actions")
+        fields = ("human_message_content", "ai_message_content", "context", "history", "source", "actions")
         row_attrs = settings.DJANGO_TABLES2_ROW_ATTRS
         orderable = False
         empty_text = "No messages in this dataset yet."

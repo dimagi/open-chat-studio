@@ -5,7 +5,7 @@ import pytest
 
 from apps.evaluations.evaluators import LlmEvaluator
 from apps.evaluations.models import EvaluationConfig, EvaluationRun
-from apps.evaluations.tasks import run_single_evaluation_task
+from apps.evaluations.tasks import evaluate_single_message_task
 from apps.utils.factories.evaluations import (
     EvaluationConfigFactory,
     EvaluationDatasetFactory,
@@ -60,7 +60,7 @@ def test_running_evaluator(get_llm_service, llm_provider, llm_provider_model):
     evaluation_run = EvaluationRun.objects.create(team=evaluation_config.team, config=evaluation_config)
 
     for message in dataset.messages.all():
-        run_single_evaluation_task(evaluation_run.id, evaluator.id, message.id)
+        evaluate_single_message_task(evaluation_run.id, [evaluator.id], message.id)
 
     evaluation_run.refresh_from_db()
     results = evaluation_run.results.all()
@@ -121,7 +121,7 @@ def test_context_variables_in_prompt(get_llm_service, llm_provider, llm_provider
     evaluation_run = EvaluationRun.objects.create(team=evaluation_config.team, config=evaluation_config)
 
     for message in dataset.messages.all():
-        run_single_evaluation_task(evaluation_run.id, evaluator.id, message.id)
+        evaluate_single_message_task(evaluation_run.id, [evaluator.id], message.id)
 
     evaluation_run.refresh_from_db()
     results = evaluation_run.results.all()

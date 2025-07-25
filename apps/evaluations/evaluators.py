@@ -21,10 +21,11 @@ class EvaluatorSchema(BaseModel):
 
 class EvaluatorResult(BaseModel):
     result: dict | None
+    generated_response: str
 
 
 class BaseEvaluator(BaseModel):
-    def run(self, message: EvaluationMessage) -> EvaluatorResult:
+    def run(self, message: EvaluationMessage, generated_response: str) -> EvaluatorResult:
         raise NotImplementedError
 
 
@@ -62,7 +63,8 @@ class LlmEvaluator(LLMResponseMixin, BaseEvaluator):
     prompt: str = Field(
         description=(
             "The prompt template to use for evaluation. "
-            "Available variables: {input.content}, {output.content}, {context.[context_parameter]}"
+            "Available variables: {input.content}, {output.content}, {context.[context_parameter]}, {full_history} "
+            "{generated_response}"
         ),
         json_schema_extra=UiSchema(widget=Widgets.expandable_text),
     )
@@ -71,7 +73,7 @@ class LlmEvaluator(LLMResponseMixin, BaseEvaluator):
         json_schema_extra=UiSchema(widget=Widgets.key_value_pairs),
     )
 
-    def run(self, message: EvaluationMessage) -> EvaluatorResult:
+    def run(self, message: EvaluationMessage, generated_response: str) -> EvaluatorResult:
         output_schema = dict_to_json_schema(self.output_schema).model_json_schema()
         llm = self.get_chat_model().with_structured_output(output_schema)
 
@@ -90,6 +92,8 @@ class LlmEvaluator(LLMResponseMixin, BaseEvaluator):
             input=SafeAccessWrapper(input),
             output=SafeAccessWrapper(output),
             context=SafeAccessWrapper(message.context),
+            full_history=message.full_history,
+            generated_response=generated_response,
         )
         result = llm.invoke(formatted_prompt)
-        return EvaluatorResult(result=result)
+        return EvaluatorResult(result=result, generated_response=generated_response)

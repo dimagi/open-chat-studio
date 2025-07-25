@@ -1,0 +1,19 @@
+{% load i18n %}
+<div class="fieldset w-full" id="version-select-container">
+  <label class="label font-bold" for="{{ field_id }}">
+    <div>
+      {% trans "Chatbot version" %}
+      {% if help_text %}
+        <small class="form-text text-muted">
+          {% include "generic/help.html" with help_content=help_text %}
+        </small>
+      {% endif %}
+    </div>
+  </label>
+  <select name="{{ field_name }}" id="{{ field_id }}" class="select w-full">
+    <option value="">{{ empty_message }}</option>
+    {% for version in versions %}
+      <option value="{{ version.value }}">{{ version.label }}</option>
+    {% endfor %}
+  </select>
+</div>

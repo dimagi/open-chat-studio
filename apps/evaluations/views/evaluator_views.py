@@ -83,7 +83,7 @@ class EditEvaluator(LoginAndTeamRequiredMixin, UpdateView, PermissionRequiredMix
     form_class = EvaluatorForm
     template_name = "evaluations/evaluator_form.html"
     extra_context = {
-        "title": "Update Evaluation",
+        "title": "Update Evaluator",
         "button_text": "Update",
         "active_tab": "evaluators",
     }

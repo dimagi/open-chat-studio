@@ -1223,6 +1223,7 @@ components:
       - api
       - slack
       - commcare_connect
+      - evaluations
       type: string
       description: |-
         * `telegram` - Telegram
@@ -1233,6 +1234,7 @@ components:
         * `api` - API
         * `slack` - Slack
         * `commcare_connect` - CommCare Connect
+        * `evaluations` - Evaluations
     SessionStatusEnum:
       enum:
       - active
