@@ -92,7 +92,7 @@ def single_collection_home(request, team_slug: str, pk: int):
         "max_files_per_collection": settings.MAX_FILES_PER_COLLECTION,
         "files_remaining": settings.MAX_FILES_PER_COLLECTION - collection_files_count,
         "max_file_size_mb": settings.MAX_FILE_SIZE_MB,
-        "document_source_types": list(SourceType),
+        "document_source_types": [SourceType.GITHUB],
     }
     return render(request, "documents/single_collection_home.html", context)
 
