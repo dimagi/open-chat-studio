@@ -42,7 +42,7 @@ class GitHubDocumentLoader(BaseDocumentLoader[GitHubSourceConfig]):
                     {
                         "collection_id": self.collection.id,
                         "source_type": "github",
-                        "repo_url": self.config.repo_url,
+                        "repo_url": str(self.config.repo_url),
                         "branch": self.config.branch,
                     }
                 )
