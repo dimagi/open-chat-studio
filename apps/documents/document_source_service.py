@@ -173,11 +173,11 @@ class DocumentSourceManager:
         """Update an existing file with new document content"""
         filename = self._extract_filename(document, identifier)
         content_file = ContentFile(document.page_content.encode("utf-8"), name=filename)
-        exiting_file = collection_file.file
-        exiting_file.file = content_file
-        exiting_file.content_size = content_file.size
-        exiting_file.metadata = document.metadata
-        exiting_file.save()
+        existing_file = collection_file.file
+        existing_file.file = content_file
+        existing_file.content_size = content_file.size
+        existing_file.metadata = document.metadata
+        existing_file.save()
 
         collection_file.status = FileStatus.PENDING
         collection_file.save(update_fields=["status"])
