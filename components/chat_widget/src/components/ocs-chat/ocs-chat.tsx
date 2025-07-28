@@ -64,6 +64,22 @@ interface SessionStorageData {
 })
 export class OcsChat {
 
+  private static readonly SESSION_EXPIRY_HOURS = 24;
+  private static readonly TASK_POLLING_MAX_ATTEMPTS = 30;
+  private static readonly TASK_POLLING_INTERVAL_MS = 1000;
+  private static readonly MESSAGE_POLLING_INTERVAL_MS = 30000;
+
+  private static readonly SCROLL_DELAY_MS = 100;
+  private static readonly FOCUS_DELAY_MS = 100;
+
+  private static readonly CHAT_WIDTH_DESKTOP = 450;
+  private static readonly CHAT_HEIGHT_EXPANDED_RATIO = 0.83; // 83% of window height
+  private static readonly CHAT_HEIGHT_COLLAPSED_RATIO = 0.6; // 60% of window height
+  private static readonly MOBILE_BREAKPOINT = 640;
+  private static readonly WINDOW_MARGIN = 20;
+
+  private static readonly LOCALSTORAGE_TEST_KEY = '__ocs_test__';
+
   /**
    * The ID of the chatbot to connect to.
    */
@@ -312,7 +328,6 @@ export class OcsChat {
     this.isTaskPolling = true;
     this.pauseMessagePolling();
 
-    const maxAttempts = 30; // 30 seconds max
     let attempts = 0;
 
     const poll = async (): Promise<void> => {
@@ -341,10 +356,10 @@ export class OcsChat {
           return;
         }
 
-        if (data.status === 'processing' && attempts < maxAttempts) {
+        if (data.status === 'processing' && attempts < OcsChat.TASK_POLLING_MAX_ATTEMPTS) {
           attempts++;
-          setTimeout(poll, 1000);
-        } else if (attempts >= maxAttempts) {
+          setTimeout(poll, OcsChat.TASK_POLLING_INTERVAL_MS);
+        } else if (attempts >= OcsChat.TASK_POLLING_MAX_ATTEMPTS) {
           // Task polling timed out, clear typing indicator and resume message polling
           this.isTyping = false;
           this.isTaskPolling = false;
@@ -370,7 +385,7 @@ export class OcsChat {
       if (!this.isTaskPolling) {
         await this.pollForMessages();
       }
-    }, 30000); // Poll every 30 seconds
+    }, OcsChat.MESSAGE_POLLING_INTERVAL_MS);
   }
 
   private pauseMessagePolling(): void {
@@ -422,7 +437,7 @@ export class OcsChat {
       if (this.messageListRef) {
         this.messageListRef.scrollTop = this.messageListRef.scrollHeight;
       }
-    }, 100);
+    }, OcsChat.SCROLL_DELAY_MS);
   }
 
   private focusInput(): void {
@@ -430,7 +445,7 @@ export class OcsChat {
       if (this.textareaRef && !this.isTyping) {
         this.textareaRef.focus();
       }
-    }, 100);
+    }, OcsChat.FOCUS_DELAY_MS);
   }
 
   private handleKeyPress(event: KeyboardEvent): void {
@@ -488,26 +503,28 @@ export class OcsChat {
   private initializePosition(): void {
     const windowWidth = window.innerWidth;
     const windowHeight = window.innerHeight;
-    const chatWidth = windowWidth < 640 ? windowWidth : 450;
-    const chatHeight = this.expanded ? (windowHeight * 0.83) : (windowHeight * 0.6);
-    const isMobile = windowWidth < 640;
+    const chatWidth = windowWidth < OcsChat.MOBILE_BREAKPOINT ? windowWidth : OcsChat.CHAT_WIDTH_DESKTOP;
+    const chatHeight = this.expanded
+      ? (windowHeight * OcsChat.CHAT_HEIGHT_EXPANDED_RATIO)
+      : (windowHeight * OcsChat.CHAT_HEIGHT_COLLAPSED_RATIO);
+    const isMobile = windowWidth < OcsChat.MOBILE_BREAKPOINT;
 
     if (isMobile) {
       this.windowPosition = { x: 0, y: 0 };
       return;
     }
-    const margin = 20;
+
     switch (this.position) {
       case 'left':
         this.windowPosition = {
-          x: margin,
-          y: windowHeight - chatHeight - margin
+          x: OcsChat.WINDOW_MARGIN,
+          y: windowHeight - chatHeight - OcsChat.WINDOW_MARGIN
         };
         break;
       case 'right':
         this.windowPosition = {
-          x: windowWidth - chatWidth - margin,
-          y: windowHeight - chatHeight - margin
+          x: windowWidth - chatWidth - OcsChat.WINDOW_MARGIN,
+          y: windowHeight - chatHeight - OcsChat.WINDOW_MARGIN
         };
         break;
       case 'center':
@@ -549,8 +566,10 @@ export class OcsChat {
     // Constrain chatbox to window
     const windowWidth = window.innerWidth;
     const windowHeight = window.innerHeight;
-    const chatWidth = windowWidth < 640 ? windowWidth : 450;
-    const chatHeight = this.expanded ? (windowHeight * 0.83) : (windowHeight * 0.6);
+    const chatWidth = windowWidth < OcsChat.MOBILE_BREAKPOINT ? windowWidth : OcsChat.CHAT_WIDTH_DESKTOP;
+    const chatHeight = this.expanded
+      ? (windowHeight * OcsChat.CHAT_HEIGHT_EXPANDED_RATIO)
+      : (windowHeight * OcsChat.CHAT_HEIGHT_COLLAPSED_RATIO);
 
     this.windowPosition = {
       x: Math.max(0, Math.min(newX, windowWidth - chatWidth)),
@@ -578,7 +597,7 @@ export class OcsChat {
   }
 
   private handleMouseDown = (event: MouseEvent): void => {
-    if (window.innerWidth < 640) return;
+    if (window.innerWidth < OcsChat.MOBILE_BREAKPOINT) return;
     if ((event.target as HTMLElement).closest('button')) return;
 
     const pointer = this.getPointerCoordinates(event);
@@ -672,7 +691,7 @@ export class OcsChat {
       if (lastActivity) {
         const lastActivityDate = new Date(lastActivity);
         const hoursSinceActivity = (Date.now() - lastActivityDate.getTime()) / (1000 * 60 * 60);
-        if (hoursSinceActivity > 24) {
+        if (hoursSinceActivity > OcsChat.SESSION_EXPIRY_HOURS) {
           this.clearSessionStorage();
           return { messages: [] };
         }
@@ -699,9 +718,8 @@ export class OcsChat {
 
   private isLocalStorageAvailable(): boolean {
     try {
-      const testKey = '__ocs_test__';
-      localStorage.setItem(testKey, 'test');
-      localStorage.removeItem(testKey);
+      localStorage.setItem(OcsChat.LOCALSTORAGE_TEST_KEY, 'test');
+      localStorage.removeItem(OcsChat.LOCALSTORAGE_TEST_KEY);
       return true;
     } catch {
       return false;
