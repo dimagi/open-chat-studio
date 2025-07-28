@@ -69,7 +69,7 @@ export class OcsChat {
   @Prop() apiBaseUrl?: string = "https://chatbots.dimagi.com";
 
   /**
-   * The text to display on the button (deprecated, use iconUrl for icon button or set to non-empty string to use text button).
+   * The text to display on the button.
    */
   @Prop() buttonText?: string;
 
