@@ -108,7 +108,7 @@ class RemoteIndexManager(IndexManager):
         ...
 
     @abstractmethod
-    def delete_file_from_index(self, file_id: str):
+    def pluck_file_from_index(self, file_id: str):
         """Disassociates the file with the vector store"""
 
     def add_files(
@@ -178,7 +178,7 @@ class OpenAIRemoteIndexManager(RemoteIndexManager):
         with contextlib.suppress(openai.NotFoundError):
             self.client.vector_stores.delete(vector_store_id=self.index_id)
 
-    def delete_file_from_index(self, file_id: str):
+    def pluck_file_from_index(self, file_id: str):
         """Disassociates the file with the vector store"""
         try:
             self.client.vector_stores.files.delete(vector_store_id=self.index_id, file_id=file_id)

@@ -237,7 +237,7 @@ class TestDeleteCollectionFile:
 
             if is_remote_index:
                 remote_index_manager_mock.delete_files.assert_not_called()
-                remote_index_manager_mock.delete_file_from_index.assert_called()
+                remote_index_manager_mock.pluck_file_from_index.assert_called()
             else:
                 local_index_manager_mock.delete_files.assert_not_called()
                 local_index_manager_mock.delete_embeddings.assert_called()
