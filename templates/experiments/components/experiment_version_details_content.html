@@ -47,20 +47,20 @@
 </div>
 <div class="divider"></div>
 <div class="modal-body" id="versionDetails">
-    {% include 'experiments/components/versions/compare.html' %}
+    {% include "experiments/components/versions/compare.html" %}
 </div>
 
 {% if not experiment.is_archived %}
     <div class="divider"></div>
     <div class="modal-action">
-        {% url 'experiments:archive-experiment' team_slug=team.slug experiment_id=experiment.working_version_id version_number=experiment.version_number as archive_url%}
+        {% url 'experiments:archive-experiment' team_slug=team.slug experiment_id=experiment.working_version_id version_number=experiment.version_number as archive_url %}
         <form method="post" action="{{ archive_url }}" onsubmit="return confirm('Are you sure you want to archive this experiment?');">
             {% csrf_token %}
             <button type="submit" class="btn btn-sm btn-warning" {% if experiment.is_default_version %}disabled{% endif %}>
                 Archive Version
             </button>
         </form>
-        {% url 'experiments:set-default-experiment' team_slug=team.slug experiment_id=experiment.working_version_id version_number=experiment.version_number as update_default_url%}
+        {% url 'experiments:set-default-experiment' team_slug=team.slug experiment_id=experiment.working_version_id version_number=experiment.version_number as update_default_url %}
         <form method="post" action="{{ update_default_url }}">
             {% csrf_token %}
             <button type="submit" class="btn btn-sm btn-primary" {% if experiment.is_default_version %}disabled{% endif %}>

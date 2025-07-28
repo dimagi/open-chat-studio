@@ -160,13 +160,18 @@ class ChatAdapter(BaseAdapter):
         # TODO: change this to something specific to the current chat message
         return self.session.chat.metadata.get("cancelled", False)
 
-    def get_output_message_metadata(self, cited_files: list[File]) -> dict:
-        """`cited_files` is a list of files that are cited in the response."""
-        if not cited_files:
-            return {}
-
-        self.session.chat.attach_files(attachment_type="file_citation", files=cited_files)
-        return {"cited_files": [file.id for file in cited_files]}
+    def get_output_message_metadata(self, cited_files: set[File], generated_files: set[File]) -> dict:
+        """`cited_files` is a list of files that are cited in the response whereas generated files are those generated
+        by the LLM
+        """
+        if cited_files:
+            self.session.chat.attach_files(attachment_type="file_citation", files=cited_files)
+        if generated_files:
+            self.session.chat.attach_files(attachment_type="code_interpreter", files=generated_files)
+        return {
+            "cited_files": [file.id for file in cited_files],
+            "generated_files": [file.id for file in generated_files],
+        }
 
     def add_citation_section_from_cited_files(self, ai_message: str, cited_files: list[File]) -> str:
         return populate_reference_section_from_citations(text=ai_message, cited_files=cited_files, session=self.session)

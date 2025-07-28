@@ -34,7 +34,7 @@
       ],
       "title": "PipelineChatHistoryTypes",
       "type": "string",
-      "default": "none",
+      "default": "global",
       "ui:enumLabels": [
         "Node",
         "Named",

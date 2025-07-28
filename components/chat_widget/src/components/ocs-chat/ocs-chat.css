@@ -99,6 +99,36 @@ textarea {
   @apply bg-gray-400;
 }
 
+/* Markdown content styling for chat messages */
+.chat-markdown {
+  @apply prose prose-sm prose-gray max-w-none;
+}
+
+/* override spacing */
+.chat-markdown > * {
+  margin-top: 0.1rem;
+  margin-bottom: 0.1rem;
+}
+
+.bg-blue-500 .chat-markdown {
+  @apply prose-invert;
+}
+
+.bg-blue-500 .chat-markdown code {
+  @apply bg-blue-400/50 text-blue-50;
+}
+
+.bg-blue-500 .chat-markdown pre {
+  @apply bg-blue-400/50 border-blue-400;
+}
+
+.bg-gray-200 .chat-markdown code {
+  @apply bg-white border border-gray-300;
+}
+
+.bg-gray-200 .chat-markdown pre {
+  @apply bg-white border border-gray-300;
+
 @media (max-width: 640px) {
   .max-w-xs {
     max-width: 85%;

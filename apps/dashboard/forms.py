@@ -4,8 +4,9 @@ from django import forms
 from django.utils import timezone
 from django.utils.translation import gettext_lazy as _
 
+from apps.annotations.models import Tag, TagCategories
 from apps.channels.models import ChannelPlatform
-from apps.experiments.models import Experiment
+from apps.experiments.models import Experiment, Participant
 
 
 class DashboardFilterForm(forms.Form):
@@ -64,6 +65,12 @@ class DashboardFilterForm(forms.Form):
         widget=forms.SelectMultiple(),
     )
 
+    participants = forms.ModelMultipleChoiceField(
+        queryset=Participant.objects.none(), required=False, widget=forms.SelectMultiple()
+    )
+
+    tags = forms.ModelMultipleChoiceField(queryset=Tag.objects.none(), required=False, widget=forms.SelectMultiple())
+
     def __init__(self, *args, team=None, **kwargs):
         super().__init__(*args, **kwargs)
 
@@ -82,6 +89,10 @@ class DashboardFilterForm(forms.Form):
                 (label_to_value[label], label) for label in available_platform_labels if label in label_to_value
             ]
             self.fields["channels"].choices = platform_choices
+            self.fields["participants"].queryset = Participant.objects.filter(team=team)
+            self.fields["tags"].queryset = Tag.objects.filter(team=team).exclude(
+                category=TagCategories.EXPERIMENT_VERSION
+            )
 
         # Set default dates if not provided
         if not self.data.get("start_date") and not self.data.get("end_date"):
@@ -144,6 +155,12 @@ class DashboardFilterForm(forms.Form):
 
         if data.get("channels"):
             params["platform_names"] = data["channels"]
+
+        if data.get("participants"):
+            params["participant_ids"] = data["participants"]
+
+        if data.get("tags"):
+            params["tag_ids"] = data["tags"]
 
         return params
 

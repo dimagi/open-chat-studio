@@ -21,7 +21,7 @@
     </form>
     <div class="mt-4" id="charts"></div>
   </section>
-{% endblock %}
+{% endblock app %}
 {% block page_js %}
   <script src="{% static 'js/adminDashboard-bundle.js' %}"></script>
   <script>
@@ -49,4 +49,4 @@
       participantChart = SiteJS.adminDashboard.cumulativeChartWithDates(participantChartCtx, start, end, participantData.data, "Participants", participantData.start_value);
     })
   </script>
-{% endblock %}
+{% endblock page_js %}

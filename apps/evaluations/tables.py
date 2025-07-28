@@ -73,7 +73,7 @@ class EvaluationRunTable(tables.Table):
         template_name="evaluations/evaluation_run_status_column.html", verbose_name="Status", orderable=False
     )
 
-    results = columns.Column(accessor="results.count", verbose_name="Result count", orderable=False)
+    results = columns.Column(accessor="results__count", verbose_name="Result count", orderable=False)
 
     actions = actions.ActionsColumn(
         actions=[
@@ -203,12 +203,12 @@ class EvaluationSessionsSelectionTable(tables.Table):
 
 class DatasetMessagesTable(tables.Table):
     human_message_content = columns.Column(
-        accessor="input.content",
+        accessor="input__content",
         verbose_name="Human Message",
         orderable=False,
     )
     ai_message_content = columns.Column(
-        accessor="output.content",
+        accessor="output__content",
         verbose_name="AI Message",
         orderable=False,
     )

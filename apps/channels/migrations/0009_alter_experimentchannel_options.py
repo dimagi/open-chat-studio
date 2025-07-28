@@ -5,7 +5,7 @@ from django.db import migrations
 
 class Migration(migrations.Migration):
     dependencies = [
-        ("channels", "0008_alter_experimentchannel_platform"),
+        ("bot_channels", "0008_alter_experimentchannel_platform"),
     ]
 
     operations = [

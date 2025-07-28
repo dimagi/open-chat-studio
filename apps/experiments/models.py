@@ -1310,16 +1310,22 @@ class Participant(BaseTeamModel):
     public_id = models.UUIDField(default=uuid.uuid4, unique=True)
     user = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.CASCADE, null=True, blank=True)
     platform = models.CharField(max_length=32)
+    remote_id = models.CharField(max_length=255, blank=True, null=True)
 
     class Meta:
         ordering = ["platform", "identifier"]
         unique_together = [("team", "platform", "identifier")]
 
     @classmethod
-    def create_anonymous(cls, team: Team, platform: str) -> "Participant":
+    def create_anonymous(cls, team: Team, platform: str, remote_id: str = None) -> "Participant":
         public_id = str(uuid.uuid4())
         return cls.objects.create(
-            team=team, platform=platform, identifier=f"anon:{public_id}", public_id=public_id, name="Anonymous"
+            team=team,
+            platform=platform,
+            identifier=f"anon:{public_id}",
+            public_id=public_id,
+            name="Anonymous",
+            remote_id=remote_id,
         )
 
     @property
@@ -1577,7 +1583,7 @@ class ExperimentSession(BaseTeamModel):
         max_length=40, blank=True, default="", help_text="System ID of the seed message task, if present."
     )
     experiment_channel = models.ForeignKey(
-        "channels.ExperimentChannel",
+        "bot_channels.experimentchannel",
         on_delete=models.SET_NULL,
         related_name="experiment_sessions",
         null=True,
@@ -1714,7 +1720,7 @@ class ExperimentSession(BaseTeamModel):
                 trace_service = TracingService.create_for_experiment(experiment)
                 with trace_service.trace_or_span(
                     name=f"{experiment.name} - {trace_info.name}",
-                    session_id=str(self.external_id),
+                    session=self,
                     user_id=str(self.participant.identifier),
                     inputs={"input": instruction_prompt},
                     metadata=trace_info.metadata,

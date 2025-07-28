@@ -14,9 +14,6 @@ class CollectionsTable(tables.Table):
         ]
     )
 
-    def render_file_count(self, record):
-        return record.files.count()
-
     def render_size(self, value):
         return f"{value} MB"
 

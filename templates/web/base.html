@@ -13,7 +13,7 @@
         {% with project_meta|get_title:page_title as title %}
           {% with project_meta|get_description:page_description as description %}
             {% with project_meta|get_image_url:page_image as image %}
-              <title>{% block page_title %}{{ title }}{% endblock %}</title>
+              <title>{% block page_title %}{{ title }}{% endblock page_title %}</title>
               <meta name="description" content="{{ description }}">
               <meta name="keywords" content="{{ project_meta.KEYWORDS }}">
       <!-- Twitter Card data -->
@@ -34,14 +34,14 @@
         {% endwith %}
       {% endif %}
     {% endblock meta %}
-    {% include 'web/components/favicon.html' %}
+    {% include "web/components/favicon.html" %}
     <link rel="stylesheet" href="{% static 'css/site-base.css' %}">
     <link rel="stylesheet" href="{% static 'css/site-tailwind.css' %}">
     <!-- Font Awesome Icons -->
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.2.0/css/all.min.css" integrity="sha512-xh6O/CkQoPOWDdYTDqeRdPCVd1SpvCA9XXcUnZS2FmJNp1coAFzvtCN9BmamE+4aHK8yyUHUSCcJHgXloTyT2A==" crossorigin="anonymous" referrerpolicy="no-referrer" />
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.2.0/css/v4-shims.min.css" integrity="sha512-ARfx5eajdcCAuWvuJrgUuJ6D25ON3KZRTCghNXXKeJldCQJ5bXS+6CvG2EhcFWITF95uwZydzpufSKvhmSpTxA==" crossorigin="anonymous" referrerpolicy="no-referrer" />
     {% if GOOGLE_ANALYTICS_ID %}
-      {% include 'web/components/google_analytics.html' %}
+      {% include "web/components/google_analytics.html" %}
     {% endif %}
 
     <!-- Sentry SDK. See https://docs.sentry.io/platforms/javascript/ -->
@@ -54,29 +54,29 @@
 
     <script src="{% static 'js/site-bundle.js'%}"></script>
     {% block page_head %}
-    {% endblock %}
+    {% endblock page_head %}
   </head>
   <body hx-headers='{"X-CSRFToken": "{{ csrf_token }}"}'>
     {% block body_wrapper %}
       {% block top_nav %}
-        {% include 'web/components/top_nav.html' %}
-      {% endblock %}
+        {% include "web/components/top_nav.html" %}
+      {% endblock top_nav %}
       {% block messages %}
-        {% include 'web/components/messages.html' %}
+        {% include "web/components/messages.html" %}
       {% endblock messages %}
       {% block notices %}
-        {% include 'web/components/notices.html' %}
+        {% include "web/components/notices.html" %}
       {% endblock notices %}
       {% block body %}
       {% endblock body %}
       {% block footer %}
-        {% include 'web/components/footer.html' %}
+        {% include "web/components/footer.html" %}
       {% endblock footer %}
     {% endblock body_wrapper %}
     {% block page_js %}
     {% endblock page_js %}
-    {% include 'web/components/messages-js.html' %}
-    {% include 'web/components/ajax_errors-js.html' %}
+    {% include "web/components/messages-js.html" %}
+    {% include "web/components/ajax_errors-js.html" %}
     {% load tz_detect %}
     {% tz_detect %}
   </body>

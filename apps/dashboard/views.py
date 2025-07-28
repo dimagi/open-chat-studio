@@ -150,6 +150,16 @@ class TagAnalyticsApiView(DashboardApiView):
         return self.json_response(data)
 
 
+class AverageResponseTimeApiView(DashboardApiView):
+    def get(self, request, *args, **kwargs):
+        service = self.get_dashboard_service()
+        filter_params = self.get_filter_params()
+        granularity = request.GET.get("granularity", "daily")
+
+        data = service.get_average_response_time_data(granularity=granularity, **filter_params)
+        return self.json_response(data)
+
+
 @method_decorator(login_and_team_required, name="dispatch")
 class SaveFilterView(LoginAndTeamRequiredMixin, TemplateView):
     """Save filter presets"""

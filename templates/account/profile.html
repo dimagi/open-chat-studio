@@ -2,14 +2,14 @@
 {% load static %}
 {% block app %}
   <section class="app-card">
-    {% include 'account/components/profile_form.html' %}
+    {% include "account/components/profile_form.html" %}
   </section>
-  {% include 'account/components/2fa.html' %}
+  {% include "account/components/2fa.html" %}
   <section class="app-card">
-    {% include 'account/components/social/social_accounts.html' %}
+    {% include "account/components/social/social_accounts.html" %}
   </section>
-  {% include 'account/components/api_keys.html' %}
-{% endblock %}
+  {% include "account/components/api_keys.html" %}
+{% endblock app %}
 {% block page_js %}
   <script>
     document.addEventListener('DOMContentLoaded', () => {
@@ -64,4 +64,4 @@
       }
     });
   </script>
-{% endblock %}
+{% endblock page_js %}

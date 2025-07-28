@@ -171,7 +171,7 @@ def cancel_schedule(request, team_slug: str, participant_id: int, schedule_id: s
 def participant_identifiers_by_experiment(request, team_slug: str, experiment_id: int):
     identifiers = list(
         Participant.objects.filter(team__slug=team_slug, experimentsession__experiment_id=experiment_id)
-        .values_list("identifier", flat=True)
+        .values_list("identifier", "remote_id")
         .distinct()
     )
     return JsonResponse(identifiers, safe=False)
@@ -180,5 +180,10 @@ def participant_identifiers_by_experiment(request, team_slug: str, experiment_id
 @permission_required("experiments.view_participant")
 @login_and_team_required
 def all_participant_identifiers(request, team_slug: str):
-    identifiers = list(Participant.objects.filter(team__slug=team_slug).values_list("identifier", flat=True).distinct())
+    identifiers = list(
+        Participant.objects
+        .filter(team__slug=team_slug)
+        .values_list("identifier", "remote_id")
+        .distinct()
+    )
     return JsonResponse(identifiers, safe=False)

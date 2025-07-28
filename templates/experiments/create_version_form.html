@@ -1,16 +1,16 @@
-{% extends 'web/app/app_base.html' %}
+{% extends "web/app/app_base.html" %}
 {% load static %}
 {% load form_tags %}
 
 {% block page_head %}
   {{ block.super }}
   <link rel="stylesheet" href="{% static 'css/editors.css' %}">
-{% endblock %}
+{% endblock page_head %}
 
 {% block page_js %}
   {{ block.super }}
   <script src="{% static 'js/editors-bundle.js' %}"></script>
-{% endblock %}
+{% endblock page_js %}
 
 {% block breadcrumbs %}
   <div class="text-sm breadcrumbs" aria-label="breadcrumbs">
@@ -20,7 +20,7 @@
       <li class="pg-breadcrumb-active" aria-current="page">Create Version</li>
     </ul>
   </div>
-{% endblock %}
+{% endblock breadcrumbs %}
 
 {% block app %}
   <div class="app-card">
@@ -47,7 +47,7 @@
         {% if version_details.fields_changed %}
           <h1 class="pg-subtitle pb-5">Changes since version {{ version_details.previous_instance.version_number }}</h1>
           <div class="p-5 border border-white rounded-lg">
-            {% include 'experiments/components/versions/compare.html' %}
+            {% include "experiments/components/versions/compare.html" %}
           </div>
         {% else %}
           <h2 class="pg-subtitle pb-5">No changes since version {{ version_details.previous_instance.version_number }}</h2>
@@ -55,4 +55,4 @@
       {% endif %}
     {% endif %}
   </div>
-{% endblock %}
+{% endblock app %}

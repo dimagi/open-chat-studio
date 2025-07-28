@@ -10,7 +10,7 @@
   <div class="flex flex-row">
     <div>
       {% if message_details.message %}
-        {% include 'experiments/chat/ai_message.html' with message=message_details.message attachments=attachments %}
+        {% include "experiments/chat/ai_message.html" with message=message_details.message attachments=attachments %}
       {% elif message_details.error_msg %}
         <p class="chat-message-system text-error">
           {{ message_details.error_msg }}

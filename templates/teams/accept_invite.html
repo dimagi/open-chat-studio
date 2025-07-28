@@ -3,7 +3,7 @@
 {% load i18n %}
 {% block body %}
   <section class="mt-7 section">
-    <div class= "container">
+    <div class="container">
       <div class="pg-columns pg-align-items-center">
         <div class="pg-column-one-third">
           <img class="img-fluid" src="{% static 'images/undraw/undraw_lighthouse.svg' %}" alt="{% translate "Welcome!" %}">
@@ -27,7 +27,7 @@
                 {% if request.user.email == invitation.email %}
                   <input type="submit" class="btn btn-primary" value="Accept Invitation"/>
                 {% else %}
-                  <p >
+                  <p>
                     {% blocktranslate with invite_email=invitation.email user_email=request.user.email  %}
                       You're logged in as {{ user_email }}. Please sign out and click the link in the invitation email sent to {{ invite_email }}.
                     {% endblocktranslate %}
@@ -65,4 +65,4 @@
       </div>
     </div>
   </section>
-{% endblock %}
+{% endblock body %}
