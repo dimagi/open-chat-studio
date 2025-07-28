@@ -208,9 +208,12 @@ def delete_collection_file(request, team_slug: str, pk: int, file_id: int):
 
     if file.is_used():
         if collection.is_index:
-            # Remove it from the index only
             index_manager = collection.get_index_manager()
-            index_manager.delete_file_from_index(file_id=file.external_id)
+            if collection.is_remote_index:
+                # Remove it from the index only
+                index_manager.delete_file_from_index(file_id=file.external_id)
+            else:
+                index_manager.delete_embeddings(file_id=file.id)
     else:
         # Nothing else is using it
         if collection.is_index:

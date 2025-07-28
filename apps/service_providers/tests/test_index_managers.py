@@ -101,6 +101,22 @@ class TestLocalIndexManager:
         collection_file.refresh_from_db()
         assert collection_file.status == FileStatus.FAILED
 
+    def test_delete_embeddings(self, local_index_instance):
+        file = FileFactory()
+        embedding = FileChunkEmbedding.objects.create(
+            team=file.team,
+            file=file,
+            collection=local_index_instance,
+            chunk_number=1,
+            page_number=1,
+            text="test embedding",
+            embedding=[0.1] * settings.EMBEDDING_VECTOR_SIZE,
+        )
+        local_index_instance.get_index_manager().delete_embeddings(file.id)
+
+        with pytest.raises(FileChunkEmbedding.DoesNotExist):
+            embedding.refresh_from_db()
+
 
 @pytest.mark.django_db()
 class TestRemoteIndexManager:

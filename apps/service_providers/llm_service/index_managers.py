@@ -31,7 +31,7 @@ class IndexManager(metaclass=ABCMeta):
         pass
 
 
-class RemoteIndexManager(metaclass=ABCMeta):
+class RemoteIndexManager(IndexManager):
     """
     Abstract base class for managing vector stores in remote indexing services.
 
@@ -231,7 +231,7 @@ class OpenAIRemoteIndexManager(RemoteIndexManager):
         File.objects.bulk_update(files, fields=["external_id"])
 
 
-class LocalIndexManager(metaclass=ABCMeta):
+class LocalIndexManager(IndexManager):
     """
     Abstract base class for managing local embedding operations.
 
@@ -320,6 +320,10 @@ class LocalIndexManager(metaclass=ABCMeta):
             FileChunkEmbedding.objects.filter(file=file).delete()
             file.external_id = ""
         File.objects.bulk_update(files, fields=["external_id"])
+
+    def delete_embeddings(self, file_id: str):
+        """Deleting a file from the local index doesn't really make"""
+        FileChunkEmbedding.objects.filter(file__id=file_id).delete()
 
 
 class OpenAILocalIndexManager(LocalIndexManager):
