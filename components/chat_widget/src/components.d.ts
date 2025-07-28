@@ -16,7 +16,7 @@ export namespace Components {
          */
         "buttonShape": 'round' | 'square';
         /**
-          * The text to display on the button (deprecated, use iconUrl for icon button or set to non-empty string to use text button).
+          * The text to display on the button.
          */
         "buttonText"?: string;
         /**
@@ -71,7 +71,7 @@ declare namespace LocalJSX {
          */
         "buttonShape"?: 'round' | 'square';
         /**
-          * The text to display on the button (deprecated, use iconUrl for icon button or set to non-empty string to use text button).
+          * The text to display on the button.
          */
         "buttonText"?: string;
         /**
