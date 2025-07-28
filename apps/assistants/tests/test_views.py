@@ -23,7 +23,7 @@ class TestDeleteFileFromAssistant:
             assistant=assistant, tool_type="code_interpreter", extra={"vector_store_id": "vs-123"}
         )
 
-    @patch("apps.assistants.sync.OpenAIRemoteIndexManager.delete_file_from_index")
+    @patch("apps.assistants.sync.OpenAIRemoteIndexManager.pluck_file_from_index")
     def test_delete_file_removes_relationship_and_keeps_file_when_used_elsewhere(
         self, delete_file, assistant, resource, client
     ):
@@ -52,7 +52,7 @@ class TestDeleteFileFromAssistant:
         delete_file.assert_called_once_with(file_id="file_123")
 
     @patch("apps.assistants.sync.delete_file_from_openai")
-    @patch("apps.assistants.sync.OpenAIRemoteIndexManager.delete_file_from_index")
+    @patch("apps.assistants.sync.OpenAIRemoteIndexManager.pluck_file_from_index")
     def test_delete_file_removes_file_when_no_other_references(
         self, delete_file, mock_delete_from_openai, assistant, resource, client
     ):

@@ -31,7 +31,7 @@ class IndexManager(metaclass=ABCMeta):
         pass
 
 
-class RemoteIndexManager(metaclass=ABCMeta):
+class RemoteIndexManager(IndexManager):
     """
     Abstract base class for managing vector stores in remote indexing services.
 
@@ -108,7 +108,7 @@ class RemoteIndexManager(metaclass=ABCMeta):
         ...
 
     @abstractmethod
-    def delete_file_from_index(self, file_id: str):
+    def pluck_file_from_index(self, file_id: str):
         """Disassociates the file with the vector store"""
 
     def add_files(
@@ -178,7 +178,7 @@ class OpenAIRemoteIndexManager(RemoteIndexManager):
         with contextlib.suppress(openai.NotFoundError):
             self.client.vector_stores.delete(vector_store_id=self.index_id)
 
-    def delete_file_from_index(self, file_id: str):
+    def pluck_file_from_index(self, file_id: str):
         """Disassociates the file with the vector store"""
         try:
             self.client.vector_stores.files.delete(vector_store_id=self.index_id, file_id=file_id)
@@ -231,7 +231,7 @@ class OpenAIRemoteIndexManager(RemoteIndexManager):
         File.objects.bulk_update(files, fields=["external_id"])
 
 
-class LocalIndexManager(metaclass=ABCMeta):
+class LocalIndexManager(IndexManager):
     """
     Abstract base class for managing local embedding operations.
 
@@ -317,9 +317,13 @@ class LocalIndexManager(metaclass=ABCMeta):
             files: List of File instances to delete from the local index.
         """
         for file in files:
-            FileChunkEmbedding.objects.filter(file=file).delete()
+            self.delete_embeddings(file_id=file.id)
             file.external_id = ""
         File.objects.bulk_update(files, fields=["external_id"])
+
+    def delete_embeddings(self, file_id: str):
+        """Deleting a file from the local index doesn't really make"""
+        FileChunkEmbedding.objects.filter(file__id=file_id).delete()
 
 
 class OpenAILocalIndexManager(LocalIndexManager):
