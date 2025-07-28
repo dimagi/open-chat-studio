@@ -692,13 +692,7 @@ export class OcsChat {
   }
 
   private async startNewChat(): Promise<void> {
-    try {
-      // Clear current session from storage (if available)
-      this.clearSessionStorage();
-    } catch (error) {
-      // If clearing storage fails, continue anyway
-      console.warn('Could not clear localStorage, continuing with new session:', error);
-    }
+    this.clearSessionStorage();
     this.sessionId = undefined;
     this.messages = [];
     this.showStarterQuestions = true;
