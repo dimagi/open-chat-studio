@@ -68,7 +68,10 @@ def markitdown_read(file_obj) -> Document:
 
 
 def plaintext_reader(file_obj) -> Document:
-    return Document(parts=[DocumentPart(content=file_obj.read().decode())])
+    try:
+        return Document(parts=[DocumentPart(content=file_obj.read().decode())])
+    except UnicodeDecodeError as e:
+        raise FileReadException("Unable to decode file contents to text") from e
 
 
 READERS = {None: markitdown_read, "text/markdown": plaintext_reader}
