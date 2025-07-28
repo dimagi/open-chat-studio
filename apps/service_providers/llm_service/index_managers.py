@@ -317,7 +317,7 @@ class LocalIndexManager(IndexManager):
             files: List of File instances to delete from the local index.
         """
         for file in files:
-            FileChunkEmbedding.objects.filter(file=file).delete()
+            self.delete_embeddings(file_id=file.id)
             file.external_id = ""
         File.objects.bulk_update(files, fields=["external_id"])
 
