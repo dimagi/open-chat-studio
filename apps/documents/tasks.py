@@ -25,13 +25,13 @@ from apps.utils.celery import TaskbadgerTaskWrapper
 logger = logging.getLogger("ocs.documents.tasks.link_files_to_index")
 
 
-@shared_task(base=TaskbadgerTask, ignore_result=True)
+@shared_task(ignore_result=True)
 def index_collection_files_task(collection_file_ids: list[int]):
     collection_files = CollectionFile.objects.filter(id__in=collection_file_ids)
     index_collection_files(collection_files_queryset=collection_files)
 
 
-@shared_task(base=TaskbadgerTask, ignore_result=True)
+@shared_task(ignore_result=True)
 def migrate_vector_stores(collection_id: int, from_vector_store_id: str, from_llm_provider_id: int):
     """Migrate vector stores from one provider to another"""
     collection_files = CollectionFile.objects.filter(collection_id=collection_id)
@@ -95,7 +95,7 @@ def _cleanup_old_vector_store(llm_provider_id: int, vector_store_id: str, file_i
             old_manager.client.files.delete(file_id)
 
 
-@shared_task(base=TaskbadgerTask, ignore_result=True)
+@shared_task(ignore_result=True)
 def create_collection_from_assistant_task(collection_id: int, assistant_id: int):
     """Create a collection from an assistant's file search resources"""
     # Get file search resources from the assistant

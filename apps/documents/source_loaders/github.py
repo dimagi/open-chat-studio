@@ -6,7 +6,7 @@ from typing import Self
 from langchain_community.document_loaders.github import GithubFileLoader
 from langchain_core.documents import Document
 
-from apps.documents.models import CollectionFile, GitHubSourceConfig
+from apps.documents.models import Collection, CollectionFile, DocumentSource, GitHubSourceConfig
 from apps.documents.source_loaders.base import BaseDocumentLoader
 from apps.service_providers.models import AuthProviderType
 
@@ -17,7 +17,7 @@ class GitHubDocumentLoader(BaseDocumentLoader[GitHubSourceConfig]):
     """Document loader for GitHub repositories"""
 
     @classmethod
-    def for_document_source(cls, collection, document_source) -> Self:
+    def for_document_source(cls, collection: Collection, document_source: DocumentSource) -> Self:
         auth_provider = document_source.auth_provider
         if not auth_provider or auth_provider.type != AuthProviderType.bearer:
             type_ = auth_provider.type if auth_provider else "None"

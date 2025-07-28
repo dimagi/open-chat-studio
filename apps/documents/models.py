@@ -35,7 +35,7 @@ class CollectionFileMetadata(pydantic.BaseModel):
 class GitHubSourceConfig(pydantic.BaseModel):
     repo_url: HttpUrl = pydantic.Field(description="GitHub repository URL")
     branch: str = pydantic.Field(default="main", description="Branch to sync from")
-    file_pattern: str = pydantic.Field(default="*.md", description="File pattern to match (e.g., *.md, *.py)")
+    file_pattern: str = pydantic.Field(default="*.md", description="File pattern to match (e.g., *.md, src/*.py)")
     path_filter: str = pydantic.Field(default="", description="Optional path prefix filter")
 
     def __str__(self):
