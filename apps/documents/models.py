@@ -411,10 +411,18 @@ class SyncStatus(models.TextChoices):
     IN_PROGRESS = "in_progress", _("In Progress")
 
 
-class DocumentSourceManager(VersionsObjectManagerMixin, models.Manager):
+class DocumentSourceManager(VersionsObjectManagerMixin, AuditingManager):
     pass
 
 
+@audit_fields(
+    "collection",
+    "source_type",
+    "config",
+    "auto_sync_enabled",
+    "auth_provider",
+    audit_special_queryset_writes=True,
+)
 class DocumentSource(BaseTeamModel, VersionsMixin):
     collection = models.ForeignKey(
         Collection,
