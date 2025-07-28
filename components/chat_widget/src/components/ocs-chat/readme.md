@@ -9,26 +9,18 @@ For more information, see the [Open Chat Studio documentation](https://docs.open
 
 ## Properties
 
-| Property                 | Attribute      | Description                                            | Type                            | Default                         |
-| ------------------------ | -------------- | ------------------------------------------------------ | ------------------------------- | ------------------------------- |
-| `apiBaseUrl`             | `api-base-url` | The base URL for the API (defaults to current origin). | `string`                        | `"https://chatbots.dimagi.com"` |
-| `buttonText`             | `button-text`  | The text to display on the button.                     | `string`                        | `"Chat"`                        |
-| `chatbotId` _(required)_ | `chatbot-id`   | The ID of the chatbot to connect to.                   | `string`                        | `undefined`                     |
-| `expanded`               | `expanded`     | Whether the chat widget is initially expanded.         | `boolean`                       | `false`                         |
-| `position`               | `position`     | The initial position of the chat widget on the screen. | `"center" \| "left" \| "right"` | `'right'`                       |
-| `visible`                | `visible`      | Whether the chat widget is visible on load.            | `boolean`                       | `false`                         |
-| `welcome-messages`       | `welcome-messages` | JSON array of messages to display when chat opens      | `string`                    | `""`                            |
-| `starter-questions`      | `starter-questions` | JSON array of clickable starter questions for users.   | `string`                   | `""`                            |
-## CSS Custom Properties
-
-| Name                              | Description                      |
-| --------------------------------- | -------------------------------- |
-| `--button-background-color`       | Button background color          |
-| `--button-background-color-hover` | Button background color on hover |
-| `--button-border-color`           | Button border color              |
-| `--button-border-color-hover`     | Button border color on hover     |
-| `--button-text-color`             | Button text color                |
-| `--button-text-color-hover`       | Button text color on hover       |
+| Property                 | Attribute           | Description                                                                                                                   | Type                            | Default                         |
+| ------------------------ | ------------------- | ----------------------------------------------------------------------------------------------------------------------------- | ------------------------------- | ------------------------------- |
+| `apiBaseUrl`             | `api-base-url`      | The base URL for the API (defaults to current origin).                                                                        | `string`                        | `"https://chatbots.dimagi.com"` |
+| `buttonShape`            | `button-shape`      | The shape of the chat button. 'default' maintains current behavior, 'round' makes it circular, 'square' makes it rectangular. | `"round" \| "square"`           | `undefined`                     |
+| `buttonText`             | `button-text`       | The text to display on the button (deprecated, use iconUrl for icon button or set to non-empty string to use text button).    | `string`                        | `undefined`                     |
+| `chatbotId` _(required)_ | `chatbot-id`        | The ID of the chatbot to connect to.                                                                                          | `string`                        | `undefined`                     |
+| `expanded`               | `expanded`          | Whether the chat widget is initially expanded.                                                                                | `boolean`                       | `false`                         |
+| `iconUrl`                | `icon-url`          | URL of the icon to display on the button. If not provided, uses the default OCS logo.                                         | `string`                        | `undefined`                     |
+| `position`               | `position`          | The initial position of the chat widget on the screen.                                                                        | `"center" \| "left" \| "right"` | `'right'`                       |
+| `starterQuestions`       | `starter-questions` | Array of starter questions that users can click to send (JSON array of strings)                                               | `string`                        | `undefined`                     |
+| `visible`                | `visible`           | Whether the chat widget is visible on load.                                                                                   | `boolean`                       | `false`                         |
+| `welcomeMessages`        | `welcome-messages`  | Welcome messages to display above starter questions (JSON array of strings)                                                   | `string`                        | `undefined`                     |
 
 
 ----------------------------------------------
