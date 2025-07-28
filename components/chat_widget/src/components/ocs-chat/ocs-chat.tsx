@@ -52,6 +52,11 @@ interface PointerEvent {
   clientY: number;
 }
 
+interface SessionStorageData {
+  sessionId?: string;
+  messages: ChatMessage[];
+}
+
 @Component({
   tag: 'open-chat-studio-widget',
   styleUrl: 'ocs-chat.css',
@@ -644,12 +649,24 @@ export class OcsChat {
     }
   }
 
-  private loadSessionFromStorage(): { sessionId?: string; messages: ChatMessage[] } {
+  private loadSessionFromStorage(): SessionStorageData {
     const keys = this.getStorageKeys();
     try {
-      const sessionId = localStorage.getItem(keys.sessionId) || undefined;
+      const storedSessionId = localStorage.getItem(keys.sessionId);
+      const sessionId = storedSessionId ? storedSessionId : undefined;
+
       const messagesJson = localStorage.getItem(keys.messages);
-      const messages = messagesJson ? JSON.parse(messagesJson) : [];
+      let messages: ChatMessage[] = [];
+
+      if (messagesJson) {
+        try {
+          const parsedMessages = JSON.parse(messagesJson);
+          messages = Array.isArray(parsedMessages) ? parsedMessages : [];
+        } catch (parseError) {
+          console.warn('Failed to parse messages from localStorage:', parseError);
+          messages = [];
+        }
+      }
 
       const lastActivity = localStorage.getItem(keys.lastActivity);
       if (lastActivity) {
