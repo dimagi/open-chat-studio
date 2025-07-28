@@ -19,8 +19,11 @@ class GitHubDocumentLoader(BaseDocumentLoader[GitHubSourceConfig]):
     @classmethod
     def for_document_source(cls, collection, document_source) -> Self:
         auth_provider = document_source.auth_provider
-        assert auth_provider.type == AuthProviderType.bearer
-        assert auth_provider.config.get("token")
+        if not auth_provider or auth_provider.type != AuthProviderType.bearer:
+            type_ = auth_provider.type if auth_provider else "None"
+            raise ValueError(f"GitHub document source requires bearer authentication, got {type_}")
+        if not auth_provider.config.get("token"):
+            raise ValueError("GitHub authentication token is missing")
         return cls(collection, document_source.config.github, auth_provider)
 
     def load_documents(self) -> Iterator[Document]:
