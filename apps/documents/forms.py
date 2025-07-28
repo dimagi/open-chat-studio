@@ -187,7 +187,7 @@ class GithubDocumentSourceForm(DocumentSourceForm):
     def _get_config_from_instance(self, instance):
         return instance.config.github
 
-    def clean_github_repo_url(self):
+    def clean_repo_url(self):
         github_repo_url = self.cleaned_data["repo_url"]
         try:
             validate_user_input_url(github_repo_url, strict=not settings.DEBUG)
