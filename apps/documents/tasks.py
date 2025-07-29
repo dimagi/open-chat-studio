@@ -10,11 +10,10 @@ from django.db.models import QuerySet
 from taskbadger.celery import Task as TaskbadgerTask
 
 from apps.assistants.models import OpenAiAssistant
+from apps.documents.datamodels import ChunkingStrategy, CollectionFileMetadata
 from apps.documents.models import (
-    ChunkingStrategy,
     Collection,
     CollectionFile,
-    CollectionFileMetadata,
     DocumentSource,
     FileStatus,
 )

@@ -6,10 +6,9 @@ from django.db import transaction
 from django.utils import timezone
 from langchain_core.documents import Document
 
+from apps.documents.datamodels import ChunkingStrategy, CollectionFileMetadata
 from apps.documents.models import (
-    ChunkingStrategy,
     CollectionFile,
-    CollectionFileMetadata,
     DocumentSource,
     DocumentSourceSyncLog,
     FileStatus,

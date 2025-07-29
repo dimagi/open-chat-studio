@@ -1,6 +1,6 @@
 import factory
 
-from apps.documents.models import DocumentSourceConfig
+from apps.documents.datamodels import DocumentSourceConfig
 
 
 class CollectionFactory(factory.django.DjangoModelFactory):

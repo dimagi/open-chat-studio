@@ -5,15 +5,14 @@ from unittest.mock import Mock, patch
 import pytest
 from langchain_core.documents import Document
 
+from apps.documents.datamodels import DocumentSourceConfig, GitHubSourceConfig
 from apps.documents.document_source_service import DocumentSourceManager
 from apps.documents.models import (
     Collection,
     CollectionFile,
     DocumentSource,
-    DocumentSourceConfig,
     DocumentSourceSyncLog,
     FileStatus,
-    GitHubSourceConfig,
     SourceType,
     SyncStatus,
 )

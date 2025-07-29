@@ -19,6 +19,7 @@ from django.views.generic import CreateView, FormView, ListView, TemplateView, U
 from django_tables2 import SingleTableView
 
 from apps.documents import tasks
+from apps.documents.datamodels import ChunkingStrategy, CollectionFileMetadata
 from apps.documents.forms import (
     CollectionForm,
     CreateCollectionFromAssistantForm,
@@ -26,10 +27,8 @@ from apps.documents.forms import (
     GithubDocumentSourceForm,
 )
 from apps.documents.models import (
-    ChunkingStrategy,
     Collection,
     CollectionFile,
-    CollectionFileMetadata,
     DocumentSource,
     FileStatus,
     SourceType,

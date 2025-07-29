@@ -4,7 +4,8 @@ from django.conf import settings
 from django.db.models import Q, Subquery
 
 from apps.assistants.models import OpenAiAssistant, ToolResources
-from apps.documents.models import Collection, DocumentSource, DocumentSourceConfig, GitHubSourceConfig, SourceType
+from apps.documents.datamodels import DocumentSourceConfig, GitHubSourceConfig
+from apps.documents.models import Collection, DocumentSource, SourceType
 from apps.service_providers.models import AuthProvider, AuthProviderType, EmbeddingProviderModel
 from apps.utils.urlvalidate import InvalidURL, validate_user_input_url
 

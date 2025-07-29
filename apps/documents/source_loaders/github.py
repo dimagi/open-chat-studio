@@ -6,7 +6,8 @@ from typing import Self
 from langchain_community.document_loaders.github import GithubFileLoader
 from langchain_core.documents import Document
 
-from apps.documents.models import Collection, CollectionFile, DocumentSource, GitHubSourceConfig
+from apps.documents.datamodels import GitHubSourceConfig
+from apps.documents.models import Collection, CollectionFile, DocumentSource
 from apps.documents.source_loaders.base import BaseDocumentLoader
 from apps.service_providers.models import AuthProviderType
 

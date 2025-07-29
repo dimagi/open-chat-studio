@@ -5,9 +5,7 @@ from unittest.mock import Mock, patch
 import pytest
 from langchain_core.documents import Document
 
-from apps.documents.models import (
-    GitHubSourceConfig,
-)
+from apps.documents.datamodels import GitHubSourceConfig
 from apps.documents.source_loaders.github import GitHubDocumentLoader
 
 
@@ -17,8 +15,8 @@ def github_config():
         repo_url="https://github.com/test/repo", branch="main", file_pattern="*.md", path_filter=""
     )
 
-class TestGitHubDocumentLoader:
 
+class TestGitHubDocumentLoader:
     def test_extract_repo_info(self, github_config):
         owner, repo = github_config.extract_repo_info()
         assert owner == "test"
@@ -59,9 +57,7 @@ def _get_mock_document_iterator() -> Iterator[Document]:
 
 
 def _get_mock_documents(paths: list[str] = None) -> list[Document]:
-    paths = paths or [
-        "md_file.md", "txt_file.txt", "py_file.py", "src/file1.py", "src/file2.md", "src/file3.txt"
-    ]
+    paths = paths or ["md_file.md", "txt_file.txt", "py_file.py", "src/file1.py", "src/file2.md", "src/file3.txt"]
     metadata = [
         {
             "path": path,
@@ -70,7 +66,4 @@ def _get_mock_documents(paths: list[str] = None) -> list[Document]:
         }
         for path in paths
     ]
-    return [
-        Document(page_content=f"test {i}", metadata=meta)
-        for i, meta in enumerate(metadata)
-    ]
+    return [Document(page_content=f"test {i}", metadata=meta) for i, meta in enumerate(metadata)]
