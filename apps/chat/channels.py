@@ -1320,10 +1320,6 @@ class EvaluationChannel(ChannelBase):
         if not self.experiment_session:
             raise ChannelException("EvaluationChannel requires an existing session")
 
-    @property
-    def participant_user(self):
-        return super().participant_user
-
     def send_text_to_user(self, bot_message: str):
         # The bot cannot send messages to this client, since evaluations are run internally
         pass

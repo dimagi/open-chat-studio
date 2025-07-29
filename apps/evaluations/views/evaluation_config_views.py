@@ -260,16 +260,14 @@ def load_experiment_versions(request, team_slug: str):
         return render(request, "evaluations/partials/version_select.html", context)
 
     try:
-        experiment = Experiment.objects.get(
+        experiment = Experiment.objects.working_versions_queryset().get(
             id=experiment_id,
             team=request.team,
-            working_version__isnull=True,  # Only working versions
         )
 
-        working_version_id = experiment.working_version_id or experiment.id
         versions = (
             Experiment.objects.filter(team=request.team)
-            .filter(Q(working_version_id=working_version_id) | Q(id=working_version_id))
+            .filter(Q(working_version_id=experiment.id) | Q(id=experiment.id))
             .order_by("-version_number")
         )
 

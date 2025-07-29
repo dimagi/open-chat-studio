@@ -78,22 +78,16 @@ class EvaluationConfigForm(forms.ModelForm):
 
         self.fields["dataset"].queryset = EvaluationDataset.objects.filter(team=team)
         self.fields["evaluators"].queryset = Evaluator.objects.filter(team=team)
-        self.fields["experiment_version"].queryset = Experiment.objects.filter(team=team)
-
-        self.fields["experiment"].queryset = Experiment.objects.filter(
-            team=team, working_version__isnull=True
-        ).order_by("name")
+        self.fields["experiment"].queryset = (
+            Experiment.objects.working_versions_queryset().filter(team=team).order_by("name")
+        )
 
         experiment_version_queryset = None
 
         if self.instance and self.instance.pk:
             if self.instance.experiment_version:
                 # For specific version, set experiment field based on the experiment_version
-                experiment_version = self.instance.experiment_version
-                working_version_id = experiment_version.working_version_id or experiment_version.id
-                working_experiment = Experiment.objects.filter(team=self.team, id=working_version_id).first()
-
-                if working_experiment:
+                if working_experiment := self.instance.experiment_version.get_working_version():
                     self.initial["experiment"] = working_experiment
                     # Filter the experiment_version queryset to only show versions for this experiment
                     experiment_version_queryset = self._get_version_choices(working_experiment)
@@ -119,7 +113,7 @@ class EvaluationConfigForm(forms.ModelForm):
     def _get_version_choices(self, experiment):
         """Get all versions for a specific experiment including working version"""
 
-        working_version_id = experiment.working_version_id or experiment.id
+        working_version_id = experiment.get_working_version_id()
         return (
             Experiment.objects.filter(team=self.team)
             .filter(Q(working_version_id=working_version_id) | Q(id=working_version_id))

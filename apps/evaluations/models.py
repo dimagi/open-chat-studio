@@ -13,7 +13,7 @@ from langchain_core.messages import AIMessage, BaseMessage, HumanMessage
 from pydantic import BaseModel as PydanticBaseModel
 
 from apps.chat.models import ChatMessage, ChatMessageType
-from apps.experiments.models import Experiment, ExperimentSession
+from apps.experiments.models import ExperimentSession
 from apps.teams.models import BaseTeamModel, Team
 from apps.utils.models import BaseModel
 
@@ -185,8 +185,7 @@ class EvaluationMessage(BaseModel):
         for message in self.history:
             message_type = message.get("message_type", "")
             content = message.get("content", "")
-            # Use ChatMessage's get_message_type_display method
-            display_type = ChatMessage(message_type=message_type).get_message_type_display()
+            display_type = ChatMessageType(message_type).role
             history_lines.append(f"{display_type}: {content}")
 
         return "\n".join(history_lines)
@@ -246,21 +245,9 @@ class EvaluationConfig(BaseTeamModel):
             return None
 
         if self.version_selection_type == ExperimentVersionSelection.LATEST_WORKING:
-            # Get the working version (the one with working_version_id=None)
-            working_version_id = self.base_experiment.working_version_id or self.base_experiment.id
-            return Experiment.objects.filter(team=self.team, id=working_version_id).first()
-
+            return self.base_experiment.get_working_version()
         elif self.version_selection_type == ExperimentVersionSelection.LATEST_PUBLISHED:
-            # Get the latest published version (highest version_number with is_default_version=True)
-            working_version_id = self.base_experiment.working_version_id or self.base_experiment.id
-            return (
-                Experiment.objects.filter(
-                    team=self.team, working_version_id=working_version_id, is_default_version=True
-                )
-                .order_by("-version_number")
-                .first()
-            )
-
+            return self.base_experiment.default_version
         return None
 
     def get_absolute_url(self):
