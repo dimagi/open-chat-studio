@@ -169,7 +169,7 @@ def run_evaluation_task(self, evaluation_run_id):
             chord_result = chord(
                 evaluate_single_message_task.chunks(
                     [(evaluation_run_id, [e.id for e in evaluators], message.id) for message in messages], 5
-                )
+                ).group()
             )(mark_evaluation_complete.s(evaluation_run_id))
 
             chord_result.parent.save()
