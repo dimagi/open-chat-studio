@@ -335,7 +335,7 @@ class TestOpenAILocalIndexManager:
     @pytest.fixture()
     def index_manager(self, provider_client_mock):
         """Create OpenAIRemoteIndexManager instance with mocked client"""
-        return OpenAILocalIndexManager(client=provider_client_mock, embedding_model_name="embedding-model")
+        return OpenAILocalIndexManager(api_key="api-123", embedding_model_name="embedding-model")
 
     def test_chunk_content(self, index_manager):
         file = mock.Mock()
