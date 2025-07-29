@@ -63,7 +63,7 @@ class TestLocalIndexManager:
     @pytest.fixture()
     def index_manager(self, provider_client_mock):
         with mock.patch("apps.service_providers.models.LlmProvider.get_local_index_manager") as get_local_index_manager:
-            manager = LocalIndexManagerMock(client=provider_client_mock, embedding_model_name="embedding-model")
+            manager = LocalIndexManagerMock(api_key="api-123", embedding_model_name="embedding-model")
             get_local_index_manager.return_value = manager
             yield manager
 
