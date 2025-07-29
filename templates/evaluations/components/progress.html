@@ -10,6 +10,7 @@
 <script>
   const progressUrl = "{% url 'web:celery_group_status' group_job_id %}";
   CeleryProgressBar.initProgressBar(progressUrl, {
+    pollInterval: 1000,
     onSuccess: () => {
       location.reload()
     },
