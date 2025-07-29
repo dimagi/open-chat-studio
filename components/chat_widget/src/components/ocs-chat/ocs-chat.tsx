@@ -742,8 +742,8 @@ export class OcsChat {
         const lastActivity = localStorage.getItem(keys.lastActivity);
         if (lastActivity) {
           const lastActivityDate = new Date(lastActivity);
-          const hoursSinceActivity = (Date.now() - lastActivityDate.getTime()) / (1000 * 60);
-          if (hoursSinceActivity > this.persistentSessionExpire) {
+          const minutesSinceActivity = (Date.now() - lastActivityDate.getTime()) / (1000 * 60);
+          if (minutesSinceActivity > this.persistentSessionExpire) {
             this.clearSessionStorage();
             return {messages: []};
           }
