@@ -5,6 +5,7 @@ from collections.abc import Iterator
 
 import openai
 from django.conf import settings
+from langchain_google_genai import GoogleGenerativeAIEmbeddings
 from langchain_openai import OpenAIEmbeddings
 from langchain_text_splitters import RecursiveCharacterTextSplitter
 from pgvector.django import CosineDistance
@@ -240,8 +241,8 @@ class LocalIndexManager(IndexManager):
     generating embedding vectors and chunking text content.
     """
 
-    def __init__(self, client: any, embedding_model_name: str):
-        self.client = client
+    def __init__(self, api_key: str, embedding_model_name: str):
+        self._api_key = api_key
         self.embedding_model_name = embedding_model_name
 
     @abstractmethod
@@ -325,22 +326,6 @@ class LocalIndexManager(IndexManager):
         """Deleting a file from the local index doesn't really make"""
         FileChunkEmbedding.objects.filter(file__id=file_id).delete()
 
-
-class OpenAILocalIndexManager(LocalIndexManager):
-    """
-    OpenAI-specific implementation of LocalIndexManager.
-
-    This class provides concrete implementations for local embedding operations
-    using OpenAI's embedding models and text processing utilities. It handles
-    text chunking using tiktoken encoding and generates embeddings via OpenAI's API.
-    """
-
-    def get_embedding_vector(self, content: str) -> Vector:
-        embeddings = OpenAIEmbeddings(
-            api_key=self.client.api_key, model=self.embedding_model_name, dimensions=settings.EMBEDDING_VECTOR_SIZE
-        )
-        return embeddings.embed_query(content)
-
     def query(self, index_id: int, query: str, top_k: int = 5) -> list[FileChunkEmbedding]:
         """
         Query the local index for the most relevant file chunks based on the query string.
@@ -361,3 +346,27 @@ class OpenAILocalIndexManager(LocalIndexManager):
             .select_related("file")
             .only("text", "file__name")[:top_k]
         )
+
+
+class OpenAILocalIndexManager(LocalIndexManager):
+    """
+    OpenAI-specific implementation of LocalIndexManager.
+
+    This class provides concrete implementations for local embedding operations
+    using OpenAI's embedding models and text processing utilities. It handles
+    text chunking using tiktoken encoding and generates embeddings via OpenAI's API.
+    """
+
+    def get_embedding_vector(self, content: str) -> Vector:
+        embeddings = OpenAIEmbeddings(
+            api_key=self._api_key, model=self.embedding_model_name, dimensions=settings.EMBEDDING_VECTOR_SIZE
+        )
+        return embeddings.embed_query(content)
+
+
+class GoogleLocalIndexManager(LocalIndexManager):
+    def get_embedding_vector(self, content: str) -> Vector:
+        embeddings = GoogleGenerativeAIEmbeddings(
+            google_api_key=self._api_key, model=f"models/{self.embedding_model_name}"
+        )
+        return embeddings.embed_query(content, output_dimensionality=settings.EMBEDDING_VECTOR_SIZE)
