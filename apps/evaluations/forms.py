@@ -2,7 +2,6 @@ import importlib
 import json
 
 from django import forms
-from django.db.models import Q
 from pydantic import ValidationError as PydanticValidationError
 
 from apps.evaluations.models import (
@@ -112,13 +111,7 @@ class EvaluationConfigForm(forms.ModelForm):
 
     def _get_version_choices(self, experiment):
         """Get all versions for a specific experiment including working version"""
-
-        working_version_id = experiment.get_working_version_id()
-        return (
-            Experiment.objects.filter(team=self.team)
-            .filter(Q(working_version_id=working_version_id) | Q(id=working_version_id))
-            .order_by("-version_number")
-        )
+        return Experiment.objects.all_versions_queryset(experiment).filter(team=self.team)
 
     def clean(self):
         cleaned_data = super().clean()

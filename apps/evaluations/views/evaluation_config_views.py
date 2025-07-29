@@ -3,7 +3,6 @@ from functools import cached_property
 
 from django.contrib.auth.decorators import permission_required
 from django.contrib.auth.mixins import PermissionRequiredMixin
-from django.db.models import Q
 from django.http import HttpResponse, HttpResponseRedirect
 from django.shortcuts import get_object_or_404, render
 from django.urls import reverse
@@ -264,13 +263,7 @@ def load_experiment_versions(request, team_slug: str):
             id=experiment_id,
             team=request.team,
         )
-
-        versions = (
-            Experiment.objects.filter(team=request.team)
-            .filter(Q(working_version_id=experiment.id) | Q(id=experiment.id))
-            .order_by("-version_number")
-        )
-
+        versions = Experiment.objects.all_versions_queryset(experiment).filter(team=request.team)
         choices = get_experiment_version_choices(versions)
         version_choices = [{"value": value, "label": label} for value, label in choices]
 
