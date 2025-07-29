@@ -45,6 +45,7 @@ IGNORE_APPS = {
     "dashboard",
     "drf_spectacular",
     "field_audit",
+    "audit_tests",
     "forms",
     "generics",
     "health_check",
