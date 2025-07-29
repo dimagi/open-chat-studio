@@ -111,7 +111,7 @@ def run_bot_generation(team, message: EvaluationMessage, experiment: Experiment)
             session=session,
         )
         response_content = bot_response.content
-        logger.info(f"Bot generated response for evaluation message {message.id}: {response_content}")
+        logger.debug(f"Bot generated response for evaluation message {message.id}: {response_content}")
 
         return session.id, response_content
 
