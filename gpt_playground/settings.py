@@ -640,6 +640,7 @@ FIELD_AUDIT_REQUEST_ID_HEADERS = [
     "X-Amzn-Trace-Id",  # Amazon
     "traceparent",  # W3C Trace Context (Google)
 ]
+FIELD_AUDIT_SERVICE_CLASS = "apps.audit.service.AuditService"
 TEST_NON_SERIALIZED_APPS = [
     "field_audit",
 ]

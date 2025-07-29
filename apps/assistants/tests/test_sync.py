@@ -355,7 +355,7 @@ def test_vector_store_create_batch_files(create_file_batch, create_vector_store,
 
 @pytest.mark.django_db()
 @patch("apps.assistants.sync.delete_file_from_openai")
-@patch("apps.assistants.sync.OpenAIRemoteIndexManager.delete_file_from_index")
+@patch("apps.assistants.sync.OpenAIRemoteIndexManager.pluck_file_from_index")
 def test_remove_files_from_tool(delete_file, delete_file_from_openai):
     collection = CollectionFactory()
     resource = ToolResources.objects.create(

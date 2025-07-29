@@ -311,7 +311,11 @@ class LocalIndexManager(IndexManager, metaclass=ABCMeta):
 
     def delete_files_from_index(self, files: list[File]):
         for file in files:
-            FileChunkEmbedding.objects.filter(file=file).delete()
+            self.delete_embeddings(file_id=file.id)
+
+    def delete_embeddings(self, file_id: str):
+        """Deleting a file from the local index doesn't really make"""
+        FileChunkEmbedding.objects.filter(file__id=file_id).delete()
 
 
 class OpenAILocalIndexManager(LocalIndexManager):
