@@ -164,7 +164,7 @@ def sync_document_source_task(document_source_id: int):
     from apps.documents.document_source_service import sync_document_source
 
     try:
-        document_source = DocumentSource.objects.get(id=document_source_id)
+        document_source = DocumentSource.objects.select_related("collection").get(id=document_source_id)
     except DocumentSource.DoesNotExist:
         return
 
