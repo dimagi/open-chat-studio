@@ -349,59 +349,56 @@ class TestDynamicFilters:
         filtered = apply_dynamic_filters(session_queryset, params, timezone)
         assert list(filtered) == [], f"Expected no sessions to exclude 'important', got {list(filtered)}"
 
-        @pytest.mark.django_db()
-        def test_state_filters(sessions_with_statuses):
-            """
-            Test status filter with ANY_OF and EXCLUDES.
-            """
-            sessions = sessions_with_statuses
-            session_queryset = sessions[0].experiment.sessions.all()
+    def test_state_filters(self, sessions_with_statuses):
+        """
+        Test status filter with ANY_OF and EXCLUDES.
+        """
+        sessions = sessions_with_statuses
+        session_queryset = sessions[0].experiment.sessions.all()
 
-            params = {
-                "filter_0_column": "state",
-                "filter_0_operator": Operators.ANY_OF,
-                "filter_0_value": json.dumps([SessionStatus.ACTIVE.value]),
-            }
+        params = {
+            "filter_0_column": "state",
+            "filter_0_operator": Operators.ANY_OF,
+            "filter_0_value": json.dumps([SessionStatus.ACTIVE.value]),
+        }
 
-            factory = RequestFactory()
-            request = factory.get("/")
-            attach_session_middleware_to_request(request)
-            timezone = request.session.get("detected_tz", None)
+        factory = RequestFactory()
+        request = factory.get("/")
+        attach_session_middleware_to_request(request)
+        timezone = request.session.get("detected_tz", None)
 
-            filtered = apply_dynamic_filters(session_queryset, params, timezone)
-            assert all(s.status == SessionStatus.ACTIVE for s in filtered)
+        filtered = apply_dynamic_filters(session_queryset, params, timezone)
+        assert all(s.status == SessionStatus.ACTIVE for s in filtered)
 
-            params["filter_0_operator"] = Operators.EXCLUDES
-            params["filter_0_value"] = json.dumps([SessionStatus.ACTIVE.value])
-            filtered = apply_dynamic_filters(session_queryset, params, timezone)
-            assert all(s.status != SessionStatus.ACTIVE for s in filtered)
+        params["filter_0_operator"] = Operators.EXCLUDES
+        params["filter_0_value"] = json.dumps([SessionStatus.ACTIVE.value])
+        filtered = apply_dynamic_filters(session_queryset, params, timezone)
+        assert all(s.status != SessionStatus.ACTIVE for s in filtered)
 
-        @pytest.mark.django_db()
-        def test_remote_id_filters(sessions_with_statuses):
-            """
-            Test remote_id filter with ANY_OF and EXCLUDES.
-            """
-            sessions = sessions_with_statuses
-            session_queryset = sessions[0].experiment.sessions.all()
+    def test_remote_id_filters(self, sessions_with_statuses):
+        sessions = sessions_with_statuses
+        session_queryset = sessions[0].experiment.sessions.all()
 
-            remote_ids = list(session_queryset.values_list("remote_id", flat=True))
-            test_id = remote_ids[0]
+        test_id = "test-remote-id-123"
 
-            params = {
-                "filter_0_column": "remote_id",
-                "filter_0_operator": Operators.ANY_OF,
-                "filter_0_value": json.dumps([test_id]),
-            }
+        session_to_update = session_queryset.first()
+        session_to_update.participant.remote_id = test_id
+        session_to_update.participant.save()
 
-            factory = RequestFactory()
-            request = factory.get("/")
-            attach_session_middleware_to_request(request)
-            timezone = request.session.get("detected_tz", None)
+        params = {
+            "filter_0_column": "remote_id",
+            "filter_0_operator": Operators.ANY_OF,
+            "filter_0_value": json.dumps([test_id]),
+        }
 
-            filtered = apply_dynamic_filters(session_queryset, params, timezone)
-            assert all(s.remote_id == test_id for s in filtered)
+        factory = RequestFactory()
+        request = factory.get("/")
+        attach_session_middleware_to_request(request)
+        timezone = request.session.get("detected_tz", None)
 
-            params["filter_0_operator"] = Operators.EXCLUDES
-            params["filter_0_value"] = json.dumps([test_id])
-            filtered = apply_dynamic_filters(session_queryset, params, timezone)
-            assert all(s.remote_id != test_id for s in filtered)
+        filtered = apply_dynamic_filters(session_queryset, params, timezone)
+        assert all(s.participant.remote_id == test_id for s in filtered)
+
+        params["filter_0_operator"] = Operators.EXCLUDES
+        filtered = apply_dynamic_filters(session_queryset, params, timezone)
+        assert all(s.participant.remote_id != test_id for s in filtered)
