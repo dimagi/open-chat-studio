@@ -52,12 +52,33 @@ interface PointerEvent {
   clientY: number;
 }
 
+interface SessionStorageData {
+  sessionId?: string;
+  messages: ChatMessage[];
+}
+
 @Component({
   tag: 'open-chat-studio-widget',
   styleUrl: 'ocs-chat.css',
   shadow: true,
 })
 export class OcsChat {
+
+  private static readonly SESSION_EXPIRY_HOURS = 24;
+  private static readonly TASK_POLLING_MAX_ATTEMPTS = 30;
+  private static readonly TASK_POLLING_INTERVAL_MS = 1000;
+  private static readonly MESSAGE_POLLING_INTERVAL_MS = 30000;
+
+  private static readonly SCROLL_DELAY_MS = 100;
+  private static readonly FOCUS_DELAY_MS = 100;
+
+  private static readonly CHAT_WIDTH_DESKTOP = 450;
+  private static readonly CHAT_HEIGHT_EXPANDED_RATIO = 0.83; // 83% of window height
+  private static readonly CHAT_HEIGHT_COLLAPSED_RATIO = 0.6; // 60% of window height
+  private static readonly MOBILE_BREAKPOINT = 640;
+  private static readonly WINDOW_MARGIN = 20;
+
+  private static readonly LOCALSTORAGE_TEST_KEY = '__ocs_test__';
 
   /**
    * The ID of the chatbot to connect to.
@@ -135,15 +156,28 @@ export class OcsChat {
     this.loaded = this.visible;
     if (!this.chatbotId) {
       this.error = 'Chatbot ID is required';
+      return;
+    }
+    // Always try to load existing session if localStorage is available
+    if (this.isLocalStorageAvailable()) {
+      const { sessionId, messages } = this.loadSessionFromStorage();
+      if (sessionId && messages) {
+        this.sessionId = sessionId;
+        this.messages = messages;
+        this.showStarterQuestions = messages.length === 0;
+      }
     }
     this.parseWelcomeMessages();
     this.parseStarterQuestions();
   }
 
   componentDidLoad() {
-    // Auto-start session if visible on load
+    // Only auto-start session if we don't have an existing one
     if (this.visible && !this.sessionId) {
       this.startSession();
+    } else if (this.visible && this.sessionId) {
+      // Resume polling for existing session
+      this.startPolling();
     }
     this.initializePosition();
     window.addEventListener('resize', this.handleWindowResize);
@@ -216,6 +250,7 @@ export class OcsChat {
 
       const data: ChatStartSessionResponse = await response.json();
       this.sessionId = data.session_id;
+      this.saveSessionToStorage();
 
       // Handle seed message if present
       if (data.seed_message_task_id) {
@@ -259,6 +294,7 @@ export class OcsChat {
         attachments: []
       };
       this.messages = [...this.messages, userMessage];
+      this.saveSessionToStorage();
       this.messageInput = '';
       this.scrollToBottom();
 
@@ -303,7 +339,6 @@ export class OcsChat {
     this.isTaskPolling = true;
     this.pauseMessagePolling();
 
-    const maxAttempts = 30; // 30 seconds max
     let attempts = 0;
 
     const poll = async (): Promise<void> => {
@@ -322,6 +357,7 @@ export class OcsChat {
 
         if (data.status === 'complete' && data.message) {
           this.messages = [...this.messages, data.message];
+          this.saveSessionToStorage();
           this.scrollToBottom();
           // Task polling complete, clear typing indicator and resume message polling
           this.isTyping = false;
@@ -331,10 +367,10 @@ export class OcsChat {
           return;
         }
 
-        if (data.status === 'processing' && attempts < maxAttempts) {
+        if (data.status === 'processing' && attempts < OcsChat.TASK_POLLING_MAX_ATTEMPTS) {
           attempts++;
-          setTimeout(poll, 1000);
-        } else if (attempts >= maxAttempts) {
+          setTimeout(poll, OcsChat.TASK_POLLING_INTERVAL_MS);
+        } else if (attempts >= OcsChat.TASK_POLLING_MAX_ATTEMPTS) {
           // Task polling timed out, clear typing indicator and resume message polling
           this.isTyping = false;
           this.isTaskPolling = false;
@@ -360,7 +396,7 @@ export class OcsChat {
       if (!this.isTaskPolling) {
         await this.pollForMessages();
       }
-    }, 30000); // Poll every 30 seconds
+    }, OcsChat.MESSAGE_POLLING_INTERVAL_MS);
   }
 
   private pauseMessagePolling(): void {
@@ -392,6 +428,7 @@ export class OcsChat {
 
       if (data.messages.length > 0) {
         this.messages = [...this.messages, ...data.messages];
+        this.saveSessionToStorage();
         this.scrollToBottom();
         this.focusInput();
       }
@@ -411,7 +448,7 @@ export class OcsChat {
       if (this.messageListRef) {
         this.messageListRef.scrollTop = this.messageListRef.scrollHeight;
       }
-    }, 100);
+    }, OcsChat.SCROLL_DELAY_MS);
   }
 
   private focusInput(): void {
@@ -419,7 +456,7 @@ export class OcsChat {
       if (this.textareaRef && !this.isTyping) {
         this.textareaRef.focus();
       }
-    }, 100);
+    }, OcsChat.FOCUS_DELAY_MS);
   }
 
   private handleKeyPress(event: KeyboardEvent): void {
@@ -477,26 +514,28 @@ export class OcsChat {
   private initializePosition(): void {
     const windowWidth = window.innerWidth;
     const windowHeight = window.innerHeight;
-    const chatWidth = windowWidth < 640 ? windowWidth : 450;
-    const chatHeight = this.expanded ? (windowHeight * 0.83) : (windowHeight * 0.6);
-    const isMobile = windowWidth < 640;
+    const chatWidth = windowWidth < OcsChat.MOBILE_BREAKPOINT ? windowWidth : OcsChat.CHAT_WIDTH_DESKTOP;
+    const chatHeight = this.expanded
+      ? (windowHeight * OcsChat.CHAT_HEIGHT_EXPANDED_RATIO)
+      : (windowHeight * OcsChat.CHAT_HEIGHT_COLLAPSED_RATIO);
+    const isMobile = windowWidth < OcsChat.MOBILE_BREAKPOINT;
 
     if (isMobile) {
       this.windowPosition = { x: 0, y: 0 };
       return;
     }
-    const margin = 20;
+
     switch (this.position) {
       case 'left':
         this.windowPosition = {
-          x: margin,
-          y: windowHeight - chatHeight - margin
+          x: OcsChat.WINDOW_MARGIN,
+          y: windowHeight - chatHeight - OcsChat.WINDOW_MARGIN
         };
         break;
       case 'right':
         this.windowPosition = {
-          x: windowWidth - chatWidth - margin,
-          y: windowHeight - chatHeight - margin
+          x: windowWidth - chatWidth - OcsChat.WINDOW_MARGIN,
+          y: windowHeight - chatHeight - OcsChat.WINDOW_MARGIN
         };
         break;
       case 'center':
@@ -538,8 +577,10 @@ export class OcsChat {
     // Constrain chatbox to window
     const windowWidth = window.innerWidth;
     const windowHeight = window.innerHeight;
-    const chatWidth = windowWidth < 640 ? windowWidth : 450;
-    const chatHeight = this.expanded ? (windowHeight * 0.83) : (windowHeight * 0.6);
+    const chatWidth = windowWidth < OcsChat.MOBILE_BREAKPOINT ? windowWidth : OcsChat.CHAT_WIDTH_DESKTOP;
+    const chatHeight = this.expanded
+      ? (windowHeight * OcsChat.CHAT_HEIGHT_EXPANDED_RATIO)
+      : (windowHeight * OcsChat.CHAT_HEIGHT_COLLAPSED_RATIO);
 
     this.windowPosition = {
       x: Math.max(0, Math.min(newX, windowWidth - chatWidth)),
@@ -567,7 +608,7 @@ export class OcsChat {
   }
 
   private handleMouseDown = (event: MouseEvent): void => {
-    if (window.innerWidth < 640) return;
+    if (window.innerWidth < OcsChat.MOBILE_BREAKPOINT) return;
     if ((event.target as HTMLElement).closest('button')) return;
 
     const pointer = this.getPointerCoordinates(event);
@@ -660,6 +701,97 @@ export class OcsChat {
     }
   }
 
+  private getStorageKeys() {
+    return {
+      sessionId: `ocs-chat-session-${this.chatbotId}`,
+      messages: `ocs-chat-messages-${this.chatbotId}`,
+      lastActivity: `ocs-chat-activity-${this.chatbotId}`
+    };
+  }
+
+  private saveSessionToStorage(): void {
+    const keys = this.getStorageKeys();
+    try {
+      if (this.sessionId) {
+        localStorage.setItem(keys.sessionId, this.sessionId);
+        localStorage.setItem(keys.lastActivity, new Date().toISOString());
+      }
+      localStorage.setItem(keys.messages, JSON.stringify(this.messages));
+    } catch (error) {
+      console.warn('Failed to save chat session to localStorage:', error);
+    }
+  }
+
+  private loadSessionFromStorage(): SessionStorageData {
+    const keys = this.getStorageKeys();
+    try {
+      const storedSessionId = localStorage.getItem(keys.sessionId);
+      const sessionId = storedSessionId ? storedSessionId : undefined;
+
+      const messagesJson = localStorage.getItem(keys.messages);
+      let messages: ChatMessage[] = [];
+
+      if (messagesJson) {
+        try {
+          const parsedMessages = JSON.parse(messagesJson);
+          messages = Array.isArray(parsedMessages) ? parsedMessages : [];
+        } catch (parseError) {
+          console.warn('Failed to parse messages from localStorage:', parseError);
+          messages = [];
+        }
+      }
+
+      const lastActivity = localStorage.getItem(keys.lastActivity);
+      if (lastActivity) {
+        const lastActivityDate = new Date(lastActivity);
+        const hoursSinceActivity = (Date.now() - lastActivityDate.getTime()) / (1000 * 60 * 60);
+        if (hoursSinceActivity > OcsChat.SESSION_EXPIRY_HOURS) {
+          this.clearSessionStorage();
+          return { messages: [] };
+        }
+      }
+
+      return { sessionId, messages };
+    } catch (error) {
+      // fall back to starting a new session
+      console.warn('Failed to load chat session from localStorage, starting new session:', error);
+      return { messages: [] };
+    }
+  }
+
+  private clearSessionStorage(): void {
+    const keys = this.getStorageKeys();
+    try {
+      localStorage.removeItem(keys.sessionId);
+      localStorage.removeItem(keys.messages);
+      localStorage.removeItem(keys.lastActivity);
+    } catch (error) {
+      console.warn('Failed to clear chat session from localStorage:', error);
+    }
+  }
+
+  private isLocalStorageAvailable(): boolean {
+    try {
+      localStorage.setItem(OcsChat.LOCALSTORAGE_TEST_KEY, 'test');
+      localStorage.removeItem(OcsChat.LOCALSTORAGE_TEST_KEY);
+      return true;
+    } catch {
+      return false;
+    }
+  }
+
+  private async startNewChat(): Promise<void> {
+    this.clearSessionStorage();
+    this.sessionId = undefined;
+    this.messages = [];
+    this.showStarterQuestions = true;
+    this.isTyping = false;
+    this.error = '';
+    this.cleanup();
+
+    await this.startSession();
+  }
+
   render() {
     if (this.error) {
       return (
@@ -691,7 +823,19 @@ export class OcsChat {
                   <GripDotsVerticalIcon/>
                 </div>
               </div>
-              <div class="flex gap-1">
+              <div></div>
+              <div class="flex gap-1 items-center">
+                {/* New Chat button */}
+                {this.sessionId && (
+                  <button
+                    class="px-3 py-1 text-sm bg-blue-500 hover:bg-blue-600 text-white rounded-md transition-colors duration-200 pointer-events-auto"
+                    onClick={() => this.startNewChat()}
+                    title="Start new chat"
+                    aria-label="Start new chat"
+                  >
+                    New Chat
+                  </button>
+                )}
                 <button
                   class="p-1.5 rounded-md transition-colors duration-200 hover:bg-gray-100 text-gray-500"
                   onClick={() => this.toggleSize()}
