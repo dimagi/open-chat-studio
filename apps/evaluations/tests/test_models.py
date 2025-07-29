@@ -45,7 +45,7 @@ def test_create_messages_from_sessions_includes_history():
     assert eval_messages[1].history[0]["content"] == "session1 message1 human"
     assert eval_messages[1].history[1]["message_type"] == ChatMessageType.AI
     assert eval_messages[1].history[1]["content"] == "session1 message1 ai"
-    assert eval_messages[1].full_history == "Human: session1 message1 human\nAI: session1 message1 ai"
+    assert eval_messages[1].full_history == "user: session1 message1 human\nassistant: session1 message1 ai"
 
     assert eval_messages[2].history == []
     assert eval_messages[2].full_history == ""
@@ -93,7 +93,7 @@ def test_get_generation_experiment_version_latest_published():
 
 @pytest.mark.django_db()
 def test_get_generation_experiment_version_latest_published_none():
-    """When there are no published versions but we are targeting it, we don't do a generation step"""
+    """When there are no published versions but we are targeting it, we use the working version"""
 
     working_experiment = ExperimentFactory()
     config = EvaluationConfigFactory(
@@ -102,7 +102,7 @@ def test_get_generation_experiment_version_latest_published_none():
         version_selection_type=ExperimentVersionSelection.LATEST_PUBLISHED,
         team=working_experiment.team,
     )
-    assert config.get_generation_experiment_version() is None
+    assert config.get_generation_experiment_version().is_working_version
 
 
 @pytest.mark.django_db()
