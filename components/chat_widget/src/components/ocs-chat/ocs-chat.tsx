@@ -64,7 +64,6 @@ interface SessionStorageData {
 })
 export class OcsChat {
 
-  private static readonly SESSION_EXPIRY_HOURS = 24;
   private static readonly TASK_POLLING_MAX_ATTEMPTS = 30;
   private static readonly TASK_POLLING_INTERVAL_MS = 1000;
   private static readonly MESSAGE_POLLING_INTERVAL_MS = 30000;
@@ -130,6 +129,16 @@ export class OcsChat {
    */
   @Prop() starterQuestions?: string;
 
+  /**
+   * Whether to persist session data to local storage to allow resuming previous conversations after page reload.
+   */
+  @Prop() persistentSession: boolean = true;
+
+  /**
+   * Minutes after which the session data in local storage will expire.
+   */
+  @Prop() persistentSessionExpire: number = 60 * 24;
+
   @State() loaded: boolean = false;
   @State() error: string = "";
   @State() messages: ChatMessage[] = [];
@@ -159,7 +168,7 @@ export class OcsChat {
       return;
     }
     // Always try to load existing session if localStorage is available
-    if (this.isLocalStorageAvailable()) {
+    if (this.persistentSession && this.isLocalStorageAvailable()) {
       const { sessionId, messages } = this.loadSessionFromStorage();
       if (sessionId && messages) {
         this.sessionId = sessionId;
@@ -710,6 +719,9 @@ export class OcsChat {
   }
 
   private saveSessionToStorage(): void {
+    if (!this.persistentSession) {
+      return
+    }
     const keys = this.getStorageKeys();
     try {
       if (this.sessionId) {
@@ -744,8 +756,8 @@ export class OcsChat {
       const lastActivity = localStorage.getItem(keys.lastActivity);
       if (lastActivity) {
         const lastActivityDate = new Date(lastActivity);
-        const hoursSinceActivity = (Date.now() - lastActivityDate.getTime()) / (1000 * 60 * 60);
-        if (hoursSinceActivity > OcsChat.SESSION_EXPIRY_HOURS) {
+        const hoursSinceActivity = (Date.now() - lastActivityDate.getTime()) / (1000 * 60);
+        if (hoursSinceActivity > this.persistentSessionExpire) {
           this.clearSessionStorage();
           return { messages: [] };
         }
