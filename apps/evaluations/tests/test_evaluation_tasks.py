@@ -58,7 +58,7 @@ def test_run_bot_generation(get_llm_service, experiment, evaluation_message, tea
     service = build_fake_llm_service(responses=["Bot generated response"], token_counts=[30])
     get_llm_service.return_value = service
 
-    result = run_bot_generation(team_with_users, evaluation_message, experiment)
+    session_id, result = run_bot_generation(team_with_users, evaluation_message, experiment)
 
     assert result == "Bot generated response"
 
@@ -69,11 +69,10 @@ def test_run_bot_generation(get_llm_service, experiment, evaluation_message, tea
     assert participant.name == "Evaluations Bot"
     assert participant.platform == "evaluations"
 
-    session = ExperimentSession.objects.get(team=team_with_users)
+    session = ExperimentSession.objects.get(team=team_with_users, id=session_id)
     assert session.experiment == experiment
     assert session.experiment_channel == evaluation_channel
     assert session.participant.identifier == "evaluations"
-    assert session.team == team_with_users
 
     assert session.chat is not None
     assert session.chat.team == team_with_users

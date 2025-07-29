@@ -29,9 +29,9 @@ def evaluate_single_message_task(evaluation_run_id, evaluator_ids, message_id):
         message = EvaluationMessage.objects.get(id=message_id)
         # Only run bot generation if an experiment version is configured
         generation_experiment = evaluation_run.generation_experiment
-        bot_response = ""
+        session_id, bot_response = None, ""
         if generation_experiment is not None:
-            bot_response = run_bot_generation(evaluation_run.team, message, generation_experiment) or ""
+            session_id, bot_response = run_bot_generation(evaluation_run.team, message, generation_experiment) or ""
 
         for evaluator_id in evaluator_ids:
             evaluator = Evaluator.objects.get(id=evaluator_id)
@@ -43,6 +43,7 @@ def evaluate_single_message_task(evaluation_run_id, evaluator_ids, message_id):
                     evaluator=evaluator,
                     output=result.model_dump(),
                     team=evaluation_run.team,
+                    session_id=session_id,
                 )
             except Exception as e:
                 logger.exception(f"Error running evaluator {evaluator.id} on message {message.id}: {e}")
@@ -52,10 +53,11 @@ def evaluate_single_message_task(evaluation_run_id, evaluator_ids, message_id):
                     evaluator=evaluator,
                     output={"error": str(e)},
                     team=evaluation_run.team,
+                    session_id=session_id,
                 )
 
 
-def run_bot_generation(team, message: EvaluationMessage, experiment: Experiment) -> str:
+def run_bot_generation(team, message: EvaluationMessage, experiment: Experiment) -> tuple[int | None, str | None]:
     """
     Run the evaluation message through the bot to generate a response.
     """
@@ -92,7 +94,12 @@ def run_bot_generation(team, message: EvaluationMessage, experiment: Experiment)
             ChatMessage.objects.bulk_create(history_messages)
 
         # TODO: Populate participant data?
+    except Exception as e:
+        logger.exception(f"Error populating eval data {message.id}: {e}")
+        # Don't fail the entire evaluation if bot generation fails
+        return None, None
 
+    try:
         # Extract the input message content
         input_content = message.input.get("content", "")
 
@@ -106,12 +113,12 @@ def run_bot_generation(team, message: EvaluationMessage, experiment: Experiment)
         response_content = bot_response.content
         logger.info(f"Bot generated response for evaluation message {message.id}: {response_content}")
 
-        return response_content
+        return session.id, response_content
 
     except Exception as e:
         logger.exception(f"Error generating bot response for evaluation message {message.id}: {e}")
         # Don't fail the entire evaluation if bot generation fails
-        return None
+        return session.id, None
 
 
 @shared_task

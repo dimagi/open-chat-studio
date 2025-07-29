@@ -13,7 +13,7 @@ from langchain_core.messages import AIMessage, BaseMessage, HumanMessage
 from pydantic import BaseModel as PydanticBaseModel
 
 from apps.chat.models import ChatMessage, ChatMessageType
-from apps.experiments.models import Experiment
+from apps.experiments.models import Experiment, ExperimentSession
 from apps.teams.models import BaseTeamModel, Team
 from apps.utils.models import BaseModel
 
@@ -344,6 +344,7 @@ class EvaluationResult(BaseTeamModel):
     evaluator = models.ForeignKey(Evaluator, on_delete=models.CASCADE)
     message = models.ForeignKey(EvaluationMessage, on_delete=models.CASCADE)
     run = models.ForeignKey(EvaluationRun, on_delete=models.CASCADE, related_name="results")
+    session = models.ForeignKey(ExperimentSession, on_delete=models.SET_NULL, null=True)
     output = models.JSONField()
 
     def __str__(self):
