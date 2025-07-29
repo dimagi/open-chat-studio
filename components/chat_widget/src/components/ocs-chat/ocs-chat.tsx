@@ -741,7 +741,10 @@ export class OcsChat {
       return stored;
     }
 
-    const newUserId = `user_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
+    const array = new Uint8Array(9);
+    window.crypto.getRandomValues(array);
+    const randomString = Array.from(array, byte => byte.toString(36)).join('').substr(0, 9);
+    const newUserId = `user_${Date.now()}_${randomString}`;
     this.generatedUserId = newUserId;
     localStorage.setItem(storageKey, newUserId);
 
