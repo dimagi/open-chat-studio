@@ -3,7 +3,7 @@ import {
   XMarkIcon,
   ChevronDownIcon,
   ChevronUpIcon,
-  GripDotsVerticalIcon,
+  GripDotsVerticalIcon, PencilSquare,
 } from './heroicons';
 import { renderMarkdownSync as renderMarkdownComplete } from '../../utils/markdown';
 
@@ -840,14 +840,14 @@ export class OcsChat {
               <div></div>
               <div class="flex gap-1 items-center">
                 {/* New Chat button */}
-                {this.sessionId && (
+                {this.sessionId && this.messages.length > 0 && (
                   <button
-                    class="px-3 py-1 text-sm bg-blue-500 hover:bg-blue-600 text-white rounded-md transition-colors duration-200 pointer-events-auto"
+                    class="p-1.5 rounded-md transition-colors duration-200 hover:bg-gray-100 text-gray-500"
                     onClick={() => this.startNewChat()}
                     title="Start new chat"
                     aria-label="Start new chat"
                   >
-                    New Chat
+                    <PencilSquare/>
                   </button>
                 )}
                 <button
