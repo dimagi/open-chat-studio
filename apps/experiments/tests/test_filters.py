@@ -52,6 +52,26 @@ class TestDynamicFilters:
         return [session1, session2], [tag1, tag2]
 
     @pytest.fixture()
+    def sessions_with_messages_tags(self):
+        session1 = ExperimentSessionFactory()
+        session2 = ExperimentSessionFactory(experiment=session1.experiment)
+
+        tag1 = _get_tag(team=session1.team, name="important")
+        tag2 = _get_tag(team=session1.team, name="follow-up")
+
+        session1.chat.add_tag(tag1, team=session1.team, added_by=None)
+
+        message = ChatMessage.objects.create(
+            chat=session2.chat,
+            content="Tagged message",
+            message_type=ChatMessageType.HUMAN,
+        )
+        message.add_tag(tag1, team=session2.team, added_by=None)
+        session2.chat.add_tag(tag2, team=session2.team, added_by=None)
+
+        return [session1, session2], [tag1, tag2]
+
+    @pytest.fixture()
     def sessions_with_versions(self):
         """Create sessions with different version tags on messages"""
         session1 = ExperimentSessionFactory()
@@ -292,6 +312,42 @@ class TestDynamicFilters:
         params["filter_0_value"] = "test"
         filtered = apply_dynamic_filters(base_session.experiment.sessions.all(), params, timezone)
         assert filtered.count() == base_session.experiment.sessions.count()
+
+    def test_messages_tag_filters(self, sessions_with_messages_tags):
+        """Test tag filtering with ANY_OF and ALL_OF operators"""
+        sessions, tags = sessions_with_messages_tags
+
+        # Test ANY_OF with one tag
+        session_queryset = sessions[0].experiment.sessions.all()
+        params = {
+            "filter_0_column": "tags",
+            "filter_0_operator": Operators.ANY_OF,
+            "filter_0_value": json.dumps(["important"]),
+        }
+        factory = RequestFactory()
+        request = factory.get("/")
+        attach_session_middleware_to_request(request)
+        timezone = request.session.get("detected_tz", None)
+
+        filtered = apply_dynamic_filters(session_queryset, params, timezone)
+        assert set(filtered) == set(sessions), f"Expected both sessions with 'important', got {filtered}"
+
+        params["filter_0_value"] = json.dumps(["follow-up"])
+        filtered = apply_dynamic_filters(session_queryset, params, timezone)
+        assert set(filtered) == {sessions[1]}, f"Expected session2 with 'follow-up', got {filtered}"
+
+        params["filter_0_value"] = json.dumps(["important", "follow-up"])
+        filtered = apply_dynamic_filters(session_queryset, params, timezone)
+        assert set(filtered) == set(sessions), f"Expected both sessions with either tag, got {filtered}"
+
+        params["filter_0_operator"] = Operators.ALL_OF
+        filtered = apply_dynamic_filters(session_queryset, params, timezone)
+        assert list(filtered) == [sessions[1]], f"Expected only session2 with both tags, got {list(filtered)}"
+
+        params["filter_0_operator"] = Operators.EXCLUDES
+        params["filter_0_value"] = json.dumps(["important"])
+        filtered = apply_dynamic_filters(session_queryset, params, timezone)
+        assert list(filtered) == [], f"Expected no sessions to exclude 'important', got {list(filtered)}"
 
         @pytest.mark.django_db()
         def test_state_filters(sessions_with_statuses):
