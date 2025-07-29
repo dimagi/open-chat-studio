@@ -135,7 +135,8 @@ export class OcsChat {
   @Prop() persistentSession: boolean = true;
 
   /**
-   * Minutes after which the session data in local storage will expire.
+   * Minutes since the most recent message after which the session data in local storage will expire. Set this to
+   * `0` to never expire.
    */
   @Prop() persistentSessionExpire: number = 60 * 24;
 

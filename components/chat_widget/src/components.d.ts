@@ -36,7 +36,7 @@ export namespace Components {
          */
         "persistentSession": boolean;
         /**
-          * Minutes after which the session data in local storage will expire.
+          * Minutes since the most recent message after which the session data in local storage will expire. Set this to `0` to never expire.
          */
         "persistentSessionExpire": number;
         /**
@@ -99,7 +99,7 @@ declare namespace LocalJSX {
          */
         "persistentSession"?: boolean;
         /**
-          * Minutes after which the session data in local storage will expire.
+          * Minutes since the most recent message after which the session data in local storage will expire. Set this to `0` to never expire.
          */
         "persistentSessionExpire"?: number;
         /**
