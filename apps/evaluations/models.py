@@ -320,7 +320,7 @@ class EvaluationRun(BaseTeamModel):
             self.save(update_fields=["finished_at", "status"])
 
     def get_table_data(self):
-        results = self.results.select_related("message", "evaluator").all()
+        results = self.results.select_related("message", "evaluator", "session").all()
         table_by_message = defaultdict(dict)
         for result in results:
             table_by_message[result.message.id].update(
@@ -333,6 +333,7 @@ class EvaluationRun(BaseTeamModel):
                         for key, value in result.output.get("result", {}).items()
                     },
                     **{f"{key}": value for key, value in result.message.context.items()},
+                    "session": result.session.external_id if result.session_id else "",
                 }
             )
             if result.output.get("error"):

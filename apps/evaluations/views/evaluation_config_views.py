@@ -1,4 +1,5 @@
 import csv
+from functools import cached_property
 
 from django.contrib.auth.decorators import permission_required
 from django.contrib.auth.mixins import PermissionRequiredMixin
@@ -15,6 +16,7 @@ from apps.evaluations.models import EvaluationConfig, EvaluationRun, EvaluationR
 from apps.evaluations.tables import EvaluationConfigTable, EvaluationRunTable
 from apps.evaluations.utils import get_evaluators_with_schema
 from apps.experiments.models import Experiment
+from apps.generics import actions
 from apps.teams.decorators import login_and_team_required
 from apps.teams.mixins import LoginAndTeamRequiredMixin
 
@@ -159,14 +161,18 @@ class EvaluationResultTableView(SingleTableView, PermissionRequiredMixin):
     permission_required = "evaluations.view_evaluationrun"
     template_name = "table/single_table.html"
 
-    def get_queryset(self) -> EvaluationRun:
+    def get_queryset(self):
+        return self.evaluation_run
+
+    @cached_property
+    def evaluation_run(self) -> EvaluationRun:
         return get_object_or_404(
-            EvaluationRun.objects.filter(team__slug=self.kwargs["team_slug"]),
+            EvaluationRun.objects.select_related("generation_experiment").filter(team__slug=self.kwargs["team_slug"]),
             pk=self.kwargs["evaluation_run_pk"],
         )
 
     def get_table_data(self):
-        return self.get_queryset().get_table_data()
+        return self.evaluation_run.get_table_data()
 
     def get_table_class(self):
         """
@@ -182,10 +188,30 @@ class EvaluationResultTableView(SingleTableView, PermissionRequiredMixin):
             for key in row:
                 if key in attrs:
                     continue
-                header = key.replace("_", " ").title()
-                attrs[key] = columns.Column(verbose_name=header)
+                attrs[key] = self.get_column(key)
 
         return type("EvaluationResultTableTable", (tables.Table,), attrs)
+
+    def get_column(self, key):
+        def session_url_factory(_, __, record, value):
+            if not value or not self.evaluation_run.generation_experiment_id:
+                return ""
+            return reverse(
+                "experiments:experiment_session_view",
+                args=[self.kwargs["team_slug"], self.evaluation_run.generation_experiment.public_id, value],
+            )
+
+        header = key.replace("_", " ").title()
+        match key:
+            case "session":
+                return actions.ActionsColumn(
+                    verbose_name=header,
+                    actions=[
+                        actions.chip_action(label="Session", url_factory=session_url_factory),
+                    ],
+                    align="right",
+                )
+        return columns.Column(verbose_name=header)
 
 
 @permission_required("evaluations.add_evaluationrun")

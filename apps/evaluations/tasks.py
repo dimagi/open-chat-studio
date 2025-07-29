@@ -31,12 +31,12 @@ def evaluate_single_message_task(evaluation_run_id, evaluator_ids, message_id):
         generation_experiment = evaluation_run.generation_experiment
         session_id, bot_response = None, ""
         if generation_experiment is not None:
-            session_id, bot_response = run_bot_generation(evaluation_run.team, message, generation_experiment) or ""
+            session_id, bot_response = run_bot_generation(evaluation_run.team, message, generation_experiment)
 
         for evaluator_id in evaluator_ids:
             evaluator = Evaluator.objects.get(id=evaluator_id)
             try:
-                result = evaluator.run(message, bot_response)
+                result = evaluator.run(message, bot_response or "")
                 EvaluationResult.objects.create(
                     message=message,
                     run=evaluation_run,
