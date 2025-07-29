@@ -5,6 +5,8 @@
   {{ block.super }}
   {% if group_job_id %}
     <script src="{% static 'celery_progress/celery_progress.js' %}"></script>
+  {% elif evaluation_run.status == "pending" %}
+     <meta http-equiv="refresh" content="2" />
   {% endif %}
 {% endblock page_head %}
 

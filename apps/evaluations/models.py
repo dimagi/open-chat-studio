@@ -275,10 +275,7 @@ class EvaluationConfig(BaseTeamModel):
 
         from apps.evaluations.tasks import run_evaluation_task
 
-        result = run_evaluation_task.delay(run.id)
-        run.job_id = result.id
-        run.save(update_fields=["job_id"])
-
+        run_evaluation_task.delay(run.id)
         return run
 
 
