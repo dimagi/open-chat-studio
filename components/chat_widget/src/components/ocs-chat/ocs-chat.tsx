@@ -737,6 +737,18 @@ export class OcsChat {
   private loadSessionFromStorage(): SessionStorageData {
     const keys = this.getStorageKeys();
     try {
+      if (this.persistentSessionExpire > 0) {
+        const lastActivity = localStorage.getItem(keys.lastActivity);
+        if (lastActivity) {
+          const lastActivityDate = new Date(lastActivity);
+          const hoursSinceActivity = (Date.now() - lastActivityDate.getTime()) / (1000 * 60);
+          if (hoursSinceActivity > this.persistentSessionExpire) {
+            this.clearSessionStorage();
+            return {messages: []};
+          }
+        }
+      }
+
       const storedSessionId = localStorage.getItem(keys.sessionId);
       const sessionId = storedSessionId ? storedSessionId : undefined;
 
@@ -750,18 +762,6 @@ export class OcsChat {
         } catch (parseError) {
           console.warn('Failed to parse messages from localStorage:', parseError);
           messages = [];
-        }
-      }
-
-      if (this.persistentSessionExpire > 0) {
-        const lastActivity = localStorage.getItem(keys.lastActivity);
-        if (lastActivity) {
-          const lastActivityDate = new Date(lastActivity);
-          const hoursSinceActivity = (Date.now() - lastActivityDate.getTime()) / (1000 * 60);
-          if (hoursSinceActivity > this.persistentSessionExpire) {
-            this.clearSessionStorage();
-            return {messages: []};
-          }
         }
       }
 
