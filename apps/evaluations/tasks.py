@@ -160,8 +160,9 @@ def run_evaluation_task(self, evaluation_run_id):
 
             # Create chord with group and callback
             chord_result = chord(
-                evaluate_single_message_task.s(evaluation_run_id, [e.id for e in evaluators], message.id)
-                for message in messages
+                evaluate_single_message_task.chunks(
+                    [(evaluation_run_id, [e.id for e in evaluators], message.id) for message in messages], 5
+                )
             )(mark_evaluation_complete.s(evaluation_run_id))
 
             chord_result.parent.save()
