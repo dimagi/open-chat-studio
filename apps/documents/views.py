@@ -221,9 +221,6 @@ class BaseDocumentSourceView(LoginAndTeamRequiredMixin, PermissionRequiredMixin)
 
 class CreateDocumentSource(BaseDocumentSourceView, CreateView):
     permission_required = "documents.add_documentsource"
-    template_name = "documents/document_source_form_dialog.html"
-    model = DocumentSource
-    form_class = DocumentSourceForm
 
     @property
     def source_type(self):
@@ -245,9 +242,6 @@ class EditDocumentSource(BaseDocumentSourceView, UpdateView):
     @property
     def source_type(self):
         return self.object.source_type
-
-    def get_context_data(self, **kwargs):
-        return super().get_context_data(**kwargs)
 
 
 @require_http_methods(["DELETE"])
