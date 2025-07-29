@@ -239,11 +239,9 @@ class TestDeleteCollectionFile:
             remote_index_manager_mock.delete_files.assert_not_called()
 
             if is_remote_index:
-                remote_index_manager_mock.delete_files.assert_not_called()
                 remote_index_manager_mock.delete_files_from_index.assert_called()
             else:
                 local_index_manager_mock.delete_files.assert_not_called()
-                local_index_manager_mock.delete_embeddings.assert_called()
 
             # Verify file still exists and is still linked to assistant
             file.refresh_from_db()

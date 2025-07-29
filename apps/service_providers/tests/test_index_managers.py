@@ -201,7 +201,7 @@ class TestOpenAIRemoteIndexManager:
 
     def test_delete_file_success(self, index_manager, provider_client_mock):
         """Test successful file deletion from vector store"""
-        index_manager.pluck_file_from_index("file-123")
+        index_manager.delete_file_from_index("file-123")
 
         provider_client_mock.vector_stores.files.delete.assert_called_once_with(
             vector_store_id="vs-test-123", file_id="file-123"
@@ -214,7 +214,7 @@ class TestOpenAIRemoteIndexManager:
         )
 
         # Should not raise exception, just log warning
-        index_manager.pluck_file_from_index("file-123")
+        index_manager.delete_file_from_index("file-123")
 
         provider_client_mock.vector_stores.files.delete.assert_called_once_with(
             vector_store_id="vs-test-123", file_id="file-123"
