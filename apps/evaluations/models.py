@@ -323,6 +323,12 @@ class EvaluationRun(BaseTeamModel):
         results = self.results.select_related("message", "evaluator", "session").all()
         table_by_message = defaultdict(dict)
         for result in results:
+            context_columns = {
+                # exclude 'current_datetime'
+                f"{key}": value
+                for key, value in result.message.context.items()
+                if key != "current_datetime"
+            }
             table_by_message[result.message.id].update(
                 {
                     "Dataset Input": result.message.input.get("content", ""),
@@ -332,7 +338,7 @@ class EvaluationRun(BaseTeamModel):
                         f"{key} ({result.evaluator.name})": value
                         for key, value in result.output.get("result", {}).items()
                     },
-                    **{f"{key}": value for key, value in result.message.context.items()},
+                    **context_columns,
                     "session": result.session.external_id if result.session_id else "",
                 }
             )
