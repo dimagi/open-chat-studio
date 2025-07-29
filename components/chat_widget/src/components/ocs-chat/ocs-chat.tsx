@@ -120,6 +120,16 @@ export class OcsChat {
    */
   @Prop() starterQuestions?: string;
 
+  /**
+  * Used to associate chat sessions with a specific user across multiple visits/sessions
+   */
+  @Prop() userId?: string;
+  /**
+   * Display name for the user.
+   */
+  @Prop() userName?: string;
+
+
   @State() loaded: boolean = false;
   @State() error: string = "";
   @State() messages: ChatMessage[] = [];
@@ -136,6 +146,7 @@ export class OcsChat {
   @State() showStarterQuestions: boolean = true;
   @State() parsedWelcomeMessages: string[] = [];
   @State() parsedStarterQuestions: string[] = [];
+  @State() generatedUserId?: string;
 
   private messageListRef?: HTMLDivElement;
   private textareaRef?: HTMLTextAreaElement;
@@ -219,18 +230,27 @@ export class OcsChat {
       this.isLoading = true;
       this.error = '';
 
+      const userId = this.getOrGenerateUserId();
+
+      const requestBody: any = {
+        chatbot_id: this.chatbotId,
+        session_data: {
+          source: 'widget',
+          page_url: window.location.href
+        },
+        participant_remote_id: userId
+      };
+
+      if (this.userName) {
+        requestBody.participant_name = this.userName;
+      }
+
       const response = await fetch(`${this.getApiBaseUrl()}/api/chat/start/`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
         },
-        body: JSON.stringify({
-          chatbot_id: this.chatbotId,
-          session_data: {
-            source: 'widget',
-            page_url: window.location.href
-          }
-        })
+        body: JSON.stringify(requestBody)
       });
 
       if (!response.ok) {
@@ -703,6 +723,29 @@ export class OcsChat {
       console.warn('Failed to load chat session from localStorage, starting new session:', error);
       return { messages: [] };
     }
+  }
+
+  private getOrGenerateUserId(): string {
+    if (this.userId) {
+      return this.userId;
+    }
+
+    if (this.generatedUserId) {
+      return this.generatedUserId;
+    }
+
+    const storageKey = `ocs-user-id-${this.chatbotId}`;
+    const stored = localStorage.getItem(storageKey);
+    if (stored) {
+      this.generatedUserId = stored;
+      return stored;
+    }
+
+    const newUserId = `user_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
+    this.generatedUserId = newUserId;
+    localStorage.setItem(storageKey, newUserId);
+
+    return newUserId;
   }
 
   private clearSessionStorage(): void {
