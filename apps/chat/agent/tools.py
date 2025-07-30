@@ -230,6 +230,40 @@ class UpdateParticipantDataTool(CustomBaseTool):
         return "Success"
 
 
+class AppendToParticipantDataTool(CustomBaseTool):
+    name: str = AgentTools.APPEND_TO_PARTICIPANT_DATA
+    description: str = "Update user data at a specific key"
+    requires_session: bool = True
+    args_schema: type[schemas.AppendToParticipantData] = schemas.AppendToParticipantData
+
+    @transaction.atomic
+    def action(self, key: str, value: str | int | list):
+        try:
+            participant_data = ParticipantData.objects.for_experiment(self.experiment_session.experiment).get(
+                participant=self.experiment_session.participant
+            )
+
+            new_value = participant_data.data.get(key, [])
+            if not isinstance(new_value, list):
+                new_value = [new_value]
+
+            if isinstance(value, list):
+                new_value.extend(value)
+            else:
+                new_value.append(value)
+
+            participant_data.data[key] = new_value
+            participant_data.save()
+        except ParticipantData.DoesNotExist:
+            ParticipantData.objects.create(
+                participant=self.experiment_session.participant,
+                experiment=self.experiment_session.experiment,
+                team=self.experiment_session.team,
+                data={key: value if isinstance(value, list) else [value]},
+            )
+        return "Success"
+
+
 class EndSessionTool(CustomBaseTool):
     requires_callbacks: ClassVar[bool] = True
     name: str = AgentTools.END_SESSION
@@ -387,6 +421,7 @@ TOOL_CLASS_MAP = {
     AgentTools.RECURRING_REMINDER: RecurringReminderTool,
     AgentTools.DELETE_REMINDER: DeleteReminderTool,
     AgentTools.UPDATE_PARTICIPANT_DATA: UpdateParticipantDataTool,
+    AgentTools.APPEND_TO_PARTICIPANT_DATA: AppendToParticipantDataTool,
     AgentTools.END_SESSION: EndSessionTool,
     AgentTools.ATTACH_MEDIA: AttachMediaTool,
     AgentTools.SEARCH_INDEX: SearchIndexTool,

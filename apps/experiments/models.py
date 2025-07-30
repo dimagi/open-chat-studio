@@ -576,6 +576,7 @@ class AgentTools(models.TextChoices):
     DELETE_REMINDER = "delete-reminder", gettext("Delete Reminder")
     MOVE_SCHEDULED_MESSAGE_DATE = "move-scheduled-message-date", gettext("Move Reminder Date")
     UPDATE_PARTICIPANT_DATA = "update-user-data", gettext("Update Participant Data")
+    APPEND_TO_PARTICIPANT_DATA = "append-to-participant-data", gettext("Append to Participant Data")
     ATTACH_MEDIA = "attach-media", gettext("Attach Media")
     END_SESSION = "end-session", gettext("End Session")
     SEARCH_INDEX = "search-index", gettext("Search Index")

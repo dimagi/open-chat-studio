@@ -36,6 +36,7 @@ PROMPT_VARS_REQUIRED_BY_TOOL = {
     AgentTools.ONE_OFF_REMINDER: [PromptVars.CURRENT_DATETIME],
     AgentTools.RECURRING_REMINDER: [PromptVars.CURRENT_DATETIME],
     AgentTools.UPDATE_PARTICIPANT_DATA: [PromptVars.PARTICIPANT_DATA],
+    AgentTools.APPEND_TO_PARTICIPANT_DATA: [PromptVars.PARTICIPANT_DATA],
 }
 
 # These prompt variables require resources to be specified by the user

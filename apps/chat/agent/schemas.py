@@ -53,6 +53,11 @@ class UpdateUserDataSchema(BaseModel):
     value: str | int | dict | list = Field(description="The new value of the user data")
 
 
+class AppendToParticipantData(BaseModel):
+    key: str = Field(description="The key in the user data to append to")
+    value: str | int | list = Field(description="The value to append")
+
+
 class AttachMediaSchema(BaseModel):
     file_id: int = Field(description="The file id of the media to attach")
 
