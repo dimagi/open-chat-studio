@@ -1,8 +1,6 @@
 import { Component, Host, h, Prop, State } from '@stencil/core';
 import {
   XMarkIcon,
-  ChevronDownIcon,
-  ChevronUpIcon,
   GripDotsVerticalIcon, PencilSquare,
 } from './heroicons';
 import { renderMarkdownSync as renderMarkdownComplete } from '../../utils/markdown';
@@ -73,7 +71,6 @@ export class OcsChat {
 
   private static readonly CHAT_WIDTH_DESKTOP = 450;
   private static readonly CHAT_HEIGHT_EXPANDED_RATIO = 0.83; // 83% of window height
-  private static readonly CHAT_HEIGHT_COLLAPSED_RATIO = 0.6; // 60% of window height
   private static readonly MOBILE_BREAKPOINT = 640;
   private static readonly WINDOW_MARGIN = 20;
 
@@ -113,11 +110,6 @@ export class OcsChat {
    * The initial position of the chat widget on the screen.
    */
   @Prop({ mutable: true }) position: 'left' | 'center' | 'right' = 'right';
-
-  /**
-   * Whether the chat widget is initially expanded.
-   */
-  @Prop({ mutable: true }) expanded: boolean = false;
 
   /**
    * Welcome messages to display above starter questions (JSON array of strings)
@@ -506,12 +498,8 @@ export class OcsChat {
     this.position = position;
   }
 
-  toggleSize() {
-    this.expanded = !this.expanded;
-  }
-
   getPositionClasses() {
-    return `fixed w-full sm:w-[450px] ${this.expanded ? 'h-5/6' : 'h-3/5'} bg-white border border-gray-200 ${this.isDragging ? 'shadow-2xl cursor-grabbing' : 'shadow-lg transition-shadow duration-200'} rounded-lg overflow-hidden flex flex-col`;
+    return `fixed w-full sm:w-[450px] h-5/6 bg-white border border-gray-200 ${this.isDragging ? 'shadow-2xl cursor-grabbing' : 'shadow-lg transition-shadow duration-200'} rounded-lg overflow-hidden flex flex-col`;
   }
 
   getPositionStyles() {
@@ -525,9 +513,7 @@ export class OcsChat {
     const windowWidth = window.innerWidth;
     const windowHeight = window.innerHeight;
     const chatWidth = windowWidth < OcsChat.MOBILE_BREAKPOINT ? windowWidth : OcsChat.CHAT_WIDTH_DESKTOP;
-    const chatHeight = this.expanded
-      ? (windowHeight * OcsChat.CHAT_HEIGHT_EXPANDED_RATIO)
-      : (windowHeight * OcsChat.CHAT_HEIGHT_COLLAPSED_RATIO);
+    const chatHeight = windowHeight * OcsChat.CHAT_HEIGHT_EXPANDED_RATIO;
     const isMobile = windowWidth < OcsChat.MOBILE_BREAKPOINT;
 
     if (isMobile) {
@@ -588,9 +574,7 @@ export class OcsChat {
     const windowWidth = window.innerWidth;
     const windowHeight = window.innerHeight;
     const chatWidth = windowWidth < OcsChat.MOBILE_BREAKPOINT ? windowWidth : OcsChat.CHAT_WIDTH_DESKTOP;
-    const chatHeight = this.expanded
-      ? (windowHeight * OcsChat.CHAT_HEIGHT_EXPANDED_RATIO)
-      : (windowHeight * OcsChat.CHAT_HEIGHT_COLLAPSED_RATIO);
+    const chatHeight = windowHeight * OcsChat.CHAT_HEIGHT_EXPANDED_RATIO;
 
     this.windowPosition = {
       x: Math.max(0, Math.min(newX, windowWidth - chatWidth)),
@@ -851,14 +835,6 @@ export class OcsChat {
                     <PencilSquare/>
                   </button>
                 )}
-                <button
-                  class="p-1.5 rounded-md transition-colors duration-200 hover:bg-gray-100 text-gray-500"
-                  onClick={() => this.toggleSize()}
-                  aria-label={this.expanded ? "Collapse" : "Expand"}
-                  title={this.expanded ? "Collapse" : "Expand"}
-                >
-                  {this.expanded ? <ChevronDownIcon/> : <ChevronUpIcon/>}
-                </button>
                 <button
                   class="p-1.5 hover:bg-gray-100 rounded-md transition-colors duration-200 text-gray-500"
                   onClick={() => this.visible = false}
