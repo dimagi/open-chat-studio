@@ -883,10 +883,10 @@ export class OcsChat {
               {this.sessionId && (
                 <div
                   ref={(el) => this.messageListRef = el}
-                  class="flex-grow overflow-y-auto p-4 space-y-4"
+                  class="flex-grow overflow-y-auto p-4 space-y-2"
                 >
                   {this.messages.length === 0 && !this.isTyping && this.parsedWelcomeMessages.length > 0 && (
-                    <div class="space-y-4">
+                    <div class="space-y-2">
                       {/* Welcome Messages */}
                       {this.parsedWelcomeMessages.map((message, index) => (
                         <div key={`welcome-${index}`} class="flex justify-start">
@@ -945,13 +945,13 @@ export class OcsChat {
                   ))}
                   {/* Typing Indicator */}
                   {this.isTyping && (
-                    <div class="flex justify-start">
-                      <div class="bg-gray-200 text-gray-800 max-w-xs lg:max-w-md px-2 py-2 rounded-lg">
-                        <div class="flex items-center gap-0.5">
-                          <span class="inline-block w-2 h-2 rounded-full bg-gray-400 animate-bounce"></span>
-                          <span class="inline-block w-2 h-2 rounded-full bg-gray-400 animate-bounce" style={{animationDelay: '0.1s'}}></span>
-                          <span class="inline-block w-2 h-2 rounded-full bg-gray-400 animate-bounce" style={{animationDelay: '0.2s'}}></span>
-                        </div>
+                    <div>
+                      <div class="h-1.5 w-full overflow-hidden">
+                        <div class="animate-progress w-full h-full bg-blue-200 origin-left-right rounded-lg"></div>
+                      </div>
+                      <div class="w-full text-xs opacity-70 justify-center">
+                        <span>Preparing response</span>
+                        <span class="loading animate-dots"></span>
                       </div>
                     </div>
                   )}
