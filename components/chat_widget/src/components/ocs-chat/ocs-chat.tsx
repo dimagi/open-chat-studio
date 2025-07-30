@@ -70,6 +70,7 @@ export class OcsChat {
   private static readonly FOCUS_DELAY_MS = 100;
 
   private static readonly CHAT_WIDTH_DESKTOP = 450;
+  private static readonly CHAT_MAX_WIDTH = 1024;
   private static readonly CHAT_HEIGHT_EXPANDED_RATIO = 0.83; // 83% of window height
   private static readonly MOBILE_BREAKPOINT = 640;
   private static readonly WINDOW_MARGIN = 20;
@@ -150,6 +151,7 @@ export class OcsChat {
   @State() isDragging: boolean = false;
   @State() dragOffset: { x: number; y: number } = { x: 0, y: 0 };
   @State() windowPosition: { x: number; y: number } = { x: 0, y: 0 };
+  @State() fullscreenPosition: { x: number } = { x: 0 };
   @State() showStarterQuestions: boolean = true;
   @State() parsedWelcomeMessages: string[] = [];
   @State() parsedStarterQuestions: string[] = [];
@@ -506,17 +508,29 @@ export class OcsChat {
 
   getPositionClasses() {
     if (this.isFullscreen) {
-      return `fixed inset-0 w-full h-full max-w-screen-lg max-h-full mx-auto bg-white border-0 shadow-lg transition-shadow duration-200 rounded-none overflow-hidden flex flex-col z-[9999]`;
+      return `fixed inset-0 w-full h-full max-w-screen-lg max-h-full bg-white border-0 shadow-lg transition-shadow duration-200 rounded-none overflow-hidden flex flex-col z-[9999]`;
     }
     return `fixed w-full sm:w-[450px] max-w-screen-lg h-5/6 bg-white border border-gray-200 ${this.isDragging ? 'shadow-2xl cursor-grabbing' : 'shadow-lg transition-shadow duration-200'} rounded-lg overflow-hidden flex flex-col`;
   }
 
+  private getFullscreenBounds() {
+    const windowWidth = window.innerWidth;
+    const actualChatWidth = Math.min(windowWidth, OcsChat.CHAT_MAX_WIDTH);
+    const centeredX = (windowWidth - actualChatWidth) / 2;
+    const maxOffset = (windowWidth - actualChatWidth) / 2;
+    
+    return { windowWidth, actualChatWidth, centeredX, maxOffset };
+  }
+
   getPositionStyles() {
     if (this.isFullscreen) {
+      const { centeredX } = this.getFullscreenBounds();
+      const finalX = centeredX + this.fullscreenPosition.x;
+
       return {
-        left: '50%',
+        left: `${finalX}px`,
         top: '0px',
-        transform: 'translateX(-50%)',
+        transform: 'none',
       };
     }
     return {
@@ -573,29 +587,48 @@ export class OcsChat {
     if (!this.chatWindowRef) return;
 
     this.isDragging = true;
-    const rect = this.chatWindowRef.getBoundingClientRect();
-    this.dragOffset = {
-      x: pointer.clientX - rect.left,
-      y: pointer.clientY - rect.top
-    };
+
+    if (this.isFullscreen) {
+      // For fullscreen, track relative to current position
+      this.dragOffset = {
+        x: pointer.clientX,
+        y: pointer.clientY
+      };
+    } else {
+      const rect = this.chatWindowRef.getBoundingClientRect();
+      this.dragOffset = {
+        x: pointer.clientX - rect.left,
+        y: pointer.clientY - rect.top
+      };
+    }
   }
 
   private updateDragPosition(pointer: PointerEvent): void {
     if (!this.isDragging) return;
 
-    const newX = pointer.clientX - this.dragOffset.x;
-    const newY = pointer.clientY - this.dragOffset.y;
+    if (this.isFullscreen) {
+      // In fullscreen, only allow horizontal dragging
+      const { maxOffset } = this.getFullscreenBounds();
 
-    // Constrain chatbox to window
-    const windowWidth = window.innerWidth;
-    const windowHeight = window.innerHeight;
-    const chatWidth = windowWidth < OcsChat.MOBILE_BREAKPOINT ? windowWidth : OcsChat.CHAT_WIDTH_DESKTOP;
-    const chatHeight = windowHeight * OcsChat.CHAT_HEIGHT_EXPANDED_RATIO;
+      const deltaX = pointer.clientX - this.dragOffset.x;
+      this.fullscreenPosition = {
+        x: Math.max(-maxOffset, Math.min(maxOffset, deltaX))
+      };
+    } else {
+      const newX = pointer.clientX - this.dragOffset.x;
+      const newY = pointer.clientY - this.dragOffset.y;
 
-    this.windowPosition = {
-      x: Math.max(0, Math.min(newX, windowWidth - chatWidth)),
-      y: Math.max(0, Math.min(newY, windowHeight - chatHeight))
-    };
+      // Constrain chatbox to window
+      const windowWidth = window.innerWidth;
+      const windowHeight = window.innerHeight;
+      const chatWidth = windowWidth < OcsChat.MOBILE_BREAKPOINT ? windowWidth : OcsChat.CHAT_WIDTH_DESKTOP;
+      const chatHeight = windowHeight * OcsChat.CHAT_HEIGHT_EXPANDED_RATIO;
+
+      this.windowPosition = {
+        x: Math.max(0, Math.min(newX, windowWidth - chatWidth)),
+        y: Math.max(0, Math.min(newY, windowHeight - chatHeight))
+      };
+    }
   }
 
   private endDrag(): void {
@@ -618,7 +651,7 @@ export class OcsChat {
   }
 
   private handleMouseDown = (event: MouseEvent): void => {
-    if (window.innerWidth < OcsChat.MOBILE_BREAKPOINT) return;
+    if (!this.isFullscreen && window.innerWidth < OcsChat.MOBILE_BREAKPOINT) return;
     if ((event.target as HTMLElement).closest('button')) return;
 
     const pointer = this.getPointerCoordinates(event);
@@ -809,6 +842,8 @@ export class OcsChat {
 
   private toggleFullscreen(): void {
     this.isFullscreen = !this.isFullscreen;
+    // Reset fullscreen position when toggling
+    this.fullscreenPosition = { x: 0 };
   }
 
   render() {
@@ -832,19 +867,16 @@ export class OcsChat {
           >
             {/* Header */}
             <div
-              class={`flex justify-between items-center px-2 py-2 border-b border-gray-100 ${this.isFullscreen ? '' : `sm:${this.isDragging ? 'cursor-grabbing' : 'cursor-grab'} active:bg-gray-50 sm:hover:bg-gray-25`} transition-colors duration-150`}
-              onMouseDown={this.isFullscreen ? undefined : this.handleMouseDown}
-              onTouchStart={this.isFullscreen ? undefined : this.handleTouchStart}
+              class={`flex justify-between items-center px-2 py-2 border-b border-gray-100 ${this.isDragging ? 'cursor-grabbing' : 'cursor-grab'} active:bg-gray-50 hover:bg-gray-25 transition-colors duration-150`}
+              onMouseDown={this.handleMouseDown}
+              onTouchStart={this.handleTouchStart}
             >
               {/* Drag indicator */}
-              {!this.isFullscreen && (
-                <div class="hidden sm:flex gap-1">
-                  <div class="flex gap-0.5 ml-2 pointer-events-none">
-                    <GripDotsVerticalIcon/>
-                  </div>
+              <div class="hidden sm:flex gap-1">
+                <div class="flex gap-0.5 ml-2 pointer-events-none">
+                  <GripDotsVerticalIcon/>
                 </div>
-              )}
-              {this.isFullscreen && <div></div>}
+              </div>
               <div class="flex gap-1 items-center">
                 {/* Fullscreen toggle button */}
                 {this.allowFullScreen && <button
