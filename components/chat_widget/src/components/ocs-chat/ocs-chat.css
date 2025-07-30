@@ -28,16 +28,15 @@
 
   .chat-btn-text,
   .chat-btn-icon {
-    @apply fixed shadow-lg border-0 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2 transition-all duration-200 ease-in-out transform hover:scale-105 rounded-full;
+    @apply shadow-lg border-0 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2 transition-all duration-200 ease-in-out transform hover:scale-105 rounded-lg;
     background-color: var(--button-background-color, white);
     z-index: var(--chat-z-index, 50);
   }
 
   /* Button with text and icon */
   .chat-btn-text {
-    @apply px-4 py-3 flex items-center gap-2;
+    @apply px-3 py-3 flex items-center gap-2;
     color: var(--button-text-color, #111827);
-    min-height: 56px;
   }
 
   .chat-btn-text:hover {
@@ -61,11 +60,6 @@
 
   .chat-btn-icon img {
     @apply w-full h-full object-contain;
-  }
-
-  .chat-btn-text,
-  .chat-btn-icon {
-    @apply rounded-lg; /* Default square shape */
   }
 
   .chat-btn-text.round,

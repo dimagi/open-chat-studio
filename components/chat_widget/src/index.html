@@ -8,13 +8,17 @@
     <script type="module" src="/build/open-chat-studio-widget.esm.js"></script>
     <script nomodule src="/build/open-chat-studio-widget.js"></script>
   </head>
+  <style>
+    open-chat-studio-widget {
+        position: static;
+    }
+  </style>
   <body style="background-color: #98dbcc">
     <open-chat-studio-widget
       api-base-url="http://localhost:8000"
       visible="false"
       chatbot-id="183312ac-cbe5-4c91-9e7b-d9df96b088e4"
       button-text="Let's Chat"
-      button-shape="round"
       expanded="true"
       position="center"
       welcome-messages="['Hi there! Welcome to OpenChatStudio!', 'How can we help you today?']"
