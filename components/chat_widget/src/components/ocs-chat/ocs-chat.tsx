@@ -506,16 +506,17 @@ export class OcsChat {
 
   getPositionClasses() {
     if (this.isFullscreen) {
-      return `fixed inset-0 w-full h-full bg-white border-0 shadow-lg transition-shadow duration-200 rounded-none overflow-hidden flex flex-col z-[9999]`;
+      return `fixed inset-0 w-full h-full max-w-screen-lg max-h-full mx-auto bg-white border-0 shadow-lg transition-shadow duration-200 rounded-none overflow-hidden flex flex-col z-[9999]`;
     }
-    return `fixed w-full sm:w-[450px] h-5/6 bg-white border border-gray-200 ${this.isDragging ? 'shadow-2xl cursor-grabbing' : 'shadow-lg transition-shadow duration-200'} rounded-lg overflow-hidden flex flex-col`;
+    return `fixed w-full sm:w-[450px] max-w-screen-lg h-5/6 bg-white border border-gray-200 ${this.isDragging ? 'shadow-2xl cursor-grabbing' : 'shadow-lg transition-shadow duration-200'} rounded-lg overflow-hidden flex flex-col`;
   }
 
   getPositionStyles() {
     if (this.isFullscreen) {
       return {
-        left: '0px',
+        left: '50%',
         top: '0px',
+        transform: 'translateX(-50%)',
       };
     }
     return {
