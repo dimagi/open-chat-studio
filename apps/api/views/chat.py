@@ -87,7 +87,7 @@ def chat_start_session(request):
     experiment_id = data["chatbot_id"]
     participant_id = data.get("participant_id")
     session_data = data.get("session_data", {})
-    remote_id = data.get("participant_remote_id")
+    remote_id = data.get("participant_remote_id", "")
     name = data.get("participant_name")
 
     # First, check if this is a public experiment

@@ -1319,7 +1319,7 @@ class Participant(BaseTeamModel):
         unique_together = [("team", "platform", "identifier")]
 
     @classmethod
-    def create_anonymous(cls, team: Team, platform: str, remote_id: str = None) -> "Participant":
+    def create_anonymous(cls, team: Team, platform: str, remote_id: str = "") -> "Participant":
         public_id = str(uuid.uuid4())
         return cls.objects.create(
             team=team,
