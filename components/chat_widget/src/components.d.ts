@@ -8,6 +8,10 @@ import { HTMLStencilElement, JSXBase } from "@stencil/core/internal";
 export namespace Components {
     interface OpenChatStudioWidget {
         /**
+          * Allow the user to make the chat window full screen.
+         */
+        "allowFullScreen": boolean;
+        /**
           * The base URL for the API (defaults to current origin).
          */
         "apiBaseUrl"?: string;
@@ -23,10 +27,6 @@ export namespace Components {
           * The ID of the chatbot to connect to.
          */
         "chatbotId": string;
-        /**
-          * Whether the chat widget is initially expanded.
-         */
-        "expanded": boolean;
         /**
           * URL of the icon to display on the button. If not provided, uses the default OCS logo.
          */
@@ -71,6 +71,10 @@ declare global {
 declare namespace LocalJSX {
     interface OpenChatStudioWidget {
         /**
+          * Allow the user to make the chat window full screen.
+         */
+        "allowFullScreen"?: boolean;
+        /**
           * The base URL for the API (defaults to current origin).
          */
         "apiBaseUrl"?: string;
@@ -86,10 +90,6 @@ declare namespace LocalJSX {
           * The ID of the chatbot to connect to.
          */
         "chatbotId": string;
-        /**
-          * Whether the chat widget is initially expanded.
-         */
-        "expanded"?: boolean;
         /**
           * URL of the icon to display on the button. If not provided, uses the default OCS logo.
          */
