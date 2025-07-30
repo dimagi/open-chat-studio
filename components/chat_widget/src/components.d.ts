@@ -8,6 +8,10 @@ import { HTMLStencilElement, JSXBase } from "@stencil/core/internal";
 export namespace Components {
     interface OpenChatStudioWidget {
         /**
+          * Allow the user to make the chat window full screen.
+         */
+        "allowFullScreen": boolean;
+        /**
           * The base URL for the API (defaults to current origin).
          */
         "apiBaseUrl"?: string;
@@ -66,6 +70,10 @@ declare global {
 }
 declare namespace LocalJSX {
     interface OpenChatStudioWidget {
+        /**
+          * Allow the user to make the chat window full screen.
+         */
+        "allowFullScreen"?: boolean;
         /**
           * The base URL for the API (defaults to current origin).
          */

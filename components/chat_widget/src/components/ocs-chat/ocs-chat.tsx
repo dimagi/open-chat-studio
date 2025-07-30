@@ -132,6 +132,11 @@ export class OcsChat {
    */
   @Prop() persistentSessionExpire: number = 60 * 24;
 
+  /**
+   * Allow the user to make the chat window full screen.
+   */
+  @Prop() allowFullScreen: boolean = true;
+
   @State() loaded: boolean = false;
   @State() error: string = "";
   @State() messages: ChatMessage[] = [];
@@ -841,14 +846,14 @@ export class OcsChat {
               {this.isFullscreen && <div></div>}
               <div class="flex gap-1 items-center">
                 {/* Fullscreen toggle button */}
-                <button
+                {this.allowFullScreen && <button
                   class="p-1.5 rounded-md transition-colors duration-200 hover:bg-gray-100 text-gray-500"
                   onClick={() => this.toggleFullscreen()}
                   title={this.isFullscreen ? "Exit fullscreen" : "Enter fullscreen"}
                   aria-label={this.isFullscreen ? "Exit fullscreen" : "Enter fullscreen"}
                 >
                   {this.isFullscreen ? <ArrowsPointingInIcon/> : <ArrowsPointingOutIcon/>}
-                </button>
+                </button>}
                 {/* New Chat button */}
                 {this.sessionId && this.messages.length > 0 && (
                   <button
