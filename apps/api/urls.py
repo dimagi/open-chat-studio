@@ -26,8 +26,6 @@ urlpatterns = [
     path("participants/", views.update_participant_data_old, name="update-participant-data-old"),
     # Duplicate update-participant-data without a trailing "/" for backwards compatibility
     path("participants", views.update_participant_data, name="update-participant-data"),
-    path("participants/analytics/", views.participant_analytics, name="participant-analytics"),
-    path("participants/details/", views.participant_details, name="participant-details"),
     path("openai/<uuid:experiment_id>/chat/completions", openai.chat_completions, name="openai-chat-completions"),
     path(
         "openai/<uuid:experiment_id>/v<int:version>/chat/completions",

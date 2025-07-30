@@ -39,18 +39,6 @@ update_state_response_serializer = inline_serializer(
                 location=OpenApiParameter.QUERY,
                 description="A list of session tags (comma separated) to filter the results by",
             ),
-            OpenApiParameter(
-                name="remote_id",
-                type=OpenApiTypes.STR,
-                location=OpenApiParameter.QUERY,
-                description="Filter sessions by participant remote ID",
-            ),
-            OpenApiParameter(
-                name="participant",
-                type=OpenApiTypes.STR,
-                location=OpenApiParameter.QUERY,
-                description="Filter sessions by participant identifier",
-            ),
         ],
     ),
     retrieve=extend_schema(
@@ -132,10 +120,6 @@ class ExperimentSessionViewSet(mixins.ListModelMixin, mixins.RetrieveModelMixin,
         queryset = ExperimentSession.objects.filter(team__slug=self.request.team.slug).all()
         if tags_query_param := self.request.query_params.get("tags"):
             queryset = queryset.filter(chat__tags__name__in=tags_query_param.split(","))
-        if remote_id := self.request.query_params.get("remote_id"):
-            queryset = queryset.filter(participant__remote_id=remote_id)
-        if participant := self.request.query_params.get("participant"):
-            queryset = queryset.filter(participant__identifier=participant)
         return queryset
 
     def create(self, request, *args, **kwargs):
