@@ -179,3 +179,6 @@ input[type=number]::-webkit-outer-spin-button {
 .markdown a {
   @apply underline
 }
+.loading {
+  @apply w-5 h-5 border-2 border-blue-500 rounded-full animate-spin;
+}
