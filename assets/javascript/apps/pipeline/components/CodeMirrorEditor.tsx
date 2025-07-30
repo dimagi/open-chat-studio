@@ -88,6 +88,13 @@ export function CodeNodeEditor(
       boost: 1,
       section: "Participant Data",
     }),
+    increment_participant_data_key: snip("increment_participant_data_key(\"${key_name}\", ${data})", {
+      label: "increment_participant_data_key",
+      type: "function",
+      detail: "Increments the value at the participant data at the specified key",
+      boost: 1,
+      section: "Participant Data",
+    }),
     set_temp_state_key: snip("set_temp_state_key(\"${key_name}\", ${data})", {
       label: "set_temp_state_key",
       type: "function",
