@@ -744,7 +744,7 @@ export class OcsChat {
     const array = new Uint8Array(9);
     window.crypto.getRandomValues(array);
     const randomString = Array.from(array, byte => byte.toString(36)).join('').substr(0, 9);
-    const newUserId = `user_${Date.now()}_${randomString}`;
+    const newUserId = `ocs:${Date.now()}_${randomString}`;
     this.generatedUserId = newUserId;
     localStorage.setItem(storageKey, newUserId);
 
