@@ -1184,6 +1184,7 @@ class CodeNode(PipelineNode, OutputMessageTagMixin):
                 "set_participant_data": participant_data_proxy.set,
                 "set_participant_data_key": participant_data_proxy.set_key,
                 "append_to_participant_data_key": participant_data_proxy.append_to_key,
+                "increment_participant_data_key": participant_data_proxy.increment_key,
                 "get_participant_schedules": participant_data_proxy.get_schedules,
                 "get_temp_state_key": self._get_temp_state_key(output_state),
                 "set_temp_state_key": self._set_temp_state_key(output_state),

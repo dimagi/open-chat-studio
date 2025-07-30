@@ -233,6 +233,19 @@ class AppendToParticipantDataTool(CustomBaseTool):
         return "Success"
 
 
+class IncrementParticipantDataTool(CustomBaseTool):
+    name: str = AgentTools.INCREMENT_PARTICIPANT_DATA
+    description: str = "Increment a value in the user data"
+    requires_session: bool = True
+    args_schema: type[schemas.IncrementParticipantDataSchema] = schemas.IncrementParticipantDataSchema
+
+    @transaction.atomic
+    def action(self, key: str, value: int):
+        data_proxy = ParticipantDataProxy(self.experiment_session)
+        data_proxy.increment_key(key, value)
+        return "Success"
+
+
 class EndSessionTool(CustomBaseTool):
     requires_callbacks: ClassVar[bool] = True
     name: str = AgentTools.END_SESSION
@@ -391,6 +404,7 @@ TOOL_CLASS_MAP = {
     AgentTools.DELETE_REMINDER: DeleteReminderTool,
     AgentTools.UPDATE_PARTICIPANT_DATA: UpdateParticipantDataTool,
     AgentTools.APPEND_TO_PARTICIPANT_DATA: AppendToParticipantDataTool,
+    AgentTools.INCREMENT_PARTICIPANT_DATA: IncrementParticipantDataTool,
     AgentTools.END_SESSION: EndSessionTool,
     AgentTools.ATTACH_MEDIA: AttachMediaTool,
     AgentTools.SEARCH_INDEX: SearchIndexTool,

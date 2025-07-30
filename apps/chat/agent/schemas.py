@@ -58,6 +58,11 @@ class AppendToParticipantData(BaseModel):
     value: str | int | list = Field(description="The value to append")
 
 
+class IncrementParticipantDataSchema(BaseModel):
+    key: str = Field(description="The key in the user data to increment")
+    value: int = Field(description="The value to increment the current value by", default=1)
+
+
 class AttachMediaSchema(BaseModel):
     file_id: int = Field(description="The file id of the media to attach")
 

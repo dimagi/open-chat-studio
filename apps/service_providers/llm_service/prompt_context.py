@@ -217,6 +217,21 @@ class ParticipantDataProxy:
         existing_data[key] = value_at_key
         self.set(existing_data)
 
+    def increment_key(self, key: str, increment: int = 1):
+        """
+        Increment a numeric value at the specified key in the participant data.
+        If the current value is not a number, it will be initialized to 0 before incrementing.
+        """
+        participant_data = self._get_db_object()
+        existing_data = participant_data.data
+        current_value = existing_data.get(key, 0)
+
+        if not isinstance(current_value, int | float):
+            current_value = 0
+
+        existing_data[key] = current_value + increment
+        self.set(existing_data)
+
     def get_schedules(self):
         """
         Returns all active scheduled messages for the participant in the current experiment session.
