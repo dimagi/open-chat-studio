@@ -126,3 +126,7 @@ textarea {
 .bg-gray-200 .chat-markdown pre {
   @apply bg-white border border-gray-300;
 }
+
+.loading:after {
+  content: ' .';
+}
