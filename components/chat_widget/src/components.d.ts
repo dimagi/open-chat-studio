@@ -32,6 +32,14 @@ export namespace Components {
          */
         "iconUrl"?: string;
         /**
+          * Whether to persist session data to local storage to allow resuming previous conversations after page reload.
+         */
+        "persistentSession": boolean;
+        /**
+          * Minutes since the most recent message after which the session data in local storage will expire. Set this to `0` to never expire.
+         */
+        "persistentSessionExpire": number;
+        /**
           * The initial position of the chat widget on the screen.
          */
         "position": 'left' | 'center' | 'right';
@@ -86,6 +94,14 @@ declare namespace LocalJSX {
           * URL of the icon to display on the button. If not provided, uses the default OCS logo.
          */
         "iconUrl"?: string;
+        /**
+          * Whether to persist session data to local storage to allow resuming previous conversations after page reload.
+         */
+        "persistentSession"?: boolean;
+        /**
+          * Minutes since the most recent message after which the session data in local storage will expire. Set this to `0` to never expire.
+         */
+        "persistentSessionExpire"?: number;
         /**
           * The initial position of the chat widget on the screen.
          */

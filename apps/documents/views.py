@@ -1,4 +1,5 @@
 import logging
+from functools import cached_property
 from pathlib import Path
 
 from django.conf import settings
@@ -6,21 +7,35 @@ from django.contrib import messages
 from django.contrib.auth.decorators import permission_required
 from django.contrib.auth.mixins import PermissionRequiredMixin
 from django.db import transaction
-from django.db.models import Count, IntegerField, OuterRef, Subquery
+from django.db.models import Case, CharField, Count, Func, IntegerField, OuterRef, Subquery, Value, When
 from django.http import HttpResponse, HttpResponseRedirect
 from django.shortcuts import get_object_or_404, redirect, render
 from django.template.loader import render_to_string
 from django.urls import reverse
 from django.utils.translation import gettext as _
 from django.views import View
-from django.views.decorators.http import require_POST
+from django.views.decorators.http import require_http_methods, require_POST
 from django.views.generic import CreateView, FormView, ListView, TemplateView, UpdateView
 from django_tables2 import SingleTableView
 
 from apps.documents import tasks
-from apps.documents.forms import CollectionForm, CreateCollectionFromAssistantForm
-from apps.documents.models import ChunkingStrategy, Collection, CollectionFile, CollectionFileMetadata, FileStatus
+from apps.documents.datamodels import ChunkingStrategy, CollectionFileMetadata
+from apps.documents.forms import (
+    CollectionForm,
+    CreateCollectionFromAssistantForm,
+    DocumentSourceForm,
+    GithubDocumentSourceForm,
+)
+from apps.documents.models import (
+    Collection,
+    CollectionFile,
+    DocumentSource,
+    FileStatus,
+    SourceType,
+)
 from apps.documents.tables import CollectionsTable
+from apps.documents.tasks import sync_document_source_task
+from apps.documents.utils import delete_collection_file
 from apps.files.models import File, FileChunkEmbedding
 from apps.generics import actions
 from apps.generics.chips import Chip
@@ -64,30 +79,60 @@ class CollectionHome(LoginAndTeamRequiredMixin, TemplateView, PermissionRequired
 def single_collection_home(request, team_slug: str, pk: int):
     collection = get_object_or_404(Collection.objects.select_related("team"), id=pk, team__slug=team_slug)
 
-    chunk_count_query = (
-        FileChunkEmbedding.objects.filter(collection_id=OuterRef("collection_id"), file_id=OuterRef("file_id"))
-        .values("collection_id", "file_id")
-        .annotate(count=Count("id"))
-        .values_list("count")
-    )
-
-    collection_files = CollectionFile.objects.filter(collection=collection).annotate(
-        chunk_count=Subquery(chunk_count_query, output_field=IntegerField())
-    )
-
-    collection_files_count = collection_files.count()
+    document_sources = DocumentSource.objects.working_versions_queryset().filter(collection=collection)
+    collection_files_count = CollectionFile.objects.filter(collection=collection).count()
     context = {
         "collection": collection,
-        "collection_files": collection_files,
         "collection_files_count": collection_files_count,
+        "document_sources": document_sources,
         "collections_supported_file_types": settings.SUPPORTED_FILE_TYPES["collections"],
         "file_search_supported_file_types": settings.SUPPORTED_FILE_TYPES["file_search"],
         "max_summary_length": settings.MAX_SUMMARY_LENGTH,
         "max_files_per_collection": settings.MAX_FILES_PER_COLLECTION,
         "files_remaining": settings.MAX_FILES_PER_COLLECTION - collection_files_count,
         "max_file_size_mb": settings.MAX_FILE_SIZE_MB,
+        "document_source_types": [SourceType.GITHUB],
     }
     return render(request, "documents/single_collection_home.html", context)
+
+
+@login_and_team_required
+def collection_files_view(request, team_slug: str, collection_id: int, document_source_id: int = None):
+    collection = get_object_or_404(Collection, id=collection_id, team__slug=team_slug)
+    document_source = None
+    if document_source_id:
+        document_source = get_object_or_404(DocumentSource, id=document_source_id, team__slug=team_slug)
+    chunk_count_query = (
+        FileChunkEmbedding.objects.filter(collection_id=OuterRef("collection_id"), file_id=OuterRef("file_id"))
+        .values("collection_id", "file_id")
+        .annotate(count=Count("id"))
+        .values_list("count")
+    )
+    collection_files = (
+        CollectionFile.objects.filter(collection=collection, document_source=document_source)
+        .annotate(
+            chunk_count=Subquery(chunk_count_query, output_field=IntegerField()),
+            # Extract directory part
+            directory=Case(
+                When(
+                    file__name__contains="/",
+                    then=Func("file__name", Value("/[^/]*$"), Value("/"), function="regexp_replace"),
+                ),
+                default=Value(""),
+                output_field=CharField(),
+            ),
+            # Determine if it's a subdirectory file
+            depth=Func("file__name", Value("/"), function="regexp_count"),
+        )
+        .order_by("directory", "depth", "file__name")
+    )
+    context = {
+        "collection": collection,
+        "collection_files": collection_files,
+        "document_source": document_source,
+        "allow_delete": document_source_id is None,
+    }
+    return render(request, "documents/partials/collection_files.html", context)
 
 
 class QueryView(LoginAndTeamRequiredMixin, TemplateView, PermissionRequiredMixin):
@@ -117,6 +162,121 @@ def query_collection(request, team_slug: str, pk: int):
         ),
     }
     return render(request, "documents/collection_query_results.html", context)
+
+
+class BaseDocumentSourceView(LoginAndTeamRequiredMixin, PermissionRequiredMixin):
+    template_name = "documents/document_source_form_dialog.html"
+    model = DocumentSource
+    form_class = DocumentSourceForm
+
+    @property
+    def collection_id(self):
+        return self.kwargs["collection_id"]
+
+    @property
+    def team_slug(self):
+        return self.kwargs["team_slug"]
+
+    @cached_property
+    def collection(self):
+        return get_object_or_404(
+            Collection.objects.select_related("team"), id=self.collection_id, team__slug=self.team_slug
+        )
+
+    def get_form_class(self):
+        return GithubDocumentSourceForm if self.source_type == SourceType.GITHUB else DocumentSourceForm
+
+    @property
+    def source_type(self):
+        raise NotImplementedError
+
+    def dispatch(self, request, *args, **kwargs):
+        if not self.collection.is_index:
+            messages.error(request, "Document sources can only be configured for indexed collections.")
+            return redirect("documents:single_collection_home", team_slug=self.team_slug, pk=self.collection_id)
+        return super().dispatch(request, *args, **kwargs)
+
+    def get_form_kwargs(self):
+        return {**super().get_form_kwargs(), "collection": self.collection}
+
+    def get_success_url(self):
+        return reverse(
+            "documents:single_collection_home", kwargs={"team_slug": self.team_slug, "pk": self.collection_id}
+        )
+
+    def get_context_data(self, **kwargs):
+        return {
+            **super().get_context_data(**kwargs),
+            "collection": self.collection,
+            "source_type": SourceType(self.source_type),
+        }
+
+    def form_valid(self, form):
+        self.object = form.save()
+        task = sync_document_source_task.delay(self.object.id)
+        self.object.sync_task_id = task.task_id
+        self.object.save(update_fields=["sync_task_id"])
+        return HttpResponse(headers={"HX-Redirect": self.get_success_url()})
+
+
+class CreateDocumentSource(BaseDocumentSourceView, CreateView):
+    permission_required = "documents.add_documentsource"
+
+    @property
+    def source_type(self):
+        request_data = self.request.GET if self.request.method == "GET" else self.request.POST
+        return request_data.get("source_type")
+
+    def get_initial(self):
+        return {
+            "source_type": self.source_type,
+        }
+
+
+class EditDocumentSource(BaseDocumentSourceView, UpdateView):
+    permission_required = "documents.change_documentsource"
+
+    def get_queryset(self):
+        return DocumentSource.objects.filter(team=self.request.team)
+
+    @property
+    def source_type(self):
+        return self.object.source_type
+
+
+@require_http_methods(["DELETE"])
+@login_and_team_required
+@permission_required("documents.change_collection")
+def delete_document_source(request, team_slug: str, collection_id: int, pk: int):
+    document_source = get_object_or_404(DocumentSource, id=pk, collection_id=collection_id, team__slug=team_slug)
+    document_source.archive()
+    return HttpResponse()
+
+
+@require_POST
+@login_and_team_required
+@permission_required("documents.change_collection")
+def sync_document_source(request, team_slug: str, collection_id: int, pk: int):
+    """Trigger manual sync of a document source"""
+    document_source = get_object_or_404(DocumentSource, id=pk, collection_id=collection_id, team__slug=team_slug)
+
+    if document_source.sync_task_id:
+        messages.warning(request, "This document source is already syncing.")
+        return HttpResponse()
+
+    task = sync_document_source_task.delay(document_source.id)
+    document_source.sync_task_id = task.task_id
+    document_source.save(update_fields=["sync_task_id"])
+    messages.success(request, "Document source sync has been queued. This may take a few minutes.")
+    return render(
+        request,
+        "documents/partials/document_source.html",
+        context={
+            "collection": document_source.collection,
+            "team": request.team,
+            "document_source": document_source,
+        },
+    )
 
 
 @require_POST
@@ -197,34 +357,13 @@ def add_collection_files(request, team_slug: str, pk: int):
 @login_and_team_required
 @permission_required("documents.change_collection")
 @transaction.atomic()
-def delete_collection_file(request, team_slug: str, pk: int, file_id: int):
+def delete_collection_file_view(request, team_slug: str, pk: int, file_id: int):
     collection_file = get_object_or_404(
         CollectionFile.objects.select_related("collection", "file"), collection_id=pk, file_id=file_id
     )
-
-    file = collection_file.file
-    collection = collection_file.collection
-    collection_file.delete()
-
-    if file.is_used():
-        if collection.is_index:
-            index_manager = collection.get_index_manager()
-            if collection.is_remote_index:
-                # Remove it from the index only
-                index_manager.pluck_file_from_index(file_id=file.external_id)
-            else:
-                # The collection file is already deleted, so we just remove the remaining embeddings
-                index_manager.delete_embeddings(file_id=file.id)
-    else:
-        # Nothing else is using it
-        if collection.is_index:
-            index_manager = collection.get_index_manager()
-            index_manager.delete_files(files=[file])
-
-        collection_file.file.delete_or_archive()
-
+    delete_collection_file(collection_file)
     messages.success(request, "File removed from collection")
-    return redirect("documents:single_collection_home", team_slug=team_slug, pk=pk)
+    return HttpResponse()
 
 
 @login_and_team_required

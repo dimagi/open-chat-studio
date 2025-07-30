@@ -1,6 +1,5 @@
 from collections.abc import Iterator
 
-import pydantic
 from django.db import models, transaction
 from django.urls import reverse
 from django.utils.text import slugify
@@ -10,27 +9,17 @@ from field_audit import audit_fields
 from field_audit.models import AuditingManager
 
 from apps.chat.agent.tools import SearchIndexTool, SearchToolConfig
+from apps.documents.datamodels import ChunkingStrategy, CollectionFileMetadata, DocumentSourceConfig
 from apps.documents.exceptions import IndexConfigurationException
 from apps.experiments.versioning import VersionDetails, VersionField, VersionsMixin, VersionsObjectManagerMixin
-from apps.files.models import File
 from apps.service_providers.llm_service.main import OpenAIBuiltinTool
 from apps.service_providers.models import EmbeddingProviderModel
 from apps.teams.models import BaseTeamModel
 from apps.utils.conversions import bytes_to_megabytes
 from apps.utils.deletion import (
-    get_related_m2m_objects,
     get_related_pipeline_experiments_queryset,
     get_related_pipelines_queryset,
 )
-
-
-class ChunkingStrategy(pydantic.BaseModel):
-    chunk_size: int = pydantic.Field(description="Size of each chunk in tokens")
-    chunk_overlap: int = pydantic.Field(description="Number of overlapping tokens between chunks")
-
-
-class CollectionFileMetadata(pydantic.BaseModel):
-    chunking_strategy: ChunkingStrategy = pydantic.Field(description="Chunking strategy used for the file")
 
 
 class CollectionObjectManager(VersionsObjectManagerMixin, AuditingManager):
@@ -48,8 +37,10 @@ class FileStatus(models.TextChoices):
 class CollectionFile(models.Model):
     file = models.ForeignKey("files.File", on_delete=models.CASCADE)
     collection = models.ForeignKey("documents.Collection", on_delete=models.CASCADE)
+    document_source = models.ForeignKey("documents.DocumentSource", on_delete=models.CASCADE, null=True)
     status = models.CharField(max_length=64, choices=FileStatus.choices, blank=True)
     metadata = SchemaField(schema=CollectionFileMetadata, null=True)
+    external_id = models.CharField(max_length=255, blank=True, help_text="ID of file in document source")
 
     def __str__(self) -> str:
         return f"{self.file.name} in {self.collection.name}"
@@ -145,7 +136,16 @@ class Collection(BaseTeamModel, VersionsMixin):
                 VersionField(
                     group_name="General", name="embedding_provider_model", raw_value=self.embedding_provider_model
                 ),
-                VersionField(group_name="General", name="files", queryset=self.files.all()),
+                VersionField(
+                    group_name="General",
+                    name="files",
+                    queryset=self.files.filter(collectionfile__document_source=None).all(),
+                ),
+                VersionField(
+                    group_name="Document Sources",
+                    name="files",
+                    queryset=self.document_sources.all(),
+                ),
             ],
         )
 
@@ -166,15 +166,29 @@ class Collection(BaseTeamModel, VersionsMixin):
         new_version.openai_vector_store_id = ""
         new_version.save()
 
-        file_versions: dict[int, int] = {}
-        for file in self.files.iterator(chunk_size=15):
-            file_version = file.create_new_version(save=False)
-            file_version.external_id = ""
-            file_version.external_source = ""
-            file_version.save()
-            file_versions[file.id] = file_version.id
+        def _version_files(file_queryset, new_object_version, through_defaults: dict = None):
+            for file in file_queryset.iterator(chunk_size=50):
+                file_version = file.create_new_version(save=False)
+                file_version.external_id = ""
+                file_version.external_source = ""
+                file_version.save()
+                file_versions[file.id] = file_version.id
+            new_object_version.files.add(*list(file_versions.values()), through_defaults=through_defaults)
 
-        new_version.files.add(*list(file_versions.values()))
+        file_versions: dict[int, int] = {}
+        _version_files(self.files.filter(collectionfile__document_source=None), new_version)
+
+        for document_source in self.document_sources.all():
+            doc_source_version = document_source.create_new_version(save=False)
+            doc_source_version.collection = new_version
+            doc_source_version.save()
+            _version_files(
+                document_source.files,
+                doc_source_version,
+                through_defaults={
+                    "collection": new_version,
+                },
+            )
 
         if self.is_index:
             # Create a new vector store at llm service for the new version of the collection.
@@ -228,6 +242,8 @@ class Collection(BaseTeamModel, VersionsMixin):
         """
         Archive the collection with its files and remove the index and the files at the remote service, if it has one
         """
+        from apps.documents.tasks import delete_collection_task
+
         if self.get_related_nodes_queryset().exists():
             return False
 
@@ -235,20 +251,10 @@ class Collection(BaseTeamModel, VersionsMixin):
             return False
 
         super().archive()
+        for doc_source in self.document_sources.all():
+            doc_source.archive(delete_files=False)
 
-        files = list(self.files.all())
-        # Remove the references to the files in the collection
-        CollectionFile.objects.filter(collection=self).delete()
-
-        # Cleanup conditionally
-        files_with_references = get_related_m2m_objects(files)
-        unused_files = [file for file in files if file not in files_with_references]
-        unused_file_ids = [file.id for file in unused_files]
-
-        if self.is_index and self.openai_vector_store_id:
-            self._remove_remote_index(unused_files)
-
-        File.objects.filter(id__in=unused_file_ids).update(is_archived=True)
+        delete_collection_task.delay(self.id)
         return True
 
     def has_failed_index_uploads(self) -> bool:
@@ -269,12 +275,10 @@ class Collection(BaseTeamModel, VersionsMixin):
             status__in=[FileStatus.PENDING, FileStatus.IN_PROGRESS],
         ).exists()
 
-    def _remove_remote_index(self, remote_files_to_remove: list[File]):
+    def remove_remote_index(self):
         """Remove the index backend"""
         manager = self.get_index_manager()
         manager.delete_remote_index()
-        manager.delete_files(remote_files_to_remove)
-
         self.openai_vector_store_id = ""
         self.save(update_fields=["openai_vector_store_id"])
 
@@ -332,3 +336,120 @@ class Collection(BaseTeamModel, VersionsMixin):
         file_ids = file_ids or []
         self.openai_vector_store_id = self.llm_provider.create_remote_index(name=self.index_name, file_ids=file_ids)
         self.save(update_fields=["openai_vector_store_id"])
+
+
+class SourceType(models.TextChoices):
+    GITHUB = "github", _("GitHub Repository")
+    CONFLUENCE = "confluence", _("Confluence Space")
+
+    @property
+    def css_logo(self):
+        return {
+            SourceType.GITHUB: "fa-brands fa-github",
+            SourceType.CONFLUENCE: "fa-brands fa-confluence",
+        }[self]
+
+
+class SyncStatus(models.TextChoices):
+    SUCCESS = "success", _("Success")
+    FAILED = "failed", _("Failed")
+    IN_PROGRESS = "in_progress", _("In Progress")
+
+
+class DocumentSourceManager(VersionsObjectManagerMixin, AuditingManager):
+    pass
+
+
+@audit_fields(
+    "collection",
+    "source_type",
+    "config",
+    "auto_sync_enabled",
+    "auth_provider",
+    audit_special_queryset_writes=True,
+)
+class DocumentSource(BaseTeamModel, VersionsMixin):
+    collection = models.ForeignKey(
+        Collection,
+        on_delete=models.CASCADE,
+        related_name="document_sources",
+        help_text="The collection this document source belongs to",
+    )
+    source_type = models.CharField(max_length=20, choices=SourceType.choices, help_text="Type of document source")
+    config = SchemaField(schema=DocumentSourceConfig, help_text="Configuration for the document source")
+    auto_sync_enabled = models.BooleanField(default=False, help_text="Automatically sync this source on a schedule")
+    last_sync = models.DateTimeField(null=True, blank=True, help_text="Timestamp of the last successful sync")
+    files = models.ManyToManyField("files.File", blank=False, through=CollectionFile, related_name="document_sources")
+    sync_task_id = models.CharField(
+        max_length=40, blank=True, default="", help_text="System ID of the sync task, if present."
+    )
+    auth_provider = models.ForeignKey("service_providers.AuthProvider", on_delete=models.PROTECT, blank=True, null=True)
+    working_version = models.ForeignKey(
+        "self",
+        on_delete=models.CASCADE,
+        null=True,
+        blank=True,
+        related_name="versions",
+    )
+    is_archived = models.BooleanField(default=False)
+
+    objects = DocumentSourceManager()
+
+    def __str__(self) -> str:
+        return f"{self.get_source_type_display()}: {self.source_config}"
+
+    @property
+    def source_type_enum(self):
+        return SourceType(self.source_type)
+
+    @property
+    def source_config(self):
+        """Get the configuration for the specific source type"""
+        if self.source_type == SourceType.GITHUB:
+            return self.config.github
+        elif self.source_type == SourceType.CONFLUENCE:
+            return self.config.confluence
+        return None
+
+    def _get_version_details(self) -> VersionDetails:
+        return VersionDetails(
+            instance=self,
+            fields=[
+                VersionField(name="source_type", raw_value=self.get_source_type_display()),
+                VersionField(name="config", raw_value=self.source_config),
+                VersionField(name="files", queryset=self.files.all()),
+            ],
+        )
+
+    def archive(self, delete_files=True):
+        from apps.documents.tasks import delete_document_source_task
+
+        super().archive()
+        if delete_files:
+            delete_document_source_task.delay(self.id)
+
+
+class DocumentSourceSyncLog(models.Model):
+    document_source = models.ForeignKey(
+        DocumentSource,
+        on_delete=models.CASCADE,
+        related_name="sync_logs",
+        help_text="The document source this sync log belongs to",
+    )
+    sync_date = models.DateTimeField(auto_now_add=True, help_text="When the sync was performed")
+    status = models.CharField(max_length=20, choices=SyncStatus.choices, help_text="Status of the sync")
+    files_added = models.IntegerField(default=0, help_text="Number of files added during sync")
+    files_updated = models.IntegerField(default=0, help_text="Number of files updated during sync")
+    files_removed = models.IntegerField(default=0, help_text="Number of files removed during sync")
+    error_message = models.TextField(blank=True, help_text="Error message if sync failed")
+    duration_seconds = models.FloatField(null=True, blank=True, help_text="Duration of the sync in seconds")
+
+    class Meta:
+        ordering = ["-sync_date"]
+
+    def __str__(self) -> str:
+        return f"Sync of {self.document_source} on {self.sync_date}"
+
+    @property
+    def total_files_processed(self) -> int:
+        return self.files_added + self.files_updated + self.files_removed

@@ -3,7 +3,7 @@ import {
   XMarkIcon,
   ChevronDownIcon,
   ChevronUpIcon,
-  GripDotsVerticalIcon,
+  GripDotsVerticalIcon, PencilSquare,
 } from './heroicons';
 import { renderMarkdownSync as renderMarkdownComplete } from '../../utils/markdown';
 
@@ -64,7 +64,6 @@ interface SessionStorageData {
 })
 export class OcsChat {
 
-  private static readonly SESSION_EXPIRY_HOURS = 24;
   private static readonly TASK_POLLING_MAX_ATTEMPTS = 30;
   private static readonly TASK_POLLING_INTERVAL_MS = 1000;
   private static readonly MESSAGE_POLLING_INTERVAL_MS = 30000;
@@ -130,6 +129,17 @@ export class OcsChat {
    */
   @Prop() starterQuestions?: string;
 
+  /**
+   * Whether to persist session data to local storage to allow resuming previous conversations after page reload.
+   */
+  @Prop() persistentSession: boolean = true;
+
+  /**
+   * Minutes since the most recent message after which the session data in local storage will expire. Set this to
+   * `0` to never expire.
+   */
+  @Prop() persistentSessionExpire: number = 60 * 24;
+
   @State() loaded: boolean = false;
   @State() error: string = "";
   @State() messages: ChatMessage[] = [];
@@ -159,7 +169,7 @@ export class OcsChat {
       return;
     }
     // Always try to load existing session if localStorage is available
-    if (this.isLocalStorageAvailable()) {
+    if (this.persistentSession && this.isLocalStorageAvailable()) {
       const { sessionId, messages } = this.loadSessionFromStorage();
       if (sessionId && messages) {
         this.sessionId = sessionId;
@@ -710,6 +720,9 @@ export class OcsChat {
   }
 
   private saveSessionToStorage(): void {
+    if (!this.persistentSession) {
+      return
+    }
     const keys = this.getStorageKeys();
     try {
       if (this.sessionId) {
@@ -725,6 +738,18 @@ export class OcsChat {
   private loadSessionFromStorage(): SessionStorageData {
     const keys = this.getStorageKeys();
     try {
+      if (this.persistentSessionExpire > 0) {
+        const lastActivity = localStorage.getItem(keys.lastActivity);
+        if (lastActivity) {
+          const lastActivityDate = new Date(lastActivity);
+          const minutesSinceActivity = (Date.now() - lastActivityDate.getTime()) / (1000 * 60);
+          if (minutesSinceActivity > this.persistentSessionExpire) {
+            this.clearSessionStorage();
+            return {messages: []};
+          }
+        }
+      }
+
       const storedSessionId = localStorage.getItem(keys.sessionId);
       const sessionId = storedSessionId ? storedSessionId : undefined;
 
@@ -738,16 +763,6 @@ export class OcsChat {
         } catch (parseError) {
           console.warn('Failed to parse messages from localStorage:', parseError);
           messages = [];
-        }
-      }
-
-      const lastActivity = localStorage.getItem(keys.lastActivity);
-      if (lastActivity) {
-        const lastActivityDate = new Date(lastActivity);
-        const hoursSinceActivity = (Date.now() - lastActivityDate.getTime()) / (1000 * 60 * 60);
-        if (hoursSinceActivity > OcsChat.SESSION_EXPIRY_HOURS) {
-          this.clearSessionStorage();
-          return { messages: [] };
         }
       }
 
@@ -826,14 +841,14 @@ export class OcsChat {
               <div></div>
               <div class="flex gap-1 items-center">
                 {/* New Chat button */}
-                {this.sessionId && (
+                {this.sessionId && this.messages.length > 0 && (
                   <button
-                    class="px-3 py-1 text-sm bg-blue-500 hover:bg-blue-600 text-white rounded-md transition-colors duration-200 pointer-events-auto"
+                    class="p-1.5 rounded-md transition-colors duration-200 hover:bg-gray-100 text-gray-500"
                     onClick={() => this.startNewChat()}
                     title="Start new chat"
                     aria-label="Start new chat"
                   >
-                    New Chat
+                    <PencilSquare/>
                   </button>
                 )}
                 <button
@@ -868,10 +883,10 @@ export class OcsChat {
               {this.sessionId && (
                 <div
                   ref={(el) => this.messageListRef = el}
-                  class="flex-grow overflow-y-auto p-4 space-y-4"
+                  class="flex-grow overflow-y-auto p-4 space-y-2"
                 >
                   {this.messages.length === 0 && !this.isTyping && this.parsedWelcomeMessages.length > 0 && (
-                    <div class="space-y-4">
+                    <div class="space-y-2">
                       {/* Welcome Messages */}
                       {this.parsedWelcomeMessages.map((message, index) => (
                         <div key={`welcome-${index}`} class="flex justify-start">
@@ -930,13 +945,13 @@ export class OcsChat {
                   ))}
                   {/* Typing Indicator */}
                   {this.isTyping && (
-                    <div class="flex justify-start">
-                      <div class="bg-gray-200 text-gray-800 max-w-xs lg:max-w-md px-2 py-2 rounded-lg">
-                        <div class="flex items-center gap-0.5">
-                          <span class="inline-block w-2 h-2 rounded-full bg-gray-400 animate-bounce"></span>
-                          <span class="inline-block w-2 h-2 rounded-full bg-gray-400 animate-bounce" style={{animationDelay: '0.1s'}}></span>
-                          <span class="inline-block w-2 h-2 rounded-full bg-gray-400 animate-bounce" style={{animationDelay: '0.2s'}}></span>
-                        </div>
+                    <div>
+                      <div class="h-1.5 w-full overflow-hidden">
+                        <div class="animate-progress w-full h-full bg-blue-200 origin-left-right rounded-lg"></div>
+                      </div>
+                      <div class="w-full text-xs opacity-70 justify-center">
+                        <span>Preparing response</span>
+                        <span class="loading animate-dots"></span>
                       </div>
                     </div>
                   )}

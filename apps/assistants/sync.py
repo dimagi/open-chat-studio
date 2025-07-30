@@ -406,7 +406,7 @@ def _sync_tool_resource_files_from_openai(file_ids, ocs_resource):
         remove_files_from_tool(ocs_resource, unused_files_objects)
 
 
-def remove_files_from_tool(ocs_resource: ToolResources, files: list[int]):
+def remove_files_from_tool(ocs_resource: ToolResources, files: list[File]):
     """
     Remove files from the tool resource and delete them if they are not used elsewhere.
     """
@@ -420,7 +420,7 @@ def remove_files_from_tool(ocs_resource: ToolResources, files: list[int]):
         if file in file_references:
             if ocs_resource.extra.get("vector_store_id") and file.external_id:
                 index_manager = OpenAIRemoteIndexManager(client, index_id=ocs_resource.extra.get("vector_store_id"))
-                index_manager.pluck_file_from_index(file_id=file.external_id)
+                index_manager.delete_file_from_index(file_id=file.external_id)
         else:
             # The file doesn't have related objects, so it's safe to remove it completely
             delete_file_from_openai(client, file)
@@ -449,7 +449,7 @@ def _get_files_missing_from_vector_store(client, vector_store_id, file_ids: list
 
     vector_store_manager = OpenAIRemoteIndexManager(client, index_id=vector_store_id)
     for file_id in to_delete_remote:
-        vector_store_manager.pluck_file_from_index(file_id=file_id)
+        vector_store_manager.delete_file_from_index(file_id=file_id)
 
     return file_ids
 

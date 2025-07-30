@@ -48,7 +48,7 @@ class RemoteIndexManagerMock(RemoteIndexManager):
 
     def delete_remote_index(self): ...
 
-    def pluck_file_from_index(self, *args, **kwargs): ...
+    def delete_files_from_index(self, *args, **kwargs): ...
 
     def link_files_to_remote_index(self, *args, **kwargs): ...
     def file_exists_at_remote(self, *args, **kwargs) -> bool: ...
@@ -63,7 +63,7 @@ class TestLocalIndexManager:
     @pytest.fixture()
     def index_manager(self, provider_client_mock):
         with mock.patch("apps.service_providers.models.LlmProvider.get_local_index_manager") as get_local_index_manager:
-            manager = LocalIndexManagerMock(client=provider_client_mock, embedding_model_name="embedding-model")
+            manager = LocalIndexManagerMock(api_key="api-123", embedding_model_name="embedding-model")
             get_local_index_manager.return_value = manager
             yield manager
 
@@ -201,7 +201,7 @@ class TestOpenAIRemoteIndexManager:
 
     def test_delete_file_success(self, index_manager, provider_client_mock):
         """Test successful file deletion from vector store"""
-        index_manager.pluck_file_from_index("file-123")
+        index_manager.delete_file_from_index("file-123")
 
         provider_client_mock.vector_stores.files.delete.assert_called_once_with(
             vector_store_id="vs-test-123", file_id="file-123"
@@ -214,7 +214,7 @@ class TestOpenAIRemoteIndexManager:
         )
 
         # Should not raise exception, just log warning
-        index_manager.pluck_file_from_index("file-123")
+        index_manager.delete_file_from_index("file-123")
 
         provider_client_mock.vector_stores.files.delete.assert_called_once_with(
             vector_store_id="vs-test-123", file_id="file-123"
@@ -335,7 +335,7 @@ class TestOpenAILocalIndexManager:
     @pytest.fixture()
     def index_manager(self, provider_client_mock):
         """Create OpenAIRemoteIndexManager instance with mocked client"""
-        return OpenAILocalIndexManager(client=provider_client_mock, embedding_model_name="embedding-model")
+        return OpenAILocalIndexManager(api_key="api-123", embedding_model_name="embedding-model")
 
     def test_chunk_content(self, index_manager):
         file = mock.Mock()
