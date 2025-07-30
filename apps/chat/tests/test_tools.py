@@ -425,6 +425,17 @@ class TestAppendToParticipantDataTool(BaseTestAgentTool):
 
 
 @pytest.mark.django_db()
+class TestIncrementParticipantDataTool(BaseTestAgentTool):
+    tool_cls = tools.IncrementParticipantDataTool
+
+    def test_increment(self, session):
+        response = self._invoke_tool(session, key="test", value=1)
+        assert response == "Success"
+
+        assert session.participant_data_from_experiment == {"test": 1}
+
+
+@pytest.mark.django_db()
 class TestSearchIndexTool:
     def load_vector_data(self):
         current_directory = os.path.dirname(os.path.abspath(__file__))
