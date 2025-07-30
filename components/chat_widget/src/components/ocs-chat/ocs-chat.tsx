@@ -1,7 +1,7 @@
 import { Component, Host, h, Prop, State } from '@stencil/core';
 import {
   XMarkIcon,
-  GripDotsVerticalIcon, PencilSquare,
+  GripDotsVerticalIcon, PencilSquare, ArrowsPointingOutIcon, ArrowsPointingInIcon,
 } from './heroicons';
 import { renderMarkdownSync as renderMarkdownComplete } from '../../utils/markdown';
 
@@ -148,6 +148,7 @@ export class OcsChat {
   @State() showStarterQuestions: boolean = true;
   @State() parsedWelcomeMessages: string[] = [];
   @State() parsedStarterQuestions: string[] = [];
+  @State() isFullscreen: boolean = false;
 
   private messageListRef?: HTMLDivElement;
   private textareaRef?: HTMLTextAreaElement;
@@ -499,10 +500,19 @@ export class OcsChat {
   }
 
   getPositionClasses() {
+    if (this.isFullscreen) {
+      return `fixed inset-0 w-full h-full bg-white border-0 shadow-lg transition-shadow duration-200 rounded-none overflow-hidden flex flex-col z-[9999]`;
+    }
     return `fixed w-full sm:w-[450px] h-5/6 bg-white border border-gray-200 ${this.isDragging ? 'shadow-2xl cursor-grabbing' : 'shadow-lg transition-shadow duration-200'} rounded-lg overflow-hidden flex flex-col`;
   }
 
   getPositionStyles() {
+    if (this.isFullscreen) {
+      return {
+        left: '0px',
+        top: '0px',
+      };
+    }
     return {
       left: `${this.windowPosition.x}px`,
       top: `${this.windowPosition.y}px`,
@@ -791,6 +801,10 @@ export class OcsChat {
     await this.startSession();
   }
 
+  private toggleFullscreen(): void {
+    this.isFullscreen = !this.isFullscreen;
+  }
+
   render() {
     if (this.error) {
       return (
@@ -812,18 +826,29 @@ export class OcsChat {
           >
             {/* Header */}
             <div
-              class={`flex justify-between items-center px-2 py-2 border-b border-gray-100 sm:${this.isDragging ? 'cursor-grabbing' : 'cursor-grab'} active:bg-gray-50 sm:hover:bg-gray-25 transition-colors duration-150`}
-              onMouseDown={this.handleMouseDown}
-              onTouchStart={this.handleTouchStart}
+              class={`flex justify-between items-center px-2 py-2 border-b border-gray-100 ${this.isFullscreen ? '' : `sm:${this.isDragging ? 'cursor-grabbing' : 'cursor-grab'} active:bg-gray-50 sm:hover:bg-gray-25`} transition-colors duration-150`}
+              onMouseDown={this.isFullscreen ? undefined : this.handleMouseDown}
+              onTouchStart={this.isFullscreen ? undefined : this.handleTouchStart}
             >
               {/* Drag indicator */}
-              <div class="hidden sm:flex gap-1">
-                <div class="flex gap-0.5 ml-2 pointer-events-none">
-                  <GripDotsVerticalIcon/>
+              {!this.isFullscreen && (
+                <div class="hidden sm:flex gap-1">
+                  <div class="flex gap-0.5 ml-2 pointer-events-none">
+                    <GripDotsVerticalIcon/>
+                  </div>
                 </div>
-              </div>
-              <div></div>
+              )}
+              {this.isFullscreen && <div></div>}
               <div class="flex gap-1 items-center">
+                {/* Fullscreen toggle button */}
+                <button
+                  class="p-1.5 rounded-md transition-colors duration-200 hover:bg-gray-100 text-gray-500"
+                  onClick={() => this.toggleFullscreen()}
+                  title={this.isFullscreen ? "Exit fullscreen" : "Enter fullscreen"}
+                  aria-label={this.isFullscreen ? "Exit fullscreen" : "Enter fullscreen"}
+                >
+                  {this.isFullscreen ? <ArrowsPointingInIcon/> : <ArrowsPointingOutIcon/>}
+                </button>
                 {/* New Chat button */}
                 {this.sessionId && this.messages.length > 0 && (
                   <button
