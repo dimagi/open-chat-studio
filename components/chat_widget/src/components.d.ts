@@ -12,9 +12,13 @@ export namespace Components {
          */
         "apiBaseUrl"?: string;
         /**
+          * The shape of the chat button. 'round' makes it circular, 'square' keeps it rectangular.
+         */
+        "buttonShape": 'round' | 'square';
+        /**
           * The text to display on the button.
          */
-        "buttonText": string;
+        "buttonText"?: string;
         /**
           * The ID of the chatbot to connect to.
          */
@@ -23,6 +27,18 @@ export namespace Components {
           * Whether the chat widget is initially expanded.
          */
         "expanded": boolean;
+        /**
+          * URL of the icon to display on the button. If not provided, uses the default OCS logo.
+         */
+        "iconUrl"?: string;
+        /**
+          * Whether to persist session data to local storage to allow resuming previous conversations after page reload.
+         */
+        "persistentSession": boolean;
+        /**
+          * Minutes since the most recent message after which the session data in local storage will expire. Set this to `0` to never expire.
+         */
+        "persistentSessionExpire": number;
         /**
           * The initial position of the chat widget on the screen.
          */
@@ -59,6 +75,10 @@ declare namespace LocalJSX {
          */
         "apiBaseUrl"?: string;
         /**
+          * The shape of the chat button. 'round' makes it circular, 'square' keeps it rectangular.
+         */
+        "buttonShape"?: 'round' | 'square';
+        /**
           * The text to display on the button.
          */
         "buttonText"?: string;
@@ -70,6 +90,18 @@ declare namespace LocalJSX {
           * Whether the chat widget is initially expanded.
          */
         "expanded"?: boolean;
+        /**
+          * URL of the icon to display on the button. If not provided, uses the default OCS logo.
+         */
+        "iconUrl"?: string;
+        /**
+          * Whether to persist session data to local storage to allow resuming previous conversations after page reload.
+         */
+        "persistentSession"?: boolean;
+        /**
+          * Minutes since the most recent message after which the session data in local storage will expire. Set this to `0` to never expire.
+         */
+        "persistentSessionExpire"?: number;
         /**
           * The initial position of the chat widget on the screen.
          */

@@ -86,7 +86,7 @@ def get_session_json(session, expected_messages=None):
             "version_number": 1,
             "versions": [],
         },
-        "participant": {"identifier": session.participant.identifier},
+        "participant": {"identifier": session.participant.identifier, "remote_id": None},
         "id": str(session.external_id),
         "team": {
             "name": session.team.name,

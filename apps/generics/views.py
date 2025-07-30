@@ -127,7 +127,7 @@ def render_session_details(
         )
     ).get(external_id=session_id, team__slug=team_slug)
     experiment = request.experiment
-
+    participant = session.participant
     return TemplateResponse(
         request,
         template_path,
@@ -137,6 +137,7 @@ def render_session_details(
             "active_tab": active_tab,
             "details": [
                 (gettext("Participant"), session.get_participant_chip()),
+                (gettext("Remote ID"), participant.remote_id if participant and participant.remote_id else "-"),
                 (gettext("Status"), session.get_status_display),
                 (gettext("Started"), session.consent_date or session.created_at),
                 (gettext("Ended"), session.ended_at or "-"),

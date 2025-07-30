@@ -492,7 +492,16 @@ def base_single_experiment_view(request, team_slug, experiment_id, template_name
         "channel_list": channel_list,
         "allow_copy": not experiment.child_links.exists(),
         "date_range_options": DATE_RANGE_OPTIONS,
-        "filter_columns": ["participant", "last_message", "first_message", "tags", "versions", "channels", "state"],
+        "filter_columns": [
+            "participant",
+            "last_message",
+            "first_message",
+            "tags",
+            "versions",
+            "channels",
+            "state",
+            "remote_id",
+        ],
         "state_list": SessionStatus.for_chatbots(),
         **_get_events_context(experiment, team_slug, request.origin),
     }

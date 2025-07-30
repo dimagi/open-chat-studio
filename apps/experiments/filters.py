@@ -121,6 +121,8 @@ def build_filter_condition(column, operator, value, timezone):
         return build_experiment_filter(operator, value)
     elif column == "state":
         return build_state_filter(operator, value)
+    elif column == "remote_id":
+        return build_remote_id_filter(operator, value)
     return None
 
 
@@ -190,21 +192,41 @@ def build_tags_filter(operator, value):
         if not selected_tags:
             return None
         if operator == Operators.ANY_OF:
-            return Q(chat__tags__name__in=selected_tags)
+            chat_tags_condition = Q(chat__tags__name__in=selected_tags)
+            message_tags_condition = Q(chat__messages__tags__name__in=selected_tags)
+            return chat_tags_condition | message_tags_condition
+
         elif operator == Operators.ALL_OF:
-            content_type = ContentType.objects.get_for_model(Chat)
             conditions = Q()
+            chat_content_type = ContentType.objects.get_for_model(Chat)
+            chat_message_content_type = ContentType.objects.get_for_model(ChatMessage)
+
             for tag in selected_tags:
-                conditions &= Exists(
+                chat_tag_exists = Exists(
                     CustomTaggedItem.objects.filter(
                         object_id=OuterRef("chat_id"),
-                        content_type_id=content_type,
+                        content_type_id=chat_content_type.id,
                         tag__name=tag,
                     )
                 )
+                message_tag_exists = Exists(
+                    CustomTaggedItem.objects.filter(
+                        content_type_id=chat_message_content_type.id,
+                        tag__name=tag,
+                        object_id__in=Subquery(
+                            ChatMessage.objects.filter(chat_id=OuterRef(OuterRef("chat_id"))).values("id")
+                        ),
+                    )
+                )
+                conditions &= chat_tag_exists | message_tag_exists
+
             return conditions
+
         elif operator == Operators.EXCLUDES:
-            return ~Q(chat__tags__name__in=selected_tags)
+            chat_tags_condition = Q(chat__tags__name__in=selected_tags)
+            message_tags_condition = Q(chat__messages__tags__name__in=selected_tags)
+            return ~(chat_tags_condition | message_tags_condition)
+
     except json.JSONDecodeError:
         pass
     return None
@@ -310,5 +332,21 @@ def build_state_filter(operator, value):
 
     elif operator == Operators.EXCLUDES:
         return ~Q(status__in=selected_values)
+
+    return None
+
+
+def build_remote_id_filter(operator, value):
+    try:
+        selected_values = json.loads(value)
+    except json.JSONDecodeError:
+        return None
+
+    if not selected_values:
+        return None
+    if operator == Operators.ANY_OF:
+        return Q(participant__remote_id__in=selected_values)
+    elif operator == Operators.EXCLUDES:
+        return ~Q(participant__remote_id__in=selected_values)
 
     return None

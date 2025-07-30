@@ -1310,16 +1310,22 @@ class Participant(BaseTeamModel):
     public_id = models.UUIDField(default=uuid.uuid4, unique=True)
     user = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.CASCADE, null=True, blank=True)
     platform = models.CharField(max_length=32)
+    remote_id = models.CharField(max_length=255, blank=True, null=True)
 
     class Meta:
         ordering = ["platform", "identifier"]
         unique_together = [("team", "platform", "identifier")]
 
     @classmethod
-    def create_anonymous(cls, team: Team, platform: str) -> "Participant":
+    def create_anonymous(cls, team: Team, platform: str, remote_id: str = None) -> "Participant":
         public_id = str(uuid.uuid4())
         return cls.objects.create(
-            team=team, platform=platform, identifier=f"anon:{public_id}", public_id=public_id, name="Anonymous"
+            team=team,
+            platform=platform,
+            identifier=f"anon:{public_id}",
+            public_id=public_id,
+            name="Anonymous",
+            remote_id=remote_id,
         )
 
     @property

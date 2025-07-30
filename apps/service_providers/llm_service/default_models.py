@@ -116,6 +116,7 @@ DEFAULT_LLM_PROVIDER_MODELS = {
 
 DEFAULT_EMBEDDING_PROVIDER_MODELS = {
     "openai": ["text-embedding-3-small", "text-embedding-3-large", "text-embedding-ada-002"],
+    "google": ["gemini-embedding-001"],
 }
 
 

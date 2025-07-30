@@ -16,6 +16,7 @@ from datetime import timedelta
 from pathlib import Path
 
 import environ
+from celery.schedules import crontab
 from django.utils.translation import gettext_lazy
 
 # Build paths inside the project like this: BASE_DIR / 'subdir'.
@@ -453,6 +454,10 @@ SCHEDULED_TASKS = {
     "evaluations.tasks.cleanup_old_evaluation_data": {
         "task": "apps.evaluations.tasks.cleanup_old_evaluation_data",
         "schedule": timedelta(days=1),
+    "documents.tasks.sync_all_document_sources_task": {
+        # sync doc sources once per week
+        "task": "apps.documents.tasks.sync_all_document_sources_task",
+        "schedule": crontab(minute="0", hour="0", day_of_week="0"),
     },
 }
 
@@ -638,6 +643,7 @@ FIELD_AUDIT_REQUEST_ID_HEADERS = [
     "X-Amzn-Trace-Id",  # Amazon
     "traceparent",  # W3C Trace Context (Google)
 ]
+FIELD_AUDIT_SERVICE_CLASS = "apps.audit.service.AuditService"
 TEST_NON_SERIALIZED_APPS = [
     "field_audit",
 ]

@@ -125,10 +125,12 @@ paths:
             examples:
               StartChatSession:
                 value:
-                  experiment_id: 123e4567-e89b-12d3-a456-426614174000
+                  chatbot_id: 123e4567-e89b-12d3-a456-426614174000
                   session_data:
                     source: widget
                     page_url: https://example.com
+                  participant_remote_id: abc
+                  participant_name: participant_name
                 summary: Start a new chat session for an experiment
         required: true
       security:
@@ -143,10 +145,12 @@ paths:
               examples:
                 StartChatSession:
                   value:
-                    experiment_id: 123e4567-e89b-12d3-a456-426614174000
+                    chatbot_id: 123e4567-e89b-12d3-a456-426614174000
                     session_data:
                       source: widget
                       page_url: https://example.com
+                    participant_remote_id: abc
+                    participant_name: participant_name
                   summary: Start a new chat session for an experiment
           description: ''
   /api/experiments/:
@@ -796,6 +800,13 @@ components:
           title: Initial session data
           description: Optional initial state data for the session. This field will
             be ignored if the request is not authenticated.
+        participant_remote_id:
+          type: string
+          description: Optional ID for the participant from remote systems
+        participant_name:
+          type: string
+          title: Paricipant Name
+          description: Optional participant name
       required:
       - chatbot_id
     ChatStartSessionResponse:
@@ -1133,6 +1144,10 @@ components:
         identifier:
           type: string
           maxLength: 320
+        remote_id:
+          type: string
+          nullable: true
+          maxLength: 255
     ParticipantDataUpdateRequest:
       type: object
       properties:
