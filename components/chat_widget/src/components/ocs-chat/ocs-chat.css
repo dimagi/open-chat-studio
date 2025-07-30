@@ -19,6 +19,9 @@
   --button-border-color-hover: #374151;
   --chat-z-index: 50;
   display: block;
+  position: fixed;
+  right: 20px;
+  bottom: 20px;
 }
 
 @layer components {
