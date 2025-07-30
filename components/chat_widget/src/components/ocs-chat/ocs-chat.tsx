@@ -886,7 +886,7 @@ export class OcsChat {
                   class="flex-grow overflow-y-auto p-4 space-y-4"
                 >
                   {this.messages.length === 0 && !this.isTyping && this.parsedWelcomeMessages.length > 0 && (
-                    <div class="space-y-4">
+                    <div class="space-y-2">
                       {/* Welcome Messages */}
                       {this.parsedWelcomeMessages.map((message, index) => (
                         <div key={`welcome-${index}`} class="flex justify-start">
