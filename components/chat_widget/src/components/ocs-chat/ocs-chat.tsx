@@ -976,7 +976,7 @@ export class OcsChat {
 
               {/* Input Area */}
               {this.sessionId && (
-                <div class="border-t border-gray-200 p-4">
+                <div class="border-t border-gray-200 p-4 text-sm">
                   <div class="flex gap-2">
                     <textarea
                       ref={(el) => this.textareaRef = el}
