@@ -1,0 +1,11 @@
+<div id="document_source_{{ document_source.id }}">
+  <div id="document_source_header_{{ document_source.id }}">
+    {% include "documents/partials/document_source_header.html" %}
+  </div>
+  <div
+      hx-get="{% url "documents:document_source_files_list" team.slug collection.id document_source.id %}"
+      hx-trigger="load"
+  >
+    <span class="loading loading-spinner"></span>
+  </div>
+</div>

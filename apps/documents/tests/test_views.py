@@ -235,12 +235,13 @@ class TestDeleteCollectionFile:
             # Verify file is NOT deleted/archived since it's used by assistant
             mock_delete_archive.assert_not_called()
 
+            # Verify OpenAI file deletion was NOT called since file is still used
+            remote_index_manager_mock.delete_files.assert_not_called()
+
             if is_remote_index:
-                remote_index_manager_mock.delete_files.assert_not_called()
-                remote_index_manager_mock.pluck_file_from_index.assert_called()
+                remote_index_manager_mock.delete_files_from_index.assert_called()
             else:
                 local_index_manager_mock.delete_files.assert_not_called()
-                local_index_manager_mock.delete_embeddings.assert_called()
 
             # Verify file still exists and is still linked to assistant
             file.refresh_from_db()
