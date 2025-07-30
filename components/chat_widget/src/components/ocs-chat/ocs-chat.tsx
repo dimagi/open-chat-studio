@@ -1,9 +1,7 @@
 import { Component, Host, h, Prop, State } from '@stencil/core';
 import {
   XMarkIcon,
-  ChevronDownIcon,
-  ChevronUpIcon,
-  GripDotsVerticalIcon,
+  GripDotsVerticalIcon, PencilSquare, ArrowsPointingOutIcon, ArrowsPointingInIcon,
 } from './heroicons';
 import { renderMarkdownSync as renderMarkdownComplete } from '../../utils/markdown';
 
@@ -64,7 +62,6 @@ interface SessionStorageData {
 })
 export class OcsChat {
 
-  private static readonly SESSION_EXPIRY_HOURS = 24;
   private static readonly TASK_POLLING_MAX_ATTEMPTS = 30;
   private static readonly TASK_POLLING_INTERVAL_MS = 1000;
   private static readonly MESSAGE_POLLING_INTERVAL_MS = 30000;
@@ -73,8 +70,8 @@ export class OcsChat {
   private static readonly FOCUS_DELAY_MS = 100;
 
   private static readonly CHAT_WIDTH_DESKTOP = 450;
-  private static readonly CHAT_HEIGHT_EXPANDED_RATIO = 0.83; // 83% of window height
-  private static readonly CHAT_HEIGHT_COLLAPSED_RATIO = 0.6; // 60% of window height
+  private static readonly CHAT_MAX_WIDTH = 1024;
+  private static readonly CHAT_HEIGHT_EXPANDED_RATIO = 0.83; // 83% of window height (h-5/6)
   private static readonly MOBILE_BREAKPOINT = 640;
   private static readonly WINDOW_MARGIN = 20;
 
@@ -93,7 +90,17 @@ export class OcsChat {
   /**
    * The text to display on the button.
    */
-  @Prop() buttonText: string = "Chat";
+  @Prop() buttonText?: string;
+
+  /**
+   * URL of the icon to display on the button. If not provided, uses the default OCS logo.
+   */
+  @Prop() iconUrl?: string;
+
+  /**
+   * The shape of the chat button. 'round' makes it circular, 'square' keeps it rectangular.
+   */
+  @Prop() buttonShape: 'round' | 'square' = 'square';
 
   /**
    * Whether the chat widget is visible on load.
@@ -104,11 +111,6 @@ export class OcsChat {
    * The initial position of the chat widget on the screen.
    */
   @Prop({ mutable: true }) position: 'left' | 'center' | 'right' = 'right';
-
-  /**
-   * Whether the chat widget is initially expanded.
-   */
-  @Prop({ mutable: true }) expanded: boolean = false;
 
   /**
    * Welcome messages to display above starter questions (JSON array of strings)
@@ -128,7 +130,21 @@ export class OcsChat {
    * Display name for the user.
    */
   @Prop() userName?: string;
+  /**
+   * Whether to persist session data to local storage to allow resuming previous conversations after page reload.
+   */
+  @Prop() persistentSession: boolean = true;
 
+  /**
+   * Minutes since the most recent message after which the session data in local storage will expire. Set this to
+   * `0` to never expire.
+   */
+  @Prop() persistentSessionExpire: number = 60 * 24;
+
+  /**
+   * Allow the user to make the chat window full screen.
+   */
+  @Prop() allowFullScreen: boolean = true;
 
   @State() loaded: boolean = false;
   @State() error: string = "";
@@ -143,14 +159,17 @@ export class OcsChat {
   @State() isDragging: boolean = false;
   @State() dragOffset: { x: number; y: number } = { x: 0, y: 0 };
   @State() windowPosition: { x: number; y: number } = { x: 0, y: 0 };
+  @State() fullscreenPosition: { x: number } = { x: 0 };
   @State() showStarterQuestions: boolean = true;
   @State() parsedWelcomeMessages: string[] = [];
   @State() parsedStarterQuestions: string[] = [];
   @State() generatedUserId?: string;
+  @State() isFullscreen: boolean = false;
 
   private messageListRef?: HTMLDivElement;
   private textareaRef?: HTMLTextAreaElement;
   private chatWindowRef?: HTMLDivElement;
+
 
   componentWillLoad() {
     this.loaded = this.visible;
@@ -159,7 +178,7 @@ export class OcsChat {
       return;
     }
     // Always try to load existing session if localStorage is available
-    if (this.isLocalStorageAvailable()) {
+    if (this.persistentSession && this.isLocalStorageAvailable()) {
       const { sessionId, messages } = this.loadSessionFromStorage();
       if (sessionId && messages) {
         this.sessionId = sessionId;
@@ -505,15 +524,33 @@ export class OcsChat {
     this.position = position;
   }
 
-  toggleSize() {
-    this.expanded = !this.expanded;
+  getPositionClasses() {
+    if (this.isFullscreen) {
+      return `fixed inset-0 w-full h-full max-w-screen-lg max-h-full bg-white border-0 shadow-lg transition-shadow duration-200 rounded-none overflow-hidden flex flex-col z-[9999]`;
+    }
+    return `fixed w-full sm:w-[450px] max-w-screen-lg h-5/6 bg-white border border-gray-200 ${this.isDragging ? 'shadow-2xl cursor-grabbing' : 'shadow-lg transition-shadow duration-200'} rounded-lg overflow-hidden flex flex-col`;
   }
 
-  getPositionClasses() {
-    return `fixed w-full sm:w-[450px] ${this.expanded ? 'h-5/6' : 'h-3/5'} bg-white border border-gray-200 ${this.isDragging ? 'shadow-2xl cursor-grabbing' : 'shadow-lg transition-shadow duration-200'} rounded-lg overflow-hidden flex flex-col`;
+  private getFullscreenBounds() {
+    const windowWidth = window.innerWidth;
+    const actualChatWidth = Math.min(windowWidth, OcsChat.CHAT_MAX_WIDTH);
+    const centeredX = (windowWidth - actualChatWidth) / 2;
+    const maxOffset = (windowWidth - actualChatWidth) / 2;
+
+    return { windowWidth, actualChatWidth, centeredX, maxOffset };
   }
 
   getPositionStyles() {
+    if (this.isFullscreen) {
+      const { centeredX } = this.getFullscreenBounds();
+      const finalX = centeredX + this.fullscreenPosition.x;
+
+      return {
+        left: `${finalX}px`,
+        top: '0px',
+        transform: 'none',
+      };
+    }
     return {
       left: `${this.windowPosition.x}px`,
       top: `${this.windowPosition.y}px`,
@@ -524,9 +561,7 @@ export class OcsChat {
     const windowWidth = window.innerWidth;
     const windowHeight = window.innerHeight;
     const chatWidth = windowWidth < OcsChat.MOBILE_BREAKPOINT ? windowWidth : OcsChat.CHAT_WIDTH_DESKTOP;
-    const chatHeight = this.expanded
-      ? (windowHeight * OcsChat.CHAT_HEIGHT_EXPANDED_RATIO)
-      : (windowHeight * OcsChat.CHAT_HEIGHT_COLLAPSED_RATIO);
+    const chatHeight = windowHeight * OcsChat.CHAT_HEIGHT_EXPANDED_RATIO;
     const isMobile = windowWidth < OcsChat.MOBILE_BREAKPOINT;
 
     if (isMobile) {
@@ -570,31 +605,48 @@ export class OcsChat {
     if (!this.chatWindowRef) return;
 
     this.isDragging = true;
-    const rect = this.chatWindowRef.getBoundingClientRect();
-    this.dragOffset = {
-      x: pointer.clientX - rect.left,
-      y: pointer.clientY - rect.top
-    };
+
+    if (this.isFullscreen) {
+      // For fullscreen, track relative to current position
+      this.dragOffset = {
+        x: pointer.clientX,
+        y: pointer.clientY
+      };
+    } else {
+      const rect = this.chatWindowRef.getBoundingClientRect();
+      this.dragOffset = {
+        x: pointer.clientX - rect.left,
+        y: pointer.clientY - rect.top
+      };
+    }
   }
 
   private updateDragPosition(pointer: PointerEvent): void {
     if (!this.isDragging) return;
 
-    const newX = pointer.clientX - this.dragOffset.x;
-    const newY = pointer.clientY - this.dragOffset.y;
+    if (this.isFullscreen) {
+      // In fullscreen, only allow horizontal dragging
+      const { maxOffset } = this.getFullscreenBounds();
 
-    // Constrain chatbox to window
-    const windowWidth = window.innerWidth;
-    const windowHeight = window.innerHeight;
-    const chatWidth = windowWidth < OcsChat.MOBILE_BREAKPOINT ? windowWidth : OcsChat.CHAT_WIDTH_DESKTOP;
-    const chatHeight = this.expanded
-      ? (windowHeight * OcsChat.CHAT_HEIGHT_EXPANDED_RATIO)
-      : (windowHeight * OcsChat.CHAT_HEIGHT_COLLAPSED_RATIO);
+      const deltaX = pointer.clientX - this.dragOffset.x;
+      this.fullscreenPosition = {
+        x: Math.max(-maxOffset, Math.min(maxOffset, deltaX))
+      };
+    } else {
+      const newX = pointer.clientX - this.dragOffset.x;
+      const newY = pointer.clientY - this.dragOffset.y;
 
-    this.windowPosition = {
-      x: Math.max(0, Math.min(newX, windowWidth - chatWidth)),
-      y: Math.max(0, Math.min(newY, windowHeight - chatHeight))
-    };
+      // Constrain chatbox to window
+      const windowWidth = window.innerWidth;
+      const windowHeight = window.innerHeight;
+      const chatWidth = windowWidth < OcsChat.MOBILE_BREAKPOINT ? windowWidth : OcsChat.CHAT_WIDTH_DESKTOP;
+      const chatHeight = windowHeight * OcsChat.CHAT_HEIGHT_EXPANDED_RATIO;
+
+      this.windowPosition = {
+        x: Math.max(0, Math.min(newX, windowWidth - chatWidth)),
+        y: Math.max(0, Math.min(newY, windowHeight - chatHeight))
+      };
+    }
   }
 
   private endDrag(): void {
@@ -617,7 +669,7 @@ export class OcsChat {
   }
 
   private handleMouseDown = (event: MouseEvent): void => {
-    if (window.innerWidth < OcsChat.MOBILE_BREAKPOINT) return;
+    if (!this.isFullscreen && window.innerWidth < OcsChat.MOBILE_BREAKPOINT) return;
     if ((event.target as HTMLElement).closest('button')) return;
 
     const pointer = this.getPointerCoordinates(event);
@@ -667,6 +719,49 @@ export class OcsChat {
     this.initializePosition();
   };
 
+  private getDefaultIconUrl(): string {
+    return `${this.getApiBaseUrl()}/static/images/favicons/favicon.svg`;
+  }
+
+  private getButtonClasses(): string {
+    const hasText = this.buttonText && this.buttonText.trim();
+    const baseClass = hasText ? 'chat-btn-text' : 'chat-btn-icon';
+    const shapeClass = this.buttonShape === 'round' ? 'round' : '';
+    return `${baseClass} ${shapeClass}`.trim();
+  }
+
+  private renderButton() {
+    const hasText = this.buttonText && this.buttonText.trim();
+    const hasCustomIcon = this.iconUrl && this.iconUrl.trim();
+    const iconSrc = hasCustomIcon ? this.iconUrl : this.getDefaultIconUrl();
+    const buttonClasses = this.getButtonClasses();
+
+    if (hasText) {
+      return (
+        <button
+          class={buttonClasses}
+          onClick={() => this.load()}
+          aria-label={`Open chat - ${this.buttonText}`}
+          title={this.buttonText}
+        >
+          <img src={iconSrc} alt="" />
+          <span>{this.buttonText}</span>
+        </button>
+      );
+    } else {
+      return (
+        <button
+          class={buttonClasses}
+          onClick={() => this.load()}
+          aria-label="Open chat"
+          title="Open chat"
+        >
+          <img src={iconSrc} alt="Chat" />
+        </button>
+      );
+    }
+  }
+
   private getStorageKeys() {
     return {
       sessionId: `ocs-chat-session-${this.chatbotId}`,
@@ -676,6 +771,9 @@ export class OcsChat {
   }
 
   private saveSessionToStorage(): void {
+    if (!this.persistentSession) {
+      return
+    }
     const keys = this.getStorageKeys();
     try {
       if (this.sessionId) {
@@ -691,6 +789,18 @@ export class OcsChat {
   private loadSessionFromStorage(): SessionStorageData {
     const keys = this.getStorageKeys();
     try {
+      if (this.persistentSessionExpire > 0) {
+        const lastActivity = localStorage.getItem(keys.lastActivity);
+        if (lastActivity) {
+          const lastActivityDate = new Date(lastActivity);
+          const minutesSinceActivity = (Date.now() - lastActivityDate.getTime()) / (1000 * 60);
+          if (minutesSinceActivity > this.persistentSessionExpire) {
+            this.clearSessionStorage();
+            return {messages: []};
+          }
+        }
+      }
+
       const storedSessionId = localStorage.getItem(keys.sessionId);
       const sessionId = storedSessionId ? storedSessionId : undefined;
 
@@ -704,16 +814,6 @@ export class OcsChat {
         } catch (parseError) {
           console.warn('Failed to parse messages from localStorage:', parseError);
           messages = [];
-        }
-      }
-
-      const lastActivity = localStorage.getItem(keys.lastActivity);
-      if (lastActivity) {
-        const lastActivityDate = new Date(lastActivity);
-        const hoursSinceActivity = (Date.now() - lastActivityDate.getTime()) / (1000 * 60 * 60);
-        if (hoursSinceActivity > OcsChat.SESSION_EXPIRY_HOURS) {
-          this.clearSessionStorage();
-          return { messages: [] };
         }
       }
 
@@ -784,6 +884,12 @@ export class OcsChat {
     await this.startSession();
   }
 
+  private toggleFullscreen(): void {
+    this.isFullscreen = !this.isFullscreen;
+    // Reset fullscreen position when toggling
+    this.fullscreenPosition = { x: 0 };
+  }
+
   render() {
     if (this.error) {
       return (
@@ -795,7 +901,7 @@ export class OcsChat {
 
     return (
       <Host>
-        <button class="btn" onClick={() => this.load()}>{this.buttonText}</button>
+        {this.renderButton()}
         {this.visible && (
           <div
             ref={(el) => this.chatWindowRef = el}
@@ -805,7 +911,7 @@ export class OcsChat {
           >
             {/* Header */}
             <div
-              class={`flex justify-between items-center px-2 py-2 border-b border-gray-100 sm:${this.isDragging ? 'cursor-grabbing' : 'cursor-grab'} active:bg-gray-50 sm:hover:bg-gray-25 transition-colors duration-150`}
+              class={`flex justify-between items-center px-2 py-2 border-b border-gray-100 ${this.isDragging ? 'cursor-grabbing' : 'cursor-grab'} active:bg-gray-50 hover:bg-gray-25 transition-colors duration-150`}
               onMouseDown={this.handleMouseDown}
               onTouchStart={this.handleTouchStart}
             >
@@ -815,27 +921,28 @@ export class OcsChat {
                   <GripDotsVerticalIcon/>
                 </div>
               </div>
-              <div></div>
+              <div class="sm:hidden"></div>
               <div class="flex gap-1 items-center">
+                {/* Fullscreen toggle button */}
+                {this.allowFullScreen && <button
+                  class="hidden sm:block p-1.5 rounded-md transition-colors duration-200 hover:bg-gray-100 text-gray-500"
+                  onClick={() => this.toggleFullscreen()}
+                  title={this.isFullscreen ? "Exit fullscreen" : "Enter fullscreen"}
+                  aria-label={this.isFullscreen ? "Exit fullscreen" : "Enter fullscreen"}
+                >
+                  {this.isFullscreen ? <ArrowsPointingInIcon/> : <ArrowsPointingOutIcon/>}
+                </button>}
                 {/* New Chat button */}
-                {this.sessionId && (
+                {this.sessionId && this.messages.length > 0 && (
                   <button
-                    class="px-3 py-1 text-sm bg-blue-500 hover:bg-blue-600 text-white rounded-md transition-colors duration-200 pointer-events-auto"
+                    class="p-1.5 rounded-md transition-colors duration-200 hover:bg-gray-100 text-gray-500"
                     onClick={() => this.startNewChat()}
                     title="Start new chat"
                     aria-label="Start new chat"
                   >
-                    New Chat
+                    <PencilSquare/>
                   </button>
                 )}
-                <button
-                  class="p-1.5 rounded-md transition-colors duration-200 hover:bg-gray-100 text-gray-500"
-                  onClick={() => this.toggleSize()}
-                  aria-label={this.expanded ? "Collapse" : "Expand"}
-                  title={this.expanded ? "Collapse" : "Expand"}
-                >
-                  {this.expanded ? <ChevronDownIcon/> : <ChevronUpIcon/>}
-                </button>
                 <button
                   class="p-1.5 hover:bg-gray-100 rounded-md transition-colors duration-200 text-gray-500"
                   onClick={() => this.visible = false}
@@ -860,10 +967,10 @@ export class OcsChat {
               {this.sessionId && (
                 <div
                   ref={(el) => this.messageListRef = el}
-                  class="flex-grow overflow-y-auto p-4 space-y-4"
+                  class="flex-grow overflow-y-auto p-4 space-y-2"
                 >
                   {this.messages.length === 0 && !this.isTyping && this.parsedWelcomeMessages.length > 0 && (
-                    <div class="space-y-4">
+                    <div class="space-y-2">
                       {/* Welcome Messages */}
                       {this.parsedWelcomeMessages.map((message, index) => (
                         <div key={`welcome-${index}`} class="flex justify-start">
@@ -922,13 +1029,13 @@ export class OcsChat {
                   ))}
                   {/* Typing Indicator */}
                   {this.isTyping && (
-                    <div class="flex justify-start">
-                      <div class="bg-gray-200 text-gray-800 max-w-xs lg:max-w-md px-2 py-2 rounded-lg">
-                        <div class="flex items-center gap-0.5">
-                          <span class="inline-block w-2 h-2 rounded-full bg-gray-400 animate-bounce"></span>
-                          <span class="inline-block w-2 h-2 rounded-full bg-gray-400 animate-bounce" style={{animationDelay: '0.1s'}}></span>
-                          <span class="inline-block w-2 h-2 rounded-full bg-gray-400 animate-bounce" style={{animationDelay: '0.2s'}}></span>
-                        </div>
+                    <div>
+                      <div class="h-1.5 w-full overflow-hidden">
+                        <div class="animate-progress w-full h-full bg-blue-200 origin-left-right rounded-lg"></div>
+                      </div>
+                      <div class="w-full text-xs opacity-70 justify-center">
+                        <span>Preparing response</span>
+                        <span class="loading animate-dots"></span>
                       </div>
                     </div>
                   )}
@@ -953,7 +1060,7 @@ export class OcsChat {
 
               {/* Input Area */}
               {this.sessionId && (
-                <div class="border-t border-gray-200 p-4">
+                <div class="border-t border-gray-200 p-4 text-sm">
                   <div class="flex gap-2">
                     <textarea
                       ref={(el) => this.textareaRef = el}

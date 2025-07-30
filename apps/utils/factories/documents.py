@@ -1,5 +1,7 @@
 import factory
 
+from apps.documents.datamodels import DocumentSourceConfig
+
 
 class CollectionFactory(factory.django.DjangoModelFactory):
     class Meta:
@@ -13,3 +15,12 @@ class CollectionFactory(factory.django.DjangoModelFactory):
         "apps.utils.factories.service_provider_factories.EmbeddingProviderModelFactory",
         team=factory.SelfAttribute("..team"),
     )
+
+
+class DocumentSourceFactory(factory.django.DjangoModelFactory):
+    class Meta:
+        model = "documents.DocumentSource"
+
+    collection = factory.SubFactory(CollectionFactory)
+    team = factory.SelfAttribute(".collection.team")
+    config = DocumentSourceConfig()

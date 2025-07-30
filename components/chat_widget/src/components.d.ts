@@ -8,21 +8,37 @@ import { HTMLStencilElement, JSXBase } from "@stencil/core/internal";
 export namespace Components {
     interface OpenChatStudioWidget {
         /**
+          * Allow the user to make the chat window full screen.
+         */
+        "allowFullScreen": boolean;
+        /**
           * The base URL for the API (defaults to current origin).
          */
         "apiBaseUrl"?: string;
         /**
+          * The shape of the chat button. 'round' makes it circular, 'square' keeps it rectangular.
+         */
+        "buttonShape": 'round' | 'square';
+        /**
           * The text to display on the button.
          */
-        "buttonText": string;
+        "buttonText"?: string;
         /**
           * The ID of the chatbot to connect to.
          */
         "chatbotId": string;
         /**
-          * Whether the chat widget is initially expanded.
+          * URL of the icon to display on the button. If not provided, uses the default OCS logo.
          */
-        "expanded": boolean;
+        "iconUrl"?: string;
+        /**
+          * Whether to persist session data to local storage to allow resuming previous conversations after page reload.
+         */
+        "persistentSession": boolean;
+        /**
+          * Minutes since the most recent message after which the session data in local storage will expire. Set this to `0` to never expire.
+         */
+        "persistentSessionExpire": number;
         /**
           * The initial position of the chat widget on the screen.
          */
@@ -63,9 +79,17 @@ declare global {
 declare namespace LocalJSX {
     interface OpenChatStudioWidget {
         /**
+          * Allow the user to make the chat window full screen.
+         */
+        "allowFullScreen"?: boolean;
+        /**
           * The base URL for the API (defaults to current origin).
          */
         "apiBaseUrl"?: string;
+        /**
+          * The shape of the chat button. 'round' makes it circular, 'square' keeps it rectangular.
+         */
+        "buttonShape"?: 'round' | 'square';
         /**
           * The text to display on the button.
          */
@@ -75,9 +99,17 @@ declare namespace LocalJSX {
          */
         "chatbotId": string;
         /**
-          * Whether the chat widget is initially expanded.
+          * URL of the icon to display on the button. If not provided, uses the default OCS logo.
          */
-        "expanded"?: boolean;
+        "iconUrl"?: string;
+        /**
+          * Whether to persist session data to local storage to allow resuming previous conversations after page reload.
+         */
+        "persistentSession"?: boolean;
+        /**
+          * Minutes since the most recent message after which the session data in local storage will expire. Set this to `0` to never expire.
+         */
+        "persistentSessionExpire"?: number;
         /**
           * The initial position of the chat widget on the screen.
          */

@@ -48,7 +48,7 @@ class RemoteIndexManagerMock(RemoteIndexManager):
 
     def delete_remote_index(self): ...
 
-    def delete_file_from_index(self, *args, **kwargs): ...
+    def delete_files_from_index(self, *args, **kwargs): ...
 
     def link_files_to_remote_index(self, *args, **kwargs): ...
     def file_exists_at_remote(self, *args, **kwargs) -> bool: ...
@@ -63,7 +63,7 @@ class TestLocalIndexManager:
     @pytest.fixture()
     def index_manager(self, provider_client_mock):
         with mock.patch("apps.service_providers.models.LlmProvider.get_local_index_manager") as get_local_index_manager:
-            manager = LocalIndexManagerMock(client=provider_client_mock, embedding_model_name="embedding-model")
+            manager = LocalIndexManagerMock(api_key="api-123", embedding_model_name="embedding-model")
             get_local_index_manager.return_value = manager
             yield manager
 
@@ -100,6 +100,22 @@ class TestLocalIndexManager:
 
         collection_file.refresh_from_db()
         assert collection_file.status == FileStatus.FAILED
+
+    def test_delete_embeddings(self, local_index_instance):
+        file = FileFactory()
+        embedding = FileChunkEmbedding.objects.create(
+            team=file.team,
+            file=file,
+            collection=local_index_instance,
+            chunk_number=1,
+            page_number=1,
+            text="test embedding",
+            embedding=[0.1] * settings.EMBEDDING_VECTOR_SIZE,
+        )
+        local_index_instance.get_index_manager().delete_embeddings(file.id)
+
+        with pytest.raises(FileChunkEmbedding.DoesNotExist):
+            embedding.refresh_from_db()
 
 
 @pytest.mark.django_db()
@@ -319,7 +335,7 @@ class TestOpenAILocalIndexManager:
     @pytest.fixture()
     def index_manager(self, provider_client_mock):
         """Create OpenAIRemoteIndexManager instance with mocked client"""
-        return OpenAILocalIndexManager(client=provider_client_mock, embedding_model_name="embedding-model")
+        return OpenAILocalIndexManager(api_key="api-123", embedding_model_name="embedding-model")
 
     def test_chunk_content(self, index_manager):
         file = mock.Mock()

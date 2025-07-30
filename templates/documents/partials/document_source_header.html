@@ -1,0 +1,62 @@
+<h2 class="text-lg font-semibold">
+  <i class="{{ document_source.source_type_enum.css_logo }}"
+     title="{{ document_source.get_source_type_display }}"></i>
+  {{ document_source.source_config }}
+  <div class="join">
+    <a
+        class="btn btn-ghost btn-sm join-item"
+        hx-get="{% url "documents:edit_document_source" team.slug collection.id document_source.id %}"
+        hx-target="#document_source_modal"
+        hx-swap="innerHTML"
+        hx-indicator="#document_source_loading_{{ document_source.id }}"
+        hx-disabled-elt="this"
+    ><i class="fa-solid fa-pencil"></i></a>
+    <a
+        class="btn btn-ghost btn-sm join-item"
+        hx-delete="{% url "documents:delete_document_source" team.slug collection.id document_source.id %}"
+        hx-target="#document_source_{{ document_source.id }}"
+        hx-swap="outerHTML"
+        hx-indicator="#document_source_loading_{{ document_source.id }}"
+        hx-disabled-elt="this"
+        hx-confirm="Are you sure you wish to delete this document source and all its data?"
+    ><i class="fa-solid fa-trash"></i></a>
+    {% if not document_source.sync_task_id %}
+      <a
+          class="btn btn-ghost btn-sm join-item"
+          hx-post="{% url "documents:sync_document_source" team.slug collection.id document_source.id %}"
+          hx-target="#document_source_{{ document_source.id }}"
+          hx-swap="outerHTML"
+          hx-indicator="#document_source_loading_{{ document_source.id }}"
+          hx-disabled-elt="this"
+          title="Sync Document Source"
+      ><i class="fa-solid fa-rotate"></i></a>
+    {% endif %}
+    <span id="document_source_loading_{{ document_source.id }}"
+          class="htmx-indicator loading loading-spinner loading-sm"></span>
+  </div>
+</h2>
+<div class="text-xs mb-2">
+  {% if document_source.last_sync %}
+    {% if document_source.sync_task_id %}
+      <div aria-label="Syncing" class="status status-accent animate-ping"></div>
+      <span>Syncing. Previous Sync: </span>
+    {% else %}
+      <div aria-label="Success" class="status status-success"></div>
+      <span>Last Sync: </span>
+    {% endif %}
+    <time datetime="{{ document_source.last_sync.isoformat }}" title="{{ document_source.last_sync.isoformat }}">
+      {{ document_source.last_sync|date:"DATETIME_FORMAT" }}
+    </time>
+  {% else %}
+    {% if document_source.sync_task_id %}
+      <div class="inline-grid *:[grid-area:1/1]">
+        <div aria-label="Syncing" class="status status-accent animate-ping"></div>
+        <div aria-label="Syncing" class="status status-accent"></div>
+      </div>
+      <span>Syncing</span>
+    {% else %}
+      <span class="status"></span>
+      <span>Not yet synced</span>
+    {% endif %}
+  {% endif %}
+</div>
