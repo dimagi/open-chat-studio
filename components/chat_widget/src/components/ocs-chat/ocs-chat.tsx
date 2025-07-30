@@ -734,7 +734,7 @@ export class OcsChat {
       return this.generatedUserId;
     }
 
-    const storageKey = `ocs-user-id-${this.chatbotId}`;
+    const storageKey = `ocs-user-id`;
     const stored = localStorage.getItem(storageKey);
     if (stored) {
       this.generatedUserId = stored;
