@@ -15,10 +15,11 @@ from apps.chat.agent.openapi_tool import openapi_spec_op_to_function_def
 from apps.chat.models import ChatAttachment
 from apps.events.forms import ScheduledMessageConfigForm
 from apps.events.models import ScheduledMessage, TimePeriod
-from apps.experiments.models import AgentTools, Experiment, ExperimentSession, ParticipantData
+from apps.experiments.models import AgentTools, Experiment, ExperimentSession
 from apps.files.models import FileChunkEmbedding
 from apps.pipelines.models import Node
 from apps.pipelines.nodes.tool_callbacks import ToolCallbacks
+from apps.service_providers.llm_service.prompt_context import ParticipantDataProxy
 from apps.utils.time import pretty_date
 
 if TYPE_CHECKING:
@@ -214,19 +215,8 @@ class UpdateParticipantDataTool(CustomBaseTool):
 
     @transaction.atomic
     def action(self, key: str, value: Any):
-        try:
-            participant_data = ParticipantData.objects.for_experiment(self.experiment_session.experiment).get(
-                participant=self.experiment_session.participant
-            )
-            participant_data.data[key] = value
-            participant_data.save()
-        except ParticipantData.DoesNotExist:
-            ParticipantData.objects.create(
-                participant=self.experiment_session.participant,
-                experiment=self.experiment_session.experiment,
-                team=self.experiment_session.team,
-                data={key: value},
-            )
+        data_proxy = ParticipantDataProxy(self.experiment_session)
+        data_proxy.set_key(key, value)
         return "Success"
 
 
@@ -238,29 +228,8 @@ class AppendToParticipantDataTool(CustomBaseTool):
 
     @transaction.atomic
     def action(self, key: str, value: str | int | list):
-        try:
-            participant_data = ParticipantData.objects.for_experiment(self.experiment_session.experiment).get(
-                participant=self.experiment_session.participant
-            )
-
-            new_value = participant_data.data.get(key, [])
-            if not isinstance(new_value, list):
-                new_value = [new_value]
-
-            if isinstance(value, list):
-                new_value.extend(value)
-            else:
-                new_value.append(value)
-
-            participant_data.data[key] = new_value
-            participant_data.save()
-        except ParticipantData.DoesNotExist:
-            ParticipantData.objects.create(
-                participant=self.experiment_session.participant,
-                experiment=self.experiment_session.experiment,
-                team=self.experiment_session.team,
-                data={key: value if isinstance(value, list) else [value]},
-            )
+        data_proxy = ParticipantDataProxy(self.experiment_session)
+        data_proxy.append_to_key(key, value)
         return "Success"
 
 
