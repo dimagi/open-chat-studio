@@ -144,3 +144,40 @@ class TestParticipantDataProxy:
         participant_data.data = {}
         participant_data.save()
         assert proxy.get_timezone() is None
+
+    def test_set_key(self):
+        """Test that set_key() updates a single key in the participant data."""
+        participant = ParticipantFactory()
+        session = ExperimentSessionFactory(participant=participant)
+
+        proxy = ParticipantDataProxy(session)
+        participant_data = proxy._get_db_object()
+
+        # Set some data
+        proxy.set_key("favorite_color", "blue")
+
+        # Check that data was updated
+        participant_data.refresh_from_db()
+        assert participant_data.data == {"favorite_color": "blue"}
+
+    def test_append_to_key(self):
+        """
+        Test that append_to_key() adds a value to a list at the specified key.
+        If the current value is not a list, it should convert it to a list.
+        """
+        participant = ParticipantFactory()
+        session = ExperimentSessionFactory(participant=participant)
+
+        proxy = ParticipantDataProxy(session)
+        participant_data = proxy._get_db_object()
+
+        assert "random_stuff" not in proxy.get()
+
+        # Append some data
+        proxy.append_to_key("random_stuff", "blue")
+        proxy.append_to_key("random_stuff", 1)
+        proxy.append_to_key("random_stuff", [3, 4])
+
+        # Check that data was updated
+        participant_data.refresh_from_db()
+        assert participant_data.data == {"random_stuff": ["blue", 1, 3, 4]}

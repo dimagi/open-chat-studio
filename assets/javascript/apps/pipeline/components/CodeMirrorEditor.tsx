@@ -74,6 +74,20 @@ export function CodeNodeEditor(
       boost: 1,
       section: "Participant Data",
     }),
+    set_participant_data_key: snip("set_participant_data_key(\"${key_name}\", ${data})", {
+      label: "set_participant_data_key",
+      type: "function",
+      detail: "Overwrites the participant data at the specified key with the value provided",
+      boost: 1,
+      section: "Participant Data",
+    }),
+    append_to_participant_data_key: snip("append_to_participant_data_key(\"${key_name}\", ${data})", {
+      label: "append_to_participant_data_key",
+      type: "function",
+      detail: "Appends the value to the participant data at the specified key",
+      boost: 1,
+      section: "Participant Data",
+    }),
     set_temp_state_key: snip("set_temp_state_key(\"${key_name}\", ${data})", {
       label: "set_temp_state_key",
       type: "function",
