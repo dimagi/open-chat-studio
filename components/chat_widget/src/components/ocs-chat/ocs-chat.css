@@ -126,27 +126,3 @@ textarea {
 .bg-gray-200 .chat-markdown pre {
   @apply bg-white border border-gray-300;
 }
-
-@media (max-width: 640px) {
-  .max-w-xs {
-    max-width: 85%;
-  }
-
-  .chat-btn-icon {
-    width: 56px;
-    height: 56px;
-  }
-
-  .chat-btn-text {
-    @apply px-3 py-2;
-    min-height: 52px;
-  }
-
-  .chat-btn-text img {
-    @apply w-5 h-5;
-  }
-
-  .chat-btn-text span {
-    @apply text-xs;
-  }
-}
