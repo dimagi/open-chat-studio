@@ -71,7 +71,7 @@ export class OcsChat {
 
   private static readonly CHAT_WIDTH_DESKTOP = 450;
   private static readonly CHAT_MAX_WIDTH = 1024;
-  private static readonly CHAT_HEIGHT_EXPANDED_RATIO = 0.83; // 83% of window height
+  private static readonly CHAT_HEIGHT_EXPANDED_RATIO = 0.83; // 83% of window height (h-5/6)
   private static readonly MOBILE_BREAKPOINT = 640;
   private static readonly WINDOW_MARGIN = 20;
 
@@ -518,7 +518,7 @@ export class OcsChat {
     const actualChatWidth = Math.min(windowWidth, OcsChat.CHAT_MAX_WIDTH);
     const centeredX = (windowWidth - actualChatWidth) / 2;
     const maxOffset = (windowWidth - actualChatWidth) / 2;
-    
+
     return { windowWidth, actualChatWidth, centeredX, maxOffset };
   }
 
@@ -877,10 +877,11 @@ export class OcsChat {
                   <GripDotsVerticalIcon/>
                 </div>
               </div>
+              <div class="sm:hidden"></div>
               <div class="flex gap-1 items-center">
                 {/* Fullscreen toggle button */}
                 {this.allowFullScreen && <button
-                  class="p-1.5 rounded-md transition-colors duration-200 hover:bg-gray-100 text-gray-500"
+                  class="hidden sm:block p-1.5 rounded-md transition-colors duration-200 hover:bg-gray-100 text-gray-500"
                   onClick={() => this.toggleFullscreen()}
                   title={this.isFullscreen ? "Exit fullscreen" : "Enter fullscreen"}
                   aria-label={this.isFullscreen ? "Exit fullscreen" : "Enter fullscreen"}
