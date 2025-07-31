@@ -8,7 +8,7 @@
         {% endblock table %}
 
         {% block pagination %}
-            <div class="pagination">
+            <div class="flex pagination justify-end">
                 {% if table.page and table.paginator.num_pages > 1 %}
                     <div class="join">
                         <a class="join-item btn"

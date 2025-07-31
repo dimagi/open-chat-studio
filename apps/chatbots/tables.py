@@ -1,5 +1,6 @@
 import django_tables2 as tables
 from django.conf import settings
+from django.db.models import F
 from django.urls import reverse
 from django_tables2 import columns
 
@@ -7,14 +8,33 @@ from apps.experiments.models import Experiment
 from apps.experiments.tables import ExperimentSessionsTable, _show_chat_button, session_chat_url
 from apps.generics import actions
 from apps.generics.actions import chip_action
+from apps.generics.tables import ColumnWithHelp, TimeAgoColumn
+
+
+def _name_label_factory(record, _):
+    if record.is_archived:
+        return f"{record.name} (archived)"
+    return record.name
 
 
 class ChatbotTable(tables.Table):
-    name = columns.Column(
+    name = actions = actions.ActionsColumn(
+        actions=[
+            chip_action(
+                label_factory=_name_label_factory,
+            ),
+        ],
+        align="left",
         orderable=True,
     )
-    description = columns.Column(verbose_name="Description")
-    owner = columns.Column(accessor="owner__username", verbose_name="Created By")
+    participant_count = columns.Column(verbose_name="Participants", orderable=True)
+    last_message = TimeAgoColumn(verbose_name="Last activity", orderable=True)
+    session_count = ColumnWithHelp(
+        verbose_name="Sessions", orderable=True, help_text="Active sessions in the last 30 days"
+    )
+    messages_count = ColumnWithHelp(
+        verbose_name="Messages", orderable=True, help_text="Messages sent and received in the last 30 days"
+    )
     actions = columns.TemplateColumn(
         template_name="experiments/components/experiment_actions_column.html",
         extra_context={"type": "chatbots"},
@@ -22,7 +42,7 @@ class ChatbotTable(tables.Table):
 
     class Meta:
         model = Experiment
-        fields = ("name",)
+        fields = ("name", "participant_count", "session_count", "messages_count")
         row_attrs = {
             **settings.DJANGO_TABLES2_ROW_ATTRS,
             "data-redirect-url": lambda record: reverse(
@@ -30,12 +50,16 @@ class ChatbotTable(tables.Table):
             ),
         }
         orderable = False
-        empty_text = "No experiments found."
+        empty_text = "No chatbots found."
 
-    def render_name(self, record):
-        if record.is_archived:
-            return f"{record.name} (archived)"
-        return record.name
+    def order_last_message(self, queryset, is_descending):
+        order = F("last_message")
+        if is_descending:
+            order = order.desc(nulls_last=True)
+        else:
+            order = order.asc(nulls_last=True)
+        queryset = queryset.order_by(order)
+        return queryset, True
 
 
 def chatbot_url_factory(_, __, record, value):
