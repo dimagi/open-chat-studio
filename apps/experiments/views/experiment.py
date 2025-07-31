@@ -1275,6 +1275,7 @@ def experiment_session_messages_view(request, team_slug: str, experiment_id: uui
             )
         )
     )
+    all_tags = {tagged_item.tag for message in messages_queryset for tagged_item in message.prefetched_tagged_items if tagged_item.tag}
 
     available_languages, translatable_languages = _get_languages_for_chat(session)
     has_missing_translations = False
@@ -1325,6 +1326,7 @@ def experiment_session_messages_view(request, team_slug: str, experiment_id: uui
         "default_message": default_message,
         "default_translation_models_by_providers": get_default_translation_models_by_provider(),
         "llm_provider_models_dict": get_models_by_team_grouped_by_provider(request.team),
+        "all_tags": all_tags
     }
 
     return TemplateResponse(
