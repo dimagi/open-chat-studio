@@ -25,18 +25,6 @@ class TagCategories(models.TextChoices):
     RESPONSE_RATING = "response_rating", _("Response Rating")
     ERROR = "error", _("Error")
 
-    @classmethod
-    def category_order(cls):
-        return {
-            None: 1,
-            "": 1,
-            cls.ERROR.value: 2,
-            cls.SAFETY_LAYER_RESPONSE.value: 3,
-            cls.RESPONSE_RATING.value: 4,
-            cls.BOT_RESPONSE.value: 5,
-            cls.EXPERIMENT_VERSION.value: 6,
-        }
-
 
 @audit_fields(
     "name",
