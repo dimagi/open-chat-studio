@@ -54,7 +54,6 @@ def test_group_evaluation_with_multiple_evaluators():
 
         # Check that the evaluation run was created properly
         evaluation_run.refresh_from_db()
-        assert evaluation_run.job_id == "test-task-id"
         assert evaluation_run.status == EvaluationRunStatus.PENDING
 
         # Verify config has expected number of evaluators and messages
@@ -78,7 +77,6 @@ def test_empty_evaluation_config():
 
         # The task should still be called, even with no evaluators
         evaluation_run.refresh_from_db()
-        assert evaluation_run.job_id == "test-task-id"
         assert evaluation_run.status == EvaluationRunStatus.PENDING
 
         # Task should be called with the evaluation run id

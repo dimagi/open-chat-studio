@@ -451,6 +451,10 @@ SCHEDULED_TASKS = {
         "task": "apps.dashboard.tasks.cleanup_expired_cache_entries",
         "schedule": timedelta(days=1),
     },
+    "evaluations.tasks.cleanup_old_evaluation_data": {
+        "task": "apps.evaluations.tasks.cleanup_old_evaluation_data",
+        "schedule": timedelta(days=1),
+    },
     "documents.tasks.sync_all_document_sources_task": {
         # sync doc sources once per week
         "task": "apps.documents.tasks.sync_all_document_sources_task",

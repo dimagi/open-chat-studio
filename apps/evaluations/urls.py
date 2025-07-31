@@ -8,6 +8,11 @@ app_name = "evaluations"
 
 urlpatterns = [
     path(
+        "experiment_versions/",
+        evaluation_config_views.load_experiment_versions,
+        name="load_experiment_versions",
+    ),
+    path(
         "<int:evaluation_pk>/runs/new/",
         evaluation_config_views.create_evaluation_run,
         name="create_evaluation_run",
