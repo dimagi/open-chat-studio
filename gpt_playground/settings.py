@@ -581,8 +581,8 @@ TELEGRAM_SECRET_TOKEN = env("TELEGRAM_SECRET_TOKEN", default="")
 
 DJANGO_TABLES2_TEMPLATE = "table/tailwind.html"
 DJANGO_TABLES2_TABLE_ATTRS = {
-    "class": "w-full table-zebra",
-    "thead": {"class": "bg-base-200 base-content uppercase text-sm leading-normal"},
+    "class": "w-full table table-zebra",
+    "thead": {"class": "bg-base-200 base-content text-sm leading-normal"},
     "th": {"class": "py-3 px-3 text-left"},
     "td": {"class": "py-3 px-3 text-left overflow-hidden"},
 }
