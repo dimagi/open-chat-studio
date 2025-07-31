@@ -802,6 +802,7 @@ components:
             be ignored if the request is not authenticated.
         participant_remote_id:
           type: string
+          default: ''
           description: Optional ID for the participant from remote systems
         participant_name:
           type: string
@@ -1146,7 +1147,6 @@ components:
           maxLength: 320
         remote_id:
           type: string
-          nullable: true
           maxLength: 255
     ParticipantDataUpdateRequest:
       type: object
