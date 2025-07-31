@@ -9,12 +9,25 @@ from apps.generics import actions
 from apps.generics.actions import chip_action
 
 
+def _name_label_factory(record, _):
+    if record.is_archived:
+        return f"{record.name} (archived)"
+    return record.name
+
+
 class ChatbotTable(tables.Table):
-    name = columns.Column(
+    name = actions = actions.ActionsColumn(
+        actions=[
+            chip_action(
+                label_factory=_name_label_factory,
+            ),
+        ],
+        align="left",
         orderable=True,
     )
-    description = columns.Column(verbose_name="Description")
-    owner = columns.Column(accessor="owner__username", verbose_name="Created By")
+    participant_count = columns.Column(verbose_name="Participants", orderable=True)
+    session_count = columns.Column(verbose_name="Sessions", orderable=True)
+    messages_count = columns.Column(verbose_name="Messages", orderable=True)
     actions = columns.TemplateColumn(
         template_name="experiments/components/experiment_actions_column.html",
         extra_context={"type": "chatbots"},
@@ -22,7 +35,7 @@ class ChatbotTable(tables.Table):
 
     class Meta:
         model = Experiment
-        fields = ("name",)
+        fields = ("name", "participant_count", "session_count", "messages_count")
         row_attrs = {
             **settings.DJANGO_TABLES2_ROW_ATTRS,
             "data-redirect-url": lambda record: reverse(
@@ -30,12 +43,7 @@ class ChatbotTable(tables.Table):
             ),
         }
         orderable = False
-        empty_text = "No experiments found."
-
-    def render_name(self, record):
-        if record.is_archived:
-            return f"{record.name} (archived)"
-        return record.name
+        empty_text = "No chatbots found."
 
 
 def chatbot_url_factory(_, __, record, value):
