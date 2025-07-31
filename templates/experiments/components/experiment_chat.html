@@ -5,33 +5,12 @@
 {% load pagination_tags %}
 
 {% if all_tags %}
-  <div class="flex flex-wrap gap-2 p-3">
-    <!-- First 10 tags -->
-    {% for tag in all_tags %}
-      {% if forloop.counter <= 8 %}
-        <button
-          class="badge badge-outline text-sm px-2 py-1 hover:cursor-pointer"
-          hx-get="{% url 'experiments:experiment_session_messages_view' request.team.slug experiment.public_id experiment_session.external_id %}"
-          hx-target="#messages-container"
-          hx-vals='{"search": "{{ tag.name }}"}'
-        >
-          {{ tag.name }}
-        </button>
-      {% endif %}
-    {% endfor %}
-
-    {% if all_tags|length > 8 %}
-      <!-- More button -->
-      <button id="toggle-more-tags"
-              class="badge badge-outline text-sm px-2 py-1 hover:cursor-pointer"
-              onclick="toggleMoreTags()">
-        <span id="more-text">More...</span>
-      </button>
-
-      <!-- Hidden additional tags (remaining tags only) -->
-      <div id="more-tags" class="hidden flex flex-wrap gap-2">
+  <div class="p-3">
+    <div class="flex justify-between items-start gap-4">
+      <div class="flex flex-wrap gap-2 flex-1">
+        <!-- First 10 tags -->
         {% for tag in all_tags %}
-          {% if forloop.counter > 8 %}
+          {% if forloop.counter <= 10 %}
             <button
               class="badge badge-outline text-sm px-2 py-1 hover:cursor-pointer"
               hx-get="{% url 'experiments:experiment_session_messages_view' request.team.slug experiment.public_id experiment_session.external_id %}"
@@ -42,24 +21,31 @@
             </button>
           {% endif %}
         {% endfor %}
+
+        {% if all_tags|length > 10 %}
+          {% for tag in all_tags %}
+            {% if forloop.counter > 10 %}
+              <button
+                class="more-tag hidden badge badge-outline text-sm px-2 py-1 hover:cursor-pointer"
+                hx-get="{% url 'experiments:experiment_session_messages_view' request.team.slug experiment.public_id experiment_session.external_id %}"
+                hx-target="#messages-container"
+                hx-vals='{"search": "{{ tag.name }}"}'
+              >
+                {{ tag.name }}
+              </button>
+            {% endif %}
+          {% endfor %}
+        {% endif %}
       </div>
-    {% endif %}
+
+      {% if all_tags|length > 10 %}
+        <div class="flex items-center gap-2">
+          <span id="more-text">Show All Tags</span>
+          <input type="checkbox" class="toggle toggle-primary" onchange="toggleMoreTags()" />
+        </div>
+      {% endif %}
+    </div>
   </div>
-
-  <script>
-    function toggleMoreTags() {
-      const moreTags = document.getElementById('more-tags');
-      const moreText = document.getElementById('more-text');
-
-      if (moreTags.classList.contains('hidden')) {
-        moreTags.classList.remove('hidden');
-        moreText.textContent = 'Less...';
-      } else {
-        moreTags.classList.add('hidden');
-        moreText.textContent = 'More...';
-      }
-    }
-  </script>
 {% endif %}
 
 <div id="table-top" class="max-w-5xl mt-4 border rounded-2xl">
@@ -460,15 +446,18 @@
   }
 
   function toggleMoreTags() {
-      const moreTags = document.getElementById('more-tags');
-      const moreText = document.getElementById('more-text');
-      console.log(moreTags)
-      if (moreTags.classList.contains('hidden')) {
-        moreTags.classList.remove('hidden');
-        moreText.textContent = 'Less...';
-      } else {
-        moreTags.classList.add('hidden');
-        moreText.textContent = 'More...';
-      }
+    const moreTags = document.querySelectorAll('.more-tag');
+    const moreText = document.getElementById('more-text');
+    const toggle = document.querySelector('input[type="checkbox"]');
+
+    if (moreTags.length === 0) return;
+
+    if (toggle.checked) {
+      moreTags.forEach(tag => tag.classList.remove('hidden'));
+      moreText.textContent = 'Show Less Tags';
+    } else {
+      moreTags.forEach(tag => tag.classList.add('hidden'));
+      moreText.textContent = 'Show All Tags';
     }
+  }
 </script>
