@@ -1,6 +1,7 @@
 import logging
 import unicodedata
 import uuid
+from collections import defaultdict
 from datetime import datetime
 from functools import cached_property
 from typing import cast
@@ -35,7 +36,7 @@ from field_audit.models import AuditAction
 from waffle import flag_is_active
 
 from apps.analysis.const import LANGUAGE_CHOICES
-from apps.annotations.models import CustomTaggedItem, Tag, TagCategories
+from apps.annotations.models import CustomTaggedItem, Tag
 from apps.assistants.sync import OpenAiSyncError, get_diff_with_openai_assistant, get_out_of_sync_files
 from apps.channels.datamodels import Attachment, AttachmentType
 from apps.channels.exceptions import ExperimentChannelException
@@ -1281,15 +1282,10 @@ def experiment_session_messages_view(request, team_slug: str, experiment_id: uui
         for tagged_item in message.prefetched_tagged_items
         if tagged_item.tag
     }
-    # Sort tags by category order, then by created_at within each category
-    all_tags_sorted = sorted(
-        all_tags_set,
-        key=lambda tag: (
-            TagCategories.category_order().get(tag.category, 999),  # Use 999(high number) for unknown categories
-            tag.created_at,
-        ),
-    )
 
+    tags_by_category = defaultdict(list)
+    for tag in all_tags_set:
+        tags_by_category[tag.get_category_display() if tag.category else "Manual Tags"].append(tag)
     available_languages, translatable_languages = _get_languages_for_chat(session)
     has_missing_translations = False
     translate_form_all = TranslateMessagesForm(
@@ -1339,7 +1335,7 @@ def experiment_session_messages_view(request, team_slug: str, experiment_id: uui
         "default_message": default_message,
         "default_translation_models_by_providers": get_default_translation_models_by_provider(),
         "llm_provider_models_dict": get_models_by_team_grouped_by_provider(request.team),
-        "all_tags": all_tags_sorted,
+        "tags_by_category": dict(tags_by_category),
     }
 
     return TemplateResponse(
