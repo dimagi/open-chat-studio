@@ -3,7 +3,7 @@ from datetime import timedelta
 
 from django.contrib.auth.decorators import permission_required
 from django.contrib.auth.mixins import PermissionRequiredMixin
-from django.db.models import Count, Q
+from django.db.models import Count, F, Max, Q
 from django.http import HttpResponse, HttpResponseRedirect
 from django.shortcuts import get_object_or_404, redirect
 from django.template.loader import render_to_string
@@ -170,7 +170,8 @@ class ChatbotExperimentTableView(LoginAndTeamRequiredMixin, SingleTableView, Per
                     ),
                 )
             )
-            .order_by("-session_count", "-messages_count")
+            .annotate(last_message=Max("sessions__chat__messages__created_at"))
+            .order_by(F("last_message").desc(nulls_last=True))
         )
         show_archived = self.request.GET.get("show_archived") == "on"
         if not show_archived:

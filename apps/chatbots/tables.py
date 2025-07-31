@@ -1,5 +1,6 @@
 import django_tables2 as tables
 from django.conf import settings
+from django.db.models import F
 from django.urls import reverse
 from django_tables2 import columns
 
@@ -7,7 +8,7 @@ from apps.experiments.models import Experiment
 from apps.experiments.tables import ExperimentSessionsTable, _show_chat_button, session_chat_url
 from apps.generics import actions
 from apps.generics.actions import chip_action
-from apps.generics.tables import ColumnWithHelp
+from apps.generics.tables import ColumnWithHelp, TimeAgoColumn
 
 
 def _name_label_factory(record, _):
@@ -27,6 +28,7 @@ class ChatbotTable(tables.Table):
         orderable=True,
     )
     participant_count = columns.Column(verbose_name="Participants", orderable=True)
+    last_message = TimeAgoColumn(verbose_name="Last activity", orderable=True)
     session_count = ColumnWithHelp(
         verbose_name="Sessions", orderable=True, help_text="Active sessions in the last 30 days"
     )
@@ -49,6 +51,15 @@ class ChatbotTable(tables.Table):
         }
         orderable = False
         empty_text = "No chatbots found."
+
+    def order_last_message(self, queryset, is_descending):
+        order = F("last_message")
+        if is_descending:
+            order = order.desc(nulls_last=True)
+        else:
+            order = order.asc(nulls_last=True)
+        queryset = queryset.order_by(order)
+        return queryset, True
 
 
 def chatbot_url_factory(_, __, record, value):
