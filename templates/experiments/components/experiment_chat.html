@@ -3,49 +3,75 @@
 {% load form_tags %}
 {% load waffle_tags %}
 {% load pagination_tags %}
-
-{% if all_tags %}
-  <div class="p-3">
-    <div class="flex justify-between items-start gap-4">
-      <div class="flex flex-wrap gap-2 flex-1">
-        <!-- First 10 tags -->
-        {% for tag in all_tags %}
-          {% if forloop.counter <= 10 %}
-            <button
-              class="badge badge-outline text-sm px-2 py-1 hover:cursor-pointer"
-              hx-get="{% url 'experiments:experiment_session_messages_view' request.team.slug experiment.public_id experiment_session.external_id %}"
-              hx-target="#messages-container"
-              hx-vals='{"search": "{{ tag.name }}"}'
-            >
-              {{ tag.name }}
-            </button>
-          {% endif %}
+{% if tags_by_category %}
+<div class="tags-filter-container p-3">
+  <!-- Categories Row -->
+  <div class="categories-row mb-4">
+    <div class="flex items-center gap-4 mb-2">
+      <span class="font-bold text-base">Tag Categories:</span>
+      <div class="flex flex-wrap gap-2">
+        {% for category, tags in tags_by_category.items %}
+          <button
+            class="btn btn-outline btn-sm"
+            data-category="{{ category }}"
+            data-category-index="{{ forloop.counter0 }}"
+            onclick="selectCategory('{{ category }}', this)"
+          >
+            {{ category }}
+          </button>
         {% endfor %}
-
-        {% if all_tags|length > 10 %}
-          {% for tag in all_tags %}
-            {% if forloop.counter > 10 %}
-              <button
-                class="more-tag hidden badge badge-outline text-sm px-2 py-1 hover:cursor-pointer"
-                hx-get="{% url 'experiments:experiment_session_messages_view' request.team.slug experiment.public_id experiment_session.external_id %}"
-                hx-target="#messages-container"
-                hx-vals='{"search": "{{ tag.name }}"}'
-              >
-                {{ tag.name }}
-              </button>
-            {% endif %}
-          {% endfor %}
-        {% endif %}
       </div>
-
-      {% if all_tags|length > 10 %}
-        <div class="flex items-center gap-2">
-          <span id="more-text">Show All Tags</span>
-          <input type="checkbox" class="toggle toggle-primary" onchange="toggleMoreTags()" />
-        </div>
-      {% endif %}
     </div>
   </div>
+
+  <!-- Tags Row -->
+  <div class="tags-row">
+    <div class="flex items-start gap-4">
+      <span class="font-bold text-base flex-shrink-0 leading-8">Tags:</span>
+      <div class="flex-1">
+        {% for category, tags in tags_by_category.items %}
+          <div
+            class="category-tags hidden"
+            data-category="{{ category }}"
+            data-category-index="{{ forloop.counter0 }}"
+          >
+            <div class="flex items-start">
+              <div class="flex flex-wrap gap-2 flex-1 items-start">
+                {% for tag in tags %}
+                  <button
+                    class="btn btn-outline btn-xs hover:btn-primary {% if forloop.counter > 8 %}hidden more-tag-{{ forloop.parentloop.counter0 }}{% endif %}"
+                    hx-get="{% url 'experiments:experiment_session_messages_view' request.team.slug experiment.public_id experiment_session.external_id %}"
+                    hx-target="#messages-container"
+                    hx-vals='{"search": "{{ tag.name }}"}'
+                    onclick="selectTag(this, '{{ tag.name }}')"
+                  >
+                    {{ tag.name }}
+                  </button>
+                {% endfor %}
+              </div>
+
+              {% if tags|length > 8 %}
+                <div class="flex items-center gap-2 ml-4 flex-shrink-0">
+                  <span class="text-sm text-gray-600" id="more-text-{{ forloop.counter0 }}">Show All Tags</span>
+                  <input
+                    type="checkbox"
+                    class="toggle toggle-primary toggle-sm"
+                    onchange="toggleMoreTags({{ forloop.counter0 }})"
+                  />
+                </div>
+              {% endif %}
+            </div>
+          </div>
+        {% endfor %}
+
+        <!-- Default message when no category is selected -->
+        <div id="no-category-selected" class="text-gray-500 text-sm leading-8">
+          Select a category to view tags
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
 {% endif %}
 
 <div id="table-top" class="max-w-5xl mt-4 border rounded-2xl">
@@ -445,19 +471,80 @@
     initializeTranslationForms();
   }
 
-  function toggleMoreTags() {
-    const moreTags = document.querySelectorAll('.more-tag');
-    const moreText = document.getElementById('more-text');
-    const toggle = document.querySelector('input[type="checkbox"]');
+  let currentCategory = null;
+  let currentCategoryButton = null;
+  let selectedTag = null;
 
-    if (moreTags.length === 0) return;
+  function selectCategory(categoryName, buttonElement) {
+    // Remove active class from all category buttons
+    document.querySelectorAll('[data-category]').forEach(btn => {
+      if (btn.classList.contains('btn') && btn !== buttonElement) {
+        btn.classList.replace('btn-primary', 'btn-outline');
+      }
+    });
+
+    // Add active class to selected category
+    buttonElement.classList.replace('btn-outline', 'btn-primary');
+
+    // Hide all earlier tag groups
+    document.querySelectorAll('.category-tags').forEach(group => {
+      group.classList.add('hidden');
+    });
+
+    // Hide the "no category selected" message
+    const noSelectionMsg = document.getElementById('no-category-selected');
+    if (noSelectionMsg) {
+      noSelectionMsg.classList.add('hidden');
+    }
+
+    // Show selected category's tags
+    const selectedTagGroup = document.querySelector(`.category-tags[data-category="${categoryName}"]`);
+    if (selectedTagGroup) {
+      selectedTagGroup.classList.remove('hidden');
+    }
+
+    // Update current category and button reference
+    currentCategory = categoryName;
+    currentCategoryButton = buttonElement;
+
+    clearSelectedTag();
+  }
+
+  // Function to toggle showing more tags
+  function toggleMoreTags(categoryIndex) {
+    const moreTagsElements = document.querySelectorAll(`.more-tag-${categoryIndex}`);
+    const moreText = document.getElementById(`more-text-${categoryIndex}`);
+    const toggle = document.querySelector(`input[onchange="toggleMoreTags(${categoryIndex})"]`);
 
     if (toggle.checked) {
-      moreTags.forEach(tag => tag.classList.remove('hidden'));
+      moreTagsElements.forEach(element => {
+        element.classList.remove('hidden');
+      });
       moreText.textContent = 'Show Less Tags';
     } else {
-      moreTags.forEach(tag => tag.classList.add('hidden'));
+      moreTagsElements.forEach(element => {
+        element.classList.add('hidden');
+      });
       moreText.textContent = 'Show All Tags';
     }
+  }
+
+  // Function to select a tag
+  function selectTag(tagButton, tagName) {
+    // Clear previous tag selection
+    clearSelectedTag();
+
+    // Mark current tag as selected
+    tagButton.classList.replace('btn-outline', 'btn-success');
+    selectedTag = tagName;
+  }
+
+  function clearSelectedTag() {
+    document.querySelectorAll('.category-tags .btn').forEach(btn => {
+      if (btn.classList.contains('btn-success')) {
+        btn.classList.replace('btn-success', 'btn-outline');
+      }
+    });
+    selectedTag = null;
   }
 </script>
