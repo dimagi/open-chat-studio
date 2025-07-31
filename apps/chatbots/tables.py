@@ -17,11 +17,20 @@ def _name_label_factory(record, _):
     return record.name
 
 
+def _chatbot_url_factory(record):
+    return reverse("chatbots:single_chatbot_home", args=[record.team.slug, record.id])
+
+
+def _chip_chatbot_url_factory(_, __, record, ___):
+    return _chatbot_url_factory(record)
+
+
 class ChatbotTable(tables.Table):
     name = actions = actions.ActionsColumn(
         actions=[
             chip_action(
                 label_factory=_name_label_factory,
+                url_factory=_chip_chatbot_url_factory,
             ),
         ],
         align="left",
@@ -45,9 +54,7 @@ class ChatbotTable(tables.Table):
         fields = ("name", "participant_count", "session_count", "messages_count")
         row_attrs = {
             **settings.DJANGO_TABLES2_ROW_ATTRS,
-            "data-redirect-url": lambda record: reverse(
-                "chatbots:single_chatbot_home", args=[record.team.slug, record.id]
-            ),
+            "data-redirect-url": _chatbot_url_factory,
         }
         orderable = False
         empty_text = "No chatbots found."
