@@ -607,7 +607,7 @@ TAGGIT_CASE_INSENSITIVE = True
 DOCUMENTATION_LINKS = {
     # Try to make these keys grep-able so that usages are easy to find
     "consent": "/concepts/consent/",
-    "embed": "/how-to/embed/",
+    "chat_widget": "/chat_widget/",
     "survey": "https://dimagi.atlassian.net/wiki/spaces/OCS/pages/2144305308/Surveys",
     "experiment": "/concepts/experiment/",
     "pipelines": "/concepts/pipelines/",
