@@ -7,6 +7,7 @@ from apps.experiments.models import Experiment
 from apps.experiments.tables import ExperimentSessionsTable, _show_chat_button, session_chat_url
 from apps.generics import actions
 from apps.generics.actions import chip_action
+from apps.generics.tables import ColumnWithHelp
 
 
 def _name_label_factory(record, _):
@@ -26,8 +27,12 @@ class ChatbotTable(tables.Table):
         orderable=True,
     )
     participant_count = columns.Column(verbose_name="Participants", orderable=True)
-    session_count = columns.Column(verbose_name="Sessions", orderable=True)
-    messages_count = columns.Column(verbose_name="Messages", orderable=True)
+    session_count = ColumnWithHelp(
+        verbose_name="Sessions", orderable=True, help_text="Active sessions in the last 30 days"
+    )
+    messages_count = ColumnWithHelp(
+        verbose_name="Messages", orderable=True, help_text="Messages sent and received in the last 30 days"
+    )
     actions = columns.TemplateColumn(
         template_name="experiments/components/experiment_actions_column.html",
         extra_context={"type": "chatbots"},
