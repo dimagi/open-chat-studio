@@ -471,9 +471,15 @@
     initializeTranslationForms();
   }
 
-  let currentCategory = null;
-  let currentCategoryButton = null;
-  let selectedTag = null;
+  if (typeof currentCategory === 'undefined') {
+  var currentCategory = sessionStorage.getItem('selectedCategory') || null;
+  }
+  if (typeof currentCategoryButton === 'undefined') {
+    var currentCategoryButton = null;
+  }
+  if (typeof selectedTag === 'undefined') {
+    var selectedTag = sessionStorage.getItem('selectedTag') || null;
+  }
 
   function selectCategory(categoryName, buttonElement) {
     // Remove active class from all category buttons
@@ -547,4 +553,50 @@
     });
     selectedTag = null;
   }
+
+  function restoreFilterState() {
+    const noSelectionMsg = document.getElementById('no-category-selected');
+
+    if (currentCategory) {
+        noSelectionMsg.classList.add('hidden');
+
+      const categoryButton = document.querySelector(`button[data-category="${currentCategory}"]`);
+      if (categoryButton) {
+        // Select the current category
+        categoryButton.classList.replace('btn-outline', 'btn-primary');
+
+        // Show the selected category's tags
+        document.querySelectorAll('.category-tags').forEach(group => {
+          group.classList.add('hidden');
+        });
+
+        const selectedTagGroup = document.querySelector(`.category-tags[data-category="${currentCategory}"]`);
+        if (selectedTagGroup) {
+          selectedTagGroup.classList.remove('hidden');
+
+          if (selectedTag) {
+            const tagButton = selectedTagGroup.querySelector(`button[onclick*="${selectedTag}"]`);
+            if (tagButton) {
+              tagButton.classList.replace('btn-outline', 'btn-primary');
+            }
+          }
+        }
+      }
+    } else {
+      if (noSelectionMsg) {
+        noSelectionMsg.classList.remove('hidden');
+        noSelectionMsg.style.display = 'block';
+      }
+      // Hide all tag groups
+      document.querySelectorAll('.category-tags').forEach(group => {
+        group.classList.add('hidden');
+      });
+    }
+  }
+
+  document.addEventListener('htmx:afterSwap', function(evt) {
+    console.log('HTMX after swap, restoring state');
+    // Small delay to ensure DOM is fully updated
+    setTimeout(restoreFilterState, 50);
+  });
 </script>
