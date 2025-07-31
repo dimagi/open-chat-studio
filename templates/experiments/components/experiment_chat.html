@@ -4,21 +4,65 @@
 {% load waffle_tags %}
 {% load pagination_tags %}
 
-<div id="table-top" class="max-w-5xl mt-4 border rounded-2xl">
-  {% if all_tags %}
+{% if all_tags %}
   <div class="flex flex-wrap gap-2 p-3">
+    <!-- First 10 tags -->
     {% for tag in all_tags %}
-      <button
-        class="badge badge-outline text-sm px-2 py-1 hover:cursor-pointer"
-        hx-get="{% url 'experiments:experiment_session_messages_view' request.team.slug experiment.public_id experiment_session.external_id %}"
-        hx-target="#messages-container"
-        hx-vals='{"search": "{{ tag.name }}"}'
-      >
-        {{ tag.name }}
-      </button>
-          {% endfor %}
-        </div>
+      {% if forloop.counter <= 10 %}
+        <button
+          class="badge badge-outline text-sm px-2 py-1 hover:cursor-pointer"
+          hx-get="{% url 'experiments:experiment_session_messages_view' request.team.slug experiment.public_id experiment_session.external_id %}"
+          hx-target="#messages-container"
+          hx-vals='{"search": "{{ tag.name }}"}'
+        >
+          {{ tag.name }}
+        </button>
       {% endif %}
+    {% endfor %}
+
+    {% if all_tags|length > 10 %}
+      <!-- More button -->
+      <button id="toggle-more-tags"
+              class="badge badge-outline text-sm px-2 py-1 hover:cursor-pointer"
+              onclick="toggleMoreTags()">
+        <span id="more-text">More...</span>
+      </button>
+
+      <!-- Hidden additional tags (remaining tags only) -->
+      <div id="more-tags" class="hidden flex flex-wrap gap-2">
+        {% for tag in all_tags %}
+          {% if forloop.counter > 10 %}
+            <button
+              class="badge badge-outline text-sm px-2 py-1 hover:cursor-pointer"
+              hx-get="{% url 'experiments:experiment_session_messages_view' request.team.slug experiment.public_id experiment_session.external_id %}"
+              hx-target="#messages-container"
+              hx-vals='{"search": "{{ tag.name }}"}'
+            >
+              {{ tag.name }}
+            </button>
+          {% endif %}
+        {% endfor %}
+      </div>
+    {% endif %}
+  </div>
+
+  <script>
+    function toggleMoreTags() {
+      const moreTags = document.getElementById('more-tags');
+      const moreText = document.getElementById('more-text');
+
+      if (moreTags.classList.contains('hidden')) {
+        moreTags.classList.remove('hidden');
+        moreText.textContent = 'Less...';
+      } else {
+        moreTags.classList.add('hidden');
+        moreText.textContent = 'More...';
+      }
+    }
+  </script>
+{% endif %}
+
+<div id="table-top" class="max-w-5xl mt-4 border rounded-2xl">
   <div class="mt-1 max-w-5xl flex justify-between p-3">
     <div class="flex flex-col gap-2">
       {% if perms.annotations.view_customtaggeditem %}
@@ -414,4 +458,17 @@
   } else {
     initializeTranslationForms();
   }
+
+  function toggleMoreTags() {
+      const moreTags = document.getElementById('more-tags');
+      const moreText = document.getElementById('more-text');
+      console.log(moreTags)
+      if (moreTags.classList.contains('hidden')) {
+        moreTags.classList.remove('hidden');
+        moreText.textContent = 'Less...';
+      } else {
+        moreTags.classList.add('hidden');
+        moreText.textContent = 'More...';
+      }
+    }
 </script>
