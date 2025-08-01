@@ -77,8 +77,7 @@
                   hx-vals='{"translate_all": "true"}'
                   hx-include="[name='search'], #translation-provider-all, [name='target_language'], #translation-provider-model-all"
                   hx-target="#messages-container"
-                  hx-indicator="#chat-message-untranslated"
-                  onclick="document.getElementById('translate-all-messages-modal').checked = false;"
+                  onclick="document.getElementById('translate-all-messages-modal').checked = false; showAllTranslationSpinners();"
                 >Translate All Messages
                 </button>
                 <label for="translate-all-messages-modal" class="btn">Cancel</label>
@@ -135,7 +134,7 @@
                         hx-vals='{"language": "{{ language }}"}'
                         hx-include="[name='search'], [name='language'], [name='show_original_translation'], #translation-provider-remaining, #translation-provider-model-remaining"
                         hx-target="#messages-container"
-                        hx-indicator="#chat-message-untranslated"
+                        hx-indicator=".translation-loading-spinner"
                         onclick="document.getElementById('translate-remaining-messages-modal').checked = false;"
                       >Translate Messages
                       </button>
@@ -165,6 +164,14 @@
     {% endif %}
   </div>
 
+  <!-- Loading indicator for initial messages -->
+  <div id="messages-initial-loading" class="htmx-show hidden">
+    <div class="flex items-center justify-center p-4">
+      <span class="loading loading-spinner loading-sm"></span>
+      <span class="ml-2">Loading...</span>
+    </div>
+  </div>
+
   <div class="flow-root">
     <div class="-mx-4 -my-2 overflow-x-auto sm:-mx-6 lg:-mx-8">
       <div class="inline-block min-w-full py-2 align-middle sm:px-6 lg:px-8">
@@ -189,25 +196,25 @@
                     <div class="grow">
                       <div class="message-contents">
                         {% if message.translation == default_message %}
-                          <div id="chat-message-untranslated">
-                            <div class="htmx-show">
+                          <div id="chat-message-{{ message.id }}-translation">
+                            <div class="translation-loading-spinner-{{ message.id }}">
                               <span class="loading loading-spinner loading-sm"></span>
                               <span class="ml-2">Translating...</span>
                             </div>
-                            <div class="htmx-hide">
+                            <div class="translation-content-{{ message.id }}">
                               <p>{{ message.translation|render_markdown }}</p>
                             </div>
                           </div>
                         {% else %}
-                          <div id="chat-message-untranslated">
-                            <div class="htmx-hide">
+                          <div id="chat-message-{{ message.id }}-translation">
+                            <div class="translation-content-{{ message.id }}">
                               {% if message.translation %}
                                 <p>{{ message.translation|render_markdown }}</p>
                               {% else %}
                                 <p>{{ message.content|render_markdown }}</p>
                               {% endif %}
                             </div>
-                            <div class="htmx-show">
+                            <div class="translation-loading-spinner-{{ message.id }}" style="display: none;">
                               <span class="loading loading-spinner loading-sm"></span>
                               <span class="ml-2">Translating...</span>
                             </div>
@@ -215,13 +222,13 @@
                         {% endif %}
                       </div>
                       {% if show_original_translation and not message.translation == default_message %}
-                        <div id="chat-message-untranslated" class="pg-text-muted htmx-hide">
+                        <div id="chat-message-{{ message.id }}-original" class="pg-text-muted htmx-hide">
                           <p><strong>Original Message: </strong>{{ message.content|render_markdown }}</p>
                         </div>
                       {% endif %}
                       {% if message.translation == default_message %}
                         {# hidden when loading spinners are shown #}
-                        <div id="chat-message-untranslated" class="pg-text-muted htmx-hide">
+                        <div id="chat-message-{{ message.id }}-original-default" class="pg-text-muted htmx-hide">
                           <p><strong>Original Message: </strong>{{ message.content|render_markdown }}</p>
                         </div>
                       {% endif %}
