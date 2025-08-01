@@ -1,12 +1,15 @@
+import functools
 import logging
+from collections import defaultdict
 from dataclasses import dataclass
 from datetime import datetime, timedelta
 from functools import cached_property
 from typing import TYPE_CHECKING, Any, ClassVar, Union
 
+from asgiref.sync import async_to_sync
 from django.db import transaction, utils
 from langchain_community.utilities.openapi import OpenAPISpec
-from langchain_core.tools import BaseTool
+from langchain_core.tools import BaseTool, StructuredTool
 from pgvector.django import CosineDistance
 
 from apps.channels.models import ChannelPlatform
@@ -20,6 +23,7 @@ from apps.files.models import FileChunkEmbedding
 from apps.pipelines.models import Node
 from apps.pipelines.nodes.tool_callbacks import ToolCallbacks
 from apps.service_providers.llm_service.prompt_context import ParticipantDataProxy
+from apps.teams.models import Team
 from apps.utils.time import pretty_date
 
 if TYPE_CHECKING:
@@ -94,7 +98,7 @@ class CustomBaseTool(BaseTool):
 
     async def _arun(self, *args, **kwargs) -> str:
         """Use the tool asynchronously."""
-        raise NotImplementedError("custom_search does not support async")
+        return self._run(*args, **kwargs)
 
     def action(self, *args, **kwargs):
         raise Exception("Not implemented")
@@ -432,7 +436,29 @@ def get_node_tools(
         tool_names.append(AgentTools.ATTACH_MEDIA)
     tools = get_tool_instances(tool_names, experiment_session, tool_callbacks)
     tools.extend(get_custom_action_tools(node))
+    tools.extend(get_mcp_tool_instances(node, experiment_session.team))
     return tools
+
+
+def get_mcp_tool_instances(node: Node, team: Team):
+    """Fetch tools from MCP servers based on the selected tools in the node parameters."""
+
+    mcp_tools = node.params.get("mcp_tools", [])
+    if not mcp_tools:
+        return []
+
+    server_tools = defaultdict(list)
+    for tool in mcp_tools:
+        mcp_server_id, tool_name = tool.split(":")
+        server_tools[int(mcp_server_id)].append(tool_name)
+
+    final_tool_instances = []
+    for server in team.mcpserver_set.filter(id__in=server_tools.keys()):
+        remote_tools = server.fetch_tools()
+        tool_instances = [_convert_to_sync_tool(tool) for tool in remote_tools if tool.name in server_tools[server.id]]
+        final_tool_instances.extend(tool_instances)
+
+    return final_tool_instances
 
 
 def get_tool_instances(
@@ -463,3 +489,19 @@ def get_tool_for_custom_action_operation(custom_action_operation) -> BaseTool | 
     method = spec.get_methods_for_path(path)[0]
     function_def = openapi_spec_op_to_function_def(spec, path, method)
     return function_def.build_tool(auth_service)
+
+
+def _convert_to_sync_tool(tool: StructuredTool) -> StructuredTool:
+    tool.func = _create_sync_wrapper(tool.coroutine)
+    tool.coroutine = None
+    return tool
+
+
+def _create_sync_wrapper(coroutine_func):
+    """Create a synchronous wrapper that preserves the original function signature."""
+
+    @functools.wraps(coroutine_func)
+    def sync_wrapper(*args, **kwargs):
+        return async_to_sync(coroutine_func)(*args, **kwargs)
+
+    return sync_wrapper

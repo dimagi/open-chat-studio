@@ -40,6 +40,16 @@ class AuthService(pydantic.BaseModel):
     def _default_retry_wait(self):
         return tenacity.wait.wait_exponential_jitter()
 
+    def get_auth_headers(self) -> dict:
+        """Extract auth headers from the auth object by constructing a dummy request and auth flow."""
+        kwargs = self._get_http_client_kwargs()
+        if auth := kwargs.get("auth"):
+            request = httpx.Request("GET", "")
+            auth_flow = auth.auth_flow(request)
+            auth_request = next(auth_flow)
+            return dict(auth_request.headers)
+        return {}
+
 
 class BasicAuthService(AuthService):
     username: str

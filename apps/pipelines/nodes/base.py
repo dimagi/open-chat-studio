@@ -437,6 +437,7 @@ class OptionsSource(StrEnum):
     custom_actions = "custom_actions"
     collection = "collection"
     built_in_tools = "built_in_tools"
+    mcp_tools = "mcp_tools"
     collection_index = "collection_index"
     built_in_tools_config = "built_in_tools_config"
     text_editor_autocomplete_vars_llm_node = "text_editor_autocomplete_vars_llm_node"

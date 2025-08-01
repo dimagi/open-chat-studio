@@ -1,12 +1,14 @@
 import json
 import os
 from datetime import datetime
+from inspect import signature
 from unittest import mock
 
 import pytest
 import pytz
 from django.utils import timezone
 from freezegun import freeze_time
+from langchain_core.tools import StructuredTool
 
 from apps.chat.agent import tools
 from apps.chat.agent.schemas import WeekdaysEnum
@@ -17,8 +19,10 @@ from apps.chat.agent.tools import (
     SearchIndexTool,
     SearchToolConfig,
     UpdateParticipantDataTool,
+    _convert_to_sync_tool,
     _move_datetime_to_new_weekday_and_time,
     create_schedule_message,
+    get_mcp_tool_instances,
 )
 from apps.events.models import ScheduledMessage, TimePeriod
 from apps.experiments.models import AgentTools, Experiment
@@ -27,6 +31,8 @@ from apps.utils.factories.documents import CollectionFactory
 from apps.utils.factories.events import EventActionFactory
 from apps.utils.factories.experiment import ExperimentSessionFactory
 from apps.utils.factories.files import FileFactory
+from apps.utils.factories.mcp_integrations import MCPServerFactory
+from apps.utils.factories.pipelines import NodeFactory
 from apps.utils.time import pretty_date
 
 
@@ -515,3 +521,51 @@ Oranges are nice
 def test_tools_present():
     for tool in AgentTools.values:
         assert tool in TOOL_CLASS_MAP
+
+
+def test_convert_to_sync_tool():
+    """Test that an async tool is converted to a sync tool and that the function's signature is preserved."""
+
+    async def async_func(url: str, method: str = "GET"):
+        return f"{method} {url}"
+
+    async_tool = StructuredTool(
+        name="test-tool",
+        description="test-description",
+        args_schema={},
+        response_format="content_and_artifact",
+        func=None,
+        coroutine=async_func,
+    )
+
+    sync_tool = _convert_to_sync_tool(async_tool)
+    assert sync_tool.coroutine is None
+    assert sync_tool.func is not None
+    assert str(signature(sync_tool.func)) == "(url: str, method: str = 'GET')"
+    assert sync_tool.func("https://example.com", "GET") == "GET https://example.com"
+
+
+@pytest.mark.django_db()
+@mock.patch("apps.mcp_integrations.models.McpServer.fetch_tools")
+def test_get_mcp_tool_instances(fetch_tools, team):
+    async def async_func(url: str, method: str = "GET"):
+        return f"{method} {url}"
+
+    fetch_tools.return_value = [
+        StructuredTool(
+            name="test-tool",
+            description="test-description",
+            args_schema={},
+            response_format="content_and_artifact",
+            func=None,
+            coroutine=async_func,
+        )
+    ]
+    server = MCPServerFactory(team=team)
+    node = NodeFactory(
+        params={
+            "mcp_tools": [f"{server.id}:test-tool"],
+        }
+    )
+    tools = get_mcp_tool_instances(node, team)
+    assert len(tools) == 1

@@ -43,6 +43,7 @@ team_urlpatterns = [
     path("files/", include("apps.files.urls")),
     path("annotations/", include("apps.annotations.urls")),
     path("participants/", include("apps.participants.urls")),
+    path("mcp_integrations/", include("apps.mcp_integrations.urls")),
     path("slack/", include("apps.slack.urls")),
     path("help/", include("apps.help.urls")),
     path("documents/", include("apps.documents.urls")),

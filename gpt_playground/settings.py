@@ -113,6 +113,7 @@ PROJECT_APPS = [
     "apps.dashboard",
     "apps.evaluations",
     "apps.trace",
+    "apps.mcp_integrations",
 ]
 
 SPECIAL_APPS = ["debug_toolbar"] if USE_DEBUG_TOOLBAR else []
@@ -194,7 +195,7 @@ TEMPLATES = [
     },
 ]
 
-WSGI_APPLICATION = "gpt_playground.wsgi.application"
+ASGI_APPLICATION = "gpt_playground.asgi.application"
 
 FORM_RENDERER = "django.forms.renderers.TemplatesSetting"
 FORMS_URLFIELD_ASSUME_HTTPS = True
