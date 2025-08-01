@@ -219,20 +219,7 @@
 
     {% if perms.chat.view_chat %}
       <div role="tabpanel" class="tab-content" id="content-allsessions">
-        <div class="app-card">
-          <div class="relative">
-            <div class="flex items-center gap-4">
-              {{ available_tags|default:""|json_script:"available-tags-data" }}
-              {{ experiment_versions|default:""|json_script:"experiment-versions-data" }}
-              {{ channel_list|default:"[]"|json_script:"channel-list-data" }}
-              {% if perms.experiments.download_chats %}
-                {% include "experiments/components/exports.html" %}
-              {% endif %}
-              {% include "evaluations/create_dataset_button.html" %}
-              {% include "experiments/filters.html" %}
-            </div>
-          </div>
-        </div>
+        {% include "chatbots/components/session_table_actions.html" %}
         <div id="sessions-table" data-url="{% url 'chatbots:sessions-list' request.team.slug experiment.id %}">
         </div>
       </div>
