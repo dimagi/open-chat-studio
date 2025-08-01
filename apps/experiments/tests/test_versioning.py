@@ -425,3 +425,53 @@ class TestCopyExperiment:
             "errors": {"test": "value"},
             "viewport": {"x": 235.23538305148782, "y": 365.64304629840245, "zoom": 0.5570968254096753},
         }
+
+    @pytest.mark.django_db()
+    def test_collection_duplicate_field_names_bug(self):
+        from apps.utils.factories.documents import CollectionFactory
+        from apps.utils.factories.files import FileFactory
+
+        collection = CollectionFactory(is_index=False)
+        collection_version = collection.create_new_version()
+        file = FileFactory(team=collection.team)
+        collection.files.add(file, through_defaults={"document_source": None})
+
+        current_version_details = collection.version_details
+        previous_version_details = collection_version.version_details
+
+        # Demonstrate the bug: both fields have the same name "files"
+        field_names = [field.name for field in current_version_details.fields]
+        files_field_count = field_names.count("files")
+        assert files_field_count == 2, f"Expected 2 'files' fields but found {files_field_count}"
+
+        # The bug: _fields_dict only contains one "files" entry due to duplicate keys
+        # The second "files" field (Document Sources) overwrites the first (General files)
+        assert len(current_version_details._fields_dict) < len(current_version_details.fields), (
+            "fields_dict should have fewer entries than fields due to duplicate names"
+        )
+
+        # Verify which field is accessible via get_field()
+        accessible_field = current_version_details.get_field("files")
+        assert accessible_field.group_name == "Document Sources", (
+            "Only the Document Sources 'files' field is accessible, General files field is overwritten"
+        )
+
+        # Compare versions - this should detect the change but currently fails
+        current_version_details.compare(previous_version_details)
+
+        # This assertion currently fails due to the bug
+        # The directly added file change is not detected because the General "files" field
+        # is overwritten by the Document Sources "files" field in _fields_dict
+        assert current_version_details.fields_changed is True, (
+            "Adding a file should be detected as a change, but fails due to duplicate field names"
+        )
+
+        # Find the field that should have detected the change
+        general_files_fields = [
+            f for f in current_version_details.fields if f.name == "files" and f.group_name == "General"
+        ]
+        assert len(general_files_fields) == 1, "Should have one General files field"
+
+        general_files_field = general_files_fields[0]
+        # This field should show as changed but doesn't due to the bug
+        assert general_files_field.changed is True, "General files field should detect the added file as a change"
