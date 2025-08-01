@@ -388,6 +388,7 @@ class LLMResponseWithPrompt(LLMResponse, HistoryMixin, OutputMessageTagMixin):
     )
     mcp_tools: list[str] = Field(
         default_factory=list,
+        title="MCP Tools",
         description="MCP tools to enable for the bot",
         json_schema_extra=UiSchema(widget=Widgets.multiselect, options_source=OptionsSource.mcp_tools),
     )

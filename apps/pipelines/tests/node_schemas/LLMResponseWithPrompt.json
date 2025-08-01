@@ -172,7 +172,7 @@
       "items": {
         "type": "string"
       },
-      "title": "Mcp Tools",
+      "title": "MCP Tools",
       "type": "array",
       "ui:optionsSource": "mcp_tools",
       "ui:widget": "multiselect"
