@@ -16,7 +16,7 @@
       filterIndex++;
     }
     params.set(`filter_${filterIndex}_column`, 'experiment');
-    params.set(`filter_${filterIndex}_operator`, 'all of');
+    params.set(`filter_${filterIndex}_operator`, 'any of');
     params.set(`filter_${filterIndex}_value`, JSON.stringify([experimentId]));
     linkElement.href += '?' + params.toString();
   }
