@@ -127,7 +127,12 @@ class CreateDataset(LoginAndTeamRequiredMixin, CreateView, PermissionRequiredMix
         return initial
 
     def _get_filter_context_data(self):
-        experiments = Experiment.objects.filter(team=self.request.team).values("id", "name").order_by("name")
+        experiments = (
+            Experiment.objects.working_versions_queryset()
+            .filter(team=self.request.team)
+            .values("id", "name")
+            .order_by("name")
+        )
         experiment_list = [{"id": exp["id"], "name": exp["name"]} for exp in experiments]
 
         channel_list = ChannelPlatform.for_filter(self.request.team)
