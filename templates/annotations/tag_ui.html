@@ -3,9 +3,9 @@
     <i class="fa-solid fa-tags"></i>
     {% for tag in object.prefetched_tags_json %}
       <div
-        class="
+        class="badge
                {% if not tag.is_system_tag %}
-                 badge badge-neutral
+                  badge-neutral
                  {% if tag.added_by == request.user.email %}
                    ring-1 ring-blue-400
                  {% endif %}
