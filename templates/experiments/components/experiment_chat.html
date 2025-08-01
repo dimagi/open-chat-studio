@@ -153,8 +153,8 @@
     </div>
 
     {% if total_pages > 1 %}
-      <div class="flex items-center">
-        {% include "experiments/components/pagination_buttons.html" with btn_size="sm" %}
+      <div class="justify-end">
+        {% include "experiments/components/pagination_buttons.html" %}
       </div>
     {% endif %}
   </div>
@@ -172,8 +172,8 @@
                         get isSelected() { return commentsRow === {{ forloop.counter }} },
                         }'
               >
-                <td class="whitespace-nowrap py-4 pl-4 pr-3 text-sm font-medium">{{ page_start_index|add:forloop.counter }}</td>
-                <td class="px-3 py-4 text-sm flex flex-col gap-2">
+                <td class="whitespace-nowrap py-2 pl-4 pr-3 text-sm font-medium">{{ page_start_index|add:forloop.counter }}</td>
+                <td class="px-3 py-2 text-sm flex flex-col gap-2">
                   <div class="flex place-items-center">
                     {% if message.is_ai_message %}
                       {% include "experiments/chat/components/system_icon.html" %}
@@ -293,7 +293,7 @@
               </tr>
             {% empty %}
               <tr>
-                <td colspan="2" class="p-4 text-center text">
+                <td colspan="2" class="px-4 py-2 text-center text">
                   {% if search %}
                     No messages found matching "{{ search }}".
                   {% else %}
@@ -305,21 +305,9 @@
           </tbody>
         </table>
 
-        <!-- Pagination -->
-        {% if total_pages > 1 %}
-          <div class="p-4 flex justify-between">
-            <div class="mt-4 flex justify-left">
-              <div>
-                <p class="text">
-                  Showing <span class="font-semibold">{{ page_size|multiply:page|subtract:page_size|add:1 }}</span> to <span class="font-semibold">{{ page_size|multiply:page|minimum:total_messages }}</span> of <span class="font-semibold">{{ total_messages }}</span> messages
-                </p>
-              </div>
-            </div>
-            <div class="flex justify-right">
-              {% include "experiments/components/pagination_buttons.html" %}
-            </div>
-          </div>
-        {% endif %}
+        <div class="flex justify-end p-3">
+          {% include "experiments/components/pagination_buttons.html" %}
+        </div>
       </div>
     </div>
   </div>
