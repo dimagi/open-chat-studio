@@ -5,7 +5,6 @@ import time
 from typing import TYPE_CHECKING, Any
 from uuid import UUID
 
-from apps.experiments.models import Participant
 from apps.service_providers.tracing.const import SpanLevel
 from apps.trace.models import Trace
 
@@ -26,29 +25,25 @@ class OCSTracer(Tracer):
         super().__init__("ocs", {})
         self.experiment_id = experiment_id
         self.team_id = team_id
-        self.participant = None
         self.output_message_id: str = None
         self.start_time: float = None
 
     @property
     def ready(self) -> bool:
         """OCS tracer is always ready when experiment_id and team_id are set."""
-        return self.experiment_id and self.team_id and self.participant
+        return self.experiment_id and self.team_id
 
     def start_trace(
         self,
         trace_name: str,
         trace_id: UUID,
         session: ExperimentSession,
-        user_id: str,
         inputs: dict[str, Any] | None = None,
         metadata: dict[str, Any] | None = None,
     ) -> None:
         """Start a trace and record the start time."""
-        super().start_trace(trace_name, trace_id, session, user_id, inputs, metadata)
+        super().start_trace(trace_name, trace_id, session, inputs, metadata)
 
-        # TODO: Trace Service should get participant object directly
-        self.participant = Participant.objects.get(team_id=self.team_id, identifier=user_id)
         self.start_time = time.time()
         self.session = session
 
@@ -66,7 +61,7 @@ class OCSTracer(Tracer):
             Trace.objects.create(
                 experiment_id=self.experiment_id,
                 session_id=self.session.id,
-                participant=self.participant,
+                participant=self.session.participant,
                 output_message_id=self.output_message_id,
                 duration=duration_ms,
                 team_id=self.team_id,

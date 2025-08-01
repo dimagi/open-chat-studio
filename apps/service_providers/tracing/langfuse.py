@@ -48,19 +48,16 @@ class LangFuseTracer(Tracer):
         trace_name: str,
         trace_id: UUID,
         session: ExperimentSession,
-        user_id: str,
         inputs: dict[str, Any] | None = None,
         metadata: dict[str, Any] | None = None,
     ) -> None:
         if self.trace:
             raise ServiceReentryException("Service does not support reentrant use.")
 
-        super().start_trace(trace_name, trace_id, session, user_id, inputs)
+        super().start_trace(trace_name, trace_id, session, inputs)
 
         self.client = client_manager.get(self.config)
-        self.trace = self.client.trace(
-            name=trace_name, session_id=session.external_id, user_id=user_id, input=inputs, metadata=metadata
-        )
+        self.trace = self.client.trace(name=trace_name, session_id=session.external_id, input=inputs, metadata=metadata)
 
     def end_trace(self, outputs: dict[str, Any] | None = None, error: Exception | None = None) -> None:
         super().end_trace(outputs=outputs, error=error)

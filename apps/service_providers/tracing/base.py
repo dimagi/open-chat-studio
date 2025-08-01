@@ -28,7 +28,6 @@ class Tracer(ABC):
 
         self.trace_id: UUID = None
         self.session: ExperimentSession = None
-        self.user_id: str = None
         self.trace_name: str = None
 
     @property
@@ -42,7 +41,6 @@ class Tracer(ABC):
         trace_name: str,
         trace_id: UUID,
         session: ExperimentSession,
-        user_id: str,
         inputs: dict[str, Any] | None = None,
         metadata: dict[str, Any] | None = None,
     ) -> None:
@@ -59,14 +57,12 @@ class Tracer(ABC):
         self.trace_name = trace_name
         self.trace_id = trace_id
         self.session = session
-        self.user_id = user_id
 
     def end_trace(self, outputs: dict[str, Any] | None = None, error: Exception | None = None) -> None:
         """This must be called after all tracing methods are called to finalize the trace."""
         self.trace_name = None
         self.trace_id = None
         self.session = None
-        self.user_id = None
 
     @abstractmethod
     def start_span(

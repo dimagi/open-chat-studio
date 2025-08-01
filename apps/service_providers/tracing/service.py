@@ -32,17 +32,15 @@ class TracingService:
         self.trace_name: str | None = None
         self.trace_id: UUID | None = None
         self.session: ExperimentSession | None = None
-        self.user_id: str | None = None
         self.experiment_id: int | None = experiment_id
         self.start_time = None
         self._input_message_id = None
         self._output_message_id = None
-        self.participant_id: int | None = None
         self.team_id: int | None = team_id
 
-        self._init_ocs_tracer()
         if (self.experiment_id is None or self.team_id is None) and self._tracers:
             raise ValueError("Tracers must be empty if experiment_id or team_id is None")
+        self._init_ocs_tracer()
 
     def _init_ocs_tracer(self):
         from apps.service_providers.tracing.ocs_tracer import OCSTracer
@@ -73,7 +71,6 @@ class TracingService:
         self,
         name: str,
         session: ExperimentSession,
-        user_id: str,
         inputs: dict[str, Any],
         metadata: dict[str, Any] | None = None,
     ):
@@ -83,7 +80,7 @@ class TracingService:
         otherwise it will start a span.
         """
         if not self.trace_id:
-            with self.trace(name, session, user_id, inputs, metadata):
+            with self.trace(name, session, inputs, metadata):
                 yield self
         else:
             with self.span(name, inputs, metadata):
@@ -94,17 +91,13 @@ class TracingService:
         self,
         trace_name: str,
         session: ExperimentSession,
-        user_id: str,
         inputs: dict[str, Any] | None = None,
         metadata: dict[str, str] | None = None,
-        participant_id: int | None = None,
     ):
         self.trace_id = uuid.uuid4()
         self.trace_name = trace_name
         self.session = session
-        self.user_id = user_id
         self._start_time = time.time()
-        self.participant_id = participant_id
 
         try:
             self._start_traces(inputs, metadata)
@@ -122,7 +115,6 @@ class TracingService:
                     trace_name=self.trace_name,
                     trace_id=self.trace_id,
                     session=self.session,
-                    user_id=self.user_id,
                     inputs=inputs,
                     metadata=metadata,
                 )
@@ -215,8 +207,8 @@ class TracingService:
         tracer_callbacks = self.get_langchain_callbacks(run_name_map, filter_patterns)
         _, span_name = self._get_current_span_info()
         metadata = {}
-        if self.user_id:
-            metadata["participant-id"] = self.user_id
+        if self.session:
+            metadata["participant-id"] = self.session.participant.identifier
         if self.session:
             metadata["session-id"] = self.session.external_id
         config = RunnableConfig(
@@ -292,7 +284,6 @@ class TracingService:
         self.trace_id = None
         self.trace_name = None
         self.session = None
-        self.user_id = None
         self.outputs = defaultdict(dict)
         self.span_stack = []
 
