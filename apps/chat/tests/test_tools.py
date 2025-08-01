@@ -394,6 +394,54 @@ class TestUpdateParticipantDataTool:
 
 
 @pytest.mark.django_db()
+class TestAppendToParticipantDataTool(BaseTestAgentTool):
+    tool_cls = tools.AppendToParticipantDataTool
+
+    def test_append_when_data_does_not_exist(self, session):
+        response = self._invoke_tool(session, key="test", value="new_value")
+        assert response == "Success"
+        assert session.participant_data_from_experiment == {"test": ["new_value"]}
+
+    def test_append_when_data_exists(self, session):
+        # First call to create the data
+        self._invoke_tool(session, key="test", value="first_value")
+        # Second call to append to the existing data
+        response = self._invoke_tool(session, key="test", value="second_value")
+        assert response == "Success"
+        assert session.participant_data_from_experiment == {"test": ["first_value", "second_value"]}
+
+    @pytest.mark.parametrize(
+        ("existing_value", "new_value", "expected_result"),
+        [
+            ("string", "new_value", ["string", "new_value"]),
+            ("string", ["new_value1", "new_value2"], ["string", "new_value1", "new_value2"]),
+            ({"key": "value"}, "new_value", [{"key": "value"}, "new_value"]),
+            (["val1", "val2"], "new_value", ["val1", "val2", "new_value"]),
+        ],
+    )
+    def test_append_different_values(self, session, existing_value, new_value, expected_result):
+        # First, set a non-list value using UpdateParticipantDataTool
+        update_tool = UpdateParticipantDataTool(experiment_session=session)
+        update_tool.action(key="test", value=existing_value)
+
+        # Then append to it using AppendToParticipantDataTool
+        response = self._invoke_tool(session, key="test", value=new_value)
+        assert response == "Success"
+        assert session.participant_data_from_experiment == {"test": expected_result}
+
+
+@pytest.mark.django_db()
+class TestIncrementParticipantDataTool(BaseTestAgentTool):
+    tool_cls = tools.IncrementParticipantDataTool
+
+    def test_increment(self, session):
+        response = self._invoke_tool(session, key="test", value=1)
+        assert response == "Success"
+
+        assert session.participant_data_from_experiment == {"test": 1}
+
+
+@pytest.mark.django_db()
 class TestSearchIndexTool:
     def load_vector_data(self):
         current_directory = os.path.dirname(os.path.abspath(__file__))

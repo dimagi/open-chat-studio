@@ -1162,6 +1162,9 @@ class CodeNode(PipelineNode, OutputMessageTagMixin):
             default_guarded_getitem,
             default_guarded_getiter,
         )
+        from RestrictedPython.Guards import (
+            guarded_iter_unpack_sequence,
+        )
 
         custom_globals = safe_globals.copy()
 
@@ -1181,9 +1184,13 @@ class CodeNode(PipelineNode, OutputMessageTagMixin):
                 "time": time,
                 "_getitem_": default_guarded_getitem,
                 "_getiter_": default_guarded_getiter,
+                "_iter_unpack_sequence_": guarded_iter_unpack_sequence,
                 "_write_": lambda x: x,
                 "get_participant_data": participant_data_proxy.get,
                 "set_participant_data": participant_data_proxy.set,
+                "set_participant_data_key": participant_data_proxy.set_key,
+                "append_to_participant_data_key": participant_data_proxy.append_to_key,
+                "increment_participant_data_key": participant_data_proxy.increment_key,
                 "get_participant_schedules": participant_data_proxy.get_schedules,
                 "get_temp_state_key": self._get_temp_state_key(output_state),
                 "set_temp_state_key": self._set_temp_state_key(output_state),

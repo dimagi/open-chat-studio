@@ -576,6 +576,8 @@ class AgentTools(models.TextChoices):
     DELETE_REMINDER = "delete-reminder", gettext("Delete Reminder")
     MOVE_SCHEDULED_MESSAGE_DATE = "move-scheduled-message-date", gettext("Move Reminder Date")
     UPDATE_PARTICIPANT_DATA = "update-user-data", gettext("Update Participant Data")
+    APPEND_TO_PARTICIPANT_DATA = "append-to-participant-data", gettext("Append to Participant Data")
+    INCREMENT_PARTICIPANT_DATA = "increment-participant-data", gettext("Increment Participant Data")
     ATTACH_MEDIA = "attach-media", gettext("Attach Media")
     END_SESSION = "end-session", gettext("End Session")
     SEARCH_INDEX = "search-index", gettext("Search Index")
@@ -1310,16 +1312,22 @@ class Participant(BaseTeamModel):
     public_id = models.UUIDField(default=uuid.uuid4, unique=True)
     user = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.CASCADE, null=True, blank=True)
     platform = models.CharField(max_length=32)
+    remote_id = models.CharField(max_length=255, blank=True, default="")
 
     class Meta:
         ordering = ["platform", "identifier"]
         unique_together = [("team", "platform", "identifier")]
 
     @classmethod
-    def create_anonymous(cls, team: Team, platform: str) -> "Participant":
+    def create_anonymous(cls, team: Team, platform: str, remote_id: str = "") -> "Participant":
         public_id = str(uuid.uuid4())
         return cls.objects.create(
-            team=team, platform=platform, identifier=f"anon:{public_id}", public_id=public_id, name="Anonymous"
+            team=team,
+            platform=platform,
+            identifier=f"anon:{public_id}",
+            public_id=public_id,
+            name="Anonymous",
+            remote_id=remote_id,
         )
 
     @property

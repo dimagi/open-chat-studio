@@ -97,8 +97,9 @@ from apps.experiments.views.prompt import PROMPT_DATA_SESSION_KEY
 from apps.files.models import File
 from apps.generics.chips import Chip
 from apps.generics.views import generic_home, paginate_session, render_session_details
+from apps.service_providers.llm_service.default_models import get_default_translation_models_by_provider
 from apps.service_providers.models import LlmProvider, LlmProviderModel
-from apps.service_providers.utils import get_llm_provider_choices
+from apps.service_providers.utils import get_llm_provider_choices, get_models_by_team_grouped_by_provider
 from apps.teams.decorators import login_and_team_required, team_required
 from apps.teams.mixins import LoginAndTeamRequiredMixin
 from apps.utils.base_experiment_table_view import BaseExperimentTableView
@@ -451,9 +452,11 @@ def base_single_experiment_view(request, team_slug, experiment_id, template_name
     user_sessions = (
         ExperimentSession.objects.with_last_message_created_at()
         .filter(participant__user=request.user, experiment=experiment)
-        .exclude(experiment_channel__platform=ChannelPlatform.API)
+        .exclude(experiment_channel__platform__in=[ChannelPlatform.API, ChannelPlatform.EVALUATIONS])
     )
-    channels = experiment.experimentchannel_set.exclude(platform__in=[ChannelPlatform.WEB, ChannelPlatform.API]).all()
+    channels = experiment.experimentchannel_set.exclude(
+        platform__in=[ChannelPlatform.WEB, ChannelPlatform.API, ChannelPlatform.EVALUATIONS]
+    ).all()
     used_platforms = {channel.platform_enum for channel in channels}
     available_platforms = ChannelPlatform.for_dropdown(used_platforms, experiment.team)
     platform_forms = {}
@@ -489,7 +492,16 @@ def base_single_experiment_view(request, team_slug, experiment_id, template_name
         "channel_list": channel_list,
         "allow_copy": not experiment.child_links.exists(),
         "date_range_options": DATE_RANGE_OPTIONS,
-        "filter_columns": ["participant", "last_message", "first_message", "tags", "versions", "channels", "state"],
+        "filter_columns": [
+            "participant",
+            "last_message",
+            "first_message",
+            "tags",
+            "versions",
+            "channels",
+            "state",
+            "remote_id",
+        ],
         "state_list": SessionStatus.for_chatbots(),
         **_get_events_context(experiment, team_slug, request.origin),
     }
@@ -1313,6 +1325,8 @@ def experiment_session_messages_view(request, team_slug: str, experiment_id: uui
         "translate_form_all": translate_form_all,
         "translate_form_remaining": translate_form_remaining,
         "default_message": default_message,
+        "default_translation_models_by_providers": get_default_translation_models_by_provider(),
+        "llm_provider_models_dict": get_models_by_team_grouped_by_provider(request.team),
     }
 
     return TemplateResponse(
@@ -1328,7 +1342,8 @@ def translate_messages_view(request, team_slug: str, experiment_id: uuid.UUID, s
     from apps.analysis.translation import translate_messages_with_llm
 
     session = request.experiment_session
-    provider_model = request.POST.get("provider_model", "")
+    provider_id = request.POST.get("llm_provider", "")
+    model_id = request.POST.get("llm_provider_model", "")
     valid_languages = [choice[0] for choice in LANGUAGE_CHOICES if choice[0]]
     translate_all = request.POST.get("translate_all", "false") == "true"
     if translate_all:
@@ -1339,12 +1354,10 @@ def translate_messages_view(request, team_slug: str, experiment_id: uuid.UUID, s
     if not language or language not in valid_languages:
         messages.error(request, "No language selected for translation.")
         return redirect_to_messages_view(request, session)
-    if not provider_model:
+    if not provider_id or not model_id:
         messages.error(request, "No LLM provider model selected.")
         return redirect_to_messages_view(request, session)
     try:
-        provider_id, model_id = provider_model.split(":", 1)
-
         try:
             llm_provider = LlmProvider.objects.get(id=provider_id, team=request.team)
             llm_provider_model = LlmProviderModel.objects.get(id=model_id)

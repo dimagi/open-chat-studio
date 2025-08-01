@@ -18,10 +18,11 @@ from apps.chat.agent.openapi_tool import openapi_spec_op_to_function_def
 from apps.chat.models import ChatAttachment
 from apps.events.forms import ScheduledMessageConfigForm
 from apps.events.models import ScheduledMessage, TimePeriod
-from apps.experiments.models import AgentTools, Experiment, ExperimentSession, ParticipantData
+from apps.experiments.models import AgentTools, Experiment, ExperimentSession
 from apps.files.models import FileChunkEmbedding
 from apps.pipelines.models import Node
 from apps.pipelines.nodes.tool_callbacks import ToolCallbacks
+from apps.service_providers.llm_service.prompt_context import ParticipantDataProxy
 from apps.teams.models import Team
 from apps.utils.time import pretty_date
 
@@ -218,19 +219,34 @@ class UpdateParticipantDataTool(CustomBaseTool):
 
     @transaction.atomic
     def action(self, key: str, value: Any):
-        try:
-            participant_data = ParticipantData.objects.for_experiment(self.experiment_session.experiment).get(
-                participant=self.experiment_session.participant
-            )
-            participant_data.data[key] = value
-            participant_data.save()
-        except ParticipantData.DoesNotExist:
-            ParticipantData.objects.create(
-                participant=self.experiment_session.participant,
-                experiment=self.experiment_session.experiment,
-                team=self.experiment_session.team,
-                data={key: value},
-            )
+        data_proxy = ParticipantDataProxy(self.experiment_session)
+        data_proxy.set_key(key, value)
+        return "Success"
+
+
+class AppendToParticipantDataTool(CustomBaseTool):
+    name: str = AgentTools.APPEND_TO_PARTICIPANT_DATA
+    description: str = "Update user data at a specific key"
+    requires_session: bool = True
+    args_schema: type[schemas.AppendToParticipantData] = schemas.AppendToParticipantData
+
+    @transaction.atomic
+    def action(self, key: str, value: str | int | list):
+        data_proxy = ParticipantDataProxy(self.experiment_session)
+        data_proxy.append_to_key(key, value)
+        return "Success"
+
+
+class IncrementParticipantDataTool(CustomBaseTool):
+    name: str = AgentTools.INCREMENT_PARTICIPANT_DATA
+    description: str = "Increment a value in the user data"
+    requires_session: bool = True
+    args_schema: type[schemas.IncrementParticipantDataSchema] = schemas.IncrementParticipantDataSchema
+
+    @transaction.atomic
+    def action(self, key: str, value: int):
+        data_proxy = ParticipantDataProxy(self.experiment_session)
+        data_proxy.increment_key(key, value)
         return "Success"
 
 
@@ -391,6 +407,8 @@ TOOL_CLASS_MAP = {
     AgentTools.RECURRING_REMINDER: RecurringReminderTool,
     AgentTools.DELETE_REMINDER: DeleteReminderTool,
     AgentTools.UPDATE_PARTICIPANT_DATA: UpdateParticipantDataTool,
+    AgentTools.APPEND_TO_PARTICIPANT_DATA: AppendToParticipantDataTool,
+    AgentTools.INCREMENT_PARTICIPANT_DATA: IncrementParticipantDataTool,
     AgentTools.END_SESSION: EndSessionTool,
     AgentTools.ATTACH_MEDIA: AttachMediaTool,
     AgentTools.SEARCH_INDEX: SearchIndexTool,

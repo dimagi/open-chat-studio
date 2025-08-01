@@ -88,7 +88,9 @@ class EditPipeline(LoginAndTeamRequiredMixin, TemplateView, PermissionRequiredMi
             "pipeline_id": kwargs["pk"],
             "pipeline_name": pipeline.name,
             "node_schemas": _pipeline_node_schemas(),
-            "parameter_values": _pipeline_node_parameter_values(self.request.team, llm_providers, llm_provider_models),
+            "parameter_values": _pipeline_node_parameter_values(
+                self.request.team, llm_providers, llm_provider_models, include_versions=pipeline.is_a_version
+            ),
             "default_values": _pipeline_node_default_values(llm_providers, llm_provider_models),
             "flags_enabled": [flag.name for flag in Flag.objects.all() if flag.is_active_for_team(self.request.team)],
             "read_only": pipeline.is_a_version,
@@ -127,16 +129,17 @@ class DeletePipeline(LoginAndTeamRequiredMixin, View, PermissionRequiredMixin):
         return HttpResponse(response, headers={"HX-Reswap": "none"}, status=400)
 
 
-def _pipeline_node_parameter_values(team, llm_providers, llm_provider_models):
+def _pipeline_node_parameter_values(team, llm_providers, llm_provider_models, include_versions=False):
     """Returns the possible values for each input type"""
-    source_materials = SourceMaterial.objects.working_versions_queryset().filter(team=team).values("id", "topic").all()
-    assistants = OpenAiAssistant.objects.working_versions_queryset().filter(team=team).values("id", "name").all()
-    collections = (
-        Collection.objects.working_versions_queryset().filter(team=team, is_index=False).values("id", "name").all()
-    )
+    common_filters = {"team": team}
+    if not include_versions:
+        common_filters["working_version"] = None
+    source_materials = SourceMaterial.objects.filter(**common_filters).values("id", "topic").all()
+    assistants = OpenAiAssistant.objects.filter(**common_filters).values("id", "name").all()
+    collections = Collection.objects.filter(**common_filters).filter(is_index=False).values("id", "name").all()
     # Until OCS fully supports RAG, we can only use remote indexes
     collection_indexes = (
-        Collection.objects.working_versions_queryset().filter(team=team, is_index=True).values("id", "name").all()
+        Collection.objects.filter(**common_filters).filter(team=team, is_index=True).values("id", "name").all()
     )
 
     def _option(value, label, type_=None, edit_url: str | None = None, max_token_limit=None):

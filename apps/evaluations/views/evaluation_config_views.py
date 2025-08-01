@@ -1,17 +1,22 @@
 import csv
+from functools import cached_property
 
 from django.contrib.auth.decorators import permission_required
 from django.contrib.auth.mixins import PermissionRequiredMixin
 from django.http import HttpResponse, HttpResponseRedirect
-from django.shortcuts import get_object_or_404
+from django.shortcuts import get_object_or_404, render
 from django.urls import reverse
+from django.views.decorators.http import require_http_methods
 from django.views.generic import CreateView, TemplateView, UpdateView
 from django_tables2 import SingleTableView, columns, tables
 
-from apps.evaluations.forms import EvaluationConfigForm
+from apps.evaluations.forms import EvaluationConfigForm, get_experiment_version_choices
 from apps.evaluations.models import EvaluationConfig, EvaluationRun, EvaluationRunStatus
 from apps.evaluations.tables import EvaluationConfigTable, EvaluationRunTable
 from apps.evaluations.utils import get_evaluators_with_schema
+from apps.experiments.models import Experiment
+from apps.generics import actions
+from apps.teams.decorators import login_and_team_required
 from apps.teams.mixins import LoginAndTeamRequiredMixin
 
 
@@ -140,7 +145,7 @@ class EvaluationResultHome(LoginAndTeamRequiredMixin, TemplateView, PermissionRe
         }
 
         # Show progress if running, otherwise show results table
-        if evaluation_run.status in [EvaluationRunStatus.PENDING, EvaluationRunStatus.PROCESSING]:
+        if evaluation_run.status in [EvaluationRunStatus.PROCESSING]:
             context["group_job_id"] = evaluation_run.job_id
         else:
             context["table_url"] = reverse(
@@ -155,14 +160,18 @@ class EvaluationResultTableView(SingleTableView, PermissionRequiredMixin):
     permission_required = "evaluations.view_evaluationrun"
     template_name = "table/single_table.html"
 
-    def get_queryset(self) -> EvaluationRun:
+    def get_queryset(self):
+        return self.evaluation_run
+
+    @cached_property
+    def evaluation_run(self) -> EvaluationRun:
         return get_object_or_404(
-            EvaluationRun.objects.filter(team__slug=self.kwargs["team_slug"]),
+            EvaluationRun.objects.select_related("generation_experiment").filter(team__slug=self.kwargs["team_slug"]),
             pk=self.kwargs["evaluation_run_pk"],
         )
 
     def get_table_data(self):
-        return self.get_queryset().get_table_data()
+        return self.evaluation_run.get_table_data()
 
     def get_table_class(self):
         """
@@ -178,10 +187,30 @@ class EvaluationResultTableView(SingleTableView, PermissionRequiredMixin):
             for key in row:
                 if key in attrs:
                     continue
-                header = key.replace("_", " ").title()
-                attrs[key] = columns.Column(verbose_name=header)
+                attrs[key] = self.get_column(key)
 
         return type("EvaluationResultTableTable", (tables.Table,), attrs)
+
+    def get_column(self, key):
+        def session_url_factory(_, __, record, value):
+            if not value or not self.evaluation_run.generation_experiment_id:
+                return ""
+            return reverse(
+                "experiments:experiment_session_view",
+                args=[self.kwargs["team_slug"], self.evaluation_run.generation_experiment.public_id, value],
+            )
+
+        header = key.replace("_", " ").title()
+        match key:
+            case "session":
+                return actions.ActionsColumn(
+                    verbose_name=header,
+                    actions=[
+                        actions.chip_action(label="Session", url_factory=session_url_factory),
+                    ],
+                    align="right",
+                )
+        return columns.Column(verbose_name=header)
 
 
 @permission_required("evaluations.add_evaluationrun")
@@ -213,3 +242,45 @@ def download_evaluation_run_csv(request, team_slug, evaluation_pk, evaluation_ru
         writer.writerow([row.get(header, "") for header in headers])
 
     return response
+
+
+@login_and_team_required
+@require_http_methods(["GET"])
+def load_experiment_versions(request, team_slug: str):
+    experiment_id = request.GET.get("experiment")
+
+    if not experiment_id:
+        context = {
+            "empty_message": "First select a chatbot above",
+            "field_name": "experiment_version",
+            "field_id": "id_experiment_version",
+            "versions": [],
+        }
+        return render(request, "evaluations/partials/version_select.html", context)
+
+    try:
+        experiment = Experiment.objects.working_versions_queryset().get(
+            id=experiment_id,
+            team=request.team,
+        )
+        versions = Experiment.objects.all_versions_queryset(experiment).filter(team=request.team)
+        choices = get_experiment_version_choices(versions)
+        version_choices = [{"value": value, "label": label} for value, label in choices]
+
+        context = {
+            "empty_message": "Select a version...",
+            "field_name": "experiment_version",
+            "field_id": "id_experiment_version",
+            "versions": version_choices,
+            "help_text": "Specific chatbot version to use for evaluation.",
+        }
+        return render(request, "evaluations/partials/version_select.html", context)
+
+    except Experiment.DoesNotExist:
+        context = {
+            "empty_message": "Chatbot not found",
+            "field_name": "experiment_version",
+            "field_id": "id_experiment_version",
+            "versions": [],
+        }
+        return render(request, "evaluations/partials/version_select.html", context)

@@ -19,7 +19,7 @@ from apps.api.serializers import (
 from apps.channels.models import ChannelPlatform, ExperimentChannel
 from apps.chat.channels import ApiChannel, WebChannel
 from apps.chat.models import Chat
-from apps.experiments.models import Experiment, ExperimentSession, Participant
+from apps.experiments.models import Experiment, ExperimentSession, Participant, ParticipantData
 from apps.experiments.task_utils import get_message_task_response
 from apps.experiments.tasks import get_response_for_webchat_task
 
@@ -65,8 +65,10 @@ def check_session_access(request, session):
             name="StartChatSession",
             summary="Start a new chat session for an experiment",
             value={
-                "experiment_id": "123e4567-e89b-12d3-a456-426614174000",
+                "chatbot_id": "123e4567-e89b-12d3-a456-426614174000",
                 "session_data": {"source": "widget", "page_url": "https://example.com"},
+                "participant_remote_id": "abc",
+                "participant_name": "participant_name",
             },
         ),
     ],
@@ -85,6 +87,8 @@ def chat_start_session(request):
     experiment_id = data["chatbot_id"]
     participant_id = data.get("participant_id")
     session_data = data.get("session_data", {})
+    remote_id = data.get("participant_remote_id", "")
+    name = data.get("participant_name")
 
     # First, check if this is a public experiment
     experiment = get_object_or_404(Experiment, public_id=experiment_id)
@@ -115,11 +119,28 @@ def chat_start_session(request):
             )
 
         participant, created = Participant.objects.get_or_create(
-            identifier=participant_id, team=team, platform=ChannelPlatform.API, defaults={"user": user}
+            identifier=participant_id,
+            team=team,
+            platform=ChannelPlatform.API,
+            defaults={"user": user, "remote_id": remote_id},
         )
     else:
-        participant = Participant.create_anonymous(team, ChannelPlatform.API)
+        participant = Participant.create_anonymous(team, ChannelPlatform.API, remote_id)
 
+    if remote_id and participant.remote_id != remote_id:
+        participant.remote_id = remote_id
+        participant.save(update_fields=["remote_id"])
+
+    if name:
+        if participant.name != name:
+            participant.name = name
+            participant.save(update_fields=["name"])
+        participant_data, _ = ParticipantData.objects.get_or_create(
+            participant=participant, experiment=experiment, team=team, defaults={"data": {}}
+        )
+        if participant_data.data.get("name") != name:
+            participant_data.data["name"] = name
+            participant_data.save(update_fields=["data"])
     api_channel = ExperimentChannel.objects.get_team_api_channel(team)
 
     session = ApiChannel.start_new_session(

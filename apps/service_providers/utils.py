@@ -153,7 +153,6 @@ def get_dropdown_llm_model_choices(team) -> list[tuple[str, str]]:
     for provider in llm_providers:
         for model in llm_provider_models_by_type.get(provider.type, []):
             model_choices.append((f"{provider.id}:{model.id}", f"{provider.name} - {model!s}"))
-
     return model_choices
 
 
@@ -181,3 +180,25 @@ def get_first_llm_provider_model(llm_provider, team_id):
             return model
     except LlmProviderModel.DoesNotExist:
         return None
+
+
+def get_llm_provider_by_team(team):
+    return LlmProvider.objects.filter(team=team).order_by("id")
+
+
+def get_models_by_provider(provider, team):
+    model_objects = LlmProviderModel.objects.for_team(team).filter(type=provider)
+    return [{"value": model.id, "label": model.display_name} for model in model_objects]
+
+
+def get_models_by_team_grouped_by_provider(team):
+    provider_types = LlmProvider.objects.filter(team=team).values_list("type", flat=True)
+    model_objects = LlmProviderModel.objects.for_team(team).filter(type__in=provider_types)
+
+    provider_dict = defaultdict(list)
+    for model in model_objects:
+        type_enum = LlmProviderTypes[model.type]
+        provider_label = str(type_enum.label)
+        provider_dict[provider_label].append(model.display_name)
+
+    return dict(provider_dict)

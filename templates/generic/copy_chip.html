@@ -1,4 +1,5 @@
-<div class="btn btn-sm {{ extra_styles }}" onclick="SiteJS.app.copyToClipboard(this, '{{ copy_element_id }}')" title="Copy to clipboard">
+<div class="btn btn-sm {{ extra_styles }}" onclick="SiteJS.app.copyToClipboard(this, '{{ copy_element_id }}')"
+     title="Copy to clipboard">
   {% if copy_value %}
     {% if show_value|default_if_none:1 %}<span id="{{ copy_element_id }}">{{ copy_value }}</span>
     {% else %}<input id="{{ copy_element_id }}" type="hidden" value="{{ copy_value }}"/>

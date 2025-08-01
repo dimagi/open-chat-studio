@@ -3,47 +3,71 @@
 @tailwind utilities;
 
 :host {
-   /**
-   * @prop --button-background-color: Button background color
-   * @prop --button-background-color-hover: Button background color on hover
-   * @prop --button-text-color: Button text color
-   * @prop --button-text-color-hover: Button text color on hover
-   * @prop --button-border-color: Button border color
-   * @prop --button-border-color-hover: Button border color on hover
-   */
+  /**
+    * @prop --button-background-color: Button background color
+    * @prop --button-background-color-hover: Button background color on hover
+    * @prop --button-text-color: Button text color
+    * @prop --button-text-color-hover: Button text color on hover
+    * @prop --button-border-color: Button border color
+    * @prop --button-border-color-hover: Button border color on hover
+    */
   --button-background-color: white;
-  /* gray-100 */
   --button-background-color-hover: #f3f4f6;
-  /* gray-900 */
   --button-text-color: #111827;
-  /* blue-700 */
   --button-text-color-hover: #1d4ed8;
-  /* gray-500 */
   --button-border-color: #6b7280;
-  /* gray-700 */
   --button-border-color-hover: #374151;
   --chat-z-index: 50;
-
   display: block;
+  position: fixed;
+  right: 20px;
+  bottom: 20px;
 }
 
-/* These custom button styles need to remain since they use CSS variables */
-
 @layer components {
-  .btn {
-    @apply py-2.5 px-5 me-2 mb-2 text-sm font-medium focus:outline-none rounded-lg border;
-    background-color: var(--button-background-color);
-    color: var(--button-text-color);
-    border-color: var(--button-border-color);
-  }
-
-  .btn:hover {
-    background-color: var(--button-background-color-hover);
-    color: var(--button-text-color-hover);
-    border-color: var(--button-border-color-hover);
-  }
   .starter-question {
     @apply text-left p-3 rounded-lg duration-200 ml-12 border border-blue-500 hover:bg-blue-50 hover:border-blue-600 text-blue-600;
+  }
+
+  .chat-btn-text,
+  .chat-btn-icon {
+    @apply shadow-lg border-0 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2 transition-all duration-200 ease-in-out transform hover:scale-105 rounded-lg;
+    background-color: var(--button-background-color, white);
+    z-index: var(--chat-z-index, 50);
+  }
+
+  /* Button with text and icon */
+  .chat-btn-text {
+    @apply px-3 py-3 flex items-center gap-2;
+    color: var(--button-text-color, #111827);
+  }
+
+  .chat-btn-text:hover {
+    color: var(--button-text-color-hover, #1d4ed8);
+  }
+
+  .chat-btn-text span {
+    @apply text-sm font-medium whitespace-nowrap;
+  }
+
+  .chat-btn-text img {
+    @apply w-6 h-6 object-contain flex-shrink-0;
+  }
+
+  /* Icon-only button */
+  .chat-btn-icon {
+    @apply p-3;
+    width: 56px;
+    height: 56px;
+  }
+
+  .chat-btn-icon img {
+    @apply w-full h-full object-contain;
+  }
+
+  .chat-btn-text.round,
+  .chat-btn-icon.round {
+    @apply rounded-full;
   }
 }
 
@@ -51,36 +75,58 @@
   z-index: var(--chat-z-index);
 }
 
-/* Auto-resize textarea */
 textarea {
   @apply min-h-10 max-h-32 resize-none overflow-y-auto;
 }
 
-/* Message bubbles responsive design */
-@media (max-width: 640px) {
-  .max-w-xs {
-    max-width: 85%;
-  }
-}
-
-/* Loading spinner */
 .loading-spinner {
   @apply w-5 h-5 border-2 border-gray-200 border-t-blue-500 rounded-full animate-spin;
 }
 
-/* Custom scrollbar for message area */
 .overflow-y-auto::-webkit-scrollbar {
   @apply w-1.5;
 }
-
 .overflow-y-auto::-webkit-scrollbar-track {
   @apply bg-gray-100 rounded;
 }
-
 .overflow-y-auto::-webkit-scrollbar-thumb {
   @apply bg-gray-300 rounded;
 }
-
 .overflow-y-auto::-webkit-scrollbar-thumb:hover {
   @apply bg-gray-400;
+}
+
+/* Markdown content styling for chat messages */
+.chat-markdown {
+  @apply prose prose-sm prose-gray max-w-none;
+}
+
+/* override spacing */
+.chat-markdown > * {
+  margin-top: 0.1rem;
+  margin-bottom: 0.1rem;
+}
+
+.bg-blue-500 .chat-markdown {
+  @apply prose-invert;
+}
+
+.bg-blue-500 .chat-markdown code {
+  @apply bg-blue-400/50 text-blue-50;
+}
+
+.bg-blue-500 .chat-markdown pre {
+  @apply bg-blue-400/50 border-blue-400;
+}
+
+.bg-gray-200 .chat-markdown code {
+  @apply bg-white border border-gray-300;
+}
+
+.bg-gray-200 .chat-markdown pre {
+  @apply bg-white border border-gray-300;
+}
+
+.loading:after {
+  content: ' .';
 }

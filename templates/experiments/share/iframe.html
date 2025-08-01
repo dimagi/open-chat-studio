@@ -1,8 +1,0 @@
-{# The rendered content of this template must be suitable for a Javascript string constant: #}
-{# - escape script tags #}
-{% if origin == "chatbots" %}
-    {% url 'chatbots:start_session_public_embed' team.slug experiment.public_id as embed_url %}
-{% else %}
-    {% url 'experiments:start_session_public_embed' team.slug experiment.public_id as embed_url %}
-{% endif %}
-<iframe src="{% absolute_url embed_url %}" width="350" height="500" style="border: none; border-radius: 10px;"></iframe>

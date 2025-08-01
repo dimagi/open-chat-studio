@@ -89,7 +89,7 @@ CONTENT_TYPES = {
     "teams": ["invitation", "membership", "team"],
     "annotations": ["tag", "customtaggeditem", "usercomment"],
     "participants": [],
-    "documents": ["collection"],
+    "documents": ["collection", "documentsource", "documentsourcesynclog"],
     "chatbots": [],
     "evaluations": [
         "evaluationconfig",
@@ -101,7 +101,6 @@ CONTENT_TYPES = {
     ],
     "trace": ["trace"],
     "mcp_integrations": ["mcpserver"],
-
 }
 
 CUSTOM_PERMISSIONS = {"experiments": ["invite_participants", "download_chats"]}
