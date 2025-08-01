@@ -1265,17 +1265,6 @@ def experiment_session_messages_view(request, team_slug: str, experiment_id: uui
     selected_tags = list(filter(None, request.GET.get("tag_filter", "").split(",")))
     language = request.GET.get("language", "")
     show_original_translation = request.GET.get("show_original_translation") == "on" and language
-    messages_queryset = (
-        ChatMessage.objects.filter(chat=session.chat)
-        .order_by("created_at")
-        .prefetch_related(
-            Prefetch(
-                "tagged_items",
-                queryset=CustomTaggedItem.objects.select_related("tag", "user"),
-                to_attr="prefetched_tagged_items",
-            )
-        )
-    )
 
     chat_message_content_type = ContentType.objects.get_for_model(ChatMessage)
     all_tags = (
@@ -1299,6 +1288,17 @@ def experiment_session_messages_view(request, team_slug: str, experiment_id: uui
     )
     default_message = "(message generated after last translation)"
 
+    messages_queryset = (
+        ChatMessage.objects.filter(chat=session.chat)
+        .order_by("created_at")
+        .prefetch_related(
+            Prefetch(
+                "tagged_items",
+                queryset=CustomTaggedItem.objects.select_related("tag", "user"),
+                to_attr="prefetched_tagged_items",
+            )
+        )
+    )
     if selected_tags:
         messages_queryset = messages_queryset.filter(tags__name__in=selected_tags).distinct()
 
