@@ -5,6 +5,7 @@
             hx-swap="outerHTML"
             hx-target="#chat-exports"
             {% if task_id %}disabled{% endif %}>
+        <i class="fa-solid fa-file-export"></i>
         {% if task_id %}
             <span class="loading loading-bars loading-xs"></span> Generating
         {% else %}
@@ -22,6 +23,7 @@
     {% endif %}
     {% if export_download_url %}
         <a class="text-sm font-medium hover:link btn btn-sm btn-outline" href="{{ export_download_url }}">
+            <i class="fa-solid fa-download"></i>
             Download export
         </a>
     {% endif %}

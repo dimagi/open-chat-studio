@@ -9,8 +9,8 @@
         {% include "experiments/components/exports.html" %}
       {% endif %}
        {% flag "flag_session-analysis" %}
-        <a href="{% url 'analysis:create' team.slug experiment.id %}" class="btn btn-sm btn-outline btn-secondary">
-            <i class="fas fa-chart-line mr-1"></i> Analyze Transcripts
+        <a href="{% url 'analysis:create' team.slug experiment.id %}" class="btn btn-sm btn-outline btn-primary">
+            <i class="fa-solid fa-table-list"></i> Analyze Transcripts
         </a>
       {% endflag %}
       {% include "evaluations/create_dataset_button.html" %}
