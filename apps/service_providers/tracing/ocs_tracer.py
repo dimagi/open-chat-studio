@@ -5,7 +5,7 @@ import time
 from typing import TYPE_CHECKING, Any
 from uuid import UUID
 
-from apps.service_providers.tracing.const import SpanLevel
+from apps.service_providers.tracing.const import OCS_TRACE_PROVIDER, SpanLevel
 from apps.trace.models import Trace
 
 from .base import Tracer
@@ -23,7 +23,7 @@ class OCSTracer(Tracer):
     """
 
     def __init__(self, experiment_id: int, team_id: int):
-        super().__init__("ocs", {})
+        super().__init__(OCS_TRACE_PROVIDER, {})
         self.experiment_id = experiment_id
         self.team_id = team_id
         self.output_message_id: str = None
