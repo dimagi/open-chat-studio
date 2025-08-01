@@ -254,7 +254,6 @@
         window.addEventListener('popstate', () => {
           this.setLabelFromURL();
         });
-        const hasExperiment = {% if experiment.id %}true{% else %}false{% endif %};
         fetch("{% if experiment.id %}{% url 'participants:participant_identifier' team.slug experiment.id %}{% else %}{% url 'participants:all_participant_identifiers' team.slug %}{% endif %}", {
           method: 'GET',
           credentials: 'same-origin',
