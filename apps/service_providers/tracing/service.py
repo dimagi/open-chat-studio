@@ -225,8 +225,8 @@ class TracingService:
         trace_info = []
         for tracer in self._active_tracers:
             try:
-                info = tracer.get_trace_metadata()
-                trace_info.append(info)
+                if info := tracer.get_trace_metadata():
+                    trace_info.append(info)
             except Exception:  # noqa BLE001
                 logger.exception("Error getting trace info")
                 continue
