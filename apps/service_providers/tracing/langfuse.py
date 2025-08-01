@@ -57,7 +57,9 @@ class LangFuseTracer(Tracer):
         super().start_trace(trace_name, trace_id, session, inputs)
 
         self.client = client_manager.get(self.config)
-        self.trace = self.client.trace(name=trace_name, session_id=session.external_id, input=inputs, metadata=metadata)
+        self.trace = self.client.trace(
+            name=trace_name, session_id=str(session.external_id), input=inputs, metadata=metadata
+        )
 
     def end_trace(self, outputs: dict[str, Any] | None = None, error: Exception | None = None) -> None:
         super().end_trace(outputs=outputs, error=error)
