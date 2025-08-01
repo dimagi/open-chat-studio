@@ -40,12 +40,6 @@ class TracingService:
 
         if (self.experiment_id is None or self.team_id is None) and self._tracers:
             raise ValueError("Tracers must be empty if experiment_id or team_id is None")
-        self._init_ocs_tracer()
-
-    def _init_ocs_tracer(self):
-        from apps.service_providers.tracing.ocs_tracer import OCSTracer
-
-        self._tracers.append(OCSTracer(self.experiment_id, self.team_id))
 
     @classmethod
     def empty(cls) -> Self:
@@ -53,7 +47,11 @@ class TracingService:
 
     @classmethod
     def create_for_experiment(cls, experiment) -> Self:
-        tracers = []
+        from apps.service_providers.tracing.ocs_tracer import OCSTracer
+
+        ocs_tracer = OCSTracer(experiment.id, experiment.team_id)
+
+        tracers = [ocs_tracer]
         if experiment and experiment.trace_provider:
             try:
                 tracers.append(experiment.trace_provider.get_service())
