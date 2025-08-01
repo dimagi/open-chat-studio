@@ -1,7 +1,6 @@
 import logging
 import unicodedata
 import uuid
-from collections import defaultdict
 from datetime import datetime
 from functools import cached_property
 from typing import cast
@@ -14,9 +13,10 @@ from django.conf import settings
 from django.contrib import messages
 from django.contrib.auth.decorators import permission_required
 from django.contrib.auth.mixins import PermissionRequiredMixin
+from django.contrib.contenttypes.models import ContentType
 from django.core.exceptions import PermissionDenied, ValidationError
 from django.db import transaction
-from django.db.models import Case, CharField, Count, IntegerField, Prefetch, Value, When
+from django.db.models import Case, CharField, Count, IntegerField, Prefetch, Subquery, Value, When
 from django.db.models.fields.json import KeyTextTransform
 from django.db.models.functions import Coalesce
 from django.http import FileResponse, Http404, HttpResponse, HttpResponseForbidden, HttpResponseRedirect
@@ -1261,7 +1261,7 @@ def experiment_session_messages_view(request, team_slug: str, experiment_id: uui
     session = request.experiment_session
     experiment = request.experiment
     page = int(request.GET.get("page", 1))
-    search = request.GET.get("search", "")
+    selected_tags = list(filter(None, request.GET.get("tag_filter", "").split(",")))
     language = request.GET.get("language", "")
     show_original_translation = request.GET.get("show_original_translation") == "on" and language
     page_size = 100
@@ -1276,16 +1276,14 @@ def experiment_session_messages_view(request, team_slug: str, experiment_id: uui
             )
         )
     )
-    all_tags_set = {
-        tagged_item.tag
-        for message in messages_queryset
-        for tagged_item in message.prefetched_tagged_items
-        if tagged_item.tag
-    }
 
-    tags_by_category = defaultdict(list)
-    for tag in all_tags_set:
-        tags_by_category[tag.get_category_display() if tag.category else "Manual Tags"].append(tag)
+    chat_message_content_type = ContentType.objects.get_for_model(ChatMessage)
+    all_tags = Tag.objects.filter(
+        annotations_customtaggeditem_items__content_type=chat_message_content_type,
+        annotations_customtaggeditem_items__object_id__in=Subquery(
+            ChatMessage.objects.filter(chat=session.chat).values("id")
+        ),
+    ).distinct()
     available_languages, translatable_languages = _get_languages_for_chat(session)
     has_missing_translations = False
     translate_form_all = TranslateMessagesForm(
@@ -1296,8 +1294,8 @@ def experiment_session_messages_view(request, team_slug: str, experiment_id: uui
     )
     default_message = "(message generated after last translation)"
 
-    if search:
-        messages_queryset = messages_queryset.filter(tags__name__icontains=search).distinct()
+    if selected_tags:
+        messages_queryset = messages_queryset.filter(tags__name__in=selected_tags).distinct()
 
     if language:
         messages_queryset = messages_queryset.annotate(
@@ -1324,7 +1322,7 @@ def experiment_session_messages_view(request, team_slug: str, experiment_id: uui
         "total_messages": total_messages,
         "page_size": page_size,
         "page_start_index": start_idx,
-        "search": search,
+        "selected_tags": selected_tags,
         "language": language,
         "available_languages": available_languages,
         "available_tags": [t.name for t in Tag.objects.filter(team__slug=team_slug, is_system_tag=False).all()],
@@ -1335,7 +1333,7 @@ def experiment_session_messages_view(request, team_slug: str, experiment_id: uui
         "default_message": default_message,
         "default_translation_models_by_providers": get_default_translation_models_by_provider(),
         "llm_provider_models_dict": get_models_by_team_grouped_by_provider(request.team),
-        "tags_by_category": dict(tags_by_category),
+        "all_tags": all_tags,
     }
 
     return TemplateResponse(
