@@ -16,7 +16,7 @@ from django.contrib.auth.mixins import PermissionRequiredMixin
 from django.contrib.contenttypes.models import ContentType
 from django.core.exceptions import PermissionDenied, ValidationError
 from django.db import transaction
-from django.db.models import Case, CharField, Count, IntegerField, Prefetch, Subquery, Value, When
+from django.db.models import Case, CharField, Count, F, IntegerField, Prefetch, Subquery, Value, When
 from django.db.models.fields.json import KeyTextTransform
 from django.db.models.functions import Coalesce
 from django.http import FileResponse, Http404, HttpResponse, HttpResponseForbidden, HttpResponseRedirect
@@ -1278,12 +1278,16 @@ def experiment_session_messages_view(request, team_slug: str, experiment_id: uui
     )
 
     chat_message_content_type = ContentType.objects.get_for_model(ChatMessage)
-    all_tags = Tag.objects.filter(
-        annotations_customtaggeditem_items__content_type=chat_message_content_type,
-        annotations_customtaggeditem_items__object_id__in=Subquery(
-            ChatMessage.objects.filter(chat=session.chat).values("id")
-        ),
-    ).distinct()
+    all_tags = (
+        Tag.objects.filter(
+            annotations_customtaggeditem_items__content_type=chat_message_content_type,
+            annotations_customtaggeditem_items__object_id__in=Subquery(
+                ChatMessage.objects.filter(chat=session.chat).values("id")
+            ),
+        )
+        .distinct()
+        .order_by(F("category").asc(nulls_first=True), "name")
+    )
     available_languages, translatable_languages = _get_languages_for_chat(session)
     has_missing_translations = False
     translate_form_all = TranslateMessagesForm(
