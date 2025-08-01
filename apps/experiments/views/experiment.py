@@ -15,6 +15,7 @@ from django.contrib.auth.decorators import permission_required
 from django.contrib.auth.mixins import PermissionRequiredMixin
 from django.contrib.contenttypes.models import ContentType
 from django.core.exceptions import PermissionDenied, ValidationError
+from django.core.paginator import Paginator
 from django.db import transaction
 from django.db.models import Case, CharField, Count, F, IntegerField, Prefetch, Subquery, Value, When
 from django.db.models.fields.json import KeyTextTransform
@@ -1264,7 +1265,6 @@ def experiment_session_messages_view(request, team_slug: str, experiment_id: uui
     selected_tags = list(filter(None, request.GET.get("tag_filter", "").split(",")))
     language = request.GET.get("language", "")
     show_original_translation = request.GET.get("show_original_translation") == "on" and language
-    page_size = 100
     messages_queryset = (
         ChatMessage.objects.filter(chat=session.chat)
         .order_by("created_at")
@@ -1312,21 +1312,18 @@ def experiment_session_messages_view(request, team_slug: str, experiment_id: uui
         )
         has_missing_translations = messages_queryset.exclude(**{f"translations__{language}__isnull": False}).exists()
 
-    total_messages = messages_queryset.count()
-    total_pages = max(1, (total_messages + page_size - 1) // page_size)
-    page = max(1, min(page, total_pages))
-    start_idx = (page - 1) * page_size
-    end_idx = start_idx + page_size
-    paginated_messages = messages_queryset[start_idx:end_idx]
+    page_size = 10
+    paginator = Paginator(messages_queryset, per_page=page_size, orphans=page_size // 3)
+    current_page = paginator.page(page)
     context = {
         "experiment_session": session,
         "experiment": experiment,
-        "messages": paginated_messages,
+        "messages": current_page.object_list,
         "page": page,
-        "total_pages": total_pages,
-        "total_messages": total_messages,
+        "total_pages": paginator.num_pages,
+        "total_messages": paginator.count,
         "page_size": page_size,
-        "page_start_index": start_idx,
+        "page_start_index": current_page.start_index(),
         "selected_tags": selected_tags,
         "language": language,
         "available_languages": available_languages,
