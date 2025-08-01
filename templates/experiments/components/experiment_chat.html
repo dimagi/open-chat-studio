@@ -124,10 +124,11 @@
       {% endif %}
       {% if perms.annotations.view_customtaggeditem and all_tags %}
         <div class="flex items-start gap-4" x-data="{selectedTag: [{% if selected_tags %}'{{ selected_tags|safeseq|join:"','" }}'{% endif %}]}">
-          <div class="flex w-3/4 gap-1">
+          <div class="flex w-3/4 gap-1 items-center">
             <p class="text-xs text-gray-500">Tags:</p>
-            <div class="items-center flex flex-wrap gap-1">
+            <div class="flex flex-wrap gap-1">
               {% for tag in all_tags %}
+                <div class="tooltip" data-tip="{{ tag.count }} message{{ tag.count|pluralize }}">
                 <input
                     x-model="selectedTag"
                     type="checkbox" aria-label="{{ tag.name }}" value="{{ tag.name }}"
@@ -137,6 +138,7 @@
                     x-bind:hx-vals='`{"tag_filter": "${selectedTag}"}`'
                     hx-include="[name='language'], [name='show_original_translation']"
                 >
+                </div>
               {% endfor %}
               <button
                 class="btn btn-ghost btn-xs" x-cloak x-show="selectedTag.length > 0"

@@ -1285,6 +1285,7 @@ def experiment_session_messages_view(request, team_slug: str, experiment_id: uui
                 ChatMessage.objects.filter(chat=session.chat).values("id")
             ),
         )
+        .annotate(count=Count("annotations_customtaggeditem_items"))
         .distinct()
         .order_by(F("category").asc(nulls_first=True), "name")
     )
