@@ -133,7 +133,7 @@ class CreateDataset(LoginAndTeamRequiredMixin, CreateView, PermissionRequiredMix
             .values("id", "name")
             .order_by("name")
         )
-        experiment_list = [{"id": exp["id"], "name": exp["name"]} for exp in experiments]
+        experiment_list = [{"id": exp["id"], "label": exp["name"]} for exp in experiments]
 
         channel_list = ChannelPlatform.for_filter(self.request.team)
         available_tags = [tag.name for tag in self.request.team.tag_set.filter(is_system_tag=False)]

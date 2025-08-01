@@ -95,7 +95,7 @@
                       <template x-for="option in filter.filteredOptions" :key="typeof option === 'object' ? option.id : option">
                         <label :for="`option-${index}-${typeof option === 'object' ? option.id : option}`" class="flex items-center px-4 py-2 hover:bg-base-200 cursor-pointer text-sm">
                           <input type="checkbox" :id="`option-${index}-${typeof option === 'object' ? option.id : option}`" :value="typeof option === 'object' ? option.id : option" x-model="filter.selectedValues" @change="triggerFilterChange()" class="checkbox checkbox-xs mr-2">
-                          <span x-text="typeof option === 'object' ? option.name : option"></span>
+                          <span x-text="typeof option === 'object' ? option.label : option"></span>
                         </label>
                       </template>
                       <div x-show="filter.filteredOptions && filter.filteredOptions.length === 0" class="px-4 py-2 text-sm text-gray-500 italic">
@@ -350,12 +350,16 @@
         this.triggerFilterChange();
       },
 
+      isObjectChoiceFilter(filter) {
+        const options = this.filterData.columns[filter.column].options;
+        return options && options.length > 0 && typeof options[0] === 'object'
+      },
+
       getSelectedDisplayText(filter) {
-        if (filter.column === 'experiment') {
-          // For experiments, convert IDs to names for display
+        if (this.isObjectChoiceFilter(filter)) {
           const displayValues = filter.selectedValues.map(id => {
-            const experiment = experimentList.find(exp => exp.id == id);
-            return experiment ? experiment.name : id;
+            const option = this.filterData.columns[filter.column].options.find(exp => exp.id === parseInt(id));
+            return option ? option.label : id;
           });
           const text = displayValues.join(', ');
           return text.length > 18 ? text.substring(0, 18) + '...' : text;
@@ -376,9 +380,8 @@
             filter.filteredOptions = [...this.filterData.columns[column].options];
           } else {
             filter.filteredOptions = this.filterData.columns[column].options.filter(option => {
-              if (typeof option === 'object' && option.name) {
-                // For experiment objects, search by name
-                return option.name.toLowerCase().includes(searchQuery);
+              if (typeof option === 'object' && option.label) {
+                return option.label.toLowerCase().includes(searchQuery);
               } else {
                 // For simple string options
                 return option.toLowerCase().includes(searchQuery);
@@ -434,11 +437,9 @@
               else if (['any of', 'all of', 'excludes'].includes(operatorParam) && valueParam) {
                 try {
                   const parsedValues = JSON.parse(valueParam);
-                  // For experiment filter, convert from IDs back to names for display
-                  if (columnParam === 'experiment') {
-                    filter.selectedValues = parsedValues.map(id => {
-                      const experiment = experimentList.find(exp => exp.id == id);
-                      return experiment ? experiment.name : id;
+                  if (this.isObjectChoiceFilter(filter)) {
+                    filter.selectedValues = parsedValues.filter(id => {
+                      return this.filterData.columns[filter.column].options.findIndex(exp => exp.id === parseInt(id)) >= 0;
                     });
                   } else {
                     filter.selectedValues = parsedValues;
@@ -475,12 +476,11 @@
 
           if (['any of', 'all of', 'excludes'].includes(filter.operator)) {
             if (filter.selectedValues && filter.selectedValues.length > 0) {
-              // For experiment filter, convert names back to IDs
               let valuesToSerialize = filter.selectedValues;
-              if (filter.column === 'experiment') {
-                valuesToSerialize = filter.selectedValues.map(name => {
-                  const experiment = experimentList.find(exp => exp.name === name);
-                  return experiment ? experiment.id : name;
+              if (this.isObjectChoiceFilter(filter)) {
+                valuesToSerialize = filter.selectedValues.map(label => {
+                  const option = this.filterData.columns[filter.column].options.find(exp => exp.label === label);
+                  return option ? option.id : label;
                 });
               }
               params.set(`filter_${i}_value`, JSON.stringify(valuesToSerialize));
@@ -512,12 +512,11 @@
 
           if (['any of', 'all of', 'excludes'].includes(filter.operator)) {
             if (filter.selectedValues && filter.selectedValues.length > 0) {
-              // For experiment filter, convert names back to IDs
               let valuesToSend = filter.selectedValues;
-              if (filter.column === 'experiment') {
-                valuesToSend = filter.selectedValues.map(name => {
-                  const experiment = experimentList.find(exp => exp.name === name);
-                  return experiment ? experiment.id : name;
+              if (this.isObjectChoiceFilter(filter)) {
+                valuesToSend = filter.selectedValues.map(label => {
+                  const option = this.filterData.columns[filter.column].options.find(exp => exp.label === label);
+                  return option ? option.id : label;
                 });
               }
               filterParams[`filter_${i}_value`] = JSON.stringify(valuesToSend);
