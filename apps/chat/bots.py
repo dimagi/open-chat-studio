@@ -499,7 +499,6 @@ class EventBot:
         with self.trace_service.trace_or_span(
             name=f"{self.experiment.name} - {self.trace_info.name}",
             session=self.session,
-            user_id=str(self.session.participant.identifier),
             inputs={"input": event_prompt},
             metadata=self.trace_info.metadata,
         ):
