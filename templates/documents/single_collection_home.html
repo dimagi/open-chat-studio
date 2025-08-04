@@ -50,6 +50,17 @@
           {% endif %}
         </div>
       </div>
+      <!-- Search input-->
+      <div class="my-2 w-full max-w-md">
+        <input class="input input-bordered w-full" type="search"
+               name="search" placeholder="Search files..."
+               hx-get="{% url 'documents:collection_files_list' request.team.slug collection.id %}"
+               hx-trigger="keyup[this.value.length === 0 || this.value.length > 2] changed delay:500ms"
+               hx-target=".table-container"
+               hx-params="*"
+               hx-indicator=".htmx-indicator">
+        <i class="mx-2 htmx-indicator fa fa-spinner fa-pulse" style="display: none;"></i>
+      </div>
     </div>
   </div>
   <div class="app-card">
@@ -97,10 +108,13 @@
       </div>
 
       <h2 class="text-lg font-semibold"><i class="fa-regular fa-file"></i> Files</h2>
-      <div hx-get="{% url "documents:collection_files_list" request.team.slug collection.id %}"
-           hx-trigger="load"
-      >
-        <span class="loading loading-spinner"></span>
+      <div class="table-container">
+        <div hx-get="{% url 'documents:collection_files_list' request.team.slug collection.id %}"
+             hx-trigger="load"
+             hx-target=".table-container"
+        >
+          <span class="loading loading-spinner"></span>
+        </div>
       </div>
     </div>
   </div>
