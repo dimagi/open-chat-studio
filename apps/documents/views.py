@@ -6,6 +6,7 @@ from django.conf import settings
 from django.contrib import messages
 from django.contrib.auth.decorators import permission_required
 from django.contrib.auth.mixins import PermissionRequiredMixin
+from django.core.paginator import EmptyPage, PageNotAnInteger, Paginator
 from django.db import transaction
 from django.db.models import Case, CharField, Count, Func, IntegerField, OuterRef, Subquery, Value, When
 from django.http import HttpResponse, HttpResponseRedirect
@@ -109,10 +110,7 @@ def collection_files_view(request, team_slug: str, collection_id: int, document_
         .values_list("count")
     )
     search_query = request.GET.get("search", "").strip()
-    collection_files = CollectionFile.objects.filter(
-        collection=collection,
-        document_source=document_source
-    )
+    collection_files = CollectionFile.objects.filter(collection=collection, document_source=document_source)
     if search_query:
         collection_files = collection_files.filter(file__name__icontains=search_query)
     collection_files = collection_files.annotate(
@@ -128,9 +126,17 @@ def collection_files_view(request, team_slug: str, collection_id: int, document_
         depth=Func("file__name", Value("/"), function="regexp_count"),
     ).order_by("directory", "depth", "file__name")
 
+    page = request.GET.get("page", 1)
+    paginator = Paginator(collection_files, 10)
+    try:
+        paginated_collection_files = paginator.page(page)
+    except PageNotAnInteger:
+        paginated_collection_files = paginator.page(1)
+    except EmptyPage:
+        paginated_collection_files = paginator.page(paginator.num_pages)
     context = {
         "collection": collection,
-        "collection_files": collection_files,
+        "collection_files": paginated_collection_files,
         "document_source": document_source,
         "allow_delete": document_source_id is None,
     }
