@@ -148,7 +148,6 @@ docs = [
 
 prod = [
     "gunicorn",
-    "uvicorn[standard]",
     "gevent"
 ]
 
