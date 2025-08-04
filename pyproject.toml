@@ -149,6 +149,7 @@ docs = [
 prod = [
     "gunicorn",
     "uvicorn[standard]",
+    "gevent"
 ]
 
 [tool.uv]
