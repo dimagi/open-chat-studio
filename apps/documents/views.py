@@ -108,24 +108,22 @@ def collection_files_view(request, team_slug: str, collection_id: int, document_
         .annotate(count=Count("id"))
         .values_list("count")
     )
-    collection_files = (
-        CollectionFile.objects.filter(collection=collection, document_source=document_source)
-        .annotate(
-            chunk_count=Subquery(chunk_count_query, output_field=IntegerField()),
-            # Extract directory part
-            directory=Case(
-                When(
-                    file__name__contains="/",
-                    then=Func("file__name", Value("/[^/]*$"), Value("/"), function="regexp_replace"),
-                ),
-                default=Value(""),
-                output_field=CharField(),
+    search_query = request.GET.get("search", "").strip()
+    collection_files = CollectionFile.objects.filter(collection=collection, document_source=document_source)
+    if search_query:
+        collection_files = collection_files.filter(file__name__icontains=search_query)
+    collection_files = collection_files.annotate(
+        chunk_count=Subquery(chunk_count_query, output_field=IntegerField()),
+        directory=Case(
+            When(
+                file__name__contains="/",
+                then=Func("file__name", Value("/[^/]*$"), Value("/"), function="regexp_replace"),
             ),
-            # Determine if it's a subdirectory file
-            depth=Func("file__name", Value("/"), function="regexp_count"),
-        )
-        .order_by("directory", "depth", "file__name")
-    )
+            default=Value(""),
+            output_field=CharField(),
+        ),
+        depth=Func("file__name", Value("/"), function="regexp_count"),
+    ).order_by("directory", "depth", "file__name")
     context = {
         "collection": collection,
         "collection_files": collection_files,
