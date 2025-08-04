@@ -256,10 +256,16 @@ class DashboardService:
                 )
                 completion_rate = (completed_sessions / sessions_count) if sessions_count else 0
 
-                experiment_url = reverse(
-                    "chatbots:single_chatbot_home",
-                    kwargs={"team_slug": self.team.slug, "experiment_id": experiment.id},
-                )
+                if experiment.pipeline_id:
+                    experiment_url = reverse(
+                        "chatbots:single_chatbot_home",
+                        kwargs={"team_slug": self.team.slug, "experiment_id": experiment.id},
+                    )
+                else:
+                    experiment_url = reverse(
+                        "experiments:single_experiment_home",
+                        kwargs={"team_slug": self.team.slug, "experiment_id": experiment.id},
+                    )
                 performance_data.append(
                     {
                         "experiment_id": experiment.id,
