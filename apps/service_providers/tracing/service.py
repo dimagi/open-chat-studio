@@ -207,8 +207,8 @@ class TracingService:
         metadata = {}
         if self.session:
             metadata["participant-id"] = self.session.participant.identifier
-        if self.session:
             metadata["session-id"] = self.session.external_id
+
         config = RunnableConfig(
             run_name=f"{span_name or 'OCS'} run",
             callbacks=tracer_callbacks + extra_callbacks,
