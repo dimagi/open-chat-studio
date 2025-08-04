@@ -49,7 +49,7 @@ class TestCollection:
         new_collection_version = collection.create_new_version()
         document_source.refresh_from_db()
         assert document_source.versions.count() == 1
-        new_doc_source_version = document_source.versions.all()[0]
+        new_doc_source_version = document_source.versions.first()
 
         assert new_doc_source_version.working_version == document_source
         assert new_doc_source_version.collection_id == new_collection_version.id
@@ -62,6 +62,22 @@ class TestCollection:
         # check that collection_files have the correct document_source version
         for collection_file in new_collection_version.collectionfile_set.all():
             assert collection_file.document_source_id == new_doc_source_version.id
+
+    def test_recreate_issue(self):
+        """
+        This is a recreation of an issue where a file from the collection was versioned and linked to the
+        document source's version that is linked to the collection.
+        """
+        collection = CollectionFactory(is_index=False)
+        document_source = DocumentSourceFactory(collection=collection)
+
+        file = FileFactory()
+        collection.files.add(file)
+
+        collection.create_new_version()
+        document_source.refresh_from_db()
+        new_doc_source_version = document_source.versions.first()
+        assert new_doc_source_version.files.count() == 0
 
     @pytest.mark.usefixtures("remote_index_manager_mock")
     @mock.patch("apps.documents.tasks.index_collection_files")
