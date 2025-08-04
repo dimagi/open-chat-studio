@@ -19,6 +19,8 @@ if TYPE_CHECKING:
     from langchain.callbacks.base import BaseCallbackHandler
     from langfuse import Langfuse
 
+    from apps.experiments.models import ExperimentSession
+
 
 logger = logging.getLogger("ocs.tracing.langfuse")
 
@@ -45,19 +47,22 @@ class LangFuseTracer(Tracer):
         self,
         trace_name: str,
         trace_id: UUID,
-        session_id: str,
-        user_id: str,
+        session: ExperimentSession,
         inputs: dict[str, Any] | None = None,
         metadata: dict[str, Any] | None = None,
     ) -> None:
         if self.trace:
             raise ServiceReentryException("Service does not support reentrant use.")
 
-        super().start_trace(trace_name, trace_id, session_id, user_id, inputs)
+        super().start_trace(trace_name, trace_id, session, inputs)
 
         self.client = client_manager.get(self.config)
         self.trace = self.client.trace(
-            name=trace_name, session_id=session_id, user_id=user_id, input=inputs, metadata=metadata
+            name=trace_name,
+            session_id=str(session.external_id),
+            user_id=session.participant.identifier,
+            input=inputs,
+            metadata=metadata,
         )
 
     def end_trace(self, outputs: dict[str, Any] | None = None, error: Exception | None = None) -> None:
@@ -140,6 +145,9 @@ class LangFuseTracer(Tracer):
         if not self.ready:
             raise ServiceNotInitializedException("Service not initialized.")
         self.trace.update(tags=tags)
+
+    def set_output_message_id(self, output_message_id: str) -> None:
+        pass
 
 
 class ClientManager:

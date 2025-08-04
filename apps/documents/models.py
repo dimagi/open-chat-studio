@@ -143,7 +143,7 @@ class Collection(BaseTeamModel, VersionsMixin):
                 ),
                 VersionField(
                     group_name="Document Sources",
-                    name="files",
+                    name="document_sources",
                     queryset=self.document_sources.all(),
                 ),
             ],
@@ -166,16 +166,20 @@ class Collection(BaseTeamModel, VersionsMixin):
         new_version.openai_vector_store_id = ""
         new_version.save()
 
+        file_versions: dict[int, int] = {}
+
         def _version_files(file_queryset, new_object_version, through_defaults: dict = None):
+            nonlocal file_versions
+            _file_versions: dict[int, int] = {}
             for file in file_queryset.iterator(chunk_size=50):
                 file_version = file.create_new_version(save=False)
                 file_version.external_id = ""
                 file_version.external_source = ""
                 file_version.save()
-                file_versions[file.id] = file_version.id
-            new_object_version.files.add(*list(file_versions.values()), through_defaults=through_defaults)
+                _file_versions[file.id] = file_version.id
+            new_object_version.files.add(*list(_file_versions.values()), through_defaults=through_defaults)
+            file_versions = file_versions | _file_versions
 
-        file_versions: dict[int, int] = {}
         _version_files(self.files.filter(collectionfile__document_source=None), new_version)
 
         for document_source in self.document_sources.all():
