@@ -48,7 +48,7 @@
   },
   "dependencies": {
     "@codemirror/lang-json": "^6.0.1",
-    "@codemirror/lang-python": "^6.1.7",
+    "@codemirror/lang-python": "^6.2.1",
     "@codemirror/merge": "^6.10.2",
     "@sentry/webpack-plugin": "^4.0.2",
     "@tailwindcss/postcss": "^4.1.5",
