@@ -3,35 +3,9 @@
 {% load form_tags %}
 {% load waffle_tags %}
 {% load pagination_tags %}
-
 <div id="table-top" class="max-w-5xl mt-4 border rounded-2xl">
   <div class="mt-1 max-w-5xl flex justify-between p-3">
-    <div class="flex flex-col gap-2">
-      {% if perms.annotations.view_customtaggeditem %}
-        <div class="flex items-center gap-2">
-          <input
-            type="text"
-            name="search"
-            value="{{ search|default:'' }}"
-            class="input input-sm w-96"
-            placeholder="Search tags..."
-            hx-get="{% url 'experiments:experiment_session_messages_view' request.team.slug experiment.public_id experiment_session.external_id %}"
-            hx-trigger="keyup changed delay:500ms"
-            hx-target="#messages-container"
-            hx-include="[name='search'], [name='language'], [name='show_original_translation']"
-          >
-          {% if search %}
-            <button
-              class="btn btn-ghost btn-sm"
-              hx-get="{% url 'experiments:experiment_session_messages_view' request.team.slug experiment.public_id experiment_session.external_id %}"
-              hx-target="#messages-container"
-            >
-              <i class="fa-solid fa-times"></i>
-            </button>
-          {% endif %}
-        </div>
-      {% endif %}
-
+    <div class="flex flex-1 flex-col gap-2">
       {% if not hide_translation|default_if_none:False %}
         <div class="flex items-center gap-3 flex-wrap">
           {% if available_languages %}
@@ -148,19 +122,41 @@
           {% endif %}
         </div>
       {% endif %}
-
-      {% if total_pages > 1 %}
-        <div class="px-1">
-          <p class="text text-sm">
-            Showing <span class="font-semibold">{{ page_size|multiply:page|subtract:page_size|add:1 }}</span> to <span class="font-semibold">{{ page_size|multiply:page|minimum:total_messages }}</span> of <span class="font-semibold">{{ total_messages }}</span> messages
-          </p>
+      {% if perms.annotations.view_customtaggeditem and all_tags %}
+        <div class="flex items-start gap-4" x-data="{selectedTag: [{% if selected_tags %}'{{ selected_tags|safeseq|join:"','" }}'{% endif %}]}">
+          <div class="flex w-3/4 gap-1 items-center">
+            <p class="text-xs text-gray-500">Tags:</p>
+            <div class="flex flex-wrap gap-1">
+              {% for tag in all_tags %}
+                <div class="tooltip" data-tip="{{ tag.count }} message{{ tag.count|pluralize }}">
+                <input
+                    x-model="selectedTag"
+                    type="checkbox" aria-label="{{ tag.name }}" value="{{ tag.name }}"
+                    class="btn btn-xs checked:btn-accent"
+                    hx-get="{% url 'experiments:experiment_session_messages_view' request.team.slug experiment.public_id experiment_session.external_id %}"
+                    hx-target="#messages-container"
+                    x-bind:hx-vals='`{"tag_filter": "${selectedTag}"}`'
+                    hx-include="[name='language'], [name='show_original_translation']"
+                >
+                </div>
+              {% endfor %}
+              <button
+                class="btn btn-ghost btn-xs" x-cloak x-show="selectedTag.length > 0"
+                hx-get="{% url 'experiments:experiment_session_messages_view' request.team.slug experiment.public_id experiment_session.external_id %}"
+                hx-target="#messages-container"
+                hx-include="[name='language'], [name='show_original_translation']"
+              >
+                <i class="fa-solid fa-times"></i>
+              </button>
+            </div>
+          </div>
         </div>
       {% endif %}
     </div>
 
     {% if total_pages > 1 %}
-      <div class="flex items-center">
-        {% include "experiments/components/pagination_buttons.html" with btn_size="sm" %}
+      <div class="justify-end">
+        {% include "experiments/components/pagination_buttons.html" %}
       </div>
     {% endif %}
   </div>
@@ -178,8 +174,8 @@
                         get isSelected() { return commentsRow === {{ forloop.counter }} },
                         }'
               >
-                <td class="whitespace-nowrap py-4 pl-4 pr-3 text-sm font-medium">{{ page_start_index|add:forloop.counter }}</td>
-                <td class="px-3 py-4 text-sm flex flex-col gap-2">
+                <td class="whitespace-nowrap py-2 pl-4 pr-3 text-sm font-medium">{{ page_start_index|add:forloop.counter }}</td>
+                <td class="px-3 py-2 text-sm flex flex-col gap-2">
                   <div class="flex place-items-center">
                     {% if message.is_ai_message %}
                       {% include "experiments/chat/components/system_icon.html" %}
@@ -299,7 +295,7 @@
               </tr>
             {% empty %}
               <tr>
-                <td colspan="2" class="p-4 text-center text">
+                <td colspan="2" class="px-4 py-2 text-center text">
                   {% if search %}
                     No messages found matching "{{ search }}".
                   {% else %}
@@ -311,21 +307,9 @@
           </tbody>
         </table>
 
-        <!-- Pagination -->
-        {% if total_pages > 1 %}
-          <div class="p-4 flex justify-between">
-            <div class="mt-4 flex justify-left">
-              <div>
-                <p class="text">
-                  Showing <span class="font-semibold">{{ page_size|multiply:page|subtract:page_size|add:1 }}</span> to <span class="font-semibold">{{ page_size|multiply:page|minimum:total_messages }}</span> of <span class="font-semibold">{{ total_messages }}</span> messages
-                </p>
-              </div>
-            </div>
-            <div class="flex justify-right">
-              {% include "experiments/components/pagination_buttons.html" %}
-            </div>
-          </div>
-        {% endif %}
+        <div class="flex justify-end p-3">
+          {% include "experiments/components/pagination_buttons.html" %}
+        </div>
       </div>
     </div>
   </div>
