@@ -2,6 +2,7 @@ import { Component, Host, h, Prop, State } from '@stencil/core';
 import {
   XMarkIcon,
   GripDotsVerticalIcon, PencilSquare, ArrowsPointingOutIcon, ArrowsPointingInIcon,
+  PaperClipIcon, CheckDocumentIcon, XIcon
 } from './heroicons';
 import { renderMarkdownSync as renderMarkdownComplete } from '../../utils/markdown';
 
@@ -1159,8 +1160,9 @@ export class OcsChat {
                         {message.attachments && message.attachments.length > 0 && (
                           <div class="mt-2 space-y-1">
                             {message.attachments.map((attachment, attachmentIndex) => (
-                              <div key={attachmentIndex} class="text-sm">
-                                📎 {attachment.name}
+                              <div key={attachmentIndex} class="flex items-center gap-2 text-sm">
+                                <span class="w-4 h-4"><PaperClipIcon /></span>
+                                <span>{attachment.name}</span>
                                 {attachment.content_url && (
                                   <a
                                     href={attachment.content_url}
@@ -1220,21 +1222,21 @@ export class OcsChat {
                     {this.selectedFiles.map((selectedFile, index) => (
                       <div key={index} class="flex items-center justify-between text-sm bg-gray-50 rounded px-2 py-1">
                         <div class="flex items-center gap-2">
-                          <span class="text-gray-700">📎 {selectedFile.file.name}</span>
+                          <span class="w-3 h-3 text-gray-500"><PaperClipIcon /></span>
+                          <span class="text-gray-700">{selectedFile.file.name}</span>
                           <span class="text-xs text-gray-500">({this.formatFileSize(selectedFile.file.size)})</span>
                           {selectedFile.error && (
                             <span class="text-xs text-red-500">{selectedFile.error}</span>
                           )}
                           {selectedFile.uploaded && (
-                            <span class="text-xs text-green-500">✓ Uploaded</span>
+                            <span class="text-green-500 w-4 h-4"><CheckDocumentIcon /></span>
                           )}
                         </div>
                         <button
                           onClick={() => this.removeSelectedFile(index)}
-                          class="text-red-500 hover:text-red-700"
+                          class="text-red-500 hover:text-red-700 text-lg font-bold px-1"
                           aria-label="Remove file"
-                        >
-                          ×
+                        ><XIcon />
                         </button>
                       </div>
                     ))}
@@ -1266,13 +1268,13 @@ export class OcsChat {
                       class="hidden"
                     />
                     <button
-                      class="px-3 py-2 rounded-md text-gray-600 hover:bg-gray-100 transition-colors duration-200 disabled:opacity-50"
+                      class="p-1.5 rounded-md text-gray-600 hover:bg-gray-100 transition-colors duration-200 disabled:opacity-50 disabled:cursor-not-allowed"
                       onClick={() => this.fileInputRef?.click()}
                       disabled={this.isTyping || this.isUploadingFiles}
                       title="Attach files"
                       aria-label="Attach files"
                     >
-                      📎
+                      <PaperClipIcon />
                     </button>
                     <button
                       class={{
