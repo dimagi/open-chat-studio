@@ -50,15 +50,17 @@
           {% endif %}
         </div>
       </div>
-      <!-- Search input-->
-      <div class="my-2 w-full max-w-md">
-        <input class="input input-bordered w-full" type="search"
-               name="search" placeholder="Search files..."
-               hx-get="{% url 'documents:collection_files_list' request.team.slug collection.id %}"
-               hx-trigger="keyup[this.value.length === 0 || this.value.length > 2] changed delay:500ms"
-               hx-target=".table-container"
-               hx-params="*"
-               hx-indicator=".htmx-indicator">
+
+      <div class="my-2 w-full max-w-md" x-data="fileSearch()">
+        <input
+          x-model="searchQuery"
+          @input.debounce.500ms="triggerSearch"
+          id="search-input"
+          class="input input-bordered w-full"
+          type="search"
+          name="search"
+          placeholder="Search files..."
+        >
         <i class="mx-2 htmx-indicator fa fa-spinner fa-pulse" style="display: none;"></i>
       </div>
     </div>
@@ -105,19 +107,54 @@
 
       <div class="grid grid-cols-1 gap-4">
         {% for document_source in document_sources %}
-          {% include "documents/partials/document_source.html" %}
+        <div id="document_source_{{ document_source.id }}">
+          <div id="document_source_header_{{ document_source.id }}">
+            {% include "documents/partials/document_source_header.html" %}
+          </div>
+          <div id="document_source_files_{{ document_source.id }}"
+               hx-get="{% url 'documents:document_source_files_list' team.slug collection.id document_source.id %}"
+               hx-trigger="load"
+               hx-target="#document_source_files_{{ document_source.id }}"
+               hx-swap="innerHTML">
+            <span class="loading loading-spinner"></span>
+          </div>
+        </div>
         {% endfor %}
       </div>
 
       <h2 class="text-lg font-semibold"><i class="fa-regular fa-file"></i> Files</h2>
-      <div class="table-container">
-        <div hx-get="{% url 'documents:collection_files_list' request.team.slug collection.id %}"
-             hx-trigger="load"
-             hx-target=".table-container"
-        >
-          <span class="loading loading-spinner"></span>
-        </div>
+      <div id="collection-files-container"
+           hx-get="{% url 'documents:collection_files_list' request.team.slug collection.id %}"
+           hx-trigger="load"
+           hx-target="this"
+           hx-swap="innerHTML">
+        <span class="loading loading-spinner"></span>
       </div>
     </div>
   </div>
+
+<script>
+  function fileSearch() {
+    return {
+      searchQuery: "",
+
+      triggerSearch() {
+        htmx.ajax('GET', "{% url 'documents:collection_files_list' request.team.slug collection.id %}", {
+          target: "#collection-files-container",
+          values: { search: this.searchQuery }
+        });
+
+        document.querySelectorAll('[id^="document_source_files_"]').forEach(el => {
+          const getUrl = el.getAttribute("hx-get");
+          if (getUrl) {
+            htmx.ajax('GET', getUrl, {
+              target: el,
+              values: { search: this.searchQuery }
+            });
+          }
+        });
+      }
+    };
+  }
+</script>
 {% endblock app %}
