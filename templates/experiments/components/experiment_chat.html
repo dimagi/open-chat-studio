@@ -50,7 +50,7 @@
                 </option>
               {% endfor %}
             </select>
-            <div id="language-loading-spinner" class="htmx-show">
+            <div id="language-loading-spinner" class="hidden">
               <span class="loading loading-spinner loading-sm"></span>
               <span class="ml-2">Loading...</span>
             </div>
@@ -165,7 +165,7 @@
   </div>
 
   <!-- Loading indicator for initial messages -->
-  <div id="messages-initial-loading" class="htmx-show hidden">
+  <div id="messages-initial-loading" class="hidden">
     <div class="flex items-center justify-center p-4">
       <span class="loading loading-spinner loading-sm"></span>
       <span class="ml-2">Loading...</span>
