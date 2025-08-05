@@ -541,6 +541,7 @@ class ChannelBase(ABC):
         # Finally send the attachments that are supported by the channel
         if supported_files:
             self._send_files_to_user(supported_files)
+        return bot_message
 
     def _format_reference_section(self, text: str, files: list[File]) -> tuple[str, list[File]]:
         """
@@ -634,10 +635,11 @@ class ChannelBase(ABC):
             self.trace_service.set_current_span_outputs(
                 {"response": ai_message.content, "attachments": [file.name for file in files]}
             )
-            self.send_message_to_user(bot_message=ai_message.content, files=files)
+            bot_message = self.send_message_to_user(bot_message=ai_message.content, files=files)
 
         # Returning the response here is a bit of a hack to support chats through the web UI while trying to
         # use a coherent interface to manage / handle user messages
+        ai_message.content=bot_message
         return ai_message
 
     def _handle_unsupported_message(self) -> str:
