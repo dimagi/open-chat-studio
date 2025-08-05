@@ -78,23 +78,25 @@
           <button class="join-item btn btn-sm btn-primary" {% if collection_files_count == max_files_per_collection %} disabled {% endif %} onclick="chooseFilesModal.showModal()">
             <i class="fa-regular fa-file"></i> Add Files
           </button>
-          <div class="dropdown">
-            <div tabindex="0" role="button" class="join-item btn btn-sm btn-primary"
-              {% if collection_files_count == max_files_per_collection %} disabled {% endif %}
-            >
-              <i class="fa-solid fa-upload"></i> Add Document Source
+          {% if collection.is_index %}
+            <div class="dropdown">
+              <div tabindex="0" role="button" class="join-item btn btn-sm btn-primary"
+                {% if collection_files_count == max_files_per_collection %} disabled {% endif %}
+              >
+                <i class="fa-solid fa-upload"></i> Add Document Source
+              </div>
+              <ul tabindex="0" class="dropdown-content menu bg-base-100 rounded-box z-1 w-52 p-2 shadow-sm">
+                {% for source_type in document_source_types %}
+                <li><a
+                    hx-get="{% url "documents:create_document_source" team.slug collection.id %}?source_type={{ source_type.value }}"
+                    hx-target="#document_source_modal"
+                    hx-swap="innerHTML"
+                  >{{ source_type.label }}</a>
+                </li>
+                {% endfor %}
+              </ul>
             </div>
-            <ul tabindex="0" class="dropdown-content menu bg-base-100 rounded-box z-1 w-52 p-2 shadow-sm">
-              {% for source_type in document_source_types %}
-              <li><a
-                  hx-get="{% url "documents:create_document_source" team.slug collection.id %}?source_type={{ source_type.value }}"
-                  hx-target="#document_source_modal"
-                  hx-swap="innerHTML"
-                >{{ source_type.label }}</a>
-              </li>
-              {% endfor %}
-            </ul>
-          </div>
+          {% endif %}
         </div>
       </div>
 
