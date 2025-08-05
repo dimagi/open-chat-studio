@@ -256,9 +256,9 @@
               <template x-for="item in botPerformanceData" :key="item.experiment_id">
                 <tr class="hover:bg-gray-50 dark:hover:bg-gray-700">
                   <td>
-                    <a :href="item.experiment_url" class="btn btn-sm">
+                    {# Note: Keep the styling consistent with `generic/chip_button.html` #}
+                    <a :href="item.experiment_url" class="btn btn-sm btn-soft btn-primary">
                       <span x-text="item.experiment_name"></span>
-                      <i class="fa-solid fa-external-link"></i>
                     </a>
                   </td>
                   <td x-text="formatNumber(item.participants)"></td>
