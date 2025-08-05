@@ -5,6 +5,7 @@ from collections.abc import Iterator
 
 import openai
 from django.conf import settings
+from django.db import DatabaseError
 from langchain_google_genai import GoogleGenerativeAIEmbeddings
 from langchain_openai import OpenAIEmbeddings
 from langchain_text_splitters import RecursiveCharacterTextSplitter
@@ -268,25 +269,39 @@ class LocalIndexManager(IndexManager, metaclass=ABCMeta):
     ):
         for collection_file in collection_files:
             file = collection_file.file
+            embeddings = []
             try:
                 text_chunks = self.chunk_file(file, chunk_size=chunk_size, chunk_overlap=chunk_overlap)
                 for idx, chunk in enumerate(text_chunks):
                     embedding_vector = self.get_embedding_vector(chunk)
-                    FileChunkEmbedding.objects.create(
-                        team_id=file.team_id,
-                        file=file,
-                        collection_id=collection_file.collection_id,
-                        chunk_number=idx + 1,  # Start chunk numbering from 1
-                        text=chunk,
-                        embedding=embedding_vector,
-                        # TODO: Get the page number if possible. Also, what file types are supported?
-                        page_number=0,
+                    embeddings.append(
+                        FileChunkEmbedding.objects.create(
+                            team_id=file.team_id,
+                            file=file,
+                            collection_id=collection_file.collection_id,
+                            chunk_number=idx + 1,  # Start chunk numbering from 1
+                            text=chunk,
+                            embedding=embedding_vector,
+                            # TODO: Get the page number if possible. Also, what file types are supported?
+                            page_number=0,
+                        )
                     )
                 collection_file.status = FileStatus.COMPLETED
             except Exception as e:
                 logger.exception("Failed to index file", extra={"file_id": file.id, "error": str(e)})
                 collection_file.status = FileStatus.FAILED
-            collection_file.save(update_fields=["status"])
+            try:
+                collection_file.save(update_fields=["status"])
+            except DatabaseError:
+                collection_file_id = collection_file.id
+                collection_file = CollectionFile.objects.filter(id=collection_file_id).first()
+                if not collection_file:
+                    # collection file deleted - remove all the embeddings
+                    FileChunkEmbedding.objects.filter(id__in=[embedding.id for embedding in embeddings]).delete()
+                else:
+                    logger.exception(
+                        "Failed to update collection file status", extra={"collection_file_id": collection_file_id}
+                    )
 
     def chunk_file(self, file: File, chunk_size: int, chunk_overlap: int) -> list[str]:
         """
