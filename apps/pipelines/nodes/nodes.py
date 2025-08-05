@@ -390,7 +390,9 @@ class LLMResponseWithPrompt(LLMResponse, HistoryMixin, OutputMessageTagMixin):
         default_factory=list,
         title="MCP Tools",
         description="MCP tools to enable for the bot",
-        json_schema_extra=UiSchema(widget=Widgets.multiselect, options_source=OptionsSource.mcp_tools),
+        json_schema_extra=UiSchema(
+            widget=Widgets.multiselect, options_source=OptionsSource.mcp_tools, flag_required="flag_mcp"
+        ),
     )
     history_type: PipelineChatHistoryTypes = Field(
         PipelineChatHistoryTypes.GLOBAL,
