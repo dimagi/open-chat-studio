@@ -20,6 +20,19 @@ interface ChatAttachment {
   content_url: string;
 }
 
+interface UploadedFile {
+  id: number;
+  name: string;
+  size: number;
+  content_type: string;
+}
+
+interface SelectedFile {
+  file: File;
+  uploaded?: UploadedFile;
+  error?: string;
+}
+
 interface ChatStartSessionResponse {
   session_id: string;
   chatbot: any;
@@ -76,6 +89,11 @@ export class OcsChat {
   private static readonly WINDOW_MARGIN = 20;
 
   private static readonly LOCALSTORAGE_TEST_KEY = '__ocs_test__';
+
+  private static readonly MAX_FILE_SIZE_MB = 50;
+  private static readonly MAX_TOTAL_SIZE_MB = 50;
+  private static readonly SUPPORTED_FILE_EXTENSIONS = ['.txt', '.pdf', '.doc', '.docx', '.xls', '.xlsx', '.csv', '.jpg', '.jpeg',
+    '.png', '.gif', '.bmp', '.webp', '.svg', '.mp4', '.mov', '.avi', '.mp3', '.wav' ];
 
   /**
    * The ID of the chatbot to connect to.
@@ -166,9 +184,13 @@ export class OcsChat {
   @State() generatedUserId?: string;
   @State() isFullscreen: boolean = false;
 
+  @State() selectedFiles: SelectedFile[] = [];
+  @State() isUploadingFiles: boolean = false;
+
   private messageListRef?: HTMLDivElement;
   private textareaRef?: HTMLTextAreaElement;
   private chatWindowRef?: HTMLDivElement;
+  private fileInputRef?: HTMLInputElement;
 
 
   componentWillLoad() {
@@ -295,6 +317,60 @@ export class OcsChat {
     }
   }
 
+  private async uploadFiles(): Promise<number[]> {
+    if (this.selectedFiles.length === 0 || !this.sessionId) {
+      return [];
+    }
+
+    this.isUploadingFiles = true;
+    const uploadedIds: number[] = [];
+
+    try {
+      const formData = new FormData();
+
+      // Add all files to form data
+      for (const selectedFile of this.selectedFiles) {
+        if (!selectedFile.error && !selectedFile.uploaded) {
+          formData.append('files', selectedFile.file);
+        } else if (selectedFile.uploaded) {
+          uploadedIds.push(selectedFile.uploaded.id);
+        }
+      }
+
+      // Only upload if there are new files
+      if (formData.has('files')) {
+        const response = await fetch(`${this.getApiBaseUrl()}/api/chat/${this.sessionId}/upload/`, {
+          method: 'POST',
+          body: formData,
+        });
+
+        if (!response.ok) {
+          const errorData = await response.json();
+          throw new Error(errorData.error || 'Failed to upload files');
+        }
+
+        const data = await response.json();
+
+        // Update selected files with upload results
+        let fileIndex = 0;
+        this.selectedFiles = this.selectedFiles.map(sf => {
+          if (!sf.error && !sf.uploaded) {
+            return { ...sf, uploaded: data.files[fileIndex++] };
+          }
+          return sf;
+        });
+        uploadedIds.push(...data.files.map((f: UploadedFile) => f.id));
+      }
+
+      return uploadedIds;
+    } catch (error) {
+      this.error = error instanceof Error ? error.message : 'Failed to upload files';
+      throw error;
+    } finally {
+      this.isUploadingFiles = false;
+    }
+  }
+
   private async sendMessage(message: string): Promise<void> {
     if (!this.sessionId || !message.trim()) return;
 
@@ -302,6 +378,11 @@ export class OcsChat {
     this.showStarterQuestions = false;
 
     try {
+      let attachmentIds: number[] = [];
+      if (this.selectedFiles.length > 0) {
+        attachmentIds = await this.uploadFiles();
+      }
+
       // If this is the first user message and there are welcome messages,
       // add them to chat history as assistant messages
       if (this.messages.length === 0 && this.parsedWelcomeMessages.length > 0) {
@@ -314,27 +395,39 @@ export class OcsChat {
         }));
         this.messages = [...this.messages, ...welcomeMessages];
       }
-      // Add user message immediately
+
+      // Add user message immediately with attachments info
       const userMessage: ChatMessage = {
         created_at: new Date().toISOString(),
         role: 'user',
         content: message.trim(),
-        attachments: []
+        attachments: this.selectedFiles.map(sf => ({
+          name: sf.file.name,
+          content_type: sf.file.type,
+          size: sf.file.size,
+          content_url: '', // We don't have the URL yet
+        }))
       };
       this.messages = [...this.messages, userMessage];
       this.saveSessionToStorage();
       this.messageInput = '';
+      this.selectedFiles = []; // Clear selected files after sending
       this.scrollToBottom();
 
       // Start typing indicator - it will stay on during task polling
       this.isTyping = true;
+
+      const requestBody: any = { message: message.trim() };
+      if (attachmentIds.length > 0) {
+        requestBody.attachment_ids = attachmentIds;
+      }
 
       const response = await fetch(`${this.getApiBaseUrl()}/api/chat/${this.sessionId}/message/`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
         },
-        body: JSON.stringify({ message: message.trim() })
+        body: JSON.stringify(requestBody)
       });
 
       if (!response.ok) {
@@ -500,6 +593,62 @@ export class OcsChat {
     if (this.messageInput.trim().length > 0) {
       this.showStarterQuestions = false;
     }
+  }
+
+  private handleFileSelect(event: Event): void {
+    const input = event.target as HTMLInputElement;
+    if (!input.files || input.files.length === 0) return;
+
+    const newFiles: SelectedFile[] = [];
+    let totalSize = this.selectedFiles.reduce((sum, f) => sum + f.file.size, 0);
+
+    for (let i = 0; i < input.files.length; i++) {
+      const file = input.files[i];
+      const ext = '.' + file.name.split('.').pop()?.toLowerCase();
+      if (!OcsChat.SUPPORTED_FILE_EXTENSIONS.includes(ext)) {
+        newFiles.push({
+          file,
+          error: `File type ${ext} not supported`
+        });
+        continue;
+      }
+      const fileSizeMB = file.size / (1024 * 1024);
+      if (fileSizeMB > OcsChat.MAX_FILE_SIZE_MB) {
+        newFiles.push({
+          file,
+          error: `File exceeds ${OcsChat.MAX_FILE_SIZE_MB}MB limit`
+        });
+        continue;
+      }
+      totalSize += file.size;
+      const totalSizeMB = totalSize / (1024 * 1024);
+      if (totalSizeMB > OcsChat.MAX_TOTAL_SIZE_MB) {
+        newFiles.push({
+          file,
+          error: `Total size exceeds ${OcsChat.MAX_TOTAL_SIZE_MB}MB limit`
+        });
+        continue;
+      }
+
+      newFiles.push({ file });
+    }
+    this.selectedFiles = [...this.selectedFiles, ...newFiles];
+    input.value = '';
+
+    // Hide starter questions when files are selected
+    this.showStarterQuestions = false;
+  }
+
+  private removeSelectedFile(index: number): void {
+    this.selectedFiles = this.selectedFiles.filter((_, i) => i !== index);
+  }
+
+  private formatFileSize(bytes: number): string {
+    if (bytes === 0) return '0 Bytes';
+    const k = 1024;
+    const sizes = ['Bytes', 'KB', 'MB', 'GB'];
+    const i = Math.floor(Math.log(bytes) / Math.log(k));
+    return Math.round(bytes / Math.pow(k, i) * 100) / 100 + ' ' + sizes[i];
   }
 
   private formatTime(dateString: string): string {
@@ -879,6 +1028,7 @@ export class OcsChat {
     this.showStarterQuestions = true;
     this.isTyping = false;
     this.error = '';
+    this.selectedFiles = [];
     this.cleanup();
 
     await this.startSession();
@@ -1009,15 +1159,19 @@ export class OcsChat {
                         {message.attachments && message.attachments.length > 0 && (
                           <div class="mt-2 space-y-1">
                             {message.attachments.map((attachment, attachmentIndex) => (
-                              <a
-                                key={attachmentIndex}
-                                href={attachment.content_url}
-                                target="_blank"
-                                rel="noopener noreferrer"
-                                class="block text-sm underline hover:no-underline"
-                              >
+                              <div key={attachmentIndex} class="text-sm">
                                 📎 {attachment.name}
-                              </a>
+                                {attachment.content_url && (
+                                  <a
+                                    href={attachment.content_url}
+                                    target="_blank"
+                                    rel="noopener noreferrer"
+                                    class="ml-2 underline hover:no-underline"
+                                  >
+                                    Download
+                                  </a>
+                                )}
+                              </div>
                             ))}
                           </div>
                         )}
@@ -1058,6 +1212,36 @@ export class OcsChat {
                 </div>
               )}
 
+              {/* Selected Files Display */}
+              {this.selectedFiles.length > 0 && (
+                <div class="px-4 py-2 border-t border-gray-200">
+                  <div class="text-xs text-gray-600 mb-1">Selected files:</div>
+                  <div class="space-y-1">
+                    {this.selectedFiles.map((selectedFile, index) => (
+                      <div key={index} class="flex items-center justify-between text-sm bg-gray-50 rounded px-2 py-1">
+                        <div class="flex items-center gap-2">
+                          <span class="text-gray-700">📎 {selectedFile.file.name}</span>
+                          <span class="text-xs text-gray-500">({this.formatFileSize(selectedFile.file.size)})</span>
+                          {selectedFile.error && (
+                            <span class="text-xs text-red-500">{selectedFile.error}</span>
+                          )}
+                          {selectedFile.uploaded && (
+                            <span class="text-xs text-green-500">✓ Uploaded</span>
+                          )}
+                        </div>
+                        <button
+                          onClick={() => this.removeSelectedFile(index)}
+                          class="text-red-500 hover:text-red-700"
+                          aria-label="Remove file"
+                        >
+                          ×
+                        </button>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+
               {/* Input Area */}
               {this.sessionId && (
                 <div class="border-t border-gray-200 p-4 text-sm">
@@ -1070,18 +1254,36 @@ export class OcsChat {
                       value={this.messageInput}
                       onInput={(e) => this.handleInputChange(e)}
                       onKeyPress={(e) => this.handleKeyPress(e)}
-                      disabled={this.isTyping}
+                      disabled={this.isTyping || this.isUploadingFiles}
                     ></textarea>
+                    {/* File Upload Button */}
+                    <input
+                      ref={(el) => this.fileInputRef = el}
+                      type="file"
+                      multiple
+                      accept={OcsChat.SUPPORTED_FILE_EXTENSIONS.join(',')}
+                      onChange={(e) => this.handleFileSelect(e)}
+                      class="hidden"
+                    />
+                    <button
+                      class="px-3 py-2 rounded-md text-gray-600 hover:bg-gray-100 transition-colors duration-200 disabled:opacity-50"
+                      onClick={() => this.fileInputRef?.click()}
+                      disabled={this.isTyping || this.isUploadingFiles}
+                      title="Attach files"
+                      aria-label="Attach files"
+                    >
+                      📎
+                    </button>
                     <button
                       class={{
                         'px-4 py-2 rounded-md font-medium transition-colors duration-200': true,
-                        'bg-blue-500 hover:bg-blue-600 text-white': !this.isTyping && !!this.messageInput.trim(),
-                        'bg-gray-300 text-gray-500 cursor-not-allowed': this.isTyping || !this.messageInput.trim()
+                        'bg-blue-500 hover:bg-blue-600 text-white': !this.isTyping && !this.isUploadingFiles && !!this.messageInput.trim(),
+                        'bg-gray-300 text-gray-500 cursor-not-allowed': this.isTyping || this.isUploadingFiles || !this.messageInput.trim()
                       }}
                       onClick={() => this.sendMessage(this.messageInput)}
-                      disabled={this.isTyping || !this.messageInput.trim()}
+                      disabled={this.isTyping || this.isUploadingFiles || !this.messageInput.trim()}
                     >
-                      Send
+                      {this.isUploadingFiles ? 'Uploading...' : 'Send'}
                     </button>
                   </div>
                 </div>
