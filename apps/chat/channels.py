@@ -500,6 +500,7 @@ class ChannelBase(ABC):
         files = files or []
         supported_files = []
         unsupported_files = []
+        formatted_bot_message = ""
 
         reply_text = True
         user_sent_voice = self.message and self.message.content_type == MESSAGE_TYPES.VOICE
@@ -518,6 +519,7 @@ class ChannelBase(ABC):
 
         if reply_text:
             bot_message, uncited_files = self._format_reference_section(bot_message, files=files)
+            formatted_bot_message = bot_message
             # Cited file links are already included in the bot message, so we only need to append the list of
             # unsupported files that are also uncited
             unsupported_files = [file for file in unsupported_files if file in uncited_files]
@@ -541,7 +543,7 @@ class ChannelBase(ABC):
         # Finally send the attachments that are supported by the channel
         if supported_files:
             self._send_files_to_user(supported_files)
-        return bot_message
+        return formatted_bot_message
 
     def _format_reference_section(self, text: str, files: list[File]) -> tuple[str, list[File]]:
         """
@@ -639,7 +641,8 @@ class ChannelBase(ABC):
 
         # Returning the response here is a bit of a hack to support chats through the web UI while trying to
         # use a coherent interface to manage / handle user messages
-        ai_message.content=bot_message
+        if bot_message:
+            ai_message.content = bot_message
         return ai_message
 
     def _handle_unsupported_message(self) -> str:
