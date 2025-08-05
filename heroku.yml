@@ -16,7 +16,7 @@ release:
 run:
   web:
     command:
-      - gunicorn --bind 0.0.0.0:$PORT --workers 1 --threads 8 --timeout 0 gpt_playground.asgi:application -k uvicorn.workers.UvicornWorker --worker-class gpt_playground.worker_class.DjangoUvicornWorker
+      - gunicorn --bind 0.0.0.0:$PORT --workers 1 --threads 8 --timeout 0 gpt_playground.wsgi:application
     image: django
   worker:
     command:
