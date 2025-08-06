@@ -21,20 +21,31 @@ For more information, see the [Open Chat Studio documentation](https://docs.open
 | `persistentSessionExpire` | `persistent-session-expire` | Minutes since the most recent message after which the session data in local storage will expire. Set this to `0` to never expire. | `number`                        | `60 * 24`                       |
 | `position`                | `position`                  | The initial position of the chat widget on the screen.                                                                            | `"center" \| "left" \| "right"` | `'right'`                       |
 | `starterQuestions`        | `starter-questions`         | Array of starter questions that users can click to send (JSON array of strings)                                                   | `string`                        | `undefined`                     |
+| `userId`                  | `user-id`                   | Used to associate chat sessions with a specific user across multiple visits/sessions                                              | `string`                        | `undefined`                     |
+| `userName`                | `user-name`                 | Display name for the user.                                                                                                        | `string`                        | `undefined`                     |
 | `visible`                 | `visible`                   | Whether the chat widget is visible on load.                                                                                       | `boolean`                       | `false`                         |
 | `welcomeMessages`         | `welcome-messages`          | Welcome messages to display above starter questions (JSON array of strings)                                                       | `string`                        | `undefined`                     |
 
 
 ## CSS Custom Properties
 
-| Name                              | Description                      |
-| --------------------------------- | -------------------------------- |
-| `--button-background-color`       | Button background color          |
-| `--button-background-color-hover` | Button background color on hover |
-| `--button-border-color`           | Button border color              |
-| `--button-border-color-hover`     | Button border color on hover     |
-| `--button-text-color`             | Button text color                |
-| `--button-text-color-hover`       | Button text color on hover       |
+| Name                              | Description                                    |
+| --------------------------------- | ---------------------------------------------- |
+| `--button-background-color`       | Button background color                        |
+| `--button-background-color-hover` | Button background color on hover               |
+| `--button-border-color`           | Button border color                            |
+| `--button-border-color-hover`     | Button border color on hover Padding variables |
+| `--button-text-color`             | Button text color                              |
+| `--button-text-color-hover`       | Button text color on hover                     |
+| `--padding-button`                | Button padding (0.75rem)                       |
+| `--padding-button-sm`             | Small button padding (0.375rem)                |
+| `--padding-container`             | Container padding                              |
+| `--padding-lg`                    | Large padding (1rem)                           |
+| `--padding-md`                    | Medium padding (0.75rem)                       |
+| `--padding-message`               | Message bubble padding                         |
+| `--padding-sm`                    | Small padding (0.5rem)                         |
+| `--padding-xl`                    | Extra large padding (1.5rem)                   |
+| `--padding-xs`                    | Extra small padding (0.125rem)                 |
 
 
 ----------------------------------------------
