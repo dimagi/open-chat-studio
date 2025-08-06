@@ -5,7 +5,7 @@
 {% load form_tags %}
 {% load django_tables2 %}
 {% block breadcrumbs %}
-  <div class="text-sm breadcrumbs" aria-label="breadcrumbs">
+<div class="text-sm breadcrumbs" aria-label="breadcrumbs" xmlns:hx-on="http://www.w3.org/1999/xhtml">
     <ul>
       <li><a href="{% url 'documents:collection_home' request.team.slug %}">Collections</a></li>
       <li class="pg-breadcrumb-active" aria-current="page">{{ collection.name }}</li>
@@ -51,15 +51,15 @@
         </div>
       </div>
 
-      <div class="my-2 w-full max-w-md" x-data="fileSearch()">
+      <div class="my-2 w-full max-w-md">
         <input
-          x-model="searchQuery"
-          @input.debounce.500ms="triggerSearch"
-          id="search-input"
           class="input input-bordered w-full"
           type="search"
           name="search"
+          id="search-input"
           placeholder="Search files..."
+          hx-on:input="document.body.dispatchEvent(new CustomEvent('search-files'))"
+          hx-trigger="input changed delay:500ms"
         >
         <i class="mx-2 htmx-indicator fa fa-spinner fa-pulse" style="display: none;"></i>
       </div>
@@ -113,9 +113,10 @@
           </div>
           <div id="document_source_files_{{ document_source.id }}"
                hx-get="{% url 'documents:document_source_files_list' team.slug collection.id document_source.id %}"
-               hx-trigger="load"
+               hx-trigger="search-files from:body, load"
                hx-target="#document_source_files_{{ document_source.id }}"
-               hx-swap="innerHTML">
+               hx-swap="innerHTML"
+               hx-include="#search-input">
             <span class="loading loading-spinner"></span>
           </div>
         </div>
@@ -125,36 +126,12 @@
       <h2 class="text-lg font-semibold"><i class="fa-regular fa-file"></i> Files</h2>
       <div id="collection-files-container"
            hx-get="{% url 'documents:collection_files_list' request.team.slug collection.id %}"
-           hx-trigger="load"
+           hx-trigger="search-files from:body, load"
            hx-target="this"
-           hx-swap="innerHTML">
+           hx-swap="innerHTML"
+           hx-include="#search-input">
         <span class="loading loading-spinner"></span>
       </div>
     </div>
   </div>
-
-<script>
-  function fileSearch() {
-    return {
-      searchQuery: "",
-
-      triggerSearch() {
-        htmx.ajax('GET', "{% url 'documents:collection_files_list' request.team.slug collection.id %}", {
-          target: "#collection-files-container",
-          values: { search: this.searchQuery }
-        });
-
-        document.querySelectorAll('[id^="document_source_files_"]').forEach(el => {
-          const getUrl = el.getAttribute("hx-get");
-          if (getUrl) {
-            htmx.ajax('GET', getUrl, {
-              target: el,
-              values: { search: this.searchQuery }
-            });
-          }
-        });
-      }
-    };
-  }
-</script>
 {% endblock app %}
