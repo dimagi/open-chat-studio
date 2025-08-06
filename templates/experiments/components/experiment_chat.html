@@ -104,6 +104,7 @@
                          hx-target="#messages-container"
                          hx-include="[name='search'], [name='language']"
                          hx-trigger="change"
+                         hx-indicator=".original-message-loading-spinner"
                          {% if request.GET.show_original_translation == "on" %}checked{% else %}unchecked{% endif %}>
                 </label>
               </div>
@@ -221,6 +222,11 @@
                           </div>
                         {% endif %}
                       </div>
+                      <div id="original-message-loading-{{ message.id }}" class="original-message-loading-spinner pg-text-muted htmx-indicator">
+                        <span class="loading loading-spinner loading-sm"></span>
+                        <span class="ml-2">Loading original message...</span>
+                      </div>
+
                       {% if show_original_translation and not message.translation == default_message %}
                         <div id="chat-message-{{ message.id }}-original" class="pg-text-muted htmx-hide">
                           <p><strong>Original Message: </strong>{{ message.content|render_markdown }}</p>
