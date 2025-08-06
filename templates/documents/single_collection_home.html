@@ -51,23 +51,23 @@
         </div>
       </div>
 
-      <div class="my-2 w-full max-w-md">
-        <input
-          class="input input-bordered w-full"
-          type="search"
-          name="search"
-          id="search-input"
-          placeholder="Search files..."
-          hx-on:input="document.body.dispatchEvent(new CustomEvent('search-files'))"
-          hx-trigger="input changed delay:500ms"
-        >
-        <i class="mx-2 htmx-indicator fa fa-spinner fa-pulse" style="display: none;"></i>
-      </div>
-    </div>
-  </div>
   <div class="app-card">
     <div class="flex flex-col gap-4">
-      <div class="flex justify-end items-center">
+      <div class="flex justify-between items-center">
+        <div class="flex items-center gap-2">
+          <div class="w-full max-w-md">
+            <input
+              class="input input-bordered w-full"
+              type="search"
+              name="search"
+              id="search-input"
+              placeholder="Search files..."
+              hx-on:input="document.body.dispatchEvent(new CustomEvent('search-files'))"
+              hx-trigger="input changed delay:500ms"
+            >
+          </div>
+          <i class="htmx-indicator fa fa-spinner fa-pulse" style="display: none;"></i>
+        </div>
         <div class="join">
           {% if collection.has_failed_index_uploads %}
             <form class="join-item" action="{% url 'documents:retry_failed_uploads' team.slug collection.id %}" method="post">
