@@ -41,9 +41,12 @@ CREATE_LINK_TEXT = """You can use this markdown link to reference it in your res
 """
 
 CHUNK_TEMPLATE = """
-## File name: {file_name}, file_id={file_id}
-### Content
-{chunk}
+<file>
+  <file_id>{file_id}</file_id>
+  <filename>{file_name}</filename>
+  <context>{chunk}
+  </context>
+</file>
 """
 
 CITATION_PROMPT = """**CRITICAL REQUIREMENT - MANDATORY CITATIONS:**
@@ -307,7 +310,12 @@ class AttachMediaTool(CustomBaseTool):
 
 class SearchIndexTool(CustomBaseTool):
     name: str = AgentTools.SEARCH_INDEX
-    description: str = "Search files / source material for relevant information pertaining to the user's query"
+    description: str = (
+        "Performs semantic search across available documents using natural language queries. "
+        "This tool analyzes the content of the documents to find relevant information, quotes, "
+        "and passages that best match your query. Use this to extract specific information "
+        "or find relevant sections within the available documents."
+    )
     requires_session: bool = False
     args_schema: type[schemas.SearchIndexSchema] = schemas.SearchIndexSchema
     search_config: SearchToolConfig
@@ -324,21 +332,30 @@ class SearchIndexTool(CustomBaseTool):
 
         query_vector = index.get_query_vector(query)
         # This query is automatically team scoped
-        embeddings = (
+        embeddings = list(
             FileChunkEmbedding.objects.annotate(distance=CosineDistance("embedding", query_vector))
             .filter(collection_id=index.id)
             .order_by("distance")
             .select_related("file")
             .only("text", "file__name")[:max_results]
         )
+        if not embeddings:
+            return "\nThe semantic search did not return any results."
+
         retrieved_chunks = "".join([self._format_result(embedding) for embedding in embeddings])
         response_template = """
-# Retrieved chunks
-{retrieved_chunks}
+{header}
 {citation_prompt}
+<context>{retrieved_chunks}
+</context>
 """
         citation_prompt = CITATION_PROMPT if self.search_config.generate_citations else ""
-        return response_template.format(retrieved_chunks=retrieved_chunks, citation_prompt=citation_prompt)
+        return response_template.format(
+            header="A semantic search was executed and retrieved the following context inside "
+            "<context></context> XML tags.",
+            retrieved_chunks=retrieved_chunks,
+            citation_prompt=citation_prompt,
+        )
 
     def _format_result(self, embedding: FileChunkEmbedding) -> str:
         """
