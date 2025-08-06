@@ -1221,7 +1221,7 @@ export class OcsChat {
                     {this.selectedFiles.map((selectedFile, index) => (
                       <div key={index} class="flex items-center justify-between text-sm bg-gray-50 rounded px-2 py-1">
                         <div class="flex items-center gap-2">
-                          <span class="w-3 h-3 text-gray-500"><PaperClipIcon /></span>
+                          <span class="w-5 h-5 text-gray-500"><PaperClipIcon /></span>
                           <span class="text-gray-700">{selectedFile.file.name}</span>
                           <span class="text-xs text-gray-500">({this.formatFileSize(selectedFile.file.size)})</span>
                           {selectedFile.error && (
