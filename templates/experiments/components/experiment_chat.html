@@ -104,7 +104,7 @@
                          hx-target="#messages-container"
                          hx-include="[name='search'], [name='language']"
                          hx-trigger="change"
-                         hx-indicator=".original-message-loading-spinner"
+                         onclick="handleOriginalToggleIndicator(this)"
                          {% if request.GET.show_original_translation == "on" %}checked{% else %}unchecked{% endif %}>
                 </label>
               </div>
@@ -399,6 +399,14 @@
         }
       }
     });
+  }
+
+  function handleOriginalToggleIndicator(toggleElement) {
+    if (toggleElement.checked) {
+      toggleElement.setAttribute('hx-indicator', '.original-message-loading-spinner');
+    } else {
+      toggleElement.removeAttribute('hx-indicator');
+    }
   }
 
   function initializeTranslationForms() {
