@@ -77,6 +77,7 @@
                   hx-vals='{"translate_all": "true"}'
                   hx-include="[name='search'], #translation-provider-all, [name='target_language'], #translation-provider-model-all"
                   hx-target="#messages-container"
+                  hx-indicator=".translation-loading-spinner"
                   onclick="document.getElementById('translate-all-messages-modal').checked = false;"
                 >Translate All Messages
                 </button>
@@ -198,27 +199,31 @@
                       <div class="message-contents">
                         {% if message.translation == default_message %}
                           <div id="chat-message-{{ message.id }}-translation">
-                            <div class="translation-loading-spinner-{{ message.id }}">
-                              <span class="loading loading-spinner loading-sm"></span>
-                              <span class="ml-2">Translating...</span>
-                            </div>
-                            <div class="translation-content-{{ message.id }}">
-                              <p>{{ message.translation|render_markdown }}</p>
-                            </div>
+	                          <div id="translation-loading-spinner-{{ message.id }}" >
+		                          <div class="translation-loading-spinner htmx-indicator">
+		                            <span class="loading loading-spinner loading-sm"></span>
+		                            <span class="ml-2">Translating...</span>
+		                          </div>
+		                          <div class="translation-content-{{ message.id }} translation-loading-spinner htmx-hide">
+		                            <p>{{ message.translation|render_markdown }}</p>
+		                          </div>
+	                          </div>
                           </div>
                         {% else %}
                           <div id="chat-message-{{ message.id }}-translation">
-                            <div class="translation-content-{{ message.id }}">
-                              {% if message.translation %}
-                                <p>{{ message.translation|render_markdown }}</p>
-                              {% else %}
-                                <p>{{ message.content|render_markdown }}</p>
-                              {% endif %}
-                            </div>
-                            <div class="translation-loading-spinner-{{ message.id }} hidden">
-                              <span class="loading loading-spinner loading-sm"></span>
-                              <span class="ml-2">Translating...</span>
-                            </div>
+	                          <div id="translation-loading-spinner-{{ message.id }}">
+		                          <div class="translation-content-{{ message.id }} translation-loading-spinner htmx-hide">
+		                            {% if message.translation %}
+		                              <p>{{ message.translation|render_markdown }}</p>
+		                            {% else %}
+		                              <p>{{ message.content|render_markdown }}</p>
+		                            {% endif %}
+		                          </div>
+		                          <div class="translation-loading-spinner htmx-indicator">
+		                            <span class="loading loading-spinner loading-sm"></span>
+		                            <span class="ml-2">Translating...</span>
+		                          </div>
+	                          </div>
                           </div>
                         {% endif %}
                       </div>
