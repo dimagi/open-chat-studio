@@ -22,10 +22,12 @@ class TestTracingService:
 
     @pytest.fixture()
     def mock_session(self):
+        participant_mock = MagicMock(identifier="participant_id")
         mock = MagicMock()
-        mock.id = "test_session"
-        mock.external_id = "session_id"
-        mock.__str__.return_value = "test_session"
+        mock.id = "session_id"
+        mock.external_id = "session_ext_id"
+        mock.__str__.return_value = "session_id"
+        mock.participant = participant_mock
         return mock
 
     def test_initialization(self, mock_tracer):
@@ -34,8 +36,7 @@ class TestTracingService:
         assert not service.activated
         assert service.trace_name is None
         assert service.trace_id is None
-        assert service.session_id is None
-        assert service.user_id is None
+        assert service.session is None
         assert service.span_stack == []
 
     def test_empty_initialization(self):
@@ -45,19 +46,17 @@ class TestTracingService:
 
     def test_trace_context_manager(self, tracing_service, mock_tracer, mock_session):
         trace_name = "test_trace"
-        session_id = "session_id"
-        user_id = "test_user"
 
-        with tracing_service.trace(trace_name, mock_session, user_id, {"input": "test"}):
+        with tracing_service.trace(trace_name, session=mock_session, inputs={"input": "test"}):
             assert tracing_service.activated
             assert tracing_service.trace_name == trace_name
-            assert tracing_service.session_id == session_id
-            assert tracing_service.user_id == user_id
+            assert tracing_service.session == mock_session
+
             assert isinstance(tracing_service.trace_id, UUID)
             assert mock_tracer.trace is not None
             assert mock_tracer.trace["name"] == trace_name
-            assert mock_tracer.trace["session_id"] == session_id
-            assert mock_tracer.trace["user_id"] == user_id
+            assert mock_tracer.trace["session_id"] == mock_session.id
+            assert mock_tracer.trace["user_id"] == mock_session.participant.identifier
             assert mock_tracer.trace["inputs"] == {"input": "test"}
 
             tracing_service.set_current_span_outputs({"output": "test"})
@@ -77,8 +76,7 @@ class TestTracingService:
         assert not tracing_service.activated
         assert not tracing_service.trace_id
         assert not tracing_service.trace_name
-        assert not tracing_service.session_id
-        assert not tracing_service.user_id
+        assert not tracing_service.session
         assert not tracing_service.outputs
         assert not tracing_service.span_stack
 
@@ -145,12 +143,12 @@ class TestTracingService:
         assert callbacks == []
 
     def test_get_langchain_config(self, tracing_service, mock_tracer, mock_session):
-        with tracing_service.trace("test_trace", mock_session, "user_id"):
+        with tracing_service.trace("test_trace", mock_session):
             config = tracing_service.get_langchain_config()
             assert config["run_name"] == "test_trace run"
             assert len(config["callbacks"]) == 1
-            assert config["metadata"]["participant-id"] == "user_id"
-            assert config["metadata"]["session-id"] == "session_id"
+            assert config["metadata"]["participant-id"] == "participant_id"
+            assert config["metadata"]["session-id"] == "session_ext_id"
 
             # Test with additional callbacks and configurable
             extra_callback = MagicMock()
@@ -164,8 +162,8 @@ class TestTracingService:
                 config = tracing_service.get_langchain_config()
                 assert config["run_name"] == "test_span run"
                 assert len(config["callbacks"]) == 1
-                assert config["metadata"]["participant-id"] == "user_id"
-                assert config["metadata"]["session-id"] == "session_id"
+                assert config["metadata"]["participant-id"] == "participant_id"
+                assert config["metadata"]["session-id"] == "session_ext_id"
 
         assert not tracing_service.activated
         config = tracing_service.get_langchain_config()
