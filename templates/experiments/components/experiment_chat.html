@@ -228,7 +228,7 @@
                       </div>
 
                       {% if show_original_translation and not message.translation == default_message %}
-                        <div id="chat-message-{{ message.id }}-original" class="pg-text-muted htmx-hide">
+                        <div id="chat-message-{{ message.id }}-original" class="pg-text-muted">
                           <p><strong>Original Message: </strong>{{ message.content|render_markdown }}</p>
                         </div>
                       {% endif %}
