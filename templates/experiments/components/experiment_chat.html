@@ -154,8 +154,21 @@
       {% endif %}
     </div>
 
-    {% if total_pages > 1 %}
-      <div class="justify-end">
+    <div class="justify-end">
+      Show all messages
+      <input type="checkbox"
+             name="show_all"
+             class="toggle"
+             hx-get="{% url 'experiments:experiment_session_messages_view' request.team.slug experiment.public_id experiment_session.external_id %}"
+             hx-target="#messages-container"
+             hx-include="[name='language'], [name='show_original_translation'], [name='tag_filter']"
+             hx-trigger="change"
+             hx-indicator=".htmx-indicator"
+             {% if request.GET.show_all == "on" %}checked{% endif %}>
+
+    </div>
+    {% if total_pages > 1 and not show_all %}
+      <div>
         {% include "experiments/components/pagination_buttons.html" %}
       </div>
     {% endif %}
