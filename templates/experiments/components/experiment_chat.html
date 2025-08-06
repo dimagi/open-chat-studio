@@ -35,25 +35,25 @@
       {% if not hide_translation|default_if_none:False %}
         <div class="flex items-center gap-3 flex-wrap">
           {% if available_languages %}
-            <select
-              name="language"
-              class="select select-sm select-bordered w-48"
-              hx-get="{% url 'experiments:experiment_session_messages_view' request.team.slug experiment.public_id experiment_session.external_id %}"
-              hx-target="#messages-container"
-              hx-include="[name='search'], [name='show_original_translation']"
-              hx-trigger="change"
-              hx-indicator="#language-loading-spinner"
-            >
-              {% for lang_code, lang_name in available_languages %}
-                <option value="{{ lang_code }}" {% if request.GET.language == lang_code %}selected{% endif %}>
-                  {{ lang_name }}
-                </option>
-              {% endfor %}
-            </select>
-            <div id="language-loading-spinner" class="hidden">
-              <span class="loading loading-spinner loading-sm"></span>
-              <span class="ml-2">Loading...</span>
-            </div>
+          <select
+            name="language"
+            class="select select-sm select-bordered w-48 language-selector htmx-hide"
+            hx-get="{% url 'experiments:experiment_session_messages_view' request.team.slug experiment.public_id experiment_session.external_id %}"
+            hx-target="#messages-container"
+            hx-include="[name='search'], [name='show_original_translation']"
+            hx-trigger="change"
+            hx-indicator=".language-selector"
+          >
+          {% for lang_code, lang_name in available_languages %}
+            <option value="{{ lang_code }}" {% if request.GET.language == lang_code %}selected{% endif %}>
+              {{ lang_name }}
+            </option>
+          {% endfor %}
+          </select>
+          <div class="language-selector htmx-indicator">
+            <span class="loading loading-spinner loading-sm"></span>
+            <span>Loading...</span>
+          </div>
           {% endif %}
 
           <label for="translate-all-messages-modal" class="btn btn-primary btn-sm">
