@@ -346,7 +346,7 @@ class ChannelBase(ABC):
 
         self._ensure_sessions_exists()
 
-    def new_user_message(self, message: BaseMessage) -> ChatMessage:
+    def new_user_message(self, message: BaseMessage, is_api_channel: bool = False) -> ChatMessage:
         """Handles the message coming from the user. Call this to send bot messages to the user.
         The `message` here will probably be some object, depending on the channel being used.
         """
@@ -365,7 +365,7 @@ class ChannelBase(ABC):
                     session=self.experiment_session,
                     inputs={"input": self.message.model_dump()},
                 ):
-                    response = self._new_user_message()
+                    response = self._new_user_message(is_api_channel)
                     self.trace_service.set_current_span_outputs({"response": response.content})
                     self.trace_service.set_output_message_id(response.id)
                     return response
@@ -377,7 +377,7 @@ class ChannelBase(ABC):
             return True
         return self.experiment.is_participant_allowed(self.participant_identifier)
 
-    def _new_user_message(self) -> ChatMessage:
+    def _new_user_message(self, is_api_channel: bool = False) -> ChatMessage:
         try:
             if not self.is_message_type_supported():
                 resp = self._handle_unsupported_message()
@@ -398,7 +398,7 @@ class ChannelBase(ABC):
                     self.experiment_session.update_status(SessionStatus.ACTIVE)
 
             enqueue_static_triggers.delay(self.experiment_session.id, StaticTriggerType.NEW_HUMAN_MESSAGE)
-            return self._handle_supported_message()
+            return self._handle_supported_message(is_api_channel)
         except Exception as e:
             self._inform_user_of_error(e)
             raise e
@@ -628,7 +628,7 @@ class ChannelBase(ABC):
                 download_link = file.download_link(self.experiment_session.id)
                 self.send_text_to_user(download_link)
 
-    def _handle_supported_message(self):
+    def _handle_supported_message(self, is_api_channel: bool = False):
         with self.trace_service.span("process_message", inputs={"input": self.user_query}):
             self.submit_input_to_llm()
             ai_message = self._get_bot_response(message=self.user_query)
@@ -641,7 +641,7 @@ class ChannelBase(ABC):
 
         # Returning the response here is a bit of a hack to support chats through the web UI while trying to
         # use a coherent interface to manage / handle user messages
-        if bot_message:
+        if bot_message and is_api_channel:
             ai_message.content = bot_message
         return ai_message
 

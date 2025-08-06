@@ -153,7 +153,7 @@ def handle_api_message(
         experiment_session=session,
         user=user,
     )
-    return channel.new_user_message(message)
+    return channel.new_user_message(message, True)
 
 
 def handle_evaluation_message(
