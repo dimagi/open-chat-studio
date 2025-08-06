@@ -72,13 +72,21 @@ Failure to include proper citations will result in an incomplete response.
 SEARCH_TOOL_HEADER = (
     "A semantic search was executed and retrieved the following context inside <context></context> XML tags."
 )
-SEARCH_TOOL_FOOTER = """
-Use the context as your learned knowledge to better answer the user.
+SEARCH_TOOL_BASE_FOOTER = """Use the context as your learned knowledge to better answer the user.
 
 In your response, remember to follow these guidelines:
 - If you don't know the answer, simply say that you don't know.
 - If you are unsure how to answer, ask for clarification.
-"""
+{citations_note}"""
+
+
+def _get_search_tool_footer(with_citations: bool):
+    citations_note = (
+        "- Include citations for relevant files."
+        if with_citations
+        else "- Avoid mentioning that you obtained the information from the context."
+    )
+    return SEARCH_TOOL_BASE_FOOTER.format(citations_note=citations_note)
 
 
 @dataclass
@@ -353,18 +361,19 @@ class SearchIndexTool(CustomBaseTool):
         if not embeddings:
             return "\nThe semantic search did not return any results."
 
-        retrieved_chunks = "".join([self._format_result(embedding) for embedding in embeddings])
+        retrieved_chunks = "\n".join([self._format_result(embedding) for embedding in embeddings])
         response_template = """
 {header}
 {citation_prompt}
-<context>{retrieved_chunks}
+<context>
+{retrieved_chunks}
 </context>
 {footer}
 """
         citation_prompt = CITATION_PROMPT if self.search_config.generate_citations else ""
         return response_template.format(
             header=SEARCH_TOOL_HEADER,
-            footer=SEARCH_TOOL_FOOTER,
+            footer=_get_search_tool_footer(self.search_config.generate_citations),
             retrieved_chunks=retrieved_chunks,
             citation_prompt=citation_prompt,
         )
@@ -374,7 +383,9 @@ class SearchIndexTool(CustomBaseTool):
         Format the result from the search index into a more structured format.
         """
 
-        return CHUNK_TEMPLATE.format(file_name=embedding.file.name, file_id=embedding.file_id, chunk=embedding.text)
+        return CHUNK_TEMPLATE.format(
+            file_name=embedding.file.name, file_id=embedding.file_id, chunk=embedding.text
+        ).strip()
 
 
 def _move_datetime_to_new_weekday_and_time(date: datetime, new_weekday: int, new_hour: int, new_minute: int):
