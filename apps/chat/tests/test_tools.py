@@ -14,12 +14,14 @@ from apps.chat.agent import tools
 from apps.chat.agent.schemas import WeekdaysEnum
 from apps.chat.agent.tools import (
     CITATION_PROMPT,
+    SEARCH_TOOL_HEADER,
     TOOL_CLASS_MAP,
     DeleteReminderTool,
     SearchIndexTool,
     SearchToolConfig,
     UpdateParticipantDataTool,
     _convert_to_sync_tool,
+    _get_search_tool_footer,
     _move_datetime_to_new_weekday_and_time,
     create_schedule_message,
     get_mcp_tool_instances,
@@ -487,33 +489,36 @@ class TestSearchIndexTool:
         local_index_manager_mock.get_embedding_vector.return_value = vector_data["What are great fruit?"]
         search_config = SearchToolConfig(index_id=collection.id, max_results=2, generate_citations=generate_citations)
         result = SearchIndexTool(search_config=search_config).action(query="What are great fruit?")
+        footer = _get_search_tool_footer(generate_citations)
+        context_block = f"""<context>
+<file>
+  <file_id>{file.id}</file_id>
+  <filename>the_greatness_of_fruit.txt</filename>
+  <context>
+    <![CDATA[Apples are great]]>
+  </context>
+</file>
+<file>
+  <file_id>{file.id}</file_id>
+  <filename>the_greatness_of_fruit.txt</filename>
+  <context>
+    <![CDATA[Oranges are nice]]>
+  </context>
+</file>
+</context>"""
         if generate_citations:
             expected_result = f"""
-# Retrieved chunks
-
-## File name: the_greatness_of_fruit.txt, file_id={file.id}
-### Content
-Apples are great
-
-## File name: the_greatness_of_fruit.txt, file_id={file.id}
-### Content
-Oranges are nice
-
+{SEARCH_TOOL_HEADER}
 {CITATION_PROMPT}
+{context_block}
+{footer}
 """
         else:
             expected_result = f"""
-# Retrieved chunks
+{SEARCH_TOOL_HEADER}
 
-## File name: the_greatness_of_fruit.txt, file_id={file.id}
-### Content
-Apples are great
-
-## File name: the_greatness_of_fruit.txt, file_id={file.id}
-### Content
-Oranges are nice
-
-
+{context_block}
+{footer}
 """
         assert result == expected_result
 
