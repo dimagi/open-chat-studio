@@ -29,23 +29,50 @@ For more information, see the [Open Chat Studio documentation](https://docs.open
 
 ## CSS Custom Properties
 
-| Name                              | Description                                    |
-| --------------------------------- | ---------------------------------------------- |
-| `--button-background-color`       | Button background color                        |
-| `--button-background-color-hover` | Button background color on hover               |
-| `--button-border-color`           | Button border color                            |
-| `--button-border-color-hover`     | Button border color on hover Padding variables |
-| `--button-text-color`             | Button text color                              |
-| `--button-text-color-hover`       | Button text color on hover                     |
-| `--padding-button`                | Button padding (0.75rem)                       |
-| `--padding-button-sm`             | Small button padding (0.375rem)                |
-| `--padding-container`             | Container padding                              |
-| `--padding-lg`                    | Large padding (1rem)                           |
-| `--padding-md`                    | Medium padding (0.75rem)                       |
-| `--padding-message`               | Message bubble padding                         |
-| `--padding-sm`                    | Small padding (0.5rem)                         |
-| `--padding-xl`                    | Extra large padding (1.5rem)                   |
-| `--padding-xs`                    | Extra small padding (0.125rem)                 |
+| Name                              | Description                         |
+| --------------------------------- | ----------------------------------- |
+| `--button-background-color`       | Button background color             |
+| `--button-background-color-hover` | Button background color on hover    |
+| `--button-border-color`           | Button border color                 |
+| `--button-border-color-hover`     | Button border color on hover        |
+| `--button-text-color`             | Button text color                   |
+| `--button-text-color-hover`       | Button text color on hover          |
+| `--color-background`              | Main background color               |
+| `--color-border`                  | Default border color                |
+| `--color-error`                   | Error/red color                     |
+| `--color-focus`                   | Focus ring color                    |
+| `--color-gray-100`                | Light gray                          |
+| `--color-gray-200`                | Medium light gray                   |
+| `--color-gray-300`                | Medium gray                         |
+| `--color-gray-400`                | Dark medium gray                    |
+| `--color-gray-50`                 | Very light gray                     |
+| `--color-gray-500`                | Dark gray                           |
+| `--color-gray-600`                | Very dark gray                      |
+| `--color-gray-700`                | Extra dark gray                     |
+| `--color-gray-800`                | Almost black gray                   |
+| `--color-gray-900`                | Almost black                        |
+| `--color-message-assistant-bg`    | Assistant message background color  |
+| `--color-message-assistant-text`  | Assistant message text color        |
+| `--color-message-system-bg`       | System message background color     |
+| `--color-message-system-text`     | System message text color           |
+| `--color-message-user-bg`         | User message background color       |
+| `--color-message-user-text`       | User message text color             |
+| `--color-primary`                 | Primary blue color                  |
+| `--color-primary-hover`           | Primary blue hover color            |
+| `--color-primary-light`           | Light primary color for backgrounds |
+| `--color-success`                 | Success/green color                 |
+| `--color-text-primary`            | Primary text color                  |
+| `--color-text-secondary`          | Secondary text color                |
+| `--color-white`                   | White color                         |
+| `--padding-button`                | Button padding (0.75rem)            |
+| `--padding-button-sm`             | Small button padding (0.375rem)     |
+| `--padding-container`             | Container padding                   |
+| `--padding-lg`                    | Large padding (1rem)                |
+| `--padding-md`                    | Medium padding (0.75rem)            |
+| `--padding-message`               | Message bubble padding              |
+| `--padding-sm`                    | Small padding (0.5rem)              |
+| `--padding-xl`                    | Extra large padding (1.5rem)        |
+| `--padding-xs`                    | Extra small padding (0.125rem)      |
 
 
 ----------------------------------------------
