@@ -44,7 +44,8 @@ CHUNK_TEMPLATE = """
 <file>
   <file_id>{file_id}</file_id>
   <filename>{file_name}</filename>
-  <context>{chunk}
+  <context>
+    <![CDATA[{chunk}]]>
   </context>
 </file>
 """
