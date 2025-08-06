@@ -163,10 +163,16 @@ def chat_upload_file(request, session_id):
     expiry_date = timezone.now() + timezone.timedelta(hours=24)
     uploaded_files = []
 
-    # TODO modify with user_id changes
-    from django.contrib.auth.models import AnonymousUser
+    participant_remote_id = request.POST.get("participant_remote_id", "")
+    participant_name = request.POST.get("participant_name", "")
+    uploaded_by = session.participant.identifier if session.participant else participant_remote_id
 
-    user = request.user.email if not isinstance(request.user, AnonymousUser) else "AnonymousUser"
+    if not uploaded_by and request.user.is_authenticated:
+        uploaded_by = request.user.email
+
+    # Default to the remote_id if we still don't have an identifier
+    if not uploaded_by:
+        uploaded_by = participant_remote_id or "unknown"
 
     for file in files:
         file_obj = File.objects.create(
@@ -177,7 +183,12 @@ def chat_upload_file(request, session_id):
             content_type=File.get_content_type(file),
             expiry_date=expiry_date,
             purpose="assistant",
-            metadata={"session_id": str(session_id), "uploaded_by": user},
+            metadata={
+                "session_id": str(session_id),
+                "uploaded_by": uploaded_by,
+                "participant_name": participant_name,
+                "participant_remote_id": participant_remote_id,
+            },
         )
         uploaded_files.append(
             {
@@ -187,6 +198,7 @@ def chat_upload_file(request, session_id):
                 "content_type": file_obj.content_type,
             }
         )
+
     return Response({"files": uploaded_files}, status=status.HTTP_201_CREATED)
 
 

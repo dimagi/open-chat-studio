@@ -338,6 +338,13 @@ export class OcsChat {
         }
       }
 
+      // Add user ID and name to the form data
+      const userId = this.getOrGenerateUserId();
+      formData.append('participant_remote_id', userId);
+      if (this.userName) {
+        formData.append('participant_name', this.userName);
+      }
+
       // Only upload if there are new files
       if (formData.has('files')) {
         const response = await fetch(`${this.getApiBaseUrl()}/api/chat/${this.sessionId}/upload/`, {
@@ -635,7 +642,6 @@ export class OcsChat {
     }
     this.selectedFiles = [...this.selectedFiles, ...newFiles];
     input.value = '';
-
     // Hide starter questions when files are selected
     this.showStarterQuestions = false;
   }
