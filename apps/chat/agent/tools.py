@@ -69,6 +69,17 @@ source document.
 Failure to include proper citations will result in an incomplete response.
 """
 
+SEARCH_TOOL_HEADER = (
+    "A semantic search was executed and retrieved the following context inside <context></context> XML tags."
+)
+SEARCH_TOOL_FOOTER = """
+Use the context as your learned knowledge to better answer the user.
+
+In your response, remember to follow these guidelines:
+- If you don't know the answer, simply say that you don't know.
+- If you are unsure how to answer, ask for clarification.
+"""
+
 
 @dataclass
 class SearchToolConfig:
@@ -348,11 +359,12 @@ class SearchIndexTool(CustomBaseTool):
 {citation_prompt}
 <context>{retrieved_chunks}
 </context>
+{footer}
 """
         citation_prompt = CITATION_PROMPT if self.search_config.generate_citations else ""
         return response_template.format(
-            header="A semantic search was executed and retrieved the following context inside "
-            "<context></context> XML tags.",
+            header=SEARCH_TOOL_HEADER,
+            footer=SEARCH_TOOL_FOOTER,
             retrieved_chunks=retrieved_chunks,
             citation_prompt=citation_prompt,
         )
