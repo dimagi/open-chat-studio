@@ -4,60 +4,101 @@
 
 :host {
   /**
-    * @prop --button-background-color: Button background color
-    * @prop --button-background-color-hover: Button background color on hover
-    * @prop --button-text-color: Button text color
-    * @prop --button-text-color-hover: Button text color on hover
-    * @prop --button-border-color: Button border color
-    * @prop --button-border-color-hover: Button border color on hover
+    * Global Variables
+    * @prop --chat-z-index: Z-index for chat widget (50)
+    * @prop --container-padding: General container padding (1rem)
+    *
+    * Button Variables
+    * @prop --button-background-color: Button background color (#ffffff)
+    * @prop --button-background-color-hover: Button background color on hover (#f3f4f6)
+    * @prop --button-text-color: Button text color (#111827)
+    * @prop --button-text-color-hover: Button text color on hover (#1d4ed8)
+    * @prop --button-border-color: Button border color (#6b7280)
+    * @prop --button-border-color-hover: Button border color on hover (#374151)
     * @prop --button-padding: Button padding (0.75rem)
     * @prop --button-padding-sm: Small button padding (0.375rem)
-    * @prop --header-padding: Header padding (0.5rem)
+    * @prop --button-font-size: Button text font size (0.875rem)
     * @prop --button-icon-width: Button icon width (1.5rem)
     * @prop --button-icon-height: Button icon height (1.5rem)
+    *
+    * Chat Window Variables
+    * @prop --chat-window-bg-color: Chat window background color (#ffffff)
+    * @prop --chat-window-border-color: Chat window border color (#d1d5db)
+    * @prop --chat-window-shadow-color: Chat window shadow color (rgba(0, 0, 0, 0.1))
+    * @prop --chat-window-font-size: Default font size for text in the chat window (0.875rem)
+    * @prop --chat-window-font-size-sm: Font size for small text in the chat window (0.75rem)
+    *
+    * Header Variables
+    * @prop --header-bg-color: Header background color (transparent)
+    * @prop --header-bg-hover-color: Header background color on hover (#f9fafb)
+    * @prop --header-border-color: Header border color (#f3f4f6)
+    * @prop --header-button-text-color: Header button text color (#6b7280)
+    * @prop --header-button-bg-hover-color: Header button background on hover (#f3f4f6)
+    * @prop --header-padding: Header padding (0.5rem)
+    *
+    * Starter Question Variables
+    * @prop --starter-question-bg-color: Starter question background color (transparent)
+    * @prop --starter-question-bg-hover-color: Starter question background on hover (#eff6ff)
+    * @prop --starter-question-text-color: Starter question text color (#3b82f6)
+    * @prop --starter-question-border-color: Starter question border color (#3b82f6)
+    * @prop --starter-question-border-hover-color: Starter question border on hover (#2563eb)
     * @prop --starter-question-padding: Starter question padding (0.75rem)
+    *
+    * Message Bubble Variables
+    * @prop --message-user-bg-color: User message background color (#3b82f6)
+    * @prop --message-user-text-color: User message text color (#ffffff)
+    * @prop --message-assistant-bg-color: Assistant message background color (#e5e7eb)
+    * @prop --message-assistant-text-color: Assistant message text color (#1f2937)
+    * @prop --message-system-bg-color: System message background color (#f3f4f6)
+    * @prop --message-system-text-color: System message text color (#4b5563)
+    * @prop --message-timestamp-color: User message timestamp color (rgba(255, 255, 255, 0.7))
+    * @prop --message-timestamp-assistant-color: Assistant message timestamp color (rgba(75, 85, 99, 0.7))
     * @prop --message-padding-x: Message horizontal padding (1rem)
     * @prop --message-padding-y: Message vertical padding (0.5rem)
-    * @prop --container-padding: Container padding (1rem)
-    * @prop --error-message-padding: Error message padding (0.5rem)
+    *
+    * Input Area Variables
+    * @prop --input-bg-color: Input area background color (transparent)
+    * @prop --input-border-color: Input field border color (#d1d5db)
+    * @prop --input-text-color: Input text color (#111827)
+    * @prop --input-placeholder-color: Input placeholder text color (#6b7280)
+    * @prop --input-outline-focus-color: Input field focus ring color (#3b82f6)
     * @prop --input-textarea-padding-x: Input textarea horizontal padding (0.75rem)
     * @prop --input-textarea-padding-y: Input textarea vertical padding (0.5rem)
+    *
+    * Send Button Variables
+    * @prop --send-button-bg-color: Send button background color (#3b82f6)
+    * @prop --send-button-bg-hover-color: Send button background on hover (#2563eb)
+    * @prop --send-button-text-color: Send button text color (#ffffff)
+    * @prop --send-button-bg-disabled-color: Send button background when disabled (#d1d5db)
+    * @prop --send-button-text-disabled-color: Send button text when disabled (#6b7280)
     * @prop --send-button-padding-x: Send button horizontal padding (1rem)
     * @prop --send-button-padding-y: Send button vertical padding (0.5rem)
-    * @prop --button-font-size: Button text font size (0.875rem)
-    * @prop --input-area-font-size: Input area font size (0.875rem)
-    * @prop --typing-text-font-size: Typing indicator text font size (0.75rem)
-    * @prop --chat-window-bg-color: Chat window background color
-    * @prop --chat-window-border-color: Chat window border color
-    * @prop --chat-window-font-size: The default font size for text in the chat window (0.875rem)
-    * @prop --chat-window-font-size-sm: Font size for small text in the chat window (0.75rem)
-    * @prop --header-bg-color: Header background color
-    * @prop --header-bg-hover-color: Header background color on hover
-    * @prop --header-border-color: Header border color
-    * @prop --header-button-text-color: Header button text color
-    * @prop --header-button-bg-hover-color: Header button background on hover
-    * @prop --starter-question-bg-color: Starter question background color
-    * @prop --starter-question-bg-hover-color: Starter question background on hover
-    * @prop --starter-question-text-color: Starter question text color
-    * @prop --starter-question-border-color: Starter question border color
-    * @prop --starter-question-border-hover-color: Starter question border on hover
-    * @prop --message-user-bg-color: User message background color
-    * @prop --message-user-text-color: User message text color
-    * @prop --message-assistant-bg-color: Assistant message background color
-    * @prop --message-assistant-text-color: Assistant message text color
-    * @prop --message-system-bg-color: System message background color
-    * @prop --message-system-text-color: System message text color
-    * @prop --input-border-color: Input field border color
-    * @prop --input-focus-ring-color: Input field focus ring color
-    * @prop --send-button-bg-color: Send button background color
-    * @prop --send-button-bg-hover-color: Send button background on hover
-    * @prop --send-button-text-color: Send button text color
-    * @prop --send-button-bg-disabled-color: Send button background when disabled
-    * @prop --send-button-text-disabled-color: Send button text when disabled
-    * @prop --loading-text-color: Loading text color
-    * @prop --loading-spinner-fill-color: Loading spinner fill color
+    *
+    * Loading Variables
+    * @prop --loading-text-color: Loading text color (#6b7280)
+    * @prop --loading-spinner-track-color: Loading spinner track color (#e5e7eb)
+    * @prop --loading-spinner-fill-color: Loading spinner fill color (#3b82f6)
     * @prop --loading-spinner-size: Loading spinner size (1.25rem)
-    * @prop --error-text-color: Error text color
+    *
+    * Typing Indicator Variables
+    * @prop --typing-progress-bg-color: Typing progress bar background color (#ade3ff)
+    *
+    * Scrollbar Variables
+    * @prop --scrollbar-track-color: Scrollbar track color (#f3f4f6)
+    * @prop --scrollbar-thumb-color: Scrollbar thumb color (#d1d5db)
+    * @prop --scrollbar-thumb-hover-color: Scrollbar thumb hover color (#9ca3af)
+    *
+    * Error Variables
+    * @prop --error-text-color: Error text color (#ef4444)
+    * @prop --error-message-padding: Error message padding (0.5rem)
+    *
+    * Markdown Code Variables
+    * @prop --code-bg-user-color: Code background in user messages (rgba(59, 130, 246, 0.3))
+    * @prop --code-text-user-color: Code text color in user messages (#dbeafe)
+    * @prop --code-border-user-color: Code border in user messages (rgba(59, 130, 246, 0.6))
+    * @prop --code-bg-assistant-color: Code background in assistant messages (#ffffff)
+    * @prop --code-text-assistant-color: Code text color in assistant messages (#1f2937)
+    * @prop --code-border-assistant-color: Code border in assistant messages (#d1d5db)
     */
   /* Global variables */
   --chat-z-index: 50;
