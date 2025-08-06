@@ -24,8 +24,6 @@
     * @prop --input-textarea-padding-y: Input textarea vertical padding (0.5rem)
     * @prop --send-button-padding-x: Send button horizontal padding (1rem)
     * @prop --send-button-padding-y: Send button vertical padding (0.5rem)
-    * @prop --loading-text-margin: Loading text margin (0.5rem)
-    * @prop --drag-dots-margin: Drag dots margin (0.5rem)
     * @prop --button-font-size: Button text font size (0.875rem)
     * @prop --input-area-font-size: Input area font size (0.875rem)
     * @prop --typing-text-font-size: Typing indicator text font size (0.75rem)
@@ -92,7 +90,6 @@
   --header-button-text-color: #6b7280;
   --header-button-bg-hover-color: #f3f4f6;
   --header-padding: 0.5rem;
-  --drag-dots-margin: 0.5rem;
 
   /* Starter question variables */
   --starter-question-bg-color: transparent;
@@ -136,7 +133,6 @@
   --loading-text-color: #6b7280;
   --loading-spinner-track-color: #e5e7eb;
   --loading-spinner-fill-color: #3b82f6;
-  --loading-text-margin: 0.5rem;
   --loading-spinner-size: 1.25rem;
 
   /* Typing indicator variables */
@@ -188,7 +184,7 @@
 
   /* Button with text and icon */
   .chat-btn-text {
-    @apply flex items-center gap-2;
+    @apply flex gap-[8px] items-center;
     padding: var(--button-padding, 0.75rem);
     color: var(--button-text-color, #111827);
   }
@@ -274,12 +270,11 @@
   }
 
   .drag-indicator {
-    @apply hidden sm:flex gap-1;
+    @apply hidden sm:flex;
   }
 
   .drag-dots {
-    @apply flex gap-0.5 pointer-events-none;
-    margin-left: var(--drag-dots-margin, 0.5rem);
+    @apply flex gap-[2px] ml-[2px] pointer-events-none;
   }
 
   .drag-spacer {
@@ -287,7 +282,7 @@
   }
 
   .header-buttons {
-    @apply flex gap-1 items-center;
+    @apply flex gap-[4px] items-center;
   }
 
   /* Header button classes */
@@ -316,7 +311,7 @@
   }
 
   .loading-text {
-    margin-left: var(--loading-text-margin, 0.5rem);
+    margin-left: 2px;
     color: var(--loading-text-color);
   }
 
@@ -360,12 +355,12 @@
   }
 
   .message-timestamp {
-    @apply opacity-70 mt-1;
+    @apply opacity-70 mt-[4px];
     font-size: var(--chat-window-font-size-sm);
   }
 
   .message-attachments {
-    @apply mt-2 space-y-1;
+    @apply mt-[8px] space-y-1;
   }
 
   .attachment-link {
@@ -416,7 +411,7 @@
   }
 
   .input-container {
-    @apply flex gap-2;
+    @apply flex gap-[8px];
   }
 
   .message-textarea {
