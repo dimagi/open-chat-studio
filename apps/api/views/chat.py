@@ -385,11 +385,11 @@ def chat_send_message(request, session_id):
         files.update(expiry_date=None)
         chat_attachment, created = ChatAttachment.objects.get_or_create(
             chat=session.chat,
-            tool_type="file_search",
+            tool_type="ocs_attachments",
         )
         chat_attachment.files.add(*files)
         for file_obj in files:
-            attachment = Attachment.from_file(file_obj, type="file_search", session_id=session.id)
+            attachment = Attachment.from_file(file_obj, type="ocs_attachments", session_id=session.id)
             attachment_data.append(attachment.model_dump())
 
     # Queue the response generation as a background task
