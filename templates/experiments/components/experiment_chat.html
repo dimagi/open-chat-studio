@@ -95,7 +95,7 @@
               </div>
 
               <div class="my-2">
-                <label class="label cursor-pointer space-x-2 text-xs">
+                <label id="show_original_messages_checkbox" class="label cursor-pointer space-x-2 text-xs">
                   Show Original Messages
                   <input type="checkbox"
                          name="show_original_translation"
@@ -105,8 +105,10 @@
                          hx-target="#messages-container"
                          hx-include="[name='search'], [name='language']"
                          hx-trigger="change"
-                         onclick="handleOriginalToggleIndicator(this)"
+                         hx-disabled-elt="this"
+                         hx-indicator="#show_original_messages_checkbox"
                          {% if request.GET.show_original_translation == "on" %}checked{% else %}unchecked{% endif %}>
+                    <span class="loading loading-spinner loading-sm htmx-indicator"></span>
                 </label>
               </div>
 
@@ -226,10 +228,6 @@
 	                          </div>
                           </div>
                         {% endif %}
-                      </div>
-                      <div id="original-message-loading-{{ message.id }}" class="original-message-loading-spinner pg-text-muted htmx-indicator">
-                        <span class="loading loading-spinner loading-sm"></span>
-                        <span class="ml-2">Loading original message...</span>
                       </div>
 
                       {% if show_original_translation and not message.translation == default_message %}
@@ -404,14 +402,6 @@
         }
       }
     });
-  }
-
-  function handleOriginalToggleIndicator(toggleElement) {
-    if (toggleElement.checked) {
-      toggleElement.setAttribute('hx-indicator', '.original-message-loading-spinner');
-    } else {
-      toggleElement.removeAttribute('hx-indicator');
-    }
   }
 
   function initializeTranslationForms() {
