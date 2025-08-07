@@ -6,9 +6,14 @@
   <section class="app-card">
     <div class="flex justify-between items-center mb-6">
       <h1 class="pg-title">{% translate "Global Admin Dashboard" %}</h1>
-      <a href="{% url 'ocs_admin:flags_home' %}" class="btn btn-primary">
-        {% translate "Manage Feature Flags" %}
-      </a>
+      <div class="flex gap-2">
+        <a href="{% url 'ocs_admin:configuration' %}" class="btn btn-outline">
+          {% translate "Site Configuration" %}
+        </a>
+        <a href="{% url 'ocs_admin:flags_home' %}" class="btn btn-primary">
+          {% translate "Manage Feature Flags" %}
+        </a>
+      </div>
     </div>
     <form hx-get="{% url "ocs_admin:usage_chart" %}" hx-target="#charts" hx-trigger="load, change, submit">
       <div class="flex items-center gap-4" x-data="{ range_type: '{{ form.range_type.data }}' }">

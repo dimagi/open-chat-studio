@@ -26,11 +26,8 @@ class TestChatWidgetConfig:
             welcome_messages=['Message with "quotes" and \\backslashes'], starter_questions=["Question with 'quotes'"]
         )
         attrs = config.get_widget_attributes()
-        assert (
-            attrs["welcome-messages"]
-            == "[\\u0022Message with \\u005C\\u0022quotes\\u005C\\u0022 and \\u005C\\u005Cbackslashes\\u0022]"
-        )
-        assert attrs["starter-questions"] == "[\\u0022Question with \\u0027quotes\\u0027\\u0022]"
+        assert attrs["welcome-messages"] == '["Message with \\"quotes\\" and \\\\backslashes"]'
+        assert attrs["starter-questions"] == "[\"Question with 'quotes'\"]"
 
 
 class TestSiteConfig:

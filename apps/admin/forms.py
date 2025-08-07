@@ -5,6 +5,7 @@ from django.core.validators import MaxValueValidator, MinValueValidator
 from django.db.models import TextChoices
 from django.utils import timezone
 
+from apps.admin.models import OcsConfiguration
 from apps.teams.models import Team
 
 User = get_user_model()
@@ -68,3 +69,23 @@ class FlagUpdateForm(forms.Form):
             raise forms.ValidationError("Percentage is required when rollout is enabled")
 
         return percent
+
+
+class OcsConfigurationForm(forms.ModelForm):
+    """Form for editing the single OcsConfiguration instance."""
+
+    class Meta:
+        model = OcsConfiguration
+        fields = ["config"]
+        widgets = {
+            "config": forms.Textarea(
+                attrs={
+                    "class": "form-control font-mono text-sm",
+                    "rows": 20,
+                    "placeholder": "Enter configuration as JSON",
+                }
+            )
+        }
+        help_texts = {
+            "config": "Configuration data in JSON format. This controls site-wide settings like the chat widget."
+        }
