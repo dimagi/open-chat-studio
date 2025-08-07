@@ -154,20 +154,26 @@
       {% endif %}
     </div>
 
-    <div class="justify-end">
-      Show all messages
-      <input type="checkbox"
-             name="show_all"
-             class="toggle"
-             hx-get="{% url 'experiments:experiment_session_messages_view' request.team.slug experiment.public_id experiment_session.external_id %}"
-             hx-target="#messages-container"
-             hx-include="[name='language'], [name='show_original_translation'], [name='tag_filter']"
-             hx-trigger="change"
-             hx-indicator=".htmx-indicator"
-             {% if request.GET.show_all == "on" %}checked{% endif %}>
+    {% if total_pages > %}
+      <div class="justify-end">
+        Show all messages
+        <input type="checkbox"
+               name="show_all"
+               class="toggle"
+               hx-get="{% url 'experiments:experiment_session_messages_view' request.team.slug experiment.public_id experiment_session.external_id %}"
+               hx-target="#messages-container"
+               hx-include="[name='language'], [name='show_original_translation'], [name='tag_filter']"
+               hx-trigger="change"
+               hx-indicator="#show_all_spinner"
+               {% if request.GET.show_all == "on" %}checked{% endif %}>
+        <div id="show_all_spinner" class="htmx-show">
+          <span class="loading loading-spinner loading-sm"></span>
+          <span class="ml-2">Loading...</span>
+        </div>
+      </div>
+    {% endif %}
 
-    </div>
-    {% if total_pages > 1 and not show_all %}
+    {% if total_pages > 1 %}
       <div>
         {% include "experiments/components/pagination_buttons.html" %}
       </div>
