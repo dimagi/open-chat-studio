@@ -154,7 +154,7 @@
       {% endif %}
     </div>
 
-    {% if total_pages > %}
+    {% if total_pages > 1 or request.GET.show_all %}
       <div class="justify-end">
         Show all messages
         <input type="checkbox"
