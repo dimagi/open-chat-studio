@@ -34,12 +34,14 @@
           {% endif %}
         </div>
         <div class="join flex items-center">
-          <div class="tooltip" data-tip="Edit">
-            <a class="btn btn-sm join-item"
-               href="{% url 'documents:collection_edit' team.slug collection.id %}">
-              <i class="fa-solid fa-pencil"></i>
-            </a>
-          </div>
+          {%if not read_only %}
+            <div class="tooltip" data-tip="Edit">
+              <a class="btn btn-sm join-item"
+                 href="{% url 'documents:collection_edit' team.slug collection.id %}">
+                <i class="fa-solid fa-pencil"></i>
+              </a>
+            </div>
+          {% endif %}
           {% if collection.is_index and not collection.is_remote_index %}
             <div class="tooltip" data-tip="Sematic Search">
               <a class="btn btn-sm join-item"
