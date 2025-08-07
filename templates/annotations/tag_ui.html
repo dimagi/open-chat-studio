@@ -25,10 +25,11 @@
             hx-target="#tag-ui-{{ object.id }}"
             hx-swap="outerHTML"
             hx-indicator="#indicator-{{ object.id }}"
+            hx-disabled-elt="this"
     >
       <span id="indicator-{{ object.id }}">
         <i class="fa-solid fa-pencil htmx-hide"></i>
-        <i class="fa-solid fa-spinner fa-spin htmx-show"></i>
+        <span class="loading loading-spinner loading-xs htmx-show"></span>
       </span>
     </button>
     {% endif %}
