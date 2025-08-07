@@ -202,7 +202,7 @@
                         {% if message.translation == default_message %}
                           <div id="chat-message-{{ message.id }}-translation">
 	                          <div id="translation-loading-spinner-{{ message.id }}" >
-		                          <div class="translation-loading-spinner htmx-indicator">
+		                          <div class="translation-loading-spinner htmx-show">
 		                            <span class="loading loading-spinner loading-sm"></span>
 		                            <span class="ml-2">Translating...</span>
 		                          </div>
@@ -221,7 +221,7 @@
 		                              <p>{{ message.content|render_markdown }}</p>
 		                            {% endif %}
 		                          </div>
-		                          <div class="translation-loading-spinner htmx-indicator">
+		                          <div class="translation-loading-spinner htmx-show">
 		                            <span class="loading loading-spinner loading-sm"></span>
 		                            <span class="ml-2">Translating...</span>
 		                          </div>
