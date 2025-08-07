@@ -13,9 +13,11 @@ from django.conf import settings
 from django.contrib import messages
 from django.contrib.auth.decorators import permission_required
 from django.contrib.auth.mixins import PermissionRequiredMixin
+from django.contrib.contenttypes.models import ContentType
 from django.core.exceptions import PermissionDenied, ValidationError
+from django.core.paginator import Paginator
 from django.db import transaction
-from django.db.models import Case, CharField, Count, IntegerField, Prefetch, Value, When
+from django.db.models import Case, CharField, Count, F, IntegerField, Prefetch, Subquery, Value, When
 from django.db.models.fields.json import KeyTextTransform
 from django.db.models.functions import Coalesce
 from django.http import FileResponse, Http404, HttpResponse, HttpResponseForbidden, HttpResponseRedirect
@@ -97,8 +99,9 @@ from apps.experiments.views.prompt import PROMPT_DATA_SESSION_KEY
 from apps.files.models import File
 from apps.generics.chips import Chip
 from apps.generics.views import generic_home, paginate_session, render_session_details
+from apps.service_providers.llm_service.default_models import get_default_translation_models_by_provider
 from apps.service_providers.models import LlmProvider, LlmProviderModel
-from apps.service_providers.utils import get_llm_provider_choices
+from apps.service_providers.utils import get_llm_provider_choices, get_models_by_team_grouped_by_provider
 from apps.teams.decorators import login_and_team_required, team_required
 from apps.teams.mixins import LoginAndTeamRequiredMixin
 from apps.utils.base_experiment_table_view import BaseExperimentTableView
@@ -451,9 +454,11 @@ def base_single_experiment_view(request, team_slug, experiment_id, template_name
     user_sessions = (
         ExperimentSession.objects.with_last_message_created_at()
         .filter(participant__user=request.user, experiment=experiment)
-        .exclude(experiment_channel__platform=ChannelPlatform.API)
+        .exclude(experiment_channel__platform__in=[ChannelPlatform.API, ChannelPlatform.EVALUATIONS])
     )
-    channels = experiment.experimentchannel_set.exclude(platform__in=[ChannelPlatform.WEB, ChannelPlatform.API]).all()
+    channels = experiment.experimentchannel_set.exclude(
+        platform__in=[ChannelPlatform.WEB, ChannelPlatform.API, ChannelPlatform.EVALUATIONS]
+    ).all()
     used_platforms = {channel.platform_enum for channel in channels}
     available_platforms = ChannelPlatform.for_dropdown(used_platforms, experiment.team)
     platform_forms = {}
@@ -489,7 +494,16 @@ def base_single_experiment_view(request, team_slug, experiment_id, template_name
         "channel_list": channel_list,
         "allow_copy": not experiment.child_links.exists(),
         "date_range_options": DATE_RANGE_OPTIONS,
-        "filter_columns": ["participant", "last_message", "first_message", "tags", "versions", "channels", "state"],
+        "filter_columns": [
+            "participant",
+            "last_message",
+            "first_message",
+            "tags",
+            "versions",
+            "channels",
+            "state",
+            "remote_id",
+        ],
         "state_list": SessionStatus.for_chatbots(),
         **_get_events_context(experiment, team_slug, request.origin),
     }
@@ -1250,10 +1264,32 @@ def experiment_session_messages_view(request, team_slug: str, experiment_id: uui
     session = request.experiment_session
     experiment = request.experiment
     page = int(request.GET.get("page", 1))
-    search = request.GET.get("search", "")
+    selected_tags = list(filter(None, request.GET.get("tag_filter", "").split(",")))
     language = request.GET.get("language", "")
     show_original_translation = request.GET.get("show_original_translation") == "on" and language
-    page_size = 100
+
+    chat_message_content_type = ContentType.objects.get_for_model(ChatMessage)
+    all_tags = (
+        Tag.objects.filter(
+            annotations_customtaggeditem_items__content_type=chat_message_content_type,
+            annotations_customtaggeditem_items__object_id__in=Subquery(
+                ChatMessage.objects.filter(chat=session.chat).values("id")
+            ),
+        )
+        .annotate(count=Count("annotations_customtaggeditem_items"))
+        .distinct()
+        .order_by(F("category").asc(nulls_first=True), "name")
+    )
+    available_languages, translatable_languages = _get_languages_for_chat(session)
+    has_missing_translations = False
+    translate_form_all = TranslateMessagesForm(
+        team=request.team, translatable_languages=translatable_languages, is_translate_all_form=True
+    )
+    translate_form_remaining = TranslateMessagesForm(
+        team=request.team, translatable_languages=translatable_languages, is_translate_all_form=False
+    )
+    default_message = "(message generated after last translation)"
+
     messages_queryset = (
         ChatMessage.objects.filter(chat=session.chat)
         .order_by("created_at")
@@ -1265,19 +1301,8 @@ def experiment_session_messages_view(request, team_slug: str, experiment_id: uui
             )
         )
     )
-
-    available_languages, translatable_languages = _get_languages_for_chat(session)
-    has_missing_translations = False
-    translate_form_all = TranslateMessagesForm(
-        team=request.team, translatable_languages=translatable_languages, is_translate_all_form=True
-    )
-    translate_form_remaining = TranslateMessagesForm(
-        team=request.team, translatable_languages=translatable_languages, is_translate_all_form=False
-    )
-    default_message = "(message generated after last translation)"
-
-    if search:
-        messages_queryset = messages_queryset.filter(tags__name__icontains=search).distinct()
+    if selected_tags:
+        messages_queryset = messages_queryset.filter(tags__name__in=selected_tags).distinct()
 
     if language:
         messages_queryset = messages_queryset.annotate(
@@ -1288,23 +1313,28 @@ def experiment_session_messages_view(request, team_slug: str, experiment_id: uui
             )
         )
         has_missing_translations = messages_queryset.exclude(**{f"translations__{language}__isnull": False}).exists()
-
-    total_messages = messages_queryset.count()
-    total_pages = max(1, (total_messages + page_size - 1) // page_size)
-    page = max(1, min(page, total_pages))
-    start_idx = (page - 1) * page_size
-    end_idx = start_idx + page_size
-    paginated_messages = messages_queryset[start_idx:end_idx]
+    show_all = request.GET.get("show_all") == "on"
+    page_size = 10
+    if show_all:
+        current_page_messages = list(messages_queryset)
+        total_pages = 1
+        page_start_index = 1
+    else:
+        paginator = Paginator(messages_queryset, per_page=page_size, orphans=page_size // 3)
+        current_page = paginator.page(page)
+        current_page_messages = current_page.object_list
+        total_pages = paginator.num_pages
+        page_start_index = current_page.start_index()
     context = {
         "experiment_session": session,
         "experiment": experiment,
-        "messages": paginated_messages,
+        "messages": current_page_messages,
         "page": page,
         "total_pages": total_pages,
-        "total_messages": total_messages,
+        "total_messages": len(messages_queryset),
         "page_size": page_size,
-        "page_start_index": start_idx,
-        "search": search,
+        "page_start_index": page_start_index,
+        "selected_tags": selected_tags,
         "language": language,
         "available_languages": available_languages,
         "available_tags": [t.name for t in Tag.objects.filter(team__slug=team_slug, is_system_tag=False).all()],
@@ -1313,6 +1343,9 @@ def experiment_session_messages_view(request, team_slug: str, experiment_id: uui
         "translate_form_all": translate_form_all,
         "translate_form_remaining": translate_form_remaining,
         "default_message": default_message,
+        "default_translation_models_by_providers": get_default_translation_models_by_provider(),
+        "llm_provider_models_dict": get_models_by_team_grouped_by_provider(request.team),
+        "all_tags": all_tags,
     }
 
     return TemplateResponse(
@@ -1328,7 +1361,8 @@ def translate_messages_view(request, team_slug: str, experiment_id: uuid.UUID, s
     from apps.analysis.translation import translate_messages_with_llm
 
     session = request.experiment_session
-    provider_model = request.POST.get("provider_model", "")
+    provider_id = request.POST.get("llm_provider", "")
+    model_id = request.POST.get("llm_provider_model", "")
     valid_languages = [choice[0] for choice in LANGUAGE_CHOICES if choice[0]]
     translate_all = request.POST.get("translate_all", "false") == "true"
     if translate_all:
@@ -1339,12 +1373,10 @@ def translate_messages_view(request, team_slug: str, experiment_id: uuid.UUID, s
     if not language or language not in valid_languages:
         messages.error(request, "No language selected for translation.")
         return redirect_to_messages_view(request, session)
-    if not provider_model:
+    if not provider_id or not model_id:
         messages.error(request, "No LLM provider model selected.")
         return redirect_to_messages_view(request, session)
     try:
-        provider_id, model_id = provider_model.split(":", 1)
-
         try:
             llm_provider = LlmProvider.objects.get(id=provider_id, team=request.team)
             llm_provider_model = LlmProviderModel.objects.get(id=model_id)

@@ -17,7 +17,9 @@ from apps.experiments.models import (
     SyntheticVoice,
 )
 from apps.generics.help import render_help_with_link
-from apps.service_providers.utils import get_dropdown_llm_model_choices
+from apps.service_providers.llm_service.default_models import get_default_translation_models_by_provider
+from apps.service_providers.models import LlmProviderTypes
+from apps.service_providers.utils import get_llm_provider_by_team, get_models_by_provider
 from apps.utils.prompt import PromptVars, validate_prompt_variables
 
 
@@ -291,24 +293,45 @@ class TranslateMessagesForm(forms.Form):
         label="Select Language",
         widget=forms.Select(attrs={"class": "select select-bordered w-full", "id": "translation-language"}),
     )
-    provider_model = forms.ChoiceField(
+    llm_provider = forms.ChoiceField(
         choices=[],
         required=True,
-        label="Select LLM Provider Model",
+        label="Select LLM Provider",
+        widget=forms.Select(attrs={"class": "select select-bordered w-full", "id": "translation-provider"}),
+    )
+    llm_provider_model = forms.ChoiceField(
+        choices=[],
+        required=True,
+        label="Select LLM Model",
         widget=forms.Select(attrs={"class": "select select-bordered w-full", "id": "translation-provider-model"}),
     )
 
     def __init__(self, *args, team, translatable_languages, is_translate_all_form=False, **kwargs):
         super().__init__(*args, **kwargs)
 
-        self.fields["provider_model"].choices = [
-            ("", "Choose a model for translation")
-        ] + get_dropdown_llm_model_choices(team)
+        providers = get_llm_provider_by_team(team)
+        provider_choices = [(provider.id, str(provider)) for provider in providers]
+
+        self.fields["llm_provider"].choices = [("", "Choose a model for translation")] + provider_choices
+        if provider_choices:
+            self.fields["llm_provider"].choices = provider_choices
+            self.fields["llm_provider"].initial = provider_choices[0][0]
+            first_provider = providers[0]
+            models_list = get_models_by_provider(first_provider.type, team)
+            model_choices = [(model["value"], model["label"]) for model in models_list]
+            self.fields["llm_provider_model"].choices = model_choices
+            default_model_name_dict = get_default_translation_models_by_provider()
+            default_model_name = default_model_name_dict.get(str(LlmProviderTypes[first_provider.type].label))
+            default_model_value = next((value for value, label in model_choices if label == default_model_name), None)
+            if default_model_value is not None:
+                self.fields["llm_provider_model"].initial = default_model_value
 
         if is_translate_all_form:
-            self.fields["provider_model"].widget.attrs["id"] = "translation-provider-model-all"
+            self.fields["llm_provider"].widget.attrs["id"] = "translation-provider-all"
+            self.fields["llm_provider_model"].widget.attrs["id"] = "translation-provider-model-all"
         else:
-            self.fields["provider_model"].widget.attrs["id"] = "translation-provider-model-remaining"
+            self.fields["llm_provider"].widget.attrs["id"] = "translation-provider-remaining"
+            self.fields["llm_provider_model"].widget.attrs["id"] = "translation-provider-model-remaining"
 
         language_choices = [(code, name) for code, name in translatable_languages if code]
         if any(code == "eng" for code, _ in translatable_languages):
@@ -319,7 +342,7 @@ class TranslateMessagesForm(forms.Form):
 
         if is_translate_all_form:
             self.fields["target_language"].label = "Target Language for All Messages"
-            self.fields["provider_model"].label = "LLM Model for Translation"
+            self.fields["llm_provider"].label = "LLM Provider for Translation"
         else:
             self.fields["target_language"].label = "Target Language for Remaining Messages"
-            self.fields["provider_model"].label = "LLM Model for Remaining Messages"
+            self.fields["llm_provider"].label = "LLM Provider for Remaining Messages"

@@ -1,3 +1,5 @@
+from __future__ import annotations
+
 import contextlib
 import logging
 import re
@@ -200,10 +202,10 @@ class LlmService(pydantic.BaseModel):
         )
         return parsed_output
 
-    def get_remote_index_manager(self, index_id: str = None) -> "IndexManager":
+    def get_remote_index_manager(self, index_id: str = None) -> IndexManager:
         raise NotImplementedError
 
-    def get_local_index_manager(self, embedding_model_name: str) -> "IndexManager":
+    def get_local_index_manager(self, embedding_model_name: str) -> IndexManager:
         raise NotImplementedError
 
     def create_remote_index(self, name: str, file_ids: list = None) -> str:
@@ -356,15 +358,15 @@ class OpenAILlmService(OpenAIGenericService):
                 raise ValueError(f"Unsupported built-in tool for openai: '{tool_name}'")
         return tools
 
-    def get_remote_index_manager(self, index_id: str = None) -> "IndexManager":
+    def get_remote_index_manager(self, index_id: str = None) -> IndexManager:
         from apps.service_providers.llm_service.index_managers import OpenAIRemoteIndexManager
 
         return OpenAIRemoteIndexManager(client=self.get_raw_client(), index_id=index_id)
 
-    def get_local_index_manager(self, embedding_model_name: str) -> "IndexManager":
+    def get_local_index_manager(self, embedding_model_name: str) -> IndexManager:
         from apps.service_providers.llm_service.index_managers import OpenAILocalIndexManager
 
-        return OpenAILocalIndexManager(client=self.get_raw_client(), embedding_model_name=embedding_model_name)
+        return OpenAILocalIndexManager(api_key=self.openai_api_key, embedding_model_name=embedding_model_name)
 
     def create_remote_index(self, name: str, file_ids: list = None) -> str:
         file_ids = file_ids or []
@@ -474,3 +476,8 @@ class GoogleLlmService(LlmService):
         #     else:
         #         raise ValueError(f"Unsupported built-in tool for gemini: '{tool_name}'")
         # return tools
+
+    def get_local_index_manager(self, embedding_model_name: str) -> IndexManager:
+        from apps.service_providers.llm_service.index_managers import GoogleLocalIndexManager
+
+        return GoogleLocalIndexManager(api_key=self.google_api_key, embedding_model_name=embedding_model_name)

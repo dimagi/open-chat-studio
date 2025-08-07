@@ -3,47 +3,488 @@
 @tailwind utilities;
 
 :host {
-   /**
-   * @prop --button-background-color: Button background color
-   * @prop --button-background-color-hover: Button background color on hover
-   * @prop --button-text-color: Button text color
-   * @prop --button-text-color-hover: Button text color on hover
-   * @prop --button-border-color: Button border color
-   * @prop --button-border-color-hover: Button border color on hover
-   */
-  --button-background-color: white;
-  /* gray-100 */
-  --button-background-color-hover: #f3f4f6;
-  /* gray-900 */
-  --button-text-color: #111827;
-  /* blue-700 */
-  --button-text-color-hover: #1d4ed8;
-  /* gray-500 */
-  --button-border-color: #6b7280;
-  /* gray-700 */
-  --button-border-color-hover: #374151;
+  /**
+    * Global Variables
+    * @prop --chat-z-index: Z-index for chat widget (50)
+    * @prop --container-padding: General container padding (1rem)
+    *
+    * Button Variables
+    * @prop --button-background-color: Button background color (#ffffff)
+    * @prop --button-background-color-hover: Button background color on hover (#f3f4f6)
+    * @prop --button-text-color: Button text color (#111827)
+    * @prop --button-text-color-hover: Button text color on hover (#1d4ed8)
+    * @prop --button-border-color: Button border color (#6b7280)
+    * @prop --button-border-color-hover: Button border color on hover (#374151)
+    * @prop --button-padding: Button padding (0.75rem)
+    * @prop --button-padding-sm: Small button padding (0.375rem)
+    * @prop --button-font-size: Button text font size (0.875rem)
+    * @prop --button-icon-width: Button icon width (1.5rem)
+    * @prop --button-icon-height: Button icon height (1.5rem)
+    *
+    * Chat Window Variables
+    * @prop --chat-window-bg-color: Chat window background color (#ffffff)
+    * @prop --chat-window-border-color: Chat window border color (#d1d5db)
+    * @prop --chat-window-shadow-color: Chat window shadow color (rgba(0, 0, 0, 0.1))
+    * @prop --chat-window-font-size: Default font size for text in the chat window (0.875rem)
+    * @prop --chat-window-font-size-sm: Font size for small text in the chat window (0.75rem)
+    *
+    * Header Variables
+    * @prop --header-bg-color: Header background color (transparent)
+    * @prop --header-bg-hover-color: Header background color on hover (#f9fafb)
+    * @prop --header-border-color: Header border color (#f3f4f6)
+    * @prop --header-button-text-color: Header button text color (#6b7280)
+    * @prop --header-button-bg-hover-color: Header button background on hover (#f3f4f6)
+    * @prop --header-padding: Header padding (0.5rem)
+    *
+    * Starter Question Variables
+    * @prop --starter-question-bg-color: Starter question background color (transparent)
+    * @prop --starter-question-bg-hover-color: Starter question background on hover (#eff6ff)
+    * @prop --starter-question-text-color: Starter question text color (#3b82f6)
+    * @prop --starter-question-border-color: Starter question border color (#3b82f6)
+    * @prop --starter-question-border-hover-color: Starter question border on hover (#2563eb)
+    * @prop --starter-question-padding: Starter question padding (0.75rem)
+    *
+    * Message Bubble Variables
+    * @prop --message-user-bg-color: User message background color (#3b82f6)
+    * @prop --message-user-text-color: User message text color (#ffffff)
+    * @prop --message-assistant-bg-color: Assistant message background color (#e5e7eb)
+    * @prop --message-assistant-text-color: Assistant message text color (#1f2937)
+    * @prop --message-system-bg-color: System message background color (#f3f4f6)
+    * @prop --message-system-text-color: System message text color (#4b5563)
+    * @prop --message-timestamp-color: User message timestamp color (rgba(255, 255, 255, 0.7))
+    * @prop --message-timestamp-assistant-color: Assistant message timestamp color (rgba(75, 85, 99, 0.7))
+    * @prop --message-padding-x: Message horizontal padding (1rem)
+    * @prop --message-padding-y: Message vertical padding (0.5rem)
+    *
+    * Input Area Variables
+    * @prop --input-bg-color: Input area background color (transparent)
+    * @prop --input-border-color: Input field border color (#d1d5db)
+    * @prop --input-text-color: Input text color (#111827)
+    * @prop --input-placeholder-color: Input placeholder text color (#6b7280)
+    * @prop --input-outline-focus-color: Input field focus ring color (#3b82f6)
+    * @prop --input-textarea-padding-x: Input textarea horizontal padding (0.75rem)
+    * @prop --input-textarea-padding-y: Input textarea vertical padding (0.5rem)
+    *
+    * Send Button Variables
+    * @prop --send-button-bg-color: Send button background color (#3b82f6)
+    * @prop --send-button-bg-hover-color: Send button background on hover (#2563eb)
+    * @prop --send-button-text-color: Send button text color (#ffffff)
+    * @prop --send-button-bg-disabled-color: Send button background when disabled (#d1d5db)
+    * @prop --send-button-text-disabled-color: Send button text when disabled (#6b7280)
+    * @prop --send-button-padding-x: Send button horizontal padding (1rem)
+    * @prop --send-button-padding-y: Send button vertical padding (0.5rem)
+    *
+    * Loading Variables
+    * @prop --loading-text-color: Loading text color (#6b7280)
+    * @prop --loading-spinner-track-color: Loading spinner track color (#e5e7eb)
+    * @prop --loading-spinner-fill-color: Loading spinner fill color (#3b82f6)
+    * @prop --loading-spinner-size: Loading spinner size (1.25rem)
+    *
+    * Typing Indicator Variables
+    * @prop --typing-progress-bg-color: Typing progress bar background color (#ade3ff)
+    *
+    * Scrollbar Variables
+    * @prop --scrollbar-track-color: Scrollbar track color (#f3f4f6)
+    * @prop --scrollbar-thumb-color: Scrollbar thumb color (#d1d5db)
+    * @prop --scrollbar-thumb-hover-color: Scrollbar thumb hover color (#9ca3af)
+    *
+    * Error Variables
+    * @prop --error-text-color: Error text color (#ef4444)
+    * @prop --error-message-padding: Error message padding (0.5rem)
+    *
+    * Markdown Code Variables
+    * @prop --code-bg-user-color: Code background in user messages (rgba(59, 130, 246, 0.3))
+    * @prop --code-text-user-color: Code text color in user messages (#dbeafe)
+    * @prop --code-border-user-color: Code border in user messages (rgba(59, 130, 246, 0.6))
+    * @prop --code-bg-assistant-color: Code background in assistant messages (#ffffff)
+    * @prop --code-text-assistant-color: Code text color in assistant messages (#1f2937)
+    * @prop --code-border-assistant-color: Code border in assistant messages (#d1d5db)
+    */
+  /* Global variables */
   --chat-z-index: 50;
+  --container-padding: 1rem;
+
+  /* Button variables */
+  --button-background-color: #ffffff;
+  --button-background-color-hover: #f3f4f6;
+  --button-text-color: #111827;
+  --button-text-color-hover: #1d4ed8;
+  --button-border-color: #6b7280;
+  --button-border-color-hover: #374151;
+  --button-padding: 0.75rem;
+  --button-padding-sm: 0.375rem;
+  --button-font-size: 0.875rem; /* text-sm */
+  --button-icon-width: 1.5rem;
+  --button-icon-height: 1.5rem;
+
+  /* Chat window variables */
+  --chat-window-bg-color: #ffffff;
+  --chat-window-border-color: #d1d5db;
+  --chat-window-shadow-color: rgba(0, 0, 0, 0.1);
+  --chat-window-font-size: 0.875rem; /* text-sm */
+  --chat-window-font-size-sm: 0.75rem; /* text-xs */
+
+  /* Header variables */
+  --header-bg-color: transparent;
+  --header-bg-hover-color: #f9fafb;
+  --header-border-color: #f3f4f6;
+  --header-button-text-color: #6b7280;
+  --header-button-bg-hover-color: #f3f4f6;
+  --header-padding: 0.5rem;
+
+  /* Starter question variables */
+  --starter-question-bg-color: transparent;
+  --starter-question-bg-hover-color: #eff6ff;
+  --starter-question-text-color: #3b82f6;
+  --starter-question-border-color: #3b82f6;
+  --starter-question-border-hover-color: #2563eb;
+  --starter-question-padding: 0.75rem;
+
+  /* Message bubble variables */
+  --message-user-bg-color: #3b82f6;
+  --message-user-text-color: #ffffff;
+  --message-assistant-bg-color: #e5e7eb;
+  --message-assistant-text-color: #1f2937;
+  --message-system-bg-color: #f3f4f6;
+  --message-system-text-color: #4b5563;
+  --message-timestamp-color: rgba(255, 255, 255, 0.7);
+  --message-timestamp-assistant-color: rgba(75, 85, 99, 0.7);
+  --message-padding-x: 1rem;
+  --message-padding-y: 0.5rem;
+
+  /* Input area variables */
+  --input-bg-color: transparent;
+  --input-border-color: #d1d5db;
+  --input-text-color: #111827;
+  --input-placeholder-color: #6b7280;
+  --input-outline-focus-color: #3b82f6;
+  --input-textarea-padding-x: 0.75rem;
+  --input-textarea-padding-y: 0.5rem;
+
+  /* Send button variables */
+  --send-button-bg-color: #3b82f6;
+  --send-button-bg-hover-color: #2563eb;
+  --send-button-text-color: #ffffff;
+  --send-button-bg-disabled-color: #d1d5db;
+  --send-button-text-disabled-color: #6b7280;
+  --send-button-padding-x: 1rem;
+  --send-button-padding-y: 0.5rem;
+
+  /* Loading variables */
+  --loading-text-color: #6b7280;
+  --loading-spinner-track-color: #e5e7eb;
+  --loading-spinner-fill-color: #3b82f6;
+  --loading-spinner-size: 1.25rem;
+
+  /* Typing indicator variables */
+  --typing-progress-bg-color: #ade3ff;
+
+  /* Scrollbar variables */
+  --scrollbar-track-color: #f3f4f6;
+  --scrollbar-thumb-color: #d1d5db;
+  --scrollbar-thumb-hover-color: #9ca3af;
+
+  /* Error variables */
+  --error-text-color: #ef4444;
+  --error-message-padding: 0.5rem;
+
+  /* Markdown code variables */
+  --code-bg-user-color: rgba(59, 130, 246, 0.3);
+  --code-text-user-color: #dbeafe;
+  --code-border-user-color: rgba(59, 130, 246, 0.6);
+  --code-bg-assistant-color: #ffffff;
+  --code-text-assistant-color: #1f2937;
+  --code-border-assistant-color: #d1d5db;
 
   display: block;
+  position: fixed;
+  right: 20px;
+  bottom: 20px;
 }
 
-/* These custom button styles need to remain since they use CSS variables */
-
 @layer components {
-  .btn {
-    @apply py-2.5 px-5 me-2 mb-2 text-sm font-medium focus:outline-none rounded-lg border;
-    background-color: var(--button-background-color);
-    color: var(--button-text-color);
-    border-color: var(--button-border-color);
+  .starter-question {
+    @apply text-left rounded-lg duration-200;
+    padding: var(--starter-question-padding, 0.75rem);
+    background-color: var(--starter-question-bg-color);
+    border: 1px solid var(--starter-question-border-color);
+    color: var(--starter-question-text-color);
   }
 
-  .btn:hover {
-    background-color: var(--button-background-color-hover);
-    color: var(--button-text-color-hover);
-    border-color: var(--button-border-color-hover);
+  .starter-question:hover {
+    background-color: var(--starter-question-bg-hover-color);
+    border-color: var(--starter-question-border-hover-color);
   }
-  .starter-question {
-    @apply text-left p-3 rounded-lg duration-200 ml-12 border border-blue-500 hover:bg-blue-50 hover:border-blue-600 text-blue-600;
+
+  .chat-btn-text,
+  .chat-btn-icon {
+    @apply shadow-lg border-0 transition-all duration-200 ease-in-out transform hover:scale-105 rounded-lg;
+    background-color: var(--button-background-color, white);
+    z-index: var(--chat-z-index, 50);
+  }
+
+  /* Button with text and icon */
+  .chat-btn-text {
+    @apply flex gap-[8px] items-center;
+    padding: var(--button-padding, 0.75rem);
+    color: var(--button-text-color, #111827);
+  }
+
+  .chat-btn-text:hover {
+    color: var(--button-text-color-hover, #1d4ed8);
+  }
+
+  .chat-btn-text span {
+    @apply font-medium whitespace-nowrap;
+    font-size: var(--button-font-size);
+  }
+
+  .chat-btn-text img {
+    @apply object-contain flex-shrink-0;
+    width: var(--button-icon-width, 1.5rem);
+    height: var(--button-icon-height, 1.5rem);
+  }
+
+  /* Icon-only button */
+  .chat-btn-icon {
+    padding: var(--button-padding, 0.75rem);
+    width: 56px;
+    height: 56px;
+  }
+
+  .chat-btn-icon img {
+    @apply w-full h-full object-contain;
+  }
+
+  .chat-btn-text.round,
+  .chat-btn-icon.round {
+    @apply rounded-full;
+  }
+
+
+  /* Error message styling */
+  .error-message {
+    padding: var(--error-message-padding, 0.5rem);
+    color: var(--error-text-color);
+  }
+
+  /* Chat window positioning classes */
+  .chat-window-fullscreen {
+    @apply fixed inset-0 w-full h-full max-w-screen-lg max-h-full border-0 shadow-lg transition-shadow duration-200 rounded-none overflow-hidden flex flex-col z-[9999];
+    background-color: var(--chat-window-bg-color);
+    font-size: var(--chat-window-font-size);
+  }
+
+  .chat-window-normal {
+    @apply fixed w-full sm:w-[450px] max-w-screen-lg h-5/6 rounded-lg overflow-hidden flex flex-col;
+    background-color: var(--chat-window-bg-color);
+    border: 1px solid var(--chat-window-border-color);
+  }
+
+  .chat-window-dragging {
+    @apply shadow-2xl cursor-grabbing;
+  }
+
+  .chat-window-normal:not(.chat-window-dragging) {
+    @apply shadow-lg transition-shadow duration-200;
+  }
+
+  /* Header/drag bar classes */
+  .chat-header {
+    @apply flex justify-between items-center transition-colors duration-150;
+    padding: var(--header-padding, 0.5rem);
+    background-color: var(--header-bg-color);
+    border-bottom: 1px solid var(--header-border-color);
+  }
+
+  .chat-header:hover,
+  .chat-header:active {
+    background-color: var(--header-bg-hover-color);
+  }
+
+  .chat-header-draggable {
+    @apply cursor-grab;
+  }
+
+  .chat-header-dragging {
+    @apply cursor-grabbing;
+  }
+
+  .drag-indicator {
+    @apply hidden sm:flex;
+  }
+
+  .drag-dots {
+    @apply flex gap-[2px] ml-[2px] pointer-events-none;
+  }
+
+  .drag-spacer {
+    @apply sm:hidden;
+  }
+
+  .header-buttons {
+    @apply flex gap-[4px] items-center;
+  }
+
+  /* Header button classes */
+  .header-button {
+    @apply rounded-md transition-colors duration-200;
+    padding: var(--button-padding-sm, 0.375rem);
+    color: var(--header-button-text-color);
+  }
+
+  .header-button:hover {
+    background-color: var(--header-button-bg-hover-color);
+  }
+
+  .fullscreen-button {
+    @apply hidden sm:block;
+  }
+
+  /* Chat content area */
+  .chat-content {
+    @apply flex flex-col flex-grow overflow-hidden;
+  }
+
+  /* Loading state */
+  .loading-container {
+    @apply flex items-center justify-center flex-grow;
+  }
+
+  .loading-text {
+    margin-left: 2px;
+    color: var(--loading-text-color);
+  }
+
+  /* Messages container */
+  .messages-container {
+    @apply flex-grow overflow-y-auto space-y-2;
+    padding: var(--container-padding, 1rem);
+  }
+
+  /* Message bubbles */
+  .message-row {
+    @apply flex;
+  }
+
+  .message-row-user {
+    @apply justify-end;
+  }
+
+  .message-row-assistant {
+    @apply justify-start;
+  }
+
+  .message-bubble {
+    @apply max-w-xs lg:max-w-md rounded-lg;
+    padding: var(--message-padding-y, 0.5rem) var(--message-padding-x, 1rem);
+  }
+
+  .message-bubble-user {
+    background-color: var(--message-user-bg-color);
+    color: var(--message-user-text-color);
+  }
+
+  .message-bubble-assistant {
+    background-color: var(--message-assistant-bg-color);
+    color: var(--message-assistant-text-color);
+  }
+
+  .message-bubble-system {
+    background-color: var(--message-system-bg-color);
+    color: var(--message-system-text-color);
+  }
+
+  .message-timestamp {
+    @apply opacity-70 mt-[4px];
+    font-size: var(--chat-window-font-size-sm);
+  }
+
+  .message-attachments {
+    @apply mt-[8px] space-y-1;
+  }
+
+  .attachment-link {
+    @apply block underline hover:no-underline;
+  }
+
+  /* Welcome messages */
+  .welcome-messages {
+    @apply space-y-2;
+  }
+
+  /* Typing indicator */
+  .typing-indicator {
+    @apply h-1.5 w-full overflow-hidden;
+  }
+
+  .typing-progress {
+    @apply animate-progress w-full h-full origin-left-right rounded-lg;
+    background-color: var(--typing-progress-bg-color);
+  }
+
+  .typing-text {
+    @apply w-full opacity-70 justify-center;
+    font-size: var(--chat-window-font-size-sm);
+  }
+
+  .typing-dots {
+    @apply loading animate-dots;
+  }
+
+  /* Starter questions */
+  .starter-questions {
+    @apply space-y-2;
+    padding: var(--container-padding, 1rem);
+    font-size: var(--chat-window-font-size);
+  }
+
+  .starter-question-row {
+    @apply flex justify-end;
+  }
+
+  /* Input area */
+  .input-area {
+    padding: var(--container-padding, 1rem);
+    background-color: var(--input-bg-color);
+    border-top: 1px solid var(--input-border-color);
+    font-size: var(--chat-window-font-size);
+  }
+
+  .input-container {
+    @apply flex gap-[8px];
+  }
+
+  .message-textarea {
+    @apply flex-grow border border-gray-300 rounded-md resize-none focus:outline-blue-300;
+    padding: var(--input-textarea-padding-y, 0.5rem) var(--input-textarea-padding-x, 0.75rem);
+    color: var(--input-text-color);
+    border: 1px solid var(--input-border-color);
+  }
+
+  .message-textarea:focus {
+    outline-color: var(--input-outline-focus-color);
+  }
+
+  .send-button {
+    @apply rounded-md font-medium transition-colors duration-200;
+    padding: var(--send-button-padding-y, 0.5rem) var(--send-button-padding-x, 1rem);
+    font-size: var(--chat-window-font-size);
+  }
+
+  .send-button-enabled {
+    background-color: var(--send-button-bg-color);
+    color: var(--send-button-text-color);
+  }
+
+  .send-button-enabled:hover {
+    background-color: var(--send-button-bg-hover-color);
+  }
+
+  .send-button-disabled {
+    @apply cursor-not-allowed;
+    background-color: var(--send-button-bg-disabled-color);
+    color: var(--send-button-text-disabled-color);
   }
 }
 
@@ -51,36 +492,71 @@
   z-index: var(--chat-z-index);
 }
 
-/* Auto-resize textarea */
 textarea {
   @apply min-h-10 max-h-32 resize-none overflow-y-auto;
 }
 
-/* Message bubbles responsive design */
-@media (max-width: 640px) {
-  .max-w-xs {
-    max-width: 85%;
-  }
-}
-
-/* Loading spinner */
 .loading-spinner {
-  @apply w-5 h-5 border-2 border-gray-200 border-t-blue-500 rounded-full animate-spin;
+  @apply border-2 rounded-full animate-spin;
+  border-color: var(--loading-spinner-track-color);
+  border-top-color: var(--loading-spinner-fill-color);
+  width: var(--loading-spinner-size, 1.25rem);
+  height: var(--loading-spinner-size, 1.25rem);
 }
 
-/* Custom scrollbar for message area */
 .overflow-y-auto::-webkit-scrollbar {
   @apply w-1.5;
 }
 
 .overflow-y-auto::-webkit-scrollbar-track {
-  @apply bg-gray-100 rounded;
+  @apply rounded;
+  background-color: var(--scrollbar-track-color);
 }
 
 .overflow-y-auto::-webkit-scrollbar-thumb {
-  @apply bg-gray-300 rounded;
+  @apply rounded;
+  background-color: var(--scrollbar-thumb-color);
 }
 
 .overflow-y-auto::-webkit-scrollbar-thumb:hover {
-  @apply bg-gray-400;
+  background-color: var(--scrollbar-thumb-hover-color);
+}
+
+/* Markdown content styling for chat messages */
+.chat-markdown {
+  @apply prose prose-sm prose-gray max-w-none;
+}
+
+/* override spacing */
+.chat-markdown > * {
+  margin-top: 0.1rem;
+  margin-bottom: 0.1rem;
+}
+
+.message-bubble-user .chat-markdown {
+  @apply prose-invert;
+}
+
+.message-bubble-user .chat-markdown code {
+  background-color: var(--code-bg-user-color);
+  color: var(--code-text-user-color);
+}
+
+.message-bubble-user .chat-markdown pre {
+  background-color: var(--code-bg-user-color);
+  border: 1px solid var(--code-border-user-color);
+}
+
+.message-bubble-assistant .chat-markdown code {
+  background-color: var(--code-bg-assistant-color);
+  color: var(--code-text-assistant-color);
+}
+
+.message-bubble-assistant .chat-markdown pre {
+  background-color: var(--code-bg-assistant-color);
+  border: 1px solid var(--code-border-assistant-color);
+}
+
+.loading:after {
+  content: ' .';
 }

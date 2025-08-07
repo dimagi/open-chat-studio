@@ -1,9 +1,13 @@
+import pydantic
 from django import forms
+from django.conf import settings
 from django.db.models import Q, Subquery
 
 from apps.assistants.models import OpenAiAssistant, ToolResources
-from apps.documents.models import Collection
-from apps.service_providers.models import EmbeddingProviderModel
+from apps.documents.datamodels import DocumentSourceConfig, GitHubSourceConfig
+from apps.documents.models import Collection, DocumentSource, SourceType
+from apps.service_providers.models import AuthProvider, AuthProviderType, EmbeddingProviderModel
+from apps.utils.urlvalidate import InvalidURL, validate_user_input_url
 
 
 class CollectionForm(forms.ModelForm):
@@ -105,6 +109,118 @@ class CollectionForm(forms.ModelForm):
             self.cleaned_data["embedding_provider_model"] = None
             self.cleaned_data["is_remote_index"] = False
 
+        return cleaned_data
+
+
+class DocumentSourceForm(forms.ModelForm):
+    requires_auth = True
+    allowed_auth_types = []
+    auth_provider_help = ""
+
+    class Meta:
+        model = DocumentSource
+        fields = ["source_type", "auto_sync_enabled", "auth_provider"]
+        labels = {
+            "auto_sync_enabled": "Auto Sync",
+        }
+        widgets = {"source_type": forms.HiddenInput()}
+
+    def __init__(self, collection, *args, **kwargs):
+        self.collection = collection
+        instance = kwargs.get("instance")
+        initial = kwargs.get("initial")
+        if instance and initial is not None:
+            object_data = self._get_config_from_instance(instance).model_dump()
+            kwargs["initial"] = {**object_data, **initial}
+        super().__init__(*args, **kwargs)
+        if not self.requires_auth:
+            del self.fields["auth_provider"]
+        else:
+            self.fields["auth_provider"].help_text = self.auth_provider_help
+            self.fields["auth_provider"].queryset = AuthProvider.objects.filter(
+                team_id=collection.team_id, type__in=self.allowed_auth_types
+            )
+
+    def _get_config_from_instance(self, instance):
+        raise NotImplementedError
+
+    def save(self, commit=True):
+        instance = super().save(commit=False)
+        instance.config = self.cleaned_data["config"]
+        instance.collection = self.collection
+        instance.team = self.collection.team
+
+        if commit:
+            instance.save()
+        return instance
+
+
+class GithubDocumentSourceForm(DocumentSourceForm):
+    requires_auth = True
+    allowed_auth_types = [AuthProviderType.bearer]
+    auth_provider_help = "GitHub requires Bearer Auth"
+
+    repo_url = forms.URLField(
+        label="Repository URL",
+        help_text="GitHub repository URL (e.g., https://github.com/user/repo)",
+        widget=forms.URLInput(attrs={"placeholder": "https://github.com/user/repo"}),
+    )
+    branch = forms.CharField(
+        initial="main",
+        label="Branch",
+        help_text="Git branch to sync from",
+        widget=forms.TextInput(attrs={"placeholder": "main"}),
+    )
+    file_pattern = forms.CharField(
+        required=False,
+        initial="*.md",
+        label="File Pattern",
+        help_text="File patterns to include (comma-separated, e.g., *.md, *.txt)",
+        widget=forms.TextInput(attrs={"placeholder": "*.md, *.txt"}),
+    )
+    path_filter = forms.CharField(
+        required=False,
+        label="Path Filter",
+        help_text="Optional path prefix to filter files (e.g., docs/)",
+        widget=forms.TextInput(attrs={"placeholder": "docs/"}),
+    )
+
+    def _get_config_from_instance(self, instance):
+        return instance.config.github
+
+    def clean_repo_url(self):
+        github_repo_url = self.cleaned_data["repo_url"]
+        try:
+            validate_user_input_url(github_repo_url, strict=not settings.DEBUG)
+        except InvalidURL as e:
+            raise forms.ValidationError(f"The URL is invalid: {str(e)}") from None
+
+        return github_repo_url
+
+    def clean_source_type(self):
+        source_type = self.cleaned_data.get("source_type")
+        if source_type != SourceType.GITHUB:
+            raise forms.ValidationError(f"Expected GitHub source type, got {source_type}")
+        return source_type
+
+    def clean(self):
+        cleaned_data = super().clean()
+        if self.errors:
+            return cleaned_data
+
+        repo_url = cleaned_data.get("repo_url")
+        branch = cleaned_data.get("branch", "main")
+        file_pattern = cleaned_data.get("file_pattern", "")
+        path_filter = cleaned_data.get("path_filter", "")
+
+        try:
+            github_config = GitHubSourceConfig(
+                repo_url=repo_url, branch=branch, file_pattern=file_pattern, path_filter=path_filter
+            )
+        except pydantic.ValidationError:
+            raise forms.ValidationError("Invalid config") from None
+
+        cleaned_data["config"] = DocumentSourceConfig(github=github_config)
         return cleaned_data
 
 

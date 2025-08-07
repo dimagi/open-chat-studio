@@ -5,6 +5,8 @@ from collections.abc import Iterator
 
 import openai
 from django.conf import settings
+from django.db import DatabaseError
+from langchain_google_genai import GoogleGenerativeAIEmbeddings
 from langchain_openai import OpenAIEmbeddings
 from langchain_text_splitters import RecursiveCharacterTextSplitter
 from pgvector.django import CosineDistance
@@ -30,8 +32,24 @@ class IndexManager(metaclass=ABCMeta):
     ):
         pass
 
+    def delete_files(self, files: list[File]):
+        """
+        Remove files from the remote index service.
 
-class RemoteIndexManager(metaclass=ABCMeta):
+        Depending on the service implementation, this may only disassociate files
+        from the vector store or completely delete them from remote storage.
+
+        Args:
+            files: List of File instances to delete from the remote service.
+        """
+        self.delete_files_from_index(files)
+
+    @abstractmethod
+    def delete_files_from_index(self, files: list[File]):
+        """Disassociates the file with the vector store"""
+
+
+class RemoteIndexManager(IndexManager, metaclass=ABCMeta):
     """
     Abstract base class for managing vector stores in remote indexing services.
 
@@ -93,23 +111,6 @@ class RemoteIndexManager(metaclass=ABCMeta):
             file: The File instance to upload to the remote service.
         """
         ...
-
-    @abstractmethod
-    def delete_files(self, files: list[File]):
-        """
-        Remove files from the remote index service.
-
-        Depending on the service implementation, this may only disassociate files
-        from the vector store or completely delete them from remote storage.
-
-        Args:
-            files: List of File instances to delete from the remote service.
-        """
-        ...
-
-    @abstractmethod
-    def delete_file_from_index(self, file_id: str):
-        """Disassociates the file with the vector store"""
 
     def add_files(
         self,
@@ -178,8 +179,12 @@ class OpenAIRemoteIndexManager(RemoteIndexManager):
         with contextlib.suppress(openai.NotFoundError):
             self.client.vector_stores.delete(vector_store_id=self.index_id)
 
-    def delete_file_from_index(self, file_id: str):
+    def delete_files_from_index(self, files: list[File]):
         """Disassociates the file with the vector store"""
+        for file in files:
+            self.delete_file_from_index(file.external_id)
+
+    def delete_file_from_index(self, file_id: str):
         try:
             self.client.vector_stores.files.delete(vector_store_id=self.index_id, file_id=file_id)
         except Exception:
@@ -231,7 +236,7 @@ class OpenAIRemoteIndexManager(RemoteIndexManager):
         File.objects.bulk_update(files, fields=["external_id"])
 
 
-class LocalIndexManager(metaclass=ABCMeta):
+class LocalIndexManager(IndexManager, metaclass=ABCMeta):
     """
     Abstract base class for managing local embedding operations.
 
@@ -240,8 +245,8 @@ class LocalIndexManager(metaclass=ABCMeta):
     generating embedding vectors and chunking text content.
     """
 
-    def __init__(self, client: any, embedding_model_name: str):
-        self.client = client
+    def __init__(self, api_key: str, embedding_model_name: str):
+        self._api_key = api_key
         self.embedding_model_name = embedding_model_name
 
     @abstractmethod
@@ -264,25 +269,39 @@ class LocalIndexManager(metaclass=ABCMeta):
     ):
         for collection_file in collection_files:
             file = collection_file.file
+            embeddings = []
             try:
                 text_chunks = self.chunk_file(file, chunk_size=chunk_size, chunk_overlap=chunk_overlap)
                 for idx, chunk in enumerate(text_chunks):
                     embedding_vector = self.get_embedding_vector(chunk)
-                    FileChunkEmbedding.objects.create(
-                        team_id=file.team_id,
-                        file=file,
-                        collection_id=collection_file.collection_id,
-                        chunk_number=idx + 1,  # Start chunk numbering from 1
-                        text=chunk,
-                        embedding=embedding_vector,
-                        # TODO: Get the page number if possible. Also, what file types are supported?
-                        page_number=0,
+                    embeddings.append(
+                        FileChunkEmbedding.objects.create(
+                            team_id=file.team_id,
+                            file=file,
+                            collection_id=collection_file.collection_id,
+                            chunk_number=idx + 1,  # Start chunk numbering from 1
+                            text=chunk,
+                            embedding=embedding_vector,
+                            # TODO: Get the page number if possible. Also, what file types are supported?
+                            page_number=0,
+                        )
                     )
                 collection_file.status = FileStatus.COMPLETED
             except Exception as e:
                 logger.exception("Failed to index file", extra={"file_id": file.id, "error": str(e)})
                 collection_file.status = FileStatus.FAILED
-            collection_file.save(update_fields=["status"])
+            try:
+                collection_file.save(update_fields=["status"])
+            except DatabaseError:
+                collection_file_id = collection_file.id
+                collection_file = CollectionFile.objects.filter(id=collection_file_id).first()
+                if not collection_file:
+                    # collection file deleted - remove all the embeddings
+                    FileChunkEmbedding.objects.filter(id__in=[embedding.id for embedding in embeddings]).delete()
+                else:
+                    logger.exception(
+                        "Failed to update collection file status", extra={"collection_file_id": collection_file_id}
+                    )
 
     def chunk_file(self, file: File, chunk_size: int, chunk_overlap: int) -> list[str]:
         """
@@ -306,36 +325,13 @@ class LocalIndexManager(metaclass=ABCMeta):
         documents = text_splitter.create_documents([file.read_content()])
         return [doc.page_content for doc in documents]
 
-    def delete_files(self, files: list[File]):
-        """
-        Remove files from the local index.
-
-        This method should handle the deletion of file embeddings and any associated
-        metadata in the local index.
-
-        Args:
-            files: List of File instances to delete from the local index.
-        """
+    def delete_files_from_index(self, files: list[File]):
         for file in files:
-            FileChunkEmbedding.objects.filter(file=file).delete()
-            file.external_id = ""
-        File.objects.bulk_update(files, fields=["external_id"])
+            self.delete_embeddings(file_id=file.id)
 
-
-class OpenAILocalIndexManager(LocalIndexManager):
-    """
-    OpenAI-specific implementation of LocalIndexManager.
-
-    This class provides concrete implementations for local embedding operations
-    using OpenAI's embedding models and text processing utilities. It handles
-    text chunking using tiktoken encoding and generates embeddings via OpenAI's API.
-    """
-
-    def get_embedding_vector(self, content: str) -> Vector:
-        embeddings = OpenAIEmbeddings(
-            api_key=self.client.api_key, model=self.embedding_model_name, dimensions=settings.EMBEDDING_VECTOR_SIZE
-        )
-        return embeddings.embed_query(content)
+    def delete_embeddings(self, file_id: str):
+        """Deleting a file from the local index doesn't really make"""
+        FileChunkEmbedding.objects.filter(file__id=file_id).delete()
 
     def query(self, index_id: int, query: str, top_k: int = 5) -> list[FileChunkEmbedding]:
         """
@@ -357,3 +353,27 @@ class OpenAILocalIndexManager(LocalIndexManager):
             .select_related("file")
             .only("text", "file__name")[:top_k]
         )
+
+
+class OpenAILocalIndexManager(LocalIndexManager):
+    """
+    OpenAI-specific implementation of LocalIndexManager.
+
+    This class provides concrete implementations for local embedding operations
+    using OpenAI's embedding models and text processing utilities. It handles
+    text chunking using tiktoken encoding and generates embeddings via OpenAI's API.
+    """
+
+    def get_embedding_vector(self, content: str) -> Vector:
+        embeddings = OpenAIEmbeddings(
+            api_key=self._api_key, model=self.embedding_model_name, dimensions=settings.EMBEDDING_VECTOR_SIZE
+        )
+        return embeddings.embed_query(content)
+
+
+class GoogleLocalIndexManager(LocalIndexManager):
+    def get_embedding_vector(self, content: str) -> Vector:
+        embeddings = GoogleGenerativeAIEmbeddings(
+            google_api_key=self._api_key, model=f"models/{self.embedding_model_name}"
+        )
+        return embeddings.embed_query(content, output_dimensionality=settings.EMBEDDING_VECTOR_SIZE)

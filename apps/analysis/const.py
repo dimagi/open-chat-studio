@@ -1,5 +1,5 @@
 LANGUAGE_CHOICES = [
-    ("", "Original (default)"),
+    ("", "Original Language"),
     ("ara", "Arabic"),
     ("ben", "Bengali"),
     ("eng", "English"),

@@ -192,6 +192,46 @@ class ParticipantDataProxy:
 
         self.session.participant.update_name_from_data(data)
 
+    def set_key(self, key: str, value: Any):
+        """Set a single key in the participant data."""
+        participant_data = self._get_db_object()
+        participant_data.data[key] = value
+        self.set(participant_data.data)
+
+    def append_to_key(self, key: str, value: Any):
+        """
+        Append a value to a list at the specified key in the participant data. If the current value is not a list,
+        it will convert it to a list before appending.
+        """
+        participant_data = self._get_db_object()
+        existing_data = participant_data.data
+        value_at_key = existing_data.get(key, [])
+        if not isinstance(value_at_key, list):
+            value_at_key = [value_at_key]
+
+        if isinstance(value, list):
+            value_at_key.extend(value)
+        else:
+            value_at_key.append(value)
+
+        existing_data[key] = value_at_key
+        self.set(existing_data)
+
+    def increment_key(self, key: str, increment: int = 1):
+        """
+        Increment a numeric value at the specified key in the participant data.
+        If the current value is not a number, it will be initialized to 0 before incrementing.
+        """
+        participant_data = self._get_db_object()
+        existing_data = participant_data.data
+        current_value = existing_data.get(key, 0)
+
+        if not isinstance(current_value, int | float):
+            current_value = 0
+
+        existing_data[key] = current_value + increment
+        self.set(existing_data)
+
     def get_schedules(self):
         """
         Returns all active scheduled messages for the participant in the current experiment session.

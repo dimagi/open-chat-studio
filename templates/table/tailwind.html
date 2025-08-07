@@ -1,4 +1,4 @@
-{% extends 'django_tables2/bootstrap5.html' %}
+{% extends "django_tables2/bootstrap5.html" %}
 {% load i18n %}
 {% load django_tables2 %}
 {% block table-wrapper %}
@@ -8,7 +8,7 @@
         {% endblock table %}
 
         {% block pagination %}
-            <div class="pagination">
+            <div class="flex pagination justify-end">
                 {% if table.page and table.paginator.num_pages > 1 %}
                     <div class="join">
                         <a class="join-item btn"
@@ -17,7 +17,7 @@
                                    href="{% querystring table.prefixed_page_field=table.page.previous_page_number %}"
                                {% endblock prev-page-link-attr %}
                            {% else %}disabled{% endif %}>
-                            <span aria-hidden="true">&laquo;</span>
+                            <span aria-hidden="true">«</span>
                         </a>
                         <a class="join-item btn">
                             {% with current_position=table.page.end_index total=table.page.paginator.count %}
@@ -32,7 +32,7 @@
                                    href="{% querystring table.prefixed_page_field=table.page.next_page_number %}"
                                {% endblock next-page-link-attr %}
                            {% else %}disabled{% endif %}>
-                            <span aria-hidden="true">&raquo;</span>
+                            <span aria-hidden="true">»</span>
                         </a>
                     </div>
                 {% endif %}

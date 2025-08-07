@@ -144,3 +144,78 @@ class TestParticipantDataProxy:
         participant_data.data = {}
         participant_data.save()
         assert proxy.get_timezone() is None
+
+    def test_set_key(self):
+        """Test that set_key() updates a single key in the participant data."""
+        participant = ParticipantFactory()
+        session = ExperimentSessionFactory(participant=participant)
+
+        proxy = ParticipantDataProxy(session)
+        participant_data = proxy._get_db_object()
+
+        # Set some data
+        proxy.set_key("favorite_color", "blue")
+
+        # Check that data was updated
+        participant_data.refresh_from_db()
+        assert participant_data.data == {"favorite_color": "blue"}
+
+    def test_append_to_key(self):
+        """
+        Test that append_to_key() adds a value to a list at the specified key.
+        If the current value is not a list, it should convert it to a list.
+        """
+        participant = ParticipantFactory()
+        session = ExperimentSessionFactory(participant=participant)
+
+        proxy = ParticipantDataProxy(session)
+        participant_data = proxy._get_db_object()
+
+        assert "random_stuff" not in proxy.get()
+
+        # Append some data
+        proxy.append_to_key("random_stuff", "blue")
+        proxy.append_to_key("random_stuff", 1)
+        proxy.append_to_key("random_stuff", [3, 4])
+
+        # Check that data was updated
+        participant_data.refresh_from_db()
+        assert participant_data.data == {"random_stuff": ["blue", 1, 3, 4]}
+
+    def test_increment_key(self):
+        """
+        Test that increment_key() increments a numeric value at the specified key.
+        If the current value is not a number, it should initialize to 0 before incrementing.
+        """
+        participant = ParticipantFactory()
+        session = ExperimentSessionFactory(participant=participant)
+
+        proxy = ParticipantDataProxy(session)
+        participant_data = proxy._get_db_object()
+
+        # Test incrementing a non-existent key (should start at 0)
+        proxy.increment_key("counter")
+        participant_data.refresh_from_db()
+        assert participant_data.data == {"counter": 1}
+
+        # Test incrementing an existing numeric value
+        proxy.increment_key("counter", 5)
+        participant_data.refresh_from_db()
+        assert participant_data.data == {"counter": 6}
+
+        # Test incrementing with default increment of 1
+        proxy.increment_key("counter")
+        participant_data.refresh_from_db()
+        assert participant_data.data == {"counter": 7}
+
+        # Test incrementing a float value
+        proxy.set_key("float_counter", 2.5)
+        proxy.increment_key("float_counter", 1.5)
+        participant_data.refresh_from_db()
+        assert participant_data.data == {"counter": 7, "float_counter": 4.0}
+
+        # Test incrementing a non-numeric value (should reset to 0 and increment)
+        proxy.set_key("text_value", "not a number")
+        proxy.increment_key("text_value", 3)
+        participant_data.refresh_from_db()
+        assert participant_data.data == {"counter": 7, "float_counter": 4.0, "text_value": 3}

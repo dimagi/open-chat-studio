@@ -1,5 +1,6 @@
 from functools import cached_property
 
+from django.conf import settings
 from django.contrib import messages
 from django.http import FileResponse, HttpResponse, JsonResponse
 from django.shortcuts import get_object_or_404, redirect, render
@@ -60,6 +61,7 @@ class TranscriptAnalysisCreateView(LoginAndTeamRequiredMixin, CreateView):
         context = super().get_context_data(**kwargs)
         context["active_tab"] = "analysis"
         context["experiment"] = self.experiment
+        context["session_limit"] = settings.ANALYTICS_MAX_SESSIONS
         return context
 
     def form_valid(self, form):

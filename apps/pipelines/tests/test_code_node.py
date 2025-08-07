@@ -1,6 +1,7 @@
 import json
 
 import pytest
+from django.core.files.base import ContentFile
 from pydantic import ValidationError
 
 from apps.channels.datamodels import Attachment
@@ -236,7 +237,8 @@ def main(input, **kwargs):
 
 @pytest.mark.django_db()
 def test_read_attachments(pipeline, experiment_session):
-    file = File.from_content("foo.txt", b"from file", "text/plain", experiment_session.team.id)
+    file_obj = ContentFile("from file")
+    file = File.create("foo.txt", file_obj, experiment_session.team.id)
 
     code_get = """
 def main(input, **kwargs):

@@ -76,6 +76,7 @@ dependencies = [
     "backoff",
     "django-cors-headers>=4.7.0",
     "markitdown[pdf, docx, xlsx, xls, outlook, pptx]",
+    "langchain-mcp-adapters",
 ]
 
 [project.urls]
@@ -139,6 +140,7 @@ dev = [
     "pytest-cov",
     "pytest-xdist",
     "django-debug-toolbar>=5.2.0",
+    "djlint>=1.36.4",
 ]
 docs = [
     "mkdocs-material>=9.6.12",
@@ -146,8 +148,15 @@ docs = [
 
 prod = [
     "gunicorn",
-    "gevent",
+    "gevent==24.*"
 ]
 
 [tool.uv]
 default-groups = ["dev", "docs"]
+
+[tool.djlint]
+profile="django"
+format_attribute_template_tags=true
+use_gitignore=true
+indent=2
+ignore="H030,H031,H021,H006,H013,H014"

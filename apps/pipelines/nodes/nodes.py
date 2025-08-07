@@ -386,6 +386,14 @@ class LLMResponseWithPrompt(LLMResponse, HistoryMixin, OutputMessageTagMixin):
         description="Configuration for builtin tools",
         json_schema_extra=UiSchema(widget=Widgets.none),
     )
+    mcp_tools: list[str] = Field(
+        default_factory=list,
+        title="MCP Tools",
+        description="MCP tools to enable for the bot",
+        json_schema_extra=UiSchema(
+            widget=Widgets.multiselect, options_source=OptionsSource.mcp_tools, flag_required="flag_mcp"
+        ),
+    )
     history_type: PipelineChatHistoryTypes = Field(
         PipelineChatHistoryTypes.GLOBAL,
         json_schema_extra=UiSchema(widget=Widgets.history, enum_labels=PipelineChatHistoryTypes.labels),
@@ -409,7 +417,7 @@ class LLMResponseWithPrompt(LLMResponse, HistoryMixin, OutputMessageTagMixin):
                 "invalid_prompt", e.error_dict["prompt"][0].message, {"field": "prompt"}
             ) from None
 
-    @field_validator("tools", "built_in_tools", mode="before")
+    @field_validator("tools", "built_in_tools", "mcp_tools", mode="before")
     def ensure_value(cls, value: str):
         return value or []
 
@@ -1156,6 +1164,9 @@ class CodeNode(PipelineNode, OutputMessageTagMixin):
             default_guarded_getitem,
             default_guarded_getiter,
         )
+        from RestrictedPython.Guards import (
+            guarded_iter_unpack_sequence,
+        )
 
         custom_globals = safe_globals.copy()
 
@@ -1175,9 +1186,13 @@ class CodeNode(PipelineNode, OutputMessageTagMixin):
                 "time": time,
                 "_getitem_": default_guarded_getitem,
                 "_getiter_": default_guarded_getiter,
+                "_iter_unpack_sequence_": guarded_iter_unpack_sequence,
                 "_write_": lambda x: x,
                 "get_participant_data": participant_data_proxy.get,
                 "set_participant_data": participant_data_proxy.set,
+                "set_participant_data_key": participant_data_proxy.set_key,
+                "append_to_participant_data_key": participant_data_proxy.append_to_key,
+                "increment_participant_data_key": participant_data_proxy.increment_key,
                 "get_participant_schedules": participant_data_proxy.get_schedules,
                 "get_temp_state_key": self._get_temp_state_key(output_state),
                 "set_temp_state_key": self._set_temp_state_key(output_state),

@@ -1,14 +1,18 @@
 import uuid
+from datetime import timedelta
 
 from django.contrib.auth.decorators import permission_required
 from django.contrib.auth.mixins import PermissionRequiredMixin
+from django.db.models import Count, F, Max, Q
 from django.http import HttpResponse, HttpResponseRedirect
 from django.shortcuts import get_object_or_404, redirect
 from django.template.loader import render_to_string
 from django.urls import reverse
+from django.utils import timezone
 from django.views.decorators.clickjacking import xframe_options_exempt
 from django.views.decorators.http import require_GET, require_POST
 from django.views.generic import TemplateView
+from django_tables2 import SingleTableView
 from waffle import flag_is_active
 
 from apps.chat.channels import WebChannel
@@ -38,7 +42,7 @@ from apps.service_providers.models import LlmProvider, LlmProviderModel
 from apps.teams.decorators import login_and_team_required, team_required
 from apps.teams.mixins import LoginAndTeamRequiredMixin
 from apps.teams.models import Flag
-from apps.utils.base_experiment_table_view import BaseExperimentTableView
+from apps.utils.search import similarity_search
 
 
 def _get_alpine_context(request, experiment=None):
@@ -133,14 +137,56 @@ def chatbots_home(request, team_slug: str):
     return generic_home(request, team_slug, "Chatbots", "chatbots:table", "chatbots:new")
 
 
-class ChatbotExperimentTableView(BaseExperimentTableView):
+class ChatbotExperimentTableView(LoginAndTeamRequiredMixin, SingleTableView, PermissionRequiredMixin):
+    paginate_by = 25
+    template_name = "table/single_table.html"
     model = Experiment
     table_class = ChatbotTable
     permission_required = "experiments.view_experiment"
 
     def get_queryset(self):
-        queryset = super().get_queryset()
-        return queryset.filter(pipeline__isnull=False)
+        end_date = timezone.now()
+        start_date = end_date - timedelta(days=30)
+        query_set = (
+            self.model.objects.get_all()
+            .filter(team=self.request.team, working_version__isnull=True, pipeline__isnull=False)
+            .annotate(session_count=Count("sessions"))
+            .annotate(
+                participant_count=Count(
+                    "sessions__participant",
+                    filter=Q(
+                        sessions__chat__messages__created_at__gte=start_date,
+                        sessions__chat__messages__created_at__lte=end_date,
+                    ),
+                    distinct=True,
+                )
+            )
+            .annotate(
+                messages_count=Count(
+                    "sessions__chat__messages",
+                    filter=Q(
+                        sessions__chat__messages__created_at__gte=start_date,
+                        sessions__chat__messages__created_at__lte=end_date,
+                    ),
+                )
+            )
+            .annotate(last_message=Max("sessions__chat__messages__created_at"))
+            .order_by(F("last_message").desc(nulls_last=True))
+        )
+        show_archived = self.request.GET.get("show_archived") == "on"
+        if not show_archived:
+            query_set = query_set.filter(is_archived=False)
+
+        search = self.request.GET.get("search")
+        if search:
+            query_set = similarity_search(
+                query_set,
+                search_phase=search,
+                columns=["name", "description"],
+                extra_conditions=Q(owner__username__icontains=search),
+                score=0.1,
+            )
+        return query_set
 
 
 class CreateChatbot(CreateExperiment, BaseExperimentView):

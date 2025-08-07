@@ -34,7 +34,7 @@ class ExperimentSerializer(serializers.ModelSerializer):
 class ParticipantSerializer(serializers.ModelSerializer):
     class Meta:
         model = Participant
-        fields = ["identifier"]
+        fields = ["identifier", "remote_id"]
 
 
 class TeamSerializer(serializers.ModelSerializer):
@@ -204,6 +204,15 @@ class ChatStartSessionRequest(serializers.Serializer):
         required=False,
         help_text="Optional initial state data for the session. "
         "This field will be ignored if the request is not authenticated.",
+    )
+    participant_remote_id = serializers.CharField(
+        label="Participant Remote Id",
+        required=False,
+        help_text="Optional ID for the participant from remote systems",
+        default="",
+    )
+    participant_name = serializers.CharField(
+        label="Paricipant Name", required=False, help_text="Optional participant name"
     )
 
 

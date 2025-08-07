@@ -1,5 +1,5 @@
 {# Generic template for rendering an object form (e.g. create / update) #}
-{% extends 'web/app/app_base.html' %}
+{% extends "web/app/app_base.html" %}
 {% load form_tags %}
 {% block app %}
   <div class="app-card max-w-5xl mx-auto" x-data="{ type: '{{ secondary_key }}' }">
@@ -36,4 +36,4 @@
       {% endblock post_form %}
     </div>
   </div>
-{% endblock %}
+{% endblock app %}

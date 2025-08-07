@@ -16,6 +16,7 @@ from datetime import timedelta
 from pathlib import Path
 
 import environ
+from celery.schedules import crontab
 from django.utils.translation import gettext_lazy
 
 # Build paths inside the project like this: BASE_DIR / 'subdir'.
@@ -112,6 +113,7 @@ PROJECT_APPS = [
     "apps.dashboard",
     "apps.evaluations",
     "apps.trace",
+    "apps.mcp_integrations",
 ]
 
 SPECIAL_APPS = ["debug_toolbar"] if USE_DEBUG_TOOLBAR else []
@@ -450,6 +452,15 @@ SCHEDULED_TASKS = {
         "task": "apps.dashboard.tasks.cleanup_expired_cache_entries",
         "schedule": timedelta(days=1),
     },
+    "evaluations.tasks.cleanup_old_evaluation_data": {
+        "task": "apps.evaluations.tasks.cleanup_old_evaluation_data",
+        "schedule": timedelta(days=1),
+    },
+    "documents.tasks.sync_all_document_sources_task": {
+        # sync doc sources once per week
+        "task": "apps.documents.tasks.sync_all_document_sources_task",
+        "schedule": crontab(minute="0", hour="0", day_of_week="0"),
+    },
 }
 
 CACHES = {
@@ -571,8 +582,8 @@ TELEGRAM_SECRET_TOKEN = env("TELEGRAM_SECRET_TOKEN", default="")
 
 DJANGO_TABLES2_TEMPLATE = "table/tailwind.html"
 DJANGO_TABLES2_TABLE_ATTRS = {
-    "class": "w-full table-fixed",
-    "thead": {"class": "bg-base-200 base-content uppercase text-sm leading-normal"},
+    "class": "w-full table table-zebra",
+    "thead": {"class": "bg-base-200 base-content text-sm leading-normal"},
     "th": {"class": "py-3 px-3 text-left"},
     "td": {"class": "py-3 px-3 text-left overflow-hidden"},
 }
@@ -597,7 +608,7 @@ TAGGIT_CASE_INSENSITIVE = True
 DOCUMENTATION_LINKS = {
     # Try to make these keys grep-able so that usages are easy to find
     "consent": "/concepts/consent/",
-    "embed": "/how-to/embed/",
+    "chat_widget": "/chat_widget/",
     "survey": "https://dimagi.atlassian.net/wiki/spaces/OCS/pages/2144305308/Surveys",
     "experiment": "/concepts/experiment/",
     "pipelines": "/concepts/pipelines/",
@@ -634,6 +645,7 @@ FIELD_AUDIT_REQUEST_ID_HEADERS = [
     "X-Amzn-Trace-Id",  # Amazon
     "traceparent",  # W3C Trace Context (Google)
 ]
+FIELD_AUDIT_SERVICE_CLASS = "apps.audit.service.AuditService"
 TEST_NON_SERIALIZED_APPS = [
     "field_audit",
 ]
@@ -737,3 +749,6 @@ CORS_ALLOWED_METHODS = [
 
 # Additional CORS settings for security
 CORS_PREFLIGHT_MAX_AGE = 86400  # Cache preflight for 24 hours
+
+# Analytics settings
+ANALYTICS_MAX_SESSIONS = 750

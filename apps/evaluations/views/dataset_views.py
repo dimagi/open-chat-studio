@@ -127,8 +127,13 @@ class CreateDataset(LoginAndTeamRequiredMixin, CreateView, PermissionRequiredMix
         return initial
 
     def _get_filter_context_data(self):
-        experiments = Experiment.objects.filter(team=self.request.team).values("id", "name").order_by("name")
-        experiment_list = [{"id": exp["id"], "name": exp["name"]} for exp in experiments]
+        experiments = (
+            Experiment.objects.working_versions_queryset()
+            .filter(team=self.request.team)
+            .values("id", "name")
+            .order_by("name")
+        )
+        experiment_list = [{"id": exp["id"], "label": exp["name"]} for exp in experiments]
 
         channel_list = ChannelPlatform.for_filter(self.request.team)
         available_tags = [tag.name for tag in self.request.team.tag_set.filter(is_system_tag=False)]
@@ -153,6 +158,7 @@ class CreateDataset(LoginAndTeamRequiredMixin, CreateView, PermissionRequiredMix
                 "tags",
                 "versions",
                 "channels",
+                "remote_id",
             ],
         }
 

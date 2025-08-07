@@ -13,13 +13,14 @@ from apps.channels.models import ChannelPlatform, ExperimentChannel
 from apps.chat.channels import (
     ApiChannel,
     CommCareConnectChannel,
+    EvaluationChannel,
     FacebookMessengerChannel,
     SureAdhereChannel,
     TelegramChannel,
     WhatsappChannel,
 )
 from apps.chat.models import ChatMessage
-from apps.experiments.models import ParticipantData
+from apps.experiments.models import ExperimentSession, ParticipantData
 from apps.service_providers.models import MessagingProviderType
 from apps.utils.taskbadger import update_taskbadger_data
 
@@ -151,6 +152,19 @@ def handle_api_message(
         experiment_channel,
         experiment_session=session,
         user=user,
+    )
+    return channel.new_user_message(message)
+
+
+def handle_evaluation_message(
+    experiment_version, experiment_channel, message_text: str, session: ExperimentSession
+) -> ChatMessage:
+    """Synchronously handles the message coming from evaluations"""
+    message = BaseMessage(participant_id=session.participant.identifier, message_text=message_text)
+    channel = EvaluationChannel(
+        experiment_version,
+        experiment_channel,
+        experiment_session=session,
     )
     return channel.new_user_message(message)
 

@@ -10,14 +10,63 @@ from apps.evaluations.models import (
     EvaluationMessage,
     EvaluationMessageContent,
     Evaluator,
+    ExperimentVersionSelection,
 )
-from apps.experiments.models import ExperimentSession
+from apps.experiments.models import Experiment, ExperimentSession
+
+
+def get_experiment_version_choices(experiment_queryset):
+    """
+    Get experiment version choices including sentinel values and specific versions.
+    Returns consistent (value, label) tuples that can be used by both forms and views.
+    """
+    choices = [
+        (ExperimentVersionSelection.LATEST_WORKING.value, ExperimentVersionSelection.LATEST_WORKING.label),
+        (ExperimentVersionSelection.LATEST_PUBLISHED.value, ExperimentVersionSelection.LATEST_PUBLISHED.label),
+    ]
+
+    # Add specific versions if queryset provided
+    if experiment_queryset is not None:
+        for version in experiment_queryset:
+            label = str(version)
+            if version.working_version_id is None:  # This is the working version
+                continue  # Ignore it as we have "LATEST_WORKING" as a special value
+            elif version.is_default_version:  # This is the default published version
+                label = f"{label} (Current published version)"
+
+            choices.append((version.id, label))
+
+    return choices
+
+
+class ExperimentChoiceField(forms.ChoiceField):
+    def __init__(self, queryset, *args, **kwargs):
+        self.queryset = queryset
+        kwargs["choices"] = get_experiment_version_choices(queryset)
+        super().__init__(*args, **kwargs)
 
 
 class EvaluationConfigForm(forms.ModelForm):
+    # Add a helper field for selecting the base chatbot first
+    experiment = forms.ModelChoiceField(
+        queryset=Experiment.objects.none(),
+        required=False,
+        empty_label="Select a chatbot for generation...",
+        help_text="Select the chatbot to run generation against",
+        widget=forms.Select(attrs={"class": "select w-full"}),
+        label="Chatbot",
+    )
+    experiment_version = None  # Created dynamically based on the queryset
+
     class Meta:
         model = EvaluationConfig
-        fields = ("name", "dataset", "evaluators")
+        fields = [
+            "name",
+            "evaluators",
+            "dataset",
+            "experiment_version",
+            "base_experiment",
+        ]
         widgets = {
             "evaluators": forms.CheckboxSelectMultiple(),
         }
@@ -25,8 +74,99 @@ class EvaluationConfigForm(forms.ModelForm):
     def __init__(self, team, *args, **kwargs):
         super().__init__(*args, **kwargs)
         self.team = team
+
         self.fields["dataset"].queryset = EvaluationDataset.objects.filter(team=team)
         self.fields["evaluators"].queryset = Evaluator.objects.filter(team=team)
+        self.fields["experiment"].queryset = (
+            Experiment.objects.working_versions_queryset().filter(team=team).order_by("name")
+        )
+
+        experiment_version_queryset = None
+
+        if self.instance and self.instance.pk:
+            if self.instance.experiment_version:
+                # For specific version, set experiment field based on the experiment_version
+                if working_experiment := self.instance.experiment_version.get_working_version():
+                    self.initial["experiment"] = working_experiment
+                    # Filter the experiment_version queryset to only show versions for this experiment
+                    experiment_version_queryset = self._get_version_choices(working_experiment)
+
+            elif self.instance.base_experiment:
+                # For sentinel values, set experiment and convert sentinel type to string
+                self.initial["experiment"] = self.instance.base_experiment
+                # Filter the experiment_version queryset to only show versions for this experiment
+                experiment_version_queryset = self._get_version_choices(self.instance.base_experiment)
+                if self.instance.version_selection_type == ExperimentVersionSelection.LATEST_WORKING:
+                    self.initial["experiment_version"] = ExperimentVersionSelection.LATEST_WORKING.value
+                elif self.instance.version_selection_type == ExperimentVersionSelection.LATEST_PUBLISHED:
+                    self.initial["experiment_version"] = ExperimentVersionSelection.LATEST_PUBLISHED.value
+
+        self.fields["experiment_version"] = ExperimentChoiceField(
+            queryset=experiment_version_queryset,
+            required=False,
+            widget=forms.Select(attrs={"class": "select w-full"}),
+            label="Chatbot version",
+            help_text="Choose a chatbot version",
+        )
+
+    def _get_version_choices(self, experiment):
+        """Get all versions for a specific experiment including working version"""
+        return Experiment.objects.all_versions_queryset(experiment).filter(team=self.team)
+
+    def clean(self):
+        cleaned_data = super().clean()
+
+        experiment_version = cleaned_data.get("experiment_version")
+        experiment = cleaned_data.get("experiment")
+
+        if experiment and not experiment_version:
+            self.add_error("experiment_version", "Please select a version")
+            return cleaned_data
+
+        if experiment_version in {
+            ExperimentVersionSelection.LATEST_WORKING,
+            ExperimentVersionSelection.LATEST_PUBLISHED,
+        }:
+            if experiment_version == ExperimentVersionSelection.LATEST_WORKING:
+                cleaned_data["version_selection_type"] = ExperimentVersionSelection.LATEST_WORKING
+                cleaned_data["experiment_version"] = None
+            elif experiment_version == ExperimentVersionSelection.LATEST_PUBLISHED:
+                cleaned_data["version_selection_type"] = ExperimentVersionSelection.LATEST_PUBLISHED
+                cleaned_data["experiment_version"] = None
+        else:
+            cleaned_data["version_selection_type"] = ExperimentVersionSelection.SPECIFIC
+            try:
+                if experiment.id == int(experiment_version):
+                    cleaned_data["experiment_version"] = Experiment.objects.get(team=self.team, id=experiment_version)
+                else:
+                    cleaned_data["experiment_version"] = Experiment.objects.get(
+                        team=self.team, working_version_id=experiment.id, id=experiment_version
+                    )
+            except Experiment.DoesNotExist:
+                self.add_error("experiment_version", "This experiment version was not found")
+
+        return cleaned_data
+
+    def save(self, commit=True):
+        instance = super().save(commit=False)
+        cleaned_data = self.cleaned_data
+        instance.version_selection_type = cleaned_data["version_selection_type"]
+        instance.experiment_version = cleaned_data["experiment_version"]
+
+        # Set base_experiment for sentinel values
+        experiment = cleaned_data.get("experiment")
+        if experiment and cleaned_data["version_selection_type"] in [
+            ExperimentVersionSelection.LATEST_WORKING,
+            ExperimentVersionSelection.LATEST_PUBLISHED,
+        ]:
+            instance.base_experiment = experiment
+        else:
+            instance.base_experiment = None
+
+        if commit:
+            instance.save()
+            self.save_m2m()
+        return instance
 
 
 class EvaluatorForm(forms.ModelForm):

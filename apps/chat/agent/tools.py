@@ -1,12 +1,15 @@
+import functools
 import logging
+from collections import defaultdict
 from dataclasses import dataclass
 from datetime import datetime, timedelta
 from functools import cached_property
 from typing import TYPE_CHECKING, Any, ClassVar, Union
 
+from asgiref.sync import async_to_sync
 from django.db import transaction, utils
 from langchain_community.utilities.openapi import OpenAPISpec
-from langchain_core.tools import BaseTool
+from langchain_core.tools import BaseTool, StructuredTool
 from pgvector.django import CosineDistance
 
 from apps.channels.models import ChannelPlatform
@@ -15,10 +18,12 @@ from apps.chat.agent.openapi_tool import openapi_spec_op_to_function_def
 from apps.chat.models import ChatAttachment
 from apps.events.forms import ScheduledMessageConfigForm
 from apps.events.models import ScheduledMessage, TimePeriod
-from apps.experiments.models import AgentTools, Experiment, ExperimentSession, ParticipantData
+from apps.experiments.models import AgentTools, Experiment, ExperimentSession
 from apps.files.models import FileChunkEmbedding
 from apps.pipelines.models import Node
 from apps.pipelines.nodes.tool_callbacks import ToolCallbacks
+from apps.service_providers.llm_service.prompt_context import ParticipantDataProxy
+from apps.teams.models import Team
 from apps.utils.time import pretty_date
 
 if TYPE_CHECKING:
@@ -36,9 +41,13 @@ CREATE_LINK_TEXT = """You can use this markdown link to reference it in your res
 """
 
 CHUNK_TEMPLATE = """
-## File name: {file_name}, file_id={file_id}
-### Content
-{chunk}
+<file>
+  <file_id>{file_id}</file_id>
+  <filename>{file_name}</filename>
+  <context>
+    <![CDATA[{chunk}]]>
+  </context>
+</file>
 """
 
 CITATION_PROMPT = """**CRITICAL REQUIREMENT - MANDATORY CITATIONS:**
@@ -60,6 +69,25 @@ source document.
 
 Failure to include proper citations will result in an incomplete response.
 """
+
+SEARCH_TOOL_HEADER = (
+    "A semantic search was executed and retrieved the following context inside <context></context> XML tags."
+)
+SEARCH_TOOL_BASE_FOOTER = """Use the context as your learned knowledge to better answer the user.
+
+In your response, remember to follow these guidelines:
+- If you don't know the answer, simply say that you don't know.
+- If you are unsure how to answer, ask for clarification.
+{citations_note}"""
+
+
+def _get_search_tool_footer(with_citations: bool):
+    citations_note = (
+        "- Include citations for relevant files."
+        if with_citations
+        else "- Avoid mentioning that you obtained the information from the context."
+    )
+    return SEARCH_TOOL_BASE_FOOTER.format(citations_note=citations_note)
 
 
 @dataclass
@@ -93,7 +121,7 @@ class CustomBaseTool(BaseTool):
 
     async def _arun(self, *args, **kwargs) -> str:
         """Use the tool asynchronously."""
-        raise NotImplementedError("custom_search does not support async")
+        return self._run(*args, **kwargs)
 
     def action(self, *args, **kwargs):
         raise Exception("Not implemented")
@@ -214,19 +242,34 @@ class UpdateParticipantDataTool(CustomBaseTool):
 
     @transaction.atomic
     def action(self, key: str, value: Any):
-        try:
-            participant_data = ParticipantData.objects.for_experiment(self.experiment_session.experiment).get(
-                participant=self.experiment_session.participant
-            )
-            participant_data.data[key] = value
-            participant_data.save()
-        except ParticipantData.DoesNotExist:
-            ParticipantData.objects.create(
-                participant=self.experiment_session.participant,
-                experiment=self.experiment_session.experiment,
-                team=self.experiment_session.team,
-                data={key: value},
-            )
+        data_proxy = ParticipantDataProxy(self.experiment_session)
+        data_proxy.set_key(key, value)
+        return "Success"
+
+
+class AppendToParticipantDataTool(CustomBaseTool):
+    name: str = AgentTools.APPEND_TO_PARTICIPANT_DATA
+    description: str = "Update user data at a specific key"
+    requires_session: bool = True
+    args_schema: type[schemas.AppendToParticipantData] = schemas.AppendToParticipantData
+
+    @transaction.atomic
+    def action(self, key: str, value: str | int | list):
+        data_proxy = ParticipantDataProxy(self.experiment_session)
+        data_proxy.append_to_key(key, value)
+        return "Success"
+
+
+class IncrementParticipantDataTool(CustomBaseTool):
+    name: str = AgentTools.INCREMENT_PARTICIPANT_DATA
+    description: str = "Increment a value in the user data"
+    requires_session: bool = True
+    args_schema: type[schemas.IncrementParticipantDataSchema] = schemas.IncrementParticipantDataSchema
+
+    @transaction.atomic
+    def action(self, key: str, value: int):
+        data_proxy = ParticipantDataProxy(self.experiment_session)
+        data_proxy.increment_key(key, value)
         return "Success"
 
 
@@ -287,7 +330,12 @@ class AttachMediaTool(CustomBaseTool):
 
 class SearchIndexTool(CustomBaseTool):
     name: str = AgentTools.SEARCH_INDEX
-    description: str = "Search files / source material for relevant information pertaining to the user's query"
+    description: str = (
+        "Performs semantic search across available documents using natural language queries. "
+        "This tool analyzes the content of the documents to find relevant information, quotes, "
+        "and passages that best match your query. Use this to extract specific information "
+        "or find relevant sections within the available documents."
+    )
     requires_session: bool = False
     args_schema: type[schemas.SearchIndexSchema] = schemas.SearchIndexSchema
     search_config: SearchToolConfig
@@ -304,28 +352,41 @@ class SearchIndexTool(CustomBaseTool):
 
         query_vector = index.get_query_vector(query)
         # This query is automatically team scoped
-        embeddings = (
+        embeddings = list(
             FileChunkEmbedding.objects.annotate(distance=CosineDistance("embedding", query_vector))
             .filter(collection_id=index.id)
             .order_by("distance")
             .select_related("file")
             .only("text", "file__name")[:max_results]
         )
-        retrieved_chunks = "".join([self._format_result(embedding) for embedding in embeddings])
+        if not embeddings:
+            return "\nThe semantic search did not return any results."
+
+        retrieved_chunks = "\n".join([self._format_result(embedding) for embedding in embeddings])
         response_template = """
-# Retrieved chunks
-{retrieved_chunks}
+{header}
 {citation_prompt}
+<context>
+{retrieved_chunks}
+</context>
+{footer}
 """
         citation_prompt = CITATION_PROMPT if self.search_config.generate_citations else ""
-        return response_template.format(retrieved_chunks=retrieved_chunks, citation_prompt=citation_prompt)
+        return response_template.format(
+            header=SEARCH_TOOL_HEADER,
+            footer=_get_search_tool_footer(self.search_config.generate_citations),
+            retrieved_chunks=retrieved_chunks,
+            citation_prompt=citation_prompt,
+        )
 
     def _format_result(self, embedding: FileChunkEmbedding) -> str:
         """
         Format the result from the search index into a more structured format.
         """
 
-        return CHUNK_TEMPLATE.format(file_name=embedding.file.name, file_id=embedding.file_id, chunk=embedding.text)
+        return CHUNK_TEMPLATE.format(
+            file_name=embedding.file.name, file_id=embedding.file_id, chunk=embedding.text
+        ).strip()
 
 
 def _move_datetime_to_new_weekday_and_time(date: datetime, new_weekday: int, new_hour: int, new_minute: int):
@@ -387,6 +448,8 @@ TOOL_CLASS_MAP = {
     AgentTools.RECURRING_REMINDER: RecurringReminderTool,
     AgentTools.DELETE_REMINDER: DeleteReminderTool,
     AgentTools.UPDATE_PARTICIPANT_DATA: UpdateParticipantDataTool,
+    AgentTools.APPEND_TO_PARTICIPANT_DATA: AppendToParticipantDataTool,
+    AgentTools.INCREMENT_PARTICIPANT_DATA: IncrementParticipantDataTool,
     AgentTools.END_SESSION: EndSessionTool,
     AgentTools.ATTACH_MEDIA: AttachMediaTool,
     AgentTools.SEARCH_INDEX: SearchIndexTool,
@@ -414,7 +477,29 @@ def get_node_tools(
         tool_names.append(AgentTools.ATTACH_MEDIA)
     tools = get_tool_instances(tool_names, experiment_session, tool_callbacks)
     tools.extend(get_custom_action_tools(node))
+    tools.extend(get_mcp_tool_instances(node, experiment_session.team))
     return tools
+
+
+def get_mcp_tool_instances(node: Node, team: Team):
+    """Fetch tools from MCP servers based on the selected tools in the node parameters."""
+
+    mcp_tools = node.params.get("mcp_tools", [])
+    if not mcp_tools:
+        return []
+
+    server_tools = defaultdict(list)
+    for tool in mcp_tools:
+        mcp_server_id, tool_name = tool.split(":")
+        server_tools[int(mcp_server_id)].append(tool_name)
+
+    final_tool_instances = []
+    for server in team.mcpserver_set.filter(id__in=server_tools.keys()):
+        remote_tools = server.fetch_tools()
+        tool_instances = [_convert_to_sync_tool(tool) for tool in remote_tools if tool.name in server_tools[server.id]]
+        final_tool_instances.extend(tool_instances)
+
+    return final_tool_instances
 
 
 def get_tool_instances(
@@ -445,3 +530,19 @@ def get_tool_for_custom_action_operation(custom_action_operation) -> BaseTool | 
     method = spec.get_methods_for_path(path)[0]
     function_def = openapi_spec_op_to_function_def(spec, path, method)
     return function_def.build_tool(auth_service)
+
+
+def _convert_to_sync_tool(tool: StructuredTool) -> StructuredTool:
+    tool.func = _create_sync_wrapper(tool.coroutine)
+    tool.coroutine = None
+    return tool
+
+
+def _create_sync_wrapper(coroutine_func):
+    """Create a synchronous wrapper that preserves the original function signature."""
+
+    @functools.wraps(coroutine_func)
+    def sync_wrapper(*args, **kwargs):
+        return async_to_sync(coroutine_func)(*args, **kwargs)
+
+    return sync_wrapper

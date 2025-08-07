@@ -5,8 +5,10 @@
   {{ block.super }}
   {% if group_job_id %}
     <script src="{% static 'celery_progress/celery_progress.js' %}"></script>
+  {% elif evaluation_run.status == "pending" %}
+     <meta http-equiv="refresh" content="2" />
   {% endif %}
-{% endblock %}
+{% endblock page_head %}
 
 {% block breadcrumbs %}
   <div class="text-sm breadcrumbs" aria-label="breadcrumbs">
@@ -16,7 +18,7 @@
       <li class="pg-breadcrumb-active" aria-current="page">Run {{ evaluation_run.id }}</li>
     </ul>
   </div>
-{% endblock %}
+{% endblock breadcrumbs %}
 
 {% block app %}
   <div class="container mx-auto px-4 py-8">
@@ -65,6 +67,16 @@
               </a>{% if not forloop.last %}, {% endif %}
             {% endfor %}
           </p>
+          {% if evaluation_run.generation_experiment %}
+            <p><strong>Generation Chatbot:</strong>
+              <a href="{% url 'chatbots:single_chatbot_home' request.team.slug evaluation_run.generation_experiment.id %}" class="link">
+                {{ evaluation_run.generation_experiment.name }}
+                {% if evaluation_run.generation_experiment.version_display %}({{ evaluation_run.generation_experiment.version_display }}){% endif %}
+              </a>
+            </p>
+          {% else %}
+            <p><strong>Generation Chatbot:</strong> <span class="text-gray-500">None configured</span></p>
+          {% endif %}
           {% if evaluation_run.error_message %}
             <p><strong>Error:</strong> <span class="text-error">{{ evaluation_run.error_message }}</span></p>
           {% endif %}
@@ -95,4 +107,4 @@
       </div>
     {% endif %}
   </div>
-{% endblock %}
+{% endblock app %}
