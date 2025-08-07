@@ -68,4 +68,8 @@ class AttachMediaSchema(BaseModel):
 
 
 class SearchIndexSchema(BaseModel):
-    query: str = Field(description="The search query to use. Keep this query as close to the user's query as possible")
+    query: str = Field(
+        description="A natural language query to search for relevant information in the documents. "
+        "Be specific and use keywords related to the information you're looking for. "
+        "The query will be used for semantic similarity matching against the file contents."
+    )

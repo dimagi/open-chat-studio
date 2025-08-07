@@ -682,9 +682,11 @@ export class OcsChat {
 
   getPositionClasses() {
     if (this.isFullscreen) {
-      return `fixed inset-0 w-full h-full max-w-screen-lg max-h-full bg-white border-0 shadow-lg transition-shadow duration-200 rounded-none overflow-hidden flex flex-col z-[9999]`;
+      return 'chat-window-fullscreen';
     }
-    return `fixed w-full sm:w-[450px] max-w-screen-lg h-5/6 bg-white border border-gray-200 ${this.isDragging ? 'shadow-2xl cursor-grabbing' : 'shadow-lg transition-shadow duration-200'} rounded-lg overflow-hidden flex flex-col`;
+    const baseClasses = 'chat-window-normal';
+    const draggingClass = this.isDragging ? ' chat-window-dragging' : '';
+    return baseClasses + draggingClass;
   }
 
   private getFullscreenBounds() {
@@ -1051,7 +1053,7 @@ export class OcsChat {
     if (this.error) {
       return (
         <Host>
-          <p class="text-red-500 p-2">{this.error}</p>
+          <p class="error-message">{this.error}</p>
         </Host>
       );
     }
@@ -1068,21 +1070,21 @@ export class OcsChat {
           >
             {/* Header */}
             <div
-              class={`flex justify-between items-center px-2 py-2 border-b border-gray-100 ${this.isDragging ? 'cursor-grabbing' : 'cursor-grab'} active:bg-gray-50 hover:bg-gray-25 transition-colors duration-150`}
+              class={`chat-header ${this.isDragging ? 'chat-header-dragging' : 'chat-header-draggable'}`}
               onMouseDown={this.handleMouseDown}
               onTouchStart={this.handleTouchStart}
             >
               {/* Drag indicator */}
-              <div class="hidden sm:flex gap-1">
-                <div class="flex gap-0.5 ml-2 pointer-events-none">
+              <div class="drag-indicator">
+                <div class="drag-dots">
                   <GripDotsVerticalIcon/>
                 </div>
               </div>
-              <div class="sm:hidden"></div>
-              <div class="flex gap-1 items-center">
+              <div class="drag-spacer"></div>
+              <div class="header-buttons">
                 {/* Fullscreen toggle button */}
                 {this.allowFullScreen && <button
-                  class="hidden sm:block p-1.5 rounded-md transition-colors duration-200 hover:bg-gray-100 text-gray-500"
+                  class="header-button fullscreen-button"
                   onClick={() => this.toggleFullscreen()}
                   title={this.isFullscreen ? "Exit fullscreen" : "Enter fullscreen"}
                   aria-label={this.isFullscreen ? "Exit fullscreen" : "Enter fullscreen"}
@@ -1092,7 +1094,7 @@ export class OcsChat {
                 {/* New Chat button */}
                 {this.sessionId && this.messages.length > 0 && (
                   <button
-                    class="p-1.5 rounded-md transition-colors duration-200 hover:bg-gray-100 text-gray-500"
+                    class="header-button"
                     onClick={() => this.startNewChat()}
                     title="Start new chat"
                     aria-label="Start new chat"
@@ -1101,7 +1103,7 @@ export class OcsChat {
                   </button>
                 )}
                 <button
-                  class="p-1.5 hover:bg-gray-100 rounded-md transition-colors duration-200 text-gray-500"
+                  class="header-button"
                   onClick={() => this.visible = false}
                   aria-label="Close"
                 >
@@ -1111,12 +1113,12 @@ export class OcsChat {
             </div>
 
             {/* Chat Content */}
-            <div class="flex flex-col flex-grow overflow-hidden">
+            <div class="chat-content">
               {/* Loading State */}
               {this.isLoading && !this.sessionId && (
-                <div class="flex items-center justify-center flex-grow">
+                <div class="loading-container">
                   <div class="loading-spinner"></div>
-                  <span class="ml-2 text-gray-500">Starting chat...</span>
+                  <span class="loading-text">Starting chat...</span>
                 </div>
               )}
 
@@ -1124,14 +1126,14 @@ export class OcsChat {
               {this.sessionId && (
                 <div
                   ref={(el) => this.messageListRef = el}
-                  class="flex-grow overflow-y-auto p-4 space-y-2"
+                  class="messages-container"
                 >
                   {this.messages.length === 0 && !this.isTyping && this.parsedWelcomeMessages.length > 0 && (
-                    <div class="space-y-2">
+                    <div class="welcome-messages">
                       {/* Welcome Messages */}
                       {this.parsedWelcomeMessages.map((message, index) => (
-                        <div key={`welcome-${index}`} class="flex justify-start">
-                          <div class="bg-gray-200 text-gray-800 max-w-xs lg:max-w-md px-4 py-2 rounded-lg">
+                        <div key={`welcome-${index}`} class="message-row message-row-assistant">
+                          <div class="message-bubble message-bubble-assistant">
                             <div
                               class="chat-markdown"
                               innerHTML={renderMarkdownComplete(message)}
@@ -1145,26 +1147,25 @@ export class OcsChat {
                   {this.messages.map((message, index) => (
                     <div
                       key={index}
-                      class={{
-                        'flex': true,
-                        'justify-end': message.role === 'user',
-                        'justify-start': message.role !== 'user'
-                      }}
+                      class={`message-row ${
+                        message.role === 'user' ? 'message-row-user' : 'message-row-assistant'
+                      }`}
                     >
                       <div
-                        class={{
-                          'max-w-xs lg:max-w-md px-4 py-2 rounded-lg': true,
-                          'bg-blue-500 text-white': message.role === 'user',
-                          'bg-gray-200 text-gray-800': message.role === 'assistant',
-                          'bg-gray-100 text-gray-600 text-sm': message.role === 'system'
-                        }}
+                        class={`message-bubble ${
+                          message.role === 'user'
+                            ? 'message-bubble-user'
+                            : message.role === 'assistant'
+                            ? 'message-bubble-assistant'
+                            : 'message-bubble-system'
+                        }`}
                       >
                         <div
                           class="chat-markdown"
                           innerHTML={renderMarkdownComplete(message.content)}
                         ></div>
                         {message.attachments && message.attachments.length > 0 && (
-                          <div class="mt-2 space-y-1">
+                          <div class="message-attachments">
                             {message.attachments.map((attachment, attachmentIndex) => (
                               <div key={attachmentIndex} class="flex items-center gap-2 text-sm">
                                 <span class="w-3 h-3"><PaperClipIcon /></span>
@@ -1183,7 +1184,7 @@ export class OcsChat {
                             ))}
                           </div>
                         )}
-                        <div class="text-xs opacity-70 mt-1">
+                        <div class="message-timestamp">
                           {this.formatTime(message.created_at)}
                         </div>
                       </div>
@@ -1192,12 +1193,12 @@ export class OcsChat {
                   {/* Typing Indicator */}
                   {this.isTyping && (
                     <div>
-                      <div class="h-1.5 w-full overflow-hidden">
-                        <div class="animate-progress w-full h-full bg-blue-200 origin-left-right rounded-lg"></div>
+                      <div class="typing-indicator">
+                        <div class="typing-progress"></div>
                       </div>
-                      <div class="w-full text-xs opacity-70 justify-center">
+                      <div class="typing-text">
                         <span>Preparing response</span>
-                        <span class="loading animate-dots"></span>
+                        <span class="typing-dots"></span>
                       </div>
                     </div>
                   )}
@@ -1206,9 +1207,9 @@ export class OcsChat {
 
               {/* Starter Questions */}
               {this.sessionId && this.showStarterQuestions && this.messages.length === 0 && !this.isTyping && (
-                <div class="p-4 space-y-2">
+                <div class="starter-questions">
                   {this.parsedStarterQuestions.map((question, index) => (
-                    <div key={`starter-${index}`} class="flex justify-end">
+                    <div key={`starter-${index}`} class="starter-question-row">
                       <button
                         class="starter-question"
                         onClick={() => this.handleStarterQuestionClick(question)}
@@ -1251,11 +1252,11 @@ export class OcsChat {
 
               {/* Input Area */}
               {this.sessionId && (
-                <div class="border-t border-gray-200 p-4 text-sm">
-                  <div class="flex gap-2">
+                <div class="input-area">
+                  <div class="input-container">
                     <textarea
                       ref={(el) => this.textareaRef = el}
-                      class="flex-grow px-3 py-2 border border-gray-300 rounded-md resize-none focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                      class="message-textarea"
                       rows={1}
                       placeholder="Type your message..."
                       value={this.messageInput}
@@ -1282,11 +1283,11 @@ export class OcsChat {
                       <PaperClipIcon />
                     </button>
                     <button
-                      class={{
-                        'px-4 py-2 rounded-md font-medium transition-colors duration-200': true,
-                        'bg-blue-500 hover:bg-blue-600 text-white': !this.isTyping && !this.isUploadingFiles && !!this.messageInput.trim(),
-                        'bg-gray-300 text-gray-500 cursor-not-allowed': this.isTyping || this.isUploadingFiles || !this.messageInput.trim()
-                      }}
+                      class={`send-button ${
+                        !this.isTyping && !!this.messageInput.trim()
+                          ? 'send-button-enabled'
+                          : 'send-button-disabled'
+                      }`}
                       onClick={() => this.sendMessage(this.messageInput)}
                       disabled={this.isTyping || this.isUploadingFiles || !this.messageInput.trim()}
                     >

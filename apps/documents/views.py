@@ -6,7 +6,7 @@ from django.conf import settings
 from django.contrib import messages
 from django.contrib.auth.decorators import permission_required
 from django.contrib.auth.mixins import PermissionRequiredMixin
-from django.core.paginator import Paginator, PageNotAnInteger, EmptyPage
+from django.core.paginator import EmptyPage, PageNotAnInteger, Paginator
 from django.db import transaction
 from django.db.models import Case, CharField, Count, Func, IntegerField, OuterRef, Subquery, Value, When
 from django.http import HttpResponse, HttpResponseRedirect
@@ -93,6 +93,7 @@ def single_collection_home(request, team_slug: str, pk: int):
         "files_remaining": settings.MAX_FILES_PER_COLLECTION - collection_files_count,
         "max_file_size_mb": settings.MAX_FILE_SIZE_MB,
         "document_source_types": [SourceType.GITHUB],
+        "read_only": collection.is_a_version,
     }
     return render(request, "documents/single_collection_home.html", context)
 
@@ -140,6 +141,7 @@ def collection_files_view(request, team_slug: str, collection_id: int, document_
         "collection_files": paginated_collection_files,
         "document_source": document_source,
         "allow_delete": document_source_id is None,
+        "read_only": collection.is_a_version,
     }
     return render(request, "documents/partials/collection_files.html", context)
 

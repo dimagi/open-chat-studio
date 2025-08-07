@@ -31,6 +31,8 @@ class ChatbotTable(tables.Table):
             chip_action(
                 label_factory=_name_label_factory,
                 url_factory=_chip_chatbot_url_factory,
+                # Note: Keep the styling consistent with `generic/chip_button.html`
+                button_style="btn-soft btn-primary",
             ),
         ],
         align="left",

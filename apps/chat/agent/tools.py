@@ -41,9 +41,13 @@ CREATE_LINK_TEXT = """You can use this markdown link to reference it in your res
 """
 
 CHUNK_TEMPLATE = """
-## File name: {file_name}, file_id={file_id}
-### Content
-{chunk}
+<file>
+  <file_id>{file_id}</file_id>
+  <filename>{file_name}</filename>
+  <context>
+    <![CDATA[{chunk}]]>
+  </context>
+</file>
 """
 
 CITATION_PROMPT = """**CRITICAL REQUIREMENT - MANDATORY CITATIONS:**
@@ -65,6 +69,25 @@ source document.
 
 Failure to include proper citations will result in an incomplete response.
 """
+
+SEARCH_TOOL_HEADER = (
+    "A semantic search was executed and retrieved the following context inside <context></context> XML tags."
+)
+SEARCH_TOOL_BASE_FOOTER = """Use the context as your learned knowledge to better answer the user.
+
+In your response, remember to follow these guidelines:
+- If you don't know the answer, simply say that you don't know.
+- If you are unsure how to answer, ask for clarification.
+{citations_note}"""
+
+
+def _get_search_tool_footer(with_citations: bool):
+    citations_note = (
+        "- Include citations for relevant files."
+        if with_citations
+        else "- Avoid mentioning that you obtained the information from the context."
+    )
+    return SEARCH_TOOL_BASE_FOOTER.format(citations_note=citations_note)
 
 
 @dataclass
@@ -307,7 +330,12 @@ class AttachMediaTool(CustomBaseTool):
 
 class SearchIndexTool(CustomBaseTool):
     name: str = AgentTools.SEARCH_INDEX
-    description: str = "Search files / source material for relevant information pertaining to the user's query"
+    description: str = (
+        "Performs semantic search across available documents using natural language queries. "
+        "This tool analyzes the content of the documents to find relevant information, quotes, "
+        "and passages that best match your query. Use this to extract specific information "
+        "or find relevant sections within the available documents."
+    )
     requires_session: bool = False
     args_schema: type[schemas.SearchIndexSchema] = schemas.SearchIndexSchema
     search_config: SearchToolConfig
@@ -324,28 +352,41 @@ class SearchIndexTool(CustomBaseTool):
 
         query_vector = index.get_query_vector(query)
         # This query is automatically team scoped
-        embeddings = (
+        embeddings = list(
             FileChunkEmbedding.objects.annotate(distance=CosineDistance("embedding", query_vector))
             .filter(collection_id=index.id)
             .order_by("distance")
             .select_related("file")
             .only("text", "file__name")[:max_results]
         )
-        retrieved_chunks = "".join([self._format_result(embedding) for embedding in embeddings])
+        if not embeddings:
+            return "\nThe semantic search did not return any results."
+
+        retrieved_chunks = "\n".join([self._format_result(embedding) for embedding in embeddings])
         response_template = """
-# Retrieved chunks
-{retrieved_chunks}
+{header}
 {citation_prompt}
+<context>
+{retrieved_chunks}
+</context>
+{footer}
 """
         citation_prompt = CITATION_PROMPT if self.search_config.generate_citations else ""
-        return response_template.format(retrieved_chunks=retrieved_chunks, citation_prompt=citation_prompt)
+        return response_template.format(
+            header=SEARCH_TOOL_HEADER,
+            footer=_get_search_tool_footer(self.search_config.generate_citations),
+            retrieved_chunks=retrieved_chunks,
+            citation_prompt=citation_prompt,
+        )
 
     def _format_result(self, embedding: FileChunkEmbedding) -> str:
         """
         Format the result from the search index into a more structured format.
         """
 
-        return CHUNK_TEMPLATE.format(file_name=embedding.file.name, file_id=embedding.file_id, chunk=embedding.text)
+        return CHUNK_TEMPLATE.format(
+            file_name=embedding.file.name, file_id=embedding.file_id, chunk=embedding.text
+        ).strip()
 
 
 def _move_datetime_to_new_weekday_and_time(date: datetime, new_weekday: int, new_hour: int, new_minute: int):
