@@ -127,7 +127,7 @@
       <div id="collection-files-container"
            hx-get="{% url 'documents:collection_files_list' request.team.slug collection.id %}"
            hx-trigger="search-files from:body, load"
-           hx-target="this"
+           hx-target="#collection-files-container"
            hx-swap="innerHTML"
            hx-include="#search-input">
         <span class="loading loading-spinner"></span>
