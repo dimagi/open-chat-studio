@@ -48,6 +48,14 @@ export namespace Components {
          */
         "starterQuestions"?: string;
         /**
+          * Used to associate chat sessions with a specific user across multiple visits/sessions
+         */
+        "userId"?: string;
+        /**
+          * Display name for the user.
+         */
+        "userName"?: string;
+        /**
           * Whether the chat widget is visible on load.
          */
         "visible": boolean;
@@ -110,6 +118,14 @@ declare namespace LocalJSX {
           * Array of starter questions that users can click to send (JSON array of strings)
          */
         "starterQuestions"?: string;
+        /**
+          * Used to associate chat sessions with a specific user across multiple visits/sessions
+         */
+        "userId"?: string;
+        /**
+          * Display name for the user.
+         */
+        "userName"?: string;
         /**
           * Whether the chat widget is visible on load.
          */

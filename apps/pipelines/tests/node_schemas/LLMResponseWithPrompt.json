@@ -166,6 +166,17 @@
       "title": "Tool Config",
       "ui:widget": "none",
       "type": "object"
+    },
+    "mcp_tools": {
+      "description": "MCP tools to enable for the bot",
+      "items": {
+        "type": "string"
+      },
+      "title": "MCP Tools",
+      "type": "array",
+      "ui:flagRequired": "flag_mcp",
+      "ui:optionsSource": "mcp_tools",
+      "ui:widget": "multiselect"
     }
   },
   "required": [

@@ -1,15 +1,16 @@
 {
   "name": "open-chat-studio-widget",
-  "version": "0.4.1",
+  "version": "0.4.2",
   "description": "Chat component for Open Chat Studio",
   "main": "dist/index.cjs.js",
+  "exports": "./dist/esm/open-chat-studio-widget.js",
+  "unpkg": "dist/open-chat-studio-widget/open-chat-studio-widget.esm.js",
   "module": "dist/index.js",
   "es2015": "dist/esm/index.mjs",
   "es2017": "dist/esm/index.mjs",
   "types": "dist/types/index.d.ts",
   "collection": "dist/collection/collection-manifest.json",
   "collection:main": "dist/collection/index.js",
-  "unpkg": "dist/open-chat-studio-widget/open-chat-studio-widget.esm.js",
   "repository": {
     "type": "git",
     "url": "https://github.com/dimagi/open-chat-studio.git"

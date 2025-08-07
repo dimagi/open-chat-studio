@@ -154,12 +154,14 @@ def chip_action(
     required_permissions: list = None,
     display_condition: callable = None,
     url_factory: Callable[[Any, Any, Any, Any], str] = None,
+    icon_class: str = None,
+    button_style: str = "",
 ):
     """Action to display a chip-style link that links to another page.
 
     This must be used with objects that implement the `get_absolute_url` method.
 
-    Note: Keep the styling consistent with`generic/chip.html`"""
+    Note: Keep the styling consistent with `generic/chip_button.html`"""
     if not label and not label_factory:
 
         def label_factory(record, value):
@@ -177,8 +179,8 @@ def chip_action(
         url_factory=url_factory,
         label=label,
         label_factory=label_factory,
-        icon_class="fa-solid fa-external-link",
-        button_style="",
+        icon_class=icon_class,
+        button_style=button_style,
         required_permissions=required_permissions,
         display_condition=display_condition,
     )

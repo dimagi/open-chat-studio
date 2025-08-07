@@ -580,7 +580,7 @@ class AgentTools(models.TextChoices):
     INCREMENT_PARTICIPANT_DATA = "increment-participant-data", gettext("Increment Participant Data")
     ATTACH_MEDIA = "attach-media", gettext("Attach Media")
     END_SESSION = "end-session", gettext("End Session")
-    SEARCH_INDEX = "search-index", gettext("Search Index")
+    SEARCH_INDEX = "file-search", gettext("File Search")
 
     @classmethod
     def reminder_tools(cls) -> list[Self]:
@@ -1723,7 +1723,6 @@ class ExperimentSession(BaseTeamModel):
                 with trace_service.trace_or_span(
                     name=f"{experiment.name} - {trace_info.name}",
                     session=self,
-                    user_id=str(self.participant.identifier),
                     inputs={"input": instruction_prompt},
                     metadata=trace_info.metadata,
                 ):
