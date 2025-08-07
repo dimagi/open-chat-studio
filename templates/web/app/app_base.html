@@ -29,3 +29,13 @@
     </div>
   </section>
 {% endblock body %}
+
+{% block footer %}
+  {{ block.super }}
+  <open-chat-studio-widget
+      id="docs-bot-widget"
+    visible="false"
+    chatbot-id="cdec8c04-ff39-4175-bffb-f7d872e2eb3a"
+    button-text="Ask me!"
+    allow-full-screen="true"></open-chat-studio-widget>
+{% endblock footer %}
