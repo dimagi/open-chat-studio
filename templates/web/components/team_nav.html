@@ -73,6 +73,14 @@
         <i class="fas fa-comments"></i>
         {% translate "Chatbots" %}
       </a>
+      <ul>
+          <li>
+            <a href="{% url 'traces:home' request.team.slug %}" {% if active_tab == 'traces' %}class="menu-active"{% endif %}>
+              <i class="fas fa-comments"></i>
+              {% translate "Traces" %}
+            </a>
+          </li>
+      </ul>
     </li>
     <li>
       <a href="{% url 'experiments:source_material_home' request.team.slug %}"
