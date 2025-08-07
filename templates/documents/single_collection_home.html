@@ -34,7 +34,7 @@
           {% endif %}
         </div>
         <div class="join flex items-center">
-          {%if not read_only %}
+          {% if not read_only %}
             <div class="tooltip" data-tip="Edit">
               <a class="btn btn-sm join-item"
                  href="{% url 'documents:collection_edit' team.slug collection.id %}">
