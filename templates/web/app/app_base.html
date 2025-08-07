@@ -32,10 +32,8 @@
 
 {% block footer %}
   {{ block.super }}
-  <open-chat-studio-widget
-      id="docs-bot-widget"
-    visible="false"
-    chatbot-id="cdec8c04-ff39-4175-bffb-f7d872e2eb3a"
-    button-text="Ask me!"
-    allow-full-screen="true"></open-chat-studio-widget>
+  {% if ocs_config.chat_widget.enabled and ocs_config.chat_widget.chatbot_id %}
+    <open-chat-studio-widget {% include "generic/attrs.html" with attrs=ocs_config.chat_widget.get_widget_attributes %}>
+    </open-chat-studio-widget>
+  {% endif %}
 {% endblock footer %}
