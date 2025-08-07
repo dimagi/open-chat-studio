@@ -1313,19 +1313,27 @@ def experiment_session_messages_view(request, team_slug: str, experiment_id: uui
             )
         )
         has_missing_translations = messages_queryset.exclude(**{f"translations__{language}__isnull": False}).exists()
-
+    show_all = request.GET.get("show_all") == "on"
     page_size = 10
-    paginator = Paginator(messages_queryset, per_page=page_size, orphans=page_size // 3)
-    current_page = paginator.page(page)
+    if show_all:
+        current_page_messages = list(messages_queryset)
+        total_pages = 1
+        page_start_index = 1
+    else:
+        paginator = Paginator(messages_queryset, per_page=page_size, orphans=page_size // 3)
+        current_page = paginator.page(page)
+        current_page_messages = current_page.object_list
+        total_pages = paginator.num_pages
+        page_start_index = current_page.start_index()
     context = {
         "experiment_session": session,
         "experiment": experiment,
-        "messages": current_page.object_list,
+        "messages": current_page_messages,
         "page": page,
-        "total_pages": paginator.num_pages,
-        "total_messages": paginator.count,
+        "total_pages": total_pages,
+        "total_messages": len(messages_queryset),
         "page_size": page_size,
-        "page_start_index": current_page.start_index(),
+        "page_start_index": page_start_index,
         "selected_tags": selected_tags,
         "language": language,
         "available_languages": available_languages,
