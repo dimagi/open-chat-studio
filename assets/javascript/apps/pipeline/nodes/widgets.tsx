@@ -1,4 +1,4 @@
-import React, {ChangeEvent, ChangeEventHandler, ReactNode, useId, useState, useMemo} from "react";
+import React, {ChangeEvent, ChangeEventHandler, ReactNode, useId, useState, useMemo, useRef, useEffect,} from "react";
 import CreatableSelect from "react-select/creatable";
 
 import {LlmProviderModel, Option, TypedOption} from "../types/nodeParameterValues";
@@ -765,6 +765,8 @@ export function HistoryTypeWidget(props: WidgetParams) {
   const historyNameError = props.getNodeFieldError(props.nodeId, "history_name");
 
   const nodes = usePipelineStore((state) => state.nodes);
+  const [searchTerm, setSearchTerm] = useState("");
+  const [isDropdownOpen, setIsDropdownOpen] = useState(false);
 
   const historyNameOptions = useMemo(() => {
     const historyNames = new Set<string>();
@@ -776,11 +778,29 @@ export function HistoryTypeWidget(props: WidgetParams) {
         historyNames.add(params.history_name);
       }
     });
-    return Array.from(historyNames).map((name) => ({ label: name, value: name }));
+    return Array.from(historyNames).sort();
   }, [nodes]);
 
-  const handleHistoryNameChange = (selected: any) => {
-    const value = selected?.value || "";
+  const filteredOptions = useMemo(() => {
+    if (!searchTerm || !isDropdownOpen) return historyNameOptions;
+    return historyNameOptions.filter(name =>
+      name.toLowerCase().includes(searchTerm.toLowerCase())
+    );
+  }, [historyNameOptions, searchTerm, isDropdownOpen]);
+
+  const showCreateOption = searchTerm.trim() &&
+    !historyNameOptions.some(name => name.toLowerCase() === searchTerm.toLowerCase());
+
+  const displayValue = (isDropdownOpen && searchTerm !== "") ? searchTerm : (historyName || "");
+
+  const handleInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    setSearchTerm(e.target.value);
+    if (!isDropdownOpen) {
+      setIsDropdownOpen(true);
+    }
+  };
+
+  const handleOptionSelect = (value: string) => {
     const syntheticEvent = {
       target: {
         name: "history_name",
@@ -788,6 +808,20 @@ export function HistoryTypeWidget(props: WidgetParams) {
       },
     };
     props.updateParamValue?.(syntheticEvent as React.ChangeEvent<HTMLInputElement>);
+    setSearchTerm("");
+    setIsDropdownOpen(false);
+  };
+
+  const handleCreateNew = () => {
+    const newName = searchTerm.trim();
+    if (newName) {
+      handleOptionSelect(newName);
+    }
+  };
+
+  const handleInputClick = () => {
+    setIsDropdownOpen(true);
+    setSearchTerm("");
   };
 
   return (
@@ -810,20 +844,44 @@ export function HistoryTypeWidget(props: WidgetParams) {
         </InputField>
         {historyType == "named" && (
           <InputField label="History Name" help_text={props.helpText}>
-            <div className="w-64">
-              <CreatableSelect
-                isClearable
-                onChange={handleHistoryNameChange}
-                value={historyName ? { label: historyName, value: historyName } : null}
-                options={historyNameOptions}
-                placeholder="Select or create..."
-                styles={{
-                    control: (base) => ({
-                      ...base,
-                      minHeight: '40px'
-                    })
-                  }}
-              />
+            <div className="w-64 relative">
+            <input
+              type="text"
+              className="input w-full pr-8"
+              value={displayValue}
+              onChange={handleInputChange}
+              onClick={handleInputClick}
+              placeholder="Type to search or create..."
+            />
+              {isDropdownOpen && (
+                <div className="absolute z-10 w-full bg-white border border-gray-300 rounded-md shadow-lg mt-1 max-h-40 overflow-y-auto">
+                  {!searchTerm && historyNameOptions.length ==0 && (
+                  <div
+                  className="px-3 py-2 text-gray-500 cursor-pointer hover:bg-gray-100"
+                    onClick={() => handleOptionSelect("")}>
+                      -- Select --
+                    </div>
+                  )}
+                  {filteredOptions.map((name) => (
+                    <div
+                      key={name}
+                      className="px-3 py-2 cursor-pointer hover:bg-gray-100"
+                      onClick={() => handleOptionSelect(name)}
+                    >
+                      {name}
+                    </div>
+                  ))}
+
+                  {showCreateOption && (
+                    <div
+                      className="px-3 py-2 cursor-pointer hover:bg-gray-100 text-blue-600 font-medium"
+                      onClick={handleCreateNew}
+                    >
+                      + Create "{searchTerm}"
+                    </div>
+                  )}
+                </div>
+              )}
             </div>
           </InputField>
         )}
