@@ -1,10 +1,10 @@
 from django.contrib.auth.mixins import PermissionRequiredMixin
 from django.urls import reverse
-from django.views.generic import TemplateView
+from django.views.generic import DetailView, TemplateView
 from django_tables2 import SingleTableView
 
 from apps.teams.mixins import LoginAndTeamRequiredMixin
-from apps.trace.models import Trace
+from apps.trace.models import Span, Trace
 from apps.trace.tables import TraceTable
 
 
@@ -15,7 +15,7 @@ class TracesHome(LoginAndTeamRequiredMixin, TemplateView):
         return {
             "active_tab": "traces",
             "title": "Traces",
-            "table_url": reverse("traces:table", args=[team_slug]),
+            "table_url": reverse("trace:table", args=[team_slug]),
         }
 
 
@@ -32,3 +32,14 @@ class TraceTableView(LoginAndTeamRequiredMixin, SingleTableView, PermissionRequi
             .filter(team__slug=self.request.team.slug)
             .order_by("-timestamp")
         )
+
+
+class TraceDetailView(LoginAndTeamRequiredMixin, DetailView, PermissionRequiredMixin):
+    model = Trace
+    template_name = "trace/trace_detail.html"
+    permission_required = "trace.view_trace"
+
+    def get_context_data(self, **kwargs):
+        context = super().get_context_data(**kwargs)
+        context["spans"] = Span.objects.filter(trace=self.object, parent_span_id__isnull=True)
+        return context

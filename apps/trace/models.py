@@ -3,6 +3,7 @@ from __future__ import annotations
 import uuid
 
 from django.db import models
+from django.urls import reverse
 from django_pydantic_field import SchemaField
 from pydantic import BaseModel
 
@@ -58,6 +59,9 @@ class Trace(models.Model):
             metadata=metadata,
         )
 
+    def get_absolute_url(self):
+        return reverse("trace:trace_detail", args=[self.team.slug, self.id])
+
 
 class Span(BaseTeamModel, TaggedModelMixin, UserCommentsMixin):
     """
@@ -89,6 +93,11 @@ class Span(BaseTeamModel, TaggedModelMixin, UserCommentsMixin):
 
     def __str__(self):
         return f"{self.name} - {self.span_id}"
+
+    def duration_ms(self) -> float:
+        if self.start_time and self.end_time:
+            return (self.end_time - self.start_time).total_seconds() * 1000
+        return 0
 
     def span(
         self, span_id: uuid.UUID, span_name: str, inputs: dict[str, any], metadata: dict[str, any] | None = None

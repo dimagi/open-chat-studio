@@ -1,0 +1,96 @@
+
+{% extends "web/app/app_base.html" %}
+
+{% block breadcrumbs %}
+    <div class="breadcrumbs text-sm">
+        <ul>
+            <li><a href="{% url 'trace:home' request.team.slug %}" class="link link-hover"><i class="fas fa-home mr-1"></i></a></li>
+            <li><a href="{% url 'trace:home' request.team.slug %}" class="link link-hover">Traces</a></li>
+            <li><span class="text-base-content/60">{{ trace.experiment.name }}</span></li>
+        </ul>
+    </div>
+{% endblock breadcrumbs %}
+
+{% block app %}
+    <div class="container mx-auto px-4 py-6">
+        <!-- Header Section -->
+        <div>
+            <h1 class="text-3xl font-bold mb-2">{{ trace.experiment.name }}</h1>
+            <p class="text-sm text-base-content/60 font-mono">Trace ID: {{ trace.trace_id }}</p>
+        </div>
+
+        <!-- Info Grid -->
+        <div class="grid grid-cols-1 lg:grid-cols-4 gap-4 mb-6">
+            <div>
+                <div class="text-sm text-base-content/60 tracking-wide">Experiment</div>
+                <div class="mt-1">
+                    {% include "generic/chip.html" with chip=trace.experiment.as_chip %}
+                </div>
+            </div>
+            <div>
+                <div class="text-sm text-base-content/60 tracking-wide">Session</div>
+                <div class="mt-1">
+                    {% include "generic/chip.html" with chip=trace.session.as_chip %}
+                </div>
+            </div>
+            <div>
+                <div class="text-sm text-base-content/60 tracking-wide">Participant</div>
+                <div class="mt-1">
+                    {% include "generic/chip.html" with chip=trace.participant.as_chip %}
+                </div>
+            </div>
+            <div>
+                <div class="text-sm text-base-content/60 tracking-wide">Timestamp</div>
+                <div class="font-semibold">{{ trace.timestamp|date:"Y-m-d" }}</div>
+                <div class="text-xs text-base-content/50">{{ trace.timestamp|date:"H:i:s" }} UTC</div>
+            </div>
+        </div>
+
+        <!-- Execution Spans Section -->
+        <div class="card mb-6">
+            <h2 class="text-xl font-bold mb-2">Execution Spans</h2>
+
+            <div class="card-body bg-base-50 shadow-md">
+                {% for span in spans %}
+                    <div class="card shadow-md">
+                        <div class="card-body">
+                            <div class="flex items-center justify-between">
+                                <div class="flex items-center gap-3">
+                                    <div class="w-6 h-6 bg-blue-500 rounded-full flex items-center justify-center">
+                                        <i class="fa-solid fa-eye text-white text-xs"></i>
+                                    </div>
+                                    <div>
+                                        <div class="font-semibold">{{ span.name }}</div>
+                                        <div class="text-sm text-base-content/60">Root Span</div>
+                                    </div>
+                                </div>
+                                <div class="text-right">
+                                    <div class="font-bold">{{ span.duration_ms }}ms</div>
+                                </div>
+                            </div>
+                            {% if span.metadata %}
+                                <div class="grid grid-cols-1 md:grid-cols-3 gap-4 mt-4 text-sm">
+                                    {% for key, value in span.metadata.items %}
+                                        <div>
+                                            <span class="text-base-content/60">{{ key|title }}:</span>
+                                            <span class="font-medium ml-1">{{ value }}</span>
+                                        </div>
+                                    {% endfor %}
+                                </div>
+                            {% endif %}
+                            <div class="flex justify-end mt-2">
+                                <div class="badge badge-{{ span.status|lower|default:'success' }}">{{ span.status|default:"Success" }}</div>
+                            </div>
+                        </div>
+                    </div>
+                {% empty %}
+                    <div class="card bg-base-100 border border-base-200">
+                        <div class="card-body p-4 text-center text-base-content/60">
+                            No spans found for this trace.
+                        </div>
+                    </div>
+                {% endfor %}
+            </div>
+        </div>
+    </div>
+{% endblock app %}

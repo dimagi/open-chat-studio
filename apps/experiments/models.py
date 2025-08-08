@@ -1485,6 +1485,9 @@ class Participant(BaseTeamModel):
         if experiment.id not in experiments:
             ParticipantData.objects.create(team=self.team, experiment=experiment, data=data, participant=self)
 
+    def as_chip(self) -> Chip:
+        return Chip(label=self.identifier, url=self.get_absolute_url())
+
 
 class ParticipantDataObjectManager(models.Manager):
     def for_experiment(self, experiment: Experiment):
@@ -1824,3 +1827,6 @@ class ExperimentSession(BaseTeamModel):
             return bool([prompt for prompt in prompts if "{participant_data}" in prompt])
         else:
             return "{participant_data}" in self.experiment.prompt_text
+
+    def as_chip(self) -> Chip:
+        return Chip(label=self.external_id, url=self.get_absolute_url())
