@@ -5,6 +5,8 @@ import time
 from typing import TYPE_CHECKING, Any
 from uuid import UUID
 
+from django.utils import timezone
+
 from apps.service_providers.tracing.const import OCS_TRACE_PROVIDER, SpanLevel
 from apps.trace.models import Span, SpanError, Trace, TraceStatus
 
@@ -114,6 +116,7 @@ class OCSTracer(Tracer):
 
         span = self.spans.pop(span_id)
         span.output = outputs or {}
+        span.end_time = timezone.now()
         if error:
             span.error = SpanError(
                 # TODO: This should come from wherever the span is started in the code

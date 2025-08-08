@@ -47,6 +47,9 @@ class Trace(models.Model):
     def __str__(self):
         return f"Trace {self.experiment} {self.session} {self.duration}ms"
 
+    def get_absolute_url(self):
+        return reverse("trace:trace_detail", args=[self.team.slug, self.id])
+
     def span(
         self, span_id: uuid.UUID, span_name: str, inputs: dict[str, any], metadata: dict[str, any] | None = None
     ) -> Span:
@@ -58,9 +61,6 @@ class Trace(models.Model):
             inputs=inputs,
             metadata=metadata,
         )
-
-    def get_absolute_url(self):
-        return reverse("trace:trace_detail", args=[self.team.slug, self.id])
 
 
 class Span(BaseTeamModel, TaggedModelMixin, UserCommentsMixin):
@@ -96,7 +96,7 @@ class Span(BaseTeamModel, TaggedModelMixin, UserCommentsMixin):
 
     def duration_ms(self) -> float:
         if self.start_time and self.end_time:
-            return (self.end_time - self.start_time).total_seconds() * 1000
+            return round((self.end_time - self.start_time).total_seconds() * 1000, 2)
         return 0
 
     def span(
