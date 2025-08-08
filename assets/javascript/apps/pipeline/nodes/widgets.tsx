@@ -798,6 +798,9 @@ export function HistoryTypeWidget(props: WidgetParams) {
     if (!isDropdownOpen) {
       setIsDropdownOpen(true);
     }
+    if (e.target.value === "") {
+      handleOptionSelect("")
+    }
   };
 
   const handleOptionSelect = (value: string) => {
