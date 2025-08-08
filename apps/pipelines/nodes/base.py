@@ -131,9 +131,11 @@ class PipelineState(dict):
         return cls(**kwargs)
 
     def add_message_tag(self, tag: str):
+        """Adds a tag to the output message."""
         self.setdefault("output_message_tags", []).append((tag, None))
 
     def add_session_tag(self, tag: str):
+        """Adds the tag to the chat session."""
         self.setdefault("session_tags", []).append((tag, None))
 
     def get_node_id(self, node_name: str):
@@ -153,7 +155,8 @@ class PipelineState(dict):
 
     def get_selected_route(self, node_name: str) -> str | None:
         """
-        Gets the route selected by a specific router node.
+        Returns the route keyword selected by a specific router node with the given name.
+        If the node does not exist or has no route defined, it returns `None`.
         """
         outputs = self.get("outputs", {})
         if node_name in outputs and "route" in outputs[node_name]:
@@ -197,7 +200,8 @@ class PipelineState(dict):
 
     def get_all_routes(self) -> dict:
         """
-        Gets all routing decisions in the pipeline.
+        Returns a dictionary containing all routing decisions in the pipeline.
+        The keys are the node names and the values are the route keywords chosen by each router node.
         """
         routes_dict = {}
         outputs = self.get("outputs", {})
@@ -209,7 +213,8 @@ class PipelineState(dict):
 
     def get_node_output_by_name(self, node_name: str) -> Any:
         """
-        Get the output of a node by its name.
+        Returns the output of the specified node if it has been executed.
+        If the node has not been executed, it returns `None`.
         """
         output = self["outputs"].get(node_name)
         if output:
