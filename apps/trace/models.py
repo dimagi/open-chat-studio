@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 import uuid
-from uuid import UUID
 
 from django.db import models
 from django_pydantic_field import SchemaField
@@ -48,6 +47,18 @@ class Trace(models.Model):
     def __str__(self):
         return f"Trace {self.experiment} {self.session} {self.duration}ms"
 
+    def span(
+        self, span_id: uuid.UUID, span_name: str, inputs: dict[str, any], metadata: dict[str, any] | None = None
+    ) -> Span:
+        return _create_span(
+            trace=self,
+            parent_span=None,
+            span_id=span_id,
+            span_name=span_name,
+            inputs=inputs,
+            metadata=metadata,
+        )
+
 
 class Span(BaseTeamModel, TaggedModelMixin, UserCommentsMixin):
     """
@@ -79,3 +90,34 @@ class Span(BaseTeamModel, TaggedModelMixin, UserCommentsMixin):
 
     def __str__(self):
         return f"{self.name} - {self.span_id}"
+
+    def span(
+        self, span_id: uuid.UUID, span_name: str, inputs: dict[str, any], metadata: dict[str, any] | None = None
+    ) -> Span:
+        return _create_span(
+            trace=self.trace,
+            parent_span=self,
+            span_id=span_id,
+            span_name=span_name,
+            inputs=inputs,
+            metadata=metadata,
+        )
+
+
+def _create_span(
+    trace: Trace,
+    parent_span: Span,
+    span_id: uuid.UUID,
+    span_name: str,
+    inputs: dict[str, any],
+    metadata: dict[str, any] | None = None,
+) -> Span:
+    return Span.objects.create(
+        trace=trace,
+        parent_span=parent_span,
+        span_id=span_id,
+        name=span_name,
+        team_id=trace.team_id,
+        input=inputs,
+        metadata=metadata or {},
+    )
