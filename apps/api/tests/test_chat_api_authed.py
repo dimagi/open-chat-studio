@@ -1,3 +1,10 @@
+"""Tests for authenticated access to the Chat API.
+
+When access is authenticated, it implies that the chat widget is being hosted on the same
+OCS instance as the bot (to allow the session cookie to work). In this case, we should enforce
+that the `remote_id` matches the authenticated user's email address.
+"""
+
 import pytest
 from django.urls import reverse
 
@@ -97,7 +104,7 @@ def test_start_chat_session_with_name(team_with_users, authed_client, experiment
     response_json = response.json()
 
     participant = Participant.objects.get(identifier=response_json["participant"]["identifier"])
-    assert response_json["participant"]["participant_remote_id"] == ""
+    assert response_json["participant"]["identifier"] == authed_client.user.email
 
     participant_data = ParticipantData.objects.get(participant=participant, experiment=experiment, team=team_with_users)
     assert participant_data.data.get("name") == name

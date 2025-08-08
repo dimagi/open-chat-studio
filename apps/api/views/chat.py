@@ -99,17 +99,16 @@ def chat_start_session(request):
             status=status.HTTP_400_BAD_REQUEST,
         )
 
+    team = experiment.team
     if request.user.is_authenticated:
-        team = request.team
         user = request.user
         participant_id = user.email
         if remote_id != participant_id:
             # Enforce this for authenticated users
-            # Currently this only happens if the chat widget is being hosted on OCS
+            # Currently this only happens if the chat widget is being hosted on the same OCS instance as the bot
             return Response({"error": "Remote ID ID must match your email address"}, status=status.HTTP_400_BAD_REQUEST)
         remote_id = ""
     else:
-        team = experiment.team
         user = None
         participant_id = None
 
