@@ -4,7 +4,7 @@ from django.views.generic import DetailView, TemplateView
 from django_tables2 import SingleTableView
 
 from apps.teams.mixins import LoginAndTeamRequiredMixin
-from apps.trace.models import Span, Trace
+from apps.trace.models import Span, Trace, TraceStatus
 from apps.trace.tables import TraceTable
 
 
@@ -30,6 +30,7 @@ class TraceTableView(LoginAndTeamRequiredMixin, SingleTableView, PermissionRequi
         return (
             Trace.objects.select_related("participant", "experiment", "session")
             .filter(team__slug=self.request.team.slug)
+            .exclude(status=TraceStatus.PENDING)
             .order_by("-timestamp")
         )
 

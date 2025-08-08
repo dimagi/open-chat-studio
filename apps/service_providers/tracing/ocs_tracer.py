@@ -32,6 +32,7 @@ class OCSTracer(Tracer):
         self.start_time: float = None
         self.trace = None
         self.spans: dict[UUID, Span] = {}
+        self.error_detected = False
 
     @property
     def ready(self) -> bool:
@@ -69,6 +70,10 @@ class OCSTracer(Tracer):
             self.trace.participant = self.session.participant
             self.trace.output_message_id = self.output_message_id
             self.trace.duration = duration_ms
+            if self.error_detected:
+                self.trace.status = TraceStatus.ERROR
+            else:
+                self.trace.status = TraceStatus.SUCCESS
             self.trace.save()
 
             logger.debug(
@@ -85,6 +90,9 @@ class OCSTracer(Tracer):
                 self.output_message_id,
             )
         finally:
+            self.trace = None
+            self.spans = {}
+            self.error_detected = False
             super().end_trace(outputs, error)
 
     def start_span(
@@ -123,6 +131,7 @@ class OCSTracer(Tracer):
                 error_display="Oops, something went wrong",
                 raw_error=str(error),
             )
+            self.error_detected = True
             span.status = TraceStatus.ERROR
         else:
             span.status = TraceStatus.SUCCESS
