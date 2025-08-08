@@ -7,6 +7,7 @@ from rest_framework.test import APIClient
 from apps.chat.models import ChatMessage, ChatMessageType
 from apps.experiments.models import ExperimentSession, Participant, ParticipantData
 from apps.utils.factories.experiment import ExperimentSessionFactory
+from apps.utils.factories.team import TeamWithUsersFactory
 from apps.utils.tests.clients import ApiTestClient
 
 
@@ -16,9 +17,10 @@ def api_client():
 
 
 @pytest.fixture()
-def authed_client(team_with_users):
-    user = team_with_users.members.first()
-    client = ApiTestClient(user, team_with_users)
+def authed_client():
+    other_team = TeamWithUsersFactory.create()
+    user = other_team.members.first()
+    client = ApiTestClient(user, other_team)
     return client
 
 
