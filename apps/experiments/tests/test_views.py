@@ -439,6 +439,7 @@ class TestExperimentTableView:
         request.team = team
         view = ExperimentTableView()
         view.request = request
+        view.kwargs = {}
         assert list(view.get_queryset().all()) == [experiment]
 
 
