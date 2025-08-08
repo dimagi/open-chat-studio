@@ -8,7 +8,6 @@ from rest_framework.authentication import SessionAuthentication
 from rest_framework.decorators import api_view, authentication_classes, permission_classes
 from rest_framework.response import Response
 
-from apps.api.permissions import ApiKeyAuthentication, BearerTokenAuthentication
 from apps.api.serializers import (
     ChatPollResponse,
     ChatSendMessageRequest,
@@ -24,7 +23,7 @@ from apps.experiments.models import Experiment, ExperimentSession, Participant, 
 from apps.experiments.task_utils import get_message_task_response
 from apps.experiments.tasks import get_response_for_webchat_task
 
-AUTH_CLASSES = [SessionAuthentication, ApiKeyAuthentication, BearerTokenAuthentication]
+AUTH_CLASSES = [SessionAuthentication]
 
 
 def check_experiment_access(experiment, participant_id):
