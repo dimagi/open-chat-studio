@@ -46,43 +46,11 @@
             </div>
         </div>
 
-        <!-- Execution Spans Section -->
         <div class="card mb-6">
             <h2 class="text-xl font-bold mb-2">Execution Spans</h2>
-
             <div class="card-body bg-base-50 shadow-md">
                 {% for span in spans %}
-                    <div class="card shadow-md">
-                        <div class="card-body">
-                            <div class="flex items-center justify-between">
-                                <div class="flex items-center gap-3">
-                                    <div class="w-6 h-6 bg-blue-500 rounded-full flex items-center justify-center">
-                                        <i class="fa-solid fa-eye text-white text-xs"></i>
-                                    </div>
-                                    <div>
-                                        <div class="font-semibold">{{ span.name }}</div>
-                                        <div class="text-sm text-base-content/60">Root Span</div>
-                                    </div>
-                                </div>
-                                <div class="text-right">
-                                    <div class="font-bold">{{ span.duration_ms }}ms</div>
-                                </div>
-                            </div>
-                            {% if span.metadata %}
-                                <div class="grid grid-cols-1 md:grid-cols-3 gap-4 mt-4 text-sm">
-                                    {% for key, value in span.metadata.items %}
-                                        <div>
-                                            <span class="text-base-content/60">{{ key|title }}:</span>
-                                            <span class="font-medium ml-1">{{ value }}</span>
-                                        </div>
-                                    {% endfor %}
-                                </div>
-                            {% endif %}
-                            <div class="flex justify-end mt-2">
-                                <div class="badge badge-{{ span.status|lower|default:'success' }}">{{ span.status|default:"Success" }}</div>
-                            </div>
-                        </div>
-                    </div>
+                    {% include "trace/span_tree.html" with span=span is_root=True %}
                 {% empty %}
                     <div class="card bg-base-100 border border-base-200">
                         <div class="card-body p-4 text-center text-base-content/60">

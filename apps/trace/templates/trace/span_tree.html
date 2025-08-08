@@ -1,0 +1,76 @@
+{% load static %}
+
+<div class="{% if is_root %}border rounded-lg p-4 mb-4 bg-base-50 border-base-300{% else %}span-node border rounded-lg p-3 mb-3{% endif %}">
+    <div class="flex items-center justify-between">
+        <div class="flex items-center">
+            {% if is_root %}
+                <svg class="w-5 h-5 mr-2" fill="currentColor" viewBox="0 0 20 20">
+                    <path d="M10 12a2 2 0 100-4 2 2 0 000 4z"/>
+                    <path fill-rule="evenodd" d="M.458 10C1.732 5.943 5.522 3 10 3s8.268 2.943 9.542 7c-1.274 4.057-5.064 7-9.542 7S1.732 14.057.458 10zM14 10a4 4 0 11-8 0 4 4 0 018 0z" clip-rule="evenodd"/>
+                </svg>
+            {% else %}
+                <svg class="w-4 h-4 text-gray-600 mr-2" fill="currentColor" viewBox="0 0 20 20">
+                    <circle cx="10" cy="10" r="3"/>
+                </svg>
+            {% endif %}
+            <div>
+                <div class="text-lg font-bold">{{ span.name }}</div>
+                <div class="text-sm flex items-center">
+                    {% if is_root %}
+                        <span class="mr-2">Root Span</span>
+                    {% else %}
+                        <span class="mr-2">Span</span>
+                    {% endif %}
+                    {% if span.status == "success" %}
+                        <span class="badge badge-success">{{ span.get_status_display }}</span>
+                    {% elif span.status == "error" %}
+                        <span class="badge badge-error">{{ span.get_status_display }}</span>
+                    {% elif span.status == "pending" %}
+                        <span class="badge badge-warning">{{ span.get_status_display }}</span>
+                    {% else %}
+                        <span class="badge badge-info">{{ span.get_status_display }}</span>
+                    {% endif %}
+                </div>
+            </div>
+        </div>
+        <div class="text-right">
+            <div class="text-sm font-medium">{{ span.duration_ms }}ms</div>
+        </div>
+    </div>
+    
+    {% if span.metadata %}
+        <div class="mt-3 grid grid-cols-{% if is_root %}4{% else %}3{% endif %} gap-4 text-xs">
+            {% for key, value in span.metadata.items %}
+                <div>
+                    <span class="text-gray-500">{{ key|title }}:</span>
+                    <span class="ml-1 text-gray-900">{{ value }}</span>
+                </div>
+            {% endfor %}
+            {% if is_root %}
+                <div>
+                    <span class="text-gray-500">Status:</span>
+                    {% if span.status == "success" %}
+                        <span class="badge badge-success ml-1">{{ span.get_status_display|default:"Success" }}</span>
+                    {% elif span.status == "error" %}
+                        <span class="badge badge-error ml-1">{{ span.get_status_display|default:"Error" }}</span>
+                    {% elif span.status == "pending" %}
+                        <span class="badge badge-warning ml-1">{{ span.get_status_display|default:"Pending" }}</span>
+                    {% else %}
+                        <span class="badge badge-info ml-1">{{ span.get_status_display|default:"Success" }}</span>
+                    {% endif %}
+                </div>
+            {% endif %}
+        </div>
+    {% endif %}
+
+    <!-- Child spans -->
+    {% with child_spans=span.child_spans.all %}
+        {% if child_spans %}
+            <div class="span-tree mt-4">
+                {% for child_span in child_spans %}
+                    {% include "trace/span_tree.html" with span=child_span is_root=False %}
+                {% endfor %}
+            </div>
+        {% endif %}
+    {% endwith %}
+</div>
