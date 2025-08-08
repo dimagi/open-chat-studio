@@ -92,6 +92,11 @@
   --success: #36d399;
 }
 
+open-chat-studio-widget {
+  z-index: 9999;
+}
+
+/* Tom-select styling */
 .ts-wrapper {
   @apply w-full ml-0!;
 }

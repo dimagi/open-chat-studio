@@ -60,6 +60,7 @@ IGNORE_APPS = {
     "rest_framework_api_key",
     "runserver_nostatic",
     "sessions",
+    "site_admin",
     "sitemaps",
     "sites",
     "slack",
