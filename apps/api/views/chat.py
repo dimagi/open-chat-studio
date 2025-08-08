@@ -45,7 +45,7 @@ def check_experiment_access(experiment, participant_id):
     return None
 
 
-def check_session_access(request, session):
+def check_session_access(session):
     """
     Check if the request has access to the session based on experiment's public API settings.
 
@@ -208,7 +208,7 @@ def chat_send_message(request, session_id):
 
     session = get_object_or_404(ExperimentSession, external_id=session_id)
 
-    access_response = check_session_access(request, session)
+    access_response = check_session_access(session)
     if access_response:
         return access_response
 
@@ -275,7 +275,7 @@ def chat_poll_task_response(request, session_id, task_id):
     except ExperimentSession.DoesNotExist:
         raise Http404() from None
 
-    access_response = check_session_access(request, session)
+    access_response = check_session_access(session)
     if access_response:
         return access_response
     task_details = get_message_task_response(session.experiment, task_id)
@@ -334,7 +334,7 @@ def chat_poll_response(request, session_id):
     """
     session = get_object_or_404(ExperimentSession, external_id=session_id)
 
-    access_response = check_session_access(request, session)
+    access_response = check_session_access(session)
     if access_response:
         return access_response
     since_param = request.query_params.get("since")
