@@ -14,7 +14,8 @@ from django.utils import timezone
 from django.views.decorators.http import require_http_methods
 from field_audit.models import AuditEvent
 
-from apps.admin.forms import DateRangeForm, DateRanges, FlagUpdateForm
+from apps.admin.forms import DateRangeForm, DateRanges, FlagUpdateForm, OcsConfigurationForm
+from apps.admin.models import OcsConfiguration
 from apps.admin.queries import get_message_stats, get_participant_stats, get_whatsapp_numbers, usage_to_csv
 from apps.admin.serializers import StatsSerializer
 from apps.experiments.models import Participant
@@ -273,3 +274,28 @@ def update_flag(request, flag_name):
     except Exception:
         logger.exception("Failed to update flag")
         return JsonResponse({"error": "Failed to update flag"}, status=500)
+
+
+@is_superuser
+def configuration(request):
+    """View for editing the single OcsConfiguration instance."""
+    # Get or create the single configuration instance
+    config_instance = OcsConfiguration.objects.first()
+
+    if request.method == "POST":
+        form = OcsConfigurationForm(request.POST, instance=config_instance)
+        if form.is_valid():
+            form.save()
+            return redirect("ocs_admin:configuration")
+    else:
+        form = OcsConfigurationForm(instance=config_instance)
+
+    return TemplateResponse(
+        request,
+        "admin/configuration.html",
+        context={
+            "active_tab": "configuration",
+            "form": form,
+            "config_instance": config_instance,
+        },
+    )
