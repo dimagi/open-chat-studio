@@ -1,5 +1,4 @@
 import React, {ChangeEvent, ChangeEventHandler, ReactNode, useId, useState, useMemo, useRef, useEffect,} from "react";
-import CreatableSelect from "react-select/creatable";
 import {LlmProviderModel, Option, TypedOption} from "../types/nodeParameterValues";
 import usePipelineStore from "../stores/pipelineStore";
 import {classNames, concatenate, getCachedData, getDocumentationLink, getSelectOptions} from "../utils";
@@ -756,6 +755,7 @@ export function LlmWidget(props: WidgetParams) {
     </InputField>
   );
 }
+
 export function HistoryTypeWidget(props: WidgetParams) {
   const options = getSelectOptions(props.schema);
   const historyType = concatenate(props.paramValue);
