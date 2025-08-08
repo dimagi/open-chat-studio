@@ -9,9 +9,9 @@ const tsBlur = new Event("ts-blur");
 
 let controlInstances = [];
 
-function addTag (name, objectInfo) {
+function addTag (name, el, objectInfo) {
   return function () {
-    let postData = {swap: 'none', values: {"tag_name": arguments[0], "object_info": objectInfo}};
+    let postData = {source: el, swap: 'none', values: {"tag_name": arguments[0], "object_info": objectInfo}};
     htmx.ajax('POST', linkTagUrl, postData);
     let dropdown_option = {text: arguments[0], value: arguments[0]};
     // Add the new tag to all existing TomSelect instances. This will do nothing if it already exists
@@ -21,9 +21,9 @@ function addTag (name, objectInfo) {
   };
 }
 
-function removeTag (name, objectInfo) {
+function removeTag (name, el, objectInfo) {
   return function () {
-    let postData = {swap: 'none', values: {"tag_name": arguments[0], "object_info": objectInfo}};
+    let postData = {source: el, swap: 'none', values: {"tag_name": arguments[0], "object_info": objectInfo}};
     htmx.ajax('POST', unlinkTagUrl, postData);
   };
 }
@@ -43,8 +43,8 @@ function configureTomSelect() {
         }
         return true;
       },
-      onItemAdd: addTag('onItemAdd', objectInfo),
-      onItemRemove: removeTag('onItemRemove', objectInfo),
+      onItemAdd: addTag('onItemAdd', el, objectInfo),
+      onItemRemove: removeTag('onItemRemove', el, objectInfo),
       onBlur: () => {
         el.dispatchEvent(tsBlur);
       }
