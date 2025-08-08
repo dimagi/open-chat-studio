@@ -26,6 +26,7 @@
                 <div class="mt-1">
                     {% include "generic/chip.html" with chip=trace.experiment.as_chip %}
                 </div>
+                <div class="text-xs mt-1">Version: {{ trace.experiment.get_version_name }}</div>
             </div>
             <div>
                 <div class="text-sm text-base-content/60 tracking-wide">Session</div>
