@@ -119,7 +119,6 @@ class OCSTracer(Tracer):
                 # TODO: This should come from wherever the span is started in the code
                 error_display="Oops, something went wrong",
                 raw_error=str(error),
-                sentry_trace_id="",
             )
             span.status = TraceStatus.ERROR
         else:

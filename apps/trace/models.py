@@ -14,7 +14,6 @@ class SpanError(BaseModel):
     # TODO: Move to data_structures file
     error_display: str
     raw_error: str
-    sentry_trace_id: str
 
 
 class TraceStatus(models.TextChoices):
