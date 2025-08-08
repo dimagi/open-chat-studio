@@ -26,14 +26,20 @@ from apps.experiments.tasks import get_response_for_webchat_task
 AUTH_CLASSES = [ApiKeyAuthentication, BearerTokenAuthentication]
 
 
-def check_experiment_access(request, experiment, participant_id):
+def check_experiment_access(experiment, participant_id):
     """
     Check if the request has access to the experiment based on public API settings.
 
     Returns:
         Response object if access denied, None if access allowed
     """
-    if not experiment.is_public and not experiment.is_participant_allowed(participant_id):
+    if experiment.is_public:
+        return None
+
+    if not participant_id:
+        return Response({"error": "Access denied"}, status=status.HTTP_403_FORBIDDEN)
+
+    if not experiment.is_participant_allowed(participant_id):
         return Response({"error": "Access denied"}, status=status.HTTP_403_FORBIDDEN)
 
     return None
@@ -46,7 +52,7 @@ def check_session_access(request, session):
     Returns:
         Response object if access denied, None if access allowed
     """
-    return check_experiment_access(request, session.experiment, session.participant.identifier)
+    return check_experiment_access(session.experiment, session.participant.identifier)
 
 
 @extend_schema(
@@ -81,7 +87,6 @@ def chat_start_session(request):
 
     data = serializer.validated_data
     experiment_id = data["chatbot_id"]
-    participant_id = data.get("participant_id")
     session_data = data.get("session_data", {})
     remote_id = data.get("participant_remote_id", "")
     name = data.get("participant_name")
@@ -94,26 +99,26 @@ def chat_start_session(request):
             status=status.HTTP_400_BAD_REQUEST,
         )
 
-    access_response = check_experiment_access(request, experiment, participant_id)
-    if access_response:
-        return access_response
-
     if request.user.is_authenticated:
         team = request.team
         user = request.user
+        participant_id = user.email
+        if remote_id != participant_id:
+            # Enforce this for authenticated users
+            # Currently this only happens if the chat widget is being hosted on OCS
+            return Response({"error": "Remote ID ID must match your email address"}, status=status.HTTP_400_BAD_REQUEST)
+        remote_id = ""
     else:
         team = experiment.team
         user = None
+        participant_id = None
+
+    access_response = check_experiment_access(experiment, participant_id)
+    if access_response:
+        return access_response
 
     # Create or get participant
     if user is not None:
-        participant_id = participant_id or user.email
-        if participant_id != user.email:
-            # TODO: re-evaluate this, it doesn't seem correct in this instance
-            return Response(
-                {"error": "Participant ID must match your email address"}, status=status.HTTP_400_BAD_REQUEST
-            )
-
         participant, created = Participant.objects.get_or_create(
             identifier=participant_id,
             team=team,
@@ -143,6 +148,7 @@ def chat_start_session(request):
         working_experiment=experiment,
         experiment_channel=api_channel,
         participant_identifier=participant.identifier,
+        participant_user=user,
         # timezone
         # session_external_id
         metadata={Chat.MetadataKeys.EMBED_SOURCE: request.headers.get("referer", None)},

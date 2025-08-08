@@ -48,15 +48,6 @@ def test_start_chat_session(team_with_users, api_client, experiment):
 
 
 @pytest.mark.django_db()
-def test_start_chat_session_with_participant_id_without_auth(team_with_users, api_client, experiment):
-    url = reverse("api:chat:start-session")
-    data = {"chatbot_id": experiment.public_id, "participant_id": "123"}
-    response = api_client.post(url, data=data, format="json")
-    assert response.status_code == 201
-    assert response.json()["participant"]["identifier"].startswith("anon:")
-
-
-@pytest.mark.django_db()
 def test_send_message(api_client, session):
     url = reverse("api:chat:send-message", kwargs={"session_id": session.external_id})
     data = {"message": "hi"}
@@ -136,15 +127,10 @@ def test_session_poll_with_messages(api_client, session):
 
 
 @pytest.mark.django_db()
-@pytest.mark.parametrize(("participant_id", "status_code"), [(None, 403), ("", 400), ("123", 403), ("a", 201)])
-def test_start_chat_session_requires_auth_when_not_public(
-    team_with_users, api_client, experiment, participant_id, status_code
-):
+def test_start_chat_session_requires_auth_when_not_public(team_with_users, api_client, experiment):
     url = reverse("api:chat:start-session")
     experiment.participant_allowlist = ["a", "b"]
     experiment.save()
     data = {"chatbot_id": experiment.public_id}
-    if participant_id is not None:
-        data["participant_id"] = participant_id
     response = api_client.post(url, data=data, format="json")
-    assert response.status_code == status_code
+    assert response.status_code == 403
