@@ -75,7 +75,7 @@ def test_list_sessions_with_tag(experiment):
     }
 
 
-def get_session_json(session, expected_messages=None):
+def get_session_json(session, expected_messages=None, expected_tags=None):
     experiment = session.experiment
     data = {
         "url": f"http://testserver/api/sessions/{session.external_id}/",
@@ -97,6 +97,8 @@ def get_session_json(session, expected_messages=None):
     }
     if expected_messages is not None:
         data["messages"] = expected_messages
+    if expected_tags is not None:
+        data["tags"] = expected_tags
     return data
 
 
@@ -114,6 +116,8 @@ def test_retrieve_session(session):
     session.chat.messages.create(message_type="ai", content="hi")
     message1 = session.chat.messages.create(message_type="human", content="hello")
     files = _create_attachments(session.chat, message1)
+
+    session.chat.add_tag(tags[0], session.team, user)
 
     message = session.chat.messages.create(message_type="human", content="rabbit in a hat", summary="Abracadabra")
     message.add_tag(tags[0], session.team, user)
@@ -176,6 +180,7 @@ def test_retrieve_session(session):
                 "attachments": [],
             },
         ],
+        expected_tags=["tag1"],
     )
 
 
