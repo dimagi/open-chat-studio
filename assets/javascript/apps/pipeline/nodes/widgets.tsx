@@ -1,6 +1,5 @@
 import React, {ChangeEvent, ChangeEventHandler, ReactNode, useId, useState, useMemo, useRef, useEffect,} from "react";
 import CreatableSelect from "react-select/creatable";
-
 import {LlmProviderModel, Option, TypedOption} from "../types/nodeParameterValues";
 import usePipelineStore from "../stores/pipelineStore";
 import {classNames, concatenate, getCachedData, getDocumentationLink, getSelectOptions} from "../utils";
@@ -757,7 +756,6 @@ export function LlmWidget(props: WidgetParams) {
     </InputField>
   );
 }
-
 export function HistoryTypeWidget(props: WidgetParams) {
   const options = getSelectOptions(props.schema);
   const historyType = concatenate(props.paramValue);
@@ -827,6 +825,19 @@ export function HistoryTypeWidget(props: WidgetParams) {
     setSearchTerm("");
   };
 
+  const handleClearClick = (e: React.MouseEvent) => {
+    e.stopPropagation();
+    handleOptionSelect("");
+  };
+
+  const handleDropdownToggle = (e: React.MouseEvent) => {
+    e.stopPropagation();
+    setIsDropdownOpen(!isDropdownOpen);
+    if (!isDropdownOpen) {
+      setSearchTerm("");
+    }
+  };
+
   return (
     <>
       <div className="flex join">
@@ -848,20 +859,44 @@ export function HistoryTypeWidget(props: WidgetParams) {
         {historyType == "named" && (
           <InputField label="History Name" help_text={props.helpText}>
             <div className="w-64 relative">
-            <input
-              type="text"
-              className="input w-full pr-8"
-              value={displayValue}
-              onChange={handleInputChange}
-              onClick={handleInputClick}
-              placeholder="Type to search or create..."
-            />
+              <input
+                type="text"
+                className="input w-full pr-8"
+                value={displayValue}
+                onChange={handleInputChange}
+                onClick={handleInputClick}
+                placeholder="Type to search or create..."
+              />
+
+              {/* Icons container */}
+              <div className="absolute inset-y-0 right-0 flex items-center pr-2">
+                {/* Clear icon */}
+                {(historyName || searchTerm) && (
+                  <button
+                    type="button"
+                    className="p-1 hover:bg-gray-200 rounded"
+                    onClick={handleClearClick}
+                  >
+                    <i className="fa fa-times text-gray-400 hover:text-gray-600" />
+                  </button>
+                )}
+
+                {/* Dropdown icon */}
+                <button
+                  type="button"
+                  className="p-1 ml-1"
+                  onClick={handleDropdownToggle}
+                >
+                  <i className={`fa fa-chevron-down text-gray-400 transition-transform ${isDropdownOpen ? 'rotate-180' : ''}`} />
+                </button>
+              </div>
+
               {isDropdownOpen && (
                 <div className="absolute z-10 w-full bg-white border border-gray-300 rounded-md shadow-lg mt-1 max-h-40 overflow-y-auto">
-                  {!searchTerm && historyNameOptions.length ==0 && (
-                  <div
-                  className="px-3 py-2 text-gray-500 cursor-pointer hover:bg-gray-100"
-                    onClick={() => handleOptionSelect("")}>
+                  {!searchTerm && historyNameOptions.length == 0 && (
+                    <div
+                      className="px-3 py-2 text-gray-500 cursor-pointer hover:bg-gray-100"
+                      onClick={() => handleOptionSelect("")}>
                       -- Select --
                     </div>
                   )}
