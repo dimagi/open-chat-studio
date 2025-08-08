@@ -1,0 +1,10 @@
+This is a test document for file upload testing.
+
+It contains multiple lines and some basic content.
+Perfect for testing text file uploads in the chat widget.
+
+Features:
+- Multiple paragraphs
+- Special characters: äöü, 中文, русский
+- Numbers: 123456
+- Symbols: !@#$%^&*()

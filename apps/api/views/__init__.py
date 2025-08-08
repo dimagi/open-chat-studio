@@ -1,5 +1,5 @@
 from .channels import callback, consent, generate_key, trigger_bot_message
-from .chat import chat_poll_response, chat_poll_task_response, chat_send_message, chat_start_session
+from .chat import chat_poll_response, chat_poll_task_response, chat_send_message, chat_start_session, chat_upload_file
 from .experiments import ExperimentViewSet
 from .files import file_content_view
 from .participants import (
@@ -22,4 +22,5 @@ __all__ = [
     "chat_send_message",
     "chat_poll_task_response",
     "chat_poll_response",
+    "chat_upload_file",
 ]
