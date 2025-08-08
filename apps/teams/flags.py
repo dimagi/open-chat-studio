@@ -52,6 +52,8 @@ class Flags(FlagInfo, Enum):
 
     COMMCARE_CONNECT = ("flag_commcare_connect", "Enables integration with CommCare Connect platform", "")
 
+    TRACING = ("flag_tracing", "Enables users to see OCS traces", "")
+
     @property
     def docs_url(self):
         docs_link = settings.DOCUMENTATION_LINKS.get(self.docs_slug, None)
