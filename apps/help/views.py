@@ -153,7 +153,7 @@ def code_completion(user_query, current_code, error=None, iteration_count=0) -> 
     ]
 
     response = client.messages.create(
-        system=system_prompt, model="claude-3-sonnet-20240229", messages=messages, max_tokens=1000
+        system=system_prompt, model=settings.AI_HELPER_API_MODEL, messages=messages, max_tokens=1000
     )
 
     response_code = f"def main(input: str, **kwargs) -> str:{response.content[0].text}"
