@@ -2,6 +2,7 @@ import importlib
 import json
 
 from django import forms
+from django.forms.widgets import RadioSelect
 from pydantic import ValidationError as PydanticValidationError
 
 from apps.evaluations.models import (
@@ -13,6 +14,20 @@ from apps.evaluations.models import (
     ExperimentVersionSelection,
 )
 from apps.experiments.models import Experiment, ExperimentSession
+
+
+class StyledRadioSelect(RadioSelect):
+    def __init__(self, attrs=None):
+        default_attrs = {"class": "space-y-1"}
+        if attrs:
+            default_attrs.update(attrs)
+        super().__init__(attrs=default_attrs)
+
+    def create_option(self, name, value, label, selected, index, subindex=None, attrs=None):
+        option = super().create_option(name, value, label, selected, index, subindex, attrs)
+
+        option["attrs"]["class"] = "radio radio-primary mr-2"
+        return option
 
 
 def get_experiment_version_choices(experiment_queryset):
@@ -232,7 +247,7 @@ class EvaluationDatasetForm(forms.ModelForm):
     ]
 
     mode = forms.ChoiceField(
-        choices=MODE_CHOICES, widget=forms.RadioSelect, initial="clone", label="Dataset creation mode"
+        choices=MODE_CHOICES, widget=StyledRadioSelect(), initial="clone", label="Dataset creation mode"
     )
 
     session_ids = forms.CharField(
