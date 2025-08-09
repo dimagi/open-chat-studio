@@ -455,7 +455,7 @@ class EvaluationDatasetForm(forms.ModelForm):
             # Extract mapped columns
             input_content = row.get(column_mapping.get("input", ""), "").strip()
             output_content = row.get(column_mapping.get("output", ""), "").strip()
-            if not input_content and output_content:
+            if not input_content or not output_content:
                 continue
 
             context = {}
