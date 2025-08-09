@@ -273,109 +273,114 @@ class EvaluationDatasetForm(forms.ModelForm):
     def clean(self):
         cleaned_data = super().clean()
         mode = cleaned_data.get("mode")
-
         if mode == "clone":
-            session_ids_str = self.data.get("session_ids", "")
-            session_ids = set(session_ids_str.split(","))
-            session_ids.discard("")  # Remove empty strings
-
-            if not session_ids:
-                raise forms.ValidationError("At least one session must be selected when cloning from sessions.")
-
-            existing_sessions = ExperimentSession.objects.filter(
-                team=self.team, external_id__in=session_ids
-            ).values_list("external_id", flat=True)
-
-            missing_sessions = set(session_ids) - set(existing_sessions)
-            if missing_sessions:
-                raise forms.ValidationError(
-                    "The following sessions do not exist or you don't have permission to access them: "
-                    f"{', '.join(missing_sessions)}"
-                )
-
-            cleaned_data["session_ids"] = session_ids
-
+            cleaned_data["session_ids"] = self._clean_clone()
         elif mode == "manual":
-            messages_json = self.data.get("messages_json", "")
-            cleaned_data["message_pairs"] = []
-            if not messages_json:
-                raise forms.ValidationError("At least one message pair must be added when creating manually.")
-
-            try:
-                message_pairs = json.loads(messages_json)
-            except json.JSONDecodeError as err:
-                raise forms.ValidationError("Messages data is invalid JSON.") from err
-
-            if not isinstance(message_pairs, list) or len(message_pairs) == 0:
-                raise forms.ValidationError("At least one message pair must be added.")
-
-            for i, pair in enumerate(message_pairs):
-                if not isinstance(pair, dict):
-                    raise forms.ValidationError(f"Message pair {i + 1} is not a valid object.")
-                if not pair.get("human", "").strip():
-                    raise forms.ValidationError(f"Message pair {i + 1} is missing human message content.")
-                if not pair.get("ai", "").strip():
-                    raise forms.ValidationError(f"Message pair {i + 1} is missing AI message content.")
-                if pair.get("context"):
-                    try:
-                        json.loads(pair.get("context", "{}"))
-                    except json.JSONDecodeError as err:
-                        raise forms.ValidationError(f"Context for pair {i + 1} has malformed JSON") from err
-
-                cleaned_data["message_pairs"].append(
-                    {
-                        "human": EvaluationMessageContent(
-                            content=pair.get("human", "").strip(), role="human"
-                        ).model_dump(),
-                        "ai": EvaluationMessageContent(content=pair.get("ai", "").strip(), role="ai").model_dump(),
-                        "context": pair.get("context"),
-                    }
-                )
-
+            cleaned_data["message_pairs"] = self._clean_manual()
         elif mode == "csv":
-            column_mapping_str = self.data.get("column_mapping", "")
-            csv_data_str = self.data.get("csv_data", "")
-            if not csv_data_str:
-                raise forms.ValidationError("Please upload a CSV file.")
-            column_mapping = {}
-            if column_mapping_str:
-                try:
-                    column_mapping = json.loads(column_mapping_str)
-                except json.JSONDecodeError as err:
-                    raise forms.ValidationError("Invalid column mapping data.") from err
-            try:
-                csv_data = json.loads(csv_data_str)
-            except json.JSONDecodeError as err:
-                raise forms.ValidationError("Invalid CSV data.") from err
-
-            if not csv_data:
-                raise forms.ValidationError("CSV data appears to be empty or invalid.")
-
-            if not column_mapping.get("input") or not column_mapping.get("output"):
-                raise forms.ValidationError("Both input and output columns must be mapped.")
-
-            csv_columns = set(csv_data[0].keys()) if csv_data else set()
-            for field_name, csv_column in column_mapping.items():
-                # Skip populate_history as it's a boolean, not a column name
-                if field_name == "populate_history":
-                    continue
-                if csv_column and csv_column not in csv_columns:
-                    raise forms.ValidationError(f"Column '{csv_column}' not found in CSV file.")
-
-            valid_rows = 0
-            for row in csv_data:
-                input_content = row.get(column_mapping.get("input", ""), "").strip()
-                output_content = row.get(column_mapping.get("output", ""), "").strip()
-                if input_content and output_content:
-                    valid_rows += 1
-
-            if valid_rows == 0:
-                raise forms.ValidationError("No valid message pairs found in CSV data.")
-
+            csv_data, column_mapping = self._clean_csv()
             cleaned_data["csv_data"] = csv_data
             cleaned_data["column_mapping"] = column_mapping
-
         return cleaned_data
+
+    def _clean_clone(self):
+        session_ids_str = self.data.get("session_ids", "")
+        session_ids = set(session_ids_str.split(","))
+        session_ids.discard("")  # Remove empty strings
+
+        if not session_ids:
+            raise forms.ValidationError("At least one session must be selected when cloning from sessions.")
+
+        existing_sessions = ExperimentSession.objects.filter(team=self.team, external_id__in=session_ids).values_list(
+            "external_id", flat=True
+        )
+
+        missing_sessions = set(session_ids) - set(existing_sessions)
+        if missing_sessions:
+            raise forms.ValidationError(
+                "The following sessions do not exist or you don't have permission to access them: "
+                f"{', '.join(missing_sessions)}"
+            )
+
+        return session_ids
+
+    def _clean_manual(self):
+        message_pairs = []
+        messages_json = self.data.get("messages_json", "")
+        if not messages_json:
+            raise forms.ValidationError("At least one message pair must be added when creating manually.")
+
+        try:
+            message_pairs = json.loads(messages_json)
+        except json.JSONDecodeError as err:
+            raise forms.ValidationError("Messages data is invalid JSON.") from err
+
+        if not isinstance(message_pairs, list) or len(message_pairs) == 0:
+            raise forms.ValidationError("At least one message pair must be added.")
+
+        for i, pair in enumerate(message_pairs):
+            if not isinstance(pair, dict):
+                raise forms.ValidationError(f"Message pair {i + 1} is not a valid object.")
+            if not pair.get("human", "").strip():
+                raise forms.ValidationError(f"Message pair {i + 1} is missing human message content.")
+            if not pair.get("ai", "").strip():
+                raise forms.ValidationError(f"Message pair {i + 1} is missing AI message content.")
+            if pair.get("context"):
+                try:
+                    json.loads(pair.get("context", "{}"))
+                except json.JSONDecodeError as err:
+                    raise forms.ValidationError(f"Context for pair {i + 1} has malformed JSON") from err
+
+            message_pairs.append(
+                {
+                    "human": EvaluationMessageContent(content=pair.get("human", "").strip(), role="human").model_dump(),
+                    "ai": EvaluationMessageContent(content=pair.get("ai", "").strip(), role="ai").model_dump(),
+                    "context": pair.get("context"),
+                }
+            )
+        return message_pairs
+
+    def _clean_csv(self):
+        column_mapping_str = self.data.get("column_mapping", "")
+        csv_data_str = self.data.get("csv_data", "")
+        if not csv_data_str:
+            raise forms.ValidationError("Please upload a CSV file.")
+        column_mapping = {}
+        if column_mapping_str:
+            try:
+                column_mapping = json.loads(column_mapping_str)
+            except json.JSONDecodeError as err:
+                raise forms.ValidationError("Invalid column mapping data.") from err
+        try:
+            csv_data = json.loads(csv_data_str)
+        except json.JSONDecodeError as err:
+            raise forms.ValidationError("Invalid CSV data.") from err
+
+        if not csv_data:
+            raise forms.ValidationError("CSV data appears to be empty or invalid.")
+
+        if not column_mapping.get("input") or not column_mapping.get("output"):
+            raise forms.ValidationError("Both input and output columns must be mapped.")
+
+        csv_columns = set(csv_data[0].keys()) if csv_data else set()
+        for field_name, csv_column in column_mapping.items():
+            # Skip populate_history as it's a boolean, not a column name
+            if field_name == "populate_history":
+                continue
+            if csv_column and csv_column not in csv_columns:
+                raise forms.ValidationError(f"Column '{csv_column}' not found in CSV file.")
+
+        valid_rows = 0
+        for row in csv_data:
+            input_content = row.get(column_mapping.get("input", ""), "").strip()
+            output_content = row.get(column_mapping.get("output", ""), "").strip()
+            if input_content and output_content:
+                valid_rows += 1
+
+        if valid_rows == 0:
+            raise forms.ValidationError("No valid message pairs found in CSV data.")
+
+        return csv_data, column_mapping
 
     def save(self, commit=True):
         """Create dataset based on the selected mode."""
@@ -390,69 +395,80 @@ class EvaluationDatasetForm(forms.ModelForm):
         evaluation_messages = []
 
         if mode == "clone":
-            session_ids = self.cleaned_data.get("session_ids", [])
-            if session_ids:
-                evaluation_messages = EvaluationMessage.create_from_sessions(self.team, session_ids)
+            evaluation_messages = self._save_clone()
         elif mode == "manual":
-            evaluation_messages = [
-                EvaluationMessage(
-                    input=pair["human"],
-                    output=pair["ai"],
-                    context=pair["context"],
-                    metadata={"created_mode": "manual"},
-                )
-                for pair in self.cleaned_data.get("message_pairs", [])
-            ]
+            evaluation_messages = self._save_manual()
         elif mode == "csv":
-            csv_data = self.cleaned_data.get("csv_data", [])
-            column_mapping = self.cleaned_data.get("column_mapping", {})
-            populate_history = column_mapping.get("populate_history", False)
-
-            evaluation_messages = []
-            history = []
-            for row in csv_data:
-                # Extract mapped columns
-                input_content = row.get(column_mapping.get("input", ""), "").strip()
-                output_content = row.get(column_mapping.get("output", ""), "").strip()
-                if not input_content and output_content:
-                    continue
-
-                context = {}
-                for field_name, csv_column in column_mapping.items():
-                    if field_name not in ["input", "output", "populate_history"] and csv_column in row:
-                        context[field_name] = row[csv_column]
-
-                evaluation_messages.append(
-                    EvaluationMessage(
-                        input=EvaluationMessageContent(content=input_content, role="human").model_dump(),
-                        output=EvaluationMessageContent(content=output_content, role="ai").model_dump(),
-                        context=context,
-                        history=[msg.copy() for msg in history] if populate_history else [],
-                        metadata={"created_mode": "csv"},
-                    )
-                )
-
-                if populate_history:
-                    history.append(
-                        {
-                            "message_type": "HUMAN",
-                            "content": input_content.strip(),
-                            "summary": None,
-                        }
-                    )
-                    history.append(
-                        {
-                            "message_type": "AI",
-                            "content": output_content.strip(),
-                            "summary": None,
-                        }
-                    )
-
+            evaluation_messages = self._save_csv()
         if evaluation_messages:
             EvaluationMessage.objects.bulk_create(evaluation_messages)
             dataset.messages.set(evaluation_messages)
 
         return dataset
+
+    def _save_clone(self):
+        evaluation_messages = []
+        session_ids = self.cleaned_data.get("session_ids", [])
+        if session_ids:
+            evaluation_messages = EvaluationMessage.create_from_sessions(self.team, session_ids)
+        return evaluation_messages
+
+    def _save_manual(self):
+        return [
+            EvaluationMessage(
+                input=pair["human"],
+                output=pair["ai"],
+                context=pair["context"],
+                metadata={"created_mode": "manual"},
+            )
+            for pair in self.cleaned_data.get("message_pairs", [])
+        ]
+
+    def _save_csv(self):
+        csv_data = self.cleaned_data.get("csv_data", [])
+        column_mapping = self.cleaned_data.get("column_mapping", {})
+        populate_history = column_mapping.get("populate_history", False)
+
+        evaluation_messages = []
+        history = []
+        for row in csv_data:
+            # Extract mapped columns
+            input_content = row.get(column_mapping.get("input", ""), "").strip()
+            output_content = row.get(column_mapping.get("output", ""), "").strip()
+            if not input_content and output_content:
+                continue
+
+            context = {}
+            for field_name, csv_column in column_mapping.items():
+                if field_name not in ["input", "output", "populate_history"] and csv_column in row:
+                    context[field_name] = row[csv_column]
+
+            evaluation_messages.append(
+                EvaluationMessage(
+                    input=EvaluationMessageContent(content=input_content, role="human").model_dump(),
+                    output=EvaluationMessageContent(content=output_content, role="ai").model_dump(),
+                    context=context,
+                    history=[msg.copy() for msg in history] if populate_history else [],
+                    metadata={"created_mode": "csv"},
+                )
+            )
+
+            if populate_history:
+                history.append(
+                    {
+                        "message_type": "HUMAN",
+                        "content": input_content.strip(),
+                        "summary": None,
+                    }
+                )
+                history.append(
+                    {
+                        "message_type": "AI",
+                        "content": output_content.strip(),
+                        "summary": None,
+                    }
+                )
+        return evaluation_messages
 
 
 class EvaluationDatasetEditForm(forms.ModelForm):
