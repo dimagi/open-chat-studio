@@ -4,7 +4,7 @@
 
 {% block form %}
   {{ form.non_field_errors }}
-  {% render_form_fields form %}
+  {% render_form_fields form "name" "mode" "session_ids" "messages_json" "column_mapping" "csv_data" %}
   <div x-data="datasetBuilder()" x-init="init()">
     <div x-show="!loaded" class="text-center py-8">
       <i class="fa-solid fa-spinner fa-spin fa-2x text-primary"></i>
@@ -252,16 +252,9 @@
               
               <!-- Populate history option -->
               <div class="pt-4 border-t">
-                <label class="flex items-center cursor-pointer">
-                  <input type="checkbox" 
-                         x-model="populateHistory"
-                         @change="updateColumnMapping()"
-                         class="checkbox checkbox-primary mr-2">
-                  <span class="text-sm font-medium">{% trans "Populate conversation history" %}</span>
-                </label>
-                <p class="text-xs text-gray-500 mt-1">
-                  {% trans "When enabled, each message will include the conversation history from previous rows in the CSV." %}
-                </p>
+                <div class="form-control">
+                  {% render_form_fields form "populate_history" %}
+                </div>
               </div>
             </div>
 
@@ -309,7 +302,6 @@
         columnMappingJson: '{}',
         csvDataJson: '[]',
         contextMappings: [],
-        populateHistory: false,
 
         init() {
           // Watch for mode changes
@@ -502,7 +494,6 @@
           this.csvData = null;
           this.columnMapping = { input: '', output: '' };
           this.contextMappings = [];
-          this.populateHistory = false;
           this.updateColumnMapping();
           document.querySelector('input[type="file"]').value = '';
         },
@@ -520,8 +511,7 @@
           // Build complete column mapping including context fields
           const mapping = {
             input: this.columnMapping.input,
-            output: this.columnMapping.output,
-            populate_history: this.populateHistory
+            output: this.columnMapping.output
           };
           
           // Add valid context mappings

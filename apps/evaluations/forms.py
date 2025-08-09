@@ -255,6 +255,13 @@ class EvaluationDatasetForm(forms.ModelForm):
         required=False,
     )
 
+    populate_history = forms.BooleanField(
+        required=False,
+        initial=False,
+        label="Populate conversation history",
+        help_text="When enabled, each message will include the conversation history from previous rows in the CSV.",
+    )
+
     class Meta:
         model = EvaluationDataset
         fields = ("name",)
@@ -363,12 +370,10 @@ class EvaluationDatasetForm(forms.ModelForm):
             raise forms.ValidationError("Both input and output columns must be mapped.")
 
         csv_columns = set(csv_data[0].keys()) if csv_data else set()
-        for field_name, csv_column in column_mapping.items():
-            # Skip populate_history as it's a boolean, not a column name
-            if field_name == "populate_history":
-                continue
-            if csv_column and csv_column not in csv_columns:
-                raise forms.ValidationError(f"Column '{csv_column}' not found in CSV file.")
+        mapped_columns = {col for col in column_mapping.values() if col}
+        missing_columns = mapped_columns - csv_columns
+        if missing_columns:
+            raise forms.ValidationError(f"Columns not found in CSV file: {', '.join(sorted(missing_columns))}")
 
         valid_rows = 0
         for row in csv_data:
@@ -427,7 +432,7 @@ class EvaluationDatasetForm(forms.ModelForm):
     def _save_csv(self):
         csv_data = self.cleaned_data.get("csv_data", [])
         column_mapping = self.cleaned_data.get("column_mapping", {})
-        populate_history = column_mapping.get("populate_history", False)
+        populate_history = self.cleaned_data.get("populate_history", False)
 
         evaluation_messages = []
         history = []
@@ -440,7 +445,7 @@ class EvaluationDatasetForm(forms.ModelForm):
 
             context = {}
             for field_name, csv_column in column_mapping.items():
-                if field_name not in ["input", "output", "populate_history"] and csv_column in row:
+                if field_name not in ["input", "output"] and csv_column in row:
                     context[field_name] = row[csv_column]
 
             evaluation_messages.append(
