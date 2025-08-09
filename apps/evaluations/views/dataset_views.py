@@ -1,8 +1,10 @@
+import csv
 import json
+from io import StringIO
 
 from django.contrib.auth.mixins import PermissionRequiredMixin
 from django.db.models import Count
-from django.http import HttpResponse
+from django.http import HttpResponse, JsonResponse
 from django.shortcuts import get_object_or_404, render
 from django.urls import reverse
 from django.views.decorators.http import require_http_methods, require_POST
@@ -348,3 +350,58 @@ def delete_message(request, team_slug, message_id):
     message = get_object_or_404(EvaluationMessage, id=message_id, evaluationdataset__team__slug=team_slug)
     message.delete()
     return HttpResponse("", status=200)
+
+
+@login_and_team_required
+@require_POST
+def parse_csv_columns(request, team_slug: str):
+    """Parse uploaded CSV and return column names and sample data."""
+    try:
+        csv_file = request.FILES.get("csv_file")
+        if not csv_file:
+            return JsonResponse({"error": "No CSV file provided"}, status=400)
+
+        file_content = csv_file.read().decode("utf-8")
+        csv_reader = csv.DictReader(StringIO(file_content))
+        columns = csv_reader.fieldnames or []
+
+        all_rows = list(csv_reader)
+        sample_rows = all_rows[:3]
+        total_rows = len(all_rows)
+        suggestions = _generate_column_suggestions(columns)
+
+        return JsonResponse(
+            {
+                "columns": columns,
+                "sample_rows": sample_rows,
+                "all_rows": all_rows,
+                "total_rows": total_rows,
+                "suggestions": suggestions,
+            }
+        )
+
+    except Exception as e:
+        return JsonResponse({"error": f"Error parsing CSV: {str(e)}"}, status=400)
+
+
+def _generate_column_suggestions(columns):
+    """Generate smart suggestions for column mapping based on column names."""
+    suggestions = {}
+    input_patterns = {"input", "human", "user", "question", "prompt", "message", "query"}
+    output_patterns = {"output", "ai", "assistant", "response", "answer", "reply", "completion"}
+
+    context_columns = []
+
+    for col in columns:
+        col_lower = col.lower().strip()
+        if "input" not in suggestions and any(pattern in col_lower for pattern in input_patterns):
+            suggestions["input"] = col
+        elif "output" not in suggestions and any(pattern in col_lower for pattern in output_patterns):
+            suggestions["output"] = col
+        else:
+            context_columns.append(col)
+
+    if context_columns:
+        suggestions["context"] = context_columns
+
+    return suggestions

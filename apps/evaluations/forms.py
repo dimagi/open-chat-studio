@@ -228,6 +228,7 @@ class EvaluationDatasetForm(forms.ModelForm):
     MODE_CHOICES = [
         ("clone", "Clone from sessions"),
         ("manual", "Create manually"),
+        ("csv", "Upload CSV file"),
     ]
 
     mode = forms.ChoiceField(
@@ -240,6 +241,16 @@ class EvaluationDatasetForm(forms.ModelForm):
     )
 
     messages_json = forms.CharField(
+        widget=forms.HiddenInput(),
+        required=False,
+    )
+
+    column_mapping = forms.CharField(
+        widget=forms.HiddenInput(),
+        required=False,
+    )
+
+    csv_data = forms.CharField(
         widget=forms.HiddenInput(),
         required=False,
     )
@@ -321,6 +332,49 @@ class EvaluationDatasetForm(forms.ModelForm):
                     }
                 )
 
+        elif mode == "csv":
+            column_mapping_str = self.data.get("column_mapping", "")
+            csv_data_str = self.data.get("csv_data", "")
+            if not csv_data_str:
+                raise forms.ValidationError("Please upload a CSV file.")
+            column_mapping = {}
+            if column_mapping_str:
+                try:
+                    column_mapping = json.loads(column_mapping_str)
+                except json.JSONDecodeError as err:
+                    raise forms.ValidationError("Invalid column mapping data.") from err
+            try:
+                csv_data = json.loads(csv_data_str)
+            except json.JSONDecodeError as err:
+                raise forms.ValidationError("Invalid CSV data.") from err
+
+            if not csv_data:
+                raise forms.ValidationError("CSV data appears to be empty or invalid.")
+
+            if not column_mapping.get("input") or not column_mapping.get("output"):
+                raise forms.ValidationError("Both input and output columns must be mapped.")
+
+            csv_columns = set(csv_data[0].keys()) if csv_data else set()
+            for field_name, csv_column in column_mapping.items():
+                # Skip populate_history as it's a boolean, not a column name
+                if field_name == "populate_history":
+                    continue
+                if csv_column and csv_column not in csv_columns:
+                    raise forms.ValidationError(f"Column '{csv_column}' not found in CSV file.")
+
+            valid_rows = 0
+            for row in csv_data:
+                input_content = row.get(column_mapping.get("input", ""), "").strip()
+                output_content = row.get(column_mapping.get("output", ""), "").strip()
+                if input_content and output_content:
+                    valid_rows += 1
+
+            if valid_rows == 0:
+                raise forms.ValidationError("No valid message pairs found in CSV data.")
+
+            cleaned_data["csv_data"] = csv_data
+            cleaned_data["column_mapping"] = column_mapping
+
         return cleaned_data
 
     def save(self, commit=True):
@@ -349,6 +403,50 @@ class EvaluationDatasetForm(forms.ModelForm):
                 )
                 for pair in self.cleaned_data.get("message_pairs", [])
             ]
+        elif mode == "csv":
+            csv_data = self.cleaned_data.get("csv_data", [])
+            column_mapping = self.cleaned_data.get("column_mapping", {})
+            populate_history = column_mapping.get("populate_history", False)
+
+            evaluation_messages = []
+            history = []
+            for row in csv_data:
+                # Extract mapped columns
+                input_content = row.get(column_mapping.get("input", ""), "").strip()
+                output_content = row.get(column_mapping.get("output", ""), "").strip()
+                if not input_content and output_content:
+                    continue
+
+                context = {}
+                for field_name, csv_column in column_mapping.items():
+                    if field_name not in ["input", "output", "populate_history"] and csv_column in row:
+                        context[field_name] = row[csv_column]
+
+                evaluation_messages.append(
+                    EvaluationMessage(
+                        input=EvaluationMessageContent(content=input_content, role="human").model_dump(),
+                        output=EvaluationMessageContent(content=output_content, role="ai").model_dump(),
+                        context=context,
+                        history=[msg.copy() for msg in history] if populate_history else [],
+                        metadata={"created_mode": "csv"},
+                    )
+                )
+
+                if populate_history:
+                    history.append(
+                        {
+                            "message_type": "HUMAN",
+                            "content": input_content.strip(),
+                            "summary": None,
+                        }
+                    )
+                    history.append(
+                        {
+                            "message_type": "AI",
+                            "content": output_content.strip(),
+                            "summary": None,
+                        }
+                    )
 
         if evaluation_messages:
             EvaluationMessage.objects.bulk_create(evaluation_messages)
