@@ -72,6 +72,11 @@ urlpatterns = [
         dataset_views.delete_message,
         name="delete_message",
     ),
+    path(
+        "parse_csv_columns/",
+        dataset_views.parse_csv_columns,
+        name="parse_csv_columns",
+    ),
 ]
 
 urlpatterns.extend(make_crud_urls(evaluation_config_views, "Evaluation", delete=False))

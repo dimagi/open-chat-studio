@@ -59,6 +59,8 @@ class EvaluationConfigTable(tables.Table):
         return mark_safe(f'<ul class="list-disc list-inside">{"".join(items)}</ul>')
 
     def render_generation_chatbot(self, record):
+        if not record.base_experiment:
+            return "—"
         if record.version_selection_type == ExperimentVersionSelection.LATEST_WORKING:
             return f"{record.base_experiment.name} (Latest Working)"
         elif record.version_selection_type == ExperimentVersionSelection.LATEST_PUBLISHED:
