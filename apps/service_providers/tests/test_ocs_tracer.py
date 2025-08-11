@@ -88,5 +88,26 @@ class TestOCSTracer:
         """
         Test that a span with an error is properly recorded.
         """
-        # TODO
-        assert False, "Span error handling not implemented yet"
+        tracer = OCSTracer(experiment.id, experiment.team_id)
+        session = ExperimentSessionFactory()
+
+        trace_id = uuid4()
+        tracer.start_trace(
+            trace_name="test_trace",
+            trace_id=trace_id,
+            session=session,
+        )
+
+        span_id = uuid4()
+        tracer.start_span(
+            span_id=span_id,
+            span_name="test_span",
+            inputs={"input": "data"},
+            metadata={"meta": "data"},
+        )
+        tracer.end_span(
+            span_id=span_id,
+            error=Exception("Test error"),
+        )
+        span = Span.objects.get(trace=tracer.trace)
+        assert span.error is not None

@@ -368,7 +368,8 @@ class PipelineBot:
             human_message = self._save_message_to_history(
                 input_state["messages"][-1], ChatMessageType.HUMAN, metadata=input_metadata
             )
-            self.trace_service.set_input_message_id(human_message.id)
+            if self.trace_service:
+                self.trace_service.set_input_message_id(human_message.id)
 
         ai_message = self._save_message_to_history(
             output["messages"][-1],
@@ -376,7 +377,8 @@ class PipelineBot:
             metadata=output_metadata,
             tags=output.get("output_message_tags"),
         )
-        self.trace_service.set_output_message_id(ai_message.id)
+        if self.trace_service:
+            self.trace_service.set_output_message_id(ai_message.id)
         ai_message.add_version_tag(
             version_number=self.experiment.version_number, is_a_version=self.experiment.is_a_version
         )
