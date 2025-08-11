@@ -398,7 +398,9 @@ class LLMResponseWithPrompt(LLMResponse, HistoryMixin, OutputMessageTagMixin):
         PipelineChatHistoryTypes.GLOBAL,
         json_schema_extra=UiSchema(widget=Widgets.history, enum_labels=PipelineChatHistoryTypes.labels),
     )
-    voice_provider_id: OptionalInt = Field(None, title="Voice Model", json_schema_extra=UiSchema(widget=Widgets.voice_widget))
+    voice_provider_id: OptionalInt = Field(
+        None, title="Voice Model", json_schema_extra=UiSchema(widget=Widgets.voice_widget)
+    )
     synthetic_voice_id: OptionalInt = Field(None, json_schema_extra=UiSchema(widget=Widgets.none))
 
     @model_validator(mode="after")
@@ -494,8 +496,6 @@ class LLMResponseWithPrompt(LLMResponse, HistoryMixin, OutputMessageTagMixin):
                 **tool_callbacks.output_message_metadata,
             },
             intents=tool_callbacks.intents,
-            voice_provider_id=self.voice_provider_id,
-            synthetic_voice_id=self.synthetic_voice_id,
         )
 
     def _get_attachments(self, state: PipelineState) -> list:
