@@ -40,6 +40,11 @@ class TraceDetailView(LoginAndTeamRequiredMixin, DetailView, PermissionRequiredM
     template_name = "trace/trace_detail.html"
     permission_required = "trace.view_trace"
 
+    def get_queryset(self):
+        return Trace.objects.select_related(
+            "experiment", "session", "participant", "input_message", "output_message"
+        ).filter(team=self.request.team)
+
     def get_context_data(self, **kwargs):
         context = super().get_context_data(**kwargs)
         context["spans"] = Span.objects.filter(trace=self.object, parent_span_id__isnull=True)

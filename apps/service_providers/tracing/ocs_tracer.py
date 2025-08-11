@@ -28,7 +28,6 @@ class OCSTracer(Tracer):
         super().__init__(OCS_TRACE_PROVIDER, {})
         self.experiment_id = experiment_id
         self.team_id = team_id
-        self.output_message_id: str = None
         self.start_time: float = None
         self.trace = None
         self.spans: dict[UUID, Span] = {}
@@ -68,7 +67,6 @@ class OCSTracer(Tracer):
             duration_ms = int(duration * 1000)
 
             self.trace.participant = self.session.participant
-            self.trace.output_message_id = self.output_message_id
             self.trace.duration = duration_ms
             if self.error_detected:
                 self.trace.status = TraceStatus.ERROR
@@ -87,7 +85,7 @@ class OCSTracer(Tracer):
                 "Error saving trace in DB | experiment_id=%s, session_id=%s, output_message_id=%s",
                 self.experiment_id,
                 self.session.id,
-                self.output_message_id,
+                self.trace.output_message_id,
             )
         finally:
             self.trace = None
@@ -127,7 +125,6 @@ class OCSTracer(Tracer):
         span.end_time = timezone.now()
         if error:
             span.error = SpanError(
-                # TODO: This should come from wherever the span is started in the code
                 error_display="Oops, something went wrong",
                 raw_error=str(error),
             )
@@ -146,7 +143,13 @@ class OCSTracer(Tracer):
 
     def set_output_message_id(self, output_message_id: str) -> None:
         """Set the output message ID for the trace."""
-        self.output_message_id = output_message_id
+        if self.trace:
+            self.trace.output_message_id = output_message_id
+
+    def set_input_message_id(self, input_message_id: str) -> None:
+        """Set the input message ID for the trace."""
+        if self.trace:
+            self.trace.input_message_id = input_message_id
 
     def _get_current_observation(self) -> Span | Trace:
         """

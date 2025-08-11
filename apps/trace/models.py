@@ -121,6 +121,7 @@ class Span(BaseTeamModel, TaggedModelMixin, UserCommentsMixin):
         """
         if self.error:
             return self.error.error_display
+        return ""
 
 
 def _create_span(

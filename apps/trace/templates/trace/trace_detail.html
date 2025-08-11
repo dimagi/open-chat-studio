@@ -12,6 +12,7 @@
 {% endblock breadcrumbs %}
 
 {% block app %}
+<div x-data="pageData">
     <div class="container mx-auto px-4 py-6">
         <!-- Header Section -->
         <div class="flex justify-between w-full">
@@ -65,20 +66,65 @@
                 <div class="text-xs text-base-content/50">{{ trace.timestamp|date:"H:i:s" }} UTC</div>
             </div>
         </div>
+    </div>
 
+    <div class="flex-1 overflow-auto">
+      <!-- Tab navigation -->
+      <div class="border-b border-t border-base-200 mb-2">
+        <nav class="px-6 flex space-x-8" aria-label="Tabs">
+          <button 
+            class="py-4 px-1 border-b-2 font-medium text-sm focus:outline-none transition-colors"
+            :class="activeTab === 'spans' ? 'tab-active border-blue-500 text-blue-600' : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'"
+            @click="activeTab = 'spans'">
+            Spans ({{ spans|length }})
+          </button>
+          <button 
+            class="py-4 px-1 border-b-2 font-medium text-sm focus:outline-none transition-colors"
+            :class="activeTab === 'inputs' ? 'tab-active border-blue-500 text-blue-600' : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'"
+            @click="activeTab = 'inputs'">
+            Inputs & Outputs
+          </button>
+        </nav>
+      </div>
+    </div>
+
+    <div x-show="activeTab === 'spans'" x-transition id="spans-content">
         <div class="card mb-6">
-            <h2 class="text-xl font-bold mb-2">Execution Spans</h2>
-            <div class="card-body bg-base-50 shadow-md">
-                {% for span in spans %}
-                    {% include "trace/span_tree.html" with span=span is_root=True %}
-                {% empty %}
-                    <div class="card bg-base-100 border border-base-200">
-                        <div class="card-body p-4 text-center text-base-content/60">
-                            No spans found for this trace.
-                        </div>
-                    </div>
-                {% endfor %}
+        <h2 class="text-xl font-bold mb-2">Execution Spans</h2>
+        <div class="card-body bg-base-50 shadow-md">
+            {% for span in spans %}
+            {% include "trace/span_tree.html" with span=span is_root=True %}
+            {% empty %}
+            <div class="card bg-base-100 border border-base-200">
+                <div class="card-body p-4 text-center text-base-content/60">
+                No spans found for this trace.
+                </div>
             </div>
+            {% endfor %}
+        </div>
         </div>
     </div>
+
+    <!-- Inputs & Outputs tab content -->
+    <div x-cloak x-show="activeTab === 'inputs'" x-transition id="inputs-content">
+        <div class="card mb-6">
+        <h2 class="text-xl font-bold mb-2">Inputs & Outputs</h2>
+        <div class="card-body bg-base-50 shadow-md">
+            {% include "trace/input_output_tab.html" %}
+        </div>
+        </div>
+    </div>
+</div>
+<script>
+  document.addEventListener('alpine:init', () => {
+    Alpine.data('pageData', () => ({
+      activeTab: 'spans',
+      
+      init() {
+        // Initialize with spans tab active by default
+        this.activeTab = 'spans';
+      }
+    }));
+  });
+</script>
 {% endblock app %}
