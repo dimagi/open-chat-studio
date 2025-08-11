@@ -278,7 +278,7 @@ class PipelineBot:
 
     def process_input(
         self, user_input: str, save_input_to_history=True, attachments: list["Attachment"] | None = None
-    ) -> ChatMessage:
+    ) -> tuple[ChatMessage, str | None, str | None]:
         input_state = self._get_input_state(attachments, user_input)
         return self.invoke_pipeline(
             input_state,
@@ -292,7 +292,7 @@ class PipelineBot:
         save_run_to_history=True,
         save_input_to_history=True,
         pipeline=None,
-    ) -> ChatMessage:
+    ) -> tuple[ChatMessage, str | None, str | None]:
         pipeline_to_use = pipeline or self.experiment.pipeline
         output = self._run_pipeline(input_state, pipeline_to_use)
 
@@ -302,7 +302,9 @@ class PipelineBot:
         else:
             result = ChatMessage(content=output)
         self._process_intents(output)
-        return result
+        voice_provider_id = output.get("voice_provider_id", None)
+        synthetic_voice_id = output.get("synthetic_voice_id", None)
+        return result, voice_provider_id, synthetic_voice_id
 
     def _get_input_state(self, attachments: list["Attachment"], user_input: str):
         attachments = attachments or []
