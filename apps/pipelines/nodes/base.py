@@ -97,6 +97,9 @@ class PipelineState(dict):
     node_source: str
 
     intents: Annotated[list[Intents], operator.add]
+    voice_provider_id: int
+    synthetic_voice_id: int
+
 
     def json_safe(self):
         # We need to make a copy of `self` to not change the actual value of `experiment_session` forever
@@ -122,12 +125,15 @@ class PipelineState(dict):
         return PipelineState(copied)
 
     @classmethod
-    def from_node_output(cls, node_name: str, node_id: str, output: Any = None, **kwargs) -> Self:
+    def from_node_output(cls, node_name: str, node_id: str, output: Any = None, voice_provider_id: int | None = None, synthetic_voice_id: int | None = None,**kwargs) -> Self:
         kwargs["outputs"] = {node_name: {"message": output, "node_id": node_id}}
         kwargs.setdefault("temp_state", {}).update({"outputs": {node_name: output}})
         if output is not None:
             kwargs["messages"] = [output]
-
+        if voice_provider_id is not None:
+            kwargs["voice_provider_id"] = voice_provider_id
+        if synthetic_voice_id is not None:
+            kwargs["synthetic_voice_id"] = synthetic_voice_id
         return cls(**kwargs)
 
     def add_message_tag(self, tag: str):
