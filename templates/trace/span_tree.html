@@ -39,20 +39,6 @@
                     <span class="ml-1 text-gray-600">{{ value }}</span>
                 </div>
             {% endfor %}
-            {% if is_root %}
-                <div>
-                    <span class="text-gray-500">Status:</span>
-                    {% if span.status == "success" %}
-                        <span class="badge badge-success ml-1">{{ span.get_status_display|default:"Success" }}</span>
-                    {% elif span.status == "error" %}
-                        <span class="badge badge-error ml-1">{{ span.get_status_display|default:"Error" }}</span>
-                    {% elif span.status == "pending" %}
-                        <span class="badge badge-warning ml-1">{{ span.get_status_display|default:"Pending" }}</span>
-                    {% else %}
-                        <span class="badge badge-info ml-1">{{ span.get_status_display|default:"Success" }}</span>
-                    {% endif %}
-                </div>
-            {% endif %}
         </div>
     {% endif %}
 
