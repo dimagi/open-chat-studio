@@ -100,7 +100,6 @@ class PipelineState(dict):
     voice_provider_id: int
     synthetic_voice_id: int
 
-
     def json_safe(self):
         # We need to make a copy of `self` to not change the actual value of `experiment_session` forever
         copy = self.copy()
@@ -125,7 +124,15 @@ class PipelineState(dict):
         return PipelineState(copied)
 
     @classmethod
-    def from_node_output(cls, node_name: str, node_id: str, output: Any = None, voice_provider_id: int | None = None, synthetic_voice_id: int | None = None,**kwargs) -> Self:
+    def from_node_output(
+        cls,
+        node_name: str,
+        node_id: str,
+        output: Any = None,
+        voice_provider_id: int | None = None,
+        synthetic_voice_id: int | None = None,
+        **kwargs,
+    ) -> Self:
         kwargs["outputs"] = {node_name: {"message": output, "node_id": node_id}}
         kwargs.setdefault("temp_state", {}).update({"outputs": {node_name: output}})
         if output is not None:
@@ -441,6 +448,7 @@ class Widgets(StrEnum):
     text_editor = "text_editor_widget"
     voice_widget = "voice_widget"
 
+
 class OptionsSource(StrEnum):
     source_material = "source_material"
     assistant = "assistant"
@@ -455,6 +463,7 @@ class OptionsSource(StrEnum):
     text_editor_autocomplete_vars_router_node = "text_editor_autocomplete_vars_router_node"
     voice_provider_id = "voice_provider_id"
     synthetic_voice_id = "synthetic_voice_id"
+
 
 class UiSchema(BaseModel):
     widget: Widgets = None

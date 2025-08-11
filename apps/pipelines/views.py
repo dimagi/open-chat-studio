@@ -97,7 +97,7 @@ class EditPipeline(LoginAndTeamRequiredMixin, TemplateView, PermissionRequiredMi
                 llm_providers,
                 llm_provider_models,
                 exclude_services,
-                False, #to be updated correctly
+                False,  # to be updated correctly
                 include_versions=pipeline.is_a_version,
             ),
             "default_values": _pipeline_node_default_values(llm_providers, llm_provider_models),
@@ -255,7 +255,7 @@ def _pipeline_node_parameter_values(
             ],
             key=lambda v: v["label"],
         ),
-        "voice_enabled" : voice_enabled
+        "voice_enabled": voice_enabled,
     }
 
 
