@@ -97,7 +97,7 @@ class EditPipeline(LoginAndTeamRequiredMixin, TemplateView, PermissionRequiredMi
                 llm_providers,
                 llm_provider_models,
                 exclude_services,
-                False,  # to be updated correctly
+                False,  # Not show voice field for now if opened from pipelines tab
                 include_versions=pipeline.is_a_version,
             ),
             "default_values": _pipeline_node_default_values(llm_providers, llm_provider_models),
