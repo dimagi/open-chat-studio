@@ -1,5 +1,6 @@
 import django_tables2 as tables
 from django.conf import settings
+from django.template.loader import get_template
 from django.urls import reverse
 
 from apps.generics import actions
@@ -46,9 +47,12 @@ class TraceTable(tables.Table):
         duration_seconds = round(value / 1000, 2)
         return f"{duration_seconds}s"
 
+    def render_status(self, record):
+        return get_template("trace/partials/status.html").render(context={"object": record})
+
     class Meta:
         model = Trace
-        fields = ("timestamp", "chatbot", "session", "duration")
+        fields = ("timestamp", "chatbot", "session", "duration", "status")
         row_attrs = {
             **settings.DJANGO_TABLES2_ROW_ATTRS,
         }

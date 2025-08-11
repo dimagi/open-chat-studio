@@ -21,15 +21,7 @@
                     {% else %}
                         <span class="mr-2">Span</span>
                     {% endif %}
-                    {% if span.status == "success" %}
-                        <span class="badge badge-success">{{ span.get_status_display }}</span>
-                    {% elif span.status == "error" %}
-                        <span class="badge badge-error">{{ span.get_status_display }}</span>
-                    {% elif span.status == "pending" %}
-                        <span class="badge badge-warning">{{ span.get_status_display }}</span>
-                    {% else %}
-                        <span class="badge badge-info">{{ span.get_status_display }}</span>
-                    {% endif %}
+                    {% include "trace/partials/status.html" with object=span %}
                 </div>
                 <div>{{ span.user_message }}</div>
             </div>

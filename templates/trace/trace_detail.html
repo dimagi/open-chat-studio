@@ -22,15 +22,7 @@
             </div>
             <div class="flex flex-row gap-2 justify-center">
                 <div>
-                    {% if trace.status == "success" %}
-                        <span class="badge badge-success">{{ trace.get_status_display }}</span>
-                    {% elif trace.status == "error" %}
-                        <span class="badge badge-error">{{ trace.get_status_display }}</span>
-                    {% elif trace.status == "pending" %}
-                        <span class="badge badge-warning">{{ trace.get_status_display }}</span>
-                    {% else %}
-                        <span class="badge badge-info">{{ trace.get_status_display }}</span>
-                    {% endif %}
+                    {% include "trace/partials/status.html" with object=trace %}
                 </div>
                 <div class="text-center">
                     <div class="font-bold">{{ trace.duration_seconds }}s</div>
