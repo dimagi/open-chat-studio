@@ -1123,7 +1123,7 @@ export function VoiceWidget(props: WidgetParams) {
 
   type VoicesByProvider = { [providerId: string]: typeof parameterValues.synthetic_voice_id };
   const voicesByProvider = parameterValues.synthetic_voice_id.reduce((acc, voice) => {
-    const voiceProviderId = voice.provider_id || voice.type; // fallback to type if provider_id doesn't exist
+  const voiceProviderId = voice.provider_id || voice.type;
     if (!acc[voiceProviderId]) {
       acc[voiceProviderId] = [];
     }
@@ -1134,6 +1134,11 @@ export function VoiceWidget(props: WidgetParams) {
   const providerId = concatenate(props.nodeParams.voice_provider_id);
   const syntheticVoiceId = concatenate(props.nodeParams.synthetic_voice_id);
   const value = makeValue(providerId, syntheticVoiceId);
+
+  // Only render if voice is enabled
+  if (!parameterValues.voice_enabled) {
+    return null;
+  }
 
   return (
     <InputField label={props.label} help_text={props.helpText} inputError={props.inputError}>
