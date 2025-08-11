@@ -58,7 +58,10 @@ def test_list_sessions_with_tag(experiment):
     # Filter by tag
     response = client.get(reverse("api:session-list") + "?tags=interesting,awesome")
     assert response.status_code == 200
-    expected_results = [get_session_json(session2), get_session_json(session1)]
+    expected_results = [
+        get_session_json(session2, expected_tags=["awesome"]),
+        get_session_json(session1, expected_tags=["interesting"]),
+    ]
     assert response.json() == {
         "next": None,
         "previous": None,
@@ -67,7 +70,11 @@ def test_list_sessions_with_tag(experiment):
 
     # Remove filters by tag
     response = client.get(reverse("api:session-list"))
-    expected_results = [get_session_json(sessions[2]), get_session_json(session2), get_session_json(session1)]
+    expected_results = [
+        get_session_json(sessions[2]),
+        get_session_json(session2, expected_tags=["awesome"]),
+        get_session_json(session1, expected_tags=["interesting"]),
+    ]
     assert response.json() == {
         "next": None,
         "previous": None,
@@ -94,11 +101,10 @@ def get_session_json(session, expected_messages=None, expected_tags=None):
         },
         "created_at": DateTimeField().to_representation(session.created_at),
         "updated_at": DateTimeField().to_representation(session.updated_at),
+        "tags": expected_tags if expected_tags is not None else [],
     }
     if expected_messages is not None:
         data["messages"] = expected_messages
-    if expected_tags is not None:
-        data["tags"] = expected_tags
     return data
 
 
