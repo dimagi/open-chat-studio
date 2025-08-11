@@ -97,6 +97,7 @@ class EditPipeline(LoginAndTeamRequiredMixin, TemplateView, PermissionRequiredMi
                 llm_providers,
                 llm_provider_models,
                 exclude_services,
+                False, #to be updated correctly
                 include_versions=pipeline.is_a_version,
             ),
             "default_values": _pipeline_node_default_values(llm_providers, llm_provider_models),
@@ -138,7 +139,7 @@ class DeletePipeline(LoginAndTeamRequiredMixin, View, PermissionRequiredMixin):
 
 
 def _pipeline_node_parameter_values(
-    team, llm_providers, llm_provider_models, excluded_services, include_versions=False
+    team, llm_providers, llm_provider_models, excluded_services, voice_enabled, include_versions=False
 ):
     """Returns the possible values for each input type"""
     common_filters = {"team": team}
@@ -254,6 +255,7 @@ def _pipeline_node_parameter_values(
             ],
             key=lambda v: v["label"],
         ),
+        "voice_enabled" : voice_enabled
     }
 
 
