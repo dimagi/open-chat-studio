@@ -125,7 +125,7 @@ class OCSTracer(Tracer):
         span.end_time = timezone.now()
         if error:
             span.error = SpanError(
-                error_display="Oops, something went wrong",
+                error_display=str(error),
                 raw_error=str(error),
             )
             self.error_detected = True
