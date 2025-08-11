@@ -572,6 +572,29 @@
         this.triggerFilterChange();
       },
 
+      selectAllTagOptions(index) {
+        const filter = this.filterData.filters[index];
+        if (filter.column === 'tags') {
+          const allTags = this.filterData.columns['tags'].options || [];
+          filter.selectedValues = [...allTags];
+          this.triggerFilterChange();
+        }
+      },
+
+      clearAllOptions(index) {
+        const filter = this.filterData.filters[index];
+        filter.selectedValues = [];
+        this.triggerFilterChange();
+        }
+      },
+
+      areAllTagsSelected(index) {
+        const filter = this.filterData.filters[index];
+        if (filter.column !== 'tags') return false;
+        const allTags = this.filterData.columns['tags'].options || [];
+        return allTags.length > 0 && filter.selectedValues.length === allTags.length;
+      },
+
       getLastMessageFilterIndex(params) {
         for (const [key, val] of params.entries()) {
           if (key.includes('_column') && val === 'last_message') {
