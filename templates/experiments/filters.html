@@ -85,7 +85,7 @@
                     <span x-text="filter.selectedValues.length ? getSelectedDisplayText(filter) : 'Select'"></span>
                     <i class="fa-solid fa-caret-down fa-sm"></i>
                   </div>
-                  <div x-show="filter.showOptions" @click.outside="filter.showOptions = false" class="absolute z-50 mt-1 bg-base-100 rounded-lg max-h-64 overflow-y-auto w-40 border border-base-300" style="z-index: 9999 !important;">
+                  <div x-show="filter.showOptions" @click.outside="filter.showOptions = false" class="absolute z-50 mt-1 bg-base-100 rounded-lg max-h-64 overflow-y-auto w-48 border border-base-300" style="z-index: 9999 !important;">
                     <div class="sticky top-0 bg-base-100 border-b p-2 z-1">
                       <div class="relative">
                         <input type="text" x-model="filter.searchQuery" @input="filterDropdownOptions(index)" placeholder="Search..." class="input input-sm w-full pl-8 focus:outline-hidden focus:border-primary">
