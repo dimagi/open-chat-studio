@@ -44,11 +44,7 @@ class EvaluationTableView(SingleTableView, PermissionRequiredMixin):
     template_name = "table/single_table.html"
 
     def get_queryset(self):
-        return (
-            EvaluationConfig.objects.filter(team=self.request.team)
-            # .annotate(run_count=Count("runs"))
-            # .order_by("name")
-        )
+        return EvaluationConfig.objects.filter(team=self.request.team).order_by("-created_at")
 
 
 class CreateEvaluation(LoginAndTeamRequiredMixin, CreateView, PermissionRequiredMixin):
