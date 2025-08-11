@@ -51,6 +51,9 @@ class Trace(models.Model):
     def get_absolute_url(self):
         return reverse("trace:trace_detail", args=[self.team.slug, self.id])
 
+    def duration_seconds(self) -> float:
+        return round(self.duration / 1000, 2)
+
     def span(
         self, span_id: uuid.UUID, span_name: str, inputs: dict[str, any], metadata: dict[str, any] | None = None
     ) -> Span:
@@ -95,9 +98,9 @@ class Span(BaseTeamModel, TaggedModelMixin, UserCommentsMixin):
     def __str__(self):
         return f"{self.name} - {self.span_id}"
 
-    def duration_ms(self) -> float:
+    def duration_seconds(self) -> float:
         if self.start_time and self.end_time:
-            return round((self.end_time - self.start_time).total_seconds() * 1000, 2)
+            return round((self.end_time - self.start_time).total_seconds(), 2)
         return 0
 
     def span(

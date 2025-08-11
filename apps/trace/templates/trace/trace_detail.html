@@ -14,9 +14,28 @@
 {% block app %}
     <div class="container mx-auto px-4 py-6">
         <!-- Header Section -->
-        <div>
-            <h1 class="text-3xl font-bold mb-2">{{ trace.experiment.name }}</h1>
-            <p class="text-sm text-base-content/60 font-mono">Trace ID: {{ trace.trace_id }}</p>
+        <div class="flex justify-between w-full">
+            <div>
+                <h1 class="text-3xl font-bold mb-2">{{ trace.experiment.name }}</h1>
+                <p class="text-sm text-base-content/60">Trace ID: {{ trace.trace_id }}</p>
+            </div>
+            <div class="flex flex-row gap-2 justify-center">
+                <div>
+                    {% if trace.status == "success" %}
+                        <span class="badge badge-success">{{ trace.get_status_display }}</span>
+                    {% elif trace.status == "error" %}
+                        <span class="badge badge-error">{{ trace.get_status_display }}</span>
+                    {% elif trace.status == "pending" %}
+                        <span class="badge badge-warning">{{ trace.get_status_display }}</span>
+                    {% else %}
+                        <span class="badge badge-info">{{ trace.get_status_display }}</span>
+                    {% endif %}
+                </div>
+                <div class="text-center">
+                    <div class="font-bold">{{ trace.duration_seconds }}s</div>
+                    <div class="text-sm pg-text-muted font-medium">Total latency</div>
+                </div>
+            </div>
         </div>
 
         <!-- Info Grid -->
