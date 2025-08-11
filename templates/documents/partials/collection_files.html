@@ -11,8 +11,8 @@
     <span class="loading loading-spinner"></span>
   </div>
 {% else %}
-  <div id="collection-files-wrapper">
-      <div class="grid grid-cols-1 gap-4">
+  <div id="{% if document_source %}document-source-files-wrapper-{{ document_source.id }}{% else %}collection-files-wrapper{% endif %}">
+    <div class="grid grid-cols-1 gap-4">
       {% for collection_file in collection_files %}
         <div id="collection_file_{{ collection_file.id }}" class="flex items-center justify-between p-3 bg-base-200 rounded-lg">
           <div class="flex flex-col flex-1 gap-1">
@@ -86,9 +86,9 @@
         <div class="join">
           {% if collection_files.has_previous %}
             <button class="join-item btn btn-sm"
-                    hx-get="{% url 'documents:collection_files_list' request.team.slug collection.id %}?page={{ collection_files.previous_page_number }}{% if request.GET.search %}&search={{ request.GET.search }}{% endif %}"
-                    hx-target="#collection-files-wrapper"
-                    hx-swap="outerHTML"
+                    hx-get="{% if document_source %}{% url 'documents:document_source_files_list' request.team.slug collection.id document_source.id %}{% else %}{% url 'documents:collection_files_list' request.team.slug collection.id %}{% endif %}?page={{ collection_files.previous_page_number }}{% if request.GET.search %}&search={{ request.GET.search }}{% endif %}"
+                    hx-target="#{% if document_source %}document-source-files-wrapper-{{ document_source.id }}{% else %}collection-files-wrapper{% endif %}"
+                    hx-swap="innerHTML"
                     hx-indicator=".htmx-indicator">
               « Previous
             </button>
@@ -100,9 +100,9 @@
 
           {% if collection_files.has_next %}
             <button class="join-item btn btn-sm"
-                    hx-get="{% url 'documents:collection_files_list' request.team.slug collection.id %}?page={{ collection_files.next_page_number }}{% if request.GET.search %}&search={{ request.GET.search }}{% endif %}"
-                    hx-target="#collection-files-wrapper"
-                    hx-swap="outerHTML"
+                    hx-get="{% if document_source %}{% url 'documents:document_source_files_list' request.team.slug collection.id document_source.id %}{% else %}{% url 'documents:collection_files_list' request.team.slug collection.id %}{% endif %}?page={{ collection_files.next_page_number }}{% if request.GET.search %}&search={{ request.GET.search }}{% endif %}"
+                    hx-target="#{% if document_source %}document-source-files-wrapper-{{ document_source.id }}{% else %}collection-files-wrapper{% endif %}"
+                    hx-swap="innerHTML"
                     hx-indicator=".htmx-indicator">
               Next »
             </button>
