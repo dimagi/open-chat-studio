@@ -33,6 +33,14 @@ class EvaluationConfigTable(tables.Table):
         actions=[
             actions.edit_action(url_name="evaluations:edit"),
             actions.Action(
+                url_name="evaluations:create_evaluation_preview",
+                url_factory=lambda url_name, request, record, value: reverse(
+                    url_name, args=[request.team.slug, record.id]
+                ),
+                icon_class="fa-solid fa-eye",
+                title="Preview",
+            ),
+            actions.Action(
                 url_name="evaluations:create_evaluation_run",
                 url_factory=lambda url_name, request, record, value: reverse(
                     url_name, args=[request.team.slug, record.id]

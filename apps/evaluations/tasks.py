@@ -9,7 +9,15 @@ from django.utils import timezone
 from apps.channels.models import ChannelPlatform, ExperimentChannel
 from apps.channels.tasks import handle_evaluation_message
 from apps.chat.models import Chat, ChatMessage, ChatMessageType
-from apps.evaluations.models import EvaluationMessage, EvaluationResult, EvaluationRun, EvaluationRunStatus, Evaluator
+from apps.evaluations.const import PREVIEW_SAMPLE_SIZE
+from apps.evaluations.models import (
+    EvaluationMessage,
+    EvaluationResult,
+    EvaluationRun,
+    EvaluationRunStatus,
+    EvaluationRunType,
+    Evaluator,
+)
 from apps.experiments.models import Experiment, ExperimentSession, Participant
 from apps.teams.utils import current_team
 
@@ -157,7 +165,11 @@ def run_evaluation_task(self, evaluation_run_id):
         with current_team(evaluation_run.team):
             config = evaluation_run.config
             evaluators = list(cast(Iterable[Evaluator], config.evaluators.all()))
-            messages = list(config.dataset.messages.all())
+            message_queryset = config.dataset.messages.all()
+            if evaluation_run.type == EvaluationRunType.PREVIEW:
+                messages = list(message_queryset[:PREVIEW_SAMPLE_SIZE])
+            else:
+                messages = list(message_queryset)
 
             if len(evaluators) == 0 or len(messages) == 0:
                 evaluation_run.job_id = ""
@@ -204,3 +216,18 @@ def cleanup_old_evaluation_data():
     deleted_sessions = old_evaluation_sessions.delete()
 
     logger.info(f"Cleanup completed: deleted {deleted_sessions[0]} evaluation sessions")
+
+
+@shared_task
+def cleanup_old_preview_evaluation_runs():
+    """Delete preview evaluation runs older than 1 day"""
+    one_day_ago = timezone.now() - timedelta(days=1)
+    old_preview_runs = EvaluationRun.objects.filter(type=EvaluationRunType.PREVIEW, created_at__lt=one_day_ago)
+
+    preview_runs_count = old_preview_runs.count()
+    if preview_runs_count == 0:
+        logger.info("No old preview evaluation runs found to cleanup")
+        return
+
+    deleted_preview_runs = old_preview_runs.delete()
+    logger.info(f"Cleanup completed: deleted {deleted_preview_runs[0]} preview evaluation runs")
