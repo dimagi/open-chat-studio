@@ -1,5 +1,6 @@
 import csv
 import json
+import logging
 from io import StringIO
 
 from django.contrib.auth.mixins import PermissionRequiredMixin
@@ -23,6 +24,8 @@ from apps.experiments.filters import DATE_RANGE_OPTIONS, FIELD_TYPE_FILTERS, app
 from apps.experiments.models import Experiment, ExperimentSession
 from apps.teams.decorators import login_and_team_required
 from apps.teams.mixins import LoginAndTeamRequiredMixin
+
+logger = logging.getLogger("ocs.evaluations")
 
 
 class DatasetHome(LoginAndTeamRequiredMixin, TemplateView, PermissionRequiredMixin):
@@ -380,8 +383,9 @@ def parse_csv_columns(request, team_slug: str):
             }
         )
 
-    except Exception as e:
-        return JsonResponse({"error": f"Error parsing CSV: {str(e)}"}, status=400)
+    except Exception:
+        logger.warning("Error parsing CSV")
+        return JsonResponse({"error": "An error occurred while parsing the CSV file."}, status=400)
 
 
 def _generate_column_suggestions(columns):
