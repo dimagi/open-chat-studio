@@ -398,8 +398,8 @@ class LLMResponseWithPrompt(LLMResponse, HistoryMixin, OutputMessageTagMixin):
         PipelineChatHistoryTypes.GLOBAL,
         json_schema_extra=UiSchema(widget=Widgets.history, enum_labels=PipelineChatHistoryTypes.labels),
     )
-    voice_provider_id: int = Field(..., title="Voice Model", json_schema_extra=UiSchema(widget=Widgets.voice_widget))
-    synthetic_voice_id: int = Field(..., json_schema_extra=UiSchema(widget=Widgets.none))
+    voice_provider_id: OptionalInt = Field(None, title="Voice Model", json_schema_extra=UiSchema(widget=Widgets.voice_widget))
+    synthetic_voice_id: OptionalInt = Field(None, json_schema_extra=UiSchema(widget=Widgets.none))
 
     @model_validator(mode="after")
     def check_prompt_variables(self) -> Self:
