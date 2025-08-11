@@ -40,6 +40,11 @@
   }
 }
 
+@utility container {
+  margin-inline: auto;
+  padding-inline: 2rem;
+}
+
 @utility section {
   @apply m-4;
 }
@@ -92,6 +97,11 @@
   --success: #36d399;
 }
 
+open-chat-studio-widget {
+  z-index: 9999;
+}
+
+/* Tom-select styling */
 .ts-wrapper {
   @apply w-full ml-0!;
 }

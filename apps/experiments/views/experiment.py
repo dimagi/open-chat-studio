@@ -112,7 +112,7 @@ from apps.utils.base_experiment_table_view import BaseExperimentTableView
 def experiments_home(request, team_slug: str):
     show_modal = flag_is_active(request, "flag_chatbots")
     return generic_home(
-        request, team_slug, "Experiments", "experiments:table", "experiments:new", show_modal_instead=show_modal
+        request, team_slug, "Experiments", "experiments:table", "experiments:new", show_modal_or_banner=show_modal
     )
 
 
