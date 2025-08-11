@@ -433,3 +433,46 @@ def _clean_context_field_name(field_name):
     field_name = re.sub(r"_+", "_", field_name).strip("_")
 
     return field_name or "context_variable"
+
+
+@login_and_team_required
+def download_dataset_csv(request, team_slug: str, pk: int):
+    """Download dataset as CSV with expanded context and metadata columns."""
+    dataset = get_object_or_404(EvaluationDataset, id=pk, team__slug=team_slug)
+
+    messages = dataset.messages.order_by("id").all()
+    if not messages:
+        # Return empty CSV with headers
+        response = HttpResponse(content_type="text/csv")
+        response["Content-Disposition"] = f"attachment; filename={dataset.name}_dataset.csv"
+        writer = csv.writer(response)
+        writer.writerow(["id", "input_content", "output_content", "history"])
+        return response
+
+    context_keys = {key for message in messages if message.context for key in message.context}
+    context_keys = sorted(context_keys)
+
+    headers = ["id", "input_content", "output_content"]
+    headers.extend([f"context.{key}" for key in context_keys])
+    headers.append("history")
+
+    filename = f"{dataset.name}_dataset.csv"
+    response = HttpResponse(content_type="text/csv")
+    response["Content-Disposition"] = f"attachment; filename={filename}"
+    writer = csv.writer(response)
+
+    writer.writerow(headers)
+
+    for message in messages:
+        row = [
+            message.id,
+            message.input.get("content", ""),
+            message.output.get("content", ""),
+        ]
+
+        for key in context_keys:
+            row.append(message.context.get(key, "") if message.context else "")
+        row.append(message.full_history)
+        writer.writerow(row)
+
+    return response

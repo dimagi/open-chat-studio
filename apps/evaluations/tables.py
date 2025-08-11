@@ -187,6 +187,12 @@ class EvaluationDatasetTable(tables.Table):
     actions = actions.ActionsColumn(
         actions=[
             actions.edit_action(url_name="evaluations:dataset_edit"),
+            actions.Action(
+                url_name="evaluations:dataset_download",
+                url_factory=lambda url_name, request, record, _: reverse(url_name, args=[request.team.slug, record.id]),
+                icon_class="fa-solid fa-download",
+                title="Download CSV",
+            ),
             actions.AjaxAction(
                 "evaluations:dataset_delete",
                 title="Delete",

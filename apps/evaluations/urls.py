@@ -82,6 +82,11 @@ urlpatterns = [
         dataset_views.parse_csv_columns,
         name="parse_csv_columns",
     ),
+    path(
+        "dataset/<int:pk>/download/",
+        dataset_views.download_dataset_csv,
+        name="dataset_download",
+    ),
 ]
 
 urlpatterns.extend(make_crud_urls(evaluation_config_views, "Evaluation", delete=False))
