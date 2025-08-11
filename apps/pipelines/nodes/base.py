@@ -433,7 +433,7 @@ class Widgets(StrEnum):
     built_in_tools = "built_in_tools"
     key_value_pairs = "key_value_pairs"
     text_editor = "text_editor_widget"
-
+    voice_widget = "voice_widget"
 
 class OptionsSource(StrEnum):
     source_material = "source_material"
@@ -447,7 +447,8 @@ class OptionsSource(StrEnum):
     built_in_tools_config = "built_in_tools_config"
     text_editor_autocomplete_vars_llm_node = "text_editor_autocomplete_vars_llm_node"
     text_editor_autocomplete_vars_router_node = "text_editor_autocomplete_vars_router_node"
-
+    voice_provider_id = "voice_provider_id"
+    synthetic_voice_id = "synthetic_voice_id"
 
 class UiSchema(BaseModel):
     widget: Widgets = None
