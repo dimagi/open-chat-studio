@@ -17,11 +17,12 @@ from django.views.decorators.csrf import csrf_exempt
 from django.views.decorators.http import require_POST
 from django.views.generic import TemplateView
 from django_tables2 import SingleTableView
+from waffle import flag_is_active
 
 from apps.assistants.models import OpenAiAssistant
 from apps.custom_actions.form_utils import get_custom_action_operation_choices
 from apps.documents.models import Collection
-from apps.experiments.models import AgentTools, BuiltInTools, Experiment, SourceMaterial
+from apps.experiments.models import AgentTools, BuiltInTools, Experiment, SourceMaterial, SyntheticVoice
 from apps.pipelines.flow import FlowPipelineData
 from apps.pipelines.models import Pipeline
 from apps.pipelines.nodes.base import OptionsSource
@@ -83,13 +84,20 @@ class EditPipeline(LoginAndTeamRequiredMixin, TemplateView, PermissionRequiredMi
         llm_providers = LlmProvider.objects.filter(team=self.request.team).values("id", "name", "type").all()
         llm_provider_models = LlmProviderModel.objects.for_team(self.request.team).all()
         pipeline = Pipeline.objects.get(id=kwargs["pk"], team=self.request.team)
+        exclude_services = [SyntheticVoice.OpenAIVoiceEngine]
+        if flag_is_active(self.request, "flag_open_ai_voice_engine"):
+            exclude_services = []
         return {
             **data,
             "pipeline_id": kwargs["pk"],
             "pipeline_name": pipeline.name,
             "node_schemas": _pipeline_node_schemas(),
             "parameter_values": _pipeline_node_parameter_values(
-                self.request.team, llm_providers, llm_provider_models, include_versions=pipeline.is_a_version
+                self.request.team,
+                llm_providers,
+                llm_provider_models,
+                exclude_services,
+                include_versions=pipeline.is_a_version,
             ),
             "default_values": _pipeline_node_default_values(llm_providers, llm_provider_models),
             "flags_enabled": [flag.name for flag in Flag.objects.all() if flag.is_active_for_team(self.request.team)],
@@ -129,7 +137,9 @@ class DeletePipeline(LoginAndTeamRequiredMixin, View, PermissionRequiredMixin):
         return HttpResponse(response, headers={"HX-Reswap": "none"}, status=400)
 
 
-def _pipeline_node_parameter_values(team, llm_providers, llm_provider_models, include_versions=False):
+def _pipeline_node_parameter_values(
+    team, llm_providers, llm_provider_models, excluded_services, include_versions=False
+):
     """Returns the possible values for each input type"""
     common_filters = {"team": team}
     if not include_versions:
@@ -226,6 +236,24 @@ def _pipeline_node_parameter_values(team, llm_providers, llm_provider_models, in
         OptionsSource.built_in_tools_config: BuiltInTools.get_tool_configs_by_provider(),
         OptionsSource.text_editor_autocomplete_vars_llm_node: PromptVars.get_all_prompt_vars(),
         OptionsSource.text_editor_autocomplete_vars_router_node: PromptVars.get_router_prompt_vars(),
+        OptionsSource.voice_provider_id: [
+            _option(provider_id, provider_type)
+            for provider_id, provider_type in team.voiceprovider_set.values_list("id", "type")
+        ],
+        OptionsSource.synthetic_voice_id: sorted(
+            [
+                _option(
+                    voice.id,
+                    str(voice),
+                    voice.service.lower(),
+                    None,
+                    None,
+                )
+                | {"provider_id": voice.voice_provider_id}
+                for voice in SyntheticVoice.get_for_team(team, exclude_services=excluded_services)
+            ],
+            key=lambda v: v["label"],
+        ),
     }
 
 
