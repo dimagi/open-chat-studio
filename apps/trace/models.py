@@ -115,6 +115,13 @@ class Span(BaseTeamModel, TaggedModelMixin, UserCommentsMixin):
             metadata=metadata,
         )
 
+    def user_message(self) -> str:
+        """
+        The message displayed to the user.
+        """
+        if self.error:
+            return self.error.error_display
+
 
 def _create_span(
     trace: Trace,
