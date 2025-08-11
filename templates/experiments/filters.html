@@ -91,6 +91,24 @@
                         <input type="text" x-model="filter.searchQuery" @input="filterDropdownOptions(index)" placeholder="Search..." class="input input-sm w-full pl-8 focus:outline-hidden focus:border-primary">
                       </div>
                     </div>
+                    <div x-show="filter.column === 'tags'" class="border-b p-2 bg-base-50">
+                      <div class="flex gap-2">
+                        <button
+                          type="button"
+                          @click="selectAllTagOptions(index)"
+                          :disabled="areAllTagsSelected(index)"
+                          class="btn btn-xs btn-outline btn-primary flex-1">
+                          Select All
+                        </button>
+                        <button
+                          type="button"
+                          @click="clearAllOptions(index)"
+                          :disabled="filter.selectedValues.length === 0"
+                          class="btn btn-xs btn-outline flex-1">
+                          Clear All
+                        </button>
+                      </div>
+                    </div>
                     <div class="py-1">
                       <template x-for="option in filter.filteredOptions" :key="typeof option === 'object' ? option.id : option">
                         <label :for="`option-${index}-${typeof option === 'object' ? option.id : option}`" class="flex items-center px-4 py-2 hover:bg-base-200 cursor-pointer text-sm">
