@@ -376,7 +376,7 @@
   }
 
   .message-bubble {
-    @apply max-w-xs lg:max-w-md rounded-lg;
+    @apply rounded-lg;
     padding: var(--message-padding-y, 0.5rem) var(--message-padding-x, 1rem);
   }
 
