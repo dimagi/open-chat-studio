@@ -86,6 +86,7 @@ THIRD_PARTY_APPS = [
 
 PROJECT_APPS = [
     "apps.web.apps.OcsAdminConfig",
+    "apps.admin.apps.SiteAdminConfig",
     "apps.audit",
     "apps.help",
     "apps.users",
@@ -185,6 +186,7 @@ TEMPLATES = [
                 # this line can be removed if not using google analytics
                 "apps.web.context_processors.google_analytics_id",
                 "apps.banners.context_processors.banner_context",
+                "apps.admin.context_processors.ocs_config",
             ],
             "loaders": _DEFAULT_LOADERS if DEBUG else _CACHED_LOADERS,
             "builtins": [
@@ -703,6 +705,7 @@ COMMCARE_CONNECT_GET_CONNECT_ID_URL = f"{COMMCARE_CONNECT_SERVER_URL}/o/userinfo
 
 # AI helper
 AI_HELPER_API_KEY = env("AI_HELPER_API_KEY", default="")
+AI_HELPER_API_MODEL = env("AI_HELPER_API_MODEL", default="claude-sonnet-4-20250514")
 
 
 # Document Management

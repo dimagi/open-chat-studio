@@ -180,10 +180,13 @@ class ParticipantDataProxy:
         return self._participant_data
 
     def get(self):
+        """Returns the current participant's data as a dictionary."""
         data = self._get_db_object().data
         return self.session.participant.global_data | data
 
     def set(self, data):
+        """Updates the current participant's data with the provided dictionary.
+        This will overwrite any existing data."""
         if not isinstance(data, dict):
             raise ValueError("Data must be a dictionary")
         participant_data = self._get_db_object()
@@ -234,7 +237,7 @@ class ParticipantDataProxy:
 
     def get_schedules(self):
         """
-        Returns all active scheduled messages for the participant in the current experiment session.
+        Returns all active scheduled messages for the participant in the current chat session.
         """
         if self._scheduled_messages is None:
             self._scheduled_messages = self.session.participant.get_schedules_for_experiment(
