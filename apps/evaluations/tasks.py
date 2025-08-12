@@ -315,15 +315,20 @@ def _update_existing_message(dataset, message_id, row_data, team):
 
     old_input_content = message.input.get("content", "")
     old_output_content = message.output.get("content", "")
+    old_history = message.history
     new_input_content = row_data["input_content"]
     new_output_content = row_data["output_content"]
+    new_history = row_data["history"]
 
     input_content_changed = old_input_content != new_input_content
     output_content_changed = old_output_content != new_output_content
-    any_content_changed = input_content_changed or output_content_changed
+    history_changed = old_history != new_history
+    any_content_changed = input_content_changed or output_content_changed or history_changed
 
     message.context = row_data["context"]
-    message.history = row_data["history"]
+
+    if history_changed:
+        message.history = new_history
 
     if input_content_changed:
         message.input = EvaluationMessageContent(content=new_input_content, role="human").model_dump()

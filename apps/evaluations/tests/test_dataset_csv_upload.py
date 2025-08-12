@@ -399,3 +399,56 @@ def test_csv_upload_comprehensive_scenarios(client, team_with_users):
     assert other_message.input["content"] == "Other question"  # unchanged
     assert other_message.output["content"] == "Other answer"  # unchanged
     assert other_message.context == {"topic": "other"}  # unchanged
+
+    # Test scenario 4: Update with only context changes (no content or history changes)
+    # This should preserve any existing chat references
+    context_only_row = {
+        "id": str(existing_message.id),
+        "input_content": "Updated question",  # Same as current (after previous update)
+        "output_content": "Updated answer",  # Same as current
+        "context.topic": "physics",  # Changed context
+        "context.difficulty": "hard",  # Changed context
+        "context.new_field": "context_only_change",  # Changed context
+        "history": "human: Previous chat\nai: Previous response",  # Same history as current
+    }
+
+    context_only_row_data = _extract_row_data(context_only_row, 3)
+    result_changed = _update_existing_message(dataset, existing_message.id, context_only_row_data, team_with_users)
+
+    # Verify that no content changes were detected (only context changed)
+    assert result_changed is False  # Should return False since no content/history changed
+
+    existing_message.refresh_from_db()
+    assert existing_message.context == {
+        "topic": "physics",  # changed
+        "difficulty": "hard",  # changed
+        "new_field": "context_only_change",  # changed
+    }
+
+    # Test scenario 5: Update with changed history only
+    history_only_row = {
+        "id": str(existing_message.id),
+        "input_content": "Updated question",  # Same as current
+        "output_content": "Updated answer",  # Same as current
+        "context.topic": "physics",  # Same as current
+        "context.difficulty": "hard",  # Same as current
+        "context.new_field": "context_only_change",  # Same as current
+        "history": "human: New history line\nai: Different response",  # Changed history
+    }
+
+    history_only_row_data = _extract_row_data(history_only_row, 4)
+    result_history_changed = _update_existing_message(
+        dataset, existing_message.id, history_only_row_data, team_with_users
+    )
+
+    # Verify that content changes were detected due to history change
+    assert result_history_changed is True  # Should return True since history changed
+
+    existing_message.refresh_from_db()
+    assert len(existing_message.history) == 2
+    assert existing_message.history[0]["message_type"] == "human"
+    assert existing_message.history[0]["content"] == "New history line"
+    assert existing_message.history[1]["message_type"] == "ai"
+    assert existing_message.history[1]["content"] == "Different response"
+    # Metadata should be updated due to history change
+    assert existing_message.metadata.get("last_modified") == "csv_upload"
