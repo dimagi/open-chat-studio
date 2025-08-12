@@ -196,6 +196,44 @@
   --code-text-assistant-color: #1f2937;
   --code-border-assistant-color: #d1d5db;
 
+  /* File upload variables */
+  --file-attachment-button-bg-color: transparent;
+  --file-attachment-button-bg-hover-color: var(--header-button-bg-hover-color); /* #f3f4f6 */
+  --file-attachment-button-text-color: var(--header-button-text-color); /* #6b7280 */
+  --file-attachment-button-text-disabled-color: var(--send-button-text-disabled-color); /* #6b7280 */
+  --file-attachment-button-padding: var(--button-padding-sm); /* 0.375rem */
+
+  /* Selected files variables */
+  --selected-files-bg-color: var(--input-bg-color); /* transparent */
+  --selected-files-border-color: var(--header-border-color); /* #f3f4f6 */
+  --selected-files-padding: var(--container-padding) var(--container-padding) 0.5rem var(--container-padding); /* 1rem 1rem 0.5rem 1rem */
+
+  /* Selected file item variables */
+  --selected-file-item-bg-color: var(--message-system-bg-color); /* #f3f4f6 */
+  --selected-file-item-border-radius: 0.375rem;
+  --selected-file-item-padding-x: 0.5rem;
+  --selected-file-item-padding-y: 0.25rem;
+  --selected-file-item-gap: 0.5rem;
+
+  /* Selected file text variables */
+  --selected-file-name-color: var(--message-assistant-text-color); /* #1f2937 */
+  --selected-file-size-color: var(--input-placeholder-color); /* #6b7280 */
+  --selected-file-error-color: var(--error-text-color); /* #ef4444 */
+  --selected-file-success-color: #10b981; /* Complementary green to existing blue palette */
+  --selected-file-remove-color: var(--error-text-color); /* #ef4444 */
+  --selected-file-remove-hover-color: #dc2626; /* Darker red for hover */
+
+  /* Selected file icon variables */
+  --selected-file-icon-size: 1.25rem;
+  --selected-file-success-icon-size: 1rem;
+
+  /* Message attachment variables */
+  --message-attachment-item-gap: 0.5rem;
+  --message-attachment-icon-size: 1rem;
+  --message-attachment-link-color: inherit;
+  --message-attachment-link-hover-decoration: none;
+
+
   display: block;
   position: fixed;
   right: 20px;
@@ -559,4 +597,124 @@ textarea {
 
 .loading:after {
   content: ' .';
+}
+/* File Upload Button */
+.file-attachment-button {
+  @apply rounded-md transition-colors duration-200 disabled:opacity-50 disabled:cursor-not-allowed;
+  padding: var(--file-attachment-button-padding);
+  background-color: var(--file-attachment-button-bg-color);
+  color: var(--file-attachment-button-text-color);
+}
+
+.file-attachment-button:hover:not(:disabled) {
+  background-color: var(--file-attachment-button-bg-hover-color);
+}
+
+.file-attachment-button:disabled {
+  color: var(--file-attachment-button-text-disabled-color);
+}
+
+/* Hidden File Input */
+.file-input-hidden {
+  @apply hidden;
+}
+
+/* Selected Files Container */
+.selected-files-container {
+  padding: var(--selected-files-padding);
+  background-color: var(--selected-files-bg-color);
+  border-top: 1px solid var(--selected-files-border-color);
+  font-size: var(--chat-window-font-size);
+}
+
+.selected-files-list {
+  @apply space-y-1;
+}
+
+/* Selected File Item */
+.selected-file-item {
+  @apply flex items-center justify-between;
+  background-color: var(--selected-file-item-bg-color);
+  border-radius: var(--selected-file-item-border-radius);
+  padding: var(--selected-file-item-padding-y) var(--selected-file-item-padding-x);
+  font-size: var(--chat-window-font-size);
+}
+
+.selected-file-info {
+  @apply flex items-center;
+  gap: var(--selected-file-item-gap);
+}
+
+.selected-file-icon {
+  @apply flex items-center justify-center;
+  width: var(--selected-file-icon-size);
+  height: var(--selected-file-icon-size);
+}
+
+.selected-file-name {
+  color: var(--selected-file-name-color);
+}
+
+.selected-file-size {
+  color: var(--selected-file-size-color);
+  font-size: var(--chat-window-font-size-sm);
+}
+
+.selected-file-error {
+  color: var(--selected-file-error-color);
+  font-size: var(--chat-window-font-size-sm);
+}
+
+.selected-file-success-icon {
+  @apply flex items-center justify-center;
+  color: var(--selected-file-success-color);
+  width: var(--selected-file-success-icon-size);
+  height: var(--selected-file-success-icon-size);
+}
+
+.selected-file-remove-button {
+  @apply font-bold transition-colors duration-200;
+  color: var(--selected-file-remove-color);
+  padding: var(--button-padding-sm);
+}
+
+.selected-file-remove-button:hover {
+  color: var(--selected-file-remove-hover-color);
+}
+
+/* Message Attachments */
+.message-attachments {
+  @apply mt-2 space-y-1;
+}
+
+.message-attachment-item {
+  @apply flex items-center;
+  gap: var(--message-attachment-item-gap);
+  font-size: var(--chat-window-font-size);
+}
+
+.message-attachment-icon {
+  @apply flex items-center justify-center;
+  width: var(--message-attachment-icon-size);
+  height: var(--message-attachment-icon-size);
+}
+
+.message-attachment-name {
+  /* Inherits color from parent message bubble */
+}
+
+.message-attachment-link {
+  @apply ml-2 underline;
+  color: var(--message-attachment-link-color);
+}
+
+.message-attachment-link:hover {
+  text-decoration: var(--message-attachment-link-hover-decoration);
+}
+
+/* Update Send Button for Upload State */
+.send-button-disabled {
+  @apply cursor-not-allowed;
+  background-color: var(--send-button-bg-disabled-color);
+  color: var(--send-button-text-disabled-color);
 }
