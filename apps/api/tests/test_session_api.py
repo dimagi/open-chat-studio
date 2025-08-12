@@ -206,6 +206,47 @@ def _create_attachments(chat, message):
 
 
 @pytest.mark.django_db()
+def test_list_sessions_with_experiment_filter(experiment):
+    team = experiment.team
+    user = experiment.team.members.first()
+
+    # Create another experiment in the same team
+    experiment2 = ExperimentFactory(team=team)
+
+    # Create sessions for both experiments
+    session1 = ExperimentSessionFactory(experiment=experiment)
+    session2 = ExperimentSessionFactory(experiment=experiment2)
+    session3 = ExperimentSessionFactory(experiment=experiment)
+
+    client = ApiTestClient(user, team)
+
+    # Filter by first experiment
+    response = client.get(reverse("api:session-list") + f"?experiment={experiment.public_id}")
+    assert response.status_code == 200
+    expected_results = [
+        get_session_json(session3),
+        get_session_json(session1),
+    ]
+    assert response.json() == {
+        "next": None,
+        "previous": None,
+        "results": expected_results,
+    }
+
+    # Filter by second experiment
+    response = client.get(reverse("api:session-list") + f"?experiment={experiment2.public_id}")
+    assert response.status_code == 200
+    expected_results = [
+        get_session_json(session2),
+    ]
+    assert response.json() == {
+        "next": None,
+        "previous": None,
+        "results": expected_results,
+    }
+
+
+@pytest.mark.django_db()
 def test_create_session(experiment):
     user = experiment.team.members.first()
     client = ApiTestClient(user, experiment.team)
