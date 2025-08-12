@@ -1168,8 +1168,10 @@ export class OcsChat {
                           <div class="message-attachments">
                             {message.attachments.map((attachment, attachmentIndex) => (
                               <div key={attachmentIndex} class="flex items-center gap-2 text-sm">
-                                <span class="w-3 h-3"><PaperClipIcon /></span>
-                                <span>{attachment.name}</span>
+                                <span class="w-4 h-4 flex items-center justify-center">
+                                  <PaperClipIcon />
+                                </span>
+                                <span> {attachment.name}</span>
                                 {attachment.content_url && (
                                   <a
                                     href={attachment.content_url}
@@ -1228,7 +1230,9 @@ export class OcsChat {
                     {this.selectedFiles.map((selectedFile, index) => (
                       <div key={index} class="flex items-center justify-between text-sm bg-gray-50 rounded px-2 py-1">
                         <div class="flex items-center gap-2">
-                          <span class="w-5 h-5 text-gray-500"><PaperClipIcon /></span>
+                          <span class="w-5 h-5 flex items-center justify-center">
+                            <PaperClipIcon/>
+                          </span>
                           <span class="text-gray-700">{selectedFile.file.name}</span>
                           <span class="text-xs text-gray-500">({this.formatFileSize(selectedFile.file.size)})</span>
                           {selectedFile.error && (
