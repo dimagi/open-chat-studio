@@ -476,3 +476,37 @@ def download_dataset_csv(request, team_slug: str, pk: int):
         writer.writerow(row)
 
     return response
+
+
+@login_and_team_required
+@require_POST
+def upload_dataset_csv(request, team_slug: str, pk: int):
+    """Upload CSV to update an existing dataset"""
+    dataset = get_object_or_404(EvaluationDataset, id=pk, team__slug=team_slug)
+
+    try:
+        csv_file = request.FILES.get("csv_file")
+        if not csv_file:
+            return JsonResponse({"error": "No CSV file provided"}, status=400)
+
+        # This will pass the whole file as a dict to celery. If files are
+        # large, this could be memory inefficient. The alternative would be to
+        # store the file on disk and fetch it in the task. Instead, we ensure
+        # the file is below a certain size.
+
+        MAX_CSV_SIZE = 5 * 1024 * 1024  # 5MB limit
+        if csv_file.size > MAX_CSV_SIZE:
+            return JsonResponse({"error": "CSV file too large (max 5MB)"}, status=400)
+        file_content = csv_file.read().decode("utf-8")
+
+        if not file_content.strip():
+            return JsonResponse({"error": "CSV file is empty"}, status=400)
+
+        from apps.evaluations.tasks import upload_dataset_csv_task
+
+        task = upload_dataset_csv_task.delay(dataset.id, file_content, request.team.id)
+        return JsonResponse({"success": True, "task_id": task.id})
+
+    except Exception as e:
+        logger.error(f"Error starting CSV upload for dataset {dataset.id}: {str(e)}")
+        return JsonResponse({"error": "An error occurred while starting the CSV upload"}, status=500)
