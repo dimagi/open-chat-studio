@@ -15,18 +15,19 @@
             {% endif %}
             <div class="flex flex-col gap-1">
                 <div class="text-lg font-bold">{{ span.name }}</div>
-                <div class="text-sm flex items-center">
-                    {% if is_root %}
-                        <span class="mr-2">Root Span</span>
-                    {% else %}
-                        <span class="mr-2">Span</span>
-                    {% endif %}
-                    {% include "trace/partials/status.html" with object=span %}
-                </div>
-                <div>{{ span.user_message }}</div>
+                {% if span.error %}
+                    <div class="text-xs rounded overflow-x-auto space-y-3">
+                        <pre class="whitespace-pre-wrap">{{ span.error }}</pre>
+                    </div>
+                {% elif span.user_message %}
+                    <div class="text-sm text-gray-700">{{ span.user_message }}</div>
+                {% endif %}
             </div>
         </div>
-        <div class="text-right">
+        <div class="flex flex-row gap-2 justify-center text-right">
+            <div class="text-sm flex items-center">
+                {% include "trace/partials/status.html" with object=span %}
+            </div>
             <div class="text-sm font-medium">{{ span.duration_seconds }}s</div>
         </div>
     </div>
