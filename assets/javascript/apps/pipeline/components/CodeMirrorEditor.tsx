@@ -178,7 +178,19 @@ export function CodeNodeEditor(
       detail: "Ensures that the specified nodes have been executed and their outputs are available in the pipeline's state.",
       boost: 1,
       section: "Flow Control",
-    })
+    }),
+    get_output_voice: snip("get_output_voice()", {
+      label: "get_output_voice",
+      type: "function",
+      detail: "Returns dict of voice name and is_default",
+      boost: 1,
+    }),
+    set_output_voice: snip("set_output_voice(\"${voice}\")", {
+      label: "set_output_voice",
+      type: "function",
+      detail: "Sets the output voice provider and voice. Enter voice in this format voice_provider:voice_name (openai:echo)",
+      boost: 1,
+    }),
   }
 
   function pythonCompletions(context: CompletionContext) {
