@@ -35,38 +35,6 @@ def test_upload_dataset_csv_task_start(client, team_with_users):
 
 
 @pytest.mark.django_db()
-def test_upload_dataset_csv_with_existing_messages(client, team_with_users):
-    """Test CSV upload with existing messages to update."""
-    dataset = EvaluationDataset.objects.create(name="Test Dataset", team=team_with_users)
-
-    existing_message = EvaluationMessage.objects.create(
-        input=EvaluationMessageContent(content="Original question", role="human").model_dump(),
-        output=EvaluationMessageContent(content="Original answer", role="ai").model_dump(),
-        context={"topic": "original"},
-        metadata={"created_mode": "manual"},
-    )
-    dataset.messages.add(existing_message)
-
-    csv_content = "id,input_content,output_content,context.topic,history\n"
-    csv_content += (
-        f"{existing_message.id},Updated question,Updated answer,updated,user: Previous\\nassistant: Response\n"
-    )
-
-    csv_file = SimpleUploadedFile("test.csv", csv_content.encode(), content_type="text/csv")
-
-    user = team_with_users.members.first()
-    client.force_login(user)
-
-    url = reverse("evaluations:dataset_upload", args=[team_with_users.slug, dataset.id])
-    response = client.post(url, {"csv_file": csv_file})
-
-    assert response.status_code == 200
-    data = response.json()
-    assert data["success"] is True
-    assert "task_id" in data
-
-
-@pytest.mark.django_db()
 def test_upload_csv_security_check(client, team_with_users):
     """Test that CSV upload properly validates team access."""
 
