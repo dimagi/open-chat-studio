@@ -39,6 +39,12 @@ update_state_response_serializer = inline_serializer(
                 location=OpenApiParameter.QUERY,
                 description="A list of session tags (comma separated) to filter the results by",
             ),
+            OpenApiParameter(
+                name="experiment",
+                type=OpenApiTypes.STR,
+                location=OpenApiParameter.QUERY,
+                description="Experiment ID to filter sessions by",
+            ),
         ],
     ),
     retrieve=extend_schema(
@@ -123,9 +129,10 @@ class ExperimentSessionViewSet(mixins.ListModelMixin, mixins.RetrieveModelMixin,
             .prefetch_related("chat__tags")
             .all()
         )
-        print(queryset.query.sql_with_params())
         if tags_query_param := self.request.query_params.get("tags"):
             queryset = queryset.filter(chat__tags__name__in=tags_query_param.split(","))
+        if experiment_id := self.request.query_params.get("experiment"):
+            queryset = queryset.filter(experiment__public_id=experiment_id)
         return queryset
 
     def create(self, request, *args, **kwargs):
