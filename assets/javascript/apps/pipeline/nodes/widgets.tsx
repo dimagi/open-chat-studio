@@ -1133,7 +1133,9 @@ export function VoiceWidget(props: WidgetParams) {
 
   const providerId = concatenate(props.nodeParams.voice_provider_id);
   const syntheticVoiceId = concatenate(props.nodeParams.synthetic_voice_id);
-  const value = makeValue(providerId, syntheticVoiceId);
+
+  const hasSelectedVoice = providerId && syntheticVoiceId;
+  const value = hasSelectedVoice ? makeValue(providerId, syntheticVoiceId) : "";
 
   // Only render if voice is enabled
   if (!parameterValues.voice_enabled) {
