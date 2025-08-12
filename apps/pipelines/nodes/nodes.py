@@ -27,7 +27,7 @@ from pydantic import ValidationError as PydanticValidationError
 from pydantic.config import ConfigDict
 from pydantic_core import PydanticCustomError
 from pydantic_core.core_schema import FieldValidationInfo
-from RestrictedPython import compile_restricted, safe_builtins, safe_globals
+from RestrictedPython import compile_restricted, limited_builtins, safe_builtins, utility_builtins
 
 from apps.annotations.models import TagCategories
 from apps.assistants.models import OpenAiAssistant
@@ -1167,19 +1167,16 @@ class CodeNode(PipelineNode, OutputMessageTagMixin):
             guarded_iter_unpack_sequence,
         )
 
-        custom_globals = safe_globals.copy()
-        custom_globals.update(
-            {
-                "__builtins__": self._get_custom_builtins(),
-                "json": json,
-                "datetime": datetime,
-                "time": time,
-                "_getitem_": default_guarded_getitem,
-                "_getiter_": default_guarded_getiter,
-                "_iter_unpack_sequence_": guarded_iter_unpack_sequence,
-                "_write_": lambda x: x,
-            }
-        )
+        custom_globals = {
+            "__builtins__": self._get_custom_builtins(),
+            "json": json,
+            "datetime": datetime,
+            "time": time,
+            "_getitem_": default_guarded_getitem,
+            "_getiter_": default_guarded_getiter,
+            "_iter_unpack_sequence_": guarded_iter_unpack_sequence,
+            "_write_": lambda x: x,
+        }
         custom_functions = self._get_custom_functions(state, output_state)
         return custom_globals | custom_functions
 
@@ -1298,9 +1295,11 @@ class CodeNode(PipelineNode, OutputMessageTagMixin):
                 "all": all,
                 "any": any,
                 "datetime": datetime,
-                "random": random,
             }
         )
+
+        custom_builtins.update(utility_builtins)
+        custom_builtins.update(limited_builtins)
 
         def guarded_import(name, *args, **kwargs):
             if name not in allowed_modules:
