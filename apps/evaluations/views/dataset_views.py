@@ -406,6 +406,9 @@ def _generate_column_suggestions(columns):
         elif col_lower == "id":
             # Skip suggesting ID columns as context
             continue
+        elif col_lower == "history":
+            # History has its own suggestion mechanism
+            suggestions["history"] = col
         else:
             # Clean up column name for context field suggestion
             clean_name = _clean_context_field_name(col)

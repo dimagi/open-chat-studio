@@ -254,11 +254,35 @@
                 </div>
               </div>
 
-              <!-- Populate history option -->
+              <!-- History configuration -->
               <div class="pt-4 border-t">
-                <div class="form-control">
+                <h4 class="font-medium mb-3">{% trans "History Configuration" %}</h4>
+
+                <!-- Automatically populate history checkbox -->
+                <div class="form-control mb-4">
                   {% render_form_fields form "populate_history" %}
                 </div>
+
+                <!-- History column mapping -->
+                <div class="mb-4">
+                  <label class="block text-sm font-medium mb-1">{% trans "Or select history column from CSV" %}</label>
+                  <select x-model="historyColumn"
+                          @change="updateHistoryColumn()"
+                          :disabled="populateHistory"
+                          class="select select-bordered w-full"
+                          :class="populateHistory ? 'select-disabled' : ''">
+                    <option value="">{% trans "Select column..." %}</option>
+                    <template x-for="column in csvData?.columns || []">
+                      <option :value="column" x-text="column"></option>
+                    </template>
+                  </select>
+                  <div class="text-xs text-gray-500 mt-1">
+                    {% trans "Choose a column that contains conversation history text" %}
+                  </div>
+                </div>
+
+                <!-- Hidden field for form submission -->
+                <input type="hidden" name="history_column" x-model="historyColumn">
               </div>
             </div>
 
@@ -306,6 +330,8 @@
         columnMappingJson: '{}',
         csvDataJson: '[]',
         contextMappings: [],
+        historyColumn: '',
+        populateHistory: false,
 
         init() {
           // Watch for mode changes
@@ -334,6 +360,18 @@
             }
           }
           this.updateMessagesJson();
+
+          // Initialize history settings for CSV mode
+          const populateHistoryCheckbox = document.querySelector('input[name="populate_history"]');
+          if (populateHistoryCheckbox) {
+            this.populateHistory = populateHistoryCheckbox.checked;
+            populateHistoryCheckbox.addEventListener('change', () => {
+              this.populateHistory = populateHistoryCheckbox.checked;
+              if (this.populateHistory) {
+                this.historyColumn = ''; // Clear history column when auto-populate is enabled
+              }
+            });
+          }
 
           // Form submission validation
           const form = document.querySelector('form');
@@ -495,6 +533,11 @@
                   fieldNameError: ''
                 }));
               }
+
+              // Pre-populate history column if suggested
+              if (data.suggestions.history) {
+                this.historyColumn = data.suggestions.history;
+              }
             }
 
             this.updateColumnMapping();
@@ -512,6 +555,7 @@
           this.csvData = null;
           this.columnMapping = { input: '', output: '' };
           this.contextMappings = [];
+          this.historyColumn = '';
           this.updateColumnMapping();
           document.querySelector('input[type="file"]').value = '';
         },
@@ -554,6 +598,17 @@
             if (i !== index && this.contextMappings[i].fieldName.trim() === fieldName) {
               mapping.fieldNameError = 'Field name already used';
               return;
+            }
+          }
+        },
+
+        updateHistoryColumn() {
+          if (this.historyColumn) {
+            // Disable populate history checkbox when a column is selected
+            const populateHistoryCheckbox = document.querySelector('input[name="populate_history"]');
+            if (populateHistoryCheckbox) {
+              populateHistoryCheckbox.checked = false;
+              this.populateHistory = false;
             }
           }
         },

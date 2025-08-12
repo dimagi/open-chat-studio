@@ -209,6 +209,27 @@ def test_csv_column_suggestions_algorithm():
     assert "context.user_name" in context3_csv_columns  # Original column name preserved
     assert "score" in context3_csv_columns
 
+    # Test history column suggestions
+    columns4 = ["id", "input", "output", "history", "context.user_name", "score"]
+    suggestions4 = _generate_column_suggestions(columns4)
+
+    assert suggestions4["input"] == "input"
+    assert suggestions4["output"] == "output"
+    assert suggestions4["history"] == "history"  # History should be suggested
+
+    context4_field_names = [s["fieldName"] for s in suggestions4["context"]]
+    context4_csv_columns = [s["csvColumn"] for s in suggestions4["context"]]
+
+    # ID and history should be filtered out from context suggestions
+    assert "id" not in context4_field_names
+    assert "history" not in context4_field_names
+    assert "id" not in context4_csv_columns
+    assert "history" not in context4_csv_columns
+
+    # Other fields should still be included
+    assert "user_name" in context4_field_names
+    assert "score" in context4_field_names
+
 
 @pytest.mark.django_db()
 def test_csv_with_empty_rows_handling(client_with_user, team_with_users):
@@ -240,3 +261,63 @@ def test_csv_with_empty_rows_handling(client_with_user, team_with_users):
     messages = list(dataset.messages.all().order_by("id"))
     assert messages[0].input["content"] == "Hello"
     assert messages[1].input["content"] == "Valid"
+
+
+@pytest.mark.django_db()
+def test_csv_dataset_creation_with_history_column(client_with_user, team_with_users):
+    """Test creating dataset from CSV using a history column."""
+    csv_data = [
+        {
+            "input": "What's the weather?",
+            "output": "I can't check weather directly.",
+            "topic": "weather",
+            "history": "human: Hello\nai: Hi there!\nhuman: How are you?\nai: I'm doing well, thanks!",
+        },
+        {
+            "input": "Tell me a joke",
+            "output": "Why don't scientists trust atoms? Because they make up everything!",
+            "topic": "humor",
+            "history": "human: Previous conversation\nai: Previous response",
+        },
+    ]
+
+    column_mapping = {"input": "input", "output": "output", "topic": "topic"}
+
+    form_data = {
+        "name": "Test CSV Dataset with History Column",
+        "mode": "csv",
+        "csv_data": json.dumps(csv_data),
+        "column_mapping": json.dumps(column_mapping),
+        "populate_history": False,
+        "history_column": "history",
+    }
+
+    url = reverse("evaluations:dataset_new", args=[team_with_users.slug])
+    response = client_with_user.post(url, form_data)
+
+    assert response.status_code == 302
+
+    dataset = EvaluationDataset.objects.get(name="Test CSV Dataset with History Column", team=team_with_users)
+    messages = list(dataset.messages.all().order_by("id"))
+
+    # First message should have parsed history
+    assert len(messages[0].history) == 4
+    assert messages[0].history[0]["message_type"] == "human"
+    assert messages[0].history[0]["content"] == "Hello"
+    assert messages[0].history[1]["message_type"] == "ai"
+    assert messages[0].history[1]["content"] == "Hi there!"
+    assert messages[0].history[2]["message_type"] == "human"
+    assert messages[0].history[2]["content"] == "How are you?"
+    assert messages[0].history[3]["message_type"] == "ai"
+    assert messages[0].history[3]["content"] == "I'm doing well, thanks!"
+
+    # Second message should have different parsed history
+    assert len(messages[1].history) == 2
+    assert messages[1].history[0]["message_type"] == "human"
+    assert messages[1].history[0]["content"] == "Previous conversation"
+    assert messages[1].history[1]["message_type"] == "ai"
+    assert messages[1].history[1]["content"] == "Previous response"
+
+    # Verify context data is still stored correctly
+    assert messages[0].context["topic"] == "weather"
+    assert messages[1].context["topic"] == "humor"
