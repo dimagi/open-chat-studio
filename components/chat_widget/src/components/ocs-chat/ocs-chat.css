@@ -525,6 +525,7 @@ textarea {
 /* Markdown content styling for chat messages */
 .chat-markdown {
   @apply prose prose-sm prose-gray max-w-none;
+  font-size: var(--chat-window-font-size);
 }
 
 /* override spacing */
@@ -535,6 +536,12 @@ textarea {
 
 .message-bubble-user .chat-markdown {
   @apply prose-invert;
+  color: var(--message-user-text-color);
+}
+
+.message-bubble-assistant .chat-markdown {
+  @apply prose-invert;
+  color: var(--message-assistant-text-color);
 }
 
 .message-bubble-user .chat-markdown code {
