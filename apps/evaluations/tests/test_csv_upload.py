@@ -71,8 +71,15 @@ def test_csv_upload_column_parsing(client_with_user, team_with_users, csv_file_c
     assert data["suggestions"]["input"] == "input"
     assert data["suggestions"]["output"] == "output"
     assert "context" in data["suggestions"]
-    assert "context_field" in data["suggestions"]["context"]
-    assert "date" in data["suggestions"]["context"]
+
+    context_suggestions = data["suggestions"]["context"]
+    context_field_names = [s["fieldName"] for s in context_suggestions]
+    context_csv_columns = [s["csvColumn"] for s in context_suggestions]
+
+    assert "context_field" in context_field_names
+    assert "date" in context_field_names
+    assert "context_field" in context_csv_columns
+    assert "date" in context_csv_columns
 
 
 @pytest.mark.django_db()
@@ -158,8 +165,14 @@ def test_csv_column_suggestions_algorithm():
     assert suggestions["input"] == "user_message"  # Contains 'user'
     assert suggestions["output"] == "bot_response"  # Contains 'response'
     assert "context" in suggestions
-    assert "timestamp" in suggestions["context"]
-    assert "user_id" in suggestions["context"]
+
+    context_field_names = [s["fieldName"] for s in suggestions["context"]]
+    context_csv_columns = [s["csvColumn"] for s in suggestions["context"]]
+
+    assert "timestamp" in context_field_names
+    assert "user_id" in context_field_names
+    assert "timestamp" in context_csv_columns
+    assert "user_id" in context_csv_columns
 
     # Test with different patterns
     columns2 = ["prompt", "completion", "metadata", "score"]
@@ -167,8 +180,34 @@ def test_csv_column_suggestions_algorithm():
 
     assert suggestions2["input"] == "prompt"
     assert suggestions2["output"] == "completion"
-    assert "metadata" in suggestions2["context"]
-    assert "score" in suggestions2["context"]
+
+    context2_field_names = [s["fieldName"] for s in suggestions2["context"]]
+    context2_csv_columns = [s["csvColumn"] for s in suggestions2["context"]]
+
+    assert "metadata" in context2_field_names
+    assert "score" in context2_field_names
+    assert "metadata" in context2_csv_columns
+    assert "score" in context2_csv_columns
+
+    # Test ID field filtering
+    columns3 = ["id", "input", "output", "context.user_name", "score"]
+    suggestions3 = _generate_column_suggestions(columns3)
+
+    assert suggestions3["input"] == "input"
+    assert suggestions3["output"] == "output"
+
+    context3_field_names = [s["fieldName"] for s in suggestions3["context"]]
+    context3_csv_columns = [s["csvColumn"] for s in suggestions3["context"]]
+
+    # ID should be filtered out from context suggestions
+    assert "id" not in context3_field_names
+    assert "id" not in context3_csv_columns
+
+    # Other fields should be cleaned and included
+    assert "user_name" in context3_field_names  # context.user_name -> user_name
+    assert "score" in context3_field_names
+    assert "context.user_name" in context3_csv_columns  # Original column name preserved
+    assert "score" in context3_csv_columns
 
 
 @pytest.mark.django_db()
