@@ -18,6 +18,11 @@ urlpatterns = [
         name="create_evaluation_run",
     ),
     path(
+        "<int:evaluation_pk>/preview/new/",
+        evaluation_config_views.create_evaluation_preview,
+        name="create_evaluation_preview",
+    ),
+    path(
         "<int:evaluation_pk>/evaluation_runs",
         evaluation_config_views.EvaluationRunHome.as_view(),
         name="evaluation_runs_home",
