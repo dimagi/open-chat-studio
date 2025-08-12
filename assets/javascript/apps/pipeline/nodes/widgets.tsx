@@ -1121,13 +1121,13 @@ export function VoiceWidget(props: WidgetParams) {
     return providerId + '|:|' + syntheticVoiceId;
   };
 
-  type VoicesByProvider = { [providerId: string]: typeof parameterValues.synthetic_voice_id };
+  type VoicesByProvider = { [providerKey: string]: typeof parameterValues.synthetic_voice_id };
   const voicesByProvider = parameterValues.synthetic_voice_id.reduce((acc, voice) => {
-  const voiceProviderId = voice.provider_id || voice.type;
-    if (!acc[voiceProviderId]) {
-      acc[voiceProviderId] = [];
+    const key = (voice.type || "").toLowerCase();
+    if (!acc[key]) {
+      acc[key] = [];
     }
-    acc[voiceProviderId].push(voice);
+    acc[key].push(voice);
     return acc;
   }, {} as VoicesByProvider);
 
@@ -1155,19 +1155,8 @@ export function VoiceWidget(props: WidgetParams) {
 
         {parameterValues.voice_provider_id.map((provider) => {
           const providerKey = provider.label.toLowerCase();
-          let providerVoices = voicesByProvider[providerKey] || [];
+          const providerVoices = voicesByProvider[providerKey] || [];
 
-          if (providerVoices.length === 0) {
-            providerVoices = voicesByProvider[provider.value] || [];
-          }
-
-          if (providerVoices.length === 0) {
-            providerVoices = parameterValues.synthetic_voice_id.filter(voice =>
-              voice.provider_id === provider.value ||
-              voice.provider_id === provider.label ||
-              voice.type === provider.label.toLowerCase()
-            );
-          }
           return providerVoices.map((voice) => (
             <option
               key={provider.value + voice.value}
