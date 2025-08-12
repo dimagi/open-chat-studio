@@ -661,11 +661,15 @@ export class OcsChat {
   }
 
   private formatFileSize(bytes: number): string {
-    if (bytes === 0) return '0 Bytes';
+    if (bytes === 0) return '0 KB';
     const k = 1024;
-    const sizes = ['Bytes', 'KB', 'MB', 'GB'];
-    const i = Math.floor(Math.log(bytes) / Math.log(k));
-    return Math.round(bytes / Math.pow(k, i) * 100) / 100 + ' ' + sizes[i];
+
+    if (bytes < k * k) {
+      // Less than 1MB, show in KB
+      return Math.round(bytes / k * 100) / 100 + ' KB';
+    } else {
+      return Math.round(bytes / (k * k) * 100) / 100 + ' MB';
+    }
   }
 
   private formatTime(dateString: string): string {
