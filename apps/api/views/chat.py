@@ -1,4 +1,4 @@
-import os
+import pathlib
 
 from django.conf import settings
 from django.http import Http404
@@ -71,7 +71,7 @@ def validate_file_upload(file):
     file_size_mb = file.size / (1024 * 1024)
     if file_size_mb > MAX_FILE_SIZE_MB:
         return False, f"File '{file.name}' exceeds maximum size of {MAX_FILE_SIZE_MB}MB"
-    file_ext = os.path.splitext(file.name)[1].lower()
+    file_ext = pathlib.Path(file.name).suffix.lower()
     if file_ext not in SUPPORTED_FILE_EXTENSIONS:
         return False, f"File type '{file_ext}' is not supported. Allowed types: {', '.join(SUPPORTED_FILE_EXTENSIONS)}"
     return True, None
