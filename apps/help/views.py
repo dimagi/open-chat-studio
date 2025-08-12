@@ -128,6 +128,12 @@ def code_completion(user_query, current_code, error=None, iteration_count=0) -> 
             the node will not execute and the pipeline will wait for the required nodes to complete.
             
             This should be called at the start of the main function.
+        
+        def set_voice_output(key_name: str, data: Any) -> None:
+            Sets the output voice provider and voice. Enter voice in this format voice_provider:voice_name (openai:echo)
+
+        def get_voice_output(key_name: str, data: Any) -> dict | None:
+            Returns dict of voice name and is_default
         ```
 
         Return only the Python code and nothing else. Do not enclose it in triple quotes or have any other
