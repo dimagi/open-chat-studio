@@ -2,9 +2,7 @@ import datetime
 import inspect
 import json
 import logging
-import sys
 import time
-import traceback
 import unicodedata
 from typing import Annotated, Literal, Self
 
@@ -48,6 +46,7 @@ from apps.pipelines.nodes.base import (
     Widgets,
     deprecated_node,
 )
+from apps.pipelines.nodes.code_node_utils import get_code_error_message
 from apps.pipelines.nodes.tool_callbacks import ToolCallbacks
 from apps.pipelines.tasks import send_email_from_pipeline
 from apps.service_providers.exceptions import ServiceProviderConfigError
@@ -1143,27 +1142,8 @@ class CodeNode(PipelineNode, OutputMessageTagMixin):
         except AbortPipeline as abort:
             return interrupt(abort.to_json())
         except Exception as exc:
-            source_lines = self.code.splitlines()
-            exc_type, exc_value, exc_traceback = sys.exc_info()
-
-            tb_list = traceback.extract_tb(exc_traceback)
-            user_frames = [frame for frame in tb_list if filename in frame.filename]
-
-            if user_frames:
-                error_frame = user_frames[-1]  # Last frame in user code
-                line_number = error_frame.lineno
-
-                if 1 <= line_number <= len(source_lines):
-                    # Show context (lines around the error)
-                    start = max(0, line_number - 3)
-                    end = min(len(source_lines), line_number + 2)
-
-                    error_with_context = f"Error: {exc!r}\nContext:"
-                    for i in range(start, end):
-                        marker = ">>>" if i + 1 == line_number else "   "
-                        error_with_context += f"\n{marker} {i + 1:3d}: {source_lines[i]}"
-
-            raise PipelineNodeRunError(error_with_context) from exc
+            message = get_code_error_message(filename, self.code)
+            raise PipelineNodeRunError(message) from exc
 
         if isinstance(result, Command):
             return result
