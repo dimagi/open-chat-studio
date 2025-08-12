@@ -22,6 +22,8 @@
     * @prop --button-icon-height: Button icon height (1.5rem)
     *
     * Chat Window Variables
+    * @prop --chat-window-height: Chat window height in pixels or percent (60%)
+    * @prop --chat-window-width: Chat window height in pixels (450px)
     * @prop --chat-window-bg-color: Chat window background color (#ffffff)
     * @prop --chat-window-border-color: Chat window border color (#d1d5db)
     * @prop --chat-window-shadow-color: Chat window shadow color (rgba(0, 0, 0, 0.1))
@@ -118,6 +120,8 @@
   --button-icon-height: 1.5rem;
 
   /* Chat window variables */
+  --chat-window-height: 60%;
+  --chat-window-width: 450px;
   --chat-window-bg-color: #ffffff;
   --chat-window-border-color: #d1d5db;
   --chat-window-shadow-color: rgba(0, 0, 0, 0.1);
@@ -276,9 +280,10 @@
   }
 
   .chat-window-normal {
-    @apply fixed w-full sm:w-[450px] max-w-screen-lg h-5/6 rounded-lg overflow-hidden flex flex-col;
+    @apply fixed w-full sm:w-[var(--chat-window-width)] max-w-screen-lg rounded-lg overflow-hidden flex flex-col;
     background-color: var(--chat-window-bg-color);
     border: 1px solid var(--chat-window-border-color);
+    height: var(--chat-window-height);
   }
 
   .chat-window-dragging {
