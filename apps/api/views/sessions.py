@@ -120,8 +120,10 @@ class ExperimentSessionViewSet(mixins.ListModelMixin, mixins.RetrieveModelMixin,
         queryset = (
             ExperimentSession.objects.filter(team__slug=self.request.team.slug)
             .select_related("team", "experiment", "participant")
+            .prefetch_related("chat__tags")
             .all()
         )
+        print(queryset.query.sql_with_params())
         if tags_query_param := self.request.query_params.get("tags"):
             queryset = queryset.filter(chat__tags__name__in=tags_query_param.split(","))
         return queryset
