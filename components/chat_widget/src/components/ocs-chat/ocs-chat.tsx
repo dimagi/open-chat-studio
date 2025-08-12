@@ -1183,17 +1183,17 @@ export class OcsChat {
                         {message.attachments && message.attachments.length > 0 && (
                           <div class="message-attachments">
                             {message.attachments.map((attachment, attachmentIndex) => (
-                              <div key={attachmentIndex} class="flex items-center gap-2 text-sm">
-                                <span class="w-4 h-4 flex items-center justify-center">
+                              <div key={attachmentIndex} class="message-attachment-item">
+                                <span class="message-attachment-icon">
                                   <PaperClipIcon />
                                 </span>
-                                <span> {attachment.name}</span>
+                                <span class="message-attachment-name">{attachment.name}</span>
                                 {attachment.content_url && (
                                   <a
                                     href={attachment.content_url}
                                     target="_blank"
                                     rel="noopener noreferrer"
-                                    class="ml-2 underline hover:no-underline"
+                                    class="message-attachment-link"
                                   >
                                     Download
                                   </a>
@@ -1241,26 +1241,26 @@ export class OcsChat {
 
               {/* Selected Files Display */}
               {this.allowAttachments && this.selectedFiles.length > 0 && (
-                <div class="px-4 py-2 border-t border-gray-200">
-                  <div class="space-y-1">
+                <div class="selected-files-container">
+                  <div class="selected-files-list">
                     {this.selectedFiles.map((selectedFile, index) => (
-                      <div key={index} class="flex items-center justify-between text-sm bg-gray-50 rounded px-2 py-1">
-                        <div class="flex items-center gap-2">
-                          <span class="w-5 h-5 flex items-center justify-center">
+                      <div key={index} class="selected-file-item">
+                        <div class="selected-file-info">
+                          <span class="selected-file-icon">
                             <PaperClipIcon/>
                           </span>
-                          <span class="text-gray-700">{selectedFile.file.name}</span>
-                          <span class="text-xs text-gray-500">({this.formatFileSize(selectedFile.file.size)})</span>
+                          <span class="selected-file-name">{selectedFile.file.name}</span>
+                          <span class="selected-file-size">({this.formatFileSize(selectedFile.file.size)})</span>
                           {selectedFile.error && (
-                            <span class="text-xs text-red-500">{selectedFile.error}</span>
+                            <span class="selected-file-error">{selectedFile.error}</span>
                           )}
                           {selectedFile.uploaded && (
-                            <span class="text-green-500 w-4 h-4"><CheckDocumentIcon /></span>
+                            <span class="selected-file-success-icon"><CheckDocumentIcon /></span>
                           )}
                         </div>
                         <button
                           onClick={() => this.removeSelectedFile(index)}
-                          class="text-red-500 hover:text-red-700 text-lg font-bold px-1"
+                          class="selected-file-remove-button"
                           aria-label="Remove file"
                         ><XIcon />
                         </button>
@@ -1292,12 +1292,12 @@ export class OcsChat {
                         multiple
                         accept={OcsChat.SUPPORTED_FILE_EXTENSIONS.join(',')}
                         onChange={(e) => this.handleFileSelect(e)}
-                        class="hidden"
+                        class="file-input-hidden"
                       />
                     )}
                     {this.allowAttachments && (
                       <button
-                        class="p-1.5 rounded-md text-gray-600 hover:bg-gray-100 transition-colors duration-200 disabled:opacity-50 disabled:cursor-not-allowed"
+                        class="file-attachment-button"
                         onClick={() => this.fileInputRef?.click()}
                         disabled={this.isTyping || this.isUploadingFiles}
                         title="Attach files"
