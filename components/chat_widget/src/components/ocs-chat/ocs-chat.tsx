@@ -165,6 +165,11 @@ export class OcsChat {
    */
   @Prop() allowFullScreen: boolean = true;
 
+  /**
+   * Allow the user to attach files to their messages.
+   */
+  @Prop() allowAttachments: boolean = false;
+
   @State() loaded: boolean = false;
   @State() error: string = "";
   @State() messages: ChatMessage[] = [];
@@ -319,7 +324,7 @@ export class OcsChat {
   }
 
   private async uploadFiles(): Promise<number[]> {
-    if (this.selectedFiles.length === 0 || !this.sessionId) {
+    if (this.selectedFiles.length === 0 || !this.sessionId || !this.allowAttachments) {
       return [];
     }
 
@@ -387,7 +392,7 @@ export class OcsChat {
 
     try {
       let attachmentIds: number[] = [];
-      if (this.selectedFiles.length > 0) {
+      if (this.allowAttachments && this.selectedFiles.length > 0) {
         attachmentIds = await this.uploadFiles();
       }
 
@@ -409,24 +414,26 @@ export class OcsChat {
         created_at: new Date().toISOString(),
         role: 'user',
         content: message.trim(),
-        attachments: this.selectedFiles.map(sf => ({
+        attachments: this.allowAttachments ? this.selectedFiles.map(sf => ({
           name: sf.file.name,
           content_type: sf.file.type,
           size: sf.file.size,
           content_url: '', // We don't have the URL yet
-        }))
+        })) : []
       };
       this.messages = [...this.messages, userMessage];
       this.saveSessionToStorage();
       this.messageInput = '';
-      this.selectedFiles = []; // Clear selected files after sending
+      if (this.allowAttachments) {
+        this.selectedFiles = []; // Clear selected files after sending
+      }
       this.scrollToBottom();
 
       // Start typing indicator - it will stay on during task polling
       this.isTyping = true;
 
       const requestBody: any = { message: message.trim() };
-      if (attachmentIds.length > 0) {
+      if (this.allowAttachments && attachmentIds.length > 0) {
         requestBody.attachment_ids = attachmentIds;
       }
 
@@ -604,6 +611,8 @@ export class OcsChat {
   }
 
   private handleFileSelect(event: Event): void {
+    if (!this.allowAttachments) return;
+
     const input = event.target as HTMLInputElement;
     if (!input.files || input.files.length === 0) return;
 
@@ -647,6 +656,7 @@ export class OcsChat {
   }
 
   private removeSelectedFile(index: number): void {
+    if (!this.allowAttachments) return;
     this.selectedFiles = this.selectedFiles.filter((_, i) => i !== index);
   }
 
@@ -1037,7 +1047,9 @@ export class OcsChat {
     this.showStarterQuestions = true;
     this.isTyping = false;
     this.error = '';
-    this.selectedFiles = [];
+    if (this.allowAttachments) {
+      this.selectedFiles = [];
+    }
     this.cleanup();
 
     await this.startSession();
@@ -1224,7 +1236,7 @@ export class OcsChat {
               )}
 
               {/* Selected Files Display */}
-              {this.selectedFiles.length > 0 && (
+              {this.allowAttachments && this.selectedFiles.length > 0 && (
                 <div class="px-4 py-2 border-t border-gray-200">
                   <div class="space-y-1">
                     {this.selectedFiles.map((selectedFile, index) => (
@@ -1269,23 +1281,27 @@ export class OcsChat {
                       disabled={this.isTyping || this.isUploadingFiles}
                     ></textarea>
                     {/* File Upload Button */}
-                    <input
-                      ref={(el) => this.fileInputRef = el}
-                      type="file"
-                      multiple
-                      accept={OcsChat.SUPPORTED_FILE_EXTENSIONS.join(',')}
-                      onChange={(e) => this.handleFileSelect(e)}
-                      class="hidden"
-                    />
-                    <button
-                      class="p-1.5 rounded-md text-gray-600 hover:bg-gray-100 transition-colors duration-200 disabled:opacity-50 disabled:cursor-not-allowed"
-                      onClick={() => this.fileInputRef?.click()}
-                      disabled={this.isTyping || this.isUploadingFiles}
-                      title="Attach files"
-                      aria-label="Attach files"
-                    >
-                      <PaperClipIcon />
-                    </button>
+                    {this.allowAttachments && (
+                      <input
+                        ref={(el) => this.fileInputRef = el}
+                        type="file"
+                        multiple
+                        accept={OcsChat.SUPPORTED_FILE_EXTENSIONS.join(',')}
+                        onChange={(e) => this.handleFileSelect(e)}
+                        class="hidden"
+                      />
+                    )}
+                    {this.allowAttachments && (
+                      <button
+                        class="p-1.5 rounded-md text-gray-600 hover:bg-gray-100 transition-colors duration-200 disabled:opacity-50 disabled:cursor-not-allowed"
+                        onClick={() => this.fileInputRef?.click()}
+                        disabled={this.isTyping || this.isUploadingFiles}
+                        title="Attach files"
+                        aria-label="Attach files"
+                      >
+                        <PaperClipIcon />
+                      </button>
+                    )}
                     <button
                       class={`send-button ${
                         !this.isTyping && !!this.messageInput.trim()
