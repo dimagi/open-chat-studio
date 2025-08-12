@@ -407,6 +407,11 @@ paths:
         description: The pagination cursor value.
         schema:
           type: string
+      - in: query
+        name: experiment
+        schema:
+          type: string
+        description: Experiment ID to filter sessions by
       - name: ordering
         required: false
         in: query
