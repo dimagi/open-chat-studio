@@ -4,17 +4,9 @@ import uuid
 
 from django.db import models
 from django.urls import reverse
-from django_pydantic_field import SchemaField
-from pydantic import BaseModel
 
 from apps.annotations.models import TaggedModelMixin, UserCommentsMixin
 from apps.teams.models import BaseTeamModel
-
-
-class SpanError(BaseModel):
-    # TODO: Move to data_structures file
-    error_display: str
-    raw_error: str
 
 
 class TraceStatus(models.TextChoices):
@@ -85,7 +77,7 @@ class Span(BaseTeamModel, TaggedModelMixin, UserCommentsMixin):
     input = models.JSONField(default=dict, blank=True)
     output = models.JSONField(default=dict, blank=True)
     metadata = models.JSONField(default=dict, blank=True)
-    error = SchemaField(schema=SpanError | None, null=True)
+    error = models.CharField(blank=True)
 
     class Meta:
         indexes = [

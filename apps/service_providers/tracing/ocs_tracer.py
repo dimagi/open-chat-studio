@@ -8,7 +8,7 @@ from uuid import UUID
 from django.utils import timezone
 
 from apps.service_providers.tracing.const import OCS_TRACE_PROVIDER, SpanLevel
-from apps.trace.models import Span, SpanError, Trace, TraceStatus
+from apps.trace.models import Span, Trace, TraceStatus
 
 from .base import Tracer
 
@@ -124,10 +124,7 @@ class OCSTracer(Tracer):
         span.output = outputs or {}
         span.end_time = timezone.now()
         if error:
-            span.error = SpanError(
-                error_display=str(error),
-                raw_error=str(error),
-            )
+            span.error = str(error)
             self.error_detected = True
             span.status = TraceStatus.ERROR
         else:
