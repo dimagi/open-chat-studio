@@ -390,6 +390,15 @@ class EvaluationDatasetForm(forms.ModelForm):
         if missing_columns:
             raise forms.ValidationError(f"Columns not found in CSV file: {', '.join(sorted(missing_columns))}")
 
+        for field_name in column_mapping:
+            if field_name not in ["input", "output"]:
+                if not self._is_valid_python_identifier(field_name):
+                    raise forms.ValidationError(
+                        f"Context field '{field_name}' is not a valid Python identifier. "
+                        "Field names must start with a letter or underscore and contain only letters, digits, "
+                        "and underscores."
+                    )
+
         valid_rows = 0
         for row in csv_data:
             input_content = row.get(column_mapping.get("input", ""), "").strip()
@@ -401,6 +410,12 @@ class EvaluationDatasetForm(forms.ModelForm):
             raise forms.ValidationError("No valid message pairs found in CSV data.")
 
         return csv_data, column_mapping
+
+    def _is_valid_python_identifier(self, name):
+        """Check if a string is a valid Python identifier."""
+        if not name:
+            return False
+        return name.isidentifier()
 
     def save(self, commit=True):
         """Create dataset based on the selected mode."""

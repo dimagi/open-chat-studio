@@ -1,6 +1,7 @@
 import csv
 import json
 import logging
+import re
 from io import StringIO
 
 from django.contrib.auth.mixins import PermissionRequiredMixin
@@ -402,10 +403,33 @@ def _generate_column_suggestions(columns):
             suggestions["input"] = col
         elif "output" not in suggestions and any(pattern in col_lower for pattern in output_patterns):
             suggestions["output"] = col
+        elif col_lower == "id":
+            # Skip suggesting ID columns as context
+            continue
         else:
-            context_columns.append(col)
+            # Clean up column name for context field suggestion
+            clean_name = _clean_context_field_name(col)
+            context_columns.append({"fieldName": clean_name, "csvColumn": col})
 
     if context_columns:
         suggestions["context"] = context_columns
 
     return suggestions
+
+
+def _clean_context_field_name(field_name):
+    """Clean a field name to be a valid Python identifier."""
+    if field_name.lower().startswith("context."):
+        field_name = field_name[8:]  # Remove 'context.' prefix
+
+    # Convert spaces to underscores and remove invalid characters
+    field_name = re.sub(r"[^\w]", "_", field_name)
+
+    # Ensure it starts with a letter or underscore
+    if field_name and not field_name[0].isalpha() and field_name[0] != "_":
+        field_name = f"_{field_name}"
+
+    # Remove consecutive underscores and trailing underscores
+    field_name = re.sub(r"_+", "_", field_name).strip("_")
+
+    return field_name or "context_variable"
