@@ -21,6 +21,7 @@ from apps.evaluations.tables import (
     EvaluationDatasetTable,
     EvaluationSessionsSelectionTable,
 )
+from apps.evaluations.tasks import upload_dataset_csv_task
 from apps.experiments.filters import DATE_RANGE_OPTIONS, FIELD_TYPE_FILTERS, apply_dynamic_filters
 from apps.experiments.models import Experiment, ExperimentSession
 from apps.teams.decorators import login_and_team_required
@@ -504,8 +505,6 @@ def upload_dataset_csv(request, team_slug: str, pk: int):
 
         if not file_content.strip():
             return JsonResponse({"error": "CSV file is empty"}, status=400)
-
-        from apps.evaluations.tasks import upload_dataset_csv_task
 
         task = upload_dataset_csv_task.delay(dataset.id, file_content, request.team.id)
         return JsonResponse({"success": True, "task_id": task.id})
