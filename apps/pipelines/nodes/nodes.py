@@ -2,8 +2,9 @@ import datetime
 import inspect
 import json
 import logging
-import random
+import sys
 import time
+import traceback
 import unicodedata
 from typing import Annotated, Literal, Self
 
@@ -1124,12 +1125,12 @@ class CodeNode(PipelineNode, OutputMessageTagMixin):
 
     def _process(self, input: str, state: PipelineState) -> PipelineState | Command:
         function_name = "main"
+        filename = "<inline_code>"
         byte_code = compile_restricted(
             self.code,
-            filename="<inline code>",
+            filename=filename,
             mode="exec",
         )
-
         custom_locals = {}
         output_state = PipelineState()
         custom_globals = self._get_custom_globals(state, output_state)
@@ -1142,7 +1143,27 @@ class CodeNode(PipelineNode, OutputMessageTagMixin):
         except AbortPipeline as abort:
             return interrupt(abort.to_json())
         except Exception as exc:
-            raise PipelineNodeRunError(exc) from exc
+            source_lines = self.code.splitlines()
+            exc_type, exc_value, exc_traceback = sys.exc_info()
+
+            tb_list = traceback.extract_tb(exc_traceback)
+            user_frames = [frame for frame in tb_list if filename in frame.filename]
+
+            if user_frames:
+                error_frame = user_frames[-1]  # Last frame in user code
+                line_number = error_frame.lineno
+
+                if 1 <= line_number <= len(source_lines):
+                    # Show context (lines around the error)
+                    start = max(0, line_number - 3)
+                    end = min(len(source_lines), line_number + 2)
+
+                    error_with_context = f"Error: {exc!r}\nContext:"
+                    for i in range(start, end):
+                        marker = ">>>" if i + 1 == line_number else "   "
+                        error_with_context += f"\n{marker} {i + 1:3d}: {source_lines[i]}"
+
+            raise PipelineNodeRunError(error_with_context) from exc
 
         if isinstance(result, Command):
             return result

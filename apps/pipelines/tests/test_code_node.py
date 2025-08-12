@@ -452,3 +452,29 @@ def main(input, **kwargs):
     node = CodeNode(name="test", node_id="123", django_node=None, code=code_set)
     node_output = node._process("hi", PipelineState(outputs={}, experiment_session=None))
     assert node_output.update["messages"][-1] == "3,4 - {1, 2}"
+
+
+def test_traceback():
+    code_set = """
+def main(input, **kwargs):
+    # this is a comment
+    a = 1
+    b = 2
+    if a != b:
+       fail("asfd")
+    return input
+    """
+
+    node = CodeNode(name="test", node_id="123", django_node=None, code=code_set)
+    with pytest.raises(PipelineNodeRunError) as exc_info:
+        node._process("hi", PipelineState(outputs={}, experiment_session=None))
+    assert (
+        str(exc_info.value)
+        == """Error: NameError("name 'fail' is not defined")
+Context:
+      5:     b = 2
+      6:     if a != b:
+>>>   7:        fail("asfd")
+      8:     return input
+      9:     """
+    )
