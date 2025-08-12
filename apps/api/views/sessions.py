@@ -117,7 +117,11 @@ class ExperimentSessionViewSet(mixins.ListModelMixin, mixins.RetrieveModelMixin,
         return serializer_class(*args, **kwargs)
 
     def get_queryset(self):
-        queryset = ExperimentSession.objects.filter(team__slug=self.request.team.slug).all()
+        queryset = (
+            ExperimentSession.objects.filter(team__slug=self.request.team.slug)
+            .select_related("team", "experiment", "participant")
+            .all()
+        )
         if tags_query_param := self.request.query_params.get("tags"):
             queryset = queryset.filter(chat__tags__name__in=tags_query_param.split(","))
         return queryset
