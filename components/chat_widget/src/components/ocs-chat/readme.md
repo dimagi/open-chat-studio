@@ -35,17 +35,17 @@ For more information, see the [Open Chat Studio documentation](https://docs.open
 | `--button-background-color-hover`       | Button background color on hover (#f3f4f6)                                       |
 | `--button-border-color`                 | Button border color (#6b7280)                                                    |
 | `--button-border-color-hover`           | Button border color on hover (#374151)                                           |
-| `--button-font-size`                    | Button text font size (0.875rem)                                                 |
-| `--button-icon-height`                  | Button icon height (1.5rem) Chat Window Variables                                |
-| `--button-icon-width`                   | Button icon width (1.5rem)                                                       |
-| `--button-padding`                      | Button padding (0.75rem)                                                         |
-| `--button-padding-sm`                   | Small button padding (0.375rem)                                                  |
+| `--button-font-size`                    | Button text font size (0.875em)                                                  |
+| `--button-icon-height`                  | Button icon height (1.5em) Chat Window Variables                                 |
+| `--button-icon-width`                   | Button icon width (1.5em)                                                        |
+| `--button-padding`                      | Button padding (0.75em)                                                          |
+| `--button-padding-sm`                   | Small button padding (0.375em)                                                   |
 | `--button-text-color`                   | Button text color (#111827)                                                      |
 | `--button-text-color-hover`             | Button text color on hover (#1d4ed8)                                             |
 | `--chat-window-bg-color`                | Chat window background color (#ffffff)                                           |
 | `--chat-window-border-color`            | Chat window border color (#d1d5db)                                               |
-| `--chat-window-font-size`               | Default font size for text in the chat window (0.875rem)                         |
-| `--chat-window-font-size-sm`            | Font size for small text in the chat window (0.75rem) Header Variables           |
+| `--chat-window-font-size`               | Default font size for text in the chat window (0.875em)                          |
+| `--chat-window-font-size-sm`            | Font size for small text in the chat window (0.75em) Header Variables            |
 | `--chat-window-height`                  | Chat window height in pixels or percent (60%)                                    |
 | `--chat-window-shadow-color`            | Chat window shadow color (rgba(0, 0, 0, 0.1))                                    |
 | `--chat-window-width`                   | Chat window height in pixels (450px)                                             |
@@ -56,30 +56,30 @@ For more information, see the [Open Chat Studio documentation](https://docs.open
 | `--code-border-user-color`              | Code border in user messages (--message-user-bg-color + 20% black)               |
 | `--code-text-assistant-color`           | Code text color in assistant messages (--message-assistant-text-color)           |
 | `--code-text-user-color`                | Code text color in user messages (--message-user-text-color)                     |
-| `--container-padding`                   | General container padding (1rem) Button Variables                                |
-| `--error-message-padding`               | Error message padding (0.5rem) Markdown Code Variables                           |
+| `--container-padding`                   | General container padding (1em) Button Variables                                 |
+| `--error-message-padding`               | Error message padding (0.5em) Markdown Code Variables                            |
 | `--error-text-color`                    | Error text color (#ef4444)                                                       |
 | `--header-bg-color`                     | Header background color (transparent)                                            |
 | `--header-bg-hover-color`               | Header background color on hover (#f9fafb)                                       |
 | `--header-border-color`                 | Header border color (#f3f4f6)                                                    |
 | `--header-button-bg-hover-color`        | Header button background on hover (#f3f4f6)                                      |
 | `--header-button-text-color`            | Header button text color (#6b7280)                                               |
-| `--header-padding`                      | Header padding (0.5rem) Starter Question Variables                               |
+| `--header-padding`                      | Header padding (0.5em) Starter Question Variables                                |
 | `--input-bg-color`                      | Input area background color (transparent)                                        |
 | `--input-border-color`                  | Input field border color (#d1d5db)                                               |
 | `--input-outline-focus-color`           | Input field focus ring color (#3b82f6)                                           |
 | `--input-placeholder-color`             | Input placeholder text color (#6b7280)                                           |
 | `--input-text-color`                    | Input text color (#111827)                                                       |
-| `--input-textarea-padding-x`            | Input textarea horizontal padding (0.75rem)                                      |
-| `--input-textarea-padding-y`            | Input textarea vertical padding (0.5rem) Send Button Variables                   |
+| `--input-textarea-padding-x`            | Input textarea horizontal padding (0.75em)                                       |
+| `--input-textarea-padding-y`            | Input textarea vertical padding (0.5em) Send Button Variables                    |
 | `--loading-spinner-fill-color`          | Loading spinner fill color (#3b82f6)                                             |
-| `--loading-spinner-size`                | Loading spinner size (1.25rem) Typing Indicator Variables                        |
+| `--loading-spinner-size`                | Loading spinner size (1.25em) Typing Indicator Variables                         |
 | `--loading-spinner-track-color`         | Loading spinner track color (#e5e7eb)                                            |
 | `--loading-text-color`                  | Loading text color (#6b7280)                                                     |
 | `--message-assistant-bg-color`          | Assistant message background color (#e5e7eb)                                     |
 | `--message-assistant-text-color`        | Assistant message text color (#1f2937)                                           |
-| `--message-padding-x`                   | Message horizontal padding (1rem)                                                |
-| `--message-padding-y`                   | Message vertical padding (0.5rem) Input Area Variables                           |
+| `--message-padding-x`                   | Message horizontal padding (1em)                                                 |
+| `--message-padding-y`                   | Message vertical padding (0.5em) Input Area Variables                            |
 | `--message-system-bg-color`             | System message background color (#f3f4f6)                                        |
 | `--message-system-text-color`           | System message text color (#4b5563)                                              |
 | `--message-timestamp-assistant-color`   | Assistant message timestamp color (rgba(75, 85, 99, 0.7))                        |
@@ -92,15 +92,15 @@ For more information, see the [Open Chat Studio documentation](https://docs.open
 | `--send-button-bg-color`                | Send button background color (#3b82f6)                                           |
 | `--send-button-bg-disabled-color`       | Send button background when disabled (#d1d5db)                                   |
 | `--send-button-bg-hover-color`          | Send button background on hover (#2563eb)                                        |
-| `--send-button-padding-x`               | Send button horizontal padding (1rem)                                            |
-| `--send-button-padding-y`               | Send button vertical padding (0.5rem) Loading Variables                          |
+| `--send-button-padding-x`               | Send button horizontal padding (1em)                                             |
+| `--send-button-padding-y`               | Send button vertical padding (0.5em) Loading Variables                           |
 | `--send-button-text-color`              | Send button text color (#ffffff)                                                 |
 | `--send-button-text-disabled-color`     | Send button text when disabled (#6b7280)                                         |
 | `--starter-question-bg-color`           | Starter question background color (transparent)                                  |
 | `--starter-question-bg-hover-color`     | Starter question background on hover (#eff6ff)                                   |
 | `--starter-question-border-color`       | Starter question border color (#3b82f6)                                          |
 | `--starter-question-border-hover-color` | Starter question border on hover (#2563eb)                                       |
-| `--starter-question-padding`            | Starter question padding (0.75rem) Message Bubble Variables                      |
+| `--starter-question-padding`            | Starter question padding (0.75em) Message Bubble Variables                       |
 | `--starter-question-text-color`         | Starter question text color (#3b82f6)                                            |
 | `--typing-progress-bg-color`            | Typing progress bar background color (#ade3ff) Scrollbar Variables               |
 
