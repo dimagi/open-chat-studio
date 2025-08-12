@@ -24,8 +24,7 @@ paths:
       tags:
       - Chat
       security:
-      - apiKeyAuth: []
-      - tokenAuth: []
+      - cookieAuth: []
       responses:
         '200':
           content:
@@ -65,8 +64,7 @@ paths:
                 summary: Send a message to the bot
         required: true
       security:
-      - apiKeyAuth: []
-      - tokenAuth: []
+      - cookieAuth: []
       responses:
         '202':
           content:
@@ -101,8 +99,7 @@ paths:
       tags:
       - Chat
       security:
-      - apiKeyAuth: []
-      - tokenAuth: []
+      - cookieAuth: []
       responses:
         '200':
           content:
@@ -134,8 +131,7 @@ paths:
                 summary: Start a new chat session for an experiment
         required: true
       security:
-      - apiKeyAuth: []
-      - tokenAuth: []
+      - cookieAuth: []
       responses:
         '201':
           content:
@@ -789,11 +785,6 @@ components:
         chatbot_id:
           type: string
           format: uuid
-        participant_id:
-          type: string
-          description: Optional participant identifier. If not provided, an anonymous
-            participant will be created. This field will be ignored if the request
-            is not authenticated.
         session_data:
           type: object
           additionalProperties: {}
@@ -1308,6 +1299,10 @@ components:
       type: apiKey
       in: header
       name: X-api-key
+    cookieAuth:
+      type: apiKey
+      in: cookie
+      name: sessionid
     tokenAuth:
       type: http
       scheme: bearer
