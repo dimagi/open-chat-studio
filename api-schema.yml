@@ -424,6 +424,11 @@ paths:
           type: string
         description: A list of session tags (comma separated) to filter the results
           by
+      - in: query
+        name: versions
+        schema:
+          type: string
+        description: Experiment versions (comma separated) to filter sessions by
       tags:
       - Experiment Sessions
       security:
