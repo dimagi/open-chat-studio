@@ -1,5 +1,6 @@
 import os
 
+from django.conf import settings
 from django.http import Http404
 from django.shortcuts import get_object_or_404
 from django.utils import timezone
@@ -30,29 +31,9 @@ from apps.files.models import File
 
 AUTH_CLASSES = [ApiKeyAuthentication, BearerTokenAuthentication]
 
-MAX_FILE_SIZE_MB = 50
+MAX_FILE_SIZE_MB = settings.MAX_FILE_SIZE_MB
 MAX_TOTAL_SIZE_MB = 50
-SUPPORTED_FILE_EXTENSIONS = [
-    ".txt",
-    ".pdf",
-    ".doc",
-    ".docx",
-    ".xls",
-    ".xlsx",
-    ".csv",
-    ".jpg",
-    ".jpeg",
-    ".png",
-    ".gif",
-    ".bmp",
-    ".webp",
-    ".svg",
-    ".mp4",
-    ".mov",
-    ".avi",
-    ".mp3",
-    ".wav",
-]
+SUPPORTED_FILE_EXTENSIONS = settings.SUPPORTED_FILE_TYPES["collections"]
 
 
 def check_experiment_access(request, experiment, participant_id):
