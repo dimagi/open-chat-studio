@@ -1,6 +1,5 @@
 import csv
 import logging
-import re
 from collections.abc import Iterable
 from datetime import timedelta
 from io import StringIO
@@ -24,6 +23,7 @@ from apps.evaluations.models import (
     EvaluationRunType,
     Evaluator,
 )
+from apps.evaluations.utils import parse_history_text
 from apps.experiments.models import Experiment, ExperimentSession, Participant
 from apps.teams.utils import current_team
 
@@ -299,7 +299,7 @@ def _extract_row_data(row, row_index):
     history = []
     history_text = row.get("history", "").strip()
     if history_text:
-        history = _parse_history_text(history_text)
+        history = parse_history_text(history_text)
 
     return {
         "input_content": input_content,
@@ -399,45 +399,3 @@ def _process_csv_rows(dataset, rows, columns, progress_recorder, team):
         progress_recorder.set_progress(progress, 100, f"Processing row {processed_rows}/{total_rows}")
 
     return stats
-
-
-def _parse_history_text(history_text: str) -> list:
-    """Parse history text back into JSON format for EvaluationMessage.history field."""
-
-    history = []
-    if not history_text.strip():
-        return history
-
-    # Use regex to find role markers at the start of lines
-    # This pattern matches "human:" or "ai:" at the start of a line (case-insensitive)
-    pattern = r"^(human|ai):\s*(.*)$"
-
-    current_message = None
-
-    for line in history_text.split("\n"):
-        line_stripped = line.strip()
-        if not line_stripped:
-            continue
-
-        match = re.match(pattern, line_stripped, re.IGNORECASE)
-        if match:
-            # Save previous message if exists
-            if current_message:
-                history.append(current_message)
-
-            # Start new message
-            role = match.group(1).lower()
-            content = match.group(2)
-            current_message = {
-                "message_type": role,
-                "content": content,
-                "summary": None,
-            }
-        elif current_message:
-            # Continuation of current message content
-            current_message["content"] += "\n" + line_stripped
-
-    if current_message:
-        history.append(current_message)
-
-    return history

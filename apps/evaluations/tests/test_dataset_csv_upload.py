@@ -4,7 +4,8 @@ from django.urls import reverse
 
 from apps.chat.models import Chat, ChatMessage, ChatMessageType
 from apps.evaluations.models import EvaluationDataset, EvaluationMessage, EvaluationMessageContent
-from apps.evaluations.tasks import _parse_history_text, _update_existing_message
+from apps.evaluations.tasks import _update_existing_message
+from apps.evaluations.utils import parse_history_text
 from apps.utils.factories.team import TeamWithUsersFactory
 
 
@@ -115,18 +116,18 @@ def test_parse_history_functionality():
     """Test the history parsing functionality."""
 
     # Test empty history
-    assert _parse_history_text("") == []
+    assert parse_history_text("") == []
 
     # Test single line history
     history_text = "human: Hello there"
-    result = _parse_history_text(history_text)
+    result = parse_history_text(history_text)
     assert len(result) == 1
     assert result[0]["message_type"] == "human"
     assert result[0]["content"] == "Hello there"
 
     # Test multi-line history
     history_text = "human: Hello\nai: Hi there!\nhuman: How are you?"
-    result = _parse_history_text(history_text)
+    result = parse_history_text(history_text)
     assert len(result) == 3
     assert result[0]["message_type"] == "human"
     assert result[1]["message_type"] == "ai"
@@ -134,7 +135,7 @@ def test_parse_history_functionality():
 
     # Test message with newlines in content
     history_text = "human: This is a multi-line\nmessage with newlines\nai: I understand your\nmulti-line message"
-    result = _parse_history_text(history_text)
+    result = parse_history_text(history_text)
     assert len(result) == 2
     assert result[0]["message_type"] == "human"
     assert result[0]["content"] == "This is a multi-line\nmessage with newlines"
@@ -145,7 +146,7 @@ def test_parse_history_functionality():
     history_text = (
         "This is garbled text\nhuman: Hello\nsome random text without role\nai: Hi there!\nmore garbled content"
     )
-    result = _parse_history_text(history_text)
+    result = parse_history_text(history_text)
     assert len(result) == 2  # Only the valid human/ai messages should be parsed
     assert result[0]["message_type"] == "human"
     assert result[0]["content"] == "Hello\nsome random text without role"  # Continuation line included
@@ -154,7 +155,7 @@ def test_parse_history_functionality():
 
     # Test different casings (HUMAN, Human, AI, Ai, etc.)
     history_text = "HUMAN: Hello from uppercase\nAi: Mixed case response\nhuman: lowercase again"
-    result = _parse_history_text(history_text)
+    result = parse_history_text(history_text)
     assert len(result) == 3
     assert result[0]["message_type"] == "human"  # Always normalized to lowercase
     assert result[0]["content"] == "Hello from uppercase"

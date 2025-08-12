@@ -1,4 +1,5 @@
 import inspect
+import re
 
 from apps.evaluations.models import Evaluator
 
@@ -70,3 +71,45 @@ def get_evaluator_type_display(evaluator_type: str) -> dict[str, str]:
     """
     evaluator_type_info = get_evaluator_type_info()
     return evaluator_type_info.get(evaluator_type, {"label": evaluator_type, "icon": None})
+
+
+def parse_history_text(history_text: str) -> list:
+    """Parse history text back into JSON format for EvaluationMessage.history field."""
+
+    history = []
+    if not history_text.strip():
+        return history
+
+    # Use regex to find role markers at the start of lines
+    # This pattern matches "human:" or "ai:" at the start of a line (case-insensitive)
+    pattern = r"^(human|ai):\s*(.*)$"
+
+    current_message = None
+
+    for line in history_text.split("\n"):
+        line_stripped = line.strip()
+        if not line_stripped:
+            continue
+
+        match = re.match(pattern, line_stripped, re.IGNORECASE)
+        if match:
+            # Save previous message if exists
+            if current_message:
+                history.append(current_message)
+
+            # Start new message
+            role = match.group(1).lower()
+            content = match.group(2)
+            current_message = {
+                "message_type": role,
+                "content": content,
+                "summary": None,
+            }
+        elif current_message:
+            # Continuation of current message content
+            current_message["content"] += "\n" + line_stripped
+
+    if current_message:
+        history.append(current_message)
+
+    return history
