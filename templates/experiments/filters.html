@@ -284,9 +284,8 @@
         })
           .then(res => res.json())
           .then(data => {
-            const identifiers = data.map(d => d[0]).filter(id => id != null);
-            const remoteIds = data.map(d => d[1]).filter(id => id != null);
-
+            const identifiers = data.identifiers;
+            const remoteIds = data.remote_ids;
             this.filterData.columns.participant.options = identifiers;
             this.filterData.columns.remote_id.options = remoteIds;
 
