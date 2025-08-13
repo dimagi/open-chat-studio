@@ -283,11 +283,9 @@
   }
 
   .chat-window-normal {
-    @apply fixed w-full sm:w-[var(--chat-window-width)] max-w-screen-lg rounded-lg overflow-hidden flex flex-col;
+    @apply fixed w-screen h-screen min-h-[300px] min-w-[300px] sm:w-[var(--chat-window-width)] sm:h-[var(--chat-window-height)] max-w-screen-lg rounded-lg overflow-hidden flex flex-col;
     background-color: var(--chat-window-bg-color);
     border: 1px solid var(--chat-window-border-color);
-    height: var(--chat-window-height);
-    min-height: 300px;
   }
 
   .chat-window-dragging {
