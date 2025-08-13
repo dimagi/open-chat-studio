@@ -16,10 +16,8 @@
     * @prop --button-border-color: Button border color (#6b7280)
     * @prop --button-border-color-hover: Button border color on hover (#374151)
     * @prop --button-padding: Button padding (0.75em)
-    * @prop --button-padding-sm: Small button padding (0.375em)
     * @prop --button-font-size: Button text font size (0.875em)
-    * @prop --button-icon-width: Button icon width (1.5em)
-    * @prop --button-icon-height: Button icon height (1.5em)
+    * @prop --button-icon-size: Button icon size (1.5em)
     *
     * Chat Window Variables
     * @prop --chat-window-height: Chat window height in pixels or percent (60%)
@@ -113,13 +111,11 @@
   --button-background-color-hover: #f3f4f6;
   --button-text-color: #111827;
   --button-text-color-hover: #1d4ed8;
-  --button-border-color: #6b7280;
-  --button-border-color-hover: #374151;
-  --button-padding: 0.75em;
-  --button-padding-sm: 0.375em;
+  --button-border-color: transparent;
+  --button-border-color-hover: #d1d5db;
+  --button-padding: 0.5em;
   --button-font-size: 0.875em; /* text-sm */
-  --button-icon-width: 1.5em;
-  --button-icon-height: 1.5em;
+  --button-icon-size: 1.5em;
 
   /* Chat window variables */
   --chat-window-height: 60%;
@@ -229,7 +225,13 @@
   .chat-btn-icon {
     @apply shadow-lg border-0 transition-all duration-200 ease-in-out transform hover:scale-105 rounded-lg;
     background-color: var(--button-background-color, white);
+    border: 1px solid var(--button-border-color);
     z-index: var(--chat-z-index, 50);
+  }
+
+  .chat-btn-text:hover, .chat-btn-icon:hover {
+    color: var(--button-text-color-hover, #1d4ed8);
+    border: 1px solid var(--button-border-color-hover);
   }
 
   /* Button with text and icon */
@@ -237,39 +239,31 @@
     @apply flex gap-[8px] items-center;
     padding: var(--button-padding, 0.75em);
     color: var(--button-text-color, #111827);
-  }
-
-  .chat-btn-text:hover {
-    color: var(--button-text-color-hover, #1d4ed8);
+    font-size: var(--button-font-size);
   }
 
   .chat-btn-text span {
     @apply font-medium whitespace-nowrap;
-    font-size: var(--button-font-size);
   }
 
   .chat-btn-text img {
-    @apply object-contain flex-shrink-0;
-    width: var(--button-icon-width, 1.5em);
-    height: var(--button-icon-height, 1.5em);
+    @apply object-contain flex-shrink-0 size-[var(--button-icon-size)];
   }
 
   /* Icon-only button */
   .chat-btn-icon {
+    font-size: var(--button-font-size);
     padding: var(--button-padding, 0.75em);
-    width: 56px;
-    height: 56px;
   }
 
   .chat-btn-icon img {
-    @apply w-full h-full object-contain;
+    @apply size-[var(--button-icon-size)] object-contain;
   }
 
   .chat-btn-text.round,
   .chat-btn-icon.round {
     @apply rounded-full;
   }
-
 
   /* Error message styling */
   .error-message {
