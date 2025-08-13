@@ -1196,11 +1196,11 @@ export class OcsChat {
                         {message.attachments && message.attachments.length > 0 && (
                           <div class="message-attachments">
                             {message.attachments.map((attachment, attachmentIndex) => (
-                              <div key={attachmentIndex} class="message-attachment-item">
+                              <div key={attachmentIndex} class="flex items-center gap-[0.5em]">
                                 <span class="message-attachment-icon">
                                   <PaperClipIcon />
                                 </span>
-                                <span class="message-attachment-name">{attachment.name}</span>
+                                {attachment.name}
                                 {attachment.content_url && (
                                   <a
                                     href={attachment.content_url}
@@ -1258,7 +1258,7 @@ export class OcsChat {
                   <div class="space-y-[0.25em]">
                     {this.selectedFiles.map((selectedFile, index) => (
                       <div key={index} class="selected-file-item">
-                        <div class="selected-file-info">
+                        <div class="flex items-center gap-[0.5em]">
                           <span class="selected-file-icon">
                             <PaperClipIcon/>
                           </span>

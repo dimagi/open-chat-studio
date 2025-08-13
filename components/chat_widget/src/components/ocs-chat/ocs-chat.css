@@ -198,7 +198,6 @@
   --file-attachment-button-bg-hover-color: var(--header-button-bg-hover-color); /* #f3f4f6 */
   --file-attachment-button-text-color: var(--header-button-text-color); /* #6b7280 */
   --file-attachment-button-text-disabled-color: var(--send-button-text-disabled-color); /* #6b7280 */
-  --file-attachment-button-padding: var(--button-padding-sm); /* 0.375rem */
 
   /* Selected files variables */
   --selected-files-bg-color: var(--input-bg-color); /* transparent */
@@ -206,12 +205,9 @@
 
   /* Selected file item variables */
   --selected-file-item-bg-color: var(--message-system-bg-color); /* #f3f4f6 */
-  --selected-file-item-border-radius: 0.375rem;
-  --selected-file-item-padding-x: 0.5rem;
-  --selected-file-item-padding-y: 0.25rem;
-  --selected-file-item-gap: 0.5rem;
 
   /* Selected file text variables */
+  --selected-file-font-size: var(--chat-window-font-size-sm);
   --selected-file-name-color: var(--message-assistant-text-color); /* #1f2937 */
   --selected-file-size-color: var(--input-placeholder-color); /* #6b7280 */
   --selected-file-error-color: var(--error-text-color); /* #ef4444 */
@@ -220,12 +216,11 @@
   --selected-file-remove-hover-color: #dc2626; /* Darker red for hover */
 
   /* Selected file icon variables */
-  --selected-file-icon-size: 1.25rem;
-  --selected-file-success-icon-size: 1rem;
+  --selected-file-icon-size: 1.25em;
+  --selected-file-success-icon-size: 1em;
 
   /* Message attachment variables */
-  --message-attachment-item-gap: 0.5rem;
-  --message-attachment-icon-size: 1rem;
+  --message-attachment-icon-size: 1em;
   --message-attachment-link-color: inherit;
   --message-attachment-link-hover-decoration: none;
 
@@ -622,7 +617,7 @@ textarea {
 /* File Upload Button */
 .file-attachment-button {
   @apply rounded-md transition-colors duration-200 disabled:opacity-50 disabled:cursor-not-allowed;
-  padding: var(--file-attachment-button-padding);
+  padding: 0.375em;
   background-color: var(--file-attachment-button-bg-color);
   color: var(--file-attachment-button-text-color);
 }
@@ -646,23 +641,17 @@ textarea {
 .selected-file-item {
   @apply flex items-center justify-between;
   background-color: var(--selected-file-item-bg-color);
-  border-radius: var(--selected-file-item-border-radius);
-  padding: var(--selected-file-item-padding-y) var(--selected-file-item-padding-x);
-}
-
-.selected-file-info {
-  @apply flex items-center;
-  gap: var(--selected-file-item-gap);
+  border-radius: 0.375em;
+  padding: 0.25em 0.5em;
 }
 
 .selected-file-icon {
-  @apply flex items-center justify-center;
-  width: var(--selected-file-icon-size);
-  height: var(--selected-file-icon-size);
+  @apply flex items-center justify-center size-[var(--selected-file-icon-size)];
 }
 
 .selected-file-name {
   color: var(--selected-file-name-color);
+  font-size: var(--selected-file-font-size);
 }
 
 .selected-file-size {
@@ -676,16 +665,14 @@ textarea {
 }
 
 .selected-file-success-icon {
-  @apply flex items-center justify-center;
+  @apply flex items-center justify-center size-[var(--selected-file-success-icon-size)];
   color: var(--selected-file-success-color);
-  width: var(--selected-file-success-icon-size);
-  height: var(--selected-file-success-icon-size);
 }
 
 .selected-file-remove-button {
   @apply font-bold transition-colors duration-200;
   color: var(--selected-file-remove-color);
-  padding: var(--button-padding-sm);
+  padding: 0.375em;
 }
 
 .selected-file-remove-button:hover {
@@ -694,26 +681,16 @@ textarea {
 
 /* Message Attachments */
 .message-attachments {
-  @apply mt-2 space-y-1;
-}
-
-.message-attachment-item {
-  @apply flex items-center;
-  gap: var(--message-attachment-item-gap);
+  @apply mt-[0.5em] space-y-[0.25em];
+  font-size: var(--chat-window-font-size-sm);
 }
 
 .message-attachment-icon {
-  @apply flex items-center justify-center;
-  width: var(--message-attachment-icon-size);
-  height: var(--message-attachment-icon-size);
-}
-
-.message-attachment-name {
-  /* Inherits color from parent message bubble */
+  @apply flex items-center justify-center size-[var(--message-attachment-icon-size)];
 }
 
 .message-attachment-link {
-  @apply ml-2 underline;
+  @apply ml-[0.5em] underline;
   color: var(--message-attachment-link-color);
 }
 
