@@ -34,6 +34,8 @@ class OCSTracer(Tracer):
         self.trace = None
         self.spans: dict[UUID, Span] = {}
         self.error_detected = False
+        # error_span_id is used to track the span in which an error occurred
+        self.error_span_id = None
 
     @property
     def ready(self) -> bool:
@@ -129,9 +131,13 @@ class OCSTracer(Tracer):
             self.error_detected = True
             span.status = TraceStatus.ERROR
             span.error = str(error)
-            tags = get_tags_from_error(error)
-            for tag in tags:
-                span.create_and_add_tag(tag=tag, team=span.team, tag_category=TagCategories.ERROR)
+
+            if self.error_span_id is None:
+                # Only tag the span in which the error occured
+                self.error_span_id = span_id
+                tags = get_tags_from_error(error)
+                for tag in tags:
+                    span.create_and_add_tag(tag=tag, team=span.team, tag_category=TagCategories.ERROR)
         else:
             span.status = TraceStatus.SUCCESS
         span.save()
