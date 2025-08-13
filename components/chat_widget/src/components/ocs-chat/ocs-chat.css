@@ -38,6 +38,7 @@
     * @prop --header-button-text-color: Header button text color (#6b7280)
     * @prop --header-button-bg-hover-color: Header button background on hover (#f3f4f6)
     * @prop --header-padding: Header padding (0.5em)
+    * @prop --header-font-size: Header font size (1em)
     *
     * Starter Question Variables
     * @prop --starter-question-bg-color: Starter question background color (transparent)
@@ -137,6 +138,8 @@
   --header-button-text-color: #6b7280;
   --header-button-bg-hover-color: #f3f4f6;
   --header-padding: 0.5em;
+  --header-font-size: 1em;
+  --header-button-icon-size: 1.5em;
 
   /* Starter question variables */
   --starter-question-bg-color: transparent;
@@ -302,6 +305,7 @@
     padding: var(--header-padding, 0.5em);
     background-color: var(--header-bg-color);
     border-bottom: 1px solid var(--header-border-color);
+    font-size: var(--header-font-size);
   }
 
   .chat-header:hover,
@@ -336,8 +340,12 @@
   /* Header button classes */
   .header-button {
     @apply rounded-md transition-colors duration-200;
-    padding: var(--button-padding-sm, 0.375em);
+    padding: 0.375em;
     color: var(--header-button-text-color);
+  }
+
+  .header-button svg {
+    @apply size-[var(--header-button-icon-size)];
   }
 
   .header-button:hover {
