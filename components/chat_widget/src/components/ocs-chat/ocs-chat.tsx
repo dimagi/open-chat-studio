@@ -1300,7 +1300,12 @@ export class OcsChat {
                     {/* File Upload Button */}
                     {this.allowAttachments && (
                       <input
-                        ref={(el) => this.fileInputRef = el}
+                        ref={(el) => {
+                            // Unclear why but after removing all attachments this is being set to `null`.
+                            if (el) {this.fileInputRef = el}
+                          }
+                        }
+                        id="ocs-file-input"
                         type="file"
                         multiple
                         accept={OcsChat.SUPPORTED_FILE_EXTENSIONS.join(',')}
