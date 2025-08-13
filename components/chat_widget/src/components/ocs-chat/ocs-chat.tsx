@@ -373,7 +373,14 @@ export class OcsChat {
 
         if (!response.ok) {
           const errorData = await response.json();
-          throw new Error(errorData.error || 'Failed to upload files');
+          const errorMessage = errorData.error || 'Failed to upload files';
+          this.selectedFiles = this.selectedFiles.map(sf => {
+            if (!sf.error && !sf.uploaded) {
+              return { ...sf, error: errorMessage };
+            }
+            return sf;
+          });
+          return uploadedIds;
         }
 
         const data = await response.json();
@@ -391,8 +398,14 @@ export class OcsChat {
 
       return uploadedIds;
     } catch (error) {
-      this.error = error instanceof Error ? error.message : 'Failed to upload files';
-      throw error;
+      const errorMessage = error instanceof Error ? error.message : 'Failed to upload files';
+      this.selectedFiles = this.selectedFiles.map(sf => {
+        if (!sf.error && !sf.uploaded) {
+          return { ...sf, error: errorMessage };
+        }
+        return sf;
+      });
+      return uploadedIds;
     } finally {
       this.isUploadingFiles = false;
     }
