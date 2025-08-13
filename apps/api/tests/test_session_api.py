@@ -3,7 +3,7 @@ from django.urls import reverse
 from rest_framework import status
 from rest_framework.fields import DateTimeField
 
-from apps.annotations.models import Tag
+from apps.annotations.models import Tag, TagCategories
 from apps.chat.models import ChatAttachment
 from apps.experiments.models import ExperimentSession, Team
 from apps.utils.factories.experiment import ExperimentFactory, ExperimentSessionFactory
@@ -248,8 +248,6 @@ def test_list_sessions_with_experiment_filter(experiment):
 
 @pytest.mark.django_db()
 def test_list_sessions_with_version_filter(experiment):
-    from apps.annotations.models import TagCategories
-
     team = experiment.team
     user = experiment.team.members.first()
 
