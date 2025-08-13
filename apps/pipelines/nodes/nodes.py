@@ -35,7 +35,13 @@ from apps.chat.agent.tools import get_node_tools
 from apps.chat.conversation import compress_chat_history, compress_pipeline_chat_history
 from apps.documents.models import Collection
 from apps.experiments.models import BuiltInTools, ExperimentSession, ParticipantData
-from apps.pipelines.exceptions import AbortPipeline, PipelineNodeBuildError, PipelineNodeRunError, WaitForNextInput
+from apps.pipelines.exceptions import (
+    AbortPipeline,
+    CodeNodeRunError,
+    PipelineNodeBuildError,
+    PipelineNodeRunError,
+    WaitForNextInput,
+)
 from apps.pipelines.models import PipelineChatHistory, PipelineChatHistoryModes, PipelineChatHistoryTypes
 from apps.pipelines.nodes.base import (
     NodeSchema,
@@ -1142,7 +1148,7 @@ class CodeNode(PipelineNode, OutputMessageTagMixin):
         except AbortPipeline as abort:
             return interrupt(abort.to_json())
         except Exception as exc:
-            raise PipelineNodeRunError(exc) from exc
+            raise CodeNodeRunError(exc) from exc
 
         if isinstance(result, Command):
             return result
@@ -1237,7 +1243,7 @@ class CodeNode(PipelineNode, OutputMessageTagMixin):
             if len(node_names) == 1 and isinstance(node_names[0], list):
                 node_names = node_names[0]
             if not all(isinstance(name, str) for name in node_names):
-                raise PipelineNodeRunError("Node names passed to 'require_node_outputs' must be a string")
+                raise CodeNodeRunError("Node names passed to 'require_node_outputs' must be a string")
             for node_name in node_names:
                 if node_name not in state["outputs"]:
                     raise WaitForNextInput(f"Node '{node_name}' has not produced any output yet")
@@ -1275,7 +1281,7 @@ class CodeNode(PipelineNode, OutputMessageTagMixin):
             This will override any existing data for the key unless the key is read-only, in which case
             an error will be raised. Read-only keys are: `user_input`, `outputs`, `attachments`."""
             if key_name in {"user_input", "outputs", "attachments"}:
-                raise PipelineNodeRunError(f"Cannot set the '{key_name}' key of the temporary state")
+                raise CodeNodeRunError(f"Cannot set the '{key_name}' key of the temporary state")
             state["temp_state"][key_name] = value
 
         return set_temp_state_key
