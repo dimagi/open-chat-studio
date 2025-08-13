@@ -101,6 +101,11 @@ export class OcsChat {
   @Prop() buttonShape: 'round' | 'square' = 'square';
 
   /**
+   * The text to place in the header.
+   */
+  @Prop() headerText: '';
+
+  /**
    * Whether the chat widget is visible on load.
    */
   @Prop({ mutable: true }) visible: boolean = false;
@@ -931,7 +936,7 @@ export class OcsChat {
                   <GripDotsVerticalIcon/>
                 </div>
               </div>
-              <div class="drag-spacer"></div>
+              <div class="header-text">{this.headerText}</div>
               <div class="header-buttons">
                 {/* Fullscreen toggle button */}
                 {this.allowFullScreen && <button
@@ -1095,6 +1100,9 @@ export class OcsChat {
                   </div>
                 </div>
               )}
+              <div class="flex items-center justify-center text-[0.8em] font-light w-full text-slate-500 py-[2px]">
+                <p>Powered by <a class="underline" href="https://www.dimagi.com" target="_blank">Dimagi</a></p>
+              </div>
             </div>
           </div>
         )}

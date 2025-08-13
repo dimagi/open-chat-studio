@@ -16,6 +16,7 @@ For more information, see the [Open Chat Studio documentation](https://docs.open
 | `buttonShape`             | `button-shape`              | The shape of the chat button. 'round' makes it circular, 'square' keeps it rectangular.                                           | `"round" \| "square"`           | `'square'`                      |
 | `buttonText`              | `button-text`               | The text to display on the button.                                                                                                | `string`                        | `undefined`                     |
 | `chatbotId` _(required)_  | `chatbot-id`                | The ID of the chatbot to connect to.                                                                                              | `string`                        | `undefined`                     |
+| `headerText`              | `header-text`               | The text to place in the header.                                                                                                  | `""`                            | `undefined`                     |
 | `iconUrl`                 | `icon-url`                  | URL of the icon to display on the button. If not provided, uses the default OCS logo.                                             | `string`                        | `undefined`                     |
 | `persistentSession`       | `persistent-session`        | Whether to persist session data to local storage to allow resuming previous conversations after page reload.                      | `boolean`                       | `true`                          |
 | `persistentSessionExpire` | `persistent-session-expire` | Minutes since the most recent message after which the session data in local storage will expire. Set this to `0` to never expire. | `number`                        | `60 * 24`                       |
@@ -62,9 +63,12 @@ For more information, see the [Open Chat Studio documentation](https://docs.open
 | `--header-bg-hover-color`               | Header background color on hover (#f9fafb)                                       |
 | `--header-border-color`                 | Header border color (#f3f4f6)                                                    |
 | `--header-button-bg-hover-color`        | Header button background on hover (#f3f4f6)                                      |
+| `--header-button-icon-size`             | Icon size for buttons in the header (1.5em)                                      |
 | `--header-button-text-color`            | Header button text color (#6b7280)                                               |
 | `--header-font-size`                    | Header font size (1em)                                                           |
 | `--header-padding`                      | Header padding (0.5em)                                                           |
+| `--header-text-color`                   | Color for the text in the header (#525762)                                       |
+| `--header-text-font-size`               | Font size for the text in the header (--header-font-size)                        |
 | `--input-bg-color`                      | Input area background color (transparent)                                        |
 | `--input-border-color`                  | Input field border color (#d1d5db)                                               |
 | `--input-outline-focus-color`           | Input field focus ring color (#3b82f6)                                           |
