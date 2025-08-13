@@ -650,6 +650,10 @@ textarea {
   @apply flex items-center justify-center size-[var(--selected-file-icon-size)];
 }
 
+.selected-file-size {
+  color: var(--selected-file-size-color);
+}
+
 .selected-file-error {
   color: var(--error-text-color);
 }

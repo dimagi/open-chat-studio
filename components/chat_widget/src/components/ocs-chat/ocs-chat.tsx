@@ -1263,7 +1263,7 @@ export class OcsChat {
                             <PaperClipIcon/>
                           </span>
                           <span>{selectedFile.file.name}</span>
-                          <span>({this.formatFileSize(selectedFile.file.size)})</span>
+                          <span class="selected-file-size">({this.formatFileSize(selectedFile.file.size)})</span>
                           {selectedFile.error && (
                             <span class="selected-file-error">{selectedFile.error}</span>
                           )}
