@@ -506,11 +506,9 @@ textarea {
 }
 
 .loading-spinner {
-  @apply border-2 rounded-full animate-spin;
+  @apply border-2 rounded-full animate-spin size-[var(--loading-spinner-size)];
   border-color: var(--loading-spinner-track-color);
   border-top-color: var(--loading-spinner-fill-color);
-  width: var(--loading-spinner-size, 1.25em);
-  height: var(--loading-spinner-size, 1.25em);
 }
 
 .overflow-y-auto::-webkit-scrollbar {
