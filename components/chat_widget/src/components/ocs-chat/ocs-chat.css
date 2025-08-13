@@ -83,6 +83,7 @@
     * @prop --scrollbar-thumb-hover-color: Scrollbar thumb hover color (#9ca3af)
     *
     * @prop --error-text-color: Error text color (#ef4444)
+    * @prop --success-text-color: Success text color (#10b981)
     * @prop --error-message-padding: Error message padding (0.5em)
     *
     * @prop --code-bg-user-color: Code background in user messages (--message-user-bg-color + 20% white)
@@ -91,6 +92,25 @@
     * @prop --code-bg-assistant-color: Code background in assistant messages (--message-assistant-bg-color + 50% white)
     * @prop --code-text-assistant-color: Code text color in assistant messages (--message-assistant-text-color)
     * @prop --code-border-assistant-color: Code border in assistant messages (--message-assistant-bg-color + 10% black)
+    *
+    * @prop --file-attachment-button-bg-color: Attach file button background color (transparent)
+    * @prop --file-attachment-button-bg-hover-color: Attach file button background hover color (--header-button-bg-hover-color)
+    * @prop --file-attachment-button-text-color: Attach file button text color (--header-button-text-color)
+    * @prop --file-attachment-button-text-disabled-color: Attach file button disabled text color (--send-button-text-disabled-color)
+    *
+    * @prop --selected-files-bg-color: Selected files container background color (--input-bg-color)
+    * @prop --selected-files-border-color: Selected files container border color (--header-border-color)
+    *
+    * @prop --selected-file-bg-color: Selected file item background color (--message-system-bg-color)
+    * @prop --selected-file-font-size: Selected file item font size (--chat-window-font-size-sm)
+    * @prop --selected-file-name-color: Selected file name color (--message-assistant-text-color)
+    * @prop --selected-file-size-color: Selected file size display color (--input-placeholder-color)
+    * @prop --selected-file-icon-size: Selected file item icon size (1.25em)
+    * @prop --selected-file-remove-icon-color: Selected file remove icon color (--error-text-color)
+    * @prop --selected-file-remove-icon-hover-color: Selected file remove icon hover (#dc2626)
+    *
+    * @prop --message-attachment-icon-size: Message attachment icon size (1em)
+    * @prop --message-attachment-link-color: Message attachment link color (inherit)
     */
   /* Global variables */
   --chat-z-index: 50;
@@ -205,23 +225,21 @@
   --selected-files-border-color: var(--header-border-color); /* #f3f4f6 */
 
   /* Selected file item variables */
-  --selected-file-item-bg-color: var(--message-system-bg-color); /* #f3f4f6 */
+  --selected-file-bg-color: var(--message-system-bg-color); /* #f3f4f6 */
 
   /* Selected file text variables */
   --selected-file-font-size: var(--chat-window-font-size-sm);
   --selected-file-name-color: var(--message-assistant-text-color); /* #1f2937 */
   --selected-file-size-color: var(--input-placeholder-color); /* #6b7280 */
-  --selected-file-remove-color: var(--error-text-color); /* #ef4444 */
-  --selected-file-remove-hover-color: #dc2626; /* Darker red for hover */
 
   /* Selected file icon variables */
   --selected-file-icon-size: 1.25em;
-  --selected-file-success-icon-size: 1em;
+  --selected-file-remove-icon-color: var(--error-text-color); /* #ef4444 */
+  --selected-file-remove-icon-hover-color: #dc2626; /* Darker red for hover */
 
   /* Message attachment variables */
   --message-attachment-icon-size: 1em;
   --message-attachment-link-color: inherit;
-  --message-attachment-link-hover-decoration: none;
 
   display: block;
   position: fixed;
@@ -642,7 +660,7 @@ textarea {
 /* Selected File Item */
 .selected-file-item {
   @apply flex items-center justify-between;
-  background-color: var(--selected-file-item-bg-color);
+  background-color: var(--selected-file-bg-color);
   border-radius: 0.375em;
   padding: 0.25em 0.5em;
   font-size: var(--selected-file-font-size);
@@ -666,13 +684,13 @@ textarea {
 }
 
 .selected-file-success-icon {
-  @apply flex items-center justify-center size-[var(--selected-file-success-icon-size)];
+  @apply flex items-center justify-center size-[var(--selected-file-icon-size)];
   color: var(--success-text-color);
 }
 
 .selected-file-remove-button {
   @apply font-bold transition-colors duration-200;
-  color: var(--selected-file-remove-color);
+  color: var(--selected-file-remove-icon-color);
   padding: 0.375em;
 }
 
@@ -681,7 +699,7 @@ textarea {
 }
 
 .selected-file-remove-button:hover {
-  color: var(--selected-file-remove-hover-color);
+  color: var(--selected-file-remove-icon-hover-color);
 }
 
 /* Message Attachments */
@@ -695,12 +713,8 @@ textarea {
 }
 
 .message-attachment-link {
-  @apply ml-[0.5em] underline;
+  @apply ml-[0.5em] underline hover:no-underline;
   color: var(--message-attachment-link-color);
-}
-
-.message-attachment-link:hover {
-  text-decoration: var(--message-attachment-link-hover-decoration);
 }
 
 /* Update Send Button for Upload State */
