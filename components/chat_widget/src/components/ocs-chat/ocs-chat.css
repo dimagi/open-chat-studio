@@ -448,7 +448,7 @@
 
   /* Input area */
   .input-area {
-    padding: var(--container-padding, 1em);
+    padding: var(--container-padding, 1em) var(--container-padding, 1em) 0 var(--container-padding, 1em);
     background-color: var(--input-bg-color);
     border-top: 1px solid var(--input-border-color);
     font-size: var(--chat-window-font-size);
