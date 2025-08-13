@@ -4,11 +4,9 @@
 
 :host {
   /**
-    * Global Variables
     * @prop --chat-z-index: Z-index for chat widget (50)
     * @prop --container-padding: General container padding (1em)
     *
-    * Button Variables
     * @prop --button-background-color: Button background color (#ffffff)
     * @prop --button-background-color-hover: Button background color on hover (#f3f4f6)
     * @prop --button-text-color: Button text color (#111827)
@@ -16,12 +14,9 @@
     * @prop --button-border-color: Button border color (#6b7280)
     * @prop --button-border-color-hover: Button border color on hover (#374151)
     * @prop --button-padding: Button padding (0.75em)
-    * @prop --button-padding-sm: Small button padding (0.375em)
     * @prop --button-font-size: Button text font size (0.875em)
-    * @prop --button-icon-width: Button icon width (1.5em)
-    * @prop --button-icon-height: Button icon height (1.5em)
+    * @prop --button-icon-size: Button icon size (1.5em)
     *
-    * Chat Window Variables
     * @prop --chat-window-height: Chat window height in pixels or percent (60%)
     * @prop --chat-window-width: Chat window width in pixels or percent (25%)
     * @prop --chat-window-fullscreen-width: Chat window fullscreen width in pixels or percent (80%)
@@ -31,15 +26,14 @@
     * @prop --chat-window-font-size: Default font size for text in the chat window (0.875em)
     * @prop --chat-window-font-size-sm: Font size for small text in the chat window (0.75em)
     *
-    * Header Variables
     * @prop --header-bg-color: Header background color (transparent)
     * @prop --header-bg-hover-color: Header background color on hover (#f9fafb)
     * @prop --header-border-color: Header border color (#f3f4f6)
     * @prop --header-button-text-color: Header button text color (#6b7280)
     * @prop --header-button-bg-hover-color: Header button background on hover (#f3f4f6)
     * @prop --header-padding: Header padding (0.5em)
+    * @prop --header-font-size: Header font size (1em)
     *
-    * Starter Question Variables
     * @prop --starter-question-bg-color: Starter question background color (transparent)
     * @prop --starter-question-bg-hover-color: Starter question background on hover (#eff6ff)
     * @prop --starter-question-text-color: Starter question text color (#3b82f6)
@@ -47,7 +41,6 @@
     * @prop --starter-question-border-hover-color: Starter question border on hover (#2563eb)
     * @prop --starter-question-padding: Starter question padding (0.75em)
     *
-    * Message Bubble Variables
     * @prop --message-user-bg-color: User message background color (#3b82f6)
     * @prop --message-user-text-color: User message text color (#ffffff)
     * @prop --message-assistant-bg-color: Assistant message background color (#e5e7eb)
@@ -59,7 +52,6 @@
     * @prop --message-padding-x: Message horizontal padding (1em)
     * @prop --message-padding-y: Message vertical padding (0.5em)
     *
-    * Input Area Variables
     * @prop --input-bg-color: Input area background color (transparent)
     * @prop --input-border-color: Input field border color (#d1d5db)
     * @prop --input-text-color: Input text color (#111827)
@@ -68,7 +60,6 @@
     * @prop --input-textarea-padding-x: Input textarea horizontal padding (0.75em)
     * @prop --input-textarea-padding-y: Input textarea vertical padding (0.5em)
     *
-    * Send Button Variables
     * @prop --send-button-bg-color: Send button background color (#3b82f6)
     * @prop --send-button-bg-hover-color: Send button background on hover (#2563eb)
     * @prop --send-button-text-color: Send button text color (#ffffff)
@@ -77,25 +68,20 @@
     * @prop --send-button-padding-x: Send button horizontal padding (1em)
     * @prop --send-button-padding-y: Send button vertical padding (0.5em)
     *
-    * Loading Variables
     * @prop --loading-text-color: Loading text color (#6b7280)
     * @prop --loading-spinner-track-color: Loading spinner track color (#e5e7eb)
     * @prop --loading-spinner-fill-color: Loading spinner fill color (#3b82f6)
     * @prop --loading-spinner-size: Loading spinner size (1.25em)
     *
-    * Typing Indicator Variables
     * @prop --typing-progress-bg-color: Typing progress bar background color (#ade3ff)
     *
-    * Scrollbar Variables
     * @prop --scrollbar-track-color: Scrollbar track color (#f3f4f6)
     * @prop --scrollbar-thumb-color: Scrollbar thumb color (#d1d5db)
     * @prop --scrollbar-thumb-hover-color: Scrollbar thumb hover color (#9ca3af)
     *
-    * Error Variables
     * @prop --error-text-color: Error text color (#ef4444)
     * @prop --error-message-padding: Error message padding (0.5em)
     *
-    * Markdown Code Variables
     * @prop --code-bg-user-color: Code background in user messages (--message-user-bg-color + 20% white)
     * @prop --code-text-user-color: Code text color in user messages (--message-user-text-color)
     * @prop --code-border-user-color: Code border in user messages (--message-user-bg-color + 20% black)
@@ -112,13 +98,11 @@
   --button-background-color-hover: #f3f4f6;
   --button-text-color: #111827;
   --button-text-color-hover: #1d4ed8;
-  --button-border-color: #6b7280;
-  --button-border-color-hover: #374151;
-  --button-padding: 0.75em;
-  --button-padding-sm: 0.375em;
+  --button-border-color: transparent;
+  --button-border-color-hover: #d1d5db;
+  --button-padding: 0.5em;
   --button-font-size: 0.875em; /* text-sm */
-  --button-icon-width: 1.5em;
-  --button-icon-height: 1.5em;
+  --button-icon-size: 1.5em;
 
   /* Chat window variables */
   --chat-window-height: 60%;
@@ -137,6 +121,8 @@
   --header-button-text-color: #6b7280;
   --header-button-bg-hover-color: #f3f4f6;
   --header-padding: 0.5em;
+  --header-font-size: 1em;
+  --header-button-icon-size: 1.5em;
 
   /* Starter question variables */
   --starter-question-bg-color: transparent;
@@ -226,7 +212,13 @@
   .chat-btn-icon {
     @apply shadow-lg border-0 transition-all duration-200 ease-in-out transform hover:scale-105 rounded-lg;
     background-color: var(--button-background-color, white);
+    border: 1px solid var(--button-border-color);
     z-index: var(--chat-z-index, 50);
+  }
+
+  .chat-btn-text:hover, .chat-btn-icon:hover {
+    color: var(--button-text-color-hover, #1d4ed8);
+    border: 1px solid var(--button-border-color-hover);
   }
 
   /* Button with text and icon */
@@ -234,39 +226,31 @@
     @apply flex gap-[8px] items-center;
     padding: var(--button-padding, 0.75em);
     color: var(--button-text-color, #111827);
-  }
-
-  .chat-btn-text:hover {
-    color: var(--button-text-color-hover, #1d4ed8);
+    font-size: var(--button-font-size);
   }
 
   .chat-btn-text span {
     @apply font-medium whitespace-nowrap;
-    font-size: var(--button-font-size);
   }
 
   .chat-btn-text img {
-    @apply object-contain flex-shrink-0;
-    width: var(--button-icon-width, 1.5em);
-    height: var(--button-icon-height, 1.5em);
+    @apply object-contain flex-shrink-0 size-[var(--button-icon-size)];
   }
 
   /* Icon-only button */
   .chat-btn-icon {
+    font-size: var(--button-font-size);
     padding: var(--button-padding, 0.75em);
-    width: 56px;
-    height: 56px;
   }
 
   .chat-btn-icon img {
-    @apply w-full h-full object-contain;
+    @apply size-[var(--button-icon-size)] object-contain;
   }
 
   .chat-btn-text.round,
   .chat-btn-icon.round {
     @apply rounded-full;
   }
-
 
   /* Error message styling */
   .error-message {
@@ -302,6 +286,7 @@
     padding: var(--header-padding, 0.5em);
     background-color: var(--header-bg-color);
     border-bottom: 1px solid var(--header-border-color);
+    font-size: var(--header-font-size);
   }
 
   .chat-header:hover,
@@ -336,8 +321,12 @@
   /* Header button classes */
   .header-button {
     @apply rounded-md transition-colors duration-200;
-    padding: var(--button-padding-sm, 0.375em);
+    padding: 0.375em;
     color: var(--header-button-text-color);
+  }
+
+  .header-button svg {
+    @apply size-[var(--header-button-icon-size)];
   }
 
   .header-button:hover {
@@ -504,11 +493,9 @@ textarea {
 }
 
 .loading-spinner {
-  @apply border-2 rounded-full animate-spin;
+  @apply border-2 rounded-full animate-spin size-[var(--loading-spinner-size)];
   border-color: var(--loading-spinner-track-color);
   border-top-color: var(--loading-spinner-fill-color);
-  width: var(--loading-spinner-size, 1.25em);
-  height: var(--loading-spinner-size, 1.25em);
 }
 
 .overflow-y-auto::-webkit-scrollbar {

@@ -927,7 +927,7 @@ export class OcsChat {
             >
               {/* Drag indicator */}
               <div class="drag-indicator">
-                <div class="drag-dots">
+                <div class="drag-dots header-button">
                   <GripDotsVerticalIcon/>
                 </div>
               </div>
