@@ -33,6 +33,9 @@
     * @prop --header-button-bg-hover-color: Header button background on hover (#f3f4f6)
     * @prop --header-padding: Header padding (0.5em)
     * @prop --header-font-size: Header font size (1em)
+    * @prop --header-button-icon-size: Icon size for buttons in the header (1.5em)
+    * @prop --header-text-font-size: Font size for the text in the header (--header-font-size)
+    * @prop --header-text-color: Color for the text in the header (#525762)
     *
     * @prop --starter-question-bg-color: Starter question background color (transparent)
     * @prop --starter-question-bg-hover-color: Starter question background on hover (#eff6ff)
@@ -122,6 +125,8 @@
   --header-button-bg-hover-color: #f3f4f6;
   --header-padding: 0.5em;
   --header-font-size: 1em;
+  --header-text-font-size: var(--header-font-size);
+  --header-text-color: #525762;
   --header-button-icon-size: 1.5em;
 
   /* Starter question variables */
@@ -289,6 +294,12 @@
     font-size: var(--header-font-size);
   }
 
+  .header-text {
+    @apply flex items-center justify-center;
+    font-size: var(--header-text-font-size);
+    color: var(--header-text-color);
+  }
+
   .chat-header:hover,
   .chat-header:active {
     background-color: var(--header-bg-hover-color);
@@ -308,10 +319,6 @@
 
   .drag-dots {
     @apply flex gap-[2px] ml-[2px] pointer-events-none;
-  }
-
-  .drag-spacer {
-    @apply sm:hidden;
   }
 
   .header-buttons {
