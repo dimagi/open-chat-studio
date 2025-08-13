@@ -3,7 +3,7 @@ from django.urls import reverse
 from rest_framework import status
 from rest_framework.fields import DateTimeField
 
-from apps.annotations.models import Tag
+from apps.annotations.models import Tag, TagCategories
 from apps.chat.models import ChatAttachment
 from apps.experiments.models import ExperimentSession, Team
 from apps.utils.factories.experiment import ExperimentFactory, ExperimentSessionFactory
@@ -244,6 +244,95 @@ def test_list_sessions_with_experiment_filter(experiment):
         "previous": None,
         "results": expected_results,
     }
+
+
+@pytest.mark.django_db()
+def test_list_sessions_with_version_filter(experiment):
+    team = experiment.team
+    user = experiment.team.members.first()
+
+    # Create sessions with messages that have version tags
+    session1 = ExperimentSessionFactory(experiment=experiment)
+    session2 = ExperimentSessionFactory(experiment=experiment)
+    session3 = ExperimentSessionFactory(experiment=experiment)
+
+    # Add messages with version tags to sessions
+    message1 = session1.chat.messages.create(message_type="ai", content="test response v1")
+    message2 = session2.chat.messages.create(message_type="ai", content="test response v2")
+    message3 = session3.chat.messages.create(message_type="ai", content="test response v1")
+
+    # Create version tags and add them to messages
+    session1.chat.create_and_add_tag("v1.0", team, TagCategories.EXPERIMENT_VERSION)
+    message1.create_and_add_tag("v1.0", team, TagCategories.EXPERIMENT_VERSION)
+
+    session2.chat.create_and_add_tag("v2.0", team, TagCategories.EXPERIMENT_VERSION)
+    message2.create_and_add_tag("v2.0", team, TagCategories.EXPERIMENT_VERSION)
+
+    session3.chat.create_and_add_tag("v1.0", team, TagCategories.EXPERIMENT_VERSION)
+    message3.create_and_add_tag("v1.0", team, TagCategories.EXPERIMENT_VERSION)
+
+    client = ApiTestClient(user, team)
+
+    # Filter by v1.0 - should return session1 and session3
+    response = client.get(reverse("api:session-list") + "?versions=v1.0")
+    assert response.status_code == 200
+    data = response.json()
+    session_ids = [result["id"] for result in data["results"]]
+    assert len(session_ids) == 2
+    assert str(session1.external_id) in session_ids
+    assert str(session3.external_id) in session_ids
+    assert str(session2.external_id) not in session_ids
+
+    # Filter by v2.0 - should return only session2
+    response = client.get(reverse("api:session-list") + "?versions=v2.0")
+    assert response.status_code == 200
+    data = response.json()
+    session_ids = [result["id"] for result in data["results"]]
+    assert len(session_ids) == 1
+    assert str(session2.external_id) in session_ids
+
+    # Filter by multiple versions - should return all sessions
+    response = client.get(reverse("api:session-list") + "?versions=v1.0,v2.0")
+    assert response.status_code == 200
+    data = response.json()
+    session_ids = [result["id"] for result in data["results"]]
+    assert len(session_ids) == 3
+
+
+@pytest.mark.django_db()
+def test_list_sessions_with_combined_filters(experiment):
+    from apps.annotations.models import TagCategories
+
+    team = experiment.team
+    user = experiment.team.members.first()
+
+    # Create another experiment for testing
+    experiment2 = ExperimentFactory(team=team)
+
+    # Create sessions
+    session1 = ExperimentSessionFactory(experiment=experiment)  # exp1, v1.0
+    session2 = ExperimentSessionFactory(experiment=experiment2)  # exp2, v1.0
+    session3 = ExperimentSessionFactory(experiment=experiment)  # exp1, v2.0
+
+    # Add version tags
+    message1 = session1.chat.messages.create(message_type="ai", content="test")
+    message2 = session2.chat.messages.create(message_type="ai", content="test")
+    message3 = session3.chat.messages.create(message_type="ai", content="test")
+
+    message1.create_and_add_tag("v1.0", team, TagCategories.EXPERIMENT_VERSION)
+    message2.create_and_add_tag("v1.0", team, TagCategories.EXPERIMENT_VERSION)
+    message3.create_and_add_tag("v2.0", team, TagCategories.EXPERIMENT_VERSION)
+
+    client = ApiTestClient(user, team)
+
+    # Test combining experiment and version filters
+    response = client.get(reverse("api:session-list") + f"?experiment={experiment.public_id}&versions=v1.0")
+    assert response.status_code == 200
+    data = response.json()
+    session_ids = [result["id"] for result in data["results"]]
+    # Should only return session1 (experiment1 + v1.0)
+    assert len(session_ids) == 1
+    assert str(session1.external_id) in session_ids
 
 
 @pytest.mark.django_db()
