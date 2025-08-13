@@ -110,7 +110,6 @@
     * @prop --selected-file-remove-icon-hover-color: Selected file remove icon hover (#dc2626)
     *
     * @prop --message-attachment-icon-size: Message attachment icon size (1em)
-    * @prop --message-attachment-link-color: Message attachment link color (inherit)
     */
   /* Global variables */
   --chat-z-index: 50;
@@ -239,7 +238,6 @@
 
   /* Message attachment variables */
   --message-attachment-icon-size: 1em;
-  --message-attachment-link-color: inherit;
 
   display: block;
   position: fixed;
@@ -710,11 +708,6 @@ textarea {
 
 .message-attachment-icon {
   @apply flex items-center justify-center size-[var(--message-attachment-icon-size)];
-}
-
-.message-attachment-link {
-  @apply ml-[0.5em] underline hover:no-underline;
-  color: var(--message-attachment-link-color);
 }
 
 /* Update Send Button for Upload State */
