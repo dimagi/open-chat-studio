@@ -183,6 +183,7 @@
 
   /* Error variables */
   --error-text-color: #ef4444;
+  --success-text-color: #10b981; /* Complementary green to existing blue palette */;
   --error-message-padding: 0.5em;
 
   /* Markdown code variables */
@@ -210,8 +211,6 @@
   --selected-file-font-size: var(--chat-window-font-size-sm);
   --selected-file-name-color: var(--message-assistant-text-color); /* #1f2937 */
   --selected-file-size-color: var(--input-placeholder-color); /* #6b7280 */
-  --selected-file-error-color: var(--error-text-color); /* #ef4444 */
-  --selected-file-success-color: #10b981; /* Complementary green to existing blue palette */
   --selected-file-remove-color: var(--error-text-color); /* #ef4444 */
   --selected-file-remove-hover-color: #dc2626; /* Darker red for hover */
 
@@ -643,30 +642,21 @@ textarea {
   background-color: var(--selected-file-item-bg-color);
   border-radius: 0.375em;
   padding: 0.25em 0.5em;
+  font-size: var(--selected-file-font-size);
+  color: var(--selected-file-name-color);
 }
 
 .selected-file-icon {
   @apply flex items-center justify-center size-[var(--selected-file-icon-size)];
 }
 
-.selected-file-name {
-  color: var(--selected-file-name-color);
-  font-size: var(--selected-file-font-size);
-}
-
-.selected-file-size {
-  color: var(--selected-file-size-color);
-  font-size: var(--chat-window-font-size-sm);
-}
-
 .selected-file-error {
-  color: var(--selected-file-error-color);
-  font-size: var(--chat-window-font-size-sm);
+  color: var(--error-text-color);
 }
 
 .selected-file-success-icon {
   @apply flex items-center justify-center size-[var(--selected-file-success-icon-size)];
-  color: var(--selected-file-success-color);
+  color: var(--success-text-color);
 }
 
 .selected-file-remove-button {
