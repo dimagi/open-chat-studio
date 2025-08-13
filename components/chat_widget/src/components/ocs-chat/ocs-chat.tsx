@@ -1200,17 +1200,7 @@ export class OcsChat {
                                 <span class="message-attachment-icon">
                                   <PaperClipIcon />
                                 </span>
-                                {attachment.name}
-                                {attachment.content_url && (
-                                  <a
-                                    href={attachment.content_url}
-                                    target="_blank"
-                                    rel="noopener noreferrer"
-                                    class="message-attachment-link"
-                                  >
-                                    Download
-                                  </a>
-                                )}
+                                <span class="message-attachment-name">{attachment.name}</span>
                               </div>
                             ))}
                           </div>
