@@ -64,7 +64,7 @@ class Span(BaseTeamModel):
     tracking of sub-operations with their own metrics and data.
     """
 
-    span_id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    span_id = models.UUIDField(default=uuid.uuid4, editable=False)
     trace = models.ForeignKey(Trace, on_delete=models.CASCADE, related_name="spans")
     parent_span = models.ForeignKey(
         "self", on_delete=models.SET_NULL, null=True, blank=True, related_name="child_spans"
