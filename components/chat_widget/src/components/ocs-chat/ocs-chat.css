@@ -645,7 +645,6 @@ textarea {
   padding: var(--container-padding) var(--container-padding) 0.5em var(--container-padding); /* 1em 1em 0.5em 1em */
   background-color: var(--selected-files-bg-color);
   border-top: 1px solid var(--selected-files-border-color);
-  font-size: var(--chat-window-font-size);
 }
 
 .selected-files-list {
@@ -658,7 +657,6 @@ textarea {
   background-color: var(--selected-file-item-bg-color);
   border-radius: var(--selected-file-item-border-radius);
   padding: var(--selected-file-item-padding-y) var(--selected-file-item-padding-x);
-  font-size: var(--chat-window-font-size);
 }
 
 .selected-file-info {
@@ -711,7 +709,6 @@ textarea {
 .message-attachment-item {
   @apply flex items-center;
   gap: var(--message-attachment-item-gap);
-  font-size: var(--chat-window-font-size);
 }
 
 .message-attachment-icon {
