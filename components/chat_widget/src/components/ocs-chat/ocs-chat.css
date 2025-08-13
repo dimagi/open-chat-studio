@@ -635,11 +635,6 @@ textarea {
   color: var(--file-attachment-button-text-disabled-color);
 }
 
-/* Hidden File Input */
-.file-input-hidden {
-  @apply hidden;
-}
-
 /* Selected Files Container */
 .selected-files-container {
   padding: var(--container-padding) var(--container-padding) 0.5em var(--container-padding); /* 1em 1em 0.5em 1em */

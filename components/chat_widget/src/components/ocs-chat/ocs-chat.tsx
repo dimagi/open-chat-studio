@@ -1305,7 +1305,7 @@ export class OcsChat {
                         multiple
                         accept={OcsChat.SUPPORTED_FILE_EXTENSIONS.join(',')}
                         onChange={(e) => this.handleFileSelect(e)}
-                        class="file-input-hidden"
+                        class="hidden"
                       />
                     )}
                     {this.allowAttachments && (
