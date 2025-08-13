@@ -1,8 +1,12 @@
+import csv
 import json
+import logging
+import re
+from io import StringIO
 
 from django.contrib.auth.mixins import PermissionRequiredMixin
 from django.db.models import Count
-from django.http import HttpResponse
+from django.http import HttpResponse, JsonResponse
 from django.shortcuts import get_object_or_404, render
 from django.urls import reverse
 from django.views.decorators.http import require_http_methods, require_POST
@@ -21,6 +25,8 @@ from apps.experiments.filters import DATE_RANGE_OPTIONS, FIELD_TYPE_FILTERS, app
 from apps.experiments.models import Experiment, ExperimentSession
 from apps.teams.decorators import login_and_team_required
 from apps.teams.mixins import LoginAndTeamRequiredMixin
+
+logger = logging.getLogger("ocs.evaluations")
 
 
 class DatasetHome(LoginAndTeamRequiredMixin, TemplateView, PermissionRequiredMixin):
@@ -348,3 +354,82 @@ def delete_message(request, team_slug, message_id):
     message = get_object_or_404(EvaluationMessage, id=message_id, evaluationdataset__team__slug=team_slug)
     message.delete()
     return HttpResponse("", status=200)
+
+
+@login_and_team_required
+@require_POST
+def parse_csv_columns(request, team_slug: str):
+    """Parse uploaded CSV and return column names and sample data."""
+    try:
+        csv_file = request.FILES.get("csv_file")
+        if not csv_file:
+            return JsonResponse({"error": "No CSV file provided"}, status=400)
+
+        file_content = csv_file.read().decode("utf-8")
+        csv_reader = csv.DictReader(StringIO(file_content))
+        columns = csv_reader.fieldnames or []
+
+        all_rows = list(csv_reader)
+        sample_rows = all_rows[:3]
+        total_rows = len(all_rows)
+        suggestions = _generate_column_suggestions(columns)
+
+        return JsonResponse(
+            {
+                "columns": columns,
+                "sample_rows": sample_rows,
+                "all_rows": all_rows,
+                "total_rows": total_rows,
+                "suggestions": suggestions,
+            }
+        )
+
+    except Exception:
+        logger.warning("Error parsing CSV")
+        return JsonResponse({"error": "An error occurred while parsing the CSV file."}, status=400)
+
+
+def _generate_column_suggestions(columns):
+    """Generate smart suggestions for column mapping based on column names."""
+    suggestions = {}
+    input_patterns = {"input", "human", "user", "question", "prompt", "message", "query"}
+    output_patterns = {"output", "ai", "assistant", "response", "answer", "reply", "completion"}
+
+    context_columns = []
+
+    for col in columns:
+        col_lower = col.lower().strip()
+        if "input" not in suggestions and any(pattern in col_lower for pattern in input_patterns):
+            suggestions["input"] = col
+        elif "output" not in suggestions and any(pattern in col_lower for pattern in output_patterns):
+            suggestions["output"] = col
+        elif col_lower == "id":
+            # Skip suggesting ID columns as context
+            continue
+        else:
+            # Clean up column name for context field suggestion
+            clean_name = _clean_context_field_name(col)
+            context_columns.append({"fieldName": clean_name, "csvColumn": col})
+
+    if context_columns:
+        suggestions["context"] = context_columns
+
+    return suggestions
+
+
+def _clean_context_field_name(field_name):
+    """Clean a field name to be a valid Python identifier."""
+    if field_name.lower().startswith("context."):
+        field_name = field_name[8:]  # Remove 'context.' prefix
+
+    # Convert spaces to underscores and remove invalid characters
+    field_name = re.sub(r"[^\w]", "_", field_name)
+
+    # Ensure it starts with a letter or underscore
+    if field_name and not field_name[0].isalpha() and field_name[0] != "_":
+        field_name = f"_{field_name}"
+
+    # Remove consecutive underscores and trailing underscores
+    field_name = re.sub(r"_+", "_", field_name).strip("_")
+
+    return field_name or "context_variable"

@@ -32,6 +32,10 @@ export namespace Components {
          */
         "chatbotId": string;
         /**
+          * The text to place in the header.
+         */
+        "headerText": '';
+        /**
           * URL of the icon to display on the button. If not provided, uses the default OCS logo.
          */
         "iconUrl"?: string;
@@ -106,6 +110,10 @@ declare namespace LocalJSX {
           * The ID of the chatbot to connect to.
          */
         "chatbotId": string;
+        /**
+          * The text to place in the header.
+         */
+        "headerText"?: '';
         /**
           * URL of the icon to display on the button. If not provided, uses the default OCS logo.
          */
