@@ -223,7 +223,6 @@
   --message-attachment-link-color: inherit;
   --message-attachment-link-hover-decoration: none;
 
-
   display: block;
   position: fixed;
   right: 20px;
@@ -621,6 +620,10 @@ textarea {
   color: var(--file-attachment-button-text-color);
 }
 
+.file-attachment-button svg {
+  @apply size-[1.5em];
+}
+
 .file-attachment-button:hover:not(:disabled) {
   background-color: var(--file-attachment-button-bg-hover-color);
 }
@@ -647,7 +650,11 @@ textarea {
 }
 
 .selected-file-icon {
-  @apply flex items-center justify-center size-[var(--selected-file-icon-size)];
+  @apply flex items-center justify-center;
+}
+
+.selected-file-icon svg {
+  @apply size-[var(--selected-file-icon-size)];
 }
 
 .selected-file-size {
@@ -667,6 +674,10 @@ textarea {
   @apply font-bold transition-colors duration-200;
   color: var(--selected-file-remove-color);
   padding: 0.375em;
+}
+
+.selected-file-remove-button svg {
+  @apply size-[var(--selected-file-icon-size)];
 }
 
 .selected-file-remove-button:hover {
