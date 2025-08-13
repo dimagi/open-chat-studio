@@ -337,6 +337,15 @@ export class OcsChat {
     }
   }
 
+  private markPendingFilesWithError(errorMessage: string): void {
+    this.selectedFiles = this.selectedFiles.map(sf => {
+      if (!sf.error && !sf.uploaded) {
+        return { ...sf, error: errorMessage };
+      }
+      return sf;
+    });
+  }
+
   private async uploadFiles(): Promise<number[]> {
     if (this.selectedFiles.length === 0 || !this.sessionId || !this.allowAttachments) {
       return [];
@@ -374,12 +383,7 @@ export class OcsChat {
         if (!response.ok) {
           const errorData = await response.json();
           const errorMessage = errorData.error || 'Failed to upload files';
-          this.selectedFiles = this.selectedFiles.map(sf => {
-            if (!sf.error && !sf.uploaded) {
-              return { ...sf, error: errorMessage };
-            }
-            return sf;
-          });
+          this.markPendingFilesWithError(errorMessage);
           return uploadedIds;
         }
 
@@ -399,12 +403,7 @@ export class OcsChat {
       return uploadedIds;
     } catch (error) {
       const errorMessage = error instanceof Error ? error.message : 'Failed to upload files';
-      this.selectedFiles = this.selectedFiles.map(sf => {
-        if (!sf.error && !sf.uploaded) {
-          return { ...sf, error: errorMessage };
-        }
-        return sf;
-      });
+      this.markPendingFilesWithError(errorMessage);
       return uploadedIds;
     } finally {
       this.isUploadingFiles = false;
