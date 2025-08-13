@@ -106,14 +106,6 @@ class Span(BaseTeamModel):
             metadata=metadata,
         )
 
-    def user_message(self) -> str:
-        """
-        The message displayed to the user.
-        """
-        if self.error:
-            return self.error.error_display
-        return ""
-
 
 def _create_span(
     trace: Trace,
