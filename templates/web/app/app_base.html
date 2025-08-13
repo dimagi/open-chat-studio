@@ -10,8 +10,8 @@
 {% block body %}
   {% block notifications %}
   {% endblock notifications %}
-  <section class="section">
-    <div class="container flex flex-row">
+  <section class="m-2 lg:m-4">
+    <div class="xl:container flex flex-row">
       {% if request.user.is_authenticated %}
         <div class="w-64 hidden lg:flex">
           {% block sidebar-nav %}

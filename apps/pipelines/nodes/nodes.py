@@ -2,7 +2,6 @@ import datetime
 import inspect
 import json
 import logging
-import random
 import time
 import unicodedata
 from typing import Annotated, Literal, Self
@@ -27,7 +26,7 @@ from pydantic import ValidationError as PydanticValidationError
 from pydantic.config import ConfigDict
 from pydantic_core import PydanticCustomError
 from pydantic_core.core_schema import FieldValidationInfo
-from RestrictedPython import compile_restricted, safe_builtins, safe_globals
+from RestrictedPython import compile_restricted, limited_builtins, safe_builtins, utility_builtins
 
 from apps.annotations.models import TagCategories
 from apps.assistants.models import OpenAiAssistant
@@ -47,6 +46,7 @@ from apps.pipelines.nodes.base import (
     Widgets,
     deprecated_node,
 )
+from apps.pipelines.nodes.code_node_utils import get_code_error_message
 from apps.pipelines.nodes.tool_callbacks import ToolCallbacks
 from apps.pipelines.tasks import send_email_from_pipeline
 from apps.service_providers.exceptions import ServiceProviderConfigError
@@ -1124,15 +1124,15 @@ class CodeNode(PipelineNode, OutputMessageTagMixin):
 
     def _process(self, input: str, state: PipelineState) -> PipelineState | Command:
         function_name = "main"
+        filename = "<inline_code>"
         byte_code = compile_restricted(
             self.code,
-            filename="<inline code>",
+            filename=filename,
             mode="exec",
         )
-
         custom_locals = {}
         output_state = PipelineState()
-        custom_globals = self._get_custom_globals(self.node_id, state, output_state)
+        custom_globals = self._get_custom_globals(state, output_state)
         kwargs = {}
         try:
             exec(byte_code, custom_globals, custom_locals)
@@ -1142,7 +1142,8 @@ class CodeNode(PipelineNode, OutputMessageTagMixin):
         except AbortPipeline as abort:
             return interrupt(abort.to_json())
         except Exception as exc:
-            raise PipelineNodeRunError(exc) from exc
+            message = get_code_error_message(filename, self.code)
+            raise PipelineNodeRunError(message) from exc
 
         if isinstance(result, Command):
             return result
@@ -1153,10 +1154,9 @@ class CodeNode(PipelineNode, OutputMessageTagMixin):
             ),
         )
 
-    def _get_custom_globals(self, node_id, state: PipelineState, output_state: PipelineState) -> dict:
+    def _get_custom_globals(self, state: PipelineState, output_state: PipelineState) -> dict:
         """
         Args:
-            node_id: This node's ID
             state: The input state. Do not modify this state.
             output_state: An empty state dict to which state modifications should be made.
         """
@@ -1168,8 +1168,20 @@ class CodeNode(PipelineNode, OutputMessageTagMixin):
             guarded_iter_unpack_sequence,
         )
 
-        custom_globals = safe_globals.copy()
+        custom_globals = {
+            "__builtins__": self._get_custom_builtins(),
+            "json": json,
+            "datetime": datetime,
+            "time": time,
+            "_getitem_": default_guarded_getitem,
+            "_getiter_": default_guarded_getiter,
+            "_iter_unpack_sequence_": guarded_iter_unpack_sequence,
+            "_write_": lambda x: x,
+        }
+        custom_functions = self._get_custom_functions(state, output_state)
+        return custom_globals | custom_functions
 
+    def _get_custom_functions(self, state: PipelineState, output_state: PipelineState) -> dict:
         participant_data_proxy = self.get_participant_data_proxy(state)
         pipeline_state = PipelineState.clone(state)
 
@@ -1177,42 +1189,36 @@ class CodeNode(PipelineNode, OutputMessageTagMixin):
         output_state["temp_state"] = pipeline_state.get("temp_state") or {}
 
         # add this node into the state so that we can trace the path
-        pipeline_state["outputs"] = {**state["outputs"], self.name: {"node_id": node_id}}
-        custom_globals.update(
-            {
-                "__builtins__": self._get_custom_builtins(),
-                "json": json,
-                "datetime": datetime,
-                "time": time,
-                "_getitem_": default_guarded_getitem,
-                "_getiter_": default_guarded_getiter,
-                "_iter_unpack_sequence_": guarded_iter_unpack_sequence,
-                "_write_": lambda x: x,
-                "get_participant_data": participant_data_proxy.get,
-                "set_participant_data": participant_data_proxy.set,
-                "set_participant_data_key": participant_data_proxy.set_key,
-                "append_to_participant_data_key": participant_data_proxy.append_to_key,
-                "increment_participant_data_key": participant_data_proxy.increment_key,
-                "get_participant_schedules": participant_data_proxy.get_schedules,
-                "get_temp_state_key": self._get_temp_state_key(output_state),
-                "set_temp_state_key": self._set_temp_state_key(output_state),
-                "get_session_state_key": self._get_session_state_key(state["experiment_session"]),
-                "set_session_state_key": self._set_session_state_key(state["experiment_session"]),
-                "get_selected_route": pipeline_state.get_selected_route,
-                "get_node_path": pipeline_state.get_node_path,
-                "get_all_routes": pipeline_state.get_all_routes,
-                "add_message_tag": output_state.add_message_tag,
-                "add_session_tag": output_state.add_session_tag,
-                "get_node_output": pipeline_state.get_node_output_by_name,
-                # control flow
-                "abort_with_message": self._abort_pipeline(),
-                "require_node_outputs": self._require_node_outputs(state),
-            }
-        )
-        return custom_globals
+        pipeline_state["outputs"] = {**state["outputs"], self.name: {"node_id": self.node_id}}
+        return {
+            "get_participant_data": participant_data_proxy.get,
+            "set_participant_data": participant_data_proxy.set,
+            "set_participant_data_key": participant_data_proxy.set_key,
+            "append_to_participant_data_key": participant_data_proxy.append_to_key,
+            "increment_participant_data_key": participant_data_proxy.increment_key,
+            "get_participant_schedules": participant_data_proxy.get_schedules,
+            "get_temp_state_key": self._get_temp_state_key(output_state),
+            "set_temp_state_key": self._set_temp_state_key(output_state),
+            "get_session_state_key": self._get_session_state_key(state["experiment_session"]),
+            "set_session_state_key": self._set_session_state_key(state["experiment_session"]),
+            "get_selected_route": pipeline_state.get_selected_route,
+            "get_node_path": pipeline_state.get_node_path,
+            "get_all_routes": pipeline_state.get_all_routes,
+            "add_message_tag": output_state.add_message_tag,
+            "add_session_tag": output_state.add_session_tag,
+            "get_node_output": pipeline_state.get_node_output_by_name,
+            # control flow
+            "abort_with_message": self._abort_pipeline(),
+            "require_node_outputs": self._require_node_outputs(state),
+        }
 
     def _abort_pipeline(self):
         def abort_pipeline(message, tag_name: str = None):
+            """Calling this will terminate the pipeline execution. No further nodes will get executed in
+            any branch of the pipeline graph.
+
+            The message provided will be used to notify the user about the reason for the termination.
+            If a tag name is provided, it will be used to tag the output message."""
             raise AbortPipeline(message, tag_name)
 
         return abort_pipeline
@@ -1221,6 +1227,11 @@ class CodeNode(PipelineNode, OutputMessageTagMixin):
         """A helper function to require inputs from a specific node"""
 
         def require_node_outputs(*node_names):
+            """This function is used to ensure that the specified nodes have been executed and their outputs
+            are available in the pipeline's state. If any of the specified nodes have not been executed,
+            the node will not execute and the pipeline will wait for the required nodes to complete.
+
+            This should be called at the start of the main function."""
             if len(node_names) == 1 and isinstance(node_names[0], list):
                 node_names = node_names[0]
             if not all(isinstance(name, str) for name in node_names):
@@ -1233,12 +1244,16 @@ class CodeNode(PipelineNode, OutputMessageTagMixin):
 
     def _get_session_state_key(self, session: ExperimentSession):
         def get_session_state_key(key_name: str):
+            """Returns the value of the session state's key with the given name.
+            If the key does not exist, it returns `None`."""
             return session.state.get(key_name)
 
         return get_session_state_key
 
     def _set_session_state_key(self, session: ExperimentSession):
         def set_session_state_key(key_name: str, value):
+            """Sets the value of the session state's key with the given name to the provided data.
+            This will override any existing data."""
             session.state[key_name] = value
             session.save(update_fields=["state"])
 
@@ -1246,12 +1261,17 @@ class CodeNode(PipelineNode, OutputMessageTagMixin):
 
     def _get_temp_state_key(self, state: PipelineState):
         def get_temp_state_key(key_name: str):
+            """Returns the value of the temporary state key with the given name.
+            If the key does not exist, it returns `None`."""
             return state["temp_state"].get(key_name)
 
         return get_temp_state_key
 
     def _set_temp_state_key(self, state: PipelineState):
         def set_temp_state_key(key_name: str, value):
+            """Sets the value of the temporary state key with the given name to the provided data.
+            This will override any existing data for the key unless the key is read-only, in which case
+            an error will be raised. Read-only keys are: `user_input`, `outputs`, `attachments`."""
             if key_name in {"user_input", "outputs", "attachments"}:
                 raise PipelineNodeRunError(f"Cannot set the '{key_name}' key of the temporary state")
             state["temp_state"][key_name] = value
@@ -1276,9 +1296,11 @@ class CodeNode(PipelineNode, OutputMessageTagMixin):
                 "all": all,
                 "any": any,
                 "datetime": datetime,
-                "random": random,
             }
         )
+
+        custom_builtins.update(utility_builtins)
+        custom_builtins.update(limited_builtins)
 
         def guarded_import(name, *args, **kwargs):
             if name not in allowed_modules:

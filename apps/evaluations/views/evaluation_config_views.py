@@ -11,7 +11,7 @@ from django.views.generic import CreateView, TemplateView, UpdateView
 from django_tables2 import SingleTableView, columns, tables
 
 from apps.evaluations.forms import EvaluationConfigForm, get_experiment_version_choices
-from apps.evaluations.models import EvaluationConfig, EvaluationRun, EvaluationRunStatus
+from apps.evaluations.models import EvaluationConfig, EvaluationRun, EvaluationRunStatus, EvaluationRunType
 from apps.evaluations.tables import EvaluationConfigTable, EvaluationRunTable
 from apps.evaluations.utils import get_evaluators_with_schema
 from apps.experiments.models import Experiment
@@ -44,11 +44,7 @@ class EvaluationTableView(SingleTableView, PermissionRequiredMixin):
     template_name = "table/single_table.html"
 
     def get_queryset(self):
-        return (
-            EvaluationConfig.objects.filter(team=self.request.team)
-            # .annotate(run_count=Count("runs"))
-            # .order_by("name")
-        )
+        return EvaluationConfig.objects.filter(team=self.request.team).order_by("-created_at")
 
 
 class CreateEvaluation(LoginAndTeamRequiredMixin, CreateView, PermissionRequiredMixin):
@@ -125,7 +121,9 @@ class EvaluationRunTableView(SingleTableView, PermissionRequiredMixin):
     template_name = "table/single_table.html"
 
     def get_queryset(self):
-        return EvaluationRun.objects.filter(config_id=self.kwargs["evaluation_pk"]).order_by("-created_at")
+        return EvaluationRun.objects.filter(
+            config_id=self.kwargs["evaluation_pk"], type=EvaluationRunType.FULL
+        ).order_by("-created_at")
 
 
 class EvaluationResultHome(LoginAndTeamRequiredMixin, TemplateView, PermissionRequiredMixin):
@@ -139,7 +137,11 @@ class EvaluationResultHome(LoginAndTeamRequiredMixin, TemplateView, PermissionRe
 
         context = {
             "active_tab": "evaluations",
-            "title": "Evaluation Run Results",
+            "title": (
+                "Evaluation Run Preview"
+                if evaluation_run.type == EvaluationRunType.PREVIEW
+                else "Evaluation Run Results"
+            ),
             "evaluation_run": evaluation_run,
             "allow_new": False,
         }
@@ -217,6 +219,13 @@ class EvaluationResultTableView(SingleTableView, PermissionRequiredMixin):
 def create_evaluation_run(request, team_slug, evaluation_pk):
     config = get_object_or_404(EvaluationConfig, team__slug=team_slug, pk=evaluation_pk)
     run = config.run()
+    return HttpResponseRedirect(reverse("evaluations:evaluation_results_home", args=[team_slug, evaluation_pk, run.pk]))
+
+
+@permission_required("evaluations.add_evaluationrun")
+def create_evaluation_preview(request, team_slug, evaluation_pk):
+    config = get_object_or_404(EvaluationConfig, team__slug=team_slug, pk=evaluation_pk)
+    run = config.run_preview()
     return HttpResponseRedirect(reverse("evaluations:evaluation_results_home", args=[team_slug, evaluation_pk, run.pk]))
 
 

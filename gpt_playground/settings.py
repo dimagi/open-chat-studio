@@ -458,6 +458,10 @@ SCHEDULED_TASKS = {
         "task": "apps.evaluations.tasks.cleanup_old_evaluation_data",
         "schedule": timedelta(days=1),
     },
+    "evaluations.tasks.cleanup_old_preview_evaluation_runs": {
+        "task": "apps.evaluations.tasks.cleanup_old_preview_evaluation_runs",
+        "schedule": timedelta(days=1),
+    },
     "documents.tasks.sync_all_document_sources_task": {
         # sync doc sources once per week
         "task": "apps.documents.tasks.sync_all_document_sources_task",
@@ -705,6 +709,7 @@ COMMCARE_CONNECT_GET_CONNECT_ID_URL = f"{COMMCARE_CONNECT_SERVER_URL}/o/userinfo
 
 # AI helper
 AI_HELPER_API_KEY = env("AI_HELPER_API_KEY", default="")
+AI_HELPER_API_MODEL = env("AI_HELPER_API_MODEL", default="claude-sonnet-4-20250514")
 
 
 # Document Management
