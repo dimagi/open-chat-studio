@@ -132,15 +132,16 @@ def chat_upload_file(request, session_id):
     if not files:
         return Response({"error": "No files provided"}, status=status.HTTP_400_BAD_REQUEST)
 
+    for file in files:
+        is_valid, error_msg = validate_file_upload(file)
+        if not is_valid:
+            return Response({"error": error_msg}, status=status.HTTP_400_BAD_REQUEST)
+
     total_size_mb = sum(f.size for f in files) / (1024 * 1024)
     if total_size_mb > MAX_TOTAL_SIZE_MB:
         return Response(
             {"error": f"Total file size exceeds maximum of {MAX_TOTAL_SIZE_MB}MB"}, status=status.HTTP_400_BAD_REQUEST
         )
-    for file in files:
-        is_valid, error_msg = validate_file_upload(file)
-        if not is_valid:
-            return Response({"error": error_msg}, status=status.HTTP_400_BAD_REQUEST)
     expiry_date = timezone.now() + timezone.timedelta(hours=24)
     uploaded_files = []
 
