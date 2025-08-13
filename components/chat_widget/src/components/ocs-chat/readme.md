@@ -36,10 +36,8 @@ For more information, see the [Open Chat Studio documentation](https://docs.open
 | `--button-border-color`                 | Button border color (#6b7280)                                                    |
 | `--button-border-color-hover`           | Button border color on hover (#374151)                                           |
 | `--button-font-size`                    | Button text font size (0.875em)                                                  |
-| `--button-icon-height`                  | Button icon height (1.5em) Chat Window Variables                                 |
-| `--button-icon-width`                   | Button icon width (1.5em)                                                        |
+| `--button-icon-size`                    | Button icon size (1.5em) Chat Window Variables                                   |
 | `--button-padding`                      | Button padding (0.75em)                                                          |
-| `--button-padding-sm`                   | Small button padding (0.375em)                                                   |
 | `--button-text-color`                   | Button text color (#111827)                                                      |
 | `--button-text-color-hover`             | Button text color on hover (#1d4ed8)                                             |
 | `--chat-window-bg-color`                | Chat window background color (#ffffff)                                           |
@@ -65,7 +63,8 @@ For more information, see the [Open Chat Studio documentation](https://docs.open
 | `--header-border-color`                 | Header border color (#f3f4f6)                                                    |
 | `--header-button-bg-hover-color`        | Header button background on hover (#f3f4f6)                                      |
 | `--header-button-text-color`            | Header button text color (#6b7280)                                               |
-| `--header-padding`                      | Header padding (0.5em) Starter Question Variables                                |
+| `--header-font-size`                    | Header font size (1em) Starter Question Variables                                |
+| `--header-padding`                      | Header padding (0.5em)                                                           |
 | `--input-bg-color`                      | Input area background color (transparent)                                        |
 | `--input-border-color`                  | Input field border color (#d1d5db)                                               |
 | `--input-outline-focus-color`           | Input field focus ring color (#3b82f6)                                           |
