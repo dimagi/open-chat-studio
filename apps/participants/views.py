@@ -174,8 +174,19 @@ def participant_identifiers_by_experiment(request, team_slug: str, experiment_id
         .values_list("identifier", "remote_id")
         .distinct()
     )
+    return _get_identifiers_response(query)
+
+
+@permission_required("experiments.view_participant")
+@login_and_team_required
+def all_participant_identifiers(request, team_slug: str):
+    query = Participant.objects.filter(team__slug=team_slug).values_list("identifier", "remote_id").distinct()
+    return _get_identifiers_response(query)
+
+
+def _get_identifiers_response(queryset):
     identifiers, remote_ids = set(), set()
-    for ident, remote_id in query:
+    for ident, remote_id in queryset:
         if ident:
             identifiers.add(ident)
         if remote_id:
@@ -187,12 +198,3 @@ def participant_identifiers_by_experiment(request, team_slug: str, experiment_id
         },
         safe=False,
     )
-
-
-@permission_required("experiments.view_participant")
-@login_and_team_required
-def all_participant_identifiers(request, team_slug: str):
-    identifiers = list(
-        Participant.objects.filter(team__slug=team_slug).values_list("identifier", "remote_id").distinct()
-    )
-    return JsonResponse(identifiers, safe=False)
