@@ -287,6 +287,7 @@
     background-color: var(--chat-window-bg-color);
     border: 1px solid var(--chat-window-border-color);
     height: var(--chat-window-height);
+    min-height: 300px;
   }
 
   .chat-window-dragging {
