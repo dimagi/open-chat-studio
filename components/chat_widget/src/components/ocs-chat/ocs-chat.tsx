@@ -4,7 +4,7 @@ import {
   GripDotsVerticalIcon, PencilSquare, ArrowsPointingOutIcon, ArrowsPointingInIcon,
 } from './heroicons';
 import { renderMarkdownSync as renderMarkdownComplete } from '../../utils/markdown';
-import { percentToFloat } from '../../utils/utils';
+import { varToPixels } from '../../utils/utils';
 
 interface ChatMessage {
   created_at: string;
@@ -70,7 +70,6 @@ export class OcsChat {
   private static readonly SCROLL_DELAY_MS = 100;
   private static readonly FOCUS_DELAY_MS = 100;
 
-  private static readonly CHAT_MAX_WIDTH = 1024;
   private static readonly MOBILE_BREAKPOINT = 640;
   private static readonly WINDOW_MARGIN = 20;
 
@@ -170,6 +169,7 @@ export class OcsChat {
   private chatWindowRef?: HTMLDivElement;
   private chatWindowHeight: number = 600;
   private chatWindowWidth: number = 450;
+  private chatWindowFullscreenWidth: number = 1024;
   @Element() host: HTMLElement;
 
 
@@ -203,21 +203,10 @@ export class OcsChat {
     const computedStyle = getComputedStyle(this.host);
     const windowHeightVar = computedStyle.getPropertyValue('--chat-window-height');
     const windowWidthVar = computedStyle.getPropertyValue('--chat-window-width');
-    if (windowHeightVar.includes("%")) {
-      const percent = percentToFloat(windowHeightVar);
-      if (!isNaN(percent)) {
-        this.chatWindowHeight = window.innerHeight * percent;
-      }
-    } else if (windowHeightVar.includes("px")) {
-      const pixels = parseFloat(windowHeightVar);
-      if (!isNaN(pixels)) {
-        this.chatWindowHeight = pixels;
-      }
-    }
-    const widthPixels = parseFloat(windowWidthVar);
-    if (!isNaN(widthPixels)) {
-      this.chatWindowWidth = widthPixels;
-    }
+    const fullscreenWidthVar = computedStyle.getPropertyValue('--chat-window-fullscreen-width');
+    this.chatWindowHeight = varToPixels(windowHeightVar, window.innerHeight, this.chatWindowHeight);
+    this.chatWindowWidth = varToPixels(windowWidthVar, window.innerWidth, this.chatWindowWidth);
+    this.chatWindowFullscreenWidth = varToPixels(fullscreenWidthVar, window.innerWidth, this.chatWindowFullscreenWidth);
     this.initializePosition();
     window.addEventListener('resize', this.handleWindowResize);
   }
@@ -555,7 +544,7 @@ export class OcsChat {
 
   private getFullscreenBounds() {
     const windowWidth = window.innerWidth;
-    const actualChatWidth = Math.min(windowWidth, OcsChat.CHAT_MAX_WIDTH);
+    const actualChatWidth = Math.min(windowWidth, this.chatWindowFullscreenWidth);
     const centeredX = (windowWidth - actualChatWidth) / 2;
     const maxOffset = (windowWidth - actualChatWidth) / 2;
 
