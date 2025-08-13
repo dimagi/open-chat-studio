@@ -34,7 +34,7 @@
     * @prop --header-padding: Header padding (0.5em)
     * @prop --header-font-size: Header font size (1em)
     * @prop --header-button-icon-size: Icon size for buttons in the header (1.5em)
-    * @prop --header-text-font-size: Font size for the text in the header (--header-font-size)
+    * @prop --header-text-font-size: Font size for the text in the header (1em)
     * @prop --header-text-color: Color for the text in the header (#525762)
     *
     * @prop --starter-question-bg-color: Starter question background color (transparent)
@@ -125,7 +125,7 @@
   --header-button-bg-hover-color: #f3f4f6;
   --header-padding: 0.5em;
   --header-font-size: 1em;
-  --header-text-font-size: var(--header-font-size);
+  --header-text-font-size: 1em;
   --header-text-color: #525762;
   --header-button-icon-size: 1.5em;
 
@@ -200,6 +200,11 @@
 }
 
 @layer components {
+  #ocs-chat-window {
+    z-index: var(--chat-z-index);
+    font-size: var(--chat-window-font-size);
+  }
+
   .starter-question {
     @apply text-left rounded-lg duration-200;
     padding: var(--starter-question-padding, 0.75em);
@@ -219,6 +224,8 @@
     background-color: var(--button-background-color, white);
     border: 1px solid var(--button-border-color);
     z-index: var(--chat-z-index, 50);
+    font-size: var(--button-font-size);
+    padding: var(--button-padding, 0.75em);
   }
 
   .chat-btn-text:hover, .chat-btn-icon:hover {
@@ -229,9 +236,7 @@
   /* Button with text and icon */
   .chat-btn-text {
     @apply flex gap-[8px] items-center;
-    padding: var(--button-padding, 0.75em);
     color: var(--button-text-color, #111827);
-    font-size: var(--button-font-size);
   }
 
   .chat-btn-text span {
@@ -244,8 +249,6 @@
 
   /* Icon-only button */
   .chat-btn-icon {
-    font-size: var(--button-font-size);
-    padding: var(--button-padding, 0.75em);
   }
 
   .chat-btn-icon img {
@@ -267,7 +270,6 @@
   .chat-window-fullscreen {
     @apply fixed inset-0 w-full h-full max-h-full border-0 shadow-lg transition-shadow duration-200 rounded-none overflow-hidden flex flex-col z-[9999];
     background-color: var(--chat-window-bg-color);
-    font-size: var(--chat-window-font-size);
     max-width: var(--chat-window-fullscreen-width);
   }
 
@@ -439,7 +441,6 @@
   .starter-questions {
     @apply space-y-2;
     padding: var(--container-padding, 1em);
-    font-size: var(--chat-window-font-size);
   }
 
   .starter-question-row {
@@ -451,7 +452,6 @@
     padding: var(--container-padding, 1em) var(--container-padding, 1em) 0 var(--container-padding, 1em);
     background-color: var(--input-bg-color);
     border-top: 1px solid var(--input-border-color);
-    font-size: var(--chat-window-font-size);
   }
 
   .input-container {
@@ -472,7 +472,6 @@
   .send-button {
     @apply rounded-md font-medium transition-colors duration-200;
     padding: var(--send-button-padding-y, 0.5em) var(--send-button-padding-x, 1em);
-    font-size: var(--chat-window-font-size);
   }
 
   .send-button-enabled {
@@ -489,10 +488,6 @@
     background-color: var(--send-button-bg-disabled-color);
     color: var(--send-button-text-disabled-color);
   }
-}
-
-#ocs-chat-window {
-  z-index: var(--chat-z-index);
 }
 
 textarea {
@@ -526,7 +521,7 @@ textarea {
 /* Markdown content styling for chat messages */
 .chat-markdown {
   @apply prose prose-sm prose-gray max-w-none;
-  font-size: var(--chat-window-font-size);
+  font-size: 1em;
   --tw-prose-body: var(--message-assistant-text-color);
   --tw-prose-headings: var(--message-assistant-text-color);
   --tw-prose-lead: var(--message-assistant-text-color);

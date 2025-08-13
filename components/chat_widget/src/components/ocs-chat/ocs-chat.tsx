@@ -1100,7 +1100,7 @@ export class OcsChat {
                   </div>
                 </div>
               )}
-              <div class="flex items-center justify-center text-[0.7em] font-light w-full text-slate-500 py-[2px]">
+              <div class="flex items-center justify-center text-[0.8em] font-light w-full text-slate-500 py-[2px]">
                 <p>Powered by <a class="underline" href="https://www.dimagi.com" target="_blank">Dimagi</a></p>
               </div>
             </div>
