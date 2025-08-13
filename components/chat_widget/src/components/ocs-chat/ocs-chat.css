@@ -203,7 +203,6 @@
   /* Selected files variables */
   --selected-files-bg-color: var(--input-bg-color); /* transparent */
   --selected-files-border-color: var(--header-border-color); /* #f3f4f6 */
-  --selected-files-padding: var(--container-padding) var(--container-padding) 0.5rem var(--container-padding); /* 1rem 1rem 0.5rem 1rem */
 
   /* Selected file item variables */
   --selected-file-item-bg-color: var(--message-system-bg-color); /* #f3f4f6 */
@@ -643,7 +642,7 @@ textarea {
 
 /* Selected Files Container */
 .selected-files-container {
-  padding: var(--selected-files-padding);
+  padding: var(--container-padding) var(--container-padding) 0.5em var(--container-padding); /* 1em 1em 0.5em 1em */
   background-color: var(--selected-files-bg-color);
   border-top: 1px solid var(--selected-files-border-color);
   font-size: var(--chat-window-font-size);
