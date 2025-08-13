@@ -1,5 +1,4 @@
 import inspect
-import re
 
 from apps.evaluations.models import Evaluator
 
@@ -80,10 +79,6 @@ def parse_history_text(history_text: str) -> list:
     if not history_text.strip():
         return history
 
-    # Use regex to find role markers at the start of lines
-    # This pattern matches "human:" or "ai:" at the start of a line (case-insensitive)
-    pattern = r"^(human|ai):\s*(.*)$"
-
     current_message = None
 
     for line in history_text.split("\n"):
@@ -91,15 +86,15 @@ def parse_history_text(history_text: str) -> list:
         if not line_stripped:
             continue
 
-        match = re.match(pattern, line_stripped, re.IGNORECASE)
-        if match:
+        if line_stripped.lower().startswith(("human:", "ai:")):
             # Save previous message if exists
             if current_message:
                 history.append(current_message)
 
             # Start new message
-            role = match.group(1).lower()
-            content = match.group(2)
+            colon_position = line_stripped.find(":")
+            role = line_stripped[:colon_position].strip().lower()
+            content = line_stripped[colon_position + 1 :].strip()
             current_message = {
                 "message_type": role,
                 "content": content,
