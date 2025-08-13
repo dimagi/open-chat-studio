@@ -1255,7 +1255,7 @@ export class OcsChat {
               {/* Selected Files Display */}
               {this.allowAttachments && this.selectedFiles.length > 0 && (
                 <div class="selected-files-container">
-                  <div class="selected-files-list">
+                  <div class="space-y-[0.25em]">
                     {this.selectedFiles.map((selectedFile, index) => (
                       <div key={index} class="selected-file-item">
                         <div class="selected-file-info">
