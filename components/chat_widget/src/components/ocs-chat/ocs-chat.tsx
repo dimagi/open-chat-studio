@@ -1,9 +1,10 @@
-import { Component, Host, h, Prop, State } from '@stencil/core';
+import { Component, Host, h, Prop, State, Element } from '@stencil/core';
 import {
   XMarkIcon,
   GripDotsVerticalIcon, PencilSquare, ArrowsPointingOutIcon, ArrowsPointingInIcon,
 } from './heroicons';
 import { renderMarkdownSync as renderMarkdownComplete } from '../../utils/markdown';
+import { varToPixels } from '../../utils/utils';
 
 interface ChatMessage {
   created_at: string;
@@ -69,9 +70,6 @@ export class OcsChat {
   private static readonly SCROLL_DELAY_MS = 100;
   private static readonly FOCUS_DELAY_MS = 100;
 
-  private static readonly CHAT_WIDTH_DESKTOP = 450;
-  private static readonly CHAT_MAX_WIDTH = 1024;
-  private static readonly CHAT_HEIGHT_EXPANDED_RATIO = 0.83; // 83% of window height (h-5/6)
   private static readonly MOBILE_BREAKPOINT = 640;
   private static readonly WINDOW_MARGIN = 20;
 
@@ -101,6 +99,11 @@ export class OcsChat {
    * The shape of the chat button. 'round' makes it circular, 'square' keeps it rectangular.
    */
   @Prop() buttonShape: 'round' | 'square' = 'square';
+
+  /**
+   * The text to place in the header.
+   */
+  @Prop() headerText: '';
 
   /**
    * Whether the chat widget is visible on load.
@@ -169,6 +172,10 @@ export class OcsChat {
   private messageListRef?: HTMLDivElement;
   private textareaRef?: HTMLTextAreaElement;
   private chatWindowRef?: HTMLDivElement;
+  private chatWindowHeight: number = 600;
+  private chatWindowWidth: number = 450;
+  private chatWindowFullscreenWidth: number = 1024;
+  @Element() host: HTMLElement;
 
 
   componentWillLoad() {
@@ -198,6 +205,13 @@ export class OcsChat {
       // Resume polling for existing session
       this.startPolling();
     }
+    const computedStyle = getComputedStyle(this.host);
+    const windowHeightVar = computedStyle.getPropertyValue('--chat-window-height');
+    const windowWidthVar = computedStyle.getPropertyValue('--chat-window-width');
+    const fullscreenWidthVar = computedStyle.getPropertyValue('--chat-window-fullscreen-width');
+    this.chatWindowHeight = varToPixels(windowHeightVar, window.innerHeight, this.chatWindowHeight);
+    this.chatWindowWidth = varToPixels(windowWidthVar, window.innerWidth, this.chatWindowWidth);
+    this.chatWindowFullscreenWidth = varToPixels(fullscreenWidthVar, window.innerWidth, this.chatWindowFullscreenWidth);
     this.initializePosition();
     window.addEventListener('resize', this.handleWindowResize);
   }
@@ -535,7 +549,7 @@ export class OcsChat {
 
   private getFullscreenBounds() {
     const windowWidth = window.innerWidth;
-    const actualChatWidth = Math.min(windowWidth, OcsChat.CHAT_MAX_WIDTH);
+    const actualChatWidth = Math.min(windowWidth, this.chatWindowFullscreenWidth);
     const centeredX = (windowWidth - actualChatWidth) / 2;
     const maxOffset = (windowWidth - actualChatWidth) / 2;
 
@@ -562,8 +576,7 @@ export class OcsChat {
   private initializePosition(): void {
     const windowWidth = window.innerWidth;
     const windowHeight = window.innerHeight;
-    const chatWidth = windowWidth < OcsChat.MOBILE_BREAKPOINT ? windowWidth : OcsChat.CHAT_WIDTH_DESKTOP;
-    const chatHeight = windowHeight * OcsChat.CHAT_HEIGHT_EXPANDED_RATIO;
+    const chatWidth = windowWidth < OcsChat.MOBILE_BREAKPOINT ? windowWidth : this.chatWindowWidth;
     const isMobile = windowWidth < OcsChat.MOBILE_BREAKPOINT;
 
     if (isMobile) {
@@ -575,19 +588,19 @@ export class OcsChat {
       case 'left':
         this.windowPosition = {
           x: OcsChat.WINDOW_MARGIN,
-          y: windowHeight - chatHeight - OcsChat.WINDOW_MARGIN
+          y: windowHeight - this.chatWindowHeight - OcsChat.WINDOW_MARGIN
         };
         break;
       case 'right':
         this.windowPosition = {
           x: windowWidth - chatWidth - OcsChat.WINDOW_MARGIN,
-          y: windowHeight - chatHeight - OcsChat.WINDOW_MARGIN
+          y: windowHeight - this.chatWindowHeight - OcsChat.WINDOW_MARGIN
         };
         break;
       case 'center':
         this.windowPosition = {
           x: (windowWidth - chatWidth) / 2,
-          y: (windowHeight - chatHeight) / 2
+          y: (windowHeight - this.chatWindowHeight) / 2
         };
         break;
     }
@@ -641,8 +654,8 @@ export class OcsChat {
       // Constrain chatbox to window
       const windowWidth = window.innerWidth;
       const windowHeight = window.innerHeight;
-      const chatWidth = windowWidth < OcsChat.MOBILE_BREAKPOINT ? windowWidth : OcsChat.CHAT_WIDTH_DESKTOP;
-      const chatHeight = windowHeight * OcsChat.CHAT_HEIGHT_EXPANDED_RATIO;
+      const chatWidth = windowWidth < OcsChat.MOBILE_BREAKPOINT ? windowWidth : this.chatWindowWidth;
+      const chatHeight = this.chatWindowRef.offsetHeight;
 
       this.windowPosition = {
         x: Math.max(0, Math.min(newX, windowWidth - chatWidth)),
@@ -919,11 +932,11 @@ export class OcsChat {
             >
               {/* Drag indicator */}
               <div class="drag-indicator">
-                <div class="drag-dots">
+                <div class="drag-dots header-button">
                   <GripDotsVerticalIcon/>
                 </div>
               </div>
-              <div class="drag-spacer"></div>
+              <div class="header-text">{this.headerText}</div>
               <div class="header-buttons">
                 {/* Fullscreen toggle button */}
                 {this.allowFullScreen && <button
@@ -996,8 +1009,8 @@ export class OcsChat {
                     >
                       <div
                         class={`message-bubble ${
-                          message.role === 'user' 
-                            ? 'message-bubble-user' 
+                          message.role === 'user'
+                            ? 'message-bubble-user'
                             : message.role === 'assistant'
                             ? 'message-bubble-assistant'
                             : 'message-bubble-system'
@@ -1075,8 +1088,8 @@ export class OcsChat {
                     ></textarea>
                     <button
                       class={`send-button ${
-                        !this.isTyping && !!this.messageInput.trim() 
-                          ? 'send-button-enabled' 
+                        !this.isTyping && !!this.messageInput.trim()
+                          ? 'send-button-enabled'
                           : 'send-button-disabled'
                       }`}
                       onClick={() => this.sendMessage(this.messageInput)}
@@ -1087,6 +1100,9 @@ export class OcsChat {
                   </div>
                 </div>
               )}
+              <div class="flex items-center justify-center text-[0.8em] font-light w-full text-slate-500 py-[2px]">
+                <p>Powered by <a class="underline" href="https://www.dimagi.com" target="_blank">Dimagi</a></p>
+              </div>
             </div>
           </div>
         )}

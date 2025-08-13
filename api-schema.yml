@@ -407,6 +407,11 @@ paths:
         description: The pagination cursor value.
         schema:
           type: string
+      - in: query
+        name: experiment
+        schema:
+          type: string
+        description: Experiment ID to filter sessions by
       - name: ordering
         required: false
         in: query
@@ -419,6 +424,11 @@ paths:
           type: string
         description: A list of session tags (comma separated) to filter the results
           by
+      - in: query
+        name: versions
+        schema:
+          type: string
+        description: Experiment versions (comma separated) to filter sessions by
       tags:
       - Experiment Sessions
       security:
@@ -939,11 +949,16 @@ components:
           type: string
           format: date-time
           readOnly: true
+        tags:
+          type: array
+          items:
+            type: string
       required:
       - created_at
       - experiment
       - id
       - participant
+      - tags
       - team
       - updated_at
       - url
@@ -1007,12 +1022,17 @@ components:
           items:
             $ref: '#/components/schemas/Message'
           readOnly: true
+        tags:
+          type: array
+          items:
+            type: string
       required:
       - created_at
       - experiment
       - id
       - messages
       - participant
+      - tags
       - team
       - updated_at
       - url
