@@ -46,9 +46,10 @@ For more information, see the [Open Chat Studio documentation](https://docs.open
 | `--chat-window-border-color`            | Chat window border color (#d1d5db)                                               |
 | `--chat-window-font-size`               | Default font size for text in the chat window (0.875em)                          |
 | `--chat-window-font-size-sm`            | Font size for small text in the chat window (0.75em) Header Variables            |
+| `--chat-window-fullscreen-width`        | Chat window fullscreen width in pixels or percent (80%)                          |
 | `--chat-window-height`                  | Chat window height in pixels or percent (60%)                                    |
 | `--chat-window-shadow-color`            | Chat window shadow color (rgba(0, 0, 0, 0.1))                                    |
-| `--chat-window-width`                   | Chat window height in pixels (450px)                                             |
+| `--chat-window-width`                   | Chat window width in pixels or percent (25%)                                     |
 | `--chat-z-index`                        | Z-index for chat widget (50)                                                     |
 | `--code-bg-assistant-color`             | Code background in assistant messages (--message-assistant-bg-color + 50% white) |
 | `--code-bg-user-color`                  | Code background in user messages (--message-user-bg-color + 20% white)           |

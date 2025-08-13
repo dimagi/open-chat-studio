@@ -23,7 +23,8 @@
     *
     * Chat Window Variables
     * @prop --chat-window-height: Chat window height in pixels or percent (60%)
-    * @prop --chat-window-width: Chat window height in pixels (450px)
+    * @prop --chat-window-width: Chat window width in pixels or percent (25%)
+    * @prop --chat-window-fullscreen-width: Chat window fullscreen width in pixels or percent (80%)
     * @prop --chat-window-bg-color: Chat window background color (#ffffff)
     * @prop --chat-window-border-color: Chat window border color (#d1d5db)
     * @prop --chat-window-shadow-color: Chat window shadow color (rgba(0, 0, 0, 0.1))
@@ -121,7 +122,8 @@
 
   /* Chat window variables */
   --chat-window-height: 60%;
-  --chat-window-width: 450px;
+  --chat-window-width: 25%;
+  --chat-window-fullscreen-width: 80%;
   --chat-window-bg-color: #ffffff;
   --chat-window-border-color: #d1d5db;
   --chat-window-shadow-color: rgba(0, 0, 0, 0.1);
@@ -274,9 +276,10 @@
 
   /* Chat window positioning classes */
   .chat-window-fullscreen {
-    @apply fixed inset-0 w-full h-full max-w-screen-lg max-h-full border-0 shadow-lg transition-shadow duration-200 rounded-none overflow-hidden flex flex-col z-[9999];
+    @apply fixed inset-0 w-full h-full max-h-full border-0 shadow-lg transition-shadow duration-200 rounded-none overflow-hidden flex flex-col z-[9999];
     background-color: var(--chat-window-bg-color);
     font-size: var(--chat-window-font-size);
+    max-width: var(--chat-window-fullscreen-width);
   }
 
   .chat-window-normal {
