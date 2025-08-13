@@ -340,6 +340,7 @@ class EvaluationDatasetForm(forms.ModelForm):
         if not isinstance(message_pairs, list) or len(message_pairs) == 0:
             raise forms.ValidationError("At least one message pair must be added.")
 
+        validated_pairs = []
         for i, pair in enumerate(message_pairs):
             if not isinstance(pair, dict):
                 raise forms.ValidationError(f"Message pair {i + 1} is not a valid object.")
@@ -353,14 +354,14 @@ class EvaluationDatasetForm(forms.ModelForm):
                 except json.JSONDecodeError as err:
                     raise forms.ValidationError(f"Context for pair {i + 1} has malformed JSON") from err
 
-            message_pairs.append(
+            validated_pairs.append(
                 {
                     "human": EvaluationMessageContent(content=pair.get("human", "").strip(), role="human").model_dump(),
                     "ai": EvaluationMessageContent(content=pair.get("ai", "").strip(), role="ai").model_dump(),
                     "context": pair.get("context"),
                 }
             )
-        return message_pairs
+        return validated_pairs
 
     def _clean_csv(self):
         column_mapping_str = self.data.get("column_mapping", "")
