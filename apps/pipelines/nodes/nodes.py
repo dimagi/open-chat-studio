@@ -1210,7 +1210,7 @@ class CodeNode(PipelineNode, OutputMessageTagMixin):
             # control flow
             "abort_with_message": self._abort_pipeline(),
             "require_node_outputs": self._require_node_outputs(state),
-            "get_output_voice": self._get_output_voice(output_state),
+            "get_output_voice": self._get_output_voice(output_state, state["experiment_session"]),
             "set_output_voice": self._set_output_voice(output_state),
         }
 
@@ -1312,17 +1312,17 @@ class CodeNode(PipelineNode, OutputMessageTagMixin):
         custom_builtins["__import__"] = guarded_import
         return custom_builtins
 
-    def _get_output_voice(self, state: PipelineState):
+    def _get_output_voice(self, output_state: PipelineState, session: ExperimentSession):
         from apps.experiments.models import SyntheticVoice
 
         def get_output_voice():
-            voice_provider_id = state.get("voice_provider_id")
-            synthetic_voice_id = state.get("synthetic_voice_id")
+            voice_provider_id = output_state.get("voice_provider_id")
+            synthetic_voice_id = output_state.get("synthetic_voice_id")
 
             is_default = False
 
             if not voice_provider_id or not synthetic_voice_id:
-                experiment = state["experiment_session"].experiment
+                experiment = session.experiment
                 if not experiment or not experiment.synthetic_voice_id:
                     return None
 
@@ -1330,12 +1330,7 @@ class CodeNode(PipelineNode, OutputMessageTagMixin):
                 is_default = True
 
             try:
-                synthetic_voice_obj = (
-                    SyntheticVoice.objects
-                    .select_related("voice_provider")
-                    .only("name", "voice_provider__type", "voice_provider_id")
-                    .get(id=synthetic_voice_id)
-                )
+                synthetic_voice_obj = SyntheticVoice.objects.select_related("voice_provider").get(id=synthetic_voice_id)
             except SyntheticVoice.DoesNotExist:
                 return None
 
@@ -1350,39 +1345,28 @@ class CodeNode(PipelineNode, OutputMessageTagMixin):
         return get_output_voice
 
     def _set_output_voice(self, output_state: PipelineState):
-        from apps.service_providers.models import VoiceProvider
         from apps.experiments.models import SyntheticVoice
+        from apps.service_providers.models import VoiceProvider
+
         def set_output_voice(name: str):
             if ":" not in name:
-                raise PipelineNodeRunError(
-                    "Invalid voice format. Use 'provider:voice_name', e.g., 'openai:echo'."
-                )
+                raise PipelineNodeRunError("Invalid voice format. Use 'provider:voice_name', e.g., 'openai:echo'.")
             voice_provider_name, synthetic_voice_name = name.split(":", 1)
             try:
                 voice_provider_id = (
-                    VoiceProvider.objects
-                    .filter(type=voice_provider_name)
-                    .values_list("id", flat=True)
-                    .get()
+                    VoiceProvider.objects.filter(type=voice_provider_name).values_list("id", flat=True).get()
                 )
             except VoiceProvider.DoesNotExist:
-                raise PipelineNodeRunError(
-                    f"Voice provider '{voice_provider_name}' not found."
-                )
+                raise PipelineNodeRunError(f"Voice provider '{voice_provider_name}' not found.")
 
             try:
                 synthetic_voice_id = (
-                    SyntheticVoice.objects
-                    .filter(name=synthetic_voice_name)
-                    .values_list("id", flat=True)
-                    .get()
+                    SyntheticVoice.objects.filter(name=synthetic_voice_name).values_list("id", flat=True).get()
                 )
             except SyntheticVoice.DoesNotExist:
-                raise PipelineNodeRunError(
-                    f"Synthetic voice '{synthetic_voice_name}' not found."
-                )
+                raise PipelineNodeRunError(f"Synthetic voice '{synthetic_voice_name}' not found.")
 
             output_state["voice_provider_id"] = voice_provider_id
             output_state["synthetic_voice_id"] = synthetic_voice_id
-        return set_output_voice
 
+        return set_output_voice
