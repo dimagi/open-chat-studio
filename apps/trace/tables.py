@@ -53,9 +53,8 @@ class TraceTable(tables.Table):
         orderable=True,
     )
 
-    def render_duration(self, value):
-        duration_seconds = round(value / 1000, 2)
-        return f"{duration_seconds}s"
+    def render_duration(self, record):
+        return f"{record.duration_seconds()}s"
 
     def render_status(self, record):
         return get_template("trace/partials/status.html").render(context={"object": record})
