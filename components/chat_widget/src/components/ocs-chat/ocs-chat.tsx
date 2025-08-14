@@ -419,6 +419,14 @@ export class OcsChat {
       let attachmentIds: number[] = [];
       if (this.allowAttachments && this.selectedFiles.length > 0) {
         attachmentIds = await this.uploadFiles();
+
+        // Check if any files have errors after upload attempt
+        const hasErrors = this.selectedFiles.some(sf => sf.error);
+        if (hasErrors) {
+          // Don't send the message, let user fix file issues first
+          this.error = 'Please remove or fix file errors before sending your message.';
+          return;
+        }
       }
 
       // If this is the first user message and there are welcome messages,
