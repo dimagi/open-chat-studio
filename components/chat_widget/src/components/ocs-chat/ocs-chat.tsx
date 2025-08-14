@@ -948,16 +948,6 @@ export class OcsChat {
               </div>
               <div class="header-text">{this.headerText}</div>
               <div class="header-buttons">
-                {/* Fullscreen toggle button */}
-                {this.allowFullScreen && <button
-                  class="header-button fullscreen-button"
-                  onClick={() => this.toggleFullscreen()}
-                  title={this.isFullscreen ? "Exit fullscreen" : "Enter fullscreen"}
-                  aria-label={this.isFullscreen ? "Exit fullscreen" : "Enter fullscreen"}
-                >
-                  {this.isFullscreen ? <ArrowsPointingInIcon/> : <ArrowsPointingOutIcon/>}
-                </button>}
-                {/* New Chat button */}
                 {this.sessionId && this.messages.length > 0 && (
                   <button
                     class="header-button"
@@ -968,6 +958,16 @@ export class OcsChat {
                     <PlusIcon/>
                   </button>
                 )}
+                {/* Fullscreen toggle button */}
+                {this.allowFullScreen && <button
+                  class="header-button fullscreen-button"
+                  onClick={() => this.toggleFullscreen()}
+                  title={this.isFullscreen ? "Exit fullscreen" : "Enter fullscreen"}
+                  aria-label={this.isFullscreen ? "Exit fullscreen" : "Enter fullscreen"}
+                >
+                  {this.isFullscreen ? <ArrowsPointingInIcon/> : <ArrowsPointingOutIcon/>}
+                </button>}
+                {/* New Chat button */}
                 <button
                   class="header-button"
                   onClick={() => this.visible = false}
