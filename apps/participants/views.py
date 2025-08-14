@@ -181,6 +181,9 @@ def participant_identifiers_by_experiment(request, team_slug: str, experiment_id
 @login_and_team_required
 def all_participant_identifiers(request, team_slug: str):
     identifiers = list(
-        Participant.objects.filter(team__slug=team_slug).values_list("identifier", "remote_id").distinct()
+        Participant.objects
+        .filter(team__slug=team_slug)
+        .values_list("identifier", "remote_id")
+        .distinct()
     )
     return JsonResponse(identifiers, safe=False)
