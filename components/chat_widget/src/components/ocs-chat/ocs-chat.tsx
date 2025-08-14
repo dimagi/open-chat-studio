@@ -4,6 +4,7 @@ import {
   GripDotsVerticalIcon, PencilSquare, ArrowsPointingOutIcon, ArrowsPointingInIcon,
 } from './heroicons';
 import { renderMarkdownSync as renderMarkdownComplete } from '../../utils/markdown';
+import { getCSRFToken } from '../../utils/cookies';
 import { varToPixels } from '../../utils/utils';
 
 interface ChatMessage {
@@ -258,6 +259,19 @@ export class OcsChat {
     return this.apiBaseUrl || window.location.origin;
   }
 
+  private getApiHeaders(): Record<string, string> {
+    const headers: Record<string, string> = {
+      'Content-Type': 'application/json',
+    };
+
+    const csrfToken = getCSRFToken(this.getApiBaseUrl());
+    if (csrfToken) {
+      headers['X-CSRFToken'] = csrfToken;
+    }
+
+    return headers;
+  }
+
   private async startSession(): Promise<void> {
     try {
       this.isLoading = true;
@@ -280,9 +294,7 @@ export class OcsChat {
 
       const response = await fetch(`${this.getApiBaseUrl()}/api/chat/start/`, {
         method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
+        headers: this.getApiHeaders(),
         body: JSON.stringify(requestBody)
       });
 
@@ -345,9 +357,7 @@ export class OcsChat {
 
       const response = await fetch(`${this.getApiBaseUrl()}/api/chat/${this.sessionId}/message/`, {
         method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
+        headers: this.getApiHeaders(),
         body: JSON.stringify({ message: message.trim() })
       });
 
