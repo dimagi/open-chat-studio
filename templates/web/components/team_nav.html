@@ -56,6 +56,14 @@
               </a>
             </li>
           {% endif %}
+          {% flag "flag_tracing" %}
+            <li>
+              <a href="{% url 'trace:home' request.team.slug %}" {% if active_tab == 'traces' %}class="menu-active"{% endif %}>
+                <i class="fa-solid fa-magnifying-glass-location"></i>
+                {% translate "Traces" %}
+              </a>
+            </li>
+          {% endflag %}
         {% endflag %}
       </ul>
     </li>

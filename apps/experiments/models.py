@@ -821,6 +821,18 @@ class Experiment(BaseTeamModel, VersionsMixin, CustomActionOperationMixin):
             label = f"{label} (archived)"
         return Chip(label=label, url=self.get_absolute_url())
 
+    def as_experiment_chip(self) -> Chip:
+        """Returns a link to the (legacy) experiment home page"""
+        return self.as_chip()
+
+    def as_chatbot_chip(self) -> Chip:
+        """Returns a link to the chatbot home page"""
+        label = self.name
+        if self.is_archived:
+            label = f"{label} (archived)"
+        url = reverse("chatbots:single_chatbot_home", args=[self.team.slug, self.id])
+        return Chip(label=label, url=url)
+
     def get_chat_model(self):
         service = self.get_llm_service()
         provider_model_name = self.get_llm_provider_model_name()
@@ -1828,5 +1840,13 @@ class ExperimentSession(BaseTeamModel):
         else:
             return "{participant_data}" in self.experiment.prompt_text
 
-    def as_chip(self) -> Chip:
+    def as_experiment_chip(self) -> Chip:
+        """Returns a link to the (legacy) experiment session page"""
         return Chip(label=self.external_id, url=self.get_absolute_url())
+
+    def as_chatbot_chip(self) -> Chip:
+        """Returns a link to the chatbot session page"""
+        url = reverse(
+            "chatbots:chatbot_session_view", args=[self.team.slug, self.experiment.public_id, self.external_id]
+        )
+        return Chip(label=self.external_id, url=url)
