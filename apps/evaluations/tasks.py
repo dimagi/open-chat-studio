@@ -255,7 +255,7 @@ def upload_dataset_csv_task(self, dataset_id, csv_content, team_id):
             if not rows:
                 return {"success": False, "error": "CSV file is empty"}
 
-            stats = _process_csv_rows(dataset, rows, columns, progress_recorder, team)
+            stats = process_csv_rows(dataset, rows, columns, progress_recorder, team)
             progress_recorder.set_progress(100, 100, "Upload complete")
 
             return {
@@ -280,7 +280,7 @@ def _parse_csv_content(csv_content, progress_recorder):
     return rows, columns
 
 
-def _extract_row_data(row, row_index):
+def _extract_row_data(row):
     """Extract and validate data from a CSV row."""
     input_content = row.get("input_content", "").strip()
     output_content = row.get("output_content", "").strip()
@@ -316,14 +316,19 @@ def _update_existing_message(dataset, message_id, row_data, team):
     old_input_content = message.input.get("content", "")
     old_output_content = message.output.get("content", "")
     old_history = message.history
+    old_context = message.context
+
     new_input_content = row_data["input_content"]
     new_output_content = row_data["output_content"]
     new_history = row_data["history"]
+    new_context = row_data["context"]
 
     input_content_changed = old_input_content != new_input_content
     output_content_changed = old_output_content != new_output_content
     history_changed = old_history != new_history
-    any_content_changed = input_content_changed or output_content_changed or history_changed
+    context_chagned = old_context != new_context
+
+    any_content_changed = input_content_changed or output_content_changed or history_changed or context_chagned
 
     message.context = row_data["context"]
 
@@ -360,7 +365,7 @@ def _create_new_message(dataset, row_data):
     dataset.messages.add(message)
 
 
-def _process_csv_rows(dataset, rows, columns, progress_recorder, team):
+def process_csv_rows(dataset, rows, columns, progress_recorder, team):
     """Process all CSV rows and return statistics."""
     stats = {"updated_count": 0, "created_count": 0, "error_messages": []}
     total_rows = len(rows)
@@ -368,8 +373,7 @@ def _process_csv_rows(dataset, rows, columns, progress_recorder, team):
 
     for row_index, row in enumerate(rows):
         try:
-            row_data = _extract_row_data(row, row_index)
-
+            row_data = _extract_row_data(row)
             updating_existing_message = has_id_column and row.get("id")
             if updating_existing_message:
                 try:
