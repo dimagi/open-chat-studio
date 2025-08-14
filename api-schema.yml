@@ -160,6 +160,12 @@ paths:
         description: The pagination cursor value.
         schema:
           type: string
+      - name: page_size
+        required: false
+        in: query
+        description: Number of results to return per page.
+        schema:
+          type: integer
       tags:
       - Experiments
       security:
@@ -414,6 +420,12 @@ paths:
         description: Which field to use when ordering the results.
         schema:
           type: string
+      - name: page_size
+        required: false
+        in: query
+        description: Number of results to return per page.
+        schema:
+          type: integer
       - in: query
         name: tags
         schema:
