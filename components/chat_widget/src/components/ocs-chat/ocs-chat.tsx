@@ -439,11 +439,13 @@ export class OcsChat {
         created_at: new Date().toISOString(),
         role: 'user',
         content: message.trim(),
-        attachments: this.allowAttachments ? this.selectedFiles.map(sf => ({
-          name: sf.file.name,
-          content_type: sf.file.type,
-          size: sf.file.size,
-        })) : []
+        attachments: this.allowAttachments ? this.selectedFiles
+          .filter(sf => !sf.error && sf.uploaded)
+          .map(sf => ({
+            name: sf.file.name,
+            content_type: sf.file.type,
+            size: sf.file.size,
+          })) : []
       };
       this.messages = [...this.messages, userMessage];
       this.saveSessionToStorage();
