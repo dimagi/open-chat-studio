@@ -31,7 +31,7 @@ def _chip_session_url_factory(_, request, record, __):
 
 
 class TraceTable(tables.Table):
-    timestamp = TimeAgoColumn(verbose_name="Last activity", orderable=True)
+    timestamp = TimeAgoColumn(verbose_name="Timestamp", orderable=True)
     bot = actions.ActionsColumn(
         actions=[
             chip_action(
