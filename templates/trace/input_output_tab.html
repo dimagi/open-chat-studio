@@ -22,7 +22,7 @@
                         </div>
                         <span class="text-xs text-base-content/50">
                             <time datetime="{{ trace.input_message.created_at.isoformat }}" title="{{ trace.input_message.created_at.isoformat }}">
-                              {{ trace.input_message.created_at|date:DATETIME_FORMAT }}
+                              {{ trace.input_message.created_at|date:"DATETIME_FORMAT" }}
                             </time>
                         </span>
                     </div>
@@ -57,7 +57,9 @@
                             {% endif %}
                         </div>
                         <span class="text-xs text-base-content/50">
-                            {{ trace.output_message.created_at|date:"Y-m-d H:i:s" }} UTC
+                            <time datetime="{{ trace.output_message.created_at.isoformat }}" title="{{ trace.output_message.created_at.isoformat }}">
+                              {{ trace.output_message.created_at|date:"DATETIME_FORMAT" }}
+                            </time>
                         </span>
                     </div>
                 </div>
