@@ -97,7 +97,7 @@ class EditPipeline(LoginAndTeamRequiredMixin, TemplateView, PermissionRequiredMi
                 llm_providers,
                 llm_provider_models,
                 exclude_services,
-                False,  # Not show voice field for now if opened from pipelines tab
+                None,  # Not show voice field for now if opened from pipelines tab
                 include_versions=pipeline.is_a_version,
             ),
             "default_values": _pipeline_node_default_values(llm_providers, llm_provider_models),
@@ -139,7 +139,7 @@ class DeletePipeline(LoginAndTeamRequiredMixin, View, PermissionRequiredMixin):
 
 
 def _pipeline_node_parameter_values(
-    team, llm_providers, llm_provider_models, excluded_services, voice_enabled, include_versions=False
+    team, llm_providers, llm_provider_models, excluded_services, selected_voice_provider, include_versions=False
 ):
     """Returns the possible values for each input type"""
     common_filters = {"team": team}
@@ -237,10 +237,9 @@ def _pipeline_node_parameter_values(
         OptionsSource.built_in_tools_config: BuiltInTools.get_tool_configs_by_provider(),
         OptionsSource.text_editor_autocomplete_vars_llm_node: PromptVars.get_all_prompt_vars(),
         OptionsSource.text_editor_autocomplete_vars_router_node: PromptVars.get_router_prompt_vars(),
-        OptionsSource.voice_provider_id: [
-            _option(provider_id, provider_type)
-            for provider_id, provider_type in team.voiceprovider_set.values_list("id", "type")
-        ],
+        OptionsSource.voice_provider_id: (
+            [_option(selected_voice_provider.id, selected_voice_provider.type)] if selected_voice_provider else []
+        ),
         OptionsSource.synthetic_voice_id: sorted(
             [
                 _option(
@@ -252,10 +251,10 @@ def _pipeline_node_parameter_values(
                 )
                 | {"provider_id": voice.voice_provider_id}
                 for voice in SyntheticVoice.get_for_team(team, exclude_services=excluded_services)
+                if selected_voice_provider and voice.service.lower() == selected_voice_provider.type
             ],
             key=lambda v: v["label"],
         ),
-        "voice_enabled": voice_enabled,
     }
 
 
