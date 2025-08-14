@@ -7,11 +7,11 @@ from django.utils import timezone
 from drf_spectacular.types import OpenApiTypes
 from drf_spectacular.utils import OpenApiExample, OpenApiParameter, extend_schema, inline_serializer
 from rest_framework import serializers, status
+from rest_framework.authentication import SessionAuthentication
 from rest_framework.decorators import api_view, authentication_classes, parser_classes, permission_classes
 from rest_framework.parsers import MultiPartParser
 from rest_framework.response import Response
 
-from apps.api.permissions import ApiKeyAuthentication, BearerTokenAuthentication
 from apps.api.serializers import (
     ChatPollResponse,
     ChatSendMessageRequest,
@@ -29,38 +29,40 @@ from apps.experiments.task_utils import get_message_task_response
 from apps.experiments.tasks import get_response_for_webchat_task
 from apps.files.models import File
 
-AUTH_CLASSES = [ApiKeyAuthentication, BearerTokenAuthentication]
+AUTH_CLASSES = [SessionAuthentication]
 
 MAX_FILE_SIZE_MB = settings.MAX_FILE_SIZE_MB
 MAX_TOTAL_SIZE_MB = 50
 SUPPORTED_FILE_EXTENSIONS = settings.SUPPORTED_FILE_TYPES["collections"]
 
 
-def check_experiment_access(request, experiment, participant_id):
+def check_experiment_access(experiment, participant_id):
     """
     Check if the request has access to the experiment based on public API settings.
 
     Returns:
         Response object if access denied, None if access allowed
     """
-    if request.team and experiment.team != request.team:
-        # Authenticated requests must be constrained to their team
+    if experiment.is_public:
+        return None
+
+    if not participant_id:
         return Response({"error": "Access denied"}, status=status.HTTP_403_FORBIDDEN)
 
-    if not experiment.is_public and not experiment.is_participant_allowed(participant_id):
+    if not experiment.is_participant_allowed(participant_id):
         return Response({"error": "Access denied"}, status=status.HTTP_403_FORBIDDEN)
 
     return None
 
 
-def check_session_access(request, session):
+def check_session_access(session):
     """
     Check if the request has access to the session based on experiment's public API settings.
 
     Returns:
         Response object if access denied, None if access allowed
     """
-    return check_experiment_access(request, session.experiment, session.participant.identifier)
+    return check_experiment_access(session.experiment, session.participant.identifier)
 
 
 def validate_file_upload(file):
@@ -216,7 +218,6 @@ def chat_start_session(request):
 
     data = serializer.validated_data
     experiment_id = data["chatbot_id"]
-    participant_id = data.get("participant_id")
     session_data = data.get("session_data", {})
     remote_id = data.get("participant_remote_id", "")
     name = data.get("participant_name")
@@ -229,26 +230,25 @@ def chat_start_session(request):
             status=status.HTTP_400_BAD_REQUEST,
         )
 
-    access_response = check_experiment_access(request, experiment, participant_id)
+    team = experiment.team
+    if request.user.is_authenticated:
+        user = request.user
+        participant_id = user.email
+        if remote_id != participant_id:
+            # Enforce this for authenticated users
+            # Currently this only happens if the chat widget is being hosted on the same OCS instance as the bot
+            return Response({"error": "Remote ID must match your email address"}, status=status.HTTP_400_BAD_REQUEST)
+        remote_id = ""
+    else:
+        user = None
+        participant_id = None
+
+    access_response = check_experiment_access(experiment, participant_id)
     if access_response:
         return access_response
 
-    if request.user.is_authenticated:
-        team = request.team
-        user = request.user
-    else:
-        team = experiment.team
-        user = None
-
     # Create or get participant
     if user is not None:
-        participant_id = participant_id or user.email
-        if participant_id != user.email:
-            # TODO: re-evaluate this, it doesn't seem correct in this instance
-            return Response(
-                {"error": "Participant ID must match your email address"}, status=status.HTTP_400_BAD_REQUEST
-            )
-
         participant, created = Participant.objects.get_or_create(
             identifier=participant_id,
             team=team,
@@ -278,6 +278,7 @@ def chat_start_session(request):
         working_experiment=experiment,
         experiment_channel=api_channel,
         participant_identifier=participant.identifier,
+        participant_user=user,
         # timezone
         # session_external_id
         metadata={Chat.MetadataKeys.EMBED_SOURCE: request.headers.get("referer", None)},
@@ -350,7 +351,7 @@ def chat_send_message(request, session_id):
 
     session = get_object_or_404(ExperimentSession, external_id=session_id)
 
-    access_response = check_session_access(request, session)
+    access_response = check_session_access(session)
     if access_response:
         return access_response
 
@@ -432,7 +433,7 @@ def chat_poll_task_response(request, session_id, task_id):
     except ExperimentSession.DoesNotExist:
         raise Http404() from None
 
-    access_response = check_session_access(request, session)
+    access_response = check_session_access(session)
     if access_response:
         return access_response
     task_details = get_message_task_response(session.experiment, task_id)
@@ -491,7 +492,7 @@ def chat_poll_response(request, session_id):
     """
     session = get_object_or_404(ExperimentSession, external_id=session_id)
 
-    access_response = check_session_access(request, session)
+    access_response = check_session_access(session)
     if access_response:
         return access_response
     since_param = request.query_params.get("since")

@@ -194,12 +194,6 @@ class ParticipantDataUpdateRequest(serializers.Serializer):
 
 class ChatStartSessionRequest(serializers.Serializer):
     chatbot_id = serializers.UUIDField(label="Chatbot ID")
-    participant_id = serializers.CharField(
-        label="Participant ID",
-        required=False,
-        help_text="Optional participant identifier. If not provided, an anonymous participant will be created. "
-        "This field will be ignored if the request is not authenticated.",
-    )
     session_data = serializers.DictField(
         label="Initial session data",
         required=False,
