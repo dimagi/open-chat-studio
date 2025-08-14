@@ -222,8 +222,9 @@ class EditChatbot(LoginAndTeamRequiredMixin, TemplateView, PermissionRequiredMix
         data = super().get_context_data(**kwargs)
         llm_providers = LlmProvider.objects.filter(team=self.request.team).values("id", "name", "type").all()
         llm_provider_models = LlmProviderModel.objects.for_team(self.request.team).all()
-        experiment = get_object_or_404(Experiment.objects.get_all(), id=kwargs["pk"], team=self.request.team)
-        voice_enabled = bool(getattr(experiment, "synthetic_voice", False))
+        experiment = get_object_or_404(
+            Experiment.objects.get_all().select_related("voice_provider"), id=kwargs["pk"], team=self.request.team
+        )
         exclude_services = [SyntheticVoice.OpenAIVoiceEngine]
         if flag_is_active(self.request, "flag_open_ai_voice_engine"):
             exclude_services = []
@@ -233,7 +234,7 @@ class EditChatbot(LoginAndTeamRequiredMixin, TemplateView, PermissionRequiredMix
             "node_schemas": _pipeline_node_schemas(),
             "experiment": experiment,
             "parameter_values": _pipeline_node_parameter_values(
-                self.request.team, llm_providers, llm_provider_models, exclude_services, voice_enabled
+                self.request.team, llm_providers, llm_provider_models, exclude_services, experiment.voice_provider
             ),
             "default_values": _pipeline_node_default_values(llm_providers, llm_provider_models),
             "origin": "chatbots",
