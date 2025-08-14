@@ -152,32 +152,21 @@ class OpenAPIToMarkdownConverter:
         """Generate markdown documentation for all endpoints in a tag."""
         lines = []
 
-        # Tag title and description
-        lines.append(f"# {tag}")
+        # API header info
+        lines.append(f"API: {self.base_info['title']} v{self.base_info['version']}")
+        if self.base_info.get("description"):
+            lines.append(f"Description: {self.base_info['description']}")
         lines.append("")
 
-        # Add tag description from schema if available
+        # Tag info
         tag_info = self._get_tag_info(tag)
-        if tag_info and tag_info.get("description"):
-            lines.append(tag_info["description"])
+        if tag != "Untagged":
+            lines.append(f"TAG: {tag}")
+            if tag_info and tag_info.get("description"):
+                lines.append(f"Description: {tag_info['description']}")
             lines.append("")
 
-        # API info
-        lines.append(f"**API:** {self.base_info['title']} v{self.base_info['version']}")
-        if self.base_info["base_url"]:
-            lines.append(f"**Base URL:** `{self.base_info['base_url']}`")
-        lines.append("")
-
-        # Table of contents
-        lines.append("## Endpoints")
-        lines.append("")
-        for endpoint in endpoints:
-            method = endpoint["method"].upper()
-            path = endpoint["path"]
-            operation = endpoint["operation"]
-            summary = operation.get("summary", f"{method} {path}")
-            anchor = self._generate_anchor(method, path)
-            lines.append(f"- [{method} {path}](#{anchor}) - {summary}")
+        lines.append("ENDPOINTS:")
         lines.append("")
 
         # Generate documentation for each endpoint
@@ -186,14 +175,37 @@ class OpenAPIToMarkdownConverter:
             path = endpoint["path"]
             operation = endpoint["operation"]
 
-            endpoint_lines = self._generate_endpoint_section(method, path, operation)
+            endpoint_lines = self._generate_endpoint_section_minified(method, path, operation)
             lines.extend(endpoint_lines)
-            lines.append("---")
             lines.append("")
 
-        # Remove last separator
-        if lines[-2:] == ["---", ""]:
-            lines = lines[:-2]
+        # Collect all schemas used in this tag
+        schemas_used = self._collect_schemas_for_tag(endpoints)
+        if schemas_used:
+            lines.append("SCHEMAS:")
+            lines.append("")
+
+            for schema_name in sorted(schemas_used):
+                schema_lines = self._format_schema_minified(schema_name)
+                lines.extend(schema_lines)
+                lines.append("")
+
+        # Add security info if present
+        security_schemes = self.schema.get("components", {}).get("securitySchemes", {})
+        if security_schemes:
+            lines.append("SECURITY:")
+            for scheme_name, scheme in security_schemes.items():
+                scheme_type = scheme.get("type", "unknown")
+                if scheme_type == "apiKey":
+                    location = scheme.get("in", "header")
+                    key_name = scheme.get("name", "key")
+                    lines.append(f"- API Key authentication ({location}: {key_name})")
+                elif scheme_type == "http":
+                    scheme_name_val = scheme.get("scheme", "bearer")
+                    lines.append(f"- HTTP {scheme_name_val} authentication")
+                else:
+                    lines.append(f"- {scheme_name} ({scheme_type})")
+            lines.append("")
 
         return "\n".join(lines)
 
@@ -212,150 +224,61 @@ class OpenAPIToMarkdownConverter:
         anchor = re.sub(r"-+", "-", anchor)
         return anchor.strip("-")
 
-    def _generate_endpoint_section(self, method: str, path: str, operation: dict[str, Any]) -> list[str]:
-        """Generate markdown section for a single endpoint."""
+    def _generate_endpoint_section_minified(self, method: str, path: str, operation: dict[str, Any]) -> list[str]:
+        """Generate minified markdown section for a single endpoint."""
         lines = []
 
-        # Endpoint title
-        title = operation.get("summary", f"{method.upper()} {path}")
-        anchor = self._generate_anchor(method, path)
-        lines.append(f"## {title} {{#{anchor}}}")
-        lines.append("")
+        # Endpoint header
+        lines.append(f"{method.upper()} {path}")
 
-        # Basic info
-        lines.append(f"**Method:** `{method.upper()}`")
-        lines.append(f"**Path:** `{path}`")
-        lines.append("")
+        # Summary
+        if operation.get("summary"):
+            lines.append(f"  Summary: {operation['summary']}")
 
-        # Description
-        if operation.get("description"):
-            lines.append("### Description")
-            lines.append("")
-            lines.append(operation["description"])
-            lines.append("")
+        # Description (only if different from summary)
+        description = operation.get("description")
+        if description and description != operation.get("summary"):
+            lines.append(f"  Description: {description}")
 
         # Parameters
         parameters = operation.get("parameters", [])
         if parameters:
-            lines.append("### Parameters")
-            lines.append("")
-
-            # Group parameters by location
-            param_groups = {}
+            lines.append("  Parameters:")
             for param in parameters:
+                name = param.get("name", "")
                 location = param.get("in", "query")
-                if location not in param_groups:
-                    param_groups[location] = []
-                param_groups[location].append(param)
-
-            for location, params in param_groups.items():
-                lines.append(f"#### {location.title()} Parameters")
-                lines.append("")
-                lines.append("| Name | Type | Required | Description |")
-                lines.append("|------|------|----------|-------------|")
-
-                for param in params:
-                    name = param.get("name", "")
-                    param_type = self._get_parameter_type(param)
-                    required = "Yes" if param.get("required", False) else "No"
-                    description = param.get("description", "").replace("\n", " ")
-                    lines.append(f"| `{name}` | {param_type} | {required} | {description} |")
-                lines.append("")
+                param_type = self._get_parameter_type_minified(param)
+                required = " (required)" if param.get("required", False) else " (optional)"
+                description = param.get("description", "No description")
+                lines.append(f"    - {name} ({location}, {param_type}{required}): {description}")
 
         # Request Body
         request_body = operation.get("requestBody")
         if request_body:
-            lines.append("### Request Body")
-            lines.append("")
-
-            if request_body.get("description"):
-                lines.append(request_body["description"])
-                lines.append("")
-
+            lines.append("  Request Body:")
             content = request_body.get("content", {})
             for media_type, media_content in content.items():
-                lines.append(f"#### {media_type}")
-                lines.append("")
-
+                lines.append(f"    Content: {media_type}")
                 schema = media_content.get("schema", {})
                 if schema:
-                    lines.append("**Schema:**")
-                    lines.append("")
-                    lines.extend(self._format_schema(schema))
-
-                # Example
-                example = media_content.get("example") or media_content.get("examples", {})
-                if example:
-                    lines.append("**Example:**")
-                    lines.append("")
-                    lines.append("```json")
-                    if isinstance(example, dict) and "value" in example:
-                        lines.append(json.dumps(example["value"], indent=2))
-                    else:
-                        lines.append(json.dumps(example, indent=2))
-                    lines.append("```")
-                    lines.append("")
+                    schema_ref = self._get_schema_reference(schema)
+                    lines.append(f"    Schema: {schema_ref}")
 
         # Responses
         responses = operation.get("responses", {})
         if responses:
-            lines.append("### Responses")
-            lines.append("")
-
+            lines.append("  Responses:")
             for status_code, response in responses.items():
-                lines.append(f"#### {status_code}")
-                lines.append("")
-
-                if response.get("description"):
-                    lines.append(response["description"])
-                    lines.append("")
+                description = response.get("description", "No description")
+                lines.append(f"    {status_code}: {description}")
 
                 content = response.get("content", {})
                 for media_type, media_content in content.items():
-                    lines.append(f"**Content Type:** `{media_type}`")
-                    lines.append("")
-
+                    lines.append(f"      Content: {media_type}")
                     schema = media_content.get("schema", {})
                     if schema:
-                        lines.append("**Response Schema:**")
-                        lines.append("")
-                        lines.extend(self._format_schema(schema))
-
-                    # Example
-                    example = media_content.get("example") or media_content.get("examples", {})
-                    if example:
-                        lines.append("**Example Response:**")
-                        lines.append("")
-                        lines.append("```json")
-                        if isinstance(example, dict) and "value" in example:
-                            lines.append(json.dumps(example["value"], indent=2))
-                        else:
-                            lines.append(json.dumps(example, indent=2))
-                        lines.append("```")
-                        lines.append("")
-
-        # Security
-        security = operation.get("security", self.schema.get("security", []))
-        if security:
-            lines.append("### Security")
-            lines.append("")
-
-            security_schemes = self.schema.get("components", {}).get("securitySchemes", {})
-            for sec_req in security:
-                for scheme_name, scopes in sec_req.items():
-                    scheme = security_schemes.get(scheme_name, {})
-                    scheme_type = scheme.get("type", "unknown")
-                    lines.append(f"- **{scheme_name}** ({scheme_type})")
-                    if scopes:
-                        lines.append(f"  - Scopes: {', '.join(scopes)}")
-            lines.append("")
-
-        # Operation ID and other metadata
-        if operation.get("operationId"):
-            lines.append("### Operation ID")
-            lines.append("")
-            lines.append(f"`{operation['operationId']}`")
-            lines.append("")
+                        schema_ref = self._get_schema_reference(schema)
+                        lines.append(f"      Schema: {schema_ref}")
 
         return lines
 
@@ -370,6 +293,94 @@ class OpenAPIToMarkdownConverter:
             return f"enum: {', '.join(map(str, schema['enum']))}"
         else:
             return param_type
+
+    def _get_parameter_type_minified(self, param: dict[str, Any]) -> str:
+        """Extract simplified parameter type information."""
+        schema = param.get("schema", {})
+        return schema.get("type", "string")
+
+    def _get_schema_reference(self, schema: dict[str, Any]) -> str:
+        """Get schema reference name or type."""
+        if "$ref" in schema:
+            return schema["$ref"].split("/")[-1]
+        elif schema.get("type") == "array" and "items" in schema:
+            items = schema["items"]
+            if "$ref" in items:
+                return f"array of {items['$ref'].split('/')[-1]}"
+            else:
+                return f"array of {items.get('type', 'unknown')}"
+        else:
+            return schema.get("type", "Unknown")
+
+    def _collect_schemas_for_tag(self, endpoints: list[dict[str, Any]]) -> set[str]:
+        """Collect all schema references used in endpoints of this tag."""
+        schemas = set()
+
+        for endpoint in endpoints:
+            operation = endpoint["operation"]
+
+            # Check request body schemas
+            request_body = operation.get("requestBody", {})
+            content = request_body.get("content", {})
+            for media_content in content.values():
+                schema = media_content.get("schema", {})
+                self._extract_schema_refs(schema, schemas)
+
+            # Check response schemas
+            responses = operation.get("responses", {})
+            for response in responses.values():
+                content = response.get("content", {})
+                for media_content in content.values():
+                    schema = media_content.get("schema", {})
+                    self._extract_schema_refs(schema, schemas)
+
+        return schemas
+
+    def _extract_schema_refs(self, schema: dict[str, Any], refs: set[str]):
+        """Recursively extract schema references."""
+        if "$ref" in schema:
+            ref_name = schema["$ref"].split("/")[-1]
+            refs.add(ref_name)
+        elif schema.get("type") == "array" and "items" in schema:
+            self._extract_schema_refs(schema["items"], refs)
+        elif schema.get("type") == "object" and "properties" in schema:
+            for prop_schema in schema["properties"].values():
+                self._extract_schema_refs(prop_schema, refs)
+
+    def _format_schema_minified(self, schema_name: str) -> list[str]:
+        """Format a schema definition in minified style."""
+        lines = []
+        schema = self.schemas.get(schema_name)
+
+        if not schema:
+            lines.append(f"{schema_name}: (not found)")
+            return lines
+
+        lines.append(f"{schema_name}:")
+
+        if schema.get("type") == "object":
+            properties = schema.get("properties", {})
+            required = schema.get("required", [])
+
+            for prop_name, prop_schema in properties.items():
+                prop_type = self._get_schema_reference(prop_schema)
+                required_marker = " (required)" if prop_name in required else ""
+                lines.append(f"  - {prop_name}: {prop_type}{required_marker}")
+
+        elif schema.get("type") == "array":
+            items = schema.get("items", {})
+            item_type = self._get_schema_reference(items)
+            lines.append(f"  - array of {item_type}")
+
+        elif schema.get("enum"):
+            enum_values = ", ".join(map(str, schema["enum"]))
+            lines.append(f"  - enum: [{enum_values}]")
+
+        else:
+            schema_type = schema.get("type", "unknown")
+            lines.append(f"  - type: {schema_type}")
+
+        return lines
 
     def _resolve_ref(self, ref: str) -> dict[str, Any]:
         """Resolve a $ref to the actual schema definition."""
@@ -426,7 +437,9 @@ class OpenAPIToMarkdownConverter:
 
         return " ".join(type_info)
 
-    def _format_schema(self, schema: dict[str, Any], indent: int = 0, visited_refs: set | None = None) -> list[str]:
+    def _format_schema_detailed(
+        self, schema: dict[str, Any], indent: int = 0, visited_refs: set | None = None
+    ) -> list[str]:
         """Format a JSON schema into readable markdown with full type definitions."""
         if visited_refs is None:
             visited_refs = set()
