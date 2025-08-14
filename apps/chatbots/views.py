@@ -234,7 +234,7 @@ class EditChatbot(LoginAndTeamRequiredMixin, TemplateView, PermissionRequiredMix
             "node_schemas": _pipeline_node_schemas(),
             "experiment": experiment,
             "parameter_values": _pipeline_node_parameter_values(
-                self.request.team, llm_providers, llm_provider_models, exclude_services, experiment.voice_provider
+                team=self.request.team, llm_providers=llm_providers, llm_provider_models=llm_provider_models, excluded_services=exclude_services, selected_voice_provider=experiment.voice_provider
             ),
             "default_values": _pipeline_node_default_values(llm_providers, llm_provider_models),
             "origin": "chatbots",
