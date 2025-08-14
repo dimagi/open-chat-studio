@@ -57,12 +57,14 @@
             </li>
           {% endif %}
           {% flag "flag_tracing" %}
-            <li>
-              <a href="{% url 'trace:home' request.team.slug %}" {% if active_tab == 'traces' %}class="menu-active"{% endif %}>
-                <i class="fa-solid fa-magnifying-glass-location"></i>
-                {% translate "Traces" %}
-              </a>
-            </li>
+            {% if perms.trace.view_trace %}
+              <li>
+                <a href="{% url 'trace:home' request.team.slug %}" {% if active_tab == 'traces' %}class="menu-active"{% endif %}>
+                  <i class="fa-solid fa-magnifying-glass-location"></i>
+                  {% translate "Traces" %}
+                </a>
+              </li>
+            {% endif %}
           {% endflag %}
         {% endflag %}
       </ul>
@@ -82,14 +84,16 @@
         {% translate "Chatbots" %}
       </a>
       {% flag "flag_tracing" %}
-        <ul>
-            <li>
-              <a href="{% url 'trace:home' request.team.slug %}" {% if active_tab == 'traces' %}class="menu-active"{% endif %}>
-                <i class="fa-solid fa-magnifying-glass-location"></i>
-                {% translate "Traces" %}
-              </a>
-            </li>
-        </ul>
+        {% if perms.trace.view_trace %}
+          <ul>
+              <li>
+                <a href="{% url 'trace:home' request.team.slug %}" {% if active_tab == 'traces' %}class="menu-active"{% endif %}>
+                  <i class="fa-solid fa-magnifying-glass-location"></i>
+                  {% translate "Traces" %}
+                </a>
+              </li>
+          </ul>
+        {% endif %}
       {% endflag %}
     </li>
     <li>
