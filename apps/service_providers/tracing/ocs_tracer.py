@@ -53,7 +53,12 @@ class OCSTracer(Tracer):
         """Start a trace and record the start time."""
         super().start_trace(trace_name, trace_id, session, inputs, metadata)
         self.trace = Trace.objects.create(
-            trace_id=trace_id, experiment_id=self.experiment_id, team_id=self.team_id, session=session, duration=0
+            trace_id=trace_id,
+            experiment_id=self.experiment_id,
+            team_id=self.team_id,
+            session=session,
+            duration=0,
+            participant=session.participant,
         )
 
         self.start_time = time.time()
@@ -70,7 +75,6 @@ class OCSTracer(Tracer):
             duration = end_time - self.start_time
             duration_ms = int(duration * 1000)
 
-            self.trace.participant = self.session.participant
             self.trace.duration = duration_ms
             if self.error_detected:
                 self.trace.status = TraceStatus.ERROR

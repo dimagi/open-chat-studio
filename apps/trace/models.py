@@ -47,11 +47,16 @@ class Trace(models.Model):
         return round(self.duration / 1000, 2)
 
     def span(
-        self, span_id: uuid.UUID, span_name: str, inputs: dict[str, any], metadata: dict[str, any] | None = None
+        self,
+        span_id: uuid.UUID,
+        span_name: str,
+        inputs: dict[str, any],
+        metadata: dict[str, any] | None = None,
     ) -> Span:
         return _create_span(
-            trace=self,
+            trace_id=self.id,
             parent_span=None,
+            team_id=self.team_id,
             span_id=span_id,
             span_name=span_name,
             inputs=inputs,
@@ -96,11 +101,16 @@ class Span(BaseTeamModel, TaggedModelMixin):
         return 0
 
     def span(
-        self, span_id: uuid.UUID, span_name: str, inputs: dict[str, any], metadata: dict[str, any] | None = None
+        self,
+        span_id: uuid.UUID,
+        span_name: str,
+        inputs: dict[str, any],
+        metadata: dict[str, any] | None = None,
     ) -> Span:
         return _create_span(
-            trace=self.trace,
+            trace_id=self.trace_id,
             parent_span=self,
+            team_id=self.team_id,
             span_id=span_id,
             span_name=span_name,
             inputs=inputs,
@@ -109,19 +119,20 @@ class Span(BaseTeamModel, TaggedModelMixin):
 
 
 def _create_span(
-    trace: Trace,
+    trace_id: int,
     parent_span: Span,
+    team_id: int,
     span_id: uuid.UUID,
     span_name: str,
     inputs: dict[str, any],
     metadata: dict[str, any] | None = None,
 ) -> Span:
     return Span.objects.create(
-        trace=trace,
+        trace_id=trace_id,
         parent_span=parent_span,
         span_id=span_id,
         name=span_name,
-        team_id=trace.team_id,
+        team_id=team_id,
         input=inputs,
         metadata=metadata or {},
     )

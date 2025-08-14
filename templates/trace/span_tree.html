@@ -4,14 +4,7 @@
     <div class="flex items-center justify-between">
         <div class="flex items-center">
             {% if is_root %}
-                <svg class="w-5 h-5 mr-2" fill="currentColor" viewBox="0 0 20 20">
-                    <path d="M10 12a2 2 0 100-4 2 2 0 000 4z"/>
-                    <path fill-rule="evenodd" d="M.458 10C1.732 5.943 5.522 3 10 3s8.268 2.943 9.542 7c-1.274 4.057-5.064 7-9.542 7S1.732 14.057.458 10zM14 10a4 4 0 11-8 0 4 4 0 018 0z" clip-rule="evenodd"/>
-                </svg>
-            {% else %}
-                <svg class="w-4 h-4 text-gray-600 mr-2" fill="currentColor" viewBox="0 0 20 20">
-                    <circle cx="10" cy="10" r="3"/>
-                </svg>
+                <i class="fa-solid fa-eye mr-2"></i>
             {% endif %}
             <div class="flex flex-col gap-1">
                 <div class="text-lg font-bold">{{ span.name }}</div>
@@ -40,7 +33,7 @@
     <!-- Child spans -->
     {% with child_spans=span.child_spans.all %}
         {% if child_spans %}
-            <div class="span-tree mt-4">
+            <div class="border-l-2 border-gray-200 ml-4 pl-4 mt-4">
                 {% for child_span in child_spans %}
                     {% include "trace/span_tree.html" with span=child_span is_root=False %}
                 {% endfor %}

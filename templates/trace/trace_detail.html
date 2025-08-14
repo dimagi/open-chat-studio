@@ -1,5 +1,6 @@
 
 {% extends "web/app/app_base.html" %}
+{% load waffle_tags %}
 
 {% block breadcrumbs %}
     <div class="breadcrumbs text-sm">
@@ -12,7 +13,7 @@
 {% endblock breadcrumbs %}
 
 {% block app %}
-<div x-data="pageData">
+<div x-data="{activeTab: 'spans'}" x-init="{ activeTab: 'spans' }">
     <div class="container mx-auto px-4 py-6">
         <!-- Header Section -->
         <div class="flex justify-between w-full">
@@ -36,14 +37,22 @@
             <div>
                 <div class="text-sm text-base-content/60 tracking-wide">Experiment</div>
                 <div class="mt-1">
-                    {% include "generic/chip.html" with chip=trace.experiment.as_chip %}
+                    {% flag "flag_chatbots" %}
+                        {% include "generic/chip.html" with chip=trace.experiment.as_chatbot_chip %}
+                    {% else %}
+                        {% include "generic/chip.html" with chip=trace.experiment.as_experiment_chip %}
+                    {% endflag %}
                 </div>
                 <div class="text-xs mt-1">Version: {{ trace.experiment.get_version_name }}</div>
             </div>
             <div>
                 <div class="text-sm text-base-content/60 tracking-wide">Session</div>
                 <div class="mt-1">
-                    {% include "generic/chip.html" with chip=trace.session.as_chip %}
+                    {% flag "flag_chatbots" %}
+                        {% include "generic/chip.html" with chip=trace.session.as_chatbot_chip %}
+                    {% else %}
+                        {% include "generic/chip.html" with chip=trace.session.as_experiment_chip %}
+                    {% endflag %}
                 </div>
             </div>
             <div>
@@ -54,8 +63,9 @@
             </div>
             <div>
                 <div class="text-sm text-base-content/60 tracking-wide">Timestamp</div>
-                <div class="font-semibold">{{ trace.timestamp|date:"Y-m-d" }}</div>
-                <div class="text-xs text-base-content/50">{{ trace.timestamp|date:"H:i:s" }} UTC</div>
+                <time datetime="{{ trace.timestamp.isoformat }}" title="{{ trace.timestamp.isoformat }}">
+                    {{ trace.timestamp|date:"DATETIME_FORMAT" }}
+                </time>
             </div>
         </div>
     </div>
@@ -107,16 +117,4 @@
         </div>
     </div>
 </div>
-<script>
-  document.addEventListener('alpine:init', () => {
-    Alpine.data('pageData', () => ({
-      activeTab: 'spans',
-      
-      init() {
-        // Initialize with spans tab active by default
-        this.activeTab = 'spans';
-      }
-    }));
-  });
-</script>
 {% endblock app %}
