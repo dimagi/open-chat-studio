@@ -34,7 +34,7 @@
     <!-- Child spans -->
     {% with child_spans=span.child_spans.all %}
         {% if child_spans %}
-            <div class="span-tree mt-4">
+            <div class="border-l-2 border-gray-200 ml-4 pl-4 mt-4">
                 {% for child_span in child_spans %}
                     {% include "trace/span_tree.html" with span=child_span is_root=False %}
                 {% endfor %}
