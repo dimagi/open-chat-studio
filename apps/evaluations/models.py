@@ -197,7 +197,8 @@ class EvaluationMessage(BaseModel):
         for message in self.history:
             message_type = message.get("message_type", "")
             content = message.get("content", "")
-            history_lines.append(f"{message_type}: {content}")
+            display_type = ChatMessageType(message_type).role
+            history_lines.append(f"{display_type}: {content}")
 
         return "\n".join(history_lines)
 

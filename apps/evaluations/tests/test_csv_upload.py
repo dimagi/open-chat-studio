@@ -271,13 +271,13 @@ def test_csv_dataset_creation_with_history_column(client_with_user, team_with_us
             "input": "What's the weather?",
             "output": "I can't check weather directly.",
             "topic": "weather",
-            "history": "human: Hello\nai: Hi there!\nhuman: How are you?\nai: I'm doing well, thanks!",
+            "history": "user: Hello\nassistant: Hi there!\nuser: How are you?\nassistant: I'm doing well, thanks!",
         },
         {
             "input": "Tell me a joke",
             "output": "Why don't scientists trust atoms? Because they make up everything!",
             "topic": "humor",
-            "history": "human: Previous conversation\nai: Previous response",
+            "history": "user: Previous conversation\nassistant: Previous response",
         },
     ]
 

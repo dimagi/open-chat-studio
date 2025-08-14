@@ -87,14 +87,14 @@ def test_parse_history_functionality():
     assert parse_history_text("") == []
 
     # Test single line history
-    history_text = "human: Hello there"
+    history_text = "user: Hello there"
     result = parse_history_text(history_text)
     assert len(result) == 1
     assert result[0]["message_type"] == "human"
     assert result[0]["content"] == "Hello there"
 
     # Test multi-line history
-    history_text = "human: Hello\nai: Hi there!\nhuman: How are you?"
+    history_text = "user: Hello\nassistant: Hi there!\nuser: How are you?"
     result = parse_history_text(history_text)
     assert len(result) == 3
     assert result[0]["message_type"] == "human"
@@ -102,7 +102,7 @@ def test_parse_history_functionality():
     assert result[2]["message_type"] == "human"
 
     # Test message with newlines in content
-    history_text = "human: This is a multi-line\nmessage with newlines\nai: I understand your\nmulti-line message"
+    history_text = "user: This is a multi-line\nmessage with newlines\nassistant: I understand your\nmulti-line message"
     result = parse_history_text(history_text)
     assert len(result) == 2
     assert result[0]["message_type"] == "human"
@@ -112,7 +112,7 @@ def test_parse_history_functionality():
 
     # Test garbled messages (lines that don't start with role markers)
     history_text = (
-        "This is garbled text\nhuman: Hello\nsome random text without role\nai: Hi there!\nmore garbled content"
+        "This is garbled text\nuser: Hello\nsome random text without role\nassistant: Hi there!\nmore garbled content"
     )
     result = parse_history_text(history_text)
     assert len(result) == 2  # Only the valid human/ai messages should be parsed
@@ -122,7 +122,7 @@ def test_parse_history_functionality():
     assert result[1]["content"] == "Hi there!\nmore garbled content"  # Continuation line included
 
     # Test different casings (HUMAN, Human, AI, Ai, etc.)
-    history_text = "HUMAN: Hello from uppercase\nAi: Mixed case response\nhuman: lowercase again"
+    history_text = "USER: Hello from uppercase\nAssistant: Mixed case response\nuser: lowercase again"
     result = parse_history_text(history_text)
     assert len(result) == 3
     assert result[0]["message_type"] == "human"  # Always normalized to lowercase
@@ -261,17 +261,17 @@ def test_csv_upload_comprehensive_scenarios(client, team_with_users):
     # New message with history and context
     csv_content += (
         ",New question with history,New answer,science,hard,added_value,"
-        '"human: Hello\nai: Hi there!\nhuman: How are you?"\n'
+        '"user: Hello\nassistant: Hi there!\nuser: How are you?"\n'
     )
 
     # Update existing message with context changes
     csv_content += (
         f"{existing_message.id},Updated question,Updated answer,science,medium,new_added_field,"
-        '"human: Previous chat\nai: Previous response"\n'
+        '"user: Previous chat\nassistant: Previous response"\n'
     )
 
     # Try to update message from different team (should fail)
-    csv_content += f'{other_message.id},Hack attempt,Hacked,hacking,expert,malicious,"human: Bad\nai: Very bad"\n'
+    csv_content += f'{other_message.id},Hack attempt,Hacked,hacking,expert,malicious,"user: Bad\nassistant: Very bad"\n'
 
     csv_file = SimpleUploadedFile("test.csv", csv_content.encode(), content_type="text/csv")
 
@@ -298,7 +298,7 @@ def test_csv_upload_comprehensive_scenarios(client, team_with_users):
         "context.topic": "science",
         "context.difficulty": "hard",
         "context.new_field": "added_value",
-        "history": "human: Hello\nai: Hi there!\nhuman: How are you?",
+        "history": "user: Hello\nassistant: Hi there!\nuser: How are you?",
     }
 
     row_data = _extract_row_data(new_row, 0)
@@ -327,7 +327,7 @@ def test_csv_upload_comprehensive_scenarios(client, team_with_users):
         "context.difficulty": "medium",  # changed from "easy"
         "context.new_field": "new_added_field",  # new field added
         # Note: "old_field" is missing, so it should be removed
-        "history": "human: Previous chat\nai: Previous response",
+        "history": "user: Previous chat\nassistant: Previous response",
     }
 
     update_row_data = _extract_row_data(update_row, 1)
@@ -354,7 +354,7 @@ def test_csv_upload_comprehensive_scenarios(client, team_with_users):
         "input_content": "Hack attempt",
         "output_content": "Hacked",
         "context.topic": "hacking",
-        "history": "human: Bad\nai: Very bad",
+        "history": "user: Bad\nassistant: Very bad",
     }
 
     cross_team_row_data = _extract_row_data(cross_team_row, 2)
@@ -378,7 +378,7 @@ def test_csv_upload_comprehensive_scenarios(client, team_with_users):
         "context.topic": "physics",  # Changed context
         "context.difficulty": "hard",  # Changed context
         "context.new_field": "context_only_change",  # Changed context
-        "history": "human: Previous chat\nai: Previous response",  # Same history as current
+        "history": "user: Previous chat\nassistant: Previous response",  # Same history as current
     }
 
     context_only_row_data = _extract_row_data(context_only_row, 3)
@@ -402,7 +402,7 @@ def test_csv_upload_comprehensive_scenarios(client, team_with_users):
         "context.topic": "physics",  # Same as current
         "context.difficulty": "hard",  # Same as current
         "context.new_field": "context_only_change",  # Same as current
-        "history": "human: New history line\nai: Different response",  # Changed history
+        "history": "user: New history line\nassistant: Different response",  # Changed history
     }
 
     history_only_row_data = _extract_row_data(history_only_row, 4)

@@ -66,7 +66,7 @@ def test_download_dataset_csv_with_context_and_metadata(client, team_with_users)
     assert row1["context.current_datetime"] == "2023-01-01T10:00:00"
     assert row1["context.user_location"] == "USA"
     assert row1["context.topic"] == ""  # Empty for missing keys
-    assert row1["history"] == "human: Hello\nai: Hi there!"
+    assert row1["history"] == "user: Hello\nassistant: Hi there!"
 
     row2 = rows[1]
     assert row2["id"] == str(message2.id)

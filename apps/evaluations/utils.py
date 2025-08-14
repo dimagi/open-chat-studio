@@ -1,5 +1,6 @@
 import inspect
 
+from apps.chat.models import ChatMessageType
 from apps.evaluations.models import Evaluator
 
 
@@ -86,17 +87,15 @@ def parse_history_text(history_text: str) -> list:
         if not line_stripped:
             continue
 
-        if line_stripped.lower().startswith(("human:", "ai:")):
-            # Save previous message if exists
+        if line_stripped.lower().startswith((f"{ChatMessageType.HUMAN.role}:", f"{ChatMessageType.AI.role}:")):
             if current_message:
                 history.append(current_message)
 
-            # Start new message
             colon_position = line_stripped.find(":")
             role = line_stripped[:colon_position].strip().lower()
             content = line_stripped[colon_position + 1 :].strip()
             current_message = {
-                "message_type": role,
+                "message_type": ChatMessageType.from_role(role),
                 "content": content,
                 "summary": None,
             }

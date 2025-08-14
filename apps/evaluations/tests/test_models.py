@@ -45,7 +45,7 @@ def test_create_messages_from_sessions_includes_history():
     assert eval_messages[1].history[0]["content"] == "session1 message1 human"
     assert eval_messages[1].history[1]["message_type"] == ChatMessageType.AI
     assert eval_messages[1].history[1]["content"] == "session1 message1 ai"
-    assert eval_messages[1].full_history == "human: session1 message1 human\nai: session1 message1 ai"
+    assert eval_messages[1].full_history == "user: session1 message1 human\nassistant: session1 message1 ai"
 
     assert eval_messages[2].history == []
     assert eval_messages[2].full_history == ""
