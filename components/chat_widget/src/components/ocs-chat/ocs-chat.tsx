@@ -1,7 +1,7 @@
 import { Component, Host, h, Prop, State, Element } from '@stencil/core';
 import {
   XMarkIcon,
-  GripDotsVerticalIcon, PencilSquare, ArrowsPointingOutIcon, ArrowsPointingInIcon,
+  GripDotsVerticalIcon, PlusIcon, ArrowsPointingOutIcon, ArrowsPointingInIcon,
 } from './heroicons';
 import { renderMarkdownSync as renderMarkdownComplete } from '../../utils/markdown';
 import { getCSRFToken } from '../../utils/cookies';
@@ -965,7 +965,7 @@ export class OcsChat {
                     title="Start new chat"
                     aria-label="Start new chat"
                   >
-                    <PencilSquare/>
+                    <PlusIcon/>
                   </button>
                 )}
                 <button
