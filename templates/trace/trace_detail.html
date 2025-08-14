@@ -63,8 +63,9 @@
             </div>
             <div>
                 <div class="text-sm text-base-content/60 tracking-wide">Timestamp</div>
-                <div class="font-semibold">{{ trace.timestamp|date:"Y-m-d" }}</div>
-                <div class="text-xs text-base-content/50">{{ trace.timestamp|date:"H:i:s" }} UTC</div>
+                <time datetime="{{ trace.timestamp.isoformat }}" title="{{ trace.timestamp.isoformat }}">
+                    {{ trace.timestamp|date:"DATETIME_FORMAT" }}
+                </time>
             </div>
         </div>
     </div>
