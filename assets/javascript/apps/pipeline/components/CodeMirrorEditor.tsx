@@ -182,13 +182,13 @@ export function CodeNodeEditor(
     get_output_voice: snip("get_output_voice()", {
       label: "get_output_voice",
       type: "function",
-      detail: "Returns dict of voice name and is_default",
+      detail: "Returns dict of voice name and is_default. It returns None if voice does not exist..",
       boost: 1,
     }),
     set_output_voice: snip("set_output_voice(\"${voice}\")", {
       label: "set_output_voice",
       type: "function",
-      detail: "Sets the output voice provider and voice. Enter voice in this format voice_provider:voice_name (openai:echo)",
+      detail: "Sets the output voice provider and voice. Voice format voice_provider:voice_name e.g(openai:echo)",
       boost: 1,
     }),
   }
