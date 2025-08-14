@@ -19,7 +19,6 @@ interface ChatAttachment {
   name: string;
   content_type: string;
   size: number;
-  content_url: string;
 }
 
 interface UploadedFile {
@@ -444,7 +443,6 @@ export class OcsChat {
           name: sf.file.name,
           content_type: sf.file.type,
           size: sf.file.size,
-          content_url: '', // We don't have the URL yet
         })) : []
       };
       this.messages = [...this.messages, userMessage];
