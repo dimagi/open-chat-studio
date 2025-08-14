@@ -64,7 +64,7 @@ interface SessionStorageData {
 })
 export class OcsChat {
 
-  private static readonly TASK_POLLING_MAX_ATTEMPTS = 120;
+  private static readonly TASK_POLLING_MAX_ATTEMPTS = 120; // Changed from 30 to 120 for 120 second timeout
   private static readonly TASK_POLLING_INTERVAL_MS = 1000;
   private static readonly MESSAGE_POLLING_INTERVAL_MS = 30000;
 
@@ -423,10 +423,22 @@ export class OcsChat {
           attempts++;
           setTimeout(poll, OcsChat.TASK_POLLING_INTERVAL_MS);
         } else if (attempts >= OcsChat.TASK_POLLING_MAX_ATTEMPTS) {
-          // Task polling timed out, clear typing indicator and resume message polling
+          // Task polling timed out - add timeout message and resume polling
+          const timeoutMessage: ChatMessage = {
+            created_at: new Date().toISOString(),
+            role: 'system',
+            content: 'The response is taking longer than expected. The system may be experiencing delays. Please try sending your message again.',
+            attachments: []
+          };
+          this.messages = [...this.messages, timeoutMessage];
+          this.saveSessionToStorage();
+          this.scrollToBottom();
+
+          // Clear typing indicator and resume message polling
           this.isTyping = false;
           this.isTaskPolling = false;
           this.resumeMessagePolling();
+          this.focusInput();
         }
       } catch (error) {
         this.error = error instanceof Error ? error.message : 'Failed to get response';
