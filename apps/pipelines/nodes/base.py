@@ -97,8 +97,8 @@ class PipelineState(dict):
     node_source: str
 
     intents: Annotated[list[Intents], operator.add]
-    voice_provider_id: int
-    synthetic_voice_id: int
+    voice_provider_id: int | None
+    synthetic_voice_id: int | None
 
     def json_safe(self):
         # We need to make a copy of `self` to not change the actual value of `experiment_session` forever

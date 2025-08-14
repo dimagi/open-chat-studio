@@ -93,11 +93,11 @@ class EditPipeline(LoginAndTeamRequiredMixin, TemplateView, PermissionRequiredMi
             "pipeline_name": pipeline.name,
             "node_schemas": _pipeline_node_schemas(),
             "parameter_values": _pipeline_node_parameter_values(
-                team=self.request.team,
-                llm_providers=llm_providers,
-                llm_provider_models=llm_provider_models,
-                excluded_services=exclude_services,
-                selected_voice_provider=None,  # Not show voice field for now if opened from pipelines tab
+                self.request.team,
+                llm_providers,
+                llm_provider_models,
+                exclude_services,
+                None,  # Not show voice field for now if opened from pipelines tab
                 include_versions=pipeline.is_a_version,
             ),
             "default_values": _pipeline_node_default_values(llm_providers, llm_provider_models),
