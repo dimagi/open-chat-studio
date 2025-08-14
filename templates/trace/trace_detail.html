@@ -13,7 +13,7 @@
 {% endblock breadcrumbs %}
 
 {% block app %}
-<div x-data="pageData">
+<div x-data="{activeTab: 'spans'}" x-init="{ activeTab: 'spans' }">
     <div class="container mx-auto px-4 py-6">
         <!-- Header Section -->
         <div class="flex justify-between w-full">
@@ -117,16 +117,4 @@
         </div>
     </div>
 </div>
-<script>
-  document.addEventListener('alpine:init', () => {
-    Alpine.data('pageData', () => ({
-      activeTab: 'spans',
-      
-      init() {
-        // Initialize with spans tab active by default
-        this.activeTab = 'spans';
-      }
-    }));
-  });
-</script>
 {% endblock app %}
