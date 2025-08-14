@@ -448,9 +448,7 @@ class ChannelBase(ABC):
 
     def _send_seed_message(self) -> str:
         with self.trace_service.span("seed_message", inputs={"input": self.experiment.seed_message}):
-            bot_response = self.bot.process_input(user_input=self.experiment.seed_message, save_input_to_history=False)[
-                0
-            ]
+            bot_response = self.bot.process_input(user_input=self.experiment.seed_message, save_input_to_history=False)
             self.trace_service.set_current_span_outputs({"response": bot_response.content})
             self.send_message_to_user(bot_response.content)
             return bot_response.content
@@ -505,7 +503,7 @@ class ChannelBase(ABC):
         supported_files = []
         unsupported_files = []
 
-        reply_text = True
+        reply_text = False
         user_sent_voice = self.message and self.message.content_type == MESSAGE_TYPES.VOICE
 
         if self.voice_replies_supported and self.experiment.synthetic_voice:
@@ -695,11 +693,9 @@ class ChannelBase(ABC):
         return "Unable to transcribe audio"
 
     def _get_bot_response(self, message: str) -> ChatMessage:
-        chat_message, voice_provider_id, synthetic_voice_id = self.bot.process_input(
-            message, attachments=self.message.attachments
-        )
-        self.output_voice_provider_id = voice_provider_id
-        self.output_synthetic_voice_id = synthetic_voice_id
+        chat_message = self.bot.process_input(message, attachments=self.message.attachments)
+        self.output_voice_provider_id = getattr(self.bot, "voice_provider_id", None)
+        self.output_synthetic_voice_id = getattr(self.bot, "synthetic_voice_id", None)
         return chat_message
 
     def _add_message_to_history(self, message: str, message_type: ChatMessageType):

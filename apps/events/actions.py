@@ -157,6 +157,6 @@ class PipelineStartAction(EventActionHandlerBase):
                 input_state=state,
                 pipeline=pipeline,
                 save_run_to_history=False,
-            )[0]
+            )
             trace_service.set_current_span_outputs({"response": output.content})
         return output.content

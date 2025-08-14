@@ -275,10 +275,12 @@ class PipelineBot:
         self.session = session
         self.trace_service = trace_service
         self.disable_reminder_tools = disable_reminder_tools
+        self.voice_provider_id = None
+        self.synthetic_voice_id = None
 
     def process_input(
         self, user_input: str, save_input_to_history=True, attachments: list["Attachment"] | None = None
-    ) -> tuple[ChatMessage, str | None, str | None]:
+    ) -> ChatMessage:
         input_state = self._get_input_state(attachments, user_input)
         return self.invoke_pipeline(
             input_state,
@@ -292,7 +294,7 @@ class PipelineBot:
         save_run_to_history=True,
         save_input_to_history=True,
         pipeline=None,
-    ) -> tuple[ChatMessage, str | None, str | None]:
+    ) -> ChatMessage:
         pipeline_to_use = pipeline or self.experiment.pipeline
         output = self._run_pipeline(input_state, pipeline_to_use)
 
@@ -302,9 +304,9 @@ class PipelineBot:
         else:
             result = ChatMessage(content=output)
         self._process_intents(output)
-        voice_provider_id = output.get("voice_provider_id", None)
-        synthetic_voice_id = output.get("synthetic_voice_id", None)
-        return result, voice_provider_id, synthetic_voice_id
+        self.voice_provider_id = output.get("voice_provider_id", None)
+        self.synthetic_voice_id = output.get("synthetic_voice_id", None)
+        return result
 
     def _get_input_state(self, attachments: list["Attachment"], user_input: str):
         attachments = attachments or []
