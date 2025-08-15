@@ -17,7 +17,7 @@ from apps.evaluations.tables import (
     EvaluationDatasetTable,
     EvaluationSessionsSelectionTable,
 )
-from apps.experiments.filters import DATE_RANGE_OPTIONS, FIELD_TYPE_FILTERS, apply_dynamic_filters
+from apps.experiments.filters import DATE_RANGE_OPTIONS, FIELD_TYPE_FILTERS, ExperimentSessionFilter
 from apps.experiments.models import Experiment, ExperimentSession
 from apps.teams.decorators import login_and_team_required
 from apps.teams.mixins import LoginAndTeamRequiredMixin
@@ -119,7 +119,8 @@ class CreateDataset(LoginAndTeamRequiredMixin, CreateView, PermissionRequiredMix
                 .select_related("participant__user")
             )
             timezone = self.request.session.get("detected_tz", None)
-            filtered_queryset = apply_dynamic_filters(queryset, self.request.GET, timezone)
+            session_filter = ExperimentSessionFilter(queryset, self.request.GET, timezone)
+            filtered_queryset = session_filter.apply()
             filtered_session_ids = ",".join(str(session.external_id) for session in filtered_queryset)
             if filtered_session_ids:
                 initial["session_ids"] = filtered_session_ids
@@ -194,7 +195,8 @@ class DatasetSessionsSelectionTableView(LoginAndTeamRequiredMixin, SingleTableVi
             .order_by("experiment__name")
         )
         timezone = self.request.session.get("detected_tz", None)
-        query_set = apply_dynamic_filters(query_set, self.request.GET, timezone)
+        session_filter = ExperimentSessionFilter(query_set, self.request.GET, timezone)
+        query_set = session_filter.apply()
         return query_set
 
 
