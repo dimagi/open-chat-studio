@@ -511,6 +511,7 @@
 
   .message-textarea {
     @apply flex-grow border border-gray-300 rounded-md resize-none focus:outline-blue-300;
+    background-color: var(--input-bg-color);
     padding: var(--input-textarea-padding-y, 0.5em) var(--input-textarea-padding-x, 0.75em);
     color: var(--input-text-color);
     border: 1px solid var(--input-border-color);
