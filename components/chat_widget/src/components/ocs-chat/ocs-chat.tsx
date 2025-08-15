@@ -661,10 +661,6 @@ export class OcsChat {
 
   private handleInputChange(event: Event): void {
     this.messageInput = (event.target as HTMLTextAreaElement).value;
-    // Hide starter questions when user starts typing
-    if (this.messageInput.trim().length > 0) {
-      this.showStarterQuestions = false;
-    }
   }
 
   private handleFileSelect(event: Event): void {
