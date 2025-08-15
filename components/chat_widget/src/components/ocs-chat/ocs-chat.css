@@ -98,7 +98,7 @@
     * @prop --file-attachment-button-text-color: Attach file button text color (--header-button-text-color)
     * @prop --file-attachment-button-text-disabled-color: Attach file button disabled text color (--send-button-text-disabled-color)
     *
-    * @prop --selected-files-bg-color: Selected files container background color (--input-bg-color)
+    * @prop --selected-files-bg-color: Selected files container background color (--chat-window-bg-color)
     * @prop --selected-files-border-color: Selected files container border color (--header-border-color)
     *
     * @prop --selected-file-bg-color: Selected file item background color (--message-system-bg-color)
@@ -220,7 +220,7 @@
   --file-attachment-button-text-disabled-color: var(--send-button-text-disabled-color); /* #6b7280 */
 
   /* Selected files variables */
-  --selected-files-bg-color: var(--input-bg-color); /* transparent */
+  --selected-files-bg-color: var(--chat-window-bg-color); /* transparent */
   --selected-files-border-color: var(--header-border-color); /* #f3f4f6 */
 
   /* Selected file item variables */
