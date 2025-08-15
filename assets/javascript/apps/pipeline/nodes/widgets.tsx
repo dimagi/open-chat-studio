@@ -40,6 +40,8 @@ export function getWidget(name: string, params: PropertySchema) {
         return BuiltInToolsWidget
     case "text_editor_widget":
         return TextEditorWidget
+    case "voice_widget":
+        return VoiceWidget
     default:
       if (params.enum) {
         return SelectWidget
@@ -743,7 +745,7 @@ export function LlmWidget(props: WidgetParams) {
         </option>
         {parameterValues.LlmProviderId.map((provider) => {
           const providersWithSameType = parameterValues.LlmProviderId.filter(p => p.type === provider.type).length;
-          
+
           return providerModelsByType[provider.type] &&
             providerModelsByType[provider.type].map((providerModel) => (
               <option key={provider.value + providerModel.value} value={makeValue(provider.value, providerModel.value)}>
@@ -1230,4 +1232,75 @@ function TextEditorModal({
 
 function getAutoCompleteList(list: Array<Option>) {
     return Array.isArray(list) ? list.map((v: Option) => v.value) : []
+}
+
+export function VoiceWidget(props: WidgetParams) {
+  const { parameterValues } = getCachedData();
+  const setNode = usePipelineStore((state) => state.setNode);
+
+  const updateParamValue = (event: ChangeEvent<HTMLSelectElement>) => {
+    const { value } = event.target;
+    const [providerId, syntheticVoiceId] = value.split('|:|');
+    setNode(props.nodeId, (old) =>
+      produce(old, (next) => {
+        next.data.params.voice_provider_id = providerId;
+        next.data.params.synthetic_voice_id = syntheticVoiceId;
+      })
+    );
+  };
+
+  const makeValue = (providerId: string, syntheticVoiceId: string) => {
+    return providerId + '|:|' + syntheticVoiceId;
+  };
+
+  type VoicesByProvider = { [providerKey: string]: typeof parameterValues.synthetic_voice_id };
+  const voicesByProvider = parameterValues.synthetic_voice_id.reduce((acc, voice) => {
+  const key = ((voice as TypedOption).type || "").toLowerCase();
+    if (!acc[key]) {
+      acc[key] = [];
+    }
+    acc[key].push(voice);
+    return acc;
+  }, {} as VoicesByProvider);
+
+  const providerId = concatenate(props.nodeParams.voice_provider_id);
+  const syntheticVoiceId = concatenate(props.nodeParams.synthetic_voice_id);
+
+  const hasSelectedVoice = providerId && syntheticVoiceId;
+  const value = hasSelectedVoice ? makeValue(providerId, syntheticVoiceId) : "";
+
+  // Only render if voice is enabled
+  if(!(parameterValues.voice_provider_id?.length)) {
+    return null;
+  }
+
+  return (
+    <InputField label={props.label} help_text={props.helpText} inputError={props.inputError}>
+      <select
+        className="select w-full"
+        name={props.name}
+        onChange={updateParamValue}
+        value={value}
+        disabled={props.readOnly}
+      >
+        <option value="" disabled>
+          Select a voice
+        </option>
+
+        {parameterValues.voice_provider_id.map((provider) => {
+          const providerKey = provider.label.toLowerCase();
+          const providerVoices = voicesByProvider[providerKey] || [];
+
+          return providerVoices.map((voice) => (
+            <option
+              key={provider.value + voice.value}
+              value={makeValue(provider.value, voice.value)}
+            >
+              {voice.label} ({provider.label})
+            </option>
+          ));
+        })}
+      </select>
+    </InputField>
+  );
 }

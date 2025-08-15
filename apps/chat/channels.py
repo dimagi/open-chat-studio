@@ -139,6 +139,8 @@ class ChannelBase(ABC):
         self._participant_identifier = experiment_session.participant.identifier if experiment_session else None
         self._is_user_message = False
         self.trace_service = TracingService.create_for_experiment(self.experiment)
+        self.output_voice_provider_id = None
+        self.output_synthetic_voice_id = None
 
     @property
     def participant_id(self) -> int | None:
@@ -646,8 +648,19 @@ class ChannelBase(ABC):
         return response
 
     def _reply_voice_message(self, text: str):
-        voice_provider = self.experiment.voice_provider
-        synthetic_voice = self.experiment.synthetic_voice
+        from apps.experiments.models import SyntheticVoice
+        from apps.service_providers.models import VoiceProvider
+
+        voice_provider = (
+            VoiceProvider.objects.get(id=self.output_voice_provider_id)
+            if self.output_voice_provider_id is not None
+            else self.experiment.voice_provider
+        )
+        synthetic_voice = (
+            SyntheticVoice.objects.get(id=self.output_synthetic_voice_id)
+            if self.output_synthetic_voice_id is not None
+            else self.experiment.synthetic_voice
+        )
         if self.experiment.use_processor_bot_voice and (
             self.bot.processor_experiment and self.bot.processor_experiment.voice_provider
         ):
@@ -680,7 +693,10 @@ class ChannelBase(ABC):
         return "Unable to transcribe audio"
 
     def _get_bot_response(self, message: str) -> ChatMessage:
-        return self.bot.process_input(message, attachments=self.message.attachments)
+        chat_message = self.bot.process_input(message, attachments=self.message.attachments)
+        self.output_voice_provider_id = getattr(self.bot, "voice_provider_id", None)
+        self.output_synthetic_voice_id = getattr(self.bot, "synthetic_voice_id", None)
+        return chat_message
 
     def _add_message_to_history(self, message: str, message_type: ChatMessageType):
         """Use this to update the chat history when not using the normal bot flow"""

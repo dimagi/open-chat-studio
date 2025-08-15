@@ -275,6 +275,8 @@ class PipelineBot:
         self.session = session
         self.trace_service = trace_service
         self.disable_reminder_tools = disable_reminder_tools
+        self.voice_provider_id = None
+        self.synthetic_voice_id = None
 
     def process_input(
         self, user_input: str, save_input_to_history=True, attachments: list["Attachment"] | None = None
@@ -302,6 +304,8 @@ class PipelineBot:
         else:
             result = ChatMessage(content=output)
         self._process_intents(output)
+        self.voice_provider_id = output.get("voice_provider_id", None)
+        self.synthetic_voice_id = output.get("synthetic_voice_id", None)
         return result
 
     def _get_input_state(self, attachments: list["Attachment"], user_input: str):
