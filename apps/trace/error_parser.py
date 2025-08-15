@@ -10,11 +10,14 @@ from apps.pipelines.exceptions import CodeNodeRunError
 
 
 class ErrorCategory(models.TextChoices):
-    TIMEOUT = "timeout"
-    RATE_LIMIT = "rate limit"
-    AUTH = "auth"
+    # LLM Provider tags
+    OPENAI = "OpenAI"
+    # Pipeline tags
     CODE_NODE = "code node"
+    PIPELINE_RUN = "Pipeline run"
+    # API call tags
     BAD_API_CALL = "bad api call"
+    # Processing tags
     AUDIO_SYNTHESIS = "audio synthesis"
     UNKNOWN = "unknown"
 
@@ -22,9 +25,10 @@ class ErrorCategory(models.TextChoices):
 def get_tags_from_error(error: Exception):
     tags = []
     if isinstance(error, OpenAIError):
-        tags.append(_parse_openai_error(error))
+        tags.extend(_parse_openai_error(error))
     elif isinstance(error, CodeNodeRunError):
         tags.append(ErrorCategory.CODE_NODE)
+        tags.append(ErrorCategory.PIPELINE_RUN)
     elif isinstance(error, AudioSynthesizeException):
         tags.append(ErrorCategory.AUDIO_SYNTHESIS)
     else:
@@ -33,8 +37,9 @@ def get_tags_from_error(error: Exception):
 
 
 def _parse_openai_error(error: OpenAIError) -> ErrorCategory:
-    if "Incorrect API key provided" in error.message:
-        return ErrorCategory.AUTH
-    elif isinstance(error, BadRequestError):
-        return ErrorCategory.BAD_API_CALL
-    return ErrorCategory.UNKNOWN
+    tags = [ErrorCategory.OPENAI]
+    if isinstance(error, BadRequestError):
+        tags.append(ErrorCategory.BAD_API_CALL)
+    else:
+        tags.append(ErrorCategory.UNKNOWN)
+    return tags
