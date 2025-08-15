@@ -64,7 +64,7 @@ interface SessionStorageData {
 })
 export class OcsChat {
 
-  private static readonly TASK_POLLING_MAX_ATTEMPTS = 120; // Changed from 30 to 120 for 120 second timeout
+  private static readonly TASK_POLLING_MAX_ATTEMPTS = 120;
   private static readonly TASK_POLLING_INTERVAL_MS = 1000;
   private static readonly MESSAGE_POLLING_INTERVAL_MS = 30000;
 
