@@ -1,3 +1,6 @@
+import pathlib
+
+from django.conf import settings
 from django.http import Http404
 from django.shortcuts import get_object_or_404
 from django.utils import timezone
@@ -5,7 +8,8 @@ from drf_spectacular.types import OpenApiTypes
 from drf_spectacular.utils import OpenApiExample, OpenApiParameter, extend_schema, inline_serializer
 from rest_framework import serializers, status
 from rest_framework.authentication import SessionAuthentication
-from rest_framework.decorators import api_view, authentication_classes, permission_classes
+from rest_framework.decorators import api_view, authentication_classes, parser_classes, permission_classes
+from rest_framework.parsers import MultiPartParser
 from rest_framework.response import Response
 
 from apps.api.serializers import (
@@ -16,14 +20,20 @@ from apps.api.serializers import (
     ChatStartSessionResponse,
     MessageSerializer,
 )
+from apps.channels.datamodels import Attachment
 from apps.channels.models import ChannelPlatform, ExperimentChannel
 from apps.chat.channels import ApiChannel, WebChannel
-from apps.chat.models import Chat
+from apps.chat.models import Chat, ChatAttachment
 from apps.experiments.models import Experiment, ExperimentSession, Participant, ParticipantData
 from apps.experiments.task_utils import get_message_task_response
 from apps.experiments.tasks import get_response_for_webchat_task
+from apps.files.models import File
 
 AUTH_CLASSES = [SessionAuthentication]
+
+MAX_FILE_SIZE_MB = settings.MAX_FILE_SIZE_MB
+MAX_TOTAL_SIZE_MB = 50
+SUPPORTED_FILE_EXTENSIONS = settings.SUPPORTED_FILE_TYPES["collections"]
 
 
 def check_experiment_access(experiment, participant_id):
@@ -53,6 +63,127 @@ def check_session_access(session):
         Response object if access denied, None if access allowed
     """
     return check_experiment_access(session.experiment, session.participant.identifier)
+
+
+def validate_file_upload(file):
+    """
+    Validate a file upload for size and type restrictions.
+    Returns: tuple: (is_valid, error_message)
+    """
+    file_size_mb = file.size / (1024 * 1024)
+    if file_size_mb > MAX_FILE_SIZE_MB:
+        return False, f"File '{file.name}' exceeds maximum size of {MAX_FILE_SIZE_MB}MB"
+    file_ext = pathlib.Path(file.name).suffix.lower()
+    if file_ext not in SUPPORTED_FILE_EXTENSIONS:
+        return False, f"File type '{file_ext}' is not supported. Allowed types: {', '.join(SUPPORTED_FILE_EXTENSIONS)}"
+    return True, None
+
+
+@extend_schema(
+    operation_id="chat_upload_file",
+    summary="Upload files for a chat message",
+    tags=["Chat"],
+    request=inline_serializer(
+        "ChatUploadFileRequest",
+        {
+            "files": serializers.ListField(
+                child=serializers.FileField(),
+                help_text=f"Files to upload (max {MAX_TOTAL_SIZE_MB}MB each, {MAX_TOTAL_SIZE_MB}MB total)",
+            )
+        },
+    ),
+    responses={
+        201: inline_serializer(
+            "ChatUploadFileResponse",
+            {
+                "files": inline_serializer(
+                    "UploadedFile",
+                    {
+                        "id": serializers.IntegerField(),
+                        "name": serializers.CharField(),
+                        "size": serializers.IntegerField(),
+                        "content_type": serializers.CharField(),
+                    },
+                    many=True,
+                )
+            },
+        )
+    },
+    parameters=[
+        OpenApiParameter(
+            name="session_id",
+            type=OpenApiTypes.STR,
+            location=OpenApiParameter.PATH,
+            description="Session ID",
+        ),
+    ],
+)
+@api_view(["POST"])
+@authentication_classes(AUTH_CLASSES)
+@permission_classes([])
+@parser_classes([MultiPartParser])
+def chat_upload_file(request, session_id):
+    session = get_object_or_404(ExperimentSession, external_id=session_id)
+    access_response = check_session_access(session)
+    if access_response:
+        return access_response
+
+    if session.is_complete:
+        return Response({"error": "Session has ended"}, status=status.HTTP_400_BAD_REQUEST)
+    files = request.FILES.getlist("files")
+    if not files:
+        return Response({"error": "No files provided"}, status=status.HTTP_400_BAD_REQUEST)
+
+    for file in files:
+        is_valid, error_msg = validate_file_upload(file)
+        if not is_valid:
+            return Response({"error": error_msg}, status=status.HTTP_400_BAD_REQUEST)
+
+    total_size_mb = sum(f.size for f in files) / (1024 * 1024)
+    if total_size_mb > MAX_TOTAL_SIZE_MB:
+        return Response(
+            {"error": f"Total file size exceeds maximum of {MAX_TOTAL_SIZE_MB}MB"}, status=status.HTTP_400_BAD_REQUEST
+        )
+    expiry_date = timezone.now() + timezone.timedelta(hours=24)
+    uploaded_files = []
+
+    participant_remote_id = request.POST.get("participant_remote_id", "")
+    participant_name = request.POST.get("participant_name", "")
+    uploaded_by = session.participant.identifier if session.participant else participant_remote_id
+
+    if not uploaded_by and request.user.is_authenticated:
+        uploaded_by = request.user.email
+
+    # Default to the remote_id if we still don't have an identifier
+    if not uploaded_by:
+        uploaded_by = participant_remote_id or "unknown"
+
+    for file in files:
+        file_obj = File.objects.create(
+            name=file.name,
+            file=file,
+            team=session.team,
+            content_size=file.size,
+            content_type=File.get_content_type(file),
+            expiry_date=expiry_date,
+            purpose="assistant",
+            metadata={
+                "session_id": str(session_id),
+                "uploaded_by": uploaded_by,
+                "participant_name": participant_name,
+                "participant_remote_id": participant_remote_id,
+            },
+        )
+        uploaded_files.append(
+            {
+                "id": file_obj.id,
+                "name": file_obj.name,
+                "size": file_obj.content_size,
+                "content_type": file_obj.content_type,
+            }
+        )
+
+    return Response({"files": uploaded_files}, status=status.HTTP_201_CREATED)
 
 
 @extend_schema(
@@ -171,11 +302,17 @@ def chat_start_session(request):
     return Response(serialized_response.data, status=status.HTTP_201_CREATED)
 
 
+class ChatSendMessageRequestWithAttachments(ChatSendMessageRequest):
+    attachment_ids = serializers.ListField(
+        child=serializers.IntegerField(), required=False, help_text="List of file IDs from prior upload"
+    )
+
+
 @extend_schema(
     operation_id="chat_send_message",
     summary="Send a message to a chat session",
     tags=["Chat"],
-    request=ChatSendMessageRequest,
+    request=ChatSendMessageRequestWithAttachments,
     responses={202: ChatSendMessageResponse},
     parameters=[
         OpenApiParameter(
@@ -191,6 +328,11 @@ def chat_start_session(request):
             summary="Send a message to the bot",
             value={"message": "Hello, how can you help me?"},
         ),
+        OpenApiExample(
+            name="SendMessageWithAttachments",
+            summary="Send a message with file attachments",
+            value={"message": "Please review these documents", "attachment_ids": [123, 124]},
+        ),
     ],
 )
 @api_view(["POST"])
@@ -200,11 +342,12 @@ def chat_send_message(request, session_id):
     """
     Send a message to a chat session
     """
-    serializer = ChatSendMessageRequest(data=request.data)
+    serializer = ChatSendMessageRequestWithAttachments(data=request.data)
     serializer.is_valid(raise_exception=True)
 
     data = serializer.validated_data
     message_text = data["message"]
+    attachment_ids = data.get("attachment_ids", [])
 
     session = get_object_or_404(ExperimentSession, external_id=session_id)
 
@@ -216,7 +359,21 @@ def chat_send_message(request, session_id):
     if session.is_complete:
         return Response({"error": "Session has ended"}, status=status.HTTP_400_BAD_REQUEST)
 
-    # TODO Handle attachments if provided
+    attachment_data = []
+    if attachment_ids:
+        files = File.objects.filter(id__in=attachment_ids, team=session.team)
+
+        if files.count() != len(attachment_ids):
+            return Response({"error": "One or more file IDs are invalid"}, status=status.HTTP_400_BAD_REQUEST)
+        files.update(expiry_date=None)
+        chat_attachment, created = ChatAttachment.objects.get_or_create(
+            chat=session.chat,
+            tool_type="ocs_attachments",
+        )
+        chat_attachment.files.add(*files)
+        for file_obj in files:
+            attachment = Attachment.from_file(file_obj, type="ocs_attachments", session_id=session.id)
+            attachment_data.append(attachment.model_dump())
 
     # Queue the response generation as a background task
     experiment_version = session.experiment_version
@@ -224,6 +381,7 @@ def chat_send_message(request, session_id):
         experiment_session_id=session.id,
         experiment_id=experiment_version.id,
         message_text=message_text,
+        attachments=attachment_data if attachment_data else None,
     ).task_id
 
     response_data = ChatSendMessageResponse({"task_id": task_id, "status": "processing"}).data
