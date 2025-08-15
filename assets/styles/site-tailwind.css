@@ -99,6 +99,11 @@
 
 open-chat-studio-widget {
   z-index: 9999;
+  right: 30px;
+  bottom: 30px;
+  --button-font-size: 1.2rem;
+  --button-border-color: #d1d5db;
+  --button-border-color-hover: #6b7280;
 }
 
 /* Tom-select styling */

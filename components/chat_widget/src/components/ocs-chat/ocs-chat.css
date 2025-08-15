@@ -120,10 +120,10 @@
   --button-background-color-hover: #f3f4f6;
   --button-text-color: #111827;
   --button-text-color-hover: #1d4ed8;
-  --button-border-color: transparent;
-  --button-border-color-hover: #d1d5db;
+  --button-border-color: #d1d5db;
+  --button-border-color-hover: #6b7280;
   --button-padding: 0.5em;
-  --button-font-size: 0.875em; /* text-sm */
+  --button-font-size: 1em; /* text-sm */
   --button-icon-size: 1.5em;
 
   /* Chat window variables */
@@ -241,8 +241,8 @@
 
   display: block;
   position: fixed;
-  right: 20px;
-  bottom: 20px;
+  right: 30px;
+  bottom: 30px;
 }
 
 @layer components {
