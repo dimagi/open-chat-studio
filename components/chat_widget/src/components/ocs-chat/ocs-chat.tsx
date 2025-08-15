@@ -187,7 +187,6 @@ export class OcsChat {
   @State() dragOffset: { x: number; y: number } = { x: 0, y: 0 };
   @State() windowPosition: { x: number; y: number } = { x: 0, y: 0 };
   @State() fullscreenPosition: { x: number } = { x: 0 };
-  @State() showStarterQuestions: boolean = true;
   @State() parsedWelcomeMessages: string[] = [];
   @State() parsedStarterQuestions: string[] = [];
   @State() generatedUserId?: string;
@@ -218,7 +217,6 @@ export class OcsChat {
       if (sessionId && messages) {
         this.sessionId = sessionId;
         this.messages = messages;
-        this.showStarterQuestions = messages.length === 0;
       }
     }
     this.parseWelcomeMessages();
@@ -424,9 +422,6 @@ export class OcsChat {
 
   private async sendMessage(message: string): Promise<void> {
     if (!this.sessionId || !message.trim()) return;
-
-    // Hide starter questions on any user interaction
-    this.showStarterQuestions = false;
 
     try {
       let attachmentIds: number[] = [];
@@ -1098,7 +1093,6 @@ export class OcsChat {
     this.clearSessionStorage();
     this.sessionId = undefined;
     this.messages = [];
-    this.showStarterQuestions = true;
     this.isTyping = false;
     this.error = '';
     if (this.allowAttachments) {
@@ -1194,7 +1188,7 @@ export class OcsChat {
                   ref={(el) => this.messageListRef = el}
                   class="messages-container"
                 >
-                  {this.messages.length === 0 && !this.isTyping && this.parsedWelcomeMessages.length > 0 && (
+                  {this.messages.length === 0 && this.parsedWelcomeMessages.length > 0 && (
                     <div class="welcome-messages">
                       {/* Welcome Messages */}
                       {this.parsedWelcomeMessages.map((message, index) => (
@@ -1264,7 +1258,7 @@ export class OcsChat {
               )}
 
               {/* Starter Questions */}
-              {this.sessionId && this.showStarterQuestions && this.messages.length === 0 && !this.isTyping && (
+              {this.messages.length === 0 && this.parsedStarterQuestions.length > 0 && (
                 <div class="starter-questions">
                   {this.parsedStarterQuestions.map((question, index) => (
                     <div key={`starter-${index}`} class="starter-question-row">
