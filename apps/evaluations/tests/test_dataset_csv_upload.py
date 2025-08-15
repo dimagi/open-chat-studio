@@ -510,7 +510,6 @@ def test_csv_upload_creates_row(dataset):
     ]
 
     stats = process_csv_rows(dataset, rows, columns, mock_progress_recorder, dataset.team)
-    print(stats)
     assert stats["created_count"] == 1
     assert stats["updated_count"] == 0
     assert len(stats["error_messages"]) == 0
