@@ -704,8 +704,6 @@ export class OcsChat {
     }
     this.selectedFiles = [...this.selectedFiles, ...newFiles];
     input.value = '';
-    // Hide starter questions when files are selected
-    this.showStarterQuestions = false;
   }
 
   private removeSelectedFile(index: number): void {
