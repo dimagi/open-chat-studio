@@ -1,6 +1,6 @@
 {% load static %}
 
-<div class="{% if is_root %}border rounded-lg p-4 mb-4 bg-base-50 border-base-300{% else %}span-node border rounded-lg p-3 mb-3{% endif %}">
+<div class="{% if is_root %}border rounded-lg p-4 mb-4 bg-base-50 border-base-300{% else %}relative before:content-[''] before:absolute before:-left-6 before:top-6 before:w-4 before:h-0.5 before:bg-gray-200 rounded-lg p-3 mb-3{% endif %}">
     <div class="flex items-center justify-between">
         <div class="flex items-center">
             {% if is_root %}
