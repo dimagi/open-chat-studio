@@ -173,7 +173,6 @@ export class OcsChat {
    */
   @Prop() allowAttachments: boolean = false;
 
-  @State() loaded: boolean = false;
   @State() error: string = "";
   @State() messages: ChatMessage[] = [];
   @State() sessionId?: string;
@@ -206,7 +205,6 @@ export class OcsChat {
 
 
   componentWillLoad() {
-    this.loaded = this.visible;
     if (!this.chatbotId) {
       this.error = 'Chatbot ID is required';
       return;
@@ -726,15 +724,24 @@ export class OcsChat {
     return date.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
   }
 
-  async load() {
+  private toggleWindowVisibility() {
     this.visible = !this.visible;
-    this.loaded = true;
+  }
 
-    if (this.visible && !this.sessionId) {
+  /**
+   * Watch for changes to the `visible` attribute and update accordingly.
+   *
+   * @param visible - The new value for the field.
+   */
+  @Watch('visible')
+  async visibilityHandler(visible: boolean) {
+    if (visible && !this.sessionId) {
       this.clearError();
       await this.startSession();
-    } else if (!this.visible) {
-      // Don't reset session when closing, allow resume
+    } else if (!visible) {
+      this.pauseMessagePolling()
+    } else {
+      this.resumeMessagePolling();
     }
   }
 
@@ -960,7 +967,7 @@ export class OcsChat {
       return (
         <button
           class={buttonClasses}
-          onClick={() => this.load()}
+          onClick={() => this.toggleWindowVisibility()}
           aria-label={`Open chat - ${this.buttonText}`}
           title={this.buttonText}
         >
@@ -972,7 +979,7 @@ export class OcsChat {
       return (
         <button
           class={buttonClasses}
-          onClick={() => this.load()}
+          onClick={() => this.toggleWindowVisibility()}
           aria-label="Open chat"
           title="Open chat"
         >
