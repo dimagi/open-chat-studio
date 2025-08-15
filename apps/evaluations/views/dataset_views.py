@@ -145,14 +145,14 @@ class CreateDataset(LoginAndTeamRequiredMixin, CreateView, PermissionRequiredMix
         experiment_versions = list(set(experiment_versions))
 
         return {
-            "available_tags": available_tags,
-            "experiment_versions": experiment_versions,
-            "experiment_list": experiment_list,
-            "field_type_filters": FIELD_TYPE_FILTERS,
-            "channel_list": channel_list,
-            "date_range_options": DATE_RANGE_OPTIONS,
-            "filter_columns": ExperimentSessionFilter.columns,
-            "date_range_column_name": "last_message",
+            "df_available_tags": available_tags,
+            "df_experiment_versions": experiment_versions,
+            "df_experiment_list": experiment_list,
+            "df_field_type_filters": FIELD_TYPE_FILTERS,
+            "df_channel_list": channel_list,
+            "df_date_range_options": DATE_RANGE_OPTIONS,
+            "df_filter_columns": ExperimentSessionFilter.columns,
+            "df_date_range_column_name": "last_message",
         }
 
     def get_context_data(self, **kwargs):
