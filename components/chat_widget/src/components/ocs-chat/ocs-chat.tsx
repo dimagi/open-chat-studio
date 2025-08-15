@@ -1,4 +1,4 @@
-import { Component, Host, h, Prop, State, Element } from '@stencil/core';
+import {Component, Host, h, Prop, State, Element, Watch} from '@stencil/core';
 import {
   XMarkIcon,
   GripDotsVerticalIcon, PencilSquare, ArrowsPointingOutIcon, ArrowsPointingInIcon,
@@ -180,9 +180,9 @@ export class OcsChat {
   @State() isLoading: boolean = false;
   @State() isTyping: boolean = false;
   @State() messageInput: string = "";
+  @State() currentPollTaskId: string = "";
   @State() pollingInterval?: any;
   @State() lastPollTime?: Date;
-  @State() isTaskPolling: boolean = false;
   @State() isDragging: boolean = false;
   @State() dragOffset: { x: number; y: number } = { x: 0, y: 0 };
   @State() windowPosition: { x: number; y: number } = { x: 0, y: 0 };
@@ -278,7 +278,7 @@ export class OcsChat {
       clearInterval(this.pollingInterval);
       this.pollingInterval = undefined;
     }
-    this.isTaskPolling = false;
+    this.currentPollTaskId = '';
   }
 
   private getApiBaseUrl(): string {
@@ -335,7 +335,8 @@ export class OcsChat {
       // Handle seed message if present
       if (data.seed_message_task_id) {
         this.isTyping = true;  // Show typing indicator for seed message
-        await this.pollTaskResponse(data.seed_message_task_id);
+        this.currentPollTaskId = data.seed_message_task_id;
+        await this.pollTaskResponse();
       }
 
       // Start polling for messages
@@ -496,7 +497,8 @@ export class OcsChat {
       }
 
       // Poll for the response - typing indicator will be managed in pollTaskResponse
-      await this.pollTaskResponse(data.task_id);
+      this.currentPollTaskId = data.task_id;
+      await this.pollTaskResponse();
     } catch (error) {
       this.error = error instanceof Error ? error.message : 'Failed to send message';
       // Clear typing indicator on error
@@ -508,18 +510,19 @@ export class OcsChat {
     this.sendMessage(question);
   }
 
-  private async pollTaskResponse(taskId: string): Promise<void> {
-    if (!this.sessionId) return;
+  private async pollTaskResponse(): Promise<void> {
+    if (!this.sessionId || !this.currentPollTaskId) return;
 
     // Stop message polling while task polling is active
-    this.isTaskPolling = true;
     this.pauseMessagePolling();
 
     let attempts = 0;
 
     const poll = async (): Promise<void> => {
+      if (!this.sessionId || !this.currentPollTaskId) return;
+
       try {
-        const response = await fetch(`${this.getApiBaseUrl()}/api/chat/${this.sessionId}/${taskId}/poll/`);
+        const response = await fetch(`${this.getApiBaseUrl()}/api/chat/${this.sessionId}/${this.currentPollTaskId}/poll/`);
 
         if (!response.ok) {
           throw new Error(`Failed to poll task: ${response.statusText}`);
@@ -537,7 +540,7 @@ export class OcsChat {
           this.scrollToBottom();
           // Task polling complete, clear typing indicator and resume message polling
           this.isTyping = false;
-          this.isTaskPolling = false;
+          this.currentPollTaskId = '';
           this.resumeMessagePolling();
           this.focusInput();
           return;
@@ -560,7 +563,7 @@ export class OcsChat {
 
           // Clear typing indicator and resume message polling
           this.isTyping = false;
-          this.isTaskPolling = false;
+          this.currentPollTaskId = '';
           this.resumeMessagePolling();
           this.focusInput();
         }
@@ -568,7 +571,7 @@ export class OcsChat {
         this.error = error instanceof Error ? error.message : 'Failed to get response';
         // Error in task polling, clear typing indicator and resume message polling
         this.isTyping = false;
-        this.isTaskPolling = false;
+        this.currentPollTaskId = '';
         this.resumeMessagePolling();
       }
     };
@@ -581,7 +584,7 @@ export class OcsChat {
 
     this.pollingInterval = setInterval(async () => {
       // Only poll for messages if not currently polling for a task
-      if (!this.isTaskPolling) {
+      if (!this.currentPollTaskId) {
         await this.pollForMessages();
       }
     }, OcsChat.MESSAGE_POLLING_INTERVAL_MS);
@@ -1094,6 +1097,7 @@ export class OcsChat {
     this.sessionId = undefined;
     this.messages = [];
     this.isTyping = false;
+    this.currentPollTaskId = '';
     this.error = '';
     if (this.allowAttachments) {
       this.selectedFiles = [];
