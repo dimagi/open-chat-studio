@@ -189,11 +189,3 @@ input[type=number]::-webkit-outer-spin-button {
 .markdown a {
   @apply underline
 }
-
-.span-node {
-    @apply relative;
-}
-.span-node::before {
-    content: '';
-    @apply absolute -left-6 top-4 w-4 h-0.5 bg-gray-200;
-}
