@@ -22,6 +22,7 @@ from django.db.models import (
     Subquery,
     UniqueConstraint,
     When,
+    functions,
 )
 from django.template.loader import get_template
 from django.urls import reverse
@@ -39,6 +40,7 @@ from apps.generics.chips import Chip
 from apps.service_providers.tracing import TraceInfo, TracingService
 from apps.teams.models import BaseTeamModel, Team
 from apps.teams.utils import current_team
+from apps.trace.models import TraceStatus
 from apps.utils.models import BaseModel
 from apps.utils.time import seconds_to_human
 from apps.web.meta import absolute_url
@@ -788,6 +790,27 @@ class Experiment(BaseTeamModel, VersionsMixin, CustomActionOperationMixin):
         elif working_version.version_number == version:
             return working_version
         return working_version.versions.get(version_number=version)
+
+    def get_error_trend_data(self):
+        """
+        Returns the error count per hour for the last 2 days
+        """
+        days = 2
+        to_date = timezone.now()
+        from_date = to_date - timezone.timedelta(days=days)
+
+        # Get error traces from the previous week grouped by 1-hour intervals
+        error_traces = (
+            self.traces.filter(status=TraceStatus.ERROR, timestamp__gte=from_date, timestamp__lte=to_date)
+            .annotate(hour_bucket=functions.TruncHour("timestamp"))
+            .values("hour_bucket")
+            .annotate(error_count=Count("id"))
+            .order_by("hour_bucket")
+        )
+        data = list(error_traces.values_list("error_count", flat=True))
+        if not data:
+            return [0] * 24 * days
+        return data
 
     @property
     def tools_enabled(self):
