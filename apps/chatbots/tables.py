@@ -46,6 +46,10 @@ class ChatbotTable(tables.Table):
     messages_count = ColumnWithHelp(
         verbose_name="Messages", orderable=True, help_text="Messages sent and received in the last 30 days"
     )
+    error_trend = columns.TemplateColumn(
+        verbose_name="Error Trend (last 48h)",
+        template_name="table/sparkline.html",
+    )
     actions = columns.TemplateColumn(
         template_name="experiments/components/experiment_actions_column.html",
         extra_context={"type": "chatbots"},
@@ -53,7 +57,7 @@ class ChatbotTable(tables.Table):
 
     class Meta:
         model = Experiment
-        fields = ("name", "participant_count", "session_count", "messages_count")
+        fields = ("name", "participant_count", "session_count", "messages_count", "last_message", "error_trend")
         row_attrs = {
             **settings.DJANGO_TABLES2_ROW_ATTRS,
             "data-redirect-url": _chatbot_url_factory,

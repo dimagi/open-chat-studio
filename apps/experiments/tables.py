@@ -22,6 +22,10 @@ class ExperimentTable(tables.Table):
     description = columns.Column(verbose_name="Description")
     owner = columns.Column(accessor="owner__username", verbose_name="Created By")
     type = columns.Column(orderable=False, empty_values=())
+    error_trend = columns.TemplateColumn(
+        verbose_name="Error Trend (last 48h)",
+        template_name="table/sparkline.html",
+    )
     actions = columns.TemplateColumn(
         template_name="experiments/components/experiment_actions_column.html",
         extra_context={"type": "experiments"},
