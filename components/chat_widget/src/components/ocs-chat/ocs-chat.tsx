@@ -180,8 +180,6 @@ export class OcsChat {
   @State() isTyping: boolean = false;
   @State() messageInput: string = "";
   @State() currentPollTaskId: string = "";
-  @State() pollingInterval?: any;
-  @State() lastPollTime?: Date;
   @State() isDragging: boolean = false;
   @State() dragOffset: { x: number; y: number } = { x: 0, y: 0 };
   @State() windowPosition: { x: number; y: number } = { x: 0, y: 0 };
@@ -194,6 +192,7 @@ export class OcsChat {
   @State() selectedFiles: SelectedFile[] = [];
   @State() isUploadingFiles: boolean = false;
 
+  private pollingInterval?: any;
   private messageListRef?: HTMLDivElement;
   private textareaRef?: HTMLTextAreaElement;
   private chatWindowRef?: HTMLDivElement;
@@ -621,8 +620,6 @@ export class OcsChat {
         this.scrollToBottom();
         this.focusInput();
       }
-
-      this.lastPollTime = new Date();
     } catch (error) {
       // Silently fail for polling
     }
