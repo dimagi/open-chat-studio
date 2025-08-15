@@ -387,7 +387,7 @@ def process_csv_rows(dataset, rows, columns, progress_recorder, team):
                         stats["updated_count"] += 1
                 except EvaluationMessage.DoesNotExist:
                     stats["error_messages"].append(
-                        f"Row {row_index + 1}: Message with ID {message_id} not found for this team"
+                        f"Row {row_index + 1}: Message with ID {message_id} not found"
                     )
                     continue
             else:

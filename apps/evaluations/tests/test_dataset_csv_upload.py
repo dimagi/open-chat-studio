@@ -618,7 +618,7 @@ def test_csv_upload_different_team(dataset):
     assert stats["created_count"] == 0
     assert stats["updated_count"] == 0
     assert len(stats["error_messages"]) == 1
-    assert stats["error_messages"][0] == f"Row 1: Message with ID {other_message.id} not found for this team"
+    assert stats["error_messages"][0] == f"Row 1: Message with ID {other_message.id} not found"
 
     # Verify the other team's message was not modified
     other_message.refresh_from_db()
