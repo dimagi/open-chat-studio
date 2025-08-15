@@ -290,7 +290,9 @@
   }
 
   .chat-btn-text img {
-    @apply object-contain flex-shrink-0 size-[var(--button-icon-size)];
+    @apply object-contain flex-shrink-0;
+    width: var(--button-icon-size);
+    height: var(--button-icon-size);
   }
 
   /* Icon-only button */
@@ -298,7 +300,9 @@
   }
 
   .chat-btn-icon img {
-    @apply size-[var(--button-icon-size)] object-contain;
+    @apply object-contain;
+    width: var(--button-icon-size);
+    height: var(--button-icon-size);
   }
 
   .chat-btn-text.round,
@@ -381,7 +385,8 @@
   }
 
   .header-button svg {
-    @apply size-[var(--header-button-icon-size)];
+    width: var(--header-button-icon-size);
+    height: var(--header-button-icon-size);
   }
 
   .header-button:hover {
@@ -541,9 +546,11 @@ textarea {
 }
 
 .loading-spinner {
-  @apply border-2 rounded-full animate-spin size-[var(--loading-spinner-size)];
+  @apply border-2 rounded-full animate-spin;
   border-color: var(--loading-spinner-track-color);
   border-top-color: var(--loading-spinner-fill-color);
+  width: var(--loading-spinner-size);
+  height: var(--loading-spinner-size);
 }
 
 .overflow-y-auto::-webkit-scrollbar {
@@ -670,7 +677,8 @@ textarea {
 }
 
 .selected-file-icon svg {
-  @apply size-[var(--selected-file-icon-size)];
+  width: var(--selected-file-icon-size);
+  height: var(--selected-file-icon-size);
 }
 
 .selected-file-size {
@@ -682,8 +690,10 @@ textarea {
 }
 
 .selected-file-success-icon {
-  @apply flex items-center justify-center size-[var(--selected-file-icon-size)];
+  @apply flex items-center justify-center;
   color: var(--success-text-color);
+  width: var(--selected-file-icon-size);
+  height: var(--selected-file-icon-size);
 }
 
 .selected-file-remove-button {
@@ -693,7 +703,8 @@ textarea {
 }
 
 .selected-file-remove-button svg {
-  @apply size-[var(--selected-file-icon-size)];
+  width: var(--selected-file-icon-size);
+  height: var(--selected-file-icon-size);
 }
 
 .selected-file-remove-button:hover {
@@ -707,7 +718,9 @@ textarea {
 }
 
 .message-attachment-icon {
-  @apply flex items-center justify-center size-[var(--message-attachment-icon-size)];
+  @apply flex items-center justify-center;
+  width: var(--message-attachment-icon-size);
+  height: var(--message-attachment-icon-size);
 }
 
 /* Update Send Button for Upload State */
