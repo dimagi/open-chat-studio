@@ -33,7 +33,7 @@ def attach_session_middleware_to_request(request):
 
 
 @pytest.mark.django_db()
-class TestDynamicFilters:
+class TestExperimentSessionFilters:
     @pytest.fixture()
     def base_session(self):
         """Create a base experiment session with participant"""
