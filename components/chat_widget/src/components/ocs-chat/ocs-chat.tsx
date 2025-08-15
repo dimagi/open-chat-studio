@@ -223,6 +223,15 @@ export class OcsChat {
     }
     this.parseWelcomeMessages();
     this.parseStarterQuestions();
+
+    const computedStyle = getComputedStyle(this.host);
+    const windowHeightVar = computedStyle.getPropertyValue('--chat-window-height');
+    const windowWidthVar = computedStyle.getPropertyValue('--chat-window-width');
+    const fullscreenWidthVar = computedStyle.getPropertyValue('--chat-window-fullscreen-width');
+    this.chatWindowHeight = varToPixels(windowHeightVar, window.innerHeight, this.chatWindowHeight);
+    this.chatWindowWidth = varToPixels(windowWidthVar, window.innerWidth, this.chatWindowWidth);
+    this.chatWindowFullscreenWidth = varToPixels(fullscreenWidthVar, window.innerWidth, this.chatWindowFullscreenWidth);
+    this.initializePosition();
   }
 
   componentDidLoad() {
@@ -233,14 +242,6 @@ export class OcsChat {
       // Resume polling for existing session
       this.startPolling();
     }
-    const computedStyle = getComputedStyle(this.host);
-    const windowHeightVar = computedStyle.getPropertyValue('--chat-window-height');
-    const windowWidthVar = computedStyle.getPropertyValue('--chat-window-width');
-    const fullscreenWidthVar = computedStyle.getPropertyValue('--chat-window-fullscreen-width');
-    this.chatWindowHeight = varToPixels(windowHeightVar, window.innerHeight, this.chatWindowHeight);
-    this.chatWindowWidth = varToPixels(windowWidthVar, window.innerWidth, this.chatWindowWidth);
-    this.chatWindowFullscreenWidth = varToPixels(fullscreenWidthVar, window.innerWidth, this.chatWindowFullscreenWidth);
-    this.initializePosition();
     window.addEventListener('resize', this.handleWindowResize);
   }
 
