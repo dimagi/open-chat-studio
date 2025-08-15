@@ -495,17 +495,11 @@ def base_single_experiment_view(request, team_slug, experiment_id, template_name
         "channel_list": channel_list,
         "allow_copy": not experiment.child_links.exists(),
         "date_range_options": DATE_RANGE_OPTIONS,
-        "filter_columns": [
-            "participant",
-            "last_message",
-            "first_message",
-            "tags",
-            "versions",
-            "channels",
-            "state",
-            "remote_id",
-        ],
+        "filter_columns": ExperimentSessionFilter.columns,
         "state_list": SessionStatus.for_chatbots(),
+        "filter_data_source_container_id": "sessions-table",
+        "filter_data_source_url": reverse("experiments:sessions-list", args=(team_slug, experiment_id)),
+        "date_range_column_name": "last_message",
         **_get_events_context(experiment, team_slug, request.origin),
     }
     if active_tab != "chatbots":

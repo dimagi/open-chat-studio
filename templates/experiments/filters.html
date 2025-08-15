@@ -175,6 +175,9 @@
 {{ date_range_options|json_script:"date-range-options" }}
 {{ filter_columns|json_script:"filter-columns-data" }}
 {{ state_list|json_script:"state-data" }}
+{{ available_tags|default:""|json_script:"available-tags-data" }}
+{{ experiment_versions|default:""|json_script:"experiment-versions-data" }}
+{{ channel_list|default:"[]"|json_script:"channel-list-data" }}
 {% if experiment_list %}{{ experiment_list|json_script:"experiment-list-data" }}{% else %}<script id="experiment-list-data" type="application/json">[]</script>{% endif %}
 <script>
   const tags = JSON.parse(document.getElementById('available-tags-data').textContent);
@@ -220,8 +223,9 @@
 
         this.loadFiltersFromUrl();
         let defaultFilterApplied = false;
-        // set default filter to exclude API sessions
-        if (this.filterData.filters.length === 1 && !this.filterData.filters[0].column) {
+        // set default filter to exclude API sessions, but only when the `channels` filter is used
+        const channelFilterUsed = filterColumns.includes('channels');
+        if (this.filterData.filters.length === 1 && !this.filterData.filters[0].column && channelFilterUsed) {
           this.filterData.filters = [{
             column: 'channels',
             operator: 'excludes',
@@ -524,7 +528,8 @@
             filterParams[`filter_${i}_value`] = filter.value;
           }
         });
-        const sessionsTableUrl = document.getElementById('sessions-table').dataset.url;
+        const dataSourceUrl = "{{filter_data_source_url}}";
+        const dataSourceContainerId = "{{filter_data_source_container_id}}";
         const showAllCheckbox = document.querySelector('input[name="show-all"]');
         if (showAllCheckbox && showAllCheckbox.checked) {
           filterParams['show-all'] = 'on';
@@ -532,8 +537,8 @@
         if (updateUrl) {
           this.updateUrlWithFilters(activeFilters);
         }
-        htmx.ajax('GET', sessionsTableUrl, {
-          target: '#sessions-table',
+        htmx.ajax('GET', dataSourceUrl, {
+          target: "#" + dataSourceContainerId,
           swap: 'innerHTML',
           values: filterParams
         }).finally(() => {
@@ -561,9 +566,9 @@
 
       selectOption(option) {
         this.selectedLabel = option.label;
-        this.filterData.filters = this.filterData.filters.filter(f => f.column !== 'last_message');
+        this.filterData.filters = this.filterData.filters.filter(f => f.column !== '{{ date_range_column_name }}');
         this.filterData.filters.push({
-          column: 'last_message',
+          column: '{{ date_range_column_name }}',
           operator: 'range',
           value: option.value,
           availableOperators: fieldTypeFilters.timestamp,

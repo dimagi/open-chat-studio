@@ -151,16 +151,8 @@ class CreateDataset(LoginAndTeamRequiredMixin, CreateView, PermissionRequiredMix
             "field_type_filters": FIELD_TYPE_FILTERS,
             "channel_list": channel_list,
             "date_range_options": DATE_RANGE_OPTIONS,
-            "filter_columns": [
-                "experiment",
-                "participant",
-                "last_message",
-                "first_message",
-                "tags",
-                "versions",
-                "channels",
-                "remote_id",
-            ],
+            "filter_columns": ExperimentSessionFilter.columns,
+            "date_range_column_name": "last_message",
         }
 
     def get_context_data(self, **kwargs):

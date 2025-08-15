@@ -50,7 +50,10 @@ DATE_RANGE_OPTIONS = [
 ]
 
 
+# TODO: Add Readme on how to use the filter component
 class DynamicFilter:
+    columns: list = []
+
     def __init__(self, queryset, parsed_params, timezone):
         self.queryset = queryset
         self.parsed_params = parsed_params
@@ -67,6 +70,8 @@ class DynamicFilter:
 
         for i in range(30):
             filter_column = param_source.get(f"filter_{i}_column")
+            if filter_column not in self.columns:
+                continue
             filter_operator = param_source.get(f"filter_{i}_operator")
             filter_value = param_source.get(f"filter_{i}_value")
 
@@ -77,7 +82,7 @@ class DynamicFilter:
             filter_operator = filter_operator[0] if isinstance(filter_operator, list) else filter_operator
             filter_value = filter_value[0] if isinstance(filter_value, list) else filter_value
 
-            condition = self.build_filter_condition(filter_column, filter_operator, filter_value)
+            condition = self._build_filter_condition(filter_column, filter_operator, filter_value)
             if condition:
                 filter_conditions &= condition
                 filter_applied = True
@@ -86,29 +91,6 @@ class DynamicFilter:
             queryset = queryset.filter(filter_conditions).distinct()
 
         return queryset
-
-    def build_filter_condition(self, column, operator, value):
-        if not value:
-            return None
-        if column == "participant":
-            return self.build_participant_filter(operator, value)
-        elif column == "last_message":
-            return self.build_timestamp_filter(operator, value, "last_message_created_at", self.timezone)
-        elif column == "first_message":
-            return self.build_timestamp_filter(operator, value, "first_message_created_at", self.timezone)
-        elif column == "tags":
-            return self.build_tags_filter(operator, value)
-        elif column == "versions":
-            return self.build_versions_filter(operator, value)
-        elif column == "channels":
-            return self.build_channels_filter(operator, value)
-        elif column == "experiment":
-            return self.build_experiment_filter(operator, value)
-        elif column == "state":
-            return self.build_state_filter(operator, value)
-        elif column == "remote_id":
-            return self.build_remote_id_filter(operator, value)
-        return None
 
     def build_participant_filter(self, operator, value):
         """Build filter condition for participant"""
@@ -167,6 +149,15 @@ class DynamicFilter:
         except (ValueError, TypeError, pytz.UnknownTimeZoneError):
             pass
         return None
+
+    def _build_filter_condition(self, column, operator, value):
+        if not value:
+            # Ignore columns that are unknown to this filter
+            return None
+        return self.build_filter_condition(column, operator, value)
+
+    def build_filter_condition(self, column, operator, value):
+        raise NotImplementedError("This method should be overridden in subclasses")
 
     def build_tags_filter(self, operator, value):
         raise NotImplementedError("Tags filter is not implemented")
@@ -235,6 +226,39 @@ class DynamicFilter:
 
 
 class ExperimentSessionFilter(DynamicFilter):
+    columns = [
+        "participant",
+        "last_message",
+        "first_message",
+        "tags",
+        "versions",
+        "channels",
+        "experiment",
+        "state",
+        "remote_id",
+    ]
+
+    def build_filter_condition(self, column, operator, value):
+        if column == "participant":
+            return self.build_participant_filter(operator, value)
+        elif column == "last_message":
+            return self.build_timestamp_filter(operator, value, "last_message_created_at", self.timezone)
+        elif column == "first_message":
+            return self.build_timestamp_filter(operator, value, "first_message_created_at", self.timezone)
+        elif column == "tags":
+            return self.build_tags_filter(operator, value)
+        elif column == "versions":
+            return self.build_versions_filter(operator, value)
+        elif column == "channels":
+            return self.build_channels_filter(operator, value)
+        elif column == "experiment":
+            return self.build_experiment_filter(operator, value)
+        elif column == "state":
+            return self.build_state_filter(operator, value)
+        elif column == "remote_id":
+            return self.build_remote_id_filter(operator, value)
+        return None
+
     def prepare_queryset(self):
         """Prepare the queryset by annotating with first and last message timestamps."""
         queryset = self.queryset
@@ -337,7 +361,7 @@ class ExperimentSessionFilter(DynamicFilter):
             pass
         return None
 
-    def build_channels_filter(operator, value):
+    def build_channels_filter(self, operator, value):
         try:
             selected_display_names = json.loads(value)
             if not selected_display_names:
