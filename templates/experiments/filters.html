@@ -85,10 +85,30 @@
                     <span x-text="filter.selectedValues.length ? getSelectedDisplayText(filter) : 'Select'"></span>
                     <i class="fa-solid fa-caret-down fa-sm"></i>
                   </div>
-                  <div x-show="filter.showOptions" @click.outside="filter.showOptions = false" class="absolute z-50 mt-1 bg-base-100 rounded-lg max-h-64 overflow-y-auto w-40 border border-base-300" style="z-index: 9999 !important;">
+                  <div x-show="filter.showOptions" @click.outside="filter.showOptions = false" class="absolute z-50 mt-1 bg-base-100 rounded-lg max-h-64 overflow-y-auto w-48 border border-base-300" style="z-index: 9999 !important;">
                     <div class="sticky top-0 bg-base-100 border-b p-2 z-1">
                       <div class="relative">
                         <input type="text" x-model="filter.searchQuery" @input="filterDropdownOptions(index)" placeholder="Search..." class="input input-sm w-full pl-8 focus:outline-hidden focus:border-primary">
+                      </div>
+                    </div>
+                    <div x-show="filter.column === 'tags'" class="border-b p-2 bg-base-50">
+                      <div class="flex gap-2">
+                        <button
+                          type="button"
+                          @click="selectAllTagOptions(index)"
+                          :disabled="areAllTagsSelected(index)"
+                          :class="areAllTagsSelected(index) ? 'btn-disabled' : ''"
+                          class="btn btn-xs btn-outline flex-1">
+                          Select All
+                        </button>
+                        <button
+                          type="button"
+                          @click="clearAllOptions(index)"
+                          :disabled="filter.selectedValues.length === 0"
+                          :class="filter.selectedValues.length === 0 ? 'btn-disabled' : ''"
+                          class="btn btn-xs btn-outline flex-1">
+                          Clear All
+                        </button>
                       </div>
                     </div>
                     <div class="py-1">
@@ -264,9 +284,8 @@
         })
           .then(res => res.json())
           .then(data => {
-            const identifiers = data.map(d => d[0]).filter(id => id != null);
-            const remoteIds = data.map(d => d[1]).filter(id => id != null);
-
+            const identifiers = data.identifiers;
+            const remoteIds = data.remote_ids;
             this.filterData.columns.participant.options = identifiers;
             this.filterData.columns.remote_id.options = remoteIds;
 
@@ -570,6 +589,28 @@
         });
         this.filterData.filters = this.getActiveFilters(this.filterData.filters);
         this.triggerFilterChange();
+      },
+
+      selectAllTagOptions(index) {
+        const filter = this.filterData.filters[index];
+        if (filter.column === 'tags') {
+          const allTags = this.filterData.columns['tags'].options || [];
+          filter.selectedValues = [...allTags];
+          this.triggerFilterChange();
+        }
+      },
+
+      clearAllOptions(index) {
+        const filter = this.filterData.filters[index];
+        filter.selectedValues = [];
+        this.triggerFilterChange();
+      },
+
+      areAllTagsSelected(index) {
+        const filter = this.filterData.filters[index];
+        if (filter.column !== 'tags') return false;
+        const allTags = this.filterData.columns['tags'].options || [];
+        return allTags.length > 0 && filter.selectedValues.length === allTags.length;
       },
 
       getLastMessageFilterIndex(params) {

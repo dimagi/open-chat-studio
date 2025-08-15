@@ -25,7 +25,14 @@
     <div class="flex justify-between items-center mb-6">
       <h1 class="text-2xl font-bold">{{ title }}</h1>
       {% if evaluation_run.status == "completed" %}
-        <div>
+        <div class="flex gap-2">
+          {% if evaluation_run.type == "preview" %}
+            <a href="{% url 'evaluations:create_evaluation_run' request.team.slug evaluation_run.config_id %}"
+               class="btn btn-primary">
+              <i class="fa-solid fa-play"></i>
+              Run evaluation ({{ evaluation_run.config.dataset.messages.count }} messages)
+            </a>
+          {% endif %}
           <a href="{% url 'evaluations:evaluation_run_download' request.team.slug evaluation_run.config_id evaluation_run.id %}"
              class="btn btn-primary">
             <i class="fa-solid fa-download"></i>
@@ -88,7 +95,7 @@
       {% include "evaluations/components/progress.html" %}
     {% elif evaluation_run.status == "completed" %}
       <div class="mb-6">
-        <h2 class="text-lg font-semibold mb-4">Results</h2>
+        <h2 class="text-lg font-semibold mb-4">Results {% if evaluation_run.type == "preview" %}(Preview){% endif %}</h2>
         <div id="results-table" hx-get="{{ table_url }}" hx-trigger="load"></div>
       </div>
     {% elif evaluation_run.status == "failed" %}

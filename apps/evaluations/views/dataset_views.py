@@ -1,8 +1,11 @@
+import csv
 import json
+import logging
+from io import StringIO
 
 from django.contrib.auth.mixins import PermissionRequiredMixin
 from django.db.models import Count
-from django.http import HttpResponse
+from django.http import HttpResponse, JsonResponse
 from django.shortcuts import get_object_or_404, render
 from django.urls import reverse
 from django.views.decorators.http import require_http_methods, require_POST
@@ -17,10 +20,14 @@ from apps.evaluations.tables import (
     EvaluationDatasetTable,
     EvaluationSessionsSelectionTable,
 )
+from apps.evaluations.tasks import upload_dataset_csv_task
+from apps.evaluations.utils import generate_csv_column_suggestions
 from apps.experiments.filters import DATE_RANGE_OPTIONS, FIELD_TYPE_FILTERS, apply_dynamic_filters
 from apps.experiments.models import Experiment, ExperimentSession
 from apps.teams.decorators import login_and_team_required
 from apps.teams.mixins import LoginAndTeamRequiredMixin
+
+logger = logging.getLogger("ocs.evaluations")
 
 
 class DatasetHome(LoginAndTeamRequiredMixin, TemplateView, PermissionRequiredMixin):
@@ -348,3 +355,111 @@ def delete_message(request, team_slug, message_id):
     message = get_object_or_404(EvaluationMessage, id=message_id, evaluationdataset__team__slug=team_slug)
     message.delete()
     return HttpResponse("", status=200)
+
+
+@login_and_team_required
+@require_POST
+def parse_csv_columns(request, team_slug: str):
+    """Parse uploaded CSV and return column names and sample data."""
+    try:
+        csv_file = request.FILES.get("csv_file")
+        if not csv_file:
+            return JsonResponse({"error": "No CSV file provided"}, status=400)
+
+        file_content = csv_file.read().decode("utf-8")
+        csv_reader = csv.DictReader(StringIO(file_content))
+        columns = csv_reader.fieldnames or []
+
+        all_rows = list(csv_reader)
+        sample_rows = all_rows[:3]
+        total_rows = len(all_rows)
+        suggestions = generate_csv_column_suggestions(columns)
+
+        return JsonResponse(
+            {
+                "columns": columns,
+                "sample_rows": sample_rows,
+                "all_rows": all_rows,
+                "total_rows": total_rows,
+                "suggestions": suggestions,
+            }
+        )
+
+    except Exception:
+        logger.warning("Error parsing CSV")
+        return JsonResponse({"error": "An error occurred while parsing the CSV file."}, status=400)
+
+
+@login_and_team_required
+def download_dataset_csv(request, team_slug: str, pk: int):
+    """Download dataset as CSV with expanded context and metadata columns."""
+    dataset = get_object_or_404(EvaluationDataset, id=pk, team__slug=team_slug)
+
+    messages = dataset.messages.order_by("id").all()
+    if not messages:
+        # Return empty CSV with headers
+        response = HttpResponse(content_type="text/csv")
+        response["Content-Disposition"] = f"attachment; filename={dataset.name}_dataset.csv"
+        writer = csv.writer(response)
+        writer.writerow(["id", "input_content", "output_content", "history"])
+        return response
+
+    context_keys = {key for message in messages if message.context for key in message.context}
+    context_keys = sorted(context_keys)
+
+    headers = ["id", "input_content", "output_content"]
+    headers.extend([f"context.{key}" for key in context_keys])
+    headers.append("history")
+
+    filename = f"{dataset.name}_dataset.csv"
+    response = HttpResponse(content_type="text/csv")
+    response["Content-Disposition"] = f"attachment; filename={filename}"
+    writer = csv.writer(response)
+
+    writer.writerow(headers)
+
+    for message in messages:
+        row = [
+            message.id,
+            message.input.get("content", ""),
+            message.output.get("content", ""),
+        ]
+
+        for key in context_keys:
+            row.append(message.context.get(key, "") if message.context else "")
+        row.append(message.full_history)
+        writer.writerow(row)
+
+    return response
+
+
+@login_and_team_required
+@require_POST
+def upload_dataset_csv(request, team_slug: str, pk: int):
+    """Upload CSV to update an existing dataset"""
+    dataset = get_object_or_404(EvaluationDataset, id=pk, team__slug=team_slug)
+
+    try:
+        csv_file = request.FILES.get("csv_file")
+        if not csv_file:
+            return JsonResponse({"error": "No CSV file provided"}, status=400)
+
+        # This will pass the whole file as a dict to celery. If files are
+        # large, this could be memory inefficient. The alternative would be to
+        # store the file on disk and fetch it in the task. Instead, we ensure
+        # the file is below a certain size.
+
+        MAX_CSV_SIZE = 5 * 1024 * 1024  # 5MB limit
+        if csv_file.size > MAX_CSV_SIZE:
+            return JsonResponse({"error": "CSV file too large (max 5MB)"}, status=400)
+        file_content = csv_file.read().decode("utf-8")
+
+        if not file_content.strip():
+            return JsonResponse({"error": "CSV file is empty"}, status=400)
+
+        task = upload_dataset_csv_task.delay(dataset.id, file_content, request.team.id)
+        return JsonResponse({"success": True, "task_id": task.id})
+
+    except Exception as e:
+        logger.error(f"Error starting CSV upload for dataset {dataset.id}: {str(e)}")
+        return JsonResponse({"error": "An error occurred while starting the CSV upload"}, status=500)

@@ -33,6 +33,14 @@ class EvaluationConfigTable(tables.Table):
         actions=[
             actions.edit_action(url_name="evaluations:edit"),
             actions.Action(
+                url_name="evaluations:create_evaluation_preview",
+                url_factory=lambda url_name, request, record, value: reverse(
+                    url_name, args=[request.team.slug, record.id]
+                ),
+                icon_class="fa-solid fa-eye",
+                title="Preview",
+            ),
+            actions.Action(
                 url_name="evaluations:create_evaluation_run",
                 url_factory=lambda url_name, request, record, value: reverse(
                     url_name, args=[request.team.slug, record.id]
@@ -59,6 +67,8 @@ class EvaluationConfigTable(tables.Table):
         return mark_safe(f'<ul class="list-disc list-inside">{"".join(items)}</ul>')
 
     def render_generation_chatbot(self, record):
+        if not record.base_experiment:
+            return "—"
         if record.version_selection_type == ExperimentVersionSelection.LATEST_WORKING:
             return f"{record.base_experiment.name} (Latest Working)"
         elif record.version_selection_type == ExperimentVersionSelection.LATEST_PUBLISHED:
@@ -177,6 +187,12 @@ class EvaluationDatasetTable(tables.Table):
     actions = actions.ActionsColumn(
         actions=[
             actions.edit_action(url_name="evaluations:dataset_edit"),
+            actions.Action(
+                url_name="evaluations:dataset_download",
+                url_factory=lambda url_name, request, record, _: reverse(url_name, args=[request.team.slug, record.id]),
+                icon_class="fa-solid fa-download",
+                title="Download CSV",
+            ),
             actions.AjaxAction(
                 "evaluations:dataset_delete",
                 title="Delete",
