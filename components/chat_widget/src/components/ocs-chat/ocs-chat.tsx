@@ -192,7 +192,7 @@ export class OcsChat {
   @State() selectedFiles: SelectedFile[] = [];
   @State() isUploadingFiles: boolean = false;
 
-  private pollingInterval?: any;
+  private pollingIntervalRef?: any;
   private messageListRef?: HTMLDivElement;
   private textareaRef?: HTMLTextAreaElement;
   private chatWindowRef?: HTMLDivElement;
@@ -271,9 +271,9 @@ export class OcsChat {
   }
 
   private cleanup() {
-    if (this.pollingInterval) {
-      clearInterval(this.pollingInterval);
-      this.pollingInterval = undefined;
+    if (this.pollingIntervalRef) {
+      clearInterval(this.pollingIntervalRef);
+      this.pollingIntervalRef = undefined;
     }
     this.currentPollTaskId = '';
   }
@@ -577,9 +577,9 @@ export class OcsChat {
   }
 
   private startPolling(): void {
-    if (this.pollingInterval) return;
+    if (this.pollingIntervalRef) return;
 
-    this.pollingInterval = setInterval(async () => {
+    this.pollingIntervalRef = setInterval(async () => {
       // Only poll for messages if not currently polling for a task
       if (!this.currentPollTaskId) {
         await this.pollForMessages();
@@ -588,9 +588,9 @@ export class OcsChat {
   }
 
   private pauseMessagePolling(): void {
-    if (this.pollingInterval) {
-      clearInterval(this.pollingInterval);
-      this.pollingInterval = undefined;
+    if (this.pollingIntervalRef) {
+      clearInterval(this.pollingIntervalRef);
+      this.pollingIntervalRef = undefined;
     }
   }
 
