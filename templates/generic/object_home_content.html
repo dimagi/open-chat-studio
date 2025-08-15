@@ -106,13 +106,19 @@
         </div>
       </div>
     </form>
+  {% elif use_dynamic_filters %}
+    <div class="my-2">
+      {% include "experiments/filters.html" %}
+    </div>
   {% else %}
     <hr class="my-2">
   {% endif %}
 
-  <div hx-get="{{ table_url }}{% querystring %}"
-       hx-trigger="load" hx-swap="outerHTML">
-    {% include "table/table_placeholder.html" %}
+    <div id="data-table">
+      <div hx-get="{{ table_url }}{% querystring %}"
+        hx-trigger="load" hx-swap="outerHTML">
+      {% include "table/table_placeholder.html" %}
+    </div>
   </div>
 </div>
 
