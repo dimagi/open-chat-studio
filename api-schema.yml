@@ -134,8 +134,7 @@ paths:
               $ref: '#/components/schemas/ChatUploadFileRequest'
         required: true
       security:
-      - apiKeyAuth: []
-      - tokenAuth: []
+      - cookieAuth: []
       responses:
         '201':
           content:
