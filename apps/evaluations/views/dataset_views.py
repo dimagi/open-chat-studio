@@ -17,7 +17,7 @@ from apps.evaluations.tables import (
     EvaluationDatasetTable,
     EvaluationSessionsSelectionTable,
 )
-from apps.experiments.filters import DATE_RANGE_OPTIONS, FIELD_TYPE_FILTERS, ExperimentSessionFilter
+from apps.experiments.filters import DATE_RANGE_OPTIONS, FIELD_TYPE_FILTERS, DynamicExperimentSessionFilter
 from apps.experiments.models import Experiment, ExperimentSession
 from apps.teams.decorators import login_and_team_required
 from apps.teams.mixins import LoginAndTeamRequiredMixin
@@ -119,7 +119,7 @@ class CreateDataset(LoginAndTeamRequiredMixin, CreateView, PermissionRequiredMix
                 .select_related("participant__user")
             )
             timezone = self.request.session.get("detected_tz", None)
-            session_filter = ExperimentSessionFilter(queryset, self.request.GET, timezone)
+            session_filter = DynamicExperimentSessionFilter(queryset, self.request.GET, timezone)
             filtered_queryset = session_filter.apply()
             filtered_session_ids = ",".join(str(session.external_id) for session in filtered_queryset)
             if filtered_session_ids:
@@ -151,7 +151,7 @@ class CreateDataset(LoginAndTeamRequiredMixin, CreateView, PermissionRequiredMix
             "df_field_type_filters": FIELD_TYPE_FILTERS,
             "df_channel_list": channel_list,
             "df_date_range_options": DATE_RANGE_OPTIONS,
-            "df_filter_columns": ExperimentSessionFilter.columns,
+            "df_filter_columns": DynamicExperimentSessionFilter.columns,
             "df_date_range_column_name": "last_message",
         }
 
@@ -187,7 +187,7 @@ class DatasetSessionsSelectionTableView(LoginAndTeamRequiredMixin, SingleTableVi
             .order_by("experiment__name")
         )
         timezone = self.request.session.get("detected_tz", None)
-        session_filter = ExperimentSessionFilter(query_set, self.request.GET, timezone)
+        session_filter = DynamicExperimentSessionFilter(query_set, self.request.GET, timezone)
         query_set = session_filter.apply()
         return query_set
 

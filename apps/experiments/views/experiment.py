@@ -61,7 +61,7 @@ from apps.experiments.decorators import (
 )
 from apps.experiments.email import send_chat_link_email, send_experiment_invitation
 from apps.experiments.exceptions import ChannelAlreadyUtilizedException
-from apps.experiments.filters import DATE_RANGE_OPTIONS, FIELD_TYPE_FILTERS, ExperimentSessionFilter
+from apps.experiments.filters import DATE_RANGE_OPTIONS, FIELD_TYPE_FILTERS, DynamicExperimentSessionFilter
 from apps.experiments.forms import (
     ConsentForm,
     ExperimentForm,
@@ -145,7 +145,7 @@ class ExperimentSessionsTableView(LoginAndTeamRequiredMixin, SingleTableView, Pe
             )
         )
         timezone = self.request.session.get("detected_tz", None)
-        session_filter = ExperimentSessionFilter(query_set, self.request.GET, timezone)
+        session_filter = DynamicExperimentSessionFilter(query_set, self.request.GET, timezone)
         query_set = session_filter.apply()
         return query_set
 
@@ -495,7 +495,7 @@ def base_single_experiment_view(request, team_slug, experiment_id, template_name
         "df_channel_list": channel_list,
         "allow_copy": not experiment.child_links.exists(),
         "df_date_range_options": DATE_RANGE_OPTIONS,
-        "df_filter_columns": ExperimentSessionFilter.columns,
+        "df_filter_columns": DynamicExperimentSessionFilter.columns,
         "df_state_list": SessionStatus.for_chatbots(),
         "df_filter_data_source_container_id": "sessions-table",
         "df_filter_data_source_url": reverse("experiments:sessions-list", args=(team_slug, experiment_id)),

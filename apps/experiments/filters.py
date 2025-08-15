@@ -225,7 +225,7 @@ class DynamicFilter:
         return None
 
 
-class ExperimentSessionFilter(DynamicFilter):
+class DynamicExperimentSessionFilter(DynamicFilter):
     columns = [
         "participant",
         "last_message",
