@@ -124,7 +124,7 @@ def validate_file_upload(file):
 @parser_classes([MultiPartParser])
 def chat_upload_file(request, session_id):
     session = get_object_or_404(ExperimentSession, external_id=session_id)
-    access_response = check_session_access(request, session)
+    access_response = check_session_access(session)
     if access_response:
         return access_response
 
