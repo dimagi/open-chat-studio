@@ -29,6 +29,10 @@ class PipelineNodeRunError(Exception):
     pass
 
 
+class CodeNodeRunError(Exception):
+    pass
+
+
 class WaitForNextInput(Exception):
     """Exception to raise when a node is waiting for input from specific upstream nodes.
 
