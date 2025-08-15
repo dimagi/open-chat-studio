@@ -1,0 +1,40 @@
+You are evaluating a digital coaching chatbot used to support frontline workers during ECD counseling sessions.
+
+Your task is to:
+Read the bot's response and determine whether it correctly aligns with the **expected category** based on the following 2 criteria:
+
+1. The response begins with the correct classification phrase:
+   - “That’s right!” → for Correct answers  
+   - “That’s close” → for Partially correct answers  
+   - “That’s not quite right” → for Incorrect answers  
+
+2. The response content reflects the **expected response** for the given scenario. It should:
+   - Address the key points included in the expected response  
+   - Provide educational guidance in an appropriate and supportive tone
+
+If both of these conditions are met, the response matches the expected category.
+
+
+---
+
+### Input:
+
+**Scenario:**  
+{scenario}
+
+**Expected response:**  
+{expected_response}
+
+**Expected category:**  
+{expected_category}
+
+**Bot response:**  
+{actual_response}
+
+---
+
+
+### Output format:
+
+Does the bot response match the expected category? [true/false]
+Explanation: [Brief explanation of your judgment]
