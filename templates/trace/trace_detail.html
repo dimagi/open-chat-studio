@@ -1,0 +1,120 @@
+
+{% extends "web/app/app_base.html" %}
+{% load waffle_tags %}
+
+{% block breadcrumbs %}
+    <div class="breadcrumbs text-sm">
+        <ul>
+            <li><a href="{% url 'trace:home' request.team.slug %}" class="link link-hover"><i class="fas fa-home mr-1"></i></a></li>
+            <li><a href="{% url 'trace:home' request.team.slug %}" class="link link-hover">Traces</a></li>
+            <li><span class="text-base-content/60">{{ trace.experiment.name }}</span></li>
+        </ul>
+    </div>
+{% endblock breadcrumbs %}
+
+{% block app %}
+<div x-data="{activeTab: 'spans'}">
+    <div class="container mx-auto px-4 py-6">
+        <!-- Header Section -->
+        <div class="flex justify-between w-full">
+            <div>
+                <h1 class="text-3xl font-bold mb-2">{{ trace.experiment.name }}</h1>
+                <p class="text-sm text-base-content/60">Trace ID: {{ trace.trace_id }}</p>
+            </div>
+            <div class="flex flex-row gap-2 justify-center">
+                <div>
+                    {% include "trace/partials/status.html" with object=trace %}
+                </div>
+                <div class="text-center">
+                    <div class="font-bold">{{ trace.duration_seconds }}s</div>
+                    <div class="text-sm pg-text-muted font-medium">Total latency</div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Info Grid -->
+        <div class="grid grid-cols-1 lg:grid-cols-4 gap-4 mb-6">
+            <div>
+                <div class="text-sm text-base-content/60 tracking-wide">Experiment</div>
+                <div class="mt-1">
+                    {% flag "flag_chatbots" %}
+                        {% include "generic/chip.html" with chip=trace.experiment.as_chatbot_chip %}
+                    {% else %}
+                        {% include "generic/chip.html" with chip=trace.experiment.as_experiment_chip %}
+                    {% endflag %}
+                </div>
+                <div class="text-xs mt-1">Version: {{ trace.experiment.get_version_name }}</div>
+            </div>
+            <div>
+                <div class="text-sm text-base-content/60 tracking-wide">Session</div>
+                <div class="mt-1">
+                    {% flag "flag_chatbots" %}
+                        {% include "generic/chip.html" with chip=trace.session.as_chatbot_chip %}
+                    {% else %}
+                        {% include "generic/chip.html" with chip=trace.session.as_experiment_chip %}
+                    {% endflag %}
+                </div>
+            </div>
+            <div>
+                <div class="text-sm text-base-content/60 tracking-wide">Participant</div>
+                <div class="mt-1">
+                    {% include "generic/chip.html" with chip=trace.participant.as_chip %}
+                </div>
+            </div>
+            <div>
+                <div class="text-sm text-base-content/60 tracking-wide">Timestamp</div>
+                <time datetime="{{ trace.timestamp.isoformat }}" title="{{ trace.timestamp.isoformat }}">
+                    {{ trace.timestamp|date:"DATETIME_FORMAT" }}
+                </time>
+            </div>
+        </div>
+    </div>
+
+    <div class="flex-1 overflow-auto">
+      <!-- Tab navigation -->
+      <div class="border-b border-t border-base-200 mb-2">
+        <nav class="px-6 flex space-x-8" aria-label="Tabs">
+          <button 
+            class="py-4 px-1 border-b-2 font-medium text-sm focus:outline-none"
+            :class="activeTab === 'spans' ? 'tab-active' : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'"
+            @click="activeTab = 'spans'">
+            Spans ({{ spans|length }})
+          </button>
+          <button 
+            class="py-4 px-1 border-b-2 font-medium text-sm focus:outline-none"
+            :class="activeTab === 'inputs' ? 'tab-active' : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'"
+            @click="activeTab = 'inputs'">
+            Inputs & Outputs
+          </button>
+        </nav>
+      </div>
+    </div>
+
+    <div x-show="activeTab === 'spans'" id="spans-content">
+        <div class="card mb-6">
+        <h2 class="text-xl font-bold mb-2">Execution Spans</h2>
+        <div class="card-body bg-base-50 shadow-md">
+            {% for span in spans %}
+            {% include "trace/span_tree.html" with span=span is_root=True %}
+            {% empty %}
+            <div class="card bg-base-100 border border-base-200">
+                <div class="card-body p-4 text-center text-base-content/60">
+                No spans found for this trace.
+                </div>
+            </div>
+            {% endfor %}
+        </div>
+        </div>
+    </div>
+
+    <!-- Inputs & Outputs tab content -->
+    <div x-cloak x-show="activeTab === 'inputs'" id="inputs-content">
+        <div class="card mb-6">
+        <h2 class="text-xl font-bold mb-2">Inputs & Outputs</h2>
+        <div class="card-body bg-base-50 shadow-md">
+            {% include "trace/input_output_tab.html" %}
+        </div>
+        </div>
+    </div>
+</div>
+{% endblock app %}

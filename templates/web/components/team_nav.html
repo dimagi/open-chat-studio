@@ -56,6 +56,16 @@
               </a>
             </li>
           {% endif %}
+          {% flag "flag_tracing" %}
+            {% if perms.trace.view_trace %}
+              <li>
+                <a href="{% url 'trace:home' request.team.slug %}" {% if active_tab == 'traces' %}class="menu-active"{% endif %}>
+                  <i class="fa-solid fa-magnifying-glass-location"></i>
+                  {% translate "Traces" %}
+                </a>
+              </li>
+            {% endif %}
+          {% endflag %}
         {% endflag %}
       </ul>
     </li>
@@ -73,6 +83,18 @@
         <i class="fas fa-comments"></i>
         {% translate "Chatbots" %}
       </a>
+      {% flag "flag_tracing" %}
+        {% if perms.trace.view_trace %}
+          <ul>
+              <li>
+                <a href="{% url 'trace:home' request.team.slug %}" {% if active_tab == 'traces' %}class="menu-active"{% endif %}>
+                  <i class="fa-solid fa-magnifying-glass-location"></i>
+                  {% translate "Traces" %}
+                </a>
+              </li>
+          </ul>
+        {% endif %}
+      {% endflag %}
     </li>
     <li>
       <a href="{% url 'experiments:source_material_home' request.team.slug %}"
