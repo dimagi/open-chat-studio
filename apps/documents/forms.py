@@ -175,7 +175,8 @@ class GithubDocumentSourceForm(DocumentSourceForm):
         required=False,
         initial="*.md",
         label="File Pattern",
-        help_text="File patterns to include (comma-separated, e.g., *.md, *.txt)",
+        help_text="File patterns to include. Prefix with '!' to exclude matching files. "
+        "(comma-separated, e.g., *.md, *.txt, !test_*)",
         widget=forms.TextInput(attrs={"placeholder": "*.md, *.txt"}),
     )
     path_filter = forms.CharField(

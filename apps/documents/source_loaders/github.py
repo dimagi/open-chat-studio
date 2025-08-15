@@ -61,7 +61,11 @@ class GitHubDocumentLoader(BaseDocumentLoader[GitHubSourceConfig]):
         if self.config.path_filter and not file_path.startswith(self.config.path_filter):
             return False
         patterns = [p.strip() for p in self.config.file_pattern.split(",")]
-        return any(fnmatch.fnmatch(file_path, pattern) for pattern in patterns)
+        include_patterns = [p for p in patterns if not p.startswith("!")]
+        exclude_patterns = [p[1:] for p in patterns if p.startswith("!")]
+        return any(fnmatch.fnmatch(file_path, pattern) for pattern in include_patterns) and not any(
+            fnmatch.fnmatch(file_path, pattern) for pattern in exclude_patterns
+        )
 
     def should_update_document(self, document: Document, existing_file: CollectionFile) -> bool:
         """
