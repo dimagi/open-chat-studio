@@ -183,7 +183,6 @@ def test_csv_dataset_creation_with_history(client_with_user, team_with_users, sa
     assert third_message.history[3]["content"] == "I'm doing well, thanks!"
 
 
-@pytest.mark.django_db()
 def test_csv_column_suggestions_algorithm():
     """Test the column suggestion algorithm directly."""
 
