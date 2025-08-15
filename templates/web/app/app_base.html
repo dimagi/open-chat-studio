@@ -32,7 +32,7 @@
 
 {% block footer %}
   {{ block.super }}
-  {% if ocs_config.chat_widget.enabled and ocs_config.chat_widget.chatbot_id %}
+  {% if request.user.is_authenticated and ocs_config.chat_widget.enabled and ocs_config.chat_widget.chatbot_id %}
     <open-chat-studio-widget {% include "generic/attrs.html" with attrs=ocs_config.chat_widget.get_widget_attributes %}
         user-id="{{ request.user.email }}"
         user-name="{{ request.user.get_display_name }}"
