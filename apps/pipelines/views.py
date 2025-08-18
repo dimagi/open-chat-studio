@@ -87,6 +87,7 @@ class EditPipeline(LoginAndTeamRequiredMixin, TemplateView, PermissionRequiredMi
         exclude_services = [SyntheticVoice.OpenAIVoiceEngine]
         if flag_is_active(self.request, "flag_open_ai_voice_engine"):
             exclude_services = []
+        synthetic_voices = SyntheticVoice.get_for_team(self.request.team, exclude_services=exclude_services)
         return {
             **data,
             "pipeline_id": kwargs["pk"],
@@ -96,7 +97,7 @@ class EditPipeline(LoginAndTeamRequiredMixin, TemplateView, PermissionRequiredMi
                 team=self.request.team,
                 llm_providers=llm_providers,
                 llm_provider_models=llm_provider_models,
-                excluded_services=exclude_services,
+                synthetic_voices=synthetic_voices,
                 selected_voice_provider=None,  # Not show voice field for now if opened from pipelines tab
                 include_versions=pipeline.is_a_version,
             ),
@@ -139,7 +140,7 @@ class DeletePipeline(LoginAndTeamRequiredMixin, View, PermissionRequiredMixin):
 
 
 def _pipeline_node_parameter_values(
-    team, llm_providers, llm_provider_models, excluded_services, selected_voice_provider, include_versions=False
+    team, llm_providers, llm_provider_models, synthetic_voices, selected_voice_provider, include_versions=False
 ):
     """Returns the possible values for each input type"""
     common_filters = {"team": team}
@@ -250,7 +251,7 @@ def _pipeline_node_parameter_values(
                     None,
                 )
                 | {"provider_id": voice.voice_provider_id}
-                for voice in SyntheticVoice.get_for_team(team, exclude_services=excluded_services)
+                for voice in synthetic_voices
                 if selected_voice_provider and voice.service.lower() == selected_voice_provider.type
             ],
             key=lambda v: v["label"],
