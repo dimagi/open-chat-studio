@@ -125,13 +125,13 @@ class PipelineState(dict):
 
     @classmethod
     def from_node_output(
-            cls,
-            node_name: str,
-            node_id: str,
-            output: Any = None,
-            voice_provider_id: str | None = None,
-            synthetic_voice_id: str | None = None,
-            **kwargs,
+        cls,
+        node_name: str,
+        node_id: str,
+        output: Any = None,
+        voice_provider_id: str | None = None,
+        synthetic_voice_id: str | None = None,
+        **kwargs,
     ) -> Self:
         kwargs["outputs"] = {node_name: {"message": output, "node_id": node_id}}
         kwargs.setdefault("temp_state", {}).update({"outputs": {node_name: output}})

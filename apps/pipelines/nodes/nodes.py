@@ -501,7 +501,7 @@ class LLMResponseWithPrompt(LLMResponse, HistoryMixin, OutputMessageTagMixin):
                 **tool_callbacks.output_message_metadata,
             },
             intents=tool_callbacks.intents,
-            **voice_kwargs
+            **voice_kwargs,
         )
 
     def _get_attachments(self, state: PipelineState) -> list:
