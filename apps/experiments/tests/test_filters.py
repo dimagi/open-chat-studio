@@ -158,7 +158,7 @@ class TestDynamicFilters:
     def test_message_timestamp_filters(self):
         """Test message timestamp filtering"""
         # Setup
-        with travel("2025-01-01 10:00:00"):
+        with travel("2025-01-01 10:00:00", tick=False):
             session1 = ExperimentSessionFactory()
             ChatMessage.objects.create(
                 chat=session1.chat, content="First message for session 1", message_type=ChatMessageType.HUMAN
@@ -170,7 +170,7 @@ class TestDynamicFilters:
                 created_at=timezone.now() + timedelta(hours=2),
             )
 
-        with travel("2025-01-02 10:00:00"):
+        with travel("2025-01-02 10:00:00", tick=False):
             session2 = ExperimentSessionFactory(experiment=session1.experiment)
             ChatMessage.objects.create(
                 chat=session2.chat, content="First message for session 2", message_type=ChatMessageType.HUMAN
