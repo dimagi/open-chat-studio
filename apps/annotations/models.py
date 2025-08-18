@@ -108,7 +108,7 @@ class TaggedModelMixin(models.Model, AnnotationMixin):
             name=tag,
             team=team,
             is_system_tag=bool(tag_category),
-            category=tag_category,
+            category=tag_category or "",
         )
         self.add_tag(tag, team=team, added_by=added_by)
 
