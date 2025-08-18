@@ -30,15 +30,22 @@ class TestGitHubDocumentLoader:
         assert not loader._matches_pattern("script.py")
         assert not loader._matches_pattern("README.txt")
 
-    def test_matches_multiple_patterns(self):
+    def test_matches_multiple_patterns_and_exclude(self):
         config = GitHubSourceConfig(
-            repo_url="https://github.com/test/repo", branch="main", file_pattern="*.md, *.txt, *.py"
+            repo_url="https://github.com/test/repo",
+            branch="main",
+            file_pattern="!*_test.py, *.md, *.txt, *.py, !test.py",
         )
         loader = GitHubDocumentLoader(Mock(), config, None)
 
         assert loader._matches_pattern("README.md")
         assert loader._matches_pattern("notes.txt")
+        assert loader._matches_pattern("docs/index.md")
         assert loader._matches_pattern("script.py")
+        assert loader._matches_pattern("src/test.py")  # not matched because of the subdirectory
+        assert not loader._matches_pattern("test.py")
+        assert not loader._matches_pattern("hello_test.py")
+        assert not loader._matches_pattern("tests/docs_test.py")
         assert not loader._matches_pattern("image.png")
 
     def test_load_documents(self, github_config):

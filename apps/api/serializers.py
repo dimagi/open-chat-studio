@@ -100,10 +100,11 @@ class ExperimentSessionSerializer(serializers.ModelSerializer):
     experiment = ExperimentSerializer(read_only=True)
     participant = ParticipantSerializer(read_only=True)
     messages = serializers.SerializerMethodField()
+    tags = TagListSerializerField(source="chat.tags")
 
     class Meta:
         model = ExperimentSession
-        fields = ["url", "id", "team", "experiment", "participant", "created_at", "updated_at", "messages"]
+        fields = ["url", "id", "team", "experiment", "participant", "created_at", "updated_at", "messages", "tags"]
 
     def __init__(self, *args, **kwargs):
         self._include_messages = kwargs.pop("include_messages", False)
@@ -193,12 +194,6 @@ class ParticipantDataUpdateRequest(serializers.Serializer):
 
 class ChatStartSessionRequest(serializers.Serializer):
     chatbot_id = serializers.UUIDField(label="Chatbot ID")
-    participant_id = serializers.CharField(
-        label="Participant ID",
-        required=False,
-        help_text="Optional participant identifier. If not provided, an anonymous participant will be created. "
-        "This field will be ignored if the request is not authenticated.",
-    )
     session_data = serializers.DictField(
         label="Initial session data",
         required=False,
