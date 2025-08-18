@@ -107,6 +107,11 @@ export class OcsChat {
   @Prop() headerText: '';
 
   /**
+   * The message to display in the new chat confirmation dialog.
+   */
+  @Prop() newChatConfirmationMessage?: string = "Starting a new chat will clear your current conversation. Continue?";
+
+  /**
    * Whether the chat widget is visible on load.
    */
   @Prop({ mutable: true }) visible: boolean = false;
@@ -998,7 +1003,7 @@ export class OcsChat {
                   <div class="confirmation-content">
                     <h3 class="confirmation-title">Start New Chat</h3>
                     <p class="confirmation-message">
-                      Starting a new chat will clear your current conversation. Continue?
+                      {this.newChatConfirmationMessage}
                     </p>
                     <div class="confirmation-buttons">
                       <button
