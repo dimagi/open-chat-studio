@@ -125,16 +125,22 @@ class PipelineState(dict):
 
     @classmethod
     def from_node_output(
-        cls,
-        node_name: str,
-        node_id: str,
-        output: Any = None,
-        **kwargs,
+            cls,
+            node_name: str,
+            node_id: str,
+            output: Any = None,
+            voice_provider_id: str | None = None,
+            synthetic_voice_id: str | None = None,
+            **kwargs,
     ) -> Self:
         kwargs["outputs"] = {node_name: {"message": output, "node_id": node_id}}
         kwargs.setdefault("temp_state", {}).update({"outputs": {node_name: output}})
         if output is not None:
             kwargs["messages"] = [output]
+        if voice_provider_id is not None:
+            kwargs["voice_provider_id"] = voice_provider_id
+        if synthetic_voice_id is not None:
+            kwargs["synthetic_voice_id"] = synthetic_voice_id
         return cls(**kwargs)
 
     def add_message_tag(self, tag: str):
@@ -376,10 +382,6 @@ class PipelineNode(BasePipelineNode, ABC):
         output.setdefault("output_message_tags", [])
         if callable(get_output_tags_fn):
             output["output_message_tags"].extend(get_output_tags_fn())
-        if getattr(self, "voice_provider_id", None) is not None:
-            output["voice_provider_id"] = self.voice_provider_id
-        if getattr(self, "synthetic_voice_id", None) is not None:
-            output["synthetic_voice_id"] = self.synthetic_voice_id
         return output
 
     def _process(self, input: str, state: PipelineState) -> PipelineState | Command:
