@@ -236,9 +236,9 @@ class TopicBot:
         voice_provider = None
         synthetic_voice = None
         if (
-                self.experiment.use_processor_bot_voice
-                and self.processor_experiment
-                and self.processor_experiment.voice_provider
+            self.experiment.use_processor_bot_voice
+            and self.processor_experiment
+            and self.processor_experiment.voice_provider
         ):
             voice_provider = self.processor_experiment.voice_provider
             synthetic_voice = self.processor_experiment.synthetic_voice
@@ -429,18 +429,17 @@ class PipelineBot:
         from apps.service_providers.models import VoiceProvider
 
         voice_provider = (
-            VoiceProvider.objects.get(id=self.output_voice_provider_id)
-            if getattr(self, "output_voice_provider_id", None) is not None
+            VoiceProvider.objects.get(id=self.voice_provider_id)
+            if getattr(self, "voice_provider_id", None) is not None
             else self.experiment.voice_provider
         )
 
         synthetic_voice = (
-            SyntheticVoice.objects.get(id=self.output_synthetic_voice_id)
-            if getattr(self, "output_synthetic_voice_id", None) is not None
+            SyntheticVoice.objects.get(id=self.synthetic_voice_id)
+            if getattr(self, "synthetic_voice_id", None) is not None
             else self.experiment.synthetic_voice
         )
         return voice_provider, synthetic_voice
-
 
 
 class PipelineTestBot:
