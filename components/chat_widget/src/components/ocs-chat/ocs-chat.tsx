@@ -169,6 +169,7 @@ export class OcsChat {
   @State() parsedStarterQuestions: string[] = [];
   @State() generatedUserId?: string;
   @State() isFullscreen: boolean = false;
+  @State() showNewChatConfirmation: boolean = false;
 
   private messageListRef?: HTMLDivElement;
   private textareaRef?: HTMLTextAreaElement;
@@ -897,7 +898,20 @@ export class OcsChat {
     }
   }
 
-  private async startNewChat(): Promise<void> {
+  private showConfirmationDialog(): void {
+    this.showNewChatConfirmation = true;
+  }
+
+  private hideConfirmationDialog(): void {
+    this.showNewChatConfirmation = false;
+  }
+
+  private async confirmNewChat(): Promise<void> {
+    this.hideConfirmationDialog();
+    await this.actuallyStartNewChat();
+  }
+
+  private async actuallyStartNewChat(): Promise<void> {
     this.clearSessionStorage();
     this.sessionId = undefined;
     this.messages = [];
@@ -951,7 +965,7 @@ export class OcsChat {
                 {this.sessionId && this.messages.length > 0 && (
                   <button
                     class="header-button"
-                    onClick={() => this.startNewChat()}
+                    onClick={() => this.showConfirmationDialog()}
                     title="Start new chat"
                     aria-label="Start new chat"
                   >
@@ -977,6 +991,33 @@ export class OcsChat {
                 </button>
               </div>
             </div>
+
+            {this.showNewChatConfirmation && (
+              <div class="confirmation-overlay">
+                <div class="confirmation-dialog">
+                  <div class="confirmation-content">
+                    <h3 class="confirmation-title">Start New Chat</h3>
+                    <p class="confirmation-message">
+                      Starting a new chat will clear your current conversation. Continue?
+                    </p>
+                    <div class="confirmation-buttons">
+                      <button
+                        class="confirmation-button confirmation-button-cancel"
+                        onClick={() => this.hideConfirmationDialog()}
+                      >
+                        Cancel
+                      </button>
+                      <button
+                        class="confirmation-button confirmation-button-confirm"
+                        onClick={() => this.confirmNewChat()}
+                      >
+                        Continue
+                      </button>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            )}
 
             {/* Chat Content */}
             <div class="chat-content">
