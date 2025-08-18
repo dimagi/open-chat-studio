@@ -1,6 +1,6 @@
 import pytest
 from django.utils import timezone
-from freezegun import freeze_time
+from time_machine import travel
 
 from apps.api.serializers import MessageSerializer
 from apps.chat.models import ChatMessage, ChatMessageType
@@ -16,7 +16,7 @@ def test_message_serializer_api_to_internal(type_, role):
 
 
 @pytest.mark.parametrize(("type_", "role"), CASES)
-@freeze_time("2021-01-01T12:00:00Z")
+@travel("2021-01-01T12:00:00Z", tick=False)
 def test_message_serializer_internal_to_api(type_, role):
     now = timezone.now()
     serializer = MessageSerializer(instance=ChatMessage(created_at=now, message_type=type_, content="hello"))

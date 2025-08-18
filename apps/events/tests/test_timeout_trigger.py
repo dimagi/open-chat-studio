@@ -3,7 +3,7 @@ from unittest import mock
 
 import pytest
 from django.test import RequestFactory, override_settings
-from freezegun import freeze_time
+from time_machine import travel
 
 from apps.chat.models import Chat, ChatMessage, ChatMessageType
 from apps.events.const import TOTAL_FAILURES
@@ -42,7 +42,7 @@ def session(experiment, channel):
 @pytest.mark.django_db()
 def test_timed_out_sessions(session):
     """A human chat message was sent longer ago than the timeout"""
-    with freeze_time("2024-04-02") as frozen_time:
+    with travel("2024-04-02", tick=False) as frozen_time:
         timeout_trigger = TimeoutTrigger.objects.create(
             experiment=session.experiment,
             action=EventAction.objects.create(action_type=EventActionType.LOG),
@@ -68,7 +68,7 @@ def test_timed_out_sessions(session):
 @pytest.mark.django_db()
 def test_non_timed_out_sessions(session):
     """A human chat message was sent more recently than the timeout"""
-    with freeze_time("2024-04-02") as frozen_time:
+    with travel("2024-04-02", tick=False) as frozen_time:
         timeout_trigger = TimeoutTrigger.objects.create(
             experiment=session.experiment,
             action=EventAction.objects.create(action_type=EventActionType.LOG),
@@ -94,7 +94,7 @@ def test_non_timed_out_sessions(session):
 @pytest.mark.django_db()
 def test_timed_out_sessions_fired(mock_fire_trigger, session):
     """A human chat message was sent more recently than the timeout"""
-    with freeze_time("2024-04-02") as frozen_time:
+    with travel("2024-04-02", tick=False) as frozen_time:
         timeout_trigger = TimeoutTrigger.objects.create(
             experiment=session.experiment,
             action=EventAction.objects.create(action_type=EventActionType.LOG),
@@ -123,7 +123,7 @@ def test_timed_out_sessions_fired(mock_fire_trigger, session):
 
 @pytest.mark.django_db()
 def test_trigger_count_reached(session):
-    with freeze_time("2024-04-02") as frozen_time:
+    with travel("2024-04-02", tick=False) as frozen_time:
         timeout_trigger = TimeoutTrigger.objects.create(
             experiment=session.experiment,
             action=EventAction.objects.create(action_type=EventActionType.LOG),
@@ -171,7 +171,7 @@ def test_trigger_count_reached(session):
 
 @pytest.mark.django_db()
 def test_failure_count_reached(session):
-    with freeze_time("2024-04-02") as frozen_time:
+    with travel("2024-04-02", tick=False) as frozen_time:
         timeout_trigger = TimeoutTrigger.objects.create(
             experiment=session.experiment,
             action=EventAction.objects.create(action_type=EventActionType.LOG),
@@ -294,7 +294,7 @@ def test_new_human_message_resets_count(session):
 def test_not_triggered_for_complete_chats(status, matches, session):
     session.status = status
     session.save()
-    with freeze_time("2024-04-02") as frozen_time:
+    with travel("2024-04-02", tick=False) as frozen_time:
         timeout_trigger = TimeoutTrigger.objects.create(
             experiment=session.experiment,
             action=EventAction.objects.create(action_type=EventActionType.LOG),
@@ -322,7 +322,7 @@ def test_not_triggered_for_complete_chats(status, matches, session):
 
 @pytest.mark.django_db()
 def test_not_triggered_no_human_message(session):
-    with freeze_time("2024-04-02") as frozen_time:
+    with travel("2024-04-02", tick=False) as frozen_time:
         timeout_trigger = TimeoutTrigger.objects.create(
             experiment=session.experiment,
             action=EventAction.objects.create(action_type=EventActionType.LOG),
