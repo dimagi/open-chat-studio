@@ -117,14 +117,22 @@ def test_poll_scheduled_messages(ad_hoc_bot_message, period):
 
     def step_time(frozen_time, db_time, delta):
         """Step time"""
+        now = timezone.now()
         if isinstance(delta, relativedelta):
-            delta = timedelta(
-                days=delta.days + delta.months * 30 + delta.years * 365,
-                seconds=delta.seconds,
-                minutes=delta.minutes,
-                hours=delta.hours,
-            )
-        frozen_time.shift(delta)
+            if delta.months
+                new_time = now + delta
+                frozen_time.move_to(new_time)
+            else:
+                td = timedelta(
+                    days=delta.days,
+                    seconds=delta.seconds,
+                    minutes=delta.minutes,
+                    hours=delta.hours,
+                )
+                frozen_time.shift(td)
+        else:
+            frozen_time.shift(delta)
+
         now = timezone.now()
         db_time.return_value = now
         return now
