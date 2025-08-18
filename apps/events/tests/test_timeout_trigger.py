@@ -59,7 +59,7 @@ def test_timed_out_sessions(session):
         session.chat = chat
         session.save()
 
-        frozen_time.tick(delta=timedelta(minutes=15))
+        frozen_time.shift(delta=timedelta(minutes=15))
         timed_out_sessions = timeout_trigger.timed_out_sessions()
         assert len(timed_out_sessions) == 1
         assert timed_out_sessions[0] == session
@@ -84,7 +84,7 @@ def test_non_timed_out_sessions(session):
         session.chat = chat
         session.save()
 
-        frozen_time.tick(delta=timedelta(seconds=5))
+        frozen_time.shift(delta=timedelta(seconds=5))
         timed_out_sessions = timeout_trigger.timed_out_sessions()
         assert len(timed_out_sessions) == 0
 
@@ -114,7 +114,7 @@ def test_timed_out_sessions_fired(mock_fire_trigger, session):
         experiment_version = session.experiment.create_new_version(make_default=True)
         trigger_version = experiment_version.timeout_triggers.first()
 
-        frozen_time.tick(delta=timedelta(minutes=15))
+        frozen_time.shift(delta=timedelta(minutes=15))
         timed_out_sessions = timeout_trigger.timed_out_sessions()
         assert len(timed_out_sessions) == 1
         enqueue_timed_out_events()
@@ -140,7 +140,7 @@ def test_trigger_count_reached(session):
         message.save()
         session.chat = chat
         session.save()
-        frozen_time.tick(delta=timedelta(minutes=11))
+        frozen_time.shift(delta=timedelta(minutes=11))
 
         timeout_trigger.event_logs.create(session=session, chat_message=message, status=EventLogStatusChoices.SUCCESS)
         assert len(timeout_trigger.timed_out_sessions()) == 1
@@ -156,7 +156,7 @@ def test_trigger_count_reached(session):
             message_type=ChatMessageType.HUMAN,
         )
         message_2.save()
-        frozen_time.tick(delta=timedelta(minutes=11))
+        frozen_time.shift(delta=timedelta(minutes=11))
         assert len(timeout_trigger.timed_out_sessions()) == 1
 
         # Sending another message before the next timeout will not trigger
@@ -165,7 +165,7 @@ def test_trigger_count_reached(session):
             content="Hello",
             message_type=ChatMessageType.HUMAN,
         )
-        frozen_time.tick(delta=timedelta(minutes=9))
+        frozen_time.shift(delta=timedelta(minutes=9))
         assert len(timeout_trigger.timed_out_sessions()) == 0
 
 
@@ -188,7 +188,7 @@ def test_failure_count_reached(session):
         message.save()
         session.chat = chat
         session.save()
-        frozen_time.tick(delta=timedelta(minutes=11))
+        frozen_time.shift(delta=timedelta(minutes=11))
         assert len(timeout_trigger.timed_out_sessions()) == 1
 
         assert timeout_trigger._has_triggers_left(timeout_trigger, session, message) is True
@@ -207,7 +207,7 @@ def test_failure_count_reached(session):
             message_type=ChatMessageType.HUMAN,
         )
         message_2.save()
-        frozen_time.tick(delta=timedelta(minutes=11))
+        frozen_time.shift(delta=timedelta(minutes=11))
         assert len(timeout_trigger.timed_out_sessions()) == 1
 
 
@@ -311,7 +311,7 @@ def test_not_triggered_for_complete_chats(status, matches, session):
         session.chat = chat
         session.save()
 
-        frozen_time.tick(delta=timedelta(minutes=15))
+        frozen_time.shift(delta=timedelta(minutes=15))
         timed_out_sessions = timeout_trigger.timed_out_sessions()
         if matches:
             assert len(timed_out_sessions) == 1
@@ -339,7 +339,7 @@ def test_not_triggered_no_human_message(session):
         session.chat = chat
         session.save()
 
-        frozen_time.tick(delta=timedelta(minutes=15))
+        frozen_time.shift(delta=timedelta(minutes=15))
         timed_out_sessions = timeout_trigger.timed_out_sessions()
         assert len(timed_out_sessions) == 0
 
