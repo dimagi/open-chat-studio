@@ -1,0 +1,47 @@
+{% load static %}
+
+<div class="{% if is_root %}border rounded-lg p-4 mb-4 bg-base-50 border-base-300{% else %}relative before:content-[''] before:absolute before:-left-6 before:top-6 before:w-4 before:h-0.5 before:bg-gray-200 rounded-lg p-3 mb-3{% endif %}">
+    <div class="flex items-center justify-between">
+        <div class="flex items-center">
+            {% if is_root %}
+                <i class="fa-solid fa-eye mr-2"></i>
+            {% endif %}
+            <div class="flex flex-col gap-1">
+                <div class="text-lg font-bold">{{ span.name }}</div>
+                {% if span.error %}
+                    <div class="text-xs rounded overflow-x-auto space-y-3">
+                        <pre class="whitespace-pre-wrap">{{ span.error }}</pre>
+                    </div>
+                {% endif %}
+            </div>
+        </div>
+        <div class="flex flex-row gap-2 justify-center text-right">
+            <div class="text-sm flex items-center">
+                {% include "trace/partials/status.html" with object=span %}
+            </div>
+            <div class="text-sm font-medium">{{ span.duration_seconds }}s</div>
+        </div>
+    </div>
+    
+    {% if span.metadata %}
+        <div class="mt-3 grid grid-cols-{% if is_root %}4{% else %}3{% endif %} gap-4 text-xs">
+            {% for key, value in span.metadata.items %}
+                <div>
+                    <span class="text-gray-500">{{ key|title }}:</span>
+                    <span class="ml-1 text-gray-600">{{ value }}</span>
+                </div>
+            {% endfor %}
+        </div>
+    {% endif %}
+
+    <!-- Child spans -->
+    {% with child_spans=span.child_spans.all %}
+        {% if child_spans %}
+            <div class="border-l-2 border-gray-200 ml-4 pl-4 mt-4">
+                {% for child_span in child_spans %}
+                    {% include "trace/span_tree.html" with span=child_span is_root=False %}
+                {% endfor %}
+            </div>
+        {% endif %}
+    {% endwith %}
+</div>

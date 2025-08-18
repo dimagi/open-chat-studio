@@ -99,7 +99,7 @@ class LangFuseTracer(Tracer):
             "level": level,
         }
 
-        self.spans[span_id] = self._get_current_span().span(**content_span)
+        self.spans[span_id] = self._get_current_observation().span(**content_span)
 
     def end_span(self, span_id: UUID, outputs: dict[str, Any] | None = None, error: Exception | None = None) -> None:
         if not self.ready:
@@ -122,7 +122,7 @@ class LangFuseTracer(Tracer):
         if not self.ready:
             raise ServiceReentryException("Service does not support reentrant use.")
 
-        return LangfuseCallbackHandler(stateful_client=self._get_current_span(), update_stateful_client=False)
+        return LangfuseCallbackHandler(stateful_client=self._get_current_observation(), update_stateful_client=False)
 
     def get_trace_metadata(self) -> dict[str, str]:
         if not self.ready:
@@ -134,7 +134,11 @@ class LangFuseTracer(Tracer):
             "trace_provider": self.type,
         }
 
-    def _get_current_span(self) -> StatefulTraceClient | StatefulSpanClient:
+    def _get_current_observation(self) -> StatefulTraceClient | StatefulSpanClient:
+        """
+        Returns the most recent active span if one exists, otherwise returns the root trace.
+        This ensures new spans are properly nested under their parent spans.
+        """
         if self.spans:
             last_span = next(reversed(self.spans))
             return self.spans[last_span]
@@ -147,6 +151,9 @@ class LangFuseTracer(Tracer):
         self.trace.update(tags=tags)
 
     def set_output_message_id(self, output_message_id: str) -> None:
+        pass
+
+    def set_input_message_id(self, input_message_id: str) -> None:
         pass
 
 

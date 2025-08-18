@@ -99,7 +99,7 @@ CONTENT_TYPES = {
         "evaluationmessage",
         "evaluationresult",
     ],
-    "trace": ["trace"],
+    "trace": ["trace", "span"],
     "mcp_integrations": ["mcpserver"],
 }
 

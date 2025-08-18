@@ -77,5 +77,8 @@ class MockTracer(Tracer):
     def add_trace_tags(self, tags: list[str]) -> None:
         self.tags = tags
 
-    def set_output_message_id(self):
+    def set_output_message_id(self, message_id: int):
+        pass
+
+    def set_input_message_id(self, message_id: int):
         pass

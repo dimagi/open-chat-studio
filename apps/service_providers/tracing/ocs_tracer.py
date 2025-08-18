@@ -5,8 +5,10 @@ import time
 from typing import TYPE_CHECKING, Any
 from uuid import UUID
 
+from django.utils import timezone
+
 from apps.service_providers.tracing.const import OCS_TRACE_PROVIDER, SpanLevel
-from apps.trace.models import Trace
+from apps.trace.models import Span, Trace, TraceStatus
 
 from .base import Tracer
 
@@ -26,13 +28,15 @@ class OCSTracer(Tracer):
         super().__init__(OCS_TRACE_PROVIDER, {})
         self.experiment_id = experiment_id
         self.team_id = team_id
-        self.output_message_id: str = None
         self.start_time: float = None
+        self.trace = None
+        self.spans: dict[UUID, Span] = {}
+        self.error_detected = False
 
     @property
     def ready(self) -> bool:
-        """OCS tracer is always ready when experiment_id and team_id are set."""
-        return self.experiment_id and self.team_id
+        """OCS tracer is always ready when no trace is active."""
+        return self.trace is not None
 
     def start_trace(
         self,
@@ -44,6 +48,14 @@ class OCSTracer(Tracer):
     ) -> None:
         """Start a trace and record the start time."""
         super().start_trace(trace_name, trace_id, session, inputs, metadata)
+        self.trace = Trace.objects.create(
+            trace_id=trace_id,
+            experiment_id=self.experiment_id,
+            team_id=self.team_id,
+            session=session,
+            duration=0,
+            participant=session.participant,
+        )
 
         self.start_time = time.time()
         self.session = session
@@ -59,14 +71,13 @@ class OCSTracer(Tracer):
             duration = end_time - self.start_time
             duration_ms = int(duration * 1000)
 
-            Trace.objects.create(
-                experiment_id=self.experiment_id,
-                session_id=self.session.id,
-                participant=self.session.participant,
-                output_message_id=self.output_message_id,
-                duration=duration_ms,
-                team_id=self.team_id,
-            )
+            self.trace.duration = duration_ms
+            if self.error_detected:
+                self.trace.status = TraceStatus.ERROR
+            else:
+                self.trace.status = TraceStatus.SUCCESS
+            self.trace.save()
+
             logger.debug(
                 "Created trace in DB | experiment_id=%s, session_id=%s, duration=%sms",
                 self.experiment_id,
@@ -78,9 +89,12 @@ class OCSTracer(Tracer):
                 "Error saving trace in DB | experiment_id=%s, session_id=%s, output_message_id=%s",
                 self.experiment_id,
                 self.session.id,
-                self.output_message_id,
+                self.trace.output_message_id,
             )
         finally:
+            self.trace = None
+            self.spans = {}
+            self.error_detected = False
             super().end_trace(outputs, error)
 
     def start_span(
@@ -91,8 +105,15 @@ class OCSTracer(Tracer):
         metadata: dict[str, Any] | None = None,
         level: SpanLevel = "DEFAULT",
     ) -> None:
-        # OCS tracer doesn't track individual spans, only the overall trace.
-        pass
+        if not self.ready:
+            return
+
+        self.spans[span_id] = self._get_current_observation().span(
+            span_id=span_id,
+            span_name=span_name,
+            inputs=inputs,
+            metadata=metadata or {},
+        )
 
     def end_span(
         self,
@@ -100,8 +121,19 @@ class OCSTracer(Tracer):
         outputs: dict[str, Any] | None = None,
         error: Exception | None = None,
     ) -> None:
-        # OCS tracer doesn't track individual spans, only the overall trace.
-        pass
+        if not self.ready:
+            return
+
+        span = self.spans.pop(span_id)
+        span.output = outputs or {}
+        span.end_time = timezone.now()
+        if error:
+            span.error = str(error)
+            self.error_detected = True
+            span.status = TraceStatus.ERROR
+        else:
+            span.status = TraceStatus.SUCCESS
+        span.save()
 
     def get_langchain_callback(self) -> None:
         """Return a mock callback handler since OCS tracer doesn't need LangChain integration."""
@@ -112,4 +144,21 @@ class OCSTracer(Tracer):
 
     def set_output_message_id(self, output_message_id: str) -> None:
         """Set the output message ID for the trace."""
-        self.output_message_id = output_message_id
+        if self.trace:
+            self.trace.output_message_id = output_message_id
+
+    def set_input_message_id(self, input_message_id: str) -> None:
+        """Set the input message ID for the trace."""
+        if self.trace:
+            self.trace.input_message_id = input_message_id
+
+    def _get_current_observation(self) -> Span | Trace:
+        """
+        Returns the most recent active span if one exists, otherwise returns the root trace.
+        This ensures new spans are properly nested under their parent spans.
+        """
+        if self.spans:
+            last_span = next(reversed(self.spans))
+            return self.spans[last_span]
+        else:
+            return self.trace

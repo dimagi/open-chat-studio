@@ -1,0 +1,9 @@
+{% if object.status == "success" %}
+    <span class="badge badge-success">{{ object.get_status_display }}</span>
+{% elif object.status == "error" %}
+    <span class="badge badge-error">{{ object.get_status_display }}</span>
+{% elif object.status == "pending" %}
+    <span class="badge badge-warning">{{ object.get_status_display }}</span>
+{% else %}
+    <span class="badge badge-info">{{ object.get_status_display }}</span>
+{% endif %}
