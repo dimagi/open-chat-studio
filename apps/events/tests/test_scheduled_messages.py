@@ -1,5 +1,5 @@
 import logging
-from datetime import datetime
+from datetime import datetime, timedelta
 from unittest.mock import patch
 
 import pytest
@@ -115,9 +115,16 @@ def test_poll_scheduled_messages(ad_hoc_bot_message, period):
     scheduled_message = None
     delta = None
 
-    def step_time(frozen_time, db_time, timedelta):
+    def step_time(frozen_time, db_time, delta):
         """Step time"""
-        frozen_time.tick(delta=timedelta)
+        if isinstance(delta, relativedelta):
+            delta = timedelta(
+                days=delta.days + delta.months * 30 + delta.years * 365,
+                seconds=delta.seconds,
+                minutes=delta.minutes,
+                hours=delta.hours,
+            )
+        frozen_time.shift(delta)
         now = timezone.now()
         db_time.return_value = now
         return now
