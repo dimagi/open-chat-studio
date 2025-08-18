@@ -139,8 +139,6 @@ class ChannelBase(ABC):
         self._participant_identifier = experiment_session.participant.identifier if experiment_session else None
         self._is_user_message = False
         self.trace_service = TracingService.create_for_experiment(self.experiment)
-        self.output_voice_provider_id = None
-        self.output_synthetic_voice_id = None
 
     @property
     def participant_id(self) -> int | None:
@@ -648,24 +646,12 @@ class ChannelBase(ABC):
         return response
 
     def _reply_voice_message(self, text: str):
-        from apps.experiments.models import SyntheticVoice
-        from apps.service_providers.models import VoiceProvider
 
-        voice_provider = (
-            VoiceProvider.objects.get(id=self.output_voice_provider_id)
-            if self.output_voice_provider_id is not None
-            else self.experiment.voice_provider
-        )
-        synthetic_voice = (
-            SyntheticVoice.objects.get(id=self.output_synthetic_voice_id)
-            if self.output_synthetic_voice_id is not None
-            else self.experiment.synthetic_voice
-        )
-        if self.experiment.use_processor_bot_voice and (
-            self.bot.processor_experiment and self.bot.processor_experiment.voice_provider
-        ):
-            voice_provider = self.bot.processor_experiment.voice_provider
-            synthetic_voice = self.bot.processor_experiment.synthetic_voice
+        voice_provider = self.experiment.voice_provider
+        synthetic_voice = self.experiment.synthetic_voice
+        voice = self.bot.synthesize_voice()
+        if voice:
+            voice_provider, synthetic_voice = voice
 
         speech_service = voice_provider.get_speech_service()
         synthetic_voice_audio = speech_service.synthesize_voice(text, synthetic_voice)
@@ -694,8 +680,6 @@ class ChannelBase(ABC):
 
     def _get_bot_response(self, message: str) -> ChatMessage:
         chat_message = self.bot.process_input(message, attachments=self.message.attachments)
-        self.output_voice_provider_id = getattr(self.bot, "voice_provider_id", None)
-        self.output_synthetic_voice_id = getattr(self.bot, "synthetic_voice_id", None)
         return chat_message
 
     def _add_message_to_history(self, message: str, message_type: ChatMessageType):
