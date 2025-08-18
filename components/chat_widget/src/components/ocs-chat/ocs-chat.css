@@ -230,6 +230,7 @@
   --confirmation-content-padding: 1.5em;
   --confirmation-button-padding-x: var(--send-button-padding-x);
   --confirmation-button-padding-y: var(--send-button-padding-y);
+  --confirmation-button-gap: 0.75em;
 
   display: block;
   position: fixed;
@@ -528,16 +529,17 @@
   }
   /* Confirmation dialog */
   .confirmation-overlay {
-    @apply fixed inset-0 flex items-center justify-center z-[9999];
+    @apply fixed inset-0 flex items-center justify-center;
     background-color: var(--confirmation-overlay-bg-color);
+    z-index: 9999;
   }
 
   .confirmation-dialog {
-    @apply max-w-sm w-full mx-4 shadow-lg;
+    @apply max-w-sm w-full mx-4;
     background-color: var(--confirmation-dialog-bg-color);
     border: 1px solid var(--confirmation-dialog-border-color);
     border-radius: var(--confirmation-dialog-border-radius);
-    box-shadow: 0 10px 25px var(--confirmation-dialog-shadow-color);
+    box-shadow: 0 0.625em 1.5625em var(--confirmation-dialog-shadow-color);
   }
 
   .confirmation-content {
@@ -557,7 +559,8 @@
   }
 
   .confirmation-buttons {
-    @apply flex gap-3 justify-end;
+    @apply flex justify-end;
+    gap: var(--confirmation-button-gap);
   }
 
   .confirmation-button {
