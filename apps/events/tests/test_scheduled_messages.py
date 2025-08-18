@@ -119,7 +119,7 @@ def test_poll_scheduled_messages(ad_hoc_bot_message, period):
         """Step time"""
         now = timezone.now()
         if isinstance(delta, relativedelta):
-            if delta.months
+            if delta.months:
                 new_time = now + delta
                 frozen_time.move_to(new_time)
             else:
