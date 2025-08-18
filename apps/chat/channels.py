@@ -501,7 +501,7 @@ class ChannelBase(ABC):
         supported_files = []
         unsupported_files = []
 
-        reply_text = True
+        reply_text = False
         user_sent_voice = self.message and self.message.content_type == MESSAGE_TYPES.VOICE
 
         if self.voice_replies_supported and self.experiment.synthetic_voice:
@@ -646,7 +646,6 @@ class ChannelBase(ABC):
         return response
 
     def _reply_voice_message(self, text: str):
-
         voice_provider = self.experiment.voice_provider
         synthetic_voice = self.experiment.synthetic_voice
         voice = self.bot.synthesize_voice()

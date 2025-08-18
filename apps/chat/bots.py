@@ -243,6 +243,9 @@ class TopicBot:
             voice_provider = self.processor_experiment.voice_provider
             synthetic_voice = self.processor_experiment.synthetic_voice
 
+        if voice_provider is None and synthetic_voice is None:
+            return None
+
         return voice_provider, synthetic_voice
 
 
@@ -424,21 +427,23 @@ class PipelineBot:
                 chat_message.create_and_add_tag(tag_value, self.session.team, category or "")
         return chat_message
 
-    def synthesize_voice(self) -> tuple["VoiceProvider", "SyntheticVoice"]:
+    def synthesize_voice(self) -> tuple["VoiceProvider", "SyntheticVoice"] | None:
         from apps.experiments.models import SyntheticVoice
         from apps.service_providers.models import VoiceProvider
 
         voice_provider = (
             VoiceProvider.objects.get(id=self.voice_provider_id)
             if getattr(self, "voice_provider_id", None) is not None
-            else self.experiment.voice_provider
+            else None
         )
 
         synthetic_voice = (
             SyntheticVoice.objects.get(id=self.synthetic_voice_id)
             if getattr(self, "synthetic_voice_id", None) is not None
-            else self.experiment.synthetic_voice
+            else None
         )
+        if voice_provider is None and synthetic_voice is None:
+            return None
         return voice_provider, synthetic_voice
 
 
