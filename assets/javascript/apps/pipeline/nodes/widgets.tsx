@@ -1123,7 +1123,7 @@ export function VoiceWidget(props: WidgetParams) {
 
   type VoicesByProvider = { [providerKey: string]: typeof parameterValues.synthetic_voice_id };
   const voicesByProvider = parameterValues.synthetic_voice_id.reduce((acc, voice) => {
-  const key = ((voice as TypedOption).type || "").toLowerCase();
+    const key = ((voice as TypedOption).type || "").toLowerCase();
     if (!acc[key]) {
       acc[key] = [];
     }
