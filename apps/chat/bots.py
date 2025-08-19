@@ -356,7 +356,7 @@ class PipelineBot:
                 tags.append((TagCategories.SAFETY_LAYER_RESPONSE, tag_name))
         return output
 
-    def _save_outputs(self, input_state, output, save_input_to_history, extra_tags=None):
+    def _save_outputs(self, input_state, output, save_input_to_history):
         input_metadata = output.get("input_message_metadata", {})
         output_metadata = output.get("output_message_metadata", {})
         trace_metadata = self.trace_service.get_trace_metadata() if self.trace_service else None
@@ -365,19 +365,26 @@ class PipelineBot:
             output_metadata.update(trace_metadata)
 
         if save_input_to_history:
-            self._save_message_to_history(input_state["messages"][-1], ChatMessageType.HUMAN, metadata=input_metadata)
+            human_message = self._save_message_to_history(
+                input_state["messages"][-1], ChatMessageType.HUMAN, metadata=input_metadata
+            )
+            if self.trace_service:
+                self.trace_service.set_input_message_id(human_message.id)
 
+        output_tags = output.get("output_message_tags")
         ai_message = self._save_message_to_history(
             output["messages"][-1],
             ChatMessageType.AI,
             metadata=output_metadata,
-            tags=output.get("output_message_tags"),
+            tags=output_tags,
         )
+        if self.trace_service:
+            self.trace_service.set_output_message_id(ai_message.id)
         ai_message.add_version_tag(
             version_number=self.experiment.version_number, is_a_version=self.experiment.is_a_version
         )
-        if self.trace_service and (tags := output.get("output_message_tags")):
-            flat_tags = [f"{category}:{tag}" for tag, category in tags]
+        if self.trace_service and output_tags:
+            flat_tags = [f"{category}:{tag}" if category else tag for tag, category in output_tags]
             self.trace_service.add_output_message_tags_to_trace(flat_tags)
 
         if session_tags := output.get("session_tags"):

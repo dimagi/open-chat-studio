@@ -71,6 +71,7 @@ class TracingService:
         session: ExperimentSession,
         inputs: dict[str, Any],
         metadata: dict[str, Any] | None = None,
+        input_message_id: int | None = None,
     ):
         """Context manager for tracing or spanning.
 
@@ -302,3 +303,7 @@ class TracingService:
     def set_output_message_id(self, output_message_id: str) -> None:
         for tracer in self._active_tracers:
             tracer.set_output_message_id(output_message_id)
+
+    def set_input_message_id(self, input_message_id: str) -> None:
+        for tracer in self._active_tracers:
+            tracer.set_input_message_id(input_message_id)

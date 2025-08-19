@@ -99,6 +99,10 @@ class Tracer(ABC):
     def set_output_message_id(self, output_message_id: str) -> None:
         pass
 
+    @abstractmethod
+    def set_input_message_id(self, input_message_id: str) -> None:
+        pass
+
 
 @dataclasses.dataclass
 class TraceInfo:

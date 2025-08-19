@@ -8,6 +8,10 @@ import { HTMLStencilElement, JSXBase } from "@stencil/core/internal";
 export namespace Components {
     interface OpenChatStudioWidget {
         /**
+          * Allow the user to attach files to their messages.
+         */
+        "allowAttachments": boolean;
+        /**
           * Allow the user to make the chat window full screen.
          */
         "allowFullScreen": boolean;
@@ -86,6 +90,10 @@ declare global {
 }
 declare namespace LocalJSX {
     interface OpenChatStudioWidget {
+        /**
+          * Allow the user to attach files to their messages.
+         */
+        "allowAttachments"?: boolean;
         /**
           * Allow the user to make the chat window full screen.
          */
