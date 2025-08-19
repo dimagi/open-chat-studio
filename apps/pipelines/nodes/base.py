@@ -129,18 +129,16 @@ class PipelineState(dict):
         node_name: str,
         node_id: str,
         output: Any = None,
-        voice_provider_id: str | None = None,
-        synthetic_voice_id: str | None = None,
         **kwargs,
     ) -> Self:
         kwargs["outputs"] = {node_name: {"message": output, "node_id": node_id}}
         kwargs.setdefault("temp_state", {}).update({"outputs": {node_name: output}})
         if output is not None:
             kwargs["messages"] = [output]
-        if voice_provider_id is not None:
-            kwargs["voice_provider_id"] = voice_provider_id
-        if synthetic_voice_id is not None:
-            kwargs["synthetic_voice_id"] = synthetic_voice_id
+        if "voice_provider_id" in kwargs:
+            kwargs["voice_provider_id"] = kwargs["voice_provider_id"]
+        if "synthetic_voice_id" in kwargs:
+            kwargs["synthetic_voice_id"] = kwargs["synthetic_voice_id"]
         return cls(**kwargs)
 
     def add_message_tag(self, tag: str):

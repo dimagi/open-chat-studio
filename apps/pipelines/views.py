@@ -17,12 +17,11 @@ from django.views.decorators.csrf import csrf_exempt
 from django.views.decorators.http import require_POST
 from django.views.generic import TemplateView
 from django_tables2 import SingleTableView
-from waffle import flag_is_active
 
 from apps.assistants.models import OpenAiAssistant
 from apps.custom_actions.form_utils import get_custom_action_operation_choices
 from apps.documents.models import Collection
-from apps.experiments.models import AgentTools, BuiltInTools, Experiment, SourceMaterial, SyntheticVoice
+from apps.experiments.models import AgentTools, BuiltInTools, Experiment, SourceMaterial
 from apps.pipelines.flow import FlowPipelineData
 from apps.pipelines.models import Pipeline
 from apps.pipelines.nodes.base import OptionsSource
@@ -84,10 +83,6 @@ class EditPipeline(LoginAndTeamRequiredMixin, TemplateView, PermissionRequiredMi
         llm_providers = LlmProvider.objects.filter(team=self.request.team).values("id", "name", "type").all()
         llm_provider_models = LlmProviderModel.objects.for_team(self.request.team).all()
         pipeline = Pipeline.objects.get(id=kwargs["pk"], team=self.request.team)
-        exclude_services = [SyntheticVoice.OpenAIVoiceEngine]
-        if flag_is_active(self.request, "flag_open_ai_voice_engine"):
-            exclude_services = []
-        synthetic_voices = SyntheticVoice.get_for_team(self.request.team, exclude_services=exclude_services)
         return {
             **data,
             "pipeline_id": kwargs["pk"],
@@ -97,7 +92,7 @@ class EditPipeline(LoginAndTeamRequiredMixin, TemplateView, PermissionRequiredMi
                 team=self.request.team,
                 llm_providers=llm_providers,
                 llm_provider_models=llm_provider_models,
-                synthetic_voices=synthetic_voices,
+                synthetic_voices=[],
                 selected_voice_provider=None,  # Not show voice field for now if opened from pipelines tab
                 include_versions=pipeline.is_a_version,
             ),
@@ -243,16 +238,8 @@ def _pipeline_node_parameter_values(
         ),
         OptionsSource.synthetic_voice_id: sorted(
             [
-                _option(
-                    voice.id,
-                    str(voice),
-                    voice.service.lower(),
-                    None,
-                    None,
-                )
-                | {"provider_id": voice.voice_provider_id}
+                _option(voice.id, str(voice), voice.service.lower()) | {"provider_id": voice.voice_provider_id}
                 for voice in synthetic_voices
-                if selected_voice_provider and voice.service.lower() == selected_voice_provider.type
             ],
             key=lambda v: v["label"],
         ),
