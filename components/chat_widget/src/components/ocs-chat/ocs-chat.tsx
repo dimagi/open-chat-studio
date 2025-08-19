@@ -1,4 +1,4 @@
-import { Component, Host, h, Prop, State, Element } from '@stencil/core';
+import {Component, Host, h, Prop, State, Element, Watch} from '@stencil/core';
 import {
   XMarkIcon,
   GripDotsVerticalIcon, PencilSquare, ArrowsPointingOutIcon, ArrowsPointingInIcon,
@@ -173,21 +173,17 @@ export class OcsChat {
    */
   @Prop() allowAttachments: boolean = false;
 
-  @State() loaded: boolean = false;
   @State() error: string = "";
   @State() messages: ChatMessage[] = [];
   @State() sessionId?: string;
   @State() isLoading: boolean = false;
   @State() isTyping: boolean = false;
   @State() messageInput: string = "";
-  @State() pollingInterval?: any;
-  @State() lastPollTime?: Date;
-  @State() isTaskPolling: boolean = false;
+  @State() currentPollTaskId: string = "";
   @State() isDragging: boolean = false;
   @State() dragOffset: { x: number; y: number } = { x: 0, y: 0 };
   @State() windowPosition: { x: number; y: number } = { x: 0, y: 0 };
   @State() fullscreenPosition: { x: number } = { x: 0 };
-  @State() showStarterQuestions: boolean = true;
   @State() parsedWelcomeMessages: string[] = [];
   @State() parsedStarterQuestions: string[] = [];
   @State() generatedUserId?: string;
@@ -196,6 +192,7 @@ export class OcsChat {
   @State() selectedFiles: SelectedFile[] = [];
   @State() isUploadingFiles: boolean = false;
 
+  private pollingIntervalRef?: any;
   private messageListRef?: HTMLDivElement;
   private textareaRef?: HTMLTextAreaElement;
   private chatWindowRef?: HTMLDivElement;
@@ -207,7 +204,6 @@ export class OcsChat {
 
 
   componentWillLoad() {
-    this.loaded = this.visible;
     if (!this.chatbotId) {
       this.error = 'Chatbot ID is required';
       return;
@@ -218,11 +214,19 @@ export class OcsChat {
       if (sessionId && messages) {
         this.sessionId = sessionId;
         this.messages = messages;
-        this.showStarterQuestions = messages.length === 0;
       }
     }
     this.parseWelcomeMessages();
     this.parseStarterQuestions();
+
+    const computedStyle = getComputedStyle(this.host);
+    const windowHeightVar = computedStyle.getPropertyValue('--chat-window-height');
+    const windowWidthVar = computedStyle.getPropertyValue('--chat-window-width');
+    const fullscreenWidthVar = computedStyle.getPropertyValue('--chat-window-fullscreen-width');
+    this.chatWindowHeight = varToPixels(windowHeightVar, window.innerHeight, this.chatWindowHeight);
+    this.chatWindowWidth = varToPixels(windowWidthVar, window.innerWidth, this.chatWindowWidth);
+    this.chatWindowFullscreenWidth = varToPixels(fullscreenWidthVar, window.innerWidth, this.chatWindowFullscreenWidth);
+    this.initializePosition();
   }
 
   componentDidLoad() {
@@ -233,14 +237,6 @@ export class OcsChat {
       // Resume polling for existing session
       this.startPolling();
     }
-    const computedStyle = getComputedStyle(this.host);
-    const windowHeightVar = computedStyle.getPropertyValue('--chat-window-height');
-    const windowWidthVar = computedStyle.getPropertyValue('--chat-window-width');
-    const fullscreenWidthVar = computedStyle.getPropertyValue('--chat-window-fullscreen-width');
-    this.chatWindowHeight = varToPixels(windowHeightVar, window.innerHeight, this.chatWindowHeight);
-    this.chatWindowWidth = varToPixels(windowWidthVar, window.innerWidth, this.chatWindowWidth);
-    this.chatWindowFullscreenWidth = varToPixels(fullscreenWidthVar, window.innerWidth, this.chatWindowFullscreenWidth);
-    this.initializePosition();
     window.addEventListener('resize', this.handleWindowResize);
   }
 
@@ -275,11 +271,11 @@ export class OcsChat {
   }
 
   private cleanup() {
-    if (this.pollingInterval) {
-      clearInterval(this.pollingInterval);
-      this.pollingInterval = undefined;
+    if (this.pollingIntervalRef) {
+      clearInterval(this.pollingIntervalRef);
+      this.pollingIntervalRef = undefined;
     }
-    this.isTaskPolling = false;
+    this.currentPollTaskId = '';
   }
 
   private getApiBaseUrl(): string {
@@ -336,7 +332,8 @@ export class OcsChat {
       // Handle seed message if present
       if (data.seed_message_task_id) {
         this.isTyping = true;  // Show typing indicator for seed message
-        await this.pollTaskResponse(data.seed_message_task_id);
+        this.currentPollTaskId = data.seed_message_task_id;
+        await this.pollTaskResponse();
       }
 
       // Start polling for messages
@@ -424,9 +421,6 @@ export class OcsChat {
   private async sendMessage(message: string): Promise<void> {
     if (!this.sessionId || !message.trim()) return;
 
-    // Hide starter questions on any user interaction
-    this.showStarterQuestions = false;
-
     try {
       let attachmentIds: number[] = [];
       if (this.allowAttachments && this.selectedFiles.length > 0) {
@@ -500,7 +494,8 @@ export class OcsChat {
       }
 
       // Poll for the response - typing indicator will be managed in pollTaskResponse
-      await this.pollTaskResponse(data.task_id);
+      this.currentPollTaskId = data.task_id;
+      await this.pollTaskResponse();
     } catch (error) {
       this.error = error instanceof Error ? error.message : 'Failed to send message';
       // Clear typing indicator on error
@@ -512,18 +507,19 @@ export class OcsChat {
     this.sendMessage(question);
   }
 
-  private async pollTaskResponse(taskId: string): Promise<void> {
-    if (!this.sessionId) return;
+  private async pollTaskResponse(): Promise<void> {
+    if (!this.sessionId || !this.currentPollTaskId) return;
 
     // Stop message polling while task polling is active
-    this.isTaskPolling = true;
     this.pauseMessagePolling();
 
     let attempts = 0;
 
     const poll = async (): Promise<void> => {
+      if (!this.sessionId || !this.currentPollTaskId) return;
+
       try {
-        const response = await fetch(`${this.getApiBaseUrl()}/api/chat/${this.sessionId}/${taskId}/poll/`);
+        const response = await fetch(`${this.getApiBaseUrl()}/api/chat/${this.sessionId}/${this.currentPollTaskId}/poll/`);
 
         if (!response.ok) {
           throw new Error(`Failed to poll task: ${response.statusText}`);
@@ -541,7 +537,7 @@ export class OcsChat {
           this.scrollToBottom();
           // Task polling complete, clear typing indicator and resume message polling
           this.isTyping = false;
-          this.isTaskPolling = false;
+          this.currentPollTaskId = '';
           this.resumeMessagePolling();
           this.focusInput();
           return;
@@ -564,7 +560,7 @@ export class OcsChat {
 
           // Clear typing indicator and resume message polling
           this.isTyping = false;
-          this.isTaskPolling = false;
+          this.currentPollTaskId = '';
           this.resumeMessagePolling();
           this.focusInput();
         }
@@ -572,7 +568,7 @@ export class OcsChat {
         this.error = error instanceof Error ? error.message : 'Failed to get response';
         // Error in task polling, clear typing indicator and resume message polling
         this.isTyping = false;
-        this.isTaskPolling = false;
+        this.currentPollTaskId = '';
         this.resumeMessagePolling();
       }
     };
@@ -581,20 +577,20 @@ export class OcsChat {
   }
 
   private startPolling(): void {
-    if (this.pollingInterval) return;
+    if (this.pollingIntervalRef) return;
 
-    this.pollingInterval = setInterval(async () => {
+    this.pollingIntervalRef = setInterval(async () => {
       // Only poll for messages if not currently polling for a task
-      if (!this.isTaskPolling) {
+      if (!this.currentPollTaskId) {
         await this.pollForMessages();
       }
     }, OcsChat.MESSAGE_POLLING_INTERVAL_MS);
   }
 
   private pauseMessagePolling(): void {
-    if (this.pollingInterval) {
-      clearInterval(this.pollingInterval);
-      this.pollingInterval = undefined;
+    if (this.pollingIntervalRef) {
+      clearInterval(this.pollingIntervalRef);
+      this.pollingIntervalRef = undefined;
     }
   }
 
@@ -624,8 +620,6 @@ export class OcsChat {
         this.scrollToBottom();
         this.focusInput();
       }
-
-      this.lastPollTime = new Date();
     } catch (error) {
       // Silently fail for polling
     }
@@ -660,10 +654,6 @@ export class OcsChat {
 
   private handleInputChange(event: Event): void {
     this.messageInput = (event.target as HTMLTextAreaElement).value;
-    // Hide starter questions when user starts typing
-    if (this.messageInput.trim().length > 0) {
-      this.showStarterQuestions = false;
-    }
   }
 
   private handleFileSelect(event: Event): void {
@@ -707,8 +697,6 @@ export class OcsChat {
     }
     this.selectedFiles = [...this.selectedFiles, ...newFiles];
     input.value = '';
-    // Hide starter questions when files are selected
-    this.showStarterQuestions = false;
   }
 
   private removeSelectedFile(index: number): void {
@@ -733,15 +721,24 @@ export class OcsChat {
     return date.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
   }
 
-  async load() {
+  private toggleWindowVisibility() {
     this.visible = !this.visible;
-    this.loaded = true;
+  }
 
-    if (this.visible && !this.sessionId) {
+  /**
+   * Watch for changes to the `visible` attribute and update accordingly.
+   *
+   * @param visible - The new value for the field.
+   */
+  @Watch('visible')
+  async visibilityHandler(visible: boolean) {
+    if (visible && !this.sessionId) {
       this.clearError();
       await this.startSession();
-    } else if (!this.visible) {
-      // Don't reset session when closing, allow resume
+    } else if (!visible) {
+      this.pauseMessagePolling()
+    } else {
+      this.resumeMessagePolling();
     }
   }
 
@@ -967,7 +964,7 @@ export class OcsChat {
       return (
         <button
           class={buttonClasses}
-          onClick={() => this.load()}
+          onClick={() => this.toggleWindowVisibility()}
           aria-label={`Open chat - ${this.buttonText}`}
           title={this.buttonText}
         >
@@ -979,7 +976,7 @@ export class OcsChat {
       return (
         <button
           class={buttonClasses}
-          onClick={() => this.load()}
+          onClick={() => this.toggleWindowVisibility()}
           aria-label="Open chat"
           title="Open chat"
         >
@@ -1103,8 +1100,8 @@ export class OcsChat {
     this.clearSessionStorage();
     this.sessionId = undefined;
     this.messages = [];
-    this.showStarterQuestions = true;
     this.isTyping = false;
+    this.currentPollTaskId = '';
     this.error = '';
     if (this.allowAttachments) {
       this.selectedFiles = [];
@@ -1199,7 +1196,7 @@ export class OcsChat {
                   ref={(el) => this.messageListRef = el}
                   class="messages-container"
                 >
-                  {this.messages.length === 0 && !this.isTyping && this.parsedWelcomeMessages.length > 0 && (
+                  {this.messages.length === 0 && this.parsedWelcomeMessages.length > 0 && (
                     <div class="welcome-messages">
                       {/* Welcome Messages */}
                       {this.parsedWelcomeMessages.map((message, index) => (
@@ -1269,7 +1266,7 @@ export class OcsChat {
               )}
 
               {/* Starter Questions */}
-              {this.sessionId && this.showStarterQuestions && this.messages.length === 0 && !this.isTyping && (
+              {this.messages.length === 0 && this.parsedStarterQuestions.length > 0 && (
                 <div class="starter-questions">
                   {this.parsedStarterQuestions.map((question, index) => (
                     <div key={`starter-${index}`} class="starter-question-row">
