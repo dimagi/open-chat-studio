@@ -84,9 +84,10 @@ class DashboardService:
             participants = participants.filter(platform__in=platform_names)
 
         if participant_ids:
-            participants = participants.filter(id__in=participant_ids)
+            experiments = experiments.filter(sessions__participant__id__in=participant_ids)
             sessions = sessions.filter(participant__id__in=participant_ids)
             messages = messages.filter(chat__experiment_session__participant__id__in=participant_ids)
+            participants = participants.filter(id__in=participant_ids)
 
         if tag_ids:
             sessions = sessions.filter(Q(chat__tags__id__in=tag_ids) | Q(chat__messages__tags__id__in=tag_ids))
