@@ -97,12 +97,12 @@
     * @prop --confirmation-dialog-border-color: Confirmation dialog border color (uses --chat-window-border-color)
     * @prop --confirmation-dialog-shadow-color: Confirmation dialog shadow color (uses --chat-window-shadow-color)
     * @prop --confirmation-dialog-border-radius: Confirmation dialog border radius (0.75em)
-    * @prop --confirmation-title-color: Confirmation dialog title text color (uses --input-text-color)
+    * @prop --confirmation-title-color: Confirmation dialog title text color (uses #111827)
     * @prop --confirmation-title-font-size: Confirmation dialog title font size (1.125em)
     * @prop --confirmation-message-color: Confirmation dialog message text color (uses --loading-text-color)
-    * @prop --confirmation-message-font-size: Confirmation dialog message font size (uses --chat-window-font-size)
+    * @prop --confirmation-message-font-size: Confirmation dialog message font size (uses 1em)
     * @prop --confirmation-button-cancel-bg-color: Cancel button background color (uses --button-background-color-hover)
-    * @prop --confirmation-button-cancel-bg-hover-color: Cancel button background on hover (uses --message-assistant-bg-color)
+    * @prop --confirmation-button-cancel-bg-hover-color: Cancel button background on hover (uses #e5e7eb)
     * @prop --confirmation-button-cancel-text-color: Cancel button text color (uses --header-button-text-color)
     * @prop --confirmation-button-confirm-bg-color: Confirm button background color (uses --error-text-color)
     * @prop --confirmation-button-confirm-bg-hover-color: Confirm button background on hover (uses --error-text-color)
@@ -217,12 +217,12 @@
   --confirmation-dialog-border-color: var(--chat-window-border-color);
   --confirmation-dialog-shadow-color: var(--chat-window-shadow-color);
   --confirmation-dialog-border-radius: 0.75em;
-  --confirmation-title-color: var(--input-text-color);
+  --confirmation-title-color: #111827;
   --confirmation-title-font-size: 1.125em;
   --confirmation-message-color: var(--loading-text-color);
-  --confirmation-message-font-size: var(--chat-window-font-size);
+  --confirmation-message-font-size: 1em;
   --confirmation-button-cancel-bg-color: var(--button-background-color-hover);
-  --confirmation-button-cancel-bg-hover-color: var(--message-assistant-bg-color);
+  --confirmation-button-cancel-bg-hover-color: #e5e7eb;
   --confirmation-button-cancel-text-color: var(--header-button-text-color);
   --confirmation-button-confirm-bg-color: var(--error-text-color);
   --confirmation-button-confirm-bg-hover-color: var(--error-text-color);
