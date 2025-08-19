@@ -1108,34 +1108,15 @@ export function VoiceWidget(props: WidgetParams) {
 
   const updateParamValue = (event: ChangeEvent<HTMLSelectElement>) => {
     const { value } = event.target;
-    const [providerId, syntheticVoiceId] = value.split('|:|');
     setNode(props.nodeId, (old) =>
       produce(old, (next) => {
-        next.data.params.voice_provider_id = providerId;
-        next.data.params.synthetic_voice_id = syntheticVoiceId;
+        next.data.params.synthetic_voice_id = value;
       })
     );
   };
 
-  const makeValue = (providerId: string, syntheticVoiceId: string) => {
-    return providerId + '|:|' + syntheticVoiceId;
-  };
-
-  type VoicesByProvider = { [providerKey: string]: typeof parameterValues.synthetic_voice_id };
-  const voicesByProvider = parameterValues.synthetic_voice_id.reduce((acc, voice) => {
-    const key = ((voice as TypedOption).type || "").toLowerCase();
-    if (!acc[key]) {
-      acc[key] = [];
-    }
-    acc[key].push(voice);
-    return acc;
-  }, {} as VoicesByProvider);
-
-  const providerId = concatenate(props.nodeParams.voice_provider_id);
+  const selectedVoiceProvider = parameterValues.voice_provider_id[0];
   const syntheticVoiceId = concatenate(props.nodeParams.synthetic_voice_id);
-
-  const hasSelectedVoice = providerId && syntheticVoiceId;
-  const value = hasSelectedVoice ? makeValue(providerId, syntheticVoiceId) : "";
 
   // Only render if voice is enabled
   if(!(parameterValues.voice_provider_id?.length)) {
@@ -1148,26 +1129,21 @@ export function VoiceWidget(props: WidgetParams) {
         className="select w-full"
         name={props.name}
         onChange={updateParamValue}
-        value={value}
+        value={syntheticVoiceId}
         disabled={props.readOnly}
       >
         <option value="" disabled>
           Select a voice
         </option>
 
-        {parameterValues.voice_provider_id.map((provider) => {
-          const providerKey = provider.label.toLowerCase();
-          const providerVoices = voicesByProvider[providerKey] || [];
-
-          return providerVoices.map((voice) => (
-            <option
-              key={provider.value + voice.value}
-              value={makeValue(provider.value, voice.value)}
-            >
-              {voice.label} ({provider.label})
-            </option>
-          ));
-        })}
+        {parameterValues.synthetic_voice_id.map((voice) => (
+          <option
+            key={voice.value}
+            value={voice.value}
+          >
+            {voice.label} ({selectedVoiceProvider.label})
+          </option>
+        ))}
       </select>
     </InputField>
   );
