@@ -1135,7 +1135,8 @@ export class OcsChat {
   }
 
   render() {
-    if (this.error) {
+    // Only show error state for critical errors that prevent the widget from functioning
+    if (this.error && !this.sessionId) {
       return (
         <Host>
           <p class="error-message">{this.error}</p>
