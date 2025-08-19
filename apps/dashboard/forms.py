@@ -151,16 +151,16 @@ class DashboardFilterForm(forms.Form):
             )
 
         if data.get("experiments"):
-            params["experiment_ids"] = [exp.id for exp in data["experiments"]]
+            params["experiment_ids"] = list(data["experiments"].values_list("id", flat=True))
 
         if data.get("channels"):
             params["platform_names"] = data["channels"]
 
         if data.get("participants"):
-            params["participant_ids"] = data["participants"]
+            params["participant_ids"] = list(data["participants"].values_list("id", flat=True))
 
         if data.get("tags"):
-            params["tag_ids"] = data["tags"]
+            params["tag_ids"] = list(data["tags"].values_list("id", flat=True))
 
         return params
 

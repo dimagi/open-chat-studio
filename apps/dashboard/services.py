@@ -44,8 +44,8 @@ class DashboardService:
         end_date: datetime | None = None,
         experiment_ids: list[int] | None = None,
         platform_names: list[str] | None = None,
-        participant_ids: list[str] | None = None,
-        tag_ids: list[str] | None = None,
+        participant_ids: list[int] | None = None,
+        tag_ids: list[int] | None = None,
     ) -> dict[str, Any]:
         """Get base querysets with common filters applied"""
 
