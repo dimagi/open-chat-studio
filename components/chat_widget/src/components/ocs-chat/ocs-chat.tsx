@@ -967,6 +967,7 @@ export class OcsChat {
               </div>
               <div class="header-text">{this.headerText}</div>
               <div class="header-buttons">
+                {/* New Chat button */}
                 {this.sessionId && this.messages.length > 0 && (
                   <button
                     class="header-button"
@@ -986,7 +987,6 @@ export class OcsChat {
                 >
                   {this.isFullscreen ? <ArrowsPointingInIcon/> : <ArrowsPointingOutIcon/>}
                 </button>}
-                {/* New Chat button */}
                 <button
                   class="header-button"
                   onClick={() => this.visible = false}
