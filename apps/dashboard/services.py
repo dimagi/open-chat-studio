@@ -7,7 +7,7 @@ from django.db.models.functions import TruncDate, TruncHour, TruncMonth, TruncWe
 from django.urls import reverse
 from django.utils import timezone
 
-from apps.channels.models import ExperimentChannel
+from apps.channels.models import ChannelPlatform, ExperimentChannel
 from apps.chat.models import ChatMessage, ChatMessageType
 from apps.experiments.models import Experiment, ExperimentSession, Participant
 
@@ -74,8 +74,14 @@ class DashboardService:
 
         # Apply platform filter
         if platform_names:
+            global_platforms = ChannelPlatform.team_global_platforms()
+            if not any(platform for platform in platform_names if platform in global_platforms):
+                # only filter experiments if we're filtering by non-global platforms since all experiments
+                # will match the global platforms
+                experiments = experiments.filter(experimentchannel__platform__in=platform_names)
             sessions = sessions.filter(experiment_channel__platform__in=platform_names)
             messages = messages.filter(chat__experiment_session__experiment_channel__platform__in=platform_names)
+            participants = participants.filter(platform__in=platform_names)
 
         if participant_ids:
             participants = participants.filter(id__in=participant_ids)
