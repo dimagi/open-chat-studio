@@ -13,6 +13,7 @@ class UserAPIKey(AbstractAPIKey):
 
     user = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.CASCADE, related_name="api_keys")
     team = models.ForeignKey(Team, on_delete=models.CASCADE, related_name="api_keys")
+    read_only = models.BooleanField(default=True)
 
     class Meta(AbstractAPIKey.Meta):
         verbose_name = "User API key"
