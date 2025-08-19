@@ -68,6 +68,9 @@ class ReadOnlyAPIKeyPermission(BasePermission):
         if not hasattr(request, "auth") or request.auth is None:
             return False
 
+        if not request.user or not request.user.is_authenticated:
+            return False
+
         api_key = request.auth
         if getattr(api_key, "read_only", True):
             return request.method in SAFE_METHODS
