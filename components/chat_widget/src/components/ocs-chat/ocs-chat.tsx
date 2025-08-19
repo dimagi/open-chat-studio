@@ -246,6 +246,30 @@ export class OcsChat {
     window.removeEventListener('resize', this.handleWindowResize);
   }
 
+  private addErrorMessage(errorText: string): void {
+    const errorMessage: ChatMessage = {
+      created_at: new Date().toISOString(),
+      role: 'system',
+      content: `**Error:** ${errorText}\nPlease try again or contact support if the problem persists.`,
+      attachments: []
+    };
+
+    this.messages = [...this.messages, errorMessage];
+    this.saveSessionToStorage();
+    this.scrollToBottom();
+  }
+
+  private handleError(errorText: string): void {
+    // show as system message
+    this.addErrorMessage(errorText);
+
+    // Clear any loading/typing states
+    this.isLoading = false;
+    this.isTyping = false;
+    this.isUploadingFiles = false;
+    this.currentPollTaskId = '';
+  }
+
   private parseJSONProp(propValue: string | undefined, propName: string): string[] {
     try {
       if (propValue) {
