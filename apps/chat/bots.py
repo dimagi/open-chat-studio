@@ -233,20 +233,14 @@ class TopicBot:
         return self.chain.history_manager.save_message_to_history(message, type_=message_type)
 
     def synthesize_voice(self):
-        voice_provider = None
         synthetic_voice = None
         if (
             self.experiment.use_processor_bot_voice
             and self.processor_experiment
             and self.processor_experiment.voice_provider
         ):
-            voice_provider = self.processor_experiment.voice_provider
             synthetic_voice = self.processor_experiment.synthetic_voice
-
-        if voice_provider is None and synthetic_voice is None:
-            return None
-
-        return voice_provider, synthetic_voice
+        return synthetic_voice
 
 
 class SafetyBot:
@@ -291,7 +285,6 @@ class PipelineBot:
         self.session = session
         self.trace_service = trace_service
         self.disable_reminder_tools = disable_reminder_tools
-        self.voice_provider_id = None
         self.synthetic_voice_id = None
 
     def process_input(
@@ -320,7 +313,6 @@ class PipelineBot:
         else:
             result = ChatMessage(content=output)
         self._process_intents(output)
-        self.voice_provider_id = output.get("voice_provider_id", None)
         self.synthetic_voice_id = output.get("synthetic_voice_id", None)
         return result
 
@@ -429,18 +421,11 @@ class PipelineBot:
 
     def synthesize_voice(self) -> tuple["VoiceProvider", "SyntheticVoice"] | None:
         from apps.experiments.models import SyntheticVoice
-        from apps.service_providers.models import VoiceProvider
-
-        voice_provider = (
-            VoiceProvider.objects.get(id=self.voice_provider_id) if self.voice_provider_id is not None else None
-        )
 
         synthetic_voice = (
             SyntheticVoice.objects.get(id=self.synthetic_voice_id) if self.synthetic_voice_id is not None else None
         )
-        if voice_provider is None and synthetic_voice is None:
-            return None
-        return voice_provider, synthetic_voice
+        return synthetic_voice
 
 
 class PipelineTestBot:

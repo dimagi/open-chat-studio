@@ -650,7 +650,7 @@ class ChannelBase(ABC):
         synthetic_voice = self.experiment.synthetic_voice
         voice = self.bot.synthesize_voice()
         if voice:
-            voice_provider, synthetic_voice = voice
+            synthetic_voice = voice
 
         speech_service = voice_provider.get_speech_service()
         synthetic_voice_audio = speech_service.synthesize_voice(text, synthetic_voice)

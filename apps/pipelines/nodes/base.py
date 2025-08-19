@@ -97,7 +97,6 @@ class PipelineState(dict):
     node_source: str
 
     intents: Annotated[list[Intents], operator.add]
-    voice_provider_id: int | None
     synthetic_voice_id: int | None
 
     def json_safe(self):
@@ -135,8 +134,6 @@ class PipelineState(dict):
         kwargs.setdefault("temp_state", {}).update({"outputs": {node_name: output}})
         if output is not None:
             kwargs["messages"] = [output]
-        if "voice_provider_id" in kwargs:
-            kwargs["voice_provider_id"] = kwargs["voice_provider_id"]
         if "synthetic_voice_id" in kwargs:
             kwargs["synthetic_voice_id"] = kwargs["synthetic_voice_id"]
         return cls(**kwargs)
