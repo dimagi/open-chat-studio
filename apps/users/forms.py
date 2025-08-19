@@ -30,9 +30,18 @@ class UploadAvatarForm(forms.Form):
 
 
 class ApiKeyForm(forms.ModelForm):
+    read_only = forms.BooleanField(
+        required=False,
+        initial=True,
+        label=gettext("Read Only - Can only view/fetch data"),
+        help_text=gettext("Leave unchecked for Read/Write access. "
+                          "This cannot be changed after the key is created."),
+        widget=forms.CheckboxInput(),
+    )
+
     class Meta:
         model = UserAPIKey
-        fields = ("team", "name")
+        fields = ("team", "name", "read_only")
 
     def __init__(self, request, *args, **kwargs):
         super().__init__(*args, **kwargs)
