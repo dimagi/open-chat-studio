@@ -432,15 +432,11 @@ class PipelineBot:
         from apps.service_providers.models import VoiceProvider
 
         voice_provider = (
-            VoiceProvider.objects.get(id=self.voice_provider_id)
-            if getattr(self, "voice_provider_id", None) is not None
-            else None
+            VoiceProvider.objects.get(id=self.voice_provider_id) if self.voice_provider_id is not None else None
         )
 
         synthetic_voice = (
-            SyntheticVoice.objects.get(id=self.synthetic_voice_id)
-            if getattr(self, "synthetic_voice_id", None) is not None
-            else None
+            SyntheticVoice.objects.get(id=self.synthetic_voice_id) if self.synthetic_voice_id is not None else None
         )
         if voice_provider is None and synthetic_voice is None:
             return None
