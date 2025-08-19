@@ -1,5 +1,7 @@
 import inspect
+import re
 
+from apps.chat.models import ChatMessageType
 from apps.evaluations.models import Evaluator
 
 
@@ -70,3 +72,88 @@ def get_evaluator_type_display(evaluator_type: str) -> dict[str, str]:
     """
     evaluator_type_info = get_evaluator_type_info()
     return evaluator_type_info.get(evaluator_type, {"label": evaluator_type, "icon": None})
+
+
+def parse_history_text(history_text: str) -> list:
+    """Parse history text back into JSON format for EvaluationMessage.history field."""
+
+    history = []
+    if not history_text.strip():
+        return history
+
+    current_message = None
+
+    for line in history_text.split("\n"):
+        line_stripped = line.strip()
+        if not line_stripped:
+            continue
+
+        if line_stripped.lower().startswith((f"{ChatMessageType.HUMAN.role}:", f"{ChatMessageType.AI.role}:")):
+            if current_message:
+                history.append(current_message)
+
+            colon_position = line_stripped.find(":")
+            role = line_stripped[:colon_position].strip().lower()
+            content = line_stripped[colon_position + 1 :].strip()
+            current_message = {
+                "message_type": ChatMessageType.from_role(role),
+                "content": content,
+                "summary": None,
+            }
+        elif current_message:
+            # Continuation of current message content
+            current_message["content"] += "\n" + line_stripped
+
+    if current_message:
+        history.append(current_message)
+
+    return history
+
+
+def generate_csv_column_suggestions(columns):
+    """Generate smart suggestions for column mapping based on column names."""
+    suggestions = {}
+    input_patterns = {"input", "human", "user", "question", "prompt", "message", "query"}
+    output_patterns = {"output", "ai", "assistant", "response", "answer", "reply", "completion"}
+
+    context_columns = []
+
+    for col in columns:
+        col_lower = col.lower().strip()
+        if "input" not in suggestions and any(pattern in col_lower for pattern in input_patterns):
+            suggestions["input"] = col
+        elif "output" not in suggestions and any(pattern in col_lower for pattern in output_patterns):
+            suggestions["output"] = col
+        elif col_lower == "id":
+            # Skip suggesting ID columns as context
+            continue
+        elif col_lower == "history":
+            # History has its own suggestion mechanism
+            suggestions["history"] = col
+        else:
+            # Clean up column name for context field suggestion
+            clean_name = _clean_context_field_name(col)
+            context_columns.append({"fieldName": clean_name, "csvColumn": col})
+
+    if context_columns:
+        suggestions["context"] = context_columns
+
+    return suggestions
+
+
+def _clean_context_field_name(field_name):
+    """Clean a field name to be a valid Python identifier."""
+    if field_name.lower().startswith("context."):
+        field_name = field_name[8:]  # Remove 'context.' prefix
+
+    # Convert spaces to underscores and remove invalid characters
+    field_name = re.sub(r"[^\w]", "_", field_name)
+
+    # Ensure it starts with a letter or underscore
+    if field_name and not field_name[0].isalpha() and field_name[0] != "_":
+        field_name = f"_{field_name}"
+
+    # Remove consecutive underscores and trailing underscores
+    field_name = re.sub(r"_+", "_", field_name).strip("_")
+
+    return field_name or "context_variable"

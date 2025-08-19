@@ -426,5 +426,55 @@ def main(input, **kwargs):
     """
     node = CodeNode(name="test", node_id="123", django_node=None, code=code_set)
     output = node._process("hi", PipelineState(outputs={}, experiment_session=None))
-    assert output.update["output_message_tags"] == [("message-tag", None)]
-    assert output.update["session_tags"] == [("session-tag", None)]
+    assert output.update["output_message_tags"] == [("message-tag", "")]
+    assert output.update["session_tags"] == [("session-tag", "")]
+
+
+def test_set_list():
+    code_set = """
+def main(input, **kwargs):
+    quiz = [{"id": 1}, {"id": 2}, {"id": 3}, {"id": 4}]
+    questions_asked = [1, "2", 2]
+    unasked_questions = quiz
+    if questions_asked:
+        normalized_questions_asked = set()
+        for question_id in questions_asked:
+            try:
+                normalized_questions_asked.add(int(question_id))
+            except:
+                pass
+        unasked_questions = [question["id"] for question in quiz if question["id"] not in normalized_questions_asked]
+
+    unasked_ids = ",".join([str(q) for q in unasked_questions])
+    return f"{unasked_ids} - {normalized_questions_asked}"
+    """
+
+    node = CodeNode(name="test", node_id="123", django_node=None, code=code_set)
+    node_output = node._process("hi", PipelineState(outputs={}, experiment_session=None))
+    assert node_output.update["messages"][-1] == "3,4 - {1, 2}"
+
+
+def test_traceback():
+    code_set = """
+def main(input, **kwargs):
+    # this is a comment
+    a = 1
+    b = 2
+    if a != b:
+       fail("asfd")
+    return input
+    """
+
+    node = CodeNode(name="test", node_id="123", django_node=None, code=code_set)
+    with pytest.raises(PipelineNodeRunError) as exc_info:
+        node._process("hi", PipelineState(outputs={}, experiment_session=None))
+    assert (
+        str(exc_info.value)
+        == """Error: NameError("name 'fail' is not defined")
+Context:
+      5:     b = 2
+      6:     if a != b:
+>>>   7:        fail("asfd")
+      8:     return input
+      9:     """
+    )

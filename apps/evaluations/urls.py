@@ -18,6 +18,11 @@ urlpatterns = [
         name="create_evaluation_run",
     ),
     path(
+        "<int:evaluation_pk>/preview/new/",
+        evaluation_config_views.create_evaluation_preview,
+        name="create_evaluation_preview",
+    ),
+    path(
         "<int:evaluation_pk>/evaluation_runs",
         evaluation_config_views.EvaluationRunHome.as_view(),
         name="evaluation_runs_home",
@@ -71,6 +76,21 @@ urlpatterns = [
         "message/<int:message_id>/delete/",
         dataset_views.delete_message,
         name="delete_message",
+    ),
+    path(
+        "parse_csv_columns/",
+        dataset_views.parse_csv_columns,
+        name="parse_csv_columns",
+    ),
+    path(
+        "dataset/<int:pk>/download/",
+        dataset_views.download_dataset_csv,
+        name="dataset_download",
+    ),
+    path(
+        "dataset/<int:pk>/upload/",
+        dataset_views.upload_dataset_csv,
+        name="dataset_upload",
     ),
 ]
 

@@ -7,8 +7,8 @@ from unittest import mock
 import pytest
 import pytz
 from django.utils import timezone
-from freezegun import freeze_time
 from langchain_core.tools import StructuredTool
+from time_machine import travel
 
 from apps.chat.agent import tools
 from apps.chat.agent.schemas import WeekdaysEnum
@@ -169,7 +169,7 @@ class TestMoveScheduledMessageDateTool(BaseTestAgentTool):
         assert response == "The user cannot do that. Only weekdays and time of day can be changed"
 
     def test_user_can_set_custom_date_for_their_messages(self, session):
-        with freeze_time("2024-01-01"):
+        with travel("2024-01-01", tick=False):
             scheduled_message = ScheduledMessage.objects.create(
                 participant=session.participant,
                 team=session.team,
@@ -190,7 +190,7 @@ class TestMoveScheduledMessageDateTool(BaseTestAgentTool):
             assert expected_date == "Monday, 01 January 2024 00:00:00 UTC"
 
     def test_update_schedule_tool(self, session):
-        with freeze_time("2024-01-01"):
+        with travel("2024-01-01", tick=False):
             message = ScheduledMessage.objects.create(
                 participant=session.participant,
                 team=session.team,

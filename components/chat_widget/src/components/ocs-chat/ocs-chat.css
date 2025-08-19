@@ -4,47 +4,46 @@
 
 :host {
   /**
-    * Global Variables
     * @prop --chat-z-index: Z-index for chat widget (50)
-    * @prop --container-padding: General container padding (1rem)
+    * @prop --container-padding: General container padding (1em)
     *
-    * Button Variables
     * @prop --button-background-color: Button background color (#ffffff)
     * @prop --button-background-color-hover: Button background color on hover (#f3f4f6)
     * @prop --button-text-color: Button text color (#111827)
     * @prop --button-text-color-hover: Button text color on hover (#1d4ed8)
     * @prop --button-border-color: Button border color (#6b7280)
     * @prop --button-border-color-hover: Button border color on hover (#374151)
-    * @prop --button-padding: Button padding (0.75rem)
-    * @prop --button-padding-sm: Small button padding (0.375rem)
-    * @prop --button-font-size: Button text font size (0.875rem)
-    * @prop --button-icon-width: Button icon width (1.5rem)
-    * @prop --button-icon-height: Button icon height (1.5rem)
+    * @prop --button-padding: Button padding (0.75em)
+    * @prop --button-font-size: Button text font size (0.875em)
+    * @prop --button-icon-size: Button icon size (1.5em)
     *
-    * Chat Window Variables
+    * @prop --chat-window-height: Chat window height in pixels or percent (60%)
+    * @prop --chat-window-width: Chat window width in pixels or percent (25%)
+    * @prop --chat-window-fullscreen-width: Chat window fullscreen width in pixels or percent (80%)
     * @prop --chat-window-bg-color: Chat window background color (#ffffff)
     * @prop --chat-window-border-color: Chat window border color (#d1d5db)
     * @prop --chat-window-shadow-color: Chat window shadow color (rgba(0, 0, 0, 0.1))
-    * @prop --chat-window-font-size: Default font size for text in the chat window (0.875rem)
-    * @prop --chat-window-font-size-sm: Font size for small text in the chat window (0.75rem)
+    * @prop --chat-window-font-size: Default font size for text in the chat window (0.875em)
+    * @prop --chat-window-font-size-sm: Font size for small text in the chat window (0.75em)
     *
-    * Header Variables
     * @prop --header-bg-color: Header background color (transparent)
     * @prop --header-bg-hover-color: Header background color on hover (#f9fafb)
     * @prop --header-border-color: Header border color (#f3f4f6)
     * @prop --header-button-text-color: Header button text color (#6b7280)
     * @prop --header-button-bg-hover-color: Header button background on hover (#f3f4f6)
-    * @prop --header-padding: Header padding (0.5rem)
+    * @prop --header-padding: Header padding (0.5em)
+    * @prop --header-font-size: Header font size (1em)
+    * @prop --header-button-icon-size: Icon size for buttons in the header (1.5em)
+    * @prop --header-text-font-size: Font size for the text in the header (1em)
+    * @prop --header-text-color: Color for the text in the header (#525762)
     *
-    * Starter Question Variables
     * @prop --starter-question-bg-color: Starter question background color (transparent)
     * @prop --starter-question-bg-hover-color: Starter question background on hover (#eff6ff)
     * @prop --starter-question-text-color: Starter question text color (#3b82f6)
     * @prop --starter-question-border-color: Starter question border color (#3b82f6)
     * @prop --starter-question-border-hover-color: Starter question border on hover (#2563eb)
-    * @prop --starter-question-padding: Starter question padding (0.75rem)
+    * @prop --starter-question-padding: Starter question padding (0.75em)
     *
-    * Message Bubble Variables
     * @prop --message-user-bg-color: User message background color (#3b82f6)
     * @prop --message-user-text-color: User message text color (#ffffff)
     * @prop --message-assistant-bg-color: Assistant message background color (#e5e7eb)
@@ -53,76 +52,89 @@
     * @prop --message-system-text-color: System message text color (#4b5563)
     * @prop --message-timestamp-color: User message timestamp color (rgba(255, 255, 255, 0.7))
     * @prop --message-timestamp-assistant-color: Assistant message timestamp color (rgba(75, 85, 99, 0.7))
-    * @prop --message-padding-x: Message horizontal padding (1rem)
-    * @prop --message-padding-y: Message vertical padding (0.5rem)
+    * @prop --message-padding-x: Message horizontal padding (1em)
+    * @prop --message-padding-y: Message vertical padding (0.5em)
     *
-    * Input Area Variables
     * @prop --input-bg-color: Input area background color (transparent)
     * @prop --input-border-color: Input field border color (#d1d5db)
     * @prop --input-text-color: Input text color (#111827)
     * @prop --input-placeholder-color: Input placeholder text color (#6b7280)
     * @prop --input-outline-focus-color: Input field focus ring color (#3b82f6)
-    * @prop --input-textarea-padding-x: Input textarea horizontal padding (0.75rem)
-    * @prop --input-textarea-padding-y: Input textarea vertical padding (0.5rem)
+    * @prop --input-textarea-padding-x: Input textarea horizontal padding (0.75em)
+    * @prop --input-textarea-padding-y: Input textarea vertical padding (0.5em)
     *
-    * Send Button Variables
     * @prop --send-button-bg-color: Send button background color (#3b82f6)
     * @prop --send-button-bg-hover-color: Send button background on hover (#2563eb)
     * @prop --send-button-text-color: Send button text color (#ffffff)
     * @prop --send-button-bg-disabled-color: Send button background when disabled (#d1d5db)
     * @prop --send-button-text-disabled-color: Send button text when disabled (#6b7280)
-    * @prop --send-button-padding-x: Send button horizontal padding (1rem)
-    * @prop --send-button-padding-y: Send button vertical padding (0.5rem)
+    * @prop --send-button-padding-x: Send button horizontal padding (1em)
+    * @prop --send-button-padding-y: Send button vertical padding (0.5em)
     *
-    * Loading Variables
     * @prop --loading-text-color: Loading text color (#6b7280)
     * @prop --loading-spinner-track-color: Loading spinner track color (#e5e7eb)
     * @prop --loading-spinner-fill-color: Loading spinner fill color (#3b82f6)
-    * @prop --loading-spinner-size: Loading spinner size (1.25rem)
+    * @prop --loading-spinner-size: Loading spinner size (1.25em)
     *
-    * Typing Indicator Variables
     * @prop --typing-progress-bg-color: Typing progress bar background color (#ade3ff)
     *
-    * Scrollbar Variables
     * @prop --scrollbar-track-color: Scrollbar track color (#f3f4f6)
     * @prop --scrollbar-thumb-color: Scrollbar thumb color (#d1d5db)
     * @prop --scrollbar-thumb-hover-color: Scrollbar thumb hover color (#9ca3af)
     *
-    * Error Variables
     * @prop --error-text-color: Error text color (#ef4444)
-    * @prop --error-message-padding: Error message padding (0.5rem)
+    * @prop --success-text-color: Success text color (#10b981)
+    * @prop --error-message-padding: Error message padding (0.5em)
     *
-    * Markdown Code Variables
-    * @prop --code-bg-user-color: Code background in user messages (rgba(59, 130, 246, 0.3))
-    * @prop --code-text-user-color: Code text color in user messages (#dbeafe)
-    * @prop --code-border-user-color: Code border in user messages (rgba(59, 130, 246, 0.6))
-    * @prop --code-bg-assistant-color: Code background in assistant messages (#ffffff)
-    * @prop --code-text-assistant-color: Code text color in assistant messages (#1f2937)
-    * @prop --code-border-assistant-color: Code border in assistant messages (#d1d5db)
+    * @prop --code-bg-user-color: Code background in user messages (--message-user-bg-color + 20% white)
+    * @prop --code-text-user-color: Code text color in user messages (--message-user-text-color)
+    * @prop --code-border-user-color: Code border in user messages (--message-user-bg-color + 20% black)
+    * @prop --code-bg-assistant-color: Code background in assistant messages (--message-assistant-bg-color + 50% white)
+    * @prop --code-text-assistant-color: Code text color in assistant messages (--message-assistant-text-color)
+    * @prop --code-border-assistant-color: Code border in assistant messages (--message-assistant-bg-color + 10% black)
+    *
+    * @prop --file-attachment-button-bg-color: Attach file button background color (transparent)
+    * @prop --file-attachment-button-bg-hover-color: Attach file button background hover color (--header-button-bg-hover-color)
+    * @prop --file-attachment-button-text-color: Attach file button text color (--header-button-text-color)
+    * @prop --file-attachment-button-text-disabled-color: Attach file button disabled text color (--send-button-text-disabled-color)
+    *
+    * @prop --selected-files-bg-color: Selected files container background color (--chat-window-bg-color)
+    * @prop --selected-files-border-color: Selected files container border color (--header-border-color)
+    *
+    * @prop --selected-file-bg-color: Selected file item background color (--message-system-bg-color)
+    * @prop --selected-file-font-size: Selected file item font size (--chat-window-font-size-sm)
+    * @prop --selected-file-name-color: Selected file name color (--message-assistant-text-color)
+    * @prop --selected-file-size-color: Selected file size display color (--input-placeholder-color)
+    * @prop --selected-file-icon-size: Selected file item icon size (1.25em)
+    * @prop --selected-file-remove-icon-color: Selected file remove icon color (--error-text-color)
+    * @prop --selected-file-remove-icon-hover-color: Selected file remove icon hover (#dc2626)
+    *
+    * @prop --message-attachment-icon-size: Message attachment icon size (1em)
     */
   /* Global variables */
   --chat-z-index: 50;
-  --container-padding: 1rem;
+  --container-padding: 1em;
 
   /* Button variables */
   --button-background-color: #ffffff;
   --button-background-color-hover: #f3f4f6;
   --button-text-color: #111827;
   --button-text-color-hover: #1d4ed8;
-  --button-border-color: #6b7280;
-  --button-border-color-hover: #374151;
-  --button-padding: 0.75rem;
-  --button-padding-sm: 0.375rem;
-  --button-font-size: 0.875rem; /* text-sm */
-  --button-icon-width: 1.5rem;
-  --button-icon-height: 1.5rem;
+  --button-border-color: #d1d5db;
+  --button-border-color-hover: #6b7280;
+  --button-padding: 0.5em;
+  --button-font-size: 1em; /* text-sm */
+  --button-icon-size: 1.5em;
 
   /* Chat window variables */
+  --chat-window-height: 60%;
+  --chat-window-width: 25%;
+  --chat-window-fullscreen-width: 80%;
   --chat-window-bg-color: #ffffff;
   --chat-window-border-color: #d1d5db;
   --chat-window-shadow-color: rgba(0, 0, 0, 0.1);
-  --chat-window-font-size: 0.875rem; /* text-sm */
-  --chat-window-font-size-sm: 0.75rem; /* text-xs */
+  --chat-window-font-size: 0.875em; /* text-sm */
+  --chat-window-font-size-sm: 0.75em; /* text-xs */
 
   /* Header variables */
   --header-bg-color: transparent;
@@ -130,7 +142,11 @@
   --header-border-color: #f3f4f6;
   --header-button-text-color: #6b7280;
   --header-button-bg-hover-color: #f3f4f6;
-  --header-padding: 0.5rem;
+  --header-padding: 0.5em;
+  --header-font-size: 1em;
+  --header-text-font-size: 1em;
+  --header-text-color: #525762;
+  --header-button-icon-size: 1.5em;
 
   /* Starter question variables */
   --starter-question-bg-color: transparent;
@@ -138,7 +154,7 @@
   --starter-question-text-color: #3b82f6;
   --starter-question-border-color: #3b82f6;
   --starter-question-border-hover-color: #2563eb;
-  --starter-question-padding: 0.75rem;
+  --starter-question-padding: 0.75em;
 
   /* Message bubble variables */
   --message-user-bg-color: #3b82f6;
@@ -149,8 +165,8 @@
   --message-system-text-color: #4b5563;
   --message-timestamp-color: rgba(255, 255, 255, 0.7);
   --message-timestamp-assistant-color: rgba(75, 85, 99, 0.7);
-  --message-padding-x: 1rem;
-  --message-padding-y: 0.5rem;
+  --message-padding-x: 1em;
+  --message-padding-y: 0.5em;
 
   /* Input area variables */
   --input-bg-color: transparent;
@@ -158,8 +174,8 @@
   --input-text-color: #111827;
   --input-placeholder-color: #6b7280;
   --input-outline-focus-color: #3b82f6;
-  --input-textarea-padding-x: 0.75rem;
-  --input-textarea-padding-y: 0.5rem;
+  --input-textarea-padding-x: 0.75em;
+  --input-textarea-padding-y: 0.5em;
 
   /* Send button variables */
   --send-button-bg-color: #3b82f6;
@@ -167,14 +183,14 @@
   --send-button-text-color: #ffffff;
   --send-button-bg-disabled-color: #d1d5db;
   --send-button-text-disabled-color: #6b7280;
-  --send-button-padding-x: 1rem;
-  --send-button-padding-y: 0.5rem;
+  --send-button-padding-x: 1em;
+  --send-button-padding-y: 0.5em;
 
   /* Loading variables */
   --loading-text-color: #6b7280;
   --loading-spinner-track-color: #e5e7eb;
   --loading-spinner-fill-color: #3b82f6;
-  --loading-spinner-size: 1.25rem;
+  --loading-spinner-size: 1.25em;
 
   /* Typing indicator variables */
   --typing-progress-bg-color: #ade3ff;
@@ -186,26 +202,58 @@
 
   /* Error variables */
   --error-text-color: #ef4444;
-  --error-message-padding: 0.5rem;
+  --success-text-color: #10b981; /* Complementary green to existing blue palette */;
+  --error-message-padding: 0.5em;
 
   /* Markdown code variables */
-  --code-bg-user-color: rgba(59, 130, 246, 0.3);
-  --code-text-user-color: #dbeafe;
-  --code-border-user-color: rgba(59, 130, 246, 0.6);
-  --code-bg-assistant-color: #ffffff;
-  --code-text-assistant-color: #1f2937;
-  --code-border-assistant-color: #d1d5db;
+  --code-bg-user-color: color-mix(in srgb, var(--message-user-bg-color) 80%, white 20%);
+  --code-text-user-color: var(--message-user-text-color);
+  --code-border-user-color: color-mix(in srgb, var(--message-user-bg-color) 90%, black 10%);
+  --code-bg-assistant-color: color-mix(in srgb, var(--message-assistant-bg-color) 50%, white 50%);
+  --code-text-assistant-color: var(--message-assistant-text-color);
+  --code-border-assistant-color: color-mix(in srgb, var(--message-assistant-bg-color) 90%, black 10%);;
+
+  /* File upload variables */
+  --file-attachment-button-bg-color: transparent;
+  --file-attachment-button-bg-hover-color: var(--header-button-bg-hover-color); /* #f3f4f6 */
+  --file-attachment-button-text-color: var(--header-button-text-color); /* #6b7280 */
+  --file-attachment-button-text-disabled-color: var(--send-button-text-disabled-color); /* #6b7280 */
+
+  /* Selected files variables */
+  --selected-files-bg-color: var(--chat-window-bg-color); /* transparent */
+  --selected-files-border-color: var(--header-border-color); /* #f3f4f6 */
+
+  /* Selected file item variables */
+  --selected-file-bg-color: var(--message-system-bg-color); /* #f3f4f6 */
+
+  /* Selected file text variables */
+  --selected-file-font-size: var(--chat-window-font-size-sm);
+  --selected-file-name-color: var(--message-assistant-text-color); /* #1f2937 */
+  --selected-file-size-color: var(--input-placeholder-color); /* #6b7280 */
+
+  /* Selected file icon variables */
+  --selected-file-icon-size: 1.25em;
+  --selected-file-remove-icon-color: var(--error-text-color); /* #ef4444 */
+  --selected-file-remove-icon-hover-color: #dc2626; /* Darker red for hover */
+
+  /* Message attachment variables */
+  --message-attachment-icon-size: 1em;
 
   display: block;
   position: fixed;
-  right: 20px;
-  bottom: 20px;
+  right: 30px;
+  bottom: 30px;
 }
 
 @layer components {
+  #ocs-chat-window {
+    z-index: var(--chat-z-index);
+    font-size: var(--chat-window-font-size);
+  }
+
   .starter-question {
     @apply text-left rounded-lg duration-200;
-    padding: var(--starter-question-padding, 0.75rem);
+    padding: var(--starter-question-padding, 0.75em);
     background-color: var(--starter-question-bg-color);
     border: 1px solid var(--starter-question-border-color);
     color: var(--starter-question-text-color);
@@ -220,40 +268,41 @@
   .chat-btn-icon {
     @apply shadow-lg border-0 transition-all duration-200 ease-in-out transform hover:scale-105 rounded-lg;
     background-color: var(--button-background-color, white);
+    border: 1px solid var(--button-border-color);
     z-index: var(--chat-z-index, 50);
+    font-size: var(--button-font-size);
+    padding: var(--button-padding, 0.75em);
+  }
+
+  .chat-btn-text:hover, .chat-btn-icon:hover {
+    color: var(--button-text-color-hover, #1d4ed8);
+    border: 1px solid var(--button-border-color-hover);
   }
 
   /* Button with text and icon */
   .chat-btn-text {
     @apply flex gap-[8px] items-center;
-    padding: var(--button-padding, 0.75rem);
     color: var(--button-text-color, #111827);
-  }
-
-  .chat-btn-text:hover {
-    color: var(--button-text-color-hover, #1d4ed8);
   }
 
   .chat-btn-text span {
     @apply font-medium whitespace-nowrap;
-    font-size: var(--button-font-size);
   }
 
   .chat-btn-text img {
     @apply object-contain flex-shrink-0;
-    width: var(--button-icon-width, 1.5rem);
-    height: var(--button-icon-height, 1.5rem);
+    width: var(--button-icon-size);
+    height: var(--button-icon-size);
   }
 
   /* Icon-only button */
   .chat-btn-icon {
-    padding: var(--button-padding, 0.75rem);
-    width: 56px;
-    height: 56px;
   }
 
   .chat-btn-icon img {
-    @apply w-full h-full object-contain;
+    @apply object-contain;
+    width: var(--button-icon-size);
+    height: var(--button-icon-size);
   }
 
   .chat-btn-text.round,
@@ -261,22 +310,21 @@
     @apply rounded-full;
   }
 
-
   /* Error message styling */
   .error-message {
-    padding: var(--error-message-padding, 0.5rem);
+    padding: var(--error-message-padding, 0.5em);
     color: var(--error-text-color);
   }
 
   /* Chat window positioning classes */
   .chat-window-fullscreen {
-    @apply fixed inset-0 w-full h-full max-w-screen-lg max-h-full border-0 shadow-lg transition-shadow duration-200 rounded-none overflow-hidden flex flex-col z-[9999];
+    @apply fixed inset-0 w-full h-full max-h-full border-0 shadow-lg transition-shadow duration-200 rounded-none overflow-hidden flex flex-col z-[9999];
     background-color: var(--chat-window-bg-color);
-    font-size: var(--chat-window-font-size);
+    max-width: var(--chat-window-fullscreen-width);
   }
 
   .chat-window-normal {
-    @apply fixed w-full sm:w-[450px] max-w-screen-lg h-5/6 rounded-lg overflow-hidden flex flex-col;
+    @apply fixed w-screen h-screen min-h-[300px] min-w-[300px] sm:w-[var(--chat-window-width)] sm:h-[var(--chat-window-height)] max-w-screen-lg rounded-lg overflow-hidden flex flex-col;
     background-color: var(--chat-window-bg-color);
     border: 1px solid var(--chat-window-border-color);
   }
@@ -292,9 +340,16 @@
   /* Header/drag bar classes */
   .chat-header {
     @apply flex justify-between items-center transition-colors duration-150;
-    padding: var(--header-padding, 0.5rem);
+    padding: var(--header-padding, 0.5em);
     background-color: var(--header-bg-color);
     border-bottom: 1px solid var(--header-border-color);
+    font-size: var(--header-font-size);
+  }
+
+  .header-text {
+    @apply flex items-center justify-center;
+    font-size: var(--header-text-font-size);
+    color: var(--header-text-color);
   }
 
   .chat-header:hover,
@@ -318,10 +373,6 @@
     @apply flex gap-[2px] ml-[2px] pointer-events-none;
   }
 
-  .drag-spacer {
-    @apply sm:hidden;
-  }
-
   .header-buttons {
     @apply flex gap-[4px] items-center;
   }
@@ -329,8 +380,13 @@
   /* Header button classes */
   .header-button {
     @apply rounded-md transition-colors duration-200;
-    padding: var(--button-padding-sm, 0.375rem);
+    padding: 0.375em;
     color: var(--header-button-text-color);
+  }
+
+  .header-button svg {
+    width: var(--header-button-icon-size);
+    height: var(--header-button-icon-size);
   }
 
   .header-button:hover {
@@ -359,7 +415,7 @@
   /* Messages container */
   .messages-container {
     @apply flex-grow overflow-y-auto space-y-2;
-    padding: var(--container-padding, 1rem);
+    padding: var(--container-padding, 1em);
   }
 
   /* Message bubbles */
@@ -376,8 +432,8 @@
   }
 
   .message-bubble {
-    @apply max-w-xs lg:max-w-md rounded-lg;
-    padding: var(--message-padding-y, 0.5rem) var(--message-padding-x, 1rem);
+    @apply rounded-lg;
+    padding: var(--message-padding-y, 0.5em) var(--message-padding-x, 1em);
   }
 
   .message-bubble-user {
@@ -435,8 +491,7 @@
   /* Starter questions */
   .starter-questions {
     @apply space-y-2;
-    padding: var(--container-padding, 1rem);
-    font-size: var(--chat-window-font-size);
+    padding: var(--container-padding, 1em);
   }
 
   .starter-question-row {
@@ -445,10 +500,9 @@
 
   /* Input area */
   .input-area {
-    padding: var(--container-padding, 1rem);
+    padding: var(--container-padding, 1em) var(--container-padding, 1em) 0 var(--container-padding, 1em);
     background-color: var(--input-bg-color);
     border-top: 1px solid var(--input-border-color);
-    font-size: var(--chat-window-font-size);
   }
 
   .input-container {
@@ -457,7 +511,8 @@
 
   .message-textarea {
     @apply flex-grow border border-gray-300 rounded-md resize-none focus:outline-blue-300;
-    padding: var(--input-textarea-padding-y, 0.5rem) var(--input-textarea-padding-x, 0.75rem);
+    background-color: var(--input-bg-color);
+    padding: var(--input-textarea-padding-y, 0.5em) var(--input-textarea-padding-x, 0.75em);
     color: var(--input-text-color);
     border: 1px solid var(--input-border-color);
   }
@@ -468,8 +523,7 @@
 
   .send-button {
     @apply rounded-md font-medium transition-colors duration-200;
-    padding: var(--send-button-padding-y, 0.5rem) var(--send-button-padding-x, 1rem);
-    font-size: var(--chat-window-font-size);
+    padding: var(--send-button-padding-y, 0.5em) var(--send-button-padding-x, 1em);
   }
 
   .send-button-enabled {
@@ -488,10 +542,6 @@
   }
 }
 
-#ocs-chat-window {
-  z-index: var(--chat-z-index);
-}
-
 textarea {
   @apply min-h-10 max-h-32 resize-none overflow-y-auto;
 }
@@ -500,8 +550,8 @@ textarea {
   @apply border-2 rounded-full animate-spin;
   border-color: var(--loading-spinner-track-color);
   border-top-color: var(--loading-spinner-fill-color);
-  width: var(--loading-spinner-size, 1.25rem);
-  height: var(--loading-spinner-size, 1.25rem);
+  width: var(--loading-spinner-size);
+  height: var(--loading-spinner-size);
 }
 
 .overflow-y-auto::-webkit-scrollbar {
@@ -525,38 +575,158 @@ textarea {
 /* Markdown content styling for chat messages */
 .chat-markdown {
   @apply prose prose-sm prose-gray max-w-none;
+  font-size: 1em;
+  --tw-prose-body: var(--message-assistant-text-color);
+  --tw-prose-headings: var(--message-assistant-text-color);
+  --tw-prose-lead: var(--message-assistant-text-color);
+  --tw-prose-links: var(--message-assistant-text-color);
+  --tw-prose-bold: var(--message-assistant-text-color);
+  --tw-prose-counters: var(--message-assistant-text-color);
+  --tw-prose-bullets: var(--message-assistant-text-color);
+  --tw-prose-hr: var(--message-assistant-text-color);
+  --tw-prose-quotes: var(--message-assistant-text-color);
+  --tw-prose-quote-borders: var(--message-assistant-text-color);
+  --tw-prose-captions: var(--message-assistant-text-color);
+  --tw-prose-kbd: var(--message-assistant-text-color);
+  --tw-prose-kbd-shadows: var(--message-assistant-text-color);
+  --tw-prose-code: var(--code-text-assistant-color);
+  --tw-prose-pre-code: var(--code-text-assistant-color);
+  --tw-prose-pre-bg: var(--code-bg-assistant-color);
+  --tw-prose-th-borders: var(--message-assistant-text-color);
+  --tw-prose-td-borders: var(--message-assistant-text-color);
+
+  --tw-prose-invert-body: var(--message-user-text-color);
+  --tw-prose-invert-headings: var(--message-user-text-color);
+  --tw-prose-invert-lead: var(--message-user-text-color);
+  --tw-prose-invert-links: var(--message-user-text-color);
+  --tw-prose-invert-bold: var(--message-user-text-color);
+  --tw-prose-invert-counters: var(--message-user-text-color);
+  --tw-prose-invert-bullets: var(--message-user-text-color);
+  --tw-prose-invert-hr: var(--message-user-text-color);
+  --tw-prose-invert-quotes: var(--message-user-text-color);
+  --tw-prose-invert-quote-borders: var(--message-user-text-color);
+  --tw-prose-invert-captions: var(--message-user-text-color);
+  --tw-prose-invert-kbd: var(--message-user-text-color);
+  --tw-prose-invert-kbd-shadows: var(--message-user-text-color);
+  --tw-prose-invert-code: var(--code-text-user-color);
+  --tw-prose-invert-pre-code: var(--code-text-user-color);
+  --tw-prose-invert-pre-bg: var(--code-bg-user-color);
+  --tw-prose-invert-th-borders: var(--message-user-text-color);
+  --tw-prose-invert-td-borders: var(--message-user-text-color);
 }
 
 /* override spacing */
 .chat-markdown > * {
-  margin-top: 0.1rem;
-  margin-bottom: 0.1rem;
+  margin-top: 0.1em;
+  margin-bottom: 0.1em;
 }
 
 .message-bubble-user .chat-markdown {
   @apply prose-invert;
 }
 
-.message-bubble-user .chat-markdown code {
-  background-color: var(--code-bg-user-color);
-  color: var(--code-text-user-color);
-}
-
 .message-bubble-user .chat-markdown pre {
-  background-color: var(--code-bg-user-color);
   border: 1px solid var(--code-border-user-color);
 }
 
-.message-bubble-assistant .chat-markdown code {
-  background-color: var(--code-bg-assistant-color);
-  color: var(--code-text-assistant-color);
-}
-
 .message-bubble-assistant .chat-markdown pre {
-  background-color: var(--code-bg-assistant-color);
   border: 1px solid var(--code-border-assistant-color);
 }
 
 .loading:after {
   content: ' .';
+}
+/* File Upload Button */
+.file-attachment-button {
+  @apply rounded-md transition-colors duration-200 disabled:opacity-50 disabled:cursor-not-allowed;
+  padding: 0.375em;
+  background-color: var(--file-attachment-button-bg-color);
+  color: var(--file-attachment-button-text-color);
+}
+
+.file-attachment-button svg {
+  @apply size-[1.5em];
+}
+
+.file-attachment-button:hover:not(:disabled) {
+  background-color: var(--file-attachment-button-bg-hover-color);
+}
+
+.file-attachment-button:disabled {
+  color: var(--file-attachment-button-text-disabled-color);
+}
+
+/* Selected Files Container */
+.selected-files-container {
+  padding: var(--container-padding) var(--container-padding) 0.5em var(--container-padding); /* 1em 1em 0.5em 1em */
+  background-color: var(--selected-files-bg-color);
+  border-top: 1px solid var(--selected-files-border-color);
+}
+
+/* Selected File Item */
+.selected-file-item {
+  @apply flex items-center justify-between;
+  background-color: var(--selected-file-bg-color);
+  border-radius: 0.375em;
+  padding: 0.25em 0.5em;
+  font-size: var(--selected-file-font-size);
+  color: var(--selected-file-name-color);
+}
+
+.selected-file-icon {
+  @apply flex items-center justify-center;
+}
+
+.selected-file-icon svg {
+  width: var(--selected-file-icon-size);
+  height: var(--selected-file-icon-size);
+}
+
+.selected-file-size {
+  color: var(--selected-file-size-color);
+}
+
+.selected-file-error {
+  color: var(--error-text-color);
+}
+
+.selected-file-success-icon {
+  @apply flex items-center justify-center;
+  color: var(--success-text-color);
+  width: var(--selected-file-icon-size);
+  height: var(--selected-file-icon-size);
+}
+
+.selected-file-remove-button {
+  @apply font-bold transition-colors duration-200;
+  color: var(--selected-file-remove-icon-color);
+  padding: 0.375em;
+}
+
+.selected-file-remove-button svg {
+  width: var(--selected-file-icon-size);
+  height: var(--selected-file-icon-size);
+}
+
+.selected-file-remove-button:hover {
+  color: var(--selected-file-remove-icon-hover-color);
+}
+
+/* Message Attachments */
+.message-attachments {
+  @apply mt-[0.5em] space-y-[0.25em];
+  font-size: var(--chat-window-font-size-sm);
+}
+
+.message-attachment-icon {
+  @apply flex items-center justify-center;
+  width: var(--message-attachment-icon-size);
+  height: var(--message-attachment-icon-size);
+}
+
+/* Update Send Button for Upload State */
+.send-button-disabled {
+  @apply cursor-not-allowed;
+  background-color: var(--send-button-bg-disabled-color);
+  color: var(--send-button-text-disabled-color);
 }

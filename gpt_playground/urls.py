@@ -51,6 +51,7 @@ team_urlpatterns = [
     path("dashboard/", include("apps.dashboard.urls", namespace="dashboard")),
     path("analysis/", include("apps.analysis.urls", namespace="analysis")),
     path("evaluations/", include("apps.evaluations.urls")),
+    path("traces/", include("apps.trace.urls")),
 ]
 
 urlpatterns = [

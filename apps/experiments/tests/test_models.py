@@ -4,7 +4,7 @@ from unittest.mock import Mock, patch
 import pytest
 from django.db.utils import IntegrityError
 from django.utils import timezone
-from freezegun import freeze_time
+from time_machine import travel
 
 from apps.annotations.models import TagCategories
 from apps.assistants.models import ToolResources
@@ -130,7 +130,7 @@ class TestExperimentSession:
             "experiment_id": experiment_id,
         }
 
-    @freeze_time("2024-01-01")
+    @travel("2024-01-01", tick=False)
     def test_get_participant_scheduled_messages_custom_params(self):
         session = ExperimentSessionFactory()
         experiment = session.experiment
@@ -219,7 +219,7 @@ class TestExperimentSession:
         assert schedule["total_triggers"] == total_triggers
         assert schedule["triggers_remaining"] == expected_triggers_remaining
 
-    @freeze_time("2024-01-01")
+    @travel("2024-01-01", tick=False)
     @pytest.mark.parametrize(
         ("time_period", "repetitions", "total_triggers", "expected"),
         [

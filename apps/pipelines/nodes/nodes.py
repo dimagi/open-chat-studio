@@ -2,7 +2,6 @@ import datetime
 import inspect
 import json
 import logging
-import random
 import time
 import unicodedata
 from typing import Annotated, Literal, Self
@@ -27,7 +26,7 @@ from pydantic import ValidationError as PydanticValidationError
 from pydantic.config import ConfigDict
 from pydantic_core import PydanticCustomError
 from pydantic_core.core_schema import FieldValidationInfo
-from RestrictedPython import compile_restricted, safe_builtins, safe_globals
+from RestrictedPython import compile_restricted, limited_builtins, safe_builtins, utility_builtins
 
 from apps.annotations.models import TagCategories
 from apps.assistants.models import OpenAiAssistant
@@ -47,6 +46,7 @@ from apps.pipelines.nodes.base import (
     Widgets,
     deprecated_node,
 )
+from apps.pipelines.nodes.code_node_utils import get_code_error_message
 from apps.pipelines.nodes.tool_callbacks import ToolCallbacks
 from apps.pipelines.tasks import send_email_from_pipeline
 from apps.service_providers.exceptions import ServiceProviderConfigError
@@ -1131,12 +1131,12 @@ class CodeNode(PipelineNode, OutputMessageTagMixin):
 
     def _process(self, input: str, state: PipelineState) -> PipelineState | Command:
         function_name = "main"
+        filename = "<inline_code>"
         byte_code = compile_restricted(
             self.code,
-            filename="<inline code>",
+            filename=filename,
             mode="exec",
         )
-
         custom_locals = {}
         output_state = PipelineState()
         custom_globals = self._get_custom_globals(state, output_state)
@@ -1149,7 +1149,8 @@ class CodeNode(PipelineNode, OutputMessageTagMixin):
         except AbortPipeline as abort:
             return interrupt(abort.to_json())
         except Exception as exc:
-            raise PipelineNodeRunError(exc) from exc
+            message = get_code_error_message(filename, self.code)
+            raise PipelineNodeRunError(message) from exc
 
         if isinstance(result, Command):
             return result
@@ -1174,19 +1175,16 @@ class CodeNode(PipelineNode, OutputMessageTagMixin):
             guarded_iter_unpack_sequence,
         )
 
-        custom_globals = safe_globals.copy()
-        custom_globals.update(
-            {
-                "__builtins__": self._get_custom_builtins(),
-                "json": json,
-                "datetime": datetime,
-                "time": time,
-                "_getitem_": default_guarded_getitem,
-                "_getiter_": default_guarded_getiter,
-                "_iter_unpack_sequence_": guarded_iter_unpack_sequence,
-                "_write_": lambda x: x,
-            }
-        )
+        custom_globals = {
+            "__builtins__": self._get_custom_builtins(),
+            "json": json,
+            "datetime": datetime,
+            "time": time,
+            "_getitem_": default_guarded_getitem,
+            "_getiter_": default_guarded_getiter,
+            "_iter_unpack_sequence_": guarded_iter_unpack_sequence,
+            "_write_": lambda x: x,
+        }
         custom_functions = self._get_custom_functions(state, output_state)
         return custom_globals | custom_functions
 
@@ -1305,9 +1303,11 @@ class CodeNode(PipelineNode, OutputMessageTagMixin):
                 "all": all,
                 "any": any,
                 "datetime": datetime,
-                "random": random,
             }
         )
+
+        custom_builtins.update(utility_builtins)
+        custom_builtins.update(limited_builtins)
 
         def guarded_import(name, *args, **kwargs):
             if name not in allowed_modules:

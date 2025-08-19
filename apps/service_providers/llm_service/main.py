@@ -241,7 +241,7 @@ class OpenAIGenericService(LlmService):
     def get_chat_model(self, llm_model: str, temperature: float) -> BaseChatModel:
         model = ChatOpenAI(
             model=llm_model,
-            temperature=1 if llm_model.startswith(("o3", "o4")) else temperature,
+            temperature=1 if llm_model.startswith(("o3", "o4", "gpt-5")) else temperature,
             **self._get_model_kwargs(),
         )
         try:

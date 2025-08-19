@@ -21,6 +21,18 @@ if TYPE_CHECKING:
     from apps.evaluations.evaluators import EvaluatorResult
 
 
+class EvaluationRunStatus(models.TextChoices):
+    PENDING = "pending", "Pending"
+    PROCESSING = "processing", "Processing"
+    COMPLETED = "completed", "Completed"
+    FAILED = "failed", "Failed"
+
+
+class EvaluationRunType(models.TextChoices):
+    FULL = "full", "Full"
+    PREVIEW = "preview", "Preview"
+
+
 class ExperimentVersionSelection(models.TextChoices):
     """Choices for experiment version selection including sentinel values"""
 
@@ -253,11 +265,15 @@ class EvaluationConfig(BaseTeamModel):
     def get_absolute_url(self):
         return reverse("evaluations:evaluation_runs_home", args=[self.team.slug, self.id])
 
-    def run(self) -> EvaluationRun:
+    def run(self, run_type=EvaluationRunType.FULL) -> EvaluationRun:
         """Runs the evaluation asynchronously using Celery"""
         generation_experiment = self.get_generation_experiment_version()
         run = EvaluationRun.objects.create(
-            team=self.team, config=self, generation_experiment=generation_experiment, status=EvaluationRunStatus.PENDING
+            team=self.team,
+            config=self,
+            generation_experiment=generation_experiment,
+            status=EvaluationRunStatus.PENDING,
+            type=run_type,
         )
 
         from apps.evaluations.tasks import run_evaluation_task
@@ -265,12 +281,9 @@ class EvaluationConfig(BaseTeamModel):
         run_evaluation_task.delay(run.id)
         return run
 
-
-class EvaluationRunStatus(models.TextChoices):
-    PENDING = "pending", "Pending"
-    PROCESSING = "processing", "Processing"
-    COMPLETED = "completed", "Completed"
-    FAILED = "failed", "Failed"
+    def run_preview(self) -> EvaluationRun:
+        """Runs a preview evaluation on a sample of the dataset"""
+        return self.run(run_type=EvaluationRunType.PREVIEW)
 
 
 class EvaluationRun(BaseTeamModel):
@@ -288,6 +301,9 @@ class EvaluationRun(BaseTeamModel):
         settings.AUTH_USER_MODEL, on_delete=models.SET_NULL, null=True, blank=True
     )  # if manually triggered, who did it
     status = models.CharField(max_length=20, choices=EvaluationRunStatus.choices, default=EvaluationRunStatus.PENDING)
+    type = models.CharField(
+        max_length=20, choices=EvaluationRunType.choices, default=EvaluationRunType.FULL, db_index=True
+    )
     job_id = models.CharField(max_length=255, blank=True)
     error_message = models.TextField(blank=True)
 

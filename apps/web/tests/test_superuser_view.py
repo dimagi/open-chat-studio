@@ -2,8 +2,8 @@ import datetime
 
 import pytest
 from django.urls import reverse
-from freezegun import freeze_time
 from pytest_django.asserts import assertFormError, assertRedirects
+from time_machine import travel
 
 from apps.utils.factories.team import TeamFactory
 from apps.utils.factories.user import UserFactory
@@ -92,7 +92,7 @@ def test_acquire_with_invalid_password(superuser, authed_client):
 
 @pytest.mark.django_db()
 def test_sudo_access_expires_after_30_minutes(superuser, authed_client):
-    with freeze_time() as freezer:
+    with travel(datetime.datetime.now(), tick=False) as freezer:
         admin_url = reverse("admin:index")
         # Acquire sudo access
         response = authed_client.post(
@@ -101,11 +101,11 @@ def test_sudo_access_expires_after_30_minutes(superuser, authed_client):
         assertRedirects(response, admin_url)
 
         # Advance time by 29 minutes
-        freezer.tick(delta=datetime.timedelta(minutes=29))
+        freezer.shift(datetime.timedelta(minutes=29))
         response = authed_client.get(admin_url)
         assert response.status_code == 200  # Should still have access
 
         # Advance time by 2 more minutes (31 minutes total)
-        freezer.tick(delta=datetime.timedelta(minutes=2))
+        freezer.shift(datetime.timedelta(minutes=2))
         response = authed_client.get(admin_url)
         assert response.status_code == 302  # Should redirect to sudo page

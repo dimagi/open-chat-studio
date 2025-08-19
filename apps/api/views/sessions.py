@@ -7,6 +7,7 @@ from rest_framework.decorators import action
 from rest_framework.response import Response
 from rest_framework.viewsets import GenericViewSet
 
+from apps.annotations.models import TagCategories
 from apps.api.permissions import DjangoModelPermissionsWithView
 from apps.api.serializers import ExperimentSessionCreateSerializer, ExperimentSessionSerializer
 from apps.experiments.models import ExperimentSession
@@ -38,6 +39,18 @@ update_state_response_serializer = inline_serializer(
                 type=OpenApiTypes.STR,
                 location=OpenApiParameter.QUERY,
                 description="A list of session tags (comma separated) to filter the results by",
+            ),
+            OpenApiParameter(
+                name="experiment",
+                type=OpenApiTypes.STR,
+                location=OpenApiParameter.QUERY,
+                description="Experiment ID to filter sessions by",
+            ),
+            OpenApiParameter(
+                name="versions",
+                type=OpenApiTypes.STR,
+                location=OpenApiParameter.QUERY,
+                description="Experiment versions (comma separated) to filter sessions by",
             ),
         ],
     ),
@@ -117,9 +130,22 @@ class ExperimentSessionViewSet(mixins.ListModelMixin, mixins.RetrieveModelMixin,
         return serializer_class(*args, **kwargs)
 
     def get_queryset(self):
-        queryset = ExperimentSession.objects.filter(team__slug=self.request.team.slug).all()
+        queryset = (
+            ExperimentSession.objects.filter(team__slug=self.request.team.slug)
+            .select_related("team", "experiment", "participant")
+            .prefetch_related("chat__tags", "chat__messages__tags")
+            .all()
+        )
         if tags_query_param := self.request.query_params.get("tags"):
             queryset = queryset.filter(chat__tags__name__in=tags_query_param.split(","))
+        if experiment_id := self.request.query_params.get("experiment"):
+            queryset = queryset.filter(experiment__public_id=experiment_id)
+        if versions_param := self.request.query_params.get("versions"):
+            version_list = versions_param.split(",")
+            queryset = queryset.filter(
+                chat__messages__tags__name__in=version_list,
+                chat__messages__tags__category=TagCategories.EXPERIMENT_VERSION,
+            ).distinct()
         return queryset
 
     def create(self, request, *args, **kwargs):

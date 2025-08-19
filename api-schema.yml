@@ -24,8 +24,7 @@ paths:
       tags:
       - Chat
       security:
-      - apiKeyAuth: []
-      - tokenAuth: []
+      - cookieAuth: []
       responses:
         '200':
           content:
@@ -57,16 +56,22 @@ paths:
         content:
           application/json:
             schema:
-              $ref: '#/components/schemas/ChatSendMessageRequest'
+              $ref: '#/components/schemas/ChatSendMessageRequestWithAttachments'
             examples:
               SendMessage:
                 value:
                   message: Hello, how can you help me?
                 summary: Send a message to the bot
+              SendMessageWithAttachments:
+                value:
+                  message: Please review these documents
+                  attachment_ids:
+                  - 123
+                  - 124
+                summary: Send a message with file attachments
         required: true
       security:
-      - apiKeyAuth: []
-      - tokenAuth: []
+      - cookieAuth: []
       responses:
         '202':
           content:
@@ -101,14 +106,41 @@ paths:
       tags:
       - Chat
       security:
-      - apiKeyAuth: []
-      - tokenAuth: []
+      - cookieAuth: []
       responses:
         '200':
           content:
             application/json:
               schema:
                 $ref: '#/components/schemas/ChatPollResponse'
+          description: ''
+  /api/chat/{session_id}/upload/:
+    post:
+      operationId: chat_upload_file
+      summary: Upload files for a chat message
+      parameters:
+      - in: path
+        name: session_id
+        schema:
+          type: string
+        description: Session ID
+        required: true
+      tags:
+      - Chat
+      requestBody:
+        content:
+          multipart/form-data:
+            schema:
+              $ref: '#/components/schemas/ChatUploadFileRequest'
+        required: true
+      security:
+      - cookieAuth: []
+      responses:
+        '201':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ChatUploadFileResponse'
           description: ''
   /api/chat/start/:
     post:
@@ -134,8 +166,7 @@ paths:
                 summary: Start a new chat session for an experiment
         required: true
       security:
-      - apiKeyAuth: []
-      - tokenAuth: []
+      - cookieAuth: []
       responses:
         '201':
           content:
@@ -164,6 +195,12 @@ paths:
         description: The pagination cursor value.
         schema:
           type: string
+      - name: page_size
+        required: false
+        in: query
+        description: Number of results to return per page.
+        schema:
+          type: integer
       tags:
       - Experiments
       security:
@@ -407,18 +444,34 @@ paths:
         description: The pagination cursor value.
         schema:
           type: string
+      - in: query
+        name: experiment
+        schema:
+          type: string
+        description: Experiment ID to filter sessions by
       - name: ordering
         required: false
         in: query
         description: Which field to use when ordering the results.
         schema:
           type: string
+      - name: page_size
+        required: false
+        in: query
+        description: Number of results to return per page.
+        schema:
+          type: integer
       - in: query
         name: tags
         schema:
           type: string
         description: A list of session tags (comma separated) to filter the results
           by
+      - in: query
+        name: versions
+        schema:
+          type: string
+        description: Experiment versions (comma separated) to filter sessions by
       tags:
       - Experiment Sessions
       security:
@@ -749,12 +802,17 @@ components:
       - has_more
       - messages
       - session_status
-    ChatSendMessageRequest:
+    ChatSendMessageRequestWithAttachments:
       type: object
       properties:
         message:
           type: string
           title: Message content
+        attachment_ids:
+          type: array
+          items:
+            type: integer
+          description: List of file IDs from prior upload
       required:
       - message
     ChatSendMessageResponse:
@@ -789,11 +847,6 @@ components:
         chatbot_id:
           type: string
           format: uuid
-        participant_id:
-          type: string
-          description: Optional participant identifier. If not provided, an anonymous
-            participant will be created. This field will be ignored if the request
-            is not authenticated.
         session_data:
           type: object
           additionalProperties: {}
@@ -852,6 +905,26 @@ components:
       description: |-
         * `processing` - processing
         * `complete` - complete
+    ChatUploadFileRequest:
+      type: object
+      properties:
+        files:
+          type: array
+          items:
+            type: string
+            format: uri
+          description: Files to upload (max 50MB each, 50MB total)
+      required:
+      - files
+    ChatUploadFileResponse:
+      type: object
+      properties:
+        files:
+          type: array
+          items:
+            $ref: '#/components/schemas/UploadedFile'
+      required:
+      - files
     CreateChatCompletionRequest:
       type: object
       properties:
@@ -939,11 +1012,16 @@ components:
           type: string
           format: date-time
           readOnly: true
+        tags:
+          type: array
+          items:
+            type: string
       required:
       - created_at
       - experiment
       - id
       - participant
+      - tags
       - team
       - updated_at
       - url
@@ -1007,12 +1085,17 @@ components:
           items:
             $ref: '#/components/schemas/Message'
           readOnly: true
+        tags:
+          type: array
+          items:
+            type: string
       required:
       - created_at
       - experiment
       - id
       - messages
       - participant
+      - tags
       - team
       - updated_at
       - url
@@ -1292,6 +1375,22 @@ components:
       - identifier
       - platform
       - prompt_text
+    UploadedFile:
+      type: object
+      properties:
+        id:
+          type: integer
+        name:
+          type: string
+        size:
+          type: integer
+        content_type:
+          type: string
+      required:
+      - content_type
+      - id
+      - name
+      - size
     update_state_response:
       type: object
       properties:
@@ -1308,6 +1407,10 @@ components:
       type: apiKey
       in: header
       name: X-api-key
+    cookieAuth:
+      type: apiKey
+      in: cookie
+      name: sessionid
     tokenAuth:
       type: http
       scheme: bearer
