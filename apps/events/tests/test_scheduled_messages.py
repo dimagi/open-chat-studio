@@ -1,11 +1,11 @@
 import logging
-from datetime import datetime
+from datetime import datetime, timedelta
 from unittest.mock import patch
 
 import pytest
 from dateutil.relativedelta import relativedelta
 from django.utils import timezone
-from freezegun import freeze_time
+from time_machine import travel
 
 from apps.events.models import (
     EventActionType,
@@ -41,7 +41,7 @@ def _construct_event_action(time_period: TimePeriod, experiment_id: int, frequen
 def test_create_scheduled_message_sets_start_date_and_external_id(ad_hoc_bot_message, period):
     session = ExperimentSessionFactory()
     event_action, params = _construct_event_action(time_period=TimePeriod(period), experiment_id=session.experiment.id)
-    with freeze_time("2024-01-01"):
+    with travel("2024-01-01", tick=False):
         message = ScheduledMessage.objects.create(
             participant=session.participant, team=session.team, action=event_action, experiment=session.experiment
         )
@@ -58,7 +58,7 @@ def test_get_messages_to_fire():
     event_action, params = _construct_event_action(
         frequency=1, time_period=TimePeriod.DAYS, experiment_id=session.experiment.id
     )
-    with freeze_time("2024-04-01"), patch("apps.events.models.functions.Now") as db_time:
+    with travel("2024-04-01", tick=False), patch("apps.events.models.functions.Now") as db_time:
         utc_now = timezone.now()
         db_time.return_value = utc_now
 
@@ -90,7 +90,7 @@ def test_get_messages_to_fire_cancelled():
     event_action, params = _construct_event_action(
         frequency=1, time_period=TimePeriod.DAYS, experiment_id=session.experiment.id
     )
-    with freeze_time("2024-04-01"), patch("apps.events.models.functions.Now") as db_time:
+    with travel("2024-04-01", tick=False), patch("apps.events.models.functions.Now") as db_time:
         utc_now = timezone.now()
 
         scheduled_message = ScheduledMessageFactory(
@@ -115,9 +115,24 @@ def test_poll_scheduled_messages(ad_hoc_bot_message, period):
     scheduled_message = None
     delta = None
 
-    def step_time(frozen_time, db_time, timedelta):
+    def step_time(frozen_time, db_time, delta):
         """Step time"""
-        frozen_time.tick(delta=timedelta)
+        now = timezone.now()
+        if isinstance(delta, relativedelta):
+            if delta.months:
+                new_time = now + delta
+                frozen_time.move_to(new_time)
+            else:
+                td = timedelta(
+                    days=delta.days,
+                    seconds=delta.seconds,
+                    minutes=delta.minutes,
+                    hours=delta.hours,
+                )
+                frozen_time.shift(td)
+        else:
+            frozen_time.shift(delta)
+
         now = timezone.now()
         db_time.return_value = now
         return now
@@ -148,7 +163,7 @@ def test_poll_scheduled_messages(ad_hoc_bot_message, period):
     seconds_offset = 1
     step_delta = delta + relativedelta(seconds=seconds_offset)
 
-    with freeze_time("2024-04-01") as frozen_time, patch("apps.events.models.functions.Now") as db_time:
+    with travel("2024-04-01", tick=False) as frozen_time, patch("apps.events.models.functions.Now") as db_time:
         current_time = db_time.return_value = timezone.now()
         scheduled_message = ScheduledMessageFactory(
             team=session.team, participant=session.participant, action=event_action, experiment=session.experiment
