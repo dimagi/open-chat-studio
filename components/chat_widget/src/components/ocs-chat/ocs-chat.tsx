@@ -1,7 +1,7 @@
 import {Component, Host, h, Prop, State, Element, Watch} from '@stencil/core';
 import {
   XMarkIcon,
-  GripDotsVerticalIcon, PencilSquare, PlusWithCircleIcon, ArrowsPointingOutIcon, ArrowsPointingInIcon,
+  GripDotsVerticalIcon, PlusWithCircleIcon, ArrowsPointingOutIcon, ArrowsPointingInIcon,
   PaperClipIcon, CheckDocumentIcon, XIcon
 } from './heroicons';
 import { renderMarkdownSync as renderMarkdownComplete } from '../../utils/markdown';
