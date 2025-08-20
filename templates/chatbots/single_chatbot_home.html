@@ -219,10 +219,31 @@
 
     {% if perms.chat.view_chat %}
       <div role="tabpanel" class="tab-content" id="content-allsessions">
-        {% include "chatbots/components/session_table_actions.html" %}
-        <div id="sessions-table" data-url="{% url 'chatbots:sessions-list' request.team.slug experiment.id %}">
+        <div class="relative">
+          {% include "chatbots/components/session_table_actions.html" %}
+          <div class="absolute top-0 right-0 flex items-center gap-2">
+            <button class="btn btn-ghost btn-sm"
+                    hx-get="{% url 'chatbots:sessions-list' request.team.slug experiment.id %}"
+                    hx-target="#sessions-table"
+                    hx-swap="innerHTML"
+                    hx-indicator="#refresh-loader"
+                    title="Refresh sessions">
+              <i class="fa-solid fa-rotate"></i>
+            </button>
+            <span class="loading loading-spinner loading-sm htmx-indicator" id="refresh-loader"></span>
+          </div>
+
+          <div id="sessions-table"
+               data-url="{% url 'chatbots:sessions-list' request.team.slug experiment.id %}"
+               hx-get="{% url 'chatbots:sessions-list' request.team.slug experiment.id %}"
+               hx-trigger="load"
+               hx-swap="innerHTML">
+
+            <div class="flex justify-center items-center p-6">
+                <span class="loading loading-spinner loading-lg"></span>
+            </div>
+          </div>
         </div>
-      </div>
       </div>
     {% endif %}
     <div role="tabpanel" class="tab-content" id="content-versions">
