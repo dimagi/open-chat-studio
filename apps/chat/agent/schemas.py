@@ -60,9 +60,9 @@ class AppendToParticipantData(BaseModel):
     value: str | int | list = Field(description="The value to append")
 
 
-class IncrementParticipantDataSchema(BaseModel):
-    key: str = Field(description="The key in the user data to increment")
-    value: int = Field(description="The value to increment the current value by", default=1)
+class IncrementCounterSchema(BaseModel):
+    counter: str = Field(description="The name of the counter to increment")
+    value: int = Field(description="The value to increment the counter by", default=1)
 
 
 class AttachMediaSchema(BaseModel):

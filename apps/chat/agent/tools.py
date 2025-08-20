@@ -268,17 +268,18 @@ class AppendToParticipantDataTool(CustomBaseTool):
         return f"The value was appended to the end of the list. {new_value_msg}"
 
 
-class IncrementParticipantDataTool(CustomBaseTool):
-    name: str = AgentTools.INCREMENT_PARTICIPANT_DATA
-    description: str = "Increment a value in the user data"
+class IncrementCounterTool(CustomBaseTool):
+    name: str = AgentTools.INCREMENT_COUNTER
+    description: str = "Increment the value of a counter."
     requires_session: bool = True
-    args_schema: type[schemas.IncrementParticipantDataSchema] = schemas.IncrementParticipantDataSchema
+    args_schema: type[schemas.IncrementCounterSchema] = schemas.IncrementCounterSchema
 
     @transaction.atomic
-    def action(self, key: str, value: int):
+    def action(self, counter: str, value: int):
+        namespaced_key = f"_counter_{counter}"
         data_proxy = ParticipantDataProxy(self.experiment_session)
-        data_proxy.increment_key(key, value)
-        return "Success"
+        new_value = data_proxy.increment_key(namespaced_key, value)
+        return f"The '{counter}' counter has been successfully incremented. The new value is {new_value}."
 
 
 class EndSessionTool(CustomBaseTool):
@@ -457,7 +458,7 @@ TOOL_CLASS_MAP = {
     AgentTools.DELETE_REMINDER: DeleteReminderTool,
     AgentTools.UPDATE_PARTICIPANT_DATA: UpdateParticipantDataTool,
     AgentTools.APPEND_TO_PARTICIPANT_DATA: AppendToParticipantDataTool,
-    AgentTools.INCREMENT_PARTICIPANT_DATA: IncrementParticipantDataTool,
+    AgentTools.INCREMENT_COUNTER: IncrementCounterTool,
     AgentTools.END_SESSION: EndSessionTool,
     AgentTools.ATTACH_MEDIA: AttachMediaTool,
     AgentTools.SEARCH_INDEX: SearchIndexTool,

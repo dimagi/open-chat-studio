@@ -434,7 +434,7 @@ class TestAppendToParticipantDataTool(BaseTestAgentTool):
 
 @pytest.mark.django_db()
 class TestIncrementParticipantDataTool(BaseTestAgentTool):
-    tool_cls = tools.IncrementParticipantDataTool
+    tool_cls = tools.IncrementCounterTool
 
     def test_increment(self, session):
         response = self._invoke_tool(session, key="test", value=1)
