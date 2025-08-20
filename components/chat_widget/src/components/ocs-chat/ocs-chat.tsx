@@ -178,6 +178,11 @@ export class OcsChat {
    */
   @Prop() allowAttachments: boolean = false;
 
+  /**
+   * The text to display while the assistant is typing/preparing a response.
+   */
+  @Prop() typingIndicatorText?: string = "Preparing response";
+
   @State() error: string = "";
   @State() messages: ChatMessage[] = [];
   @State() sessionId?: string;
@@ -1321,7 +1326,7 @@ export class OcsChat {
                         <div class="typing-progress"></div>
                       </div>
                       <div class="typing-text">
-                        <span>Preparing response</span>
+                        <span>{this.typingIndicatorText}</span>
                         <span class="typing-dots"></span>
                       </div>
                     </div>
