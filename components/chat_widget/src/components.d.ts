@@ -40,6 +40,10 @@ export namespace Components {
          */
         "iconUrl"?: string;
         /**
+          * The message to display in the new chat confirmation dialog.
+         */
+        "newChatConfirmationMessage"?: string;
+        /**
           * Whether to persist session data to local storage to allow resuming previous conversations after page reload.
          */
         "persistentSession": boolean;
@@ -118,6 +122,10 @@ declare namespace LocalJSX {
           * URL of the icon to display on the button. If not provided, uses the default OCS logo.
          */
         "iconUrl"?: string;
+        /**
+          * The message to display in the new chat confirmation dialog.
+         */
+        "newChatConfirmationMessage"?: string;
         /**
           * Whether to persist session data to local storage to allow resuming previous conversations after page reload.
          */

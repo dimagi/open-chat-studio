@@ -1,7 +1,7 @@
 import {Component, Host, h, Prop, State, Element, Watch} from '@stencil/core';
 import {
   XMarkIcon,
-  GripDotsVerticalIcon, PencilSquare, ArrowsPointingOutIcon, ArrowsPointingInIcon,
+  GripDotsVerticalIcon, PlusWithCircleIcon, ArrowsPointingOutIcon, ArrowsPointingInIcon,
   PaperClipIcon, CheckDocumentIcon, XIcon
 } from './heroicons';
 import { renderMarkdownSync as renderMarkdownComplete } from '../../utils/markdown';
@@ -125,6 +125,11 @@ export class OcsChat {
   @Prop() headerText: '';
 
   /**
+   * The message to display in the new chat confirmation dialog.
+   */
+  @Prop() newChatConfirmationMessage?: string = "Starting a new chat will clear your current conversation. Continue?";
+
+  /**
    * Whether the chat widget is visible on load.
    */
   @Prop({ mutable: true }) visible: boolean = false;
@@ -188,6 +193,7 @@ export class OcsChat {
   @State() parsedStarterQuestions: string[] = [];
   @State() generatedUserId?: string;
   @State() isFullscreen: boolean = false;
+  @State() showNewChatConfirmation: boolean = false;
 
   @State() selectedFiles: SelectedFile[] = [];
   @State() isUploadingFiles: boolean = false;
@@ -1114,7 +1120,20 @@ export class OcsChat {
     }
   }
 
-  private async startNewChat(): Promise<void> {
+  private showConfirmationDialog(): void {
+    this.showNewChatConfirmation = true;
+  }
+
+  private hideConfirmationDialog(): void {
+    this.showNewChatConfirmation = false;
+  }
+
+  private async confirmNewChat(): Promise<void> {
+    this.hideConfirmationDialog();
+    await this.actuallyStartNewChat();
+  }
+
+  private async actuallyStartNewChat(): Promise<void> {
     this.clearSessionStorage();
     this.sessionId = undefined;
     this.messages = [];
@@ -1168,6 +1187,17 @@ export class OcsChat {
               </div>
               <div class="header-text">{this.headerText}</div>
               <div class="header-buttons">
+                {/* New Chat button */}
+                {this.sessionId && this.messages.length > 0 && (
+                  <button
+                    class="header-button"
+                    onClick={() => this.showConfirmationDialog()}
+                    title="Start new chat"
+                    aria-label="Start new chat"
+                  >
+                    <PlusWithCircleIcon/>
+                  </button>
+                )}
                 {/* Fullscreen toggle button */}
                 {this.allowFullScreen && <button
                   class="header-button fullscreen-button"
@@ -1177,17 +1207,6 @@ export class OcsChat {
                 >
                   {this.isFullscreen ? <ArrowsPointingInIcon/> : <ArrowsPointingOutIcon/>}
                 </button>}
-                {/* New Chat button */}
-                {this.sessionId && this.messages.length > 0 && (
-                  <button
-                    class="header-button"
-                    onClick={() => this.startNewChat()}
-                    title="Start new chat"
-                    aria-label="Start new chat"
-                  >
-                    <PencilSquare/>
-                  </button>
-                )}
                 <button
                   class="header-button"
                   onClick={() => this.visible = false}
@@ -1197,6 +1216,33 @@ export class OcsChat {
                 </button>
               </div>
             </div>
+
+            {this.showNewChatConfirmation && (
+              <div class="confirmation-overlay">
+                <div class="confirmation-dialog">
+                  <div class="confirmation-content">
+                    <h3 class="confirmation-title">Start New Chat</h3>
+                    <p class="confirmation-message">
+                      {this.newChatConfirmationMessage}
+                    </p>
+                    <div class="confirmation-buttons">
+                      <button
+                        class="confirmation-button confirmation-button-cancel"
+                        onClick={() => this.hideConfirmationDialog()}
+                      >
+                        Cancel
+                      </button>
+                      <button
+                        class="confirmation-button confirmation-button-confirm"
+                        onClick={() => this.confirmNewChat()}
+                      >
+                        Continue
+                      </button>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            )}
 
             {/* Chat Content */}
             <div class="chat-content">
