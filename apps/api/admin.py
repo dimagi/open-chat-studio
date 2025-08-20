@@ -15,6 +15,7 @@ class UserAPIKeyModelAdmin(APIKeyModelAdmin):
         "expiry_date",
         "_has_expired",
         "revoked",
+        "read_only"
     ]
-    list_filter = ["created", "revoked"]
+    list_filter = ["created", "revoked", "read_only"]
     search_fields = ["name", "prefix", "team__name", "user__username"]
