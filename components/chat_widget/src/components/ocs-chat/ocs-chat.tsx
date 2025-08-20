@@ -246,6 +246,30 @@ export class OcsChat {
     window.removeEventListener('resize', this.handleWindowResize);
   }
 
+  private addErrorMessage(errorText: string): void {
+    const errorMessage: ChatMessage = {
+      created_at: new Date().toISOString(),
+      role: 'system',
+      content: `**Error:** ${errorText}\nPlease try again.`,
+      attachments: []
+    };
+
+    this.messages = [...this.messages, errorMessage];
+    this.saveSessionToStorage();
+    this.scrollToBottom();
+  }
+
+  private handleError(errorText: string): void {
+    // show as system message
+    this.addErrorMessage(errorText);
+
+    // Clear any loading/typing states
+    this.isLoading = false;
+    this.isTyping = false;
+    this.isUploadingFiles = false;
+    this.currentPollTaskId = '';
+  }
+
   private parseJSONProp(propValue: string | undefined, propName: string): string[] {
     try {
       if (propValue) {
@@ -298,7 +322,6 @@ export class OcsChat {
   private async startSession(): Promise<void> {
     try {
       this.isLoading = true;
-      this.error = '';
 
       const userId = this.getOrGenerateUserId();
 
@@ -339,7 +362,8 @@ export class OcsChat {
       // Start polling for messages
       this.startPolling();
     } catch (error) {
-      this.error = error instanceof Error ? error.message : 'Failed to start chat session';
+      const errorText = error instanceof Error ? error.message : 'Failed to start chat session';
+      this.handleError(errorText);
     } finally {
       this.isLoading = false;
     }
@@ -430,7 +454,7 @@ export class OcsChat {
         const hasErrors = this.selectedFiles.some(sf => sf.error);
         if (hasErrors) {
           // Don't send the message, let user fix file issues first
-          this.error = 'Please remove or fix file errors before sending your message.';
+          this.handleError('Please remove or fix file errors before sending your message.');
           return;
         }
       }
@@ -497,9 +521,8 @@ export class OcsChat {
       this.currentPollTaskId = data.task_id;
       await this.pollTaskResponse();
     } catch (error) {
-      this.error = error instanceof Error ? error.message : 'Failed to send message';
-      // Clear typing indicator on error
-      this.isTyping = false;
+      const errorText = error instanceof Error ? error.message : 'Failed to send message';
+      this.handleError(errorText);
     }
   }
 
@@ -565,9 +588,9 @@ export class OcsChat {
           this.focusInput();
         }
       } catch (error) {
-        this.error = error instanceof Error ? error.message : 'Failed to get response';
-        // Error in task polling, clear typing indicator and resume message polling
-        this.isTyping = false;
+        const errorText = error instanceof Error ? error.message : 'Failed to get response';
+        this.handleError(errorText);
+        // Clear states and resume polling
         this.currentPollTaskId = '';
         this.resumeMessagePolling();
       }
@@ -623,10 +646,6 @@ export class OcsChat {
     } catch (error) {
       // Silently fail for polling
     }
-  }
-
-  private clearError() {
-    this.error = '';
   }
 
   private scrollToBottom(): void {
@@ -733,7 +752,6 @@ export class OcsChat {
   @Watch('visible')
   async visibilityHandler(visible: boolean) {
     if (visible && !this.sessionId) {
-      this.clearError();
       await this.startSession();
     } else if (!visible) {
       this.pauseMessagePolling()
@@ -1102,7 +1120,6 @@ export class OcsChat {
     this.messages = [];
     this.isTyping = false;
     this.currentPollTaskId = '';
-    this.error = '';
     if (this.allowAttachments) {
       this.selectedFiles = [];
     }
@@ -1118,7 +1135,8 @@ export class OcsChat {
   }
 
   render() {
-    if (this.error) {
+    // Only show error state for critical errors that prevent the widget from functioning
+    if (this.error && !this.sessionId) {
       return (
         <Host>
           <p class="error-message">{this.error}</p>
