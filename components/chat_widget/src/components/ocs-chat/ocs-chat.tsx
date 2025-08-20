@@ -250,7 +250,7 @@ export class OcsChat {
     const errorMessage: ChatMessage = {
       created_at: new Date().toISOString(),
       role: 'system',
-      content: `**Error:** ${errorText}\nPlease try again or contact support if the problem persists.`,
+      content: `**Error:** ${errorText}\nPlease try again.`,
       attachments: []
     };
 
