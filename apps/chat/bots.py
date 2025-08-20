@@ -429,10 +429,12 @@ class PipelineBot:
     def synthesize_voice(self) -> tuple["SyntheticVoice"] | None:
         from apps.experiments.models import SyntheticVoice
 
-        synthetic_voice = (
-            SyntheticVoice.objects.get(id=self.synthetic_voice_id) if self.synthetic_voice_id is not None else None
-        )
-        return synthetic_voice
+        if self.synthetic_voice_id is None:
+            return None
+        return SyntheticVoice.objects.filter(
+            id=self.synthetic_voice_id,
+            voice_provider__type=self.experiment.voice_provider.type,
+        ).first()
 
 
 class PipelineTestBot:
