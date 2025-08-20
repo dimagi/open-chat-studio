@@ -134,8 +134,6 @@ class PipelineState(dict):
         kwargs.setdefault("temp_state", {}).update({"outputs": {node_name: output}})
         if output is not None:
             kwargs["messages"] = [output]
-        if "synthetic_voice_id" in kwargs:
-            kwargs["synthetic_voice_id"] = kwargs["synthetic_voice_id"]
         return cls(**kwargs)
 
     def add_message_tag(self, tag: str):
