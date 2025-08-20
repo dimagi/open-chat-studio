@@ -233,9 +233,6 @@ def _pipeline_node_parameter_values(
         OptionsSource.built_in_tools_config: BuiltInTools.get_tool_configs_by_provider(),
         OptionsSource.text_editor_autocomplete_vars_llm_node: PromptVars.get_all_prompt_vars(),
         OptionsSource.text_editor_autocomplete_vars_router_node: PromptVars.get_router_prompt_vars(),
-        OptionsSource.voice_provider_id: (
-            [_option(selected_voice_provider.id, selected_voice_provider.type)] if selected_voice_provider else []
-        ),
         OptionsSource.synthetic_voice_id: sorted(
             [
                 _option(voice.id, str(voice), voice.service.lower()) | {"provider_id": voice.voice_provider_id}

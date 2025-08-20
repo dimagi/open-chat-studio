@@ -1247,11 +1247,10 @@ export function VoiceWidget(props: WidgetParams) {
     );
   };
 
-  const selectedVoiceProvider = parameterValues.voice_provider_id[0];
   const syntheticVoiceId = concatenate(props.nodeParams.synthetic_voice_id);
 
   // Only render if voice is enabled
-  if(!(parameterValues.voice_provider_id?.length)) {
+  if(!(parameterValues.synthetic_voice_id?.length)) {
     return null;
   }
 
@@ -1273,7 +1272,7 @@ export function VoiceWidget(props: WidgetParams) {
             key={voice.value}
             value={voice.value}
           >
-            {voice.label} ({selectedVoiceProvider.label})
+            {voice.label} ({voice.type})
           </option>
         ))}
       </select>
