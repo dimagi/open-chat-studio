@@ -212,7 +212,7 @@ class MoveScheduledMessageDateTool(CustomBaseTool):
             )
         message.save()
 
-        return f"The new datetime is {pretty_date(message.next_trigger_date)}"
+        return f"The schedule has been moved. The updated schedule datetime is {pretty_date(message.next_trigger_date)}"
 
 
 class DeleteReminderTool(CustomBaseTool):
@@ -231,7 +231,7 @@ class DeleteReminderTool(CustomBaseTool):
             return "Could not find this reminder"
 
         scheduled_message.cancel()
-        return "Success"
+        return "The reminder has been successfully deleted."
 
 
 class UpdateParticipantDataTool(CustomBaseTool):
@@ -244,20 +244,28 @@ class UpdateParticipantDataTool(CustomBaseTool):
     def action(self, key: str, value: Any):
         data_proxy = ParticipantDataProxy(self.experiment_session)
         data_proxy.set_key(key, value)
-        return "Success"
+        return "The new value has been set in user data."
 
 
 class AppendToParticipantDataTool(CustomBaseTool):
     name: str = AgentTools.APPEND_TO_PARTICIPANT_DATA
-    description: str = "Update user data at a specific key"
+    description: str = (
+        "Append a value to user data at a specific key. This will convert any existing "
+        "value to a list and append the new value to the end of the list. Use this tool to "
+        "track lists of items e.g. questions asked."
+    )
     requires_session: bool = True
     args_schema: type[schemas.AppendToParticipantData] = schemas.AppendToParticipantData
 
     @transaction.atomic
     def action(self, key: str, value: str | int | list):
         data_proxy = ParticipantDataProxy(self.experiment_session)
-        data_proxy.append_to_key(key, value)
-        return "Success"
+        new_value = data_proxy.append_to_key(key, value)
+        if len(new_value) > 10:
+            new_value_msg = f"The last 10 items in the list are: {new_value[-10:]}"
+        else:
+            new_value_msg = f"The new list is: {new_value}"
+        return f"The value was appended to the end of the list. {new_value_msg}"
 
 
 class IncrementParticipantDataTool(CustomBaseTool):
@@ -437,7 +445,7 @@ def create_schedule_message(
                 )
             return "Success: scheduled message created"
         except Experiment.DoesNotExist:
-            return "Experiment does not exist! Could not create scheduled message"
+            return "Could not create scheduled message"
     logging.exception(f"Could not create one-off reminder. Form errors: {form.errors}")
     return "Could not create scheduled message"
 
