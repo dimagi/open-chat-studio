@@ -432,8 +432,7 @@ class PipelineBot:
         if self.synthetic_voice_id is None:
             return None
         return SyntheticVoice.objects.filter(
-            id=self.synthetic_voice_id,
-            voice_provider__type=self.experiment.voice_provider.type,
+            id=self.synthetic_voice_id, service__iexact=self.experiment.voice_provider.type
         ).first()
 
 
