@@ -1272,7 +1272,7 @@ export function VoiceWidget(props: WidgetParams) {
             key={voice.value}
             value={voice.value}
           >
-            {voice.label} ({voice.type})
+            {voice.label} ({(voice as TypedOption).type})
           </option>
         ))}
       </select>
