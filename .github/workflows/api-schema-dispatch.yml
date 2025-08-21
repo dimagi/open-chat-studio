@@ -1,0 +1,32 @@
+name: API Schema Dispatch
+
+on:
+  push:
+    branches:
+      - main
+    paths:
+      - 'api-schema.yml'
+  workflow_dispatch:  # Allow manual trigger
+
+permissions:
+  contents: read
+
+jobs:
+  dispatch:
+    name: Dispatch API Schema Update
+    runs-on: ubuntu-latest
+    
+    steps:
+      - name: Repository Dispatch
+        uses: peter-evans/repository-dispatch@v3
+        with:
+          token: ${{ secrets.OCS_DOCS_PAT }}
+          repository: dimagi/open-chat-studio-docs
+          event-type: ocs_api_update
+          client-payload: |
+            {
+              "ref": "${{ github.ref }}",
+              "sha": "${{ github.sha }}",
+              "repository": "${{ github.repository }}",
+              "timestamp": "${{ github.event.head_commit.timestamp }}"
+            }
