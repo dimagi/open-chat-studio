@@ -227,10 +227,11 @@
                     hx-target="#sessions-table"
                     hx-swap="innerHTML"
                     hx-indicator="#refresh-loader"
+                    hx-disabled-elt="this"
                     title="Refresh sessions">
-              <i class="fa-solid fa-rotate"></i>
+              <i class="fa-solid fa-rotate htmx-hide"></i>
             </button>
-            <span class="loading loading-spinner loading-sm htmx-indicator" id="refresh-loader"></span>
+            <span class="loading loading-spinner loading-sm htmx-indicator htmx-show" id="refresh-loader"></span>
           </div>
 
           <div id="sessions-table"
