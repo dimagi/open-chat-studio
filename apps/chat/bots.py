@@ -280,11 +280,14 @@ class PipelineBot:
         self, user_input: str, save_input_to_history=True, attachments: list["Attachment"] | None = None
     ) -> ChatMessage:
         input_state = self._get_input_state(attachments, user_input)
-        return self.invoke_pipeline(
-            input_state,
-            save_run_to_history=True,
-            save_input_to_history=save_input_to_history,
-        )
+
+        kwargs = {
+            "input_state": input_state,
+            "save_run_to_history": True,
+            "save_input_to_history": save_input_to_history,
+        }
+        with self.trace_service.span("Run Pipeline", inputs=kwargs | {"input_state": input_state.json_safe()}):
+            return self.invoke_pipeline(**kwargs)
 
     def invoke_pipeline(
         self,

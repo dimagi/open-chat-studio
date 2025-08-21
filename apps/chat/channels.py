@@ -625,7 +625,7 @@ class ChannelBase(ABC):
                 self.send_text_to_user(download_link)
 
     def _handle_supported_message(self):
-        with self.trace_service.span("process_message", inputs={"input": self.user_query}) as span:
+        with self.trace_service.span("Process Message", inputs={"input": self.user_query}) as span:
             self.submit_input_to_llm()
             ai_message = self._get_bot_response(message=self.user_query)
 
@@ -633,7 +633,10 @@ class ChannelBase(ABC):
             span.set_current_span_outputs(
                 {"response": ai_message.content, "attachments": [file.name for file in files]}
             )
-            self.send_message_to_user(bot_message=ai_message.content, files=files)
+
+            kwargs = {"bot_message": ai_message.content, "files": files}
+            with self.trace_service.span("Send message to user", inputs=kwargs):
+                self.send_message_to_user(**kwargs)
 
         # Returning the response here is a bit of a hack to support chats through the web UI while trying to
         # use a coherent interface to manage / handle user messages
@@ -679,7 +682,10 @@ class ChannelBase(ABC):
         return "Unable to transcribe audio"
 
     def _get_bot_response(self, message: str) -> ChatMessage:
-        return self.bot.process_input(message, attachments=self.message.attachments)
+        with self.trace_service.span("Get bot response", inputs={"message": message}) as span:
+            response = self.bot.process_input(message, attachments=self.message.attachments)
+            span.set_current_span_outputs({"response": response.content})
+            return response
 
     def _add_message_to_history(self, message: str, message_type: ChatMessageType):
         """Use this to update the chat history when not using the normal bot flow"""
