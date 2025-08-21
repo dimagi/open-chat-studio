@@ -9,7 +9,7 @@ from django.http import HttpResponse
 from django.utils.translation import gettext as _
 from rest_framework import exceptions
 from rest_framework.authentication import BaseAuthentication
-from rest_framework.permissions import DjangoModelPermissions
+from rest_framework.permissions import DjangoModelPermissions, BasePermission, SAFE_METHODS
 from rest_framework_api_key.permissions import KeyParser
 
 from apps.teams.helpers import get_team_membership_for_request
@@ -36,7 +36,6 @@ class BaseKeyAuthentication(BaseAuthentication):
 
         if not token.user.is_active:
             raise exceptions.AuthenticationFailed(_("User inactive or deleted."))
-
         user = token.user
         request.user = user
         request.team = token.team
@@ -60,6 +59,23 @@ class BearerTokenAuthentication(BaseKeyAuthentication):
     def get_key(self, request):
         return ConfigurableKeyParser(keyword=self.keyword).get_from_authorization(request)
 
+class ReadOnlyAPIKeyPermission(BasePermission):
+    """
+    Allows only safe methods (GET, HEAD, OPTIONS) for read-only API keys.
+    """
+
+    def has_permission(self, request, view):
+        if not hasattr(request, "auth") or request.auth is None:
+            return False
+
+        if not request.user or not request.user.is_authenticated:
+            return False
+
+        api_key = request.auth
+        if getattr(api_key, "read_only", True):
+            return request.method in SAFE_METHODS
+
+        return True
 
 class ConfigurableKeyParser(KeyParser):
     def __init__(self, keyword: str):

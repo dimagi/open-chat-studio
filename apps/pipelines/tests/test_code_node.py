@@ -426,8 +426,8 @@ def main(input, **kwargs):
     """
     node = CodeNode(name="test", node_id="123", django_node=None, code=code_set)
     output = node._process("hi", PipelineState(outputs={}, experiment_session=None))
-    assert output.update["output_message_tags"] == [("message-tag", None)]
-    assert output.update["session_tags"] == [("session-tag", None)]
+    assert output.update["output_message_tags"] == [("message-tag", "")]
+    assert output.update["session_tags"] == [("session-tag", "")]
 
 
 def test_set_list():

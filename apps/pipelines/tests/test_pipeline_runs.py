@@ -1,10 +1,8 @@
-from unittest import mock
-
 import pytest
 
 from apps.annotations.models import TagCategories
 from apps.chat.bots import PipelineBot
-from apps.chat.models import ChatMessage, ChatMessageType
+from apps.chat.models import ChatMessageType
 from apps.experiments.models import ExperimentSession
 from apps.pipelines.models import Pipeline
 from apps.pipelines.nodes.base import PipelineState
@@ -54,15 +52,31 @@ def test_save_trace_metadata(pipeline: Pipeline, session: ExperimentSession):
 
 
 @pytest.mark.django_db()
-def test_save_metadata_and_tagging(pipeline: Pipeline, session: ExperimentSession):
-    output_message_tags = [("test_tag_1", TagCategories.BOT_RESPONSE)]
+def test_output_message_tagging(pipeline: Pipeline, session: ExperimentSession):
+    output_message_tags = [("test_tag_1", TagCategories.BOT_RESPONSE.value), ("user_tag", None)]
     pipeline_state = PipelineState(messages=["Hi"], output_message_tags=output_message_tags)
 
-    with mock.patch.object(ChatMessage, "create_and_add_tag") as mock_add_system_tag:
-        bot = PipelineBot(session=session, experiment=session.experiment, trace_service=TracingService.empty())
-        bot.invoke_pipeline(input_state=pipeline_state, pipeline=pipeline)
-        for tag_value, category in output_message_tags:
-            mock_add_system_tag.assert_any_call(tag_value, session.team, category or "")
+    bot = PipelineBot(session=session, experiment=session.experiment, trace_service=TracingService.empty())
+    result = bot.invoke_pipeline(input_state=pipeline_state, pipeline=pipeline)
 
-        # add version tag also calls add system tag
-        assert mock_add_system_tag.call_count == len(output_message_tags) + 1
+    tags = list(result.tags.all())
+    version_tag = (f"v{session.experiment.version_number}-unreleased", TagCategories.EXPERIMENT_VERSION.value)
+    _assert_tags(tags, output_message_tags + [version_tag])
+
+
+@pytest.mark.django_db()
+def test_session_tagging(pipeline: Pipeline, session: ExperimentSession):
+    output_message_tags = [("test_tag_1", None), ("user_tag", "")]
+    pipeline_state = PipelineState(messages=["Hi"], session_tags=output_message_tags)
+
+    bot = PipelineBot(session=session, experiment=session.experiment, trace_service=TracingService.empty())
+    bot.invoke_pipeline(input_state=pipeline_state, pipeline=pipeline)
+
+    tags = list(session.chat.tags.all())
+    _assert_tags(tags, output_message_tags)
+
+
+def _assert_tags(object_tags, expected: list[tuple[str, str]]):
+    assert len(object_tags) == len(expected)
+    created_tags = set((tag.name, tag.category) for tag in object_tags)
+    assert created_tags == set((name, category or "") for name, category in expected)

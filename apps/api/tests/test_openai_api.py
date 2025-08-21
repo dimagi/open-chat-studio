@@ -41,7 +41,7 @@ def experiment(team_with_users):
 @pytest.fixture()
 def api_key(team_with_users):
     user = team_with_users.members.first()
-    obj, key = UserAPIKey.objects.create_key(name=f"{user.get_display_name()} API Key", user=user, team=team_with_users)
+    obj, key = UserAPIKey.objects.create_key(name=f"{user.get_display_name()} API Key", user=user, team=team_with_users, read_only=False)
     return key
 
 

@@ -93,6 +93,20 @@
     * @prop --code-text-assistant-color: Code text color in assistant messages (--message-assistant-text-color)
     * @prop --code-border-assistant-color: Code border in assistant messages (--message-assistant-bg-color + 10% black)
     *
+    * @prop --confirmation-overlay-bg-color: Confirmation dialog overlay background color (rgba(0, 0, 0, 0.5))
+    * @prop --confirmation-dialog-bg-color: Confirmation dialog background color (uses --chat-window-bg-color)
+    * @prop --confirmation-dialog-border-color: Confirmation dialog border color (uses --chat-window-border-color)
+    * @prop --confirmation-dialog-shadow-color: Confirmation dialog shadow color (uses --chat-window-shadow-color)
+    * @prop --confirmation-title-color: Confirmation dialog title text color (uses #111827)
+    * @prop --confirmation-title-font-size: Confirmation dialog title font size (1.125em)
+    * @prop --confirmation-message-color: Confirmation dialog message text color (uses --loading-text-color)
+    * @prop --confirmation-message-font-size: Confirmation dialog message font size (uses 1em)
+    * @prop --confirmation-button-cancel-bg-color: Cancel button background color (uses --button-background-color-hover)
+    * @prop --confirmation-button-cancel-bg-hover-color: Cancel button background on hover (uses #e5e7eb)
+    * @prop --confirmation-button-cancel-text-color: Cancel button text color (uses --header-button-text-color)
+    * @prop --confirmation-button-confirm-bg-color: Confirm button background color (uses --error-text-color)
+    * @prop --confirmation-button-confirm-bg-hover-color: Confirm button background on hover (uses --error-text-color)
+    * @prop --confirmation-button-confirm-text-color: Confirm button text color (uses --send-button-text-color)
     * @prop --file-attachment-button-bg-color: Attach file button background color (transparent)
     * @prop --file-attachment-button-bg-hover-color: Attach file button background hover color (--header-button-bg-hover-color)
     * @prop --file-attachment-button-text-color: Attach file button text color (--header-button-text-color)
@@ -120,10 +134,10 @@
   --button-background-color-hover: #f3f4f6;
   --button-text-color: #111827;
   --button-text-color-hover: #1d4ed8;
-  --button-border-color: transparent;
-  --button-border-color-hover: #d1d5db;
+  --button-border-color: #d1d5db;
+  --button-border-color-hover: #6b7280;
   --button-padding: 0.5em;
-  --button-font-size: 0.875em; /* text-sm */
+  --button-font-size: 1em; /* text-sm */
   --button-icon-size: 1.5em;
 
   /* Chat window variables */
@@ -213,6 +227,21 @@
   --code-text-assistant-color: var(--message-assistant-text-color);
   --code-border-assistant-color: color-mix(in srgb, var(--message-assistant-bg-color) 90%, black 10%);;
 
+  --confirmation-overlay-bg-color: rgba(0, 0, 0, 0.5);
+  --confirmation-dialog-bg-color: var(--chat-window-bg-color);
+  --confirmation-dialog-border-color: var(--chat-window-border-color);
+  --confirmation-dialog-shadow-color: var(--chat-window-shadow-color);
+  --confirmation-title-color: #111827;
+  --confirmation-title-font-size: 1.125em;
+  --confirmation-message-color: var(--loading-text-color);
+  --confirmation-message-font-size: 1em;
+  --confirmation-button-cancel-bg-color: var(--button-background-color-hover);
+  --confirmation-button-cancel-bg-hover-color: #e5e7eb;
+  --confirmation-button-cancel-text-color: var(--header-button-text-color);
+  --confirmation-button-confirm-bg-color: var(--error-text-color);
+  --confirmation-button-confirm-bg-hover-color: var(--error-text-color);
+  --confirmation-button-confirm-text-color: var(--send-button-text-color);
+
   /* File upload variables */
   --file-attachment-button-bg-color: transparent;
   --file-attachment-button-bg-hover-color: var(--header-button-bg-hover-color); /* #f3f4f6 */
@@ -241,8 +270,8 @@
 
   display: block;
   position: fixed;
-  right: 20px;
-  bottom: 20px;
+  right: 30px;
+  bottom: 30px;
 }
 
 @layer components {
@@ -539,6 +568,64 @@
     @apply cursor-not-allowed;
     background-color: var(--send-button-bg-disabled-color);
     color: var(--send-button-text-disabled-color);
+  }
+  /* Confirmation dialog */
+  .confirmation-overlay {
+    @apply fixed inset-0 flex items-center justify-center;
+    background-color: var(--confirmation-overlay-bg-color);
+    z-index: 9999;
+  }
+
+  .confirmation-dialog {
+    @apply max-w-sm w-full mx-4;
+    background-color: var(--confirmation-dialog-bg-color);
+    border: 1px solid var(--confirmation-dialog-border-color);
+    border-radius: 0.75em;
+    box-shadow: 0 0.625em 1.5625em var(--confirmation-dialog-shadow-color);
+  }
+
+  .confirmation-content {
+    padding: 1.5em;
+  }
+
+  .confirmation-title {
+    @apply font-semibold mb-2;
+    color: var(--confirmation-title-color);
+    font-size: var(--confirmation-title-font-size);
+  }
+
+  .confirmation-message {
+    @apply mb-4;
+    color: var(--confirmation-message-color);
+    font-size: var(--confirmation-message-font-size);
+  }
+
+  .confirmation-buttons {
+    @apply flex justify-end;
+    gap: 0.75em;
+  }
+
+  .confirmation-button {
+    @apply rounded-md font-medium transition-colors duration-200;
+    padding: 0.5em 1em;
+  }
+
+  .confirmation-button-cancel {
+    background-color: var(--confirmation-button-cancel-bg-color);
+    color: var(--confirmation-button-cancel-text-color);
+  }
+
+  .confirmation-button-cancel:hover {
+    background-color: var(--confirmation-button-cancel-bg-hover-color);
+  }
+
+  .confirmation-button-confirm {
+    background-color: var(--confirmation-button-confirm-bg-color);
+    color: var(--confirmation-button-confirm-text-color);
+  }
+
+  .confirmation-button-confirm:hover {
+    background-color: var(--confirmation-button-confirm-bg-hover-color);
   }
 }
 

@@ -30,9 +30,17 @@ class UploadAvatarForm(forms.Form):
 
 
 class ApiKeyForm(forms.ModelForm):
+    allow_write = forms.BooleanField(
+        required=False,
+        initial=False,
+        label=gettext("Allow Write Access"),
+        help_text=gettext("Check to allow Read/Write access. Leave unchecked for Read-only."),
+        widget=forms.CheckboxInput(),
+    )
+
     class Meta:
         model = UserAPIKey
-        fields = ("team", "name")
+        fields = ("team", "name", "allow_write")
 
     def __init__(self, request, *args, **kwargs):
         super().__init__(*args, **kwargs)
@@ -43,6 +51,7 @@ class ApiKeyForm(forms.ModelForm):
     def save(self):
         instance = super().save(commit=False)
         instance.user = self.user
+        instance.read_only = not self.cleaned_data["allow_write"]
         key = UserAPIKey.objects.assign_key(instance)
         instance.save()
         return instance, key

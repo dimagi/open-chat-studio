@@ -2,23 +2,24 @@
 Errors can be categorized or tagged based on where or why it occurs.
 """
 
-from django.db import models
+from enum import StrEnum
+
 from openai import BadRequestError, OpenAIError
 
 from apps.chat.exceptions import AudioSynthesizeException
 from apps.pipelines.exceptions import CodeNodeRunError
 
 
-class ErrorCategory(models.TextChoices):
+class ErrorCategory(StrEnum):
     # LLM Provider tags
-    OPENAI = "OpenAI"
+    LLM_PROVIDER = "llm provider"
     # Pipeline tags
-    CODE_NODE = "code node"
-    PIPELINE_RUN = "Pipeline run"
+    CODE_NODE = "python node"
+    PIPELINE_RUN = "internal"
     # API call tags
-    BAD_API_CALL = "bad api call"
+    BAD_API_CALL = "api"
     # Processing tags
-    AUDIO_SYNTHESIS = "audio synthesis"
+    AUDIO_SYNTHESIS = "text to speech"
     UNKNOWN = "unknown"
 
 
@@ -37,7 +38,7 @@ def get_tags_from_error(error: Exception):
 
 
 def _parse_openai_error(error: OpenAIError) -> ErrorCategory:
-    tags = [ErrorCategory.OPENAI]
+    tags = [ErrorCategory.LLM_PROVIDER]
     if isinstance(error, BadRequestError):
         tags.append(ErrorCategory.BAD_API_CALL)
     else:

@@ -145,3 +145,12 @@ def test_attachments_returned(mock_response, experiment):
         "response": "Fido",
         "attachments": [{"file_name": file.name, "link": file.download_link(session.id)}],
     }
+
+@pytest.mark.django_db()
+def test_read_only_key_cannot_post(experiment):
+    user = experiment.team.members.first()
+
+    client = ApiTestClient(user, experiment.team, read_only=True)
+    new_message_url = reverse("channels:new_api_message", kwargs={"experiment_id": experiment.public_id})
+    response = client.post(new_message_url, data={"message": "What should I call my dog?"}, format="json")
+    assert response.status_code == 403
