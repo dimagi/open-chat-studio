@@ -9,16 +9,16 @@ from apps.chat.exceptions import AudioSynthesizeException
 from apps.pipelines.exceptions import CodeNodeRunError
 
 
-class ErrorCategory(models.TextChoices):
+class ErrorCategory(StrEnum):
     # LLM Provider tags
-    OPENAI = "OpenAI"
+    OPENAI = "openai"
     # Pipeline tags
-    CODE_NODE = "code node"
-    PIPELINE_RUN = "Pipeline run"
+    CODE_NODE = "python node"
+    PIPELINE_RUN = "internal"
     # API call tags
-    BAD_API_CALL = "bad api call"
+    BAD_API_CALL = "api"
     # Processing tags
-    AUDIO_SYNTHESIS = "audio synthesis"
+    AUDIO_SYNTHESIS = "text to speech"
     UNKNOWN = "unknown"
 
 
