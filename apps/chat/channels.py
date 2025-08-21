@@ -682,10 +682,7 @@ class ChannelBase(ABC):
         return "Unable to transcribe audio"
 
     def _get_bot_response(self, message: str) -> ChatMessage:
-        with self.trace_service.span("Get bot response", inputs={"message": message}) as span:
-            response = self.bot.process_input(message, attachments=self.message.attachments)
-            span.set_current_span_outputs({"response": response.content})
-            return response
+        return self.bot.process_input(message, attachments=self.message.attachments)
 
     def _add_message_to_history(self, message: str, message_type: ChatMessageType):
         """Use this to update the chat history when not using the normal bot flow"""
