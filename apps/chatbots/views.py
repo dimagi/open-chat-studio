@@ -241,7 +241,6 @@ class EditChatbot(LoginAndTeamRequiredMixin, TemplateView, PermissionRequiredMix
                 llm_providers=llm_providers,
                 llm_provider_models=llm_provider_models,
                 synthetic_voices=synthetic_voices,
-                selected_voice_provider=experiment.voice_provider,
             ),
             "default_values": _pipeline_node_default_values(llm_providers, llm_provider_models),
             "origin": "chatbots",

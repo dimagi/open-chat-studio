@@ -93,7 +93,6 @@ class EditPipeline(LoginAndTeamRequiredMixin, TemplateView, PermissionRequiredMi
                 llm_providers=llm_providers,
                 llm_provider_models=llm_provider_models,
                 synthetic_voices=[],
-                selected_voice_provider=None,  # Not show voice field for now if opened from pipelines tab
                 include_versions=pipeline.is_a_version,
             ),
             "default_values": _pipeline_node_default_values(llm_providers, llm_provider_models),
@@ -134,9 +133,7 @@ class DeletePipeline(LoginAndTeamRequiredMixin, View, PermissionRequiredMixin):
         return HttpResponse(response, headers={"HX-Reswap": "none"}, status=400)
 
 
-def _pipeline_node_parameter_values(
-    team, llm_providers, llm_provider_models, synthetic_voices, selected_voice_provider, include_versions=False
-):
+def _pipeline_node_parameter_values(team, llm_providers, llm_provider_models, synthetic_voices, include_versions=False):
     """Returns the possible values for each input type"""
     common_filters = {"team": team}
     if not include_versions:
