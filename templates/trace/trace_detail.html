@@ -13,7 +13,7 @@
 {% endblock breadcrumbs %}
 
 {% block app %}
-<div x-data="{activeTab: 'spans'}">
+<div x-data="{activeTab: 'spans', selectedSpan: 'span-{{ spans.0.id }}'}">
     <div class="container mx-auto px-4 py-6">
         <!-- Header Section -->
         <div class="flex justify-between w-full">
@@ -92,18 +92,25 @@
 
     <div x-show="activeTab === 'spans'" id="spans-content">
         <div class="card mb-6">
-        <h2 class="text-xl font-bold mb-2">Execution Spans</h2>
-        <div class="card-body bg-base-50 shadow-md">
-            {% for span in spans %}
-            {% include "trace/span_tree.html" with span=span is_root=True %}
-            {% empty %}
-            <div class="card bg-base-100 border border-base-200">
-                <div class="card-body p-4 text-center text-base-content/60">
-                No spans found for this trace.
+            <h2 class="text-xl font-bold mb-2">Execution Spans</h2>
+            <div class="flex gap-2">
+                <div class="border-l card-body bg-base-50 shadow-md w-1/2">
+                    {% for span in spans %}
+                        {% include "trace/span_tree.html" with span=span is_root=True %}
+                    {% empty %}
+                    <div class="card bg-base-100 border border-base-200">
+                        <div class="card-body p-4 text-center text-base-content/60">
+                        No spans found for this trace.
+                        </div>
+                    </div>
+                    {% endfor %}
+                </div>
+                <div class="w-1/2">
+                    {% for span in trace.spans.all %}
+                        {% include "trace/span_input_output.html" with span=span %}
+                    {% endfor %}
                 </div>
             </div>
-            {% endfor %}
-        </div>
         </div>
     </div>
 
