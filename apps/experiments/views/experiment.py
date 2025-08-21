@@ -1655,6 +1655,7 @@ def migrate_experiment_view(request, team_slug, experiment_id):
 
 
 @require_GET
+@login_and_team_required
 @permission_required("experiments.view_experiment")
 def experiment_error_trend(request, team_slug: str, experiment_id: int):
     """
