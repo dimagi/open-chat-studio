@@ -356,7 +356,8 @@ export class OcsChat {
       });
 
       if (!response.ok) {
-        throw new Error(`Failed to start session: ${response.statusText}`);
+        this.handleError(`Failed to start session: ${response.statusText}`);
+        return;
       }
 
       const data: ChatStartSessionResponse = await response.json();
@@ -373,8 +374,7 @@ export class OcsChat {
       // Start polling for messages
       this.startPolling();
     } catch (error) {
-      const errorText = error instanceof Error ? error.message : 'Failed to start chat session';
-      this.handleError(errorText);
+      this.handleError('Failed to start chat session');
     } finally {
       this.isLoading = false;
     }
@@ -1193,7 +1193,7 @@ export class OcsChat {
               <div class="header-text">{this.headerText}</div>
               <div class="header-buttons">
                 {/* New Chat button */}
-                {this.sessionId && this.messages.length > 0 && (
+                {this.messages.length > 0 && (
                   <button
                     class="header-button"
                     onClick={() => this.showConfirmationDialog()}
@@ -1260,7 +1260,7 @@ export class OcsChat {
               )}
 
               {/* Messages */}
-              {this.sessionId && (
+              {(
                 <div
                   ref={(el) => this.messageListRef = el}
                   class="messages-container"
