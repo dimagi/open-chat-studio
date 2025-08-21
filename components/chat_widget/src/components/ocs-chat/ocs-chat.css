@@ -661,7 +661,7 @@ textarea {
 
 /* Markdown content styling for chat messages */
 .chat-markdown {
-  @apply prose prose-sm prose-gray max-w-none;
+  @apply prose prose-sm prose-gray max-w-none prose-a:no-underline hover:prose-a:underline;
   font-size: 1em;
   --tw-prose-body: var(--message-assistant-text-color);
   --tw-prose-headings: var(--message-assistant-text-color);
