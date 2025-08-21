@@ -398,6 +398,9 @@ class LLMResponseWithPrompt(LLMResponse, HistoryMixin, OutputMessageTagMixin):
         PipelineChatHistoryTypes.GLOBAL,
         json_schema_extra=UiSchema(widget=Widgets.history, enum_labels=PipelineChatHistoryTypes.labels),
     )
+    synthetic_voice_id: OptionalInt = Field(
+        None, title="Voice Model", json_schema_extra=UiSchema(widget=Widgets.voice_widget)
+    )
 
     @model_validator(mode="after")
     def check_prompt_variables(self) -> Self:
@@ -483,6 +486,9 @@ class LLMResponseWithPrompt(LLMResponse, HistoryMixin, OutputMessageTagMixin):
             chat = SimpleLLMChat(adapter=chat_adapter, history_manager=history_manager)
         # Invoke runnable
         result = chat.invoke(input=input, attachments=attachments)
+        voice_kwargs = {}
+        if self.synthetic_voice_id is not None:
+            voice_kwargs["synthetic_voice_id"] = self.synthetic_voice_id
         return PipelineState.from_node_output(
             node_name=self.name,
             node_id=self.node_id,
@@ -492,6 +498,7 @@ class LLMResponseWithPrompt(LLMResponse, HistoryMixin, OutputMessageTagMixin):
                 **tool_callbacks.output_message_metadata,
             },
             intents=tool_callbacks.intents,
+            **voice_kwargs,
         )
 
     def _get_attachments(self, state: PipelineState) -> list:

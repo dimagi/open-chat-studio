@@ -177,6 +177,12 @@
       "ui:flagRequired": "flag_mcp",
       "ui:optionsSource": "mcp_tools",
       "ui:widget": "multiselect"
+    },
+    "synthetic_voice_id": {
+      "default": null,
+      "title": "Voice Model",
+      "ui:widget": "voice_widget",
+      "type": "integer"
     }
   },
   "required": [
