@@ -225,6 +225,7 @@ class EditChatbot(LoginAndTeamRequiredMixin, TemplateView, PermissionRequiredMix
         experiment = get_object_or_404(
             Experiment.objects.get_all().select_related("voice_provider"), id=kwargs["pk"], team=self.request.team
         )
+        synthetic_voices = []
         if experiment.voice_provider:
             exclude_services = [SyntheticVoice.OpenAIVoiceEngine]
             if flag_is_active(self.request, "flag_open_ai_voice_engine"):
