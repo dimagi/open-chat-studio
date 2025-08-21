@@ -20,7 +20,7 @@ from django.db import transaction
 from django.db.models import Case, CharField, Count, F, IntegerField, Prefetch, Subquery, Value, When
 from django.db.models.fields.json import KeyTextTransform
 from django.db.models.functions import Coalesce
-from django.http import FileResponse, Http404, HttpResponse, HttpResponseForbidden, HttpResponseRedirect
+from django.http import FileResponse, Http404, HttpResponse, HttpResponseForbidden, HttpResponseRedirect, JsonResponse
 from django.shortcuts import get_object_or_404, redirect, render
 from django.template.response import TemplateResponse
 from django.urls import reverse
@@ -95,6 +95,7 @@ from apps.experiments.tasks import (
     async_export_chat,
     get_response_for_webchat_task,
 )
+from apps.experiments.utils import get_experiment_error_trend_data
 from apps.experiments.views.prompt import PROMPT_DATA_SESSION_KEY
 from apps.files.models import File
 from apps.generics.chips import Chip
@@ -1651,3 +1652,17 @@ def migrate_experiment_view(request, team_slug, experiment_id):
         return redirect(failed_url)
 
     return redirect(failed_url)
+
+
+@require_GET
+@permission_required("experiments.view_experiment")
+def experiment_error_trend(request, team_slug: str, experiment_id: int):
+    """
+    Returns JSON data for experiment error trend sparkline chart.
+    """
+    try:
+        experiment = get_object_or_404(Experiment.objects.filter(team__slug=team_slug), id=experiment_id)
+        return JsonResponse({"data": get_experiment_error_trend_data(experiment)})
+    except Exception:
+        logging.exception(f"Error loading sparkline data for experiment {experiment_id}")
+        return JsonResponse({"error": "Failed to load sparkline data", "data": []}, status=500)

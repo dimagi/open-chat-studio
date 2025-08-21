@@ -1,24 +1,16 @@
 {% load static %}
 
 <canvas id="{{ record.id }}-sparkline-chart" class="mt-2" width="100" height="30"></canvas>
-{{ record.get_error_trend_data|json_script:record.id }}
 <script>
-    document.addEventListener('htmx:afterSettle', function(event) {
-    // htmx.onLoad(() => {
-        let sparklineChart;
-        const seriesData = JSON.parse(document.getElementById('{{ record.id }}').textContent);
-        console.log(seriesData);
+    (function() {
         const canvasElement = document.getElementById('{{ record.id }}-sparkline-chart');
-        
         if (canvasElement.chart) {
             // Destroy existing chart if it exists
             canvasElement.chart.destroy();
         }
         
         const chartContext = canvasElement.getContext('2d');
-        sparklineChart = SiteJS.sparkline.sparklineChart(chartContext, seriesData);
-        
         // Store chart reference on canvas for future cleanup
-        canvasElement.chart = sparklineChart;
-    });
+        canvasElement.chart = SiteJS.sparkline.sparklineChart(chartContext, "{% url 'experiments:experiment_error_trend' record.team.slug record.id %}");
+    })();
 </script>
