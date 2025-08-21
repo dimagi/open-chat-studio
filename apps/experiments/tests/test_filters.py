@@ -6,7 +6,7 @@ from django.contrib.messages.storage.fallback import FallbackStorage
 from django.contrib.sessions.middleware import SessionMiddleware
 from django.test import RequestFactory
 from django.utils import timezone
-from freezegun import freeze_time
+from time_machine import travel
 
 from apps.annotations.models import Tag, TagCategories
 from apps.chat.models import Chat, ChatMessage, ChatMessageType
@@ -161,11 +161,11 @@ class TestExperimentSessionFilters:
         assert filtered.count() == 1
         assert filtered.first() == session
 
-    @freeze_time("2025-01-03 10:00:00")
+    @travel("2025-01-03 10:00:00", tick=False)
     def test_message_timestamp_filters(self):
         """Test message timestamp filtering"""
         # Setup
-        with freeze_time("2025-01-01 10:00:00"):
+        with travel("2025-01-01 10:00:00", tick=False):
             session1 = ExperimentSessionFactory()
             ChatMessage.objects.create(
                 chat=session1.chat, content="First message for session 1", message_type=ChatMessageType.HUMAN
@@ -177,7 +177,7 @@ class TestExperimentSessionFilters:
                 created_at=timezone.now() + timedelta(hours=2),
             )
 
-        with freeze_time("2025-01-02 10:00:00"):
+        with travel("2025-01-02 10:00:00", tick=False):
             session2 = ExperimentSessionFactory(experiment=session1.experiment)
             ChatMessage.objects.create(
                 chat=session2.chat, content="First message for session 2", message_type=ChatMessageType.HUMAN

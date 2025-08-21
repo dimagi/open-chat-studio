@@ -2,12 +2,12 @@ from datetime import datetime, timedelta
 from typing import Any
 
 from django.contrib.contenttypes.models import ContentType
-from django.db.models import Avg, Count, DurationField, Exists, ExpressionWrapper, F, Max, OuterRef, Q
+from django.db.models import Avg, Count, DurationField, ExpressionWrapper, F, Max, Q
 from django.db.models.functions import TruncDate, TruncHour, TruncMonth, TruncWeek
 from django.urls import reverse
 from django.utils import timezone
 
-from apps.channels.models import ExperimentChannel
+from apps.channels.models import ChannelPlatform, ExperimentChannel
 from apps.chat.models import ChatMessage, ChatMessageType
 from apps.experiments.models import Experiment, ExperimentSession, Participant
 
@@ -44,8 +44,8 @@ class DashboardService:
         end_date: datetime | None = None,
         experiment_ids: list[int] | None = None,
         platform_names: list[str] | None = None,
-        participant_ids: list[str] | None = None,
-        tag_ids: list[str] | None = None,
+        participant_ids: list[int] | None = None,
+        tag_ids: list[int] | None = None,
     ) -> dict[str, Any]:
         """Get base querysets with common filters applied"""
 
@@ -74,19 +74,32 @@ class DashboardService:
 
         # Apply platform filter
         if platform_names:
+            global_platforms = ChannelPlatform.team_global_platforms()
+            if not any(platform for platform in platform_names if platform in global_platforms):
+                # only filter experiments if we're filtering by non-global platforms since all experiments
+                # will match the global platforms
+                experiments = experiments.filter(experimentchannel__platform__in=platform_names)
             sessions = sessions.filter(experiment_channel__platform__in=platform_names)
             messages = messages.filter(chat__experiment_session__experiment_channel__platform__in=platform_names)
+            participants = participants.filter(platform__in=platform_names)
 
         if participant_ids:
-            participants = participants.filter(id__in=participant_ids)
+            experiments = experiments.filter(sessions__participant__id__in=participant_ids)
             sessions = sessions.filter(participant__id__in=participant_ids)
             messages = messages.filter(chat__experiment_session__participant__id__in=participant_ids)
+            participants = participants.filter(id__in=participant_ids)
 
         if tag_ids:
-            sessions = sessions.annotate(
-                has_tagged_messages=Exists(ChatMessage.objects.filter(chat=OuterRef("chat_id"), tags__id__in=tag_ids))
-            ).filter(has_tagged_messages=True)
+            experiments = experiments.filter(
+                Q(sessions__chat__tags__id__in=tag_ids) | Q(sessions__chat__messages__tags__id__in=tag_ids)
+            )
+            sessions = sessions.filter(Q(chat__tags__id__in=tag_ids) | Q(chat__messages__tags__id__in=tag_ids))
             messages = messages.filter(tags__id__in=tag_ids)
+            participants = participants.filter(
+                Q(experimentsession__chat__tags__id__in=tag_ids)
+                | Q(experimentsession__chat__messages__tags__id__in=tag_ids)
+            )
+
         return {
             "experiments": experiments,
             "sessions": sessions,

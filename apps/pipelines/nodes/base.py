@@ -86,8 +86,8 @@ class PipelineState(dict):
     input_message_metadata: Annotated[dict, merge_dicts]
     output_message_metadata: Annotated[dict, merge_dicts]
     attachments: list = Field(default=[])
-    output_message_tags: Annotated[list[str], operator.add]
-    session_tags: Annotated[list[str], operator.add]
+    output_message_tags: Annotated[list[tuple[str, str]], operator.add]
+    session_tags: Annotated[list[tuple[str, str]], operator.add]
 
     # List of (previous, current, next) tuples used for aiding in routing decisions.
     path: Annotated[Sequence[tuple[str | None, str, list[str]]], operator.add]
@@ -132,11 +132,11 @@ class PipelineState(dict):
 
     def add_message_tag(self, tag: str):
         """Adds a tag to the output message."""
-        self.setdefault("output_message_tags", []).append((tag, None))
+        self.setdefault("output_message_tags", []).append((tag, ""))
 
     def add_session_tag(self, tag: str):
         """Adds the tag to the chat session."""
-        self.setdefault("session_tags", []).append((tag, None))
+        self.setdefault("session_tags", []).append((tag, ""))
 
     def get_node_id(self, node_name: str):
         """
