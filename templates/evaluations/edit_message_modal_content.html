@@ -55,7 +55,7 @@
         <span class="label-text-alt">{% trans "Optional additional context data" %}</span>
       </label>
       <input type="hidden" name="context" id="context-field" value="{{ form_data.context }}">
-      <div class="json-editor w-full h-32" data-target-field="#context-field" data-disable-elt="#save-button"></div>
+      <div class="json-editor w-full h-32 resize-y overflow-auto" data-target-field="#context-field" data-disable-elt="#save-button"></div>
       {% if errors.context %}
         <div class="text-error text-sm mt-1">{{ errors.context }}</div>
       {% endif %}
