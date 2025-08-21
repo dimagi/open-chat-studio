@@ -1,3 +1,4 @@
+// eslint-disable-next-line @typescript-eslint/no-unused-vars
 import {Component, Host, h, Prop, State, Element, Watch} from '@stencil/core';
 import {
   XMarkIcon,
@@ -654,7 +655,7 @@ export class OcsChat {
         this.scrollToBottom();
         this.focusInput();
       }
-    } catch (error) {
+    } catch {
       // Silently fail for polling
     }
   }
