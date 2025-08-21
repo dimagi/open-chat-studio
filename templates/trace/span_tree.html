@@ -1,7 +1,7 @@
 {% load static %}
 
 <div class="{% if is_root %}border rounded-lg p-4 mb-4 bg-base-50 border-base-300{% else %}relative before:content-[''] before:absolute before:-left-6 before:top-6 before:w-4 before:h-0.5 before:bg-gray-200 rounded-lg p-3 mb-3{% endif %}">
-    <div class="flex items-center justify-between">
+    <div class="flex items-center border border-base-200 justify-between hover:cursor-pointer hover:bg-base-300 p-2 rounded-lg" @click="selectedSpan='span-{{ span.id }}'" :class="selectedSpan === 'span-{{ span.id }}' ? 'bg-base-300' : ''">
         <div class="flex items-center">
             {% if is_root %}
                 <i class="fa-solid fa-eye mr-2"></i>
@@ -13,11 +13,6 @@
                         {% for tag in span.tags.all %}
                             <span class="badge badge-info">{{ tag.name }}</span>
                         {% endfor %}
-                    </div>
-                {% endif %}
-                {% if span.error %}
-                    <div class="text-xs rounded overflow-x-auto space-y-3">
-                        <pre class="whitespace-pre-wrap">{{ span.error }}</pre>
                     </div>
                 {% endif %}
             </div>
