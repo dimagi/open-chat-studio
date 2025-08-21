@@ -6,6 +6,7 @@ on:
       - main
     paths:
       - 'api-schema.yml'
+  workflow_dispatch:  # Allow manual trigger
 
 permissions:
   contents: read
