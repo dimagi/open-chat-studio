@@ -212,6 +212,7 @@ export class OcsChat {
   private chatWindowHeight: number = 600;
   private chatWindowWidth: number = 450;
   private chatWindowFullscreenWidth: number = 1024;
+  private positionInitialized: boolean = false;
   @Element() host: HTMLElement;
 
 
@@ -230,7 +231,9 @@ export class OcsChat {
     }
     this.parseWelcomeMessages();
     this.parseStarterQuestions();
+  }
 
+  componentDidLoad() {
     const computedStyle = getComputedStyle(this.host);
     const windowHeightVar = computedStyle.getPropertyValue('--chat-window-height');
     const windowWidthVar = computedStyle.getPropertyValue('--chat-window-width');
@@ -238,10 +241,10 @@ export class OcsChat {
     this.chatWindowHeight = varToPixels(windowHeightVar, window.innerHeight, this.chatWindowHeight);
     this.chatWindowWidth = varToPixels(windowWidthVar, window.innerWidth, this.chatWindowWidth);
     this.chatWindowFullscreenWidth = varToPixels(fullscreenWidthVar, window.innerWidth, this.chatWindowFullscreenWidth);
-    this.initializePosition();
-  }
+    if (this.visible) {
+      this.initializePosition();
+    }
 
-  componentDidLoad() {
     // Only auto-start session if we don't have an existing one
     if (this.visible && !this.sessionId) {
       this.startSession();
@@ -763,6 +766,9 @@ export class OcsChat {
    */
   @Watch('visible')
   async visibilityHandler(visible: boolean) {
+    if (visible) {
+      this.initializePosition();
+    }
     if (visible && !this.sessionId) {
       await this.startSession();
     } else if (!visible) {
@@ -792,6 +798,7 @@ export class OcsChat {
     const centeredX = (windowWidth - actualChatWidth) / 2;
     const maxOffset = (windowWidth - actualChatWidth) / 2;
 
+    console.log( windowWidth, actualChatWidth, centeredX, maxOffset )
     return { windowWidth, actualChatWidth, centeredX, maxOffset };
   }
 
@@ -813,6 +820,11 @@ export class OcsChat {
   }
 
   private initializePosition(): void {
+    if (this.positionInitialized) {
+      return;
+    }
+    this.positionInitialized = true;
+
     const windowWidth = window.innerWidth;
     const windowHeight = window.innerHeight;
     const chatWidth = windowWidth < OcsChat.MOBILE_BREAKPOINT ? windowWidth : this.chatWindowWidth;
@@ -970,6 +982,7 @@ export class OcsChat {
   };
 
   private handleWindowResize = (): void => {
+    this.positionInitialized = false;
     this.initializePosition();
   };
 
