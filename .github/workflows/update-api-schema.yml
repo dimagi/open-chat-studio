@@ -4,6 +4,8 @@
 # This ensures the schema stays in sync with API changes and prevents CI failures from the schema validation test.
 
 name: Update API Schema
+permissions:
+  contents: write
 
 on:
   pull_request:
