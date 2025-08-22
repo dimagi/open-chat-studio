@@ -475,14 +475,7 @@ class LLMResponseWithPrompt(LLMResponse, HistoryMixin, OutputMessageTagMixin):
             disabled_tools=self.disabled_tools,
             expect_citations=self.generate_citations,
         )
-        allowed_tools = chat_adapter.get_allowed_tools()
-        # TODO: tracing
-        # if len(tools) != len(allowed_tools):
-        # self.logger.info(
-        #     "Some tools have been disabled: %s", [tool.name for tool in tools if tool not in allowed_tools]
-        # )
-
-        if allowed_tools:
+        if chat_adapter.get_allowed_tools():
             chat = AgentLLMChat(adapter=chat_adapter, history_manager=history_manager)
         else:
             chat = SimpleLLMChat(adapter=chat_adapter, history_manager=history_manager)
@@ -1053,15 +1046,7 @@ class AssistantNode(PipelineNode, OutputMessageTagMixin):
         history_manager = PipelineHistoryManager.for_assistant()
         adapter = AssistantAdapter.for_pipeline(session=session, node=self, disabled_tools=self.disabled_tools)
 
-        allowed_tools = adapter.get_allowed_tools()
-        # TODO: tracing
-        # if len(adapter.tools) != len(allowed_tools):
-        #     self.logger.info(
-        #         "Some tools have been disabled: %s",
-        #         [tool.name for tool in adapter.tools if tool not in allowed_tools]
-        #     )
-
-        if allowed_tools:
+        if adapter.get_allowed_tools():
             return AgentAssistantChat(adapter=adapter, history_manager=history_manager)
         else:
             if assistant.tools_enabled:

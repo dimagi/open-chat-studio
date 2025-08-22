@@ -16,6 +16,7 @@ from functools import cached_property
 from typing import TYPE_CHECKING, Self
 
 from django.db import models
+from google.ai.generativelanguage_v1beta.types import Tool as GenAITool
 from langchain_core.prompts import PromptTemplate, get_template_variables
 from langchain_core.tools import BaseTool
 
@@ -24,7 +25,12 @@ from apps.chat.agent.tools import get_assistant_tools, get_tools
 from apps.chat.models import Chat
 from apps.experiments.models import Experiment, ExperimentSession
 from apps.files.models import File
-from apps.service_providers.llm_service.main import LlmService, OpenAIAssistantRunnable
+from apps.service_providers.llm_service.main import (
+    AnthropicBuiltinTool,
+    LlmService,
+    OpenAIAssistantRunnable,
+    OpenAIBuiltinTool,
+)
 from apps.service_providers.llm_service.prompt_context import PromptTemplateContext
 from apps.service_providers.llm_service.utils import (
     populate_reference_section_from_citations,
@@ -61,6 +67,16 @@ class BaseAdapter:
             # Model builtin tools doesn't have a name attribute and are dicts
             return [tool for tool in self.tools if hasattr(tool, "name") and tool.name not in self.disabled_tools]
         return self.tools
+
+    def get_callable_tools(self):
+        """Filter out tools that are not OCS tools. `AgentExecutor` expects a list of runnable tools, so we need to
+        remove all tools that are run by the LLM provider
+        """
+        return [
+            t
+            for t in self.get_allowed_tools()
+            if not isinstance(t, (OpenAIBuiltinTool | GenAITool | AnthropicBuiltinTool))
+        ]
 
 
 class ChatAdapter(BaseAdapter):
