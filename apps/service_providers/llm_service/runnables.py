@@ -5,7 +5,6 @@ from typing import TYPE_CHECKING, Any, Literal
 
 import openai
 from django.db import transaction
-from google.ai.generativelanguage_v1beta.types import Tool as GenAITool
 from langchain.agents import AgentExecutor, create_tool_calling_agent
 from langchain.agents.openai_assistant.base import OpenAIAssistantFinish
 from langchain.agents.output_parsers import tools as lc_tools_parser
@@ -29,7 +28,7 @@ from apps.files.models import File
 from apps.service_providers.llm_service.adapters import AssistantAdapter, ChatAdapter
 from apps.service_providers.llm_service.datamodels import LlmChatResponse
 from apps.service_providers.llm_service.history_managers import ExperimentHistoryManager, PipelineHistoryManager
-from apps.service_providers.llm_service.main import AnthropicBuiltinTool, OpenAIAssistantRunnable, OpenAIBuiltinTool
+from apps.service_providers.llm_service.main import OpenAIAssistantRunnable
 from apps.service_providers.llm_service.parsers import custom_parse_ai_message
 from apps.service_providers.llm_service.utils import format_multimodal_input
 from apps.utils.prompt import OcsPromptTemplate
@@ -260,20 +259,14 @@ class AgentLLMChat(LLMChat):
         return output_parser(output, session=self.adapter.session, include_citations=self.adapter.expect_citations)
 
     def _build_chain(self) -> Runnable[dict[str, Any], dict]:
-        tools = self.adapter.get_allowed_tools()
-        agent = create_tool_calling_agent(llm=self.adapter.get_chat_model(), tools=tools, prompt=self.prompt)
-        tools = self._remove_builtin_tools(tools)
+        agent = create_tool_calling_agent(
+            llm=self.adapter.get_chat_model(), tools=self.adapter.get_allowed_tools(), prompt=self.prompt
+        )
         return AgentExecutor.from_agent_and_tools(
             agent=agent,
-            tools=tools,
+            tools=self.adapter.get_callable_tools(),
             max_execution_time=120,
         )
-
-    def _remove_builtin_tools(self, tools: list):
-        """Filter out tools that are not OCS tools. `AgentExecutor` expects a list of runnable tools, so we need to
-        remove all tools that are run by the LLM provider
-        """
-        return [t for t in tools if not isinstance(t, (OpenAIBuiltinTool | GenAITool | AnthropicBuiltinTool))]
 
     @property
     def prompt(self):
