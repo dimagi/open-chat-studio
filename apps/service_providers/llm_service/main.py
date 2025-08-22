@@ -166,7 +166,13 @@ class LlmService(pydantic.BaseModel):
     def _default_parser(
         self, llm_output, session: ExperimentSession, include_citations: bool = True
     ) -> LlmChatResponse:
-        llm_outputs = llm_output.get("output", "")
+        if isinstance(llm_output, dict):
+            llm_outputs = llm_output.get("output", "")
+        elif isinstance(llm_output, str | list):
+            llm_outputs = llm_output
+        else:
+            raise ValueError(f"Unexpected type {type(llm_output)}")
+
         final_text = ""
         cited_file_ids_remote = []
         cited_file_ids = []
