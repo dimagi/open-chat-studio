@@ -1,3 +1,4 @@
+// eslint-disable-next-line @typescript-eslint/no-unused-vars
 import {Component, Host, h, Prop, State, Element, Watch} from '@stencil/core';
 import {
   XMarkIcon,
@@ -211,6 +212,7 @@ export class OcsChat {
   private chatWindowHeight: number = 600;
   private chatWindowWidth: number = 450;
   private chatWindowFullscreenWidth: number = 1024;
+  private positionInitialized: boolean = false;
   @Element() host: HTMLElement;
 
 
@@ -229,7 +231,9 @@ export class OcsChat {
     }
     this.parseWelcomeMessages();
     this.parseStarterQuestions();
+  }
 
+  componentDidLoad() {
     const computedStyle = getComputedStyle(this.host);
     const windowHeightVar = computedStyle.getPropertyValue('--chat-window-height');
     const windowWidthVar = computedStyle.getPropertyValue('--chat-window-width');
@@ -237,10 +241,10 @@ export class OcsChat {
     this.chatWindowHeight = varToPixels(windowHeightVar, window.innerHeight, this.chatWindowHeight);
     this.chatWindowWidth = varToPixels(windowWidthVar, window.innerWidth, this.chatWindowWidth);
     this.chatWindowFullscreenWidth = varToPixels(fullscreenWidthVar, window.innerWidth, this.chatWindowFullscreenWidth);
-    this.initializePosition();
-  }
+    if (this.visible) {
+      this.initializePosition();
+    }
 
-  componentDidLoad() {
     // Only auto-start session if we don't have an existing one
     if (this.visible && !this.sessionId) {
       this.startSession();
@@ -356,7 +360,8 @@ export class OcsChat {
       });
 
       if (!response.ok) {
-        throw new Error(`Failed to start session: ${response.statusText}`);
+        this.handleError(`Failed to start session: ${response.statusText}`);
+        return;
       }
 
       const data: ChatStartSessionResponse = await response.json();
@@ -373,8 +378,7 @@ export class OcsChat {
       // Start polling for messages
       this.startPolling();
     } catch (error) {
-      const errorText = error instanceof Error ? error.message : 'Failed to start chat session';
-      this.handleError(errorText);
+      this.handleError('Failed to start chat session');
     } finally {
       this.isLoading = false;
     }
@@ -654,7 +658,7 @@ export class OcsChat {
         this.scrollToBottom();
         this.focusInput();
       }
-    } catch (error) {
+    } catch {
       // Silently fail for polling
     }
   }
@@ -762,6 +766,9 @@ export class OcsChat {
    */
   @Watch('visible')
   async visibilityHandler(visible: boolean) {
+    if (visible) {
+      this.initializePosition();
+    }
     if (visible && !this.sessionId) {
       await this.startSession();
     } else if (!visible) {
@@ -791,6 +798,7 @@ export class OcsChat {
     const centeredX = (windowWidth - actualChatWidth) / 2;
     const maxOffset = (windowWidth - actualChatWidth) / 2;
 
+    console.log( windowWidth, actualChatWidth, centeredX, maxOffset )
     return { windowWidth, actualChatWidth, centeredX, maxOffset };
   }
 
@@ -812,6 +820,11 @@ export class OcsChat {
   }
 
   private initializePosition(): void {
+    if (this.positionInitialized) {
+      return;
+    }
+    this.positionInitialized = true;
+
     const windowWidth = window.innerWidth;
     const windowHeight = window.innerHeight;
     const chatWidth = windowWidth < OcsChat.MOBILE_BREAKPOINT ? windowWidth : this.chatWindowWidth;
@@ -969,6 +982,7 @@ export class OcsChat {
   };
 
   private handleWindowResize = (): void => {
+    this.positionInitialized = false;
     this.initializePosition();
   };
 
@@ -1193,7 +1207,7 @@ export class OcsChat {
               <div class="header-text">{this.headerText}</div>
               <div class="header-buttons">
                 {/* New Chat button */}
-                {this.sessionId && this.messages.length > 0 && (
+                {this.messages.length > 0 && (
                   <button
                     class="header-button"
                     onClick={() => this.showConfirmationDialog()}
@@ -1260,7 +1274,7 @@ export class OcsChat {
               )}
 
               {/* Messages */}
-              {this.sessionId && (
+              {(
                 <div
                   ref={(el) => this.messageListRef = el}
                   class="messages-container"
