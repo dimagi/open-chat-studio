@@ -10,13 +10,14 @@ from django.core.exceptions import ValidationError
 from django.core.validators import validate_email
 from django.db.models import TextChoices
 from jinja2.sandbox import SandboxedEnvironment
-from langchain_core.messages import BaseMessage
+from langchain_core.messages import BaseMessage, HumanMessage, SystemMessage
 from langchain_core.prompts import MessagesPlaceholder, PromptTemplate
 from langchain_core.runnables import RunnableLambda, RunnablePassthrough
 from langchain_core.tools import BaseTool
 from langchain_openai.chat_models.base import OpenAIRefusalError
 from langchain_text_splitters import RecursiveCharacterTextSplitter
 from langgraph.constants import END
+from langgraph.prebuilt import create_react_agent
 from langgraph.types import Command, interrupt
 from pydantic import BaseModel, BeforeValidator, Field, create_model, field_serializer, field_validator, model_validator
 from pydantic import ValidationError as PydanticValidationError
@@ -51,16 +52,16 @@ from apps.pipelines.nodes.base import (
 from apps.pipelines.nodes.tool_callbacks import ToolCallbacks
 from apps.pipelines.tasks import send_email_from_pipeline
 from apps.service_providers.exceptions import ServiceProviderConfigError
+from apps.service_providers.llm_service import LlmService
 from apps.service_providers.llm_service.adapters import AssistantAdapter, ChatAdapter
 from apps.service_providers.llm_service.history_managers import PipelineHistoryManager
 from apps.service_providers.llm_service.prompt_context import PromptTemplateContext
 from apps.service_providers.llm_service.runnables import (
     AgentAssistantChat,
-    AgentLLMChat,
     AssistantChat,
     ChainOutput,
-    SimpleLLMChat,
 )
+from apps.service_providers.llm_service.utils import format_multimodal_input
 from apps.service_providers.models import LlmProviderModel
 from apps.utils.langchain import dict_to_json_schema
 from apps.utils.prompt import OcsPromptTemplate, PromptVars, validate_prompt_variables
@@ -165,7 +166,7 @@ class LLMResponseMixin(BaseModel):
             )
         return self
 
-    def get_llm_service(self):
+    def get_llm_service(self) -> LlmService:
         from apps.service_providers.models import LlmProvider
 
         try:
@@ -475,21 +476,52 @@ class LLMResponseWithPrompt(LLMResponse, HistoryMixin, OutputMessageTagMixin):
             disabled_tools=self.disabled_tools,
             expect_citations=self.generate_citations,
         )
-        if chat_adapter.get_allowed_tools():
-            chat = AgentLLMChat(adapter=chat_adapter, history_manager=history_manager)
+
+        prompt_template = PromptTemplate.from_template(self.prompt)
+        context = chat_adapter.get_template_context(prompt_template.input_variables)
+        try:
+            formatted_prompt = prompt_template.format(**context)
+            prompt = SystemMessage(content=formatted_prompt)
+        except KeyError as e:
+            raise PipelineNodeRunError(str(e)) from e
+
+        history = history_manager.get_chat_history([prompt, HumanMessage(content=input)])
+
+        model = chat_adapter.get_chat_model()
+        chat = create_react_agent(
+            # TODO: I think this will fail with google builtin tools
+            model=model,
+            tools=chat_adapter.get_allowed_tools(),
+            prompt=prompt,
+        )
+        formatted_input = format_multimodal_input(message=input, attachments=attachments)
+        result = chat.invoke({"messages": history + [("human", formatted_input)]})
+        final_message = result["messages"][-1]
+        print(final_message)
+        output_parser = self.get_llm_service().get_output_parser()
+        parsed_output = output_parser(final_message.content, session=session, include_citations=self.generate_citations)
+        ai_message_metadata = chat_adapter.get_output_message_metadata(
+            cited_files=parsed_output.cited_files, generated_files=parsed_output.generated_files
+        )
+        if self.generate_citations:
+            ai_message = chat_adapter.add_citation_section_from_cited_files(
+                parsed_output.text, cited_files=parsed_output.cited_files
+            )
         else:
-            chat = SimpleLLMChat(adapter=chat_adapter, history_manager=history_manager)
-        # Invoke runnable
-        result = chat.invoke(input=input, attachments=attachments)
+            ai_message = chat_adapter.remove_file_citations(parsed_output.text)
+
+        history_manager.add_messages_to_history(input, {}, ai_message, {})
+
         voice_kwargs = {}
         if self.synthetic_voice_id is not None:
             voice_kwargs["synthetic_voice_id"] = self.synthetic_voice_id
+
         return PipelineState.from_node_output(
             node_name=self.name,
             node_id=self.node_id,
-            output=result.output,
+            output=ai_message,
             output_message_metadata={
-                **history_manager.output_message_metadata,
+                **ai_message_metadata,
                 **tool_callbacks.output_message_metadata,
             },
             intents=tool_callbacks.intents,
