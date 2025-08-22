@@ -662,7 +662,6 @@ textarea {
 }
 
 .message-bubble-assistant .chat-markdown {
-  @apply prose prose-sm prose-gray max-w-none prose-a:no-underline hover:prose-a:underline;
   --tw-prose-body: var(--message-assistant-text-color);
   --tw-prose-headings: var(--message-assistant-text-color);
   --tw-prose-lead: var(--message-assistant-text-color);
