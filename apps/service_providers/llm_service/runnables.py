@@ -31,6 +31,7 @@ from apps.service_providers.llm_service.datamodels import LlmChatResponse
 from apps.service_providers.llm_service.history_managers import ExperimentHistoryManager, PipelineHistoryManager
 from apps.service_providers.llm_service.main import AnthropicBuiltinTool, OpenAIAssistantRunnable, OpenAIBuiltinTool
 from apps.service_providers.llm_service.parsers import custom_parse_ai_message
+from apps.service_providers.llm_service.utils import format_multimodal_input
 from apps.utils.prompt import OcsPromptTemplate
 
 lc_tools_parser.parse_ai_message_to_tool_action = custom_parse_ai_message
@@ -147,9 +148,7 @@ class LLMChat(RunnableSerializable[str, ChainOutput]):
 
         try:
             if attachments:
-                input = self._format_multimodal_input(
-                    input=input, attachments=attachments, session_id=self.adapter.session.id
-                )
+                input = format_multimodal_input(message=input, attachments=attachments)
             if include_conversation_history:
                 self._populate_memory(input)
 
@@ -182,21 +181,6 @@ class LLMChat(RunnableSerializable[str, ChainOutput]):
             )
 
         return result
-
-    def _format_multimodal_input(self, input: str, attachments: list, session_id: int) -> list[dict]:
-        parts = [{"type": "text", "text": input}]
-        for att in attachments:
-            download_url = att.download_link
-            mime_type = att.content_type or ""
-            parts.append(
-                {
-                    "type": "image" if mime_type.startswith("image/") else "file",
-                    "source_type": "url",
-                    "url": download_url,
-                    "mime_type": mime_type,
-                }
-            )
-        return parts
 
     def _get_input(self, input: str):
         return {self.input_key: self.adapter.format_input(input)}
