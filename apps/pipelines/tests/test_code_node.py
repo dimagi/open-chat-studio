@@ -7,7 +7,7 @@ from pydantic import ValidationError
 from apps.channels.datamodels import Attachment
 from apps.experiments.models import Participant, ParticipantData
 from apps.files.models import File
-from apps.pipelines.exceptions import PipelineNodeRunError
+from apps.pipelines.exceptions import CodeNodeRunError
 from apps.pipelines.nodes.base import PipelineState
 from apps.pipelines.nodes.nodes import CodeNode, RenderTemplate
 from apps.pipelines.tests.utils import (
@@ -112,7 +112,7 @@ def test_code_node_build_errors(code, input, error):
 )
 def test_code_node_runtime_errors(code, input, error):
     node = CodeNode(name="test", node_id="123", django_node=None, code=code)
-    with pytest.raises(PipelineNodeRunError, match=error):
+    with pytest.raises(CodeNodeRunError, match=error):
         node._process(input, PipelineState(outputs={}, experiment_session=None))
 
 
@@ -217,7 +217,7 @@ def main(input, **kwargs):
     return input
 """
     node = CodeNode(name="test", node_id="123", django_node=None, code=code_set)
-    with pytest.raises(PipelineNodeRunError, match="Cannot set the 'outputs' key of the temporary state"):
+    with pytest.raises(CodeNodeRunError, match="Cannot set the 'outputs' key of the temporary state"):
         node._process("hi", PipelineState(outputs={}, experiment_session=None))
 
 
@@ -466,7 +466,7 @@ def main(input, **kwargs):
     """
 
     node = CodeNode(name="test", node_id="123", django_node=None, code=code_set)
-    with pytest.raises(PipelineNodeRunError) as exc_info:
+    with pytest.raises(CodeNodeRunError) as exc_info:
         node._process("hi", PipelineState(outputs={}, experiment_session=None))
     assert (
         str(exc_info.value)
