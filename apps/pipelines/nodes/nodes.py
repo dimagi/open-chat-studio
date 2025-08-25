@@ -1,8 +1,5 @@
-import datetime
-import inspect
 import json
 import logging
-import time
 import unicodedata
 from typing import Annotated, Literal, Self
 
@@ -26,7 +23,6 @@ from pydantic import ValidationError as PydanticValidationError
 from pydantic.config import ConfigDict
 from pydantic_core import PydanticCustomError
 from pydantic_core.core_schema import FieldValidationInfo
-from RestrictedPython import compile_restricted, limited_builtins, safe_builtins, utility_builtins
 
 from apps.annotations.models import TagCategories
 from apps.assistants.models import OpenAiAssistant
@@ -63,6 +59,7 @@ from apps.service_providers.llm_service.runnables import (
 from apps.service_providers.models import LlmProviderModel
 from apps.utils.langchain import dict_to_json_schema
 from apps.utils.prompt import OcsPromptTemplate, PromptVars, validate_prompt_variables
+from apps.utils.python_execution import RestrictedPythonExecutionMixin
 
 OptionalInt = Annotated[int | None, BeforeValidator(lambda x: None if isinstance(x, str) and len(x) == 0 else x)]
 
@@ -1078,7 +1075,7 @@ def main(input: str, **kwargs) -> str:
 """
 
 
-class CodeNode(PipelineNode, OutputMessageTagMixin):
+class CodeNode(PipelineNode, OutputMessageTagMixin, RestrictedPythonExecutionMixin):
     """Runs python"""
 
     model_config = ConfigDict(
@@ -1094,62 +1091,25 @@ class CodeNode(PipelineNode, OutputMessageTagMixin):
         json_schema_extra=UiSchema(widget=Widgets.code),
     )
 
-    @field_validator("code")
-    def validate_code(cls, value, info: FieldValidationInfo):
-        if not value:
-            value = DEFAULT_FUNCTION
-        try:
-            byte_code = compile_restricted(
-                value,
-                filename="<inline code>",
-                mode="exec",
-            )
-            custom_locals = {}
-            try:
-                exec(byte_code, {}, custom_locals)
-            except Exception as exc:
-                raise PydanticCustomError("invalid_code", "{error}", {"error": str(exc)}) from exc
+    @classmethod
+    def _get_default_code(cls) -> str:
+        return DEFAULT_FUNCTION
 
-            try:
-                main = custom_locals["main"]
-            except KeyError:
-                raise SyntaxError("You must define a 'main' function") from None
-
-            for name, item in custom_locals.items():
-                if name != "main" and inspect.isfunction(item):
-                    raise SyntaxError(
-                        "You can only define a single function, 'main' at the top level. "
-                        "You may use nested functions inside that function if required"
-                    )
-
-            if list(inspect.signature(main).parameters) != ["input", "kwargs"]:
-                raise SyntaxError("The main function should have the signature main(input, **kwargs) only.")
-
-        except SyntaxError as exc:
-            raise PydanticCustomError("invalid_code", "{error}", {"error": exc.msg}) from None
-        return value
+    @classmethod
+    def _get_function_args(cls) -> list[str]:
+        return ["input", "**kwargs"]
 
     def _process(self, input: str, state: PipelineState) -> PipelineState | Command:
-        function_name = "main"
-        filename = "<inline_code>"
-        byte_code = compile_restricted(
-            self.code,
-            filename=filename,
-            mode="exec",
-        )
-        custom_locals = {}
         output_state = PipelineState()
-        custom_globals = self._get_custom_globals(state, output_state)
-        kwargs = {}
+        custom_globals = self._get_custom_globals().copy() | self._get_custom_functions(state, output_state)
         try:
-            exec(byte_code, custom_globals, custom_locals)
-            result = custom_locals[function_name](input, **kwargs)
+            result = self.compile_and_execute_code(custom_globals=custom_globals, input=input)
         except WaitForNextInput:
             return Command(goto=END)
         except AbortPipeline as abort:
             return interrupt(abort.to_json())
         except Exception as exc:
-            message = get_code_error_message(filename, self.code)
+            message = get_code_error_message("<inline_code>", self.code)
             raise PipelineNodeRunError(message) from exc
 
         if isinstance(result, Command):
@@ -1161,34 +1121,12 @@ class CodeNode(PipelineNode, OutputMessageTagMixin):
             ),
         )
 
-    def _get_custom_globals(self, state: PipelineState, output_state: PipelineState) -> dict:
+    def _get_custom_functions(self, state: PipelineState, output_state: PipelineState) -> dict:
         """
         Args:
             state: The input state. Do not modify this state.
             output_state: An empty state dict to which state modifications should be made.
         """
-        from RestrictedPython.Eval import (
-            default_guarded_getitem,
-            default_guarded_getiter,
-        )
-        from RestrictedPython.Guards import (
-            guarded_iter_unpack_sequence,
-        )
-
-        custom_globals = {
-            "__builtins__": self._get_custom_builtins(),
-            "json": json,
-            "datetime": datetime,
-            "time": time,
-            "_getitem_": default_guarded_getitem,
-            "_getiter_": default_guarded_getiter,
-            "_iter_unpack_sequence_": guarded_iter_unpack_sequence,
-            "_write_": lambda x: x,
-        }
-        custom_functions = self._get_custom_functions(state, output_state)
-        return custom_globals | custom_functions
-
-    def _get_custom_functions(self, state: PipelineState, output_state: PipelineState) -> dict:
         participant_data_proxy = self.get_participant_data_proxy(state)
         pipeline_state = PipelineState.clone(state)
 
@@ -1284,35 +1222,3 @@ class CodeNode(PipelineNode, OutputMessageTagMixin):
             state["temp_state"][key_name] = value
 
         return set_temp_state_key
-
-    def _get_custom_builtins(self):
-        allowed_modules = {
-            "json",
-            "re",
-            "datetime",
-            "time",
-            "random",
-        }
-        custom_builtins = safe_builtins.copy()
-        custom_builtins.update(
-            {
-                "min": min,
-                "max": max,
-                "sum": sum,
-                "abs": abs,
-                "all": all,
-                "any": any,
-                "datetime": datetime,
-            }
-        )
-
-        custom_builtins.update(utility_builtins)
-        custom_builtins.update(limited_builtins)
-
-        def guarded_import(name, *args, **kwargs):
-            if name not in allowed_modules:
-                raise ImportError(f"Importing '{name}' is not allowed")
-            return __import__(name, *args, **kwargs)
-
-        custom_builtins["__import__"] = guarded_import
-        return custom_builtins
