@@ -145,7 +145,12 @@ class ExperimentSessionsTableView(LoginAndTeamRequiredMixin, SingleTableView, Pe
             )
         )
         timezone = self.request.session.get("detected_tz", None)
-        query_set = apply_dynamic_filters(query_set, self.request.GET, timezone)
+        filters = self.request.GET
+        if not filters and (hx_url := self.request.headers.get("HX-Current-URL")):
+            parsed_url = urlparse(hx_url)
+            filters = parse_qs(parsed_url.query)
+
+        query_set = apply_dynamic_filters(query_set, filters, timezone)
         return query_set
 
 
