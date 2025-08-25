@@ -11,14 +11,18 @@
         <h2 class="text-2xl">
           {{ project_meta.DESCRIPTION }}
         </h2>
-        <p class="mt-4 flex grow">
+        <p class="mt-4 flex grow gap-2">
           {% if signup_enabled %}
-            <a class="btn btn-outline" href="{% url 'account_signup' %}">
+            <a class="btn btn-outline btn-primary" href="{% url 'account_signup' %}">
               {% translate "Create account" %}
             </a>
           {% endif %}
           <a class="btn btn-outline btn-secondary w-44" href="{% url login_url_name|default:"account_login" %}">
             {% translate "Sign In" %}
+          </a>
+          <a class="btn btn-ghost" href="{{ project_meta.DOCS_URL }}" target="_blank">
+            {% translate "Docs" %}
+            <i class="fa-solid fa-up-right-from-square"></i>
           </a>
         </p>
       </div>
