@@ -144,14 +144,14 @@ class RestrictedPythonExecutionMixin(BaseModel):
 
     def compile_and_execute_code(
         self,
-        custom_globals: dict[str, Any] = None,
+        additional_globals: dict[str, Any] | None = None,
         *args,
         **kwargs,
     ) -> Any:
         """
         Compile and execute Python code safely.
         Args:
-            custom_globals: Additional globals to include
+            additional_globals: Additional globals to include
             *args, **kwargs: Arguments to pass to the function
         Returns:
             The result of calling the function
@@ -164,9 +164,13 @@ class RestrictedPythonExecutionMixin(BaseModel):
             mode="exec",
         )
         custom_locals = {}
-        exec(byte_code, custom_globals, custom_locals)
 
-        # Call the main function
+        if additional_globals is None:
+            all_globals = self._get_custom_globals()
+        else:
+            all_globals = self._get_custom_globals().copy() | additional_globals
+        exec(byte_code, all_globals, custom_locals)
+
         if function_name not in custom_locals:
             raise ValueError(f"Function {function_name} not found in code")
 

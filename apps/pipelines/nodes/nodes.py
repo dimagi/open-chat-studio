@@ -1101,9 +1101,10 @@ class CodeNode(PipelineNode, OutputMessageTagMixin, RestrictedPythonExecutionMix
 
     def _process(self, input: str, state: PipelineState) -> PipelineState | Command:
         output_state = PipelineState()
-        custom_globals = self._get_custom_globals().copy() | self._get_custom_functions(state, output_state)
         try:
-            result = self.compile_and_execute_code(custom_globals=custom_globals, input=input)
+            result = self.compile_and_execute_code(
+                additional_globals=self._get_custom_functions(state, output_state), input=input
+            )
         except WaitForNextInput:
             return Command(goto=END)
         except AbortPipeline as abort:

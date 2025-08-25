@@ -7,11 +7,13 @@ from pydantic_core import ValidationError
 from apps.evaluations.exceptions import EvaluationRunException
 from apps.evaluations.models import EvaluationMessage, EvaluationMessageContent
 from apps.pipelines.nodes.base import UiSchema, Widgets
+from apps.pipelines.nodes.code_node_utils import get_code_error_message
 from apps.service_providers.exceptions import ServiceProviderConfigError
 from apps.service_providers.llm_service.main import LlmService
 from apps.service_providers.llm_service.prompt_context import SafeAccessWrapper
 from apps.service_providers.models import LlmProviderModel
 from apps.utils.langchain import dict_to_json_schema
+from apps.utils.python_execution import RestrictedPythonExecutionMixin
 
 
 class EvaluatorSchema(BaseModel):
@@ -96,4 +98,60 @@ class LlmEvaluator(LLMResponseMixin, BaseEvaluator):
             generated_response=generated_response,
         )
         result = llm.invoke(formatted_prompt)
+        return EvaluatorResult(result=result, generated_response=generated_response)
+
+
+DEFAULT_FUNCTION = """
+def main(input, output, context, full_history, generated_response, **kwargs) -> dict:
+    return {'key': input}
+"""
+
+
+class PythonEvaluator(BaseEvaluator, RestrictedPythonExecutionMixin):
+    """Runs python"""
+
+    model_config = ConfigDict(
+        evaluator_schema=EvaluatorSchema(
+            label="Python Evaluator",
+            icon="fa-solid fa-file-code",
+        )
+    )
+    code: str = Field(
+        default=DEFAULT_FUNCTION,
+        description="The code to run",
+        json_schema_extra=UiSchema(widget=Widgets.code),
+    )
+
+    @classmethod
+    def _get_default_code(cls) -> str:
+        return DEFAULT_FUNCTION
+
+    @classmethod
+    def _get_function_args(cls) -> list[str]:
+        return ["input", "output", "context", "full_history", "generated_response", "**kwargs"]
+
+    def run(self, message: EvaluationMessage, generated_response: str) -> EvaluatorResult:
+        try:
+            input = EvaluationMessageContent.model_validate(message.input)
+        except ValidationError as err:
+            raise EvaluationRunException("Missing input text") from err
+
+        try:
+            output = EvaluationMessageContent.model_validate(message.output)
+        except ValidationError as err:
+            raise EvaluationRunException("Missing output text") from err
+
+        try:
+            result = self.compile_and_execute_code(
+                input=input,
+                output=output,
+                context=message.context,
+                full_history=message.full_history,
+                generated_response=generated_response,
+            )
+            if not isinstance(result, dict):
+                raise EvaluationRunException("The python function did not return a dictionary")
+        except Exception as exc:
+            raise EvaluationRunException(get_code_error_message("<inline_code>", self.code)) from exc
+
         return EvaluatorResult(result=result, generated_response=generated_response)
