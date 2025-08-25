@@ -94,6 +94,24 @@
               </div>
             </template>
 
+            <!-- Python Code Widget -->
+            <template x-if="getWidget(field) === 'code'">
+              <div class="mb-6">
+                <label :for="'param_' + fieldName" class="label font-bold">
+                  <div x-text="field.title || fieldName"></div>
+                </label>
+                <div class="python-editor textarea textarea-bordered w-full p-0 overflow-auto resize-y"
+                     :data-target-field="'#param_' + fieldName"
+                     style="height: 300px; min-height: 150px; max-height: 1000px;"></div>
+                <textarea :id="'param_' + fieldName"
+                          :name="'param_' + fieldName"
+                          x-model="params[fieldName]"
+                          style="display: none;"
+                          :required="isRequired(fieldName)"></textarea>
+                <small class="form-text text-muted" x-show="field.description" x-text="field.description"></small>
+              </div>
+            </template>
+
             <!-- Expandable Text Widget -->
             <template x-if="getWidget(field) === 'expandable_text'">
               <div>
@@ -232,6 +250,8 @@
 {% endblock form %}
 
 {% block page_js %}
+  {{ block.super }}
+  <script src="{% load static %}{% static 'js/editors-bundle.js' %}"></script>
   {{ evaluator_schemas|json_script:"evaluator-schemas" }}
   {{ parameter_values|json_script:"parameter-values" }}
   {{ default_values|json_script:"default-values" }}
@@ -310,6 +330,13 @@
                     ? Object.entries(this.params[key]).map(([k, v]) => ({key: k, value: v}))
                     : [{key: '', value: ''}];
                 }
+              }
+            });
+
+            // Initialize Python editors after DOM is rendered
+            this.$nextTick(() => {
+              if (window.SiteJS && window.SiteJS.editors && window.SiteJS.editors.initPythonEditors) {
+                window.SiteJS.editors.initPythonEditors();
               }
             });
           }
