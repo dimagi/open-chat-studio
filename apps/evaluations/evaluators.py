@@ -100,9 +100,23 @@ class LlmEvaluator(LLMResponseMixin, BaseEvaluator):
         return EvaluatorResult(result=result, generated_response=generated_response)
 
 
-DEFAULT_FUNCTION = """
-def main(input, output, context, full_history, generated_response, **kwargs) -> dict:
-    return {'key': input}
+DEFAULT_FUNCTION = """# The main function is called for each message in the evaluation dataset
+
+def main(input: dict, output: dict, context: dict, full_history: str, generated_response: str, **kwargs) -> dict:
+    \"""Evaluate a single message and return metrics.
+
+    Args:
+        input: The input message data (e.g., {'content': 'Hello', 'role': 'human'})
+        output: The actual output message / ground-truth data (e.g., {'content': 'Hello', 'role': 'ai'})
+        context: Additional context of the message (e.g., {'current_datetime': '2025-06-02T18:51:55.334974+00:00'})
+        full_history: Complete conversation history as a string (e.g., "user: hello!\nassistant: hello!\n")
+        generated_response: The AI-generated response being evaluated, if enabled
+
+    Returns:
+        dict: Evaluation results where keys become columns in the output
+              (e.g., {'accuracy': 0.95, 'relevance': 'high'})
+    \"""
+    return {'python_evaluation': input['content']}
 """
 
 
