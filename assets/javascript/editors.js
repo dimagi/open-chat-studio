@@ -182,6 +182,17 @@ class JsonEditor extends BaseEditor {
     super(element, JsonEditor.instances);
   }
 
+  setupEventListeners() {
+    super.setupEventListeners();
+    // reset event listener
+    const form = this.element.closest('form');
+    if (form) {
+      form.addEventListener('reset', () => {
+        setTimeout(() => this.reset(), 10);
+      });
+    }
+  }
+
   /**
    * Format the current JSON content
    */
@@ -273,7 +284,6 @@ class JsonEditor extends BaseEditor {
     });
   }
 
-
   /**
    * Update error status display
    */
@@ -293,6 +303,22 @@ class JsonEditor extends BaseEditor {
     }
   }
 
+  reset() {
+    if (!this.view) return;
+
+    this.view.dispatch({
+      changes: {
+        from: 0,
+        to: this.view.state.doc.length,
+        insert: this.initialValue || '{}'
+      }
+    });
+
+    if (this.target) {
+        this.target.value = this.initialValue || '{}';
+    }
+    this.updateErrorStatus();
+  }
 
   /**
    * Create or update a JSON editor for an element

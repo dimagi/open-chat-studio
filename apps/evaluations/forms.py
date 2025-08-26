@@ -365,7 +365,7 @@ class EvaluationDatasetForm(forms.ModelForm):
                 {
                     "human": EvaluationMessageContent(content=pair.get("human", "").strip(), role="human").model_dump(),
                     "ai": EvaluationMessageContent(content=pair.get("ai", "").strip(), role="ai").model_dump(),
-                    "context": pair.get("context"),
+                    "context": json.loads(pair.get("context", "{}")) if pair.get("context") else {},
                 }
             )
         return validated_pairs

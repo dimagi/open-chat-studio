@@ -663,10 +663,29 @@ export class OcsChat {
     }
   }
 
-  private scrollToBottom(): void {
+  /**
+   * Scroll the message container to the bottom.
+   * @param forceEnd When `false`, scroll the top of the last message into view.
+   *    When `true`, scroll all the way to the end of the last message.
+   */
+  private scrollToBottom(forceEnd: boolean =false): void {
     setTimeout(() => {
       if (this.messageListRef) {
-        this.messageListRef.scrollTop = this.messageListRef.scrollHeight;
+        const lastChild = this.messageListRef.lastElementChild;
+        if (!forceEnd && lastChild) {
+          // scroll so that the top of the last message is in the centre of the message container
+          const parentRect = this.messageListRef.getBoundingClientRect();
+          const childRect = lastChild.getBoundingClientRect();
+          const currentScrollTop = this.messageListRef.scrollTop;
+          const childTopRelativeToParent = childRect.top - parentRect.top;
+          const targetScroll = currentScrollTop + childTopRelativeToParent - (parentRect.height / 2);
+          this.messageListRef.scrollTo({
+              top: targetScroll,
+              behavior: 'smooth'
+          });
+        } else {
+          this.messageListRef.scrollTop = this.messageListRef.scrollHeight;
+        }
       }
     }, OcsChat.SCROLL_DELAY_MS);
   }
@@ -774,6 +793,7 @@ export class OcsChat {
     } else if (!visible) {
       this.pauseMessagePolling()
     } else {
+      this.scrollToBottom(true);
       this.resumeMessagePolling();
     }
   }
