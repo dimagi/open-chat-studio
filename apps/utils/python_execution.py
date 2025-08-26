@@ -133,6 +133,7 @@ class RestrictedPythonExecutionMixin(BaseModel):
                 "all": all,
                 "any": any,
                 "datetime": datetime,
+                "dict": dict,
             }
         )
 
