@@ -144,6 +144,21 @@ class BaseEditor {
   }
 
   /**
+   * Get common extensions shared by all editors
+   * @param {boolean} readOnlyValue - Whether the editor should be read-only
+   * @returns {Array} Array of CodeMirror extensions
+   */
+  getCommonExtensions(readOnlyValue = false) {
+    return [
+      basicSetup,
+      keymap.of([indentWithTab]),
+      this.readOnly.of(EditorState.readOnly.of(readOnlyValue)),
+      EditorView.updateListener.of(this.handleEditorUpdate.bind(this)),
+      getSelectedTheme(),
+    ];
+  }
+
+  /**
    * Abstract method to create the CodeMirror editor instance
    * Must be implemented by subclasses
    */
@@ -265,14 +280,10 @@ class JsonEditor extends BaseEditor {
       doc: this.initialValue || "",
       parent: this.element,
       extensions: [
-        basicSetup,
-        keymap.of([indentWithTab]),
+        ...this.getCommonExtensions(false),
         json(),
         linter(jsonParseLinter(), { delay: 250 }),
         lintGutter(),
-        this.readOnly.of(EditorState.readOnly.of(false)),
-        EditorView.updateListener.of(this.handleEditorUpdate.bind(this)),
-        getSelectedTheme(),
         // Keyboard shortcut for formatting
         EditorView.domEventHandlers({
           keydown: (e) => {
@@ -381,13 +392,9 @@ class PythonEditor extends BaseEditor {
       doc: this.initialValue || "",
       parent: this.element,
       extensions: [
-        basicSetup,
-        keymap.of([indentWithTab]),
+        ...this.getCommonExtensions(readOnlyAttr),
         python(),
-        getSelectedTheme(),
         indentUnit.of("    "),
-        this.readOnly.of(EditorState.readOnly.of(readOnlyAttr)),
-        EditorView.updateListener.of(this.handleEditorUpdate.bind(this)),
         EditorView.lineWrapping,
       ]
     });
@@ -452,17 +459,13 @@ class PromptEditor extends BaseEditor {
       doc: this.initialValue || "",
       parent: this.element,
       extensions: [
-        basicSetup,
-        keymap.of([indentWithTab]),
+        ...this.getCommonExtensions(readOnlyAttr),
         autocompletion({
           override: [textEditorVarCompletions(autocompleteVars)],
           activateOnTyping: true,
         }),
         highlightAutoCompleteVars(autocompleteVars),
         autocompleteVarTheme(),
-        getSelectedTheme(),
-        this.readOnly.of(EditorState.readOnly.of(readOnlyAttr)),
-        EditorView.updateListener.of(this.handleEditorUpdate.bind(this)),
         EditorView.lineWrapping,
       ]
     });
