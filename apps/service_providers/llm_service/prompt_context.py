@@ -201,7 +201,7 @@ class ParticipantDataProxy:
         participant_data.data[key] = value
         self.set(participant_data.data)
 
-    def append_to_key(self, key: str, value: Any):
+    def append_to_key(self, key: str, value: Any) -> list[Any]:
         """
         Append a value to a list at the specified key in the participant data. If the current value is not a list,
         it will convert it to a list before appending.
@@ -219,8 +219,9 @@ class ParticipantDataProxy:
 
         existing_data[key] = value_at_key
         self.set(existing_data)
+        return value_at_key
 
-    def increment_key(self, key: str, increment: int = 1):
+    def increment_key(self, key: str, increment: int = 1) -> int:
         """
         Increment a numeric value at the specified key in the participant data.
         If the current value is not a number, it will be initialized to 0 before incrementing.
@@ -232,8 +233,10 @@ class ParticipantDataProxy:
         if not isinstance(current_value, int | float):
             current_value = 0
 
-        existing_data[key] = current_value + increment
+        new_value = current_value + increment
+        existing_data[key] = new_value
         self.set(existing_data)
+        return new_value
 
     def get_schedules(self):
         """

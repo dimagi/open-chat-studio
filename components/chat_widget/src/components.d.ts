@@ -68,6 +68,10 @@ export namespace Components {
          */
         "starterQuestions"?: string;
         /**
+          * The text to display while the assistant is typing/preparing a response.
+         */
+        "typingIndicatorText"?: string;
+        /**
           * Used to associate chat sessions with a specific user across multiple visits/sessions
          */
         "userId"?: string;
@@ -159,6 +163,10 @@ declare namespace LocalJSX {
           * Array of starter questions that users can click to send (JSON array of strings)
          */
         "starterQuestions"?: string;
+        /**
+          * The text to display while the assistant is typing/preparing a response.
+         */
+        "typingIndicatorText"?: string;
         /**
           * Used to associate chat sessions with a specific user across multiple visits/sessions
          */

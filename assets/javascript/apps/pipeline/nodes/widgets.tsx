@@ -40,6 +40,8 @@ export function getWidget(name: string, params: PropertySchema) {
         return BuiltInToolsWidget
     case "text_editor_widget":
         return TextEditorWidget
+    case "voice_widget":
+        return VoiceWidget
     default:
       if (params.enum) {
         return SelectWidget
@@ -743,7 +745,7 @@ export function LlmWidget(props: WidgetParams) {
         </option>
         {parameterValues.LlmProviderId.map((provider) => {
           const providersWithSameType = parameterValues.LlmProviderId.filter(p => p.type === provider.type).length;
-          
+
           return providerModelsByType[provider.type] &&
             providerModelsByType[provider.type].map((providerModel) => (
               <option key={provider.value + providerModel.value} value={makeValue(provider.value, providerModel.value)}>
@@ -1230,4 +1232,50 @@ function TextEditorModal({
 
 function getAutoCompleteList(list: Array<Option>) {
     return Array.isArray(list) ? list.map((v: Option) => v.value) : []
+}
+
+export function VoiceWidget(props: WidgetParams) {
+  const { parameterValues } = getCachedData();
+  const setNode = usePipelineStore((state) => state.setNode);
+
+  const updateParamValue = (event: ChangeEvent<HTMLSelectElement>) => {
+    const { value } = event.target;
+    setNode(props.nodeId, (old) =>
+      produce(old, (next) => {
+        next.data.params.synthetic_voice_id = value;
+      })
+    );
+  };
+
+  const syntheticVoiceId = concatenate(props.nodeParams.synthetic_voice_id);
+
+  // Only render if voice is enabled
+  if(!(parameterValues.synthetic_voice_id?.length)) {
+    return null;
+  }
+
+  return (
+    <InputField label={props.label} help_text={props.helpText} inputError={props.inputError}>
+      <select
+        className="select w-full"
+        name={props.name}
+        onChange={updateParamValue}
+        value={syntheticVoiceId}
+        disabled={props.readOnly}
+      >
+        <option value="" disabled>
+          Select a voice
+        </option>
+
+        {parameterValues.synthetic_voice_id.map((voice) => (
+          <option
+            key={voice.value}
+            value={voice.value}
+          >
+            {voice.label} ({(voice as TypedOption).type})
+          </option>
+        ))}
+      </select>
+    </InputField>
+  );
 }
