@@ -234,12 +234,7 @@
             <span class="loading loading-spinner loading-sm htmx-indicator htmx-show" id="refresh-loader"></span>
           </div>
 
-          <div id="sessions-table"
-               data-url="{% url 'chatbots:sessions-list' request.team.slug experiment.id %}"
-               hx-get="{% url 'chatbots:sessions-list' request.team.slug experiment.id %}"
-               hx-trigger="load"
-               hx-swap="innerHTML">
-
+          <div id="sessions-table" data-url="{% url 'chatbots:sessions-list' request.team.slug experiment.id %}">
             <div class="flex justify-center items-center p-6">
                 <span class="loading loading-spinner loading-lg"></span>
             </div>
