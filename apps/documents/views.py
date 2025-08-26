@@ -23,6 +23,7 @@ from apps.documents import tasks
 from apps.documents.datamodels import ChunkingStrategy, CollectionFileMetadata
 from apps.documents.forms import (
     CollectionForm,
+    ConfluenceDocumentSourceForm,
     CreateCollectionFromAssistantForm,
     DocumentSourceForm,
     GithubDocumentSourceForm,
@@ -92,7 +93,7 @@ def single_collection_home(request, team_slug: str, pk: int):
         "max_files_per_collection": settings.MAX_FILES_PER_COLLECTION,
         "files_remaining": settings.MAX_FILES_PER_COLLECTION - collection_files_count,
         "max_file_size_mb": settings.MAX_FILE_SIZE_MB,
-        "document_source_types": [SourceType.GITHUB],
+        "document_source_types": list(SourceType),
         "read_only": collection.is_a_version,
     }
     return render(request, "documents/single_collection_home.html", context)
@@ -194,7 +195,10 @@ class BaseDocumentSourceView(LoginAndTeamRequiredMixin, PermissionRequiredMixin)
         )
 
     def get_form_class(self):
-        return GithubDocumentSourceForm if self.source_type == SourceType.GITHUB else DocumentSourceForm
+        return {
+            SourceType.GITHUB: GithubDocumentSourceForm,
+            SourceType.CONFLUENCE: ConfluenceDocumentSourceForm,
+        }.get(self.source_type, DocumentSourceForm)
 
     @property
     def source_type(self):

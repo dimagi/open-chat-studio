@@ -48,7 +48,9 @@ class GitHubSourceConfig(pydantic.BaseModel):
 class ConfluenceSourceConfig(pydantic.BaseModel):
     base_url: str = pydantic.Field(description="Confluence base URL")
     space_key: str = pydantic.Field(description="Confluence space key")
-    page_filter: str = pydantic.Field(default="", description="Optional page title filter")
+
+    def __str__(self):
+        return f"{self.base_url}/spaces/{self.space_key}/"
 
 
 class DocumentSourceConfig(pydantic.BaseModel):

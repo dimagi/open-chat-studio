@@ -4,7 +4,7 @@ from django.conf import settings
 from django.db.models import Q, Subquery
 
 from apps.assistants.models import OpenAiAssistant, ToolResources
-from apps.documents.datamodels import DocumentSourceConfig, GitHubSourceConfig
+from apps.documents.datamodels import ConfluenceSourceConfig, DocumentSourceConfig, GitHubSourceConfig
 from apps.documents.models import Collection, DocumentSource, SourceType
 from apps.service_providers.models import AuthProvider, AuthProviderType, EmbeddingProviderModel
 from apps.utils.urlvalidate import InvalidURL, validate_user_input_url
@@ -222,6 +222,56 @@ class GithubDocumentSourceForm(DocumentSourceForm):
             raise forms.ValidationError("Invalid config") from None
 
         cleaned_data["config"] = DocumentSourceConfig(github=github_config)
+        return cleaned_data
+
+
+class ConfluenceDocumentSourceForm(DocumentSourceForm):
+    requires_auth = True
+    allowed_auth_types = [AuthProviderType.basic]
+    auth_provider_help = "Confluence requires a 'Basic' authentication provider"
+
+    base_url = forms.URLField(
+        label="Confluence Site URL",
+        help_text="Confluence Site URL (e.g., https://yoursite.atlassian.com/wiki)",
+        widget=forms.URLInput(attrs={"placeholder": "https://yoursite.atlassian.com/wiki"}),
+    )
+    space_key = forms.CharField(
+        label="Space Key",
+        help_text="Confluence Space Key",
+    )
+
+    def _get_config_from_instance(self, instance):
+        return instance.config.confluence
+
+    def clean_base_url(self):
+        base_url = self.cleaned_data["base_url"]
+        try:
+            validate_user_input_url(base_url, strict=not settings.DEBUG)
+        except InvalidURL as e:
+            raise forms.ValidationError(f"The URL is invalid: {str(e)}") from None
+
+        return base_url
+
+    def clean_source_type(self):
+        source_type = self.cleaned_data.get("source_type")
+        if source_type != SourceType.CONFLUENCE:
+            raise forms.ValidationError(f"Expected Confluence source type, got {source_type}")
+        return source_type
+
+    def clean(self):
+        cleaned_data = super().clean()
+        if self.errors:
+            return cleaned_data
+
+        base_url = cleaned_data.get("base_url")
+        space_key = cleaned_data.get("space_key")
+
+        try:
+            config = ConfluenceSourceConfig(base_url=base_url, space_key=space_key)
+        except pydantic.ValidationError:
+            raise forms.ValidationError("Invalid config") from None
+
+        cleaned_data["config"] = DocumentSourceConfig(confluence=config)
         return cleaned_data
 
 
