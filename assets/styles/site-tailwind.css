@@ -144,6 +144,30 @@ open-chat-studio-widget {
   @apply bg-gray-100 text-gray-900;
 }
 
+.dark .ts-control {
+  @apply bg-base-100 border border-zinc-700 text-base-content;
+}
+
+.dark .ts-control input::placeholder {
+  @apply text-gray-400;
+}
+
+.dark .ts-dropdown {
+  @apply bg-base-100 border border-zinc-700;
+}
+
+.dark .ts-dropdown .option {
+  @apply text-gray-400;
+}
+
+.dark .ts-dropdown .create:hover,
+.dark .ts-dropdown .option:hover {
+  @apply bg-zinc-600 text-gray-100;
+}
+.dark .ts-dropdown .active {
+  @apply  bg-zinc-600 text-gray-100;
+}
+
 input[type=number]::-webkit-inner-spin-button, 
 input[type=number]::-webkit-outer-spin-button {
   display: none;
