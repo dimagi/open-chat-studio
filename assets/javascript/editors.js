@@ -90,6 +90,13 @@ class JsonEditor {
         });
       }
     });
+    // reset event listener
+    const form = this.element.closest('form');
+    if (form) {
+      form.addEventListener('reset', () => {
+        setTimeout(() => this.reset(), 10);
+      });
+    }
   }
 
   /**
@@ -238,6 +245,23 @@ class JsonEditor {
     } else {
       this.errorContainer.textContent = '';
     }
+  }
+
+  reset() {
+    if (!this.view) return;
+
+    this.view.dispatch({
+      changes: {
+        from: 0,
+        to: this.view.state.doc.length,
+        insert: this.initialValue || '{}'
+      }
+    });
+
+    if (this.target) {
+        this.target.value = this.initialValue || '{}';
+    }
+    this.updateErrorStatus();
   }
 
   /**
