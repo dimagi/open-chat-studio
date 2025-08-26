@@ -69,6 +69,7 @@ export namespace Components {
         "starterQuestions"?: string;
         /**
           * The text to display while the assistant is typing/preparing a response.
+          * @default "Preparing response"
          */
         "typingIndicatorText"?: string;
         /**
@@ -165,6 +166,7 @@ declare namespace LocalJSX {
         "starterQuestions"?: string;
         /**
           * The text to display while the assistant is typing/preparing a response.
+          * @default "Preparing response"
          */
         "typingIndicatorText"?: string;
         /**
