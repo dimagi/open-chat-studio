@@ -1,5 +1,6 @@
 import { basicSetup, minimalSetup } from "codemirror"
-import { EditorView } from "@codemirror/view"
+import { EditorView, keymap } from "@codemirror/view"
+import { indentWithTab } from "@codemirror/commands"
 import { linter, lintGutter, diagnosticCount } from "@codemirror/lint"
 import { json, jsonParseLinter } from "@codemirror/lang-json"
 import { indentUnit } from "@codemirror/language"
@@ -265,6 +266,7 @@ class JsonEditor extends BaseEditor {
       parent: this.element,
       extensions: [
         basicSetup,
+        keymap.of([indentWithTab]),
         json(),
         linter(jsonParseLinter(), { delay: 250 }),
         lintGutter(),
@@ -380,6 +382,7 @@ class PythonEditor extends BaseEditor {
       parent: this.element,
       extensions: [
         basicSetup,
+        keymap.of([indentWithTab]),
         python(),
         getSelectedTheme(),
         indentUnit.of("    "),
@@ -450,6 +453,7 @@ class PromptEditor extends BaseEditor {
       parent: this.element,
       extensions: [
         basicSetup,
+        keymap.of([indentWithTab]),
         autocompletion({
           override: [textEditorVarCompletions(autocompleteVars)],
           activateOnTyping: true,
