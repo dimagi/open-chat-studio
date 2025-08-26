@@ -7,6 +7,8 @@ import { Compartment, EditorState } from "@codemirror/state"
 import { githubDarkInit, githubLightInit } from "@uiw/codemirror-theme-github";
 import {MergeView} from "@codemirror/merge"
 import { python } from "@codemirror/lang-python"
+import { textEditorVarCompletions, highlightAutoCompleteVars, autocompleteVarTheme } from "./utils/codemirror-extensions.js"
+import { autocompletion } from "@codemirror/autocomplete"
 import "../styles/app/editors.css";
 
 const githubDark = githubDarkInit({
@@ -421,6 +423,79 @@ class PythonEditor extends BaseEditor {
   }
 }
 
+/**
+ * PromptEditor - A class to manage CodeMirror prompt editor instances with variable autocompletion
+ */
+class PromptEditor extends BaseEditor {
+  /** Map of all editor instances by DOM element */
+  static instances = new Map();
+
+  /**
+   * Create a new Prompt editor instance
+   * @param {HTMLElement} element - DOM element to attach editor to
+   */
+  constructor(element) {
+    super(element, PromptEditor.instances);
+  }
+
+  /**
+   * Create CodeMirror editor instance
+   */
+  createEditor() {
+    const readOnlyAttr = this.element.hasAttribute('data-readonly');
+    const autocompleteVars = JSON.parse(this.element.getAttribute('data-autocomplete-vars') || '[]');
+
+    this.view = new EditorView({
+      doc: this.initialValue || "",
+      parent: this.element,
+      extensions: [
+        basicSetup,
+        autocompletion({
+          override: [textEditorVarCompletions(autocompleteVars)],
+          activateOnTyping: true,
+        }),
+        highlightAutoCompleteVars(autocompleteVars),
+        autocompleteVarTheme(),
+        getSelectedTheme(),
+        this.readOnly.of(EditorState.readOnly.of(readOnlyAttr)),
+        EditorView.updateListener.of(this.handleEditorUpdate.bind(this)),
+        EditorView.lineWrapping,
+      ]
+    });
+  }
+
+  /**
+   * Create or update a Prompt editor for an element
+   * @param {HTMLElement} element - DOM element to attach editor to
+   * @returns {PromptEditor} The editor instance
+   */
+  static create(element) {
+    // Clean up existing instance if present
+    if (PromptEditor.instances.has(element)) {
+      PromptEditor.instances.get(element).destroy();
+    }
+
+    return new PromptEditor(element);
+  }
+
+  /**
+   * Initialize all editors matching a selector
+   * @param {string} selector - CSS selector to find editor elements
+   */
+  static initAll(selector = '.prompt-editor') {
+    Array.from(document.querySelectorAll(selector)).forEach(el => {
+      PromptEditor.create(el);
+    });
+  }
+
+  /**
+   * Destroy all editor instances
+   */
+  static destroyAll() {
+    PromptEditor.instances.forEach(editor => editor.destroy());
+  }
+}
+
 // Initialize editors when the DOM is loaded
 export const initJsonEditors = () => {
   JsonEditor.initAll();
@@ -446,6 +521,16 @@ export const createPythonEditor = (element) => {
   return PythonEditor.create(element);
 };
 
+// Initialize Prompt editors
+export const initPromptEditors = () => {
+  PromptEditor.initAll();
+};
+
+// Create a Prompt editor instance
+export const createPromptEditor = (element) => {
+  return PromptEditor.create(element);
+};
+
 // Global HTMX handler for reinitializing editors
 document.addEventListener("htmx:afterSettle", (e) => {
   // Reinitialize JSON editors
@@ -461,6 +546,14 @@ document.addEventListener("htmx:afterSettle", (e) => {
   if (newPythonEditors.length) {
     Array.from(newPythonEditors).forEach(el => {
       createPythonEditor(el);
+    });
+  }
+
+  // Reinitialize Prompt editors
+  const newPromptEditors = e.detail.target.querySelectorAll('.prompt-editor');
+  if (newPromptEditors.length) {
+    Array.from(newPromptEditors).forEach(el => {
+      createPromptEditor(el);
     });
   }
 });
@@ -509,4 +602,7 @@ document.addEventListener("DOMContentLoaded", () => {
 
   // Initialize Python editors
   PythonEditor.initAll();
+
+  // Initialize Prompt editors
+  PromptEditor.initAll();
 });

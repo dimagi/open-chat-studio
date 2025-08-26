@@ -67,7 +67,7 @@ class LlmEvaluator(LLMResponseMixin, BaseEvaluator):
             "Available variables: {input.content}, {output.content}, {context.[context_parameter]}, {full_history} "
             "{generated_response}"
         ),
-        json_schema_extra=UiSchema(widget=Widgets.expandable_text),
+        json_schema_extra=UiSchema(widget=Widgets.text_editor),
     )
     output_schema: dict = Field(
         description="The expected output schema for the evaluation",
