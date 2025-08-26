@@ -229,6 +229,7 @@ class ConfluenceDocumentSourceForm(DocumentSourceForm):
     requires_auth = True
     allowed_auth_types = [AuthProviderType.basic]
     auth_provider_help = "Confluence requires a 'Basic' authentication provider"
+    custom_template = "documents/partials/confluence_form.html"
 
     base_url = forms.URLField(
         label="Confluence Site URL",
@@ -253,7 +254,7 @@ class ConfluenceDocumentSourceForm(DocumentSourceForm):
         required=False,
         label="CQL Query",
         help_text="Confluence Query Language query",
-        widget=forms.Textarea(attrs={"placeholder": "space = 'DOCS' AND type = 'page'", "rows": 3}),
+        widget=forms.Textarea(attrs={"placeholder": "space = IDEAS or label = idea", "rows": 3}),
     )
     page_ids = forms.CharField(
         required=False,
