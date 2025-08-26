@@ -42,7 +42,6 @@ from apps.pipelines.nodes.base import (
     Widgets,
     deprecated_node,
 )
-from apps.pipelines.nodes.code_node_utils import get_code_error_message
 from apps.pipelines.nodes.tool_callbacks import ToolCallbacks
 from apps.pipelines.tasks import send_email_from_pipeline
 from apps.service_providers.exceptions import ServiceProviderConfigError
@@ -59,7 +58,7 @@ from apps.service_providers.llm_service.runnables import (
 from apps.service_providers.models import LlmProviderModel
 from apps.utils.langchain import dict_to_json_schema
 from apps.utils.prompt import OcsPromptTemplate, PromptVars, validate_prompt_variables
-from apps.utils.python_execution import RestrictedPythonExecutionMixin
+from apps.utils.python_execution import RestrictedPythonExecutionMixin, get_code_error_message
 
 OptionalInt = Annotated[int | None, BeforeValidator(lambda x: None if isinstance(x, str) and len(x) == 0 else x)]
 

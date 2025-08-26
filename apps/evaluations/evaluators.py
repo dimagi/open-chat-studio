@@ -7,13 +7,12 @@ from pydantic_core import ValidationError
 from apps.evaluations.exceptions import EvaluationRunException
 from apps.evaluations.models import EvaluationMessage, EvaluationMessageContent
 from apps.pipelines.nodes.base import UiSchema, Widgets
-from apps.pipelines.nodes.code_node_utils import get_code_error_message
 from apps.service_providers.exceptions import ServiceProviderConfigError
 from apps.service_providers.llm_service.main import LlmService
 from apps.service_providers.llm_service.prompt_context import SafeAccessWrapper
 from apps.service_providers.models import LlmProviderModel
 from apps.utils.langchain import dict_to_json_schema
-from apps.utils.python_execution import RestrictedPythonExecutionMixin
+from apps.utils.python_execution import RestrictedPythonExecutionMixin, get_code_error_message
 
 
 class EvaluatorSchema(BaseModel):

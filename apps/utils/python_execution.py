@@ -1,7 +1,10 @@
 import datetime
 import inspect
 import json
+import logging
+import sys
 import time
+import traceback
 from typing import Any
 
 from pydantic import BaseModel, Field, field_validator
@@ -10,6 +13,8 @@ from pydantic_core.core_schema import FieldValidationInfo
 from RestrictedPython import compile_restricted, limited_builtins, safe_builtins, utility_builtins
 from RestrictedPython.Eval import default_guarded_getitem, default_guarded_getiter
 from RestrictedPython.Guards import guarded_iter_unpack_sequence
+
+logger = logging.getLogger("ocs.utils")
 
 
 class RestrictedPythonExecutionMixin(BaseModel):
@@ -175,3 +180,31 @@ class RestrictedPythonExecutionMixin(BaseModel):
             raise ValueError(f"Function {function_name} not found in code")
 
         return custom_locals[function_name](*args, **kwargs)
+
+
+def get_code_error_message(filename: str, code: str) -> str:
+    exc_type, exc_value, exc_traceback = sys.exc_info()
+    error_message = f"Error: {exc_value!r}"
+
+    try:
+        tb_list = traceback.extract_tb(exc_traceback)
+        user_frames = [frame for frame in tb_list if filename in frame.filename]
+
+        if user_frames:
+            error_frame = user_frames[-1]  # Last frame in user code
+            line_number = error_frame.lineno
+
+            source_lines = code.splitlines()
+            if 1 <= line_number <= len(source_lines):
+                # Show context (lines around the error)
+                start = max(0, line_number - 3)
+                end = min(len(source_lines), line_number + 2)
+
+                error_message += "\nContext:"
+                for i in range(start, end):
+                    marker = ">>>" if i + 1 == line_number else "   "
+                    error_message += f"\n{marker} {i + 1:3d}: {source_lines[i]}"
+    except Exception:
+        logger.exception("Error while getting code error message")
+
+    return error_message
