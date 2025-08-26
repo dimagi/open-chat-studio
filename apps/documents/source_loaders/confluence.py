@@ -27,7 +27,7 @@ class ConfluenceDocumentLoader(BaseDocumentLoader[ConfluenceSourceConfig]):
         return cls(collection, document_source.config.confluence, auth_provider)
 
     def load_documents(self) -> Iterator[Document]:
-        """Load documents from Confluence space"""
+        """Load documents from Confluence using configured options"""
         try:
             username = self.auth_provider.config.get("username")
             token = self.auth_provider.config.get("password")
@@ -35,14 +35,15 @@ class ConfluenceDocumentLoader(BaseDocumentLoader[ConfluenceSourceConfig]):
             if not username:
                 raise ValueError("Confluence authentication requires username or email")
 
-            loader = ConfluenceLoader(
-                url=self.config.base_url,
-                username=username,
-                api_key=token,
-                space_key=self.config.space_key,
-                include_attachments=False,  # Skip attachments for now
-                max_pages=1000,
+            loader_kwargs = self.config.get_loader_kwargs()
+            loader_kwargs.update(
+                {
+                    "username": username,
+                    "api_key": token,
+                }
             )
+
+            loader = ConfluenceLoader(**loader_kwargs)
 
             for document in loader.lazy_load():
                 if not document.page_content.strip():
@@ -53,7 +54,6 @@ class ConfluenceDocumentLoader(BaseDocumentLoader[ConfluenceSourceConfig]):
                         "collection_id": self.collection.id,
                         "source_type": "confluence",
                         "base_url": self.config.base_url,
-                        "space_key": self.config.space_key,
                     }
                 )
                 yield document
@@ -63,9 +63,10 @@ class ConfluenceDocumentLoader(BaseDocumentLoader[ConfluenceSourceConfig]):
             raise
 
     def get_document_identifier(self, document: Document) -> str:
+        """Get a unique identifier for a Confluence document"""
         page_id = document.metadata.get("id")
         if page_id:
-            return f"confluence://{self.config.space_key}/{page_id}"
+            return f"confluence://{self.config.base_url}/{page_id}"
         return document.metadata.get("source", "")
 
     def should_update_document(self, document: Document, existing_file: CollectionFile) -> bool:
