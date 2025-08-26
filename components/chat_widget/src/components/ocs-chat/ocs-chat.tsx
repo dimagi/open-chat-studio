@@ -774,6 +774,7 @@ export class OcsChat {
     } else if (!visible) {
       this.pauseMessagePolling()
     } else {
+      this.scrollToBottom()
       this.resumeMessagePolling();
     }
   }
