@@ -1218,7 +1218,7 @@ function TextEditorModal({
 
         <div className="grow h-full w-full flex flex-col">
           <h4 className="mb-4 font-bold text-lg capitalize">{label}</h4>
-          <PromptEditor value={value} onChange={onChange} readOnly={readOnly} autocompleteVars={autocomplete_vars_list}/>;
+          <PromptEditor value={value} onChange={onChange} readOnly={readOnly} autocompleteVars={autocomplete_vars_list}/>
         </div>
 
         {inputError && <div className="text-red-500">{inputError}</div>}
