@@ -131,12 +131,12 @@ class PythonEvaluator(BaseEvaluator, RestrictedPythonExecutionMixin):
 
     def run(self, message: EvaluationMessage, generated_response: str) -> EvaluatorResult:
         try:
-            input = EvaluationMessageContent.model_validate(message.input)
+            input = EvaluationMessageContent.model_validate(message.input).model_dump()
         except ValidationError as err:
             raise EvaluationRunException("Missing input text") from err
 
         try:
-            output = EvaluationMessageContent.model_validate(message.output)
+            output = EvaluationMessageContent.model_validate(message.output).model_dump()
         except ValidationError as err:
             raise EvaluationRunException("Missing output text") from err
 

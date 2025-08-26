@@ -14,7 +14,7 @@ from apps.utils.factories.evaluations import EvaluationMessageFactory
         (
             textwrap.dedent("""
             def main(input, output, context, full_history, generated_response, **kwargs):
-                return {"out": f'Hello, {input.content}!'}
+                return {"out": f"Hello, {input['content']}!"}
             """),
             {"content": "World", "role": "human"},
             {"out": "Hello, World!"},
@@ -22,7 +22,7 @@ from apps.utils.factories.evaluations import EvaluationMessageFactory
         (
             textwrap.dedent("""
             def main(input, output, context, full_history, generated_response, **kwargs):
-                return {'result': 'foo'}"
+                return {'result': 'foo'}
             """),
             {"content": "World", "role": "ai"},
             {"result": "foo"},
