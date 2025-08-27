@@ -112,6 +112,25 @@
               </div>
             </template>
 
+            <!-- Text Editor Widget -->
+            <template x-if="getWidget(field) === 'text_editor_widget'">
+              <div class="mb-6">
+                <label :for="'param_' + fieldName" class="label font-bold">
+                  <div x-text="field.title || fieldName"></div>
+                </label>
+                <div class="prompt-editor textarea textarea-bordered w-full p-0 overflow-auto resize-y"
+                     :data-target-field="'#param_' + fieldName"
+                     data-autocomplete-vars='["input.content", "output.content", "context", "full_history", "generated_response"]'
+                     style="height: 300px; min-height: 150px; max-height: 1000px;"></div>
+                <textarea :id="'param_' + fieldName"
+                          :name="'param_' + fieldName"
+                          x-model="params[fieldName]"
+                          style="display: none;"
+                          :required="isRequired(fieldName)"></textarea>
+                <small class="form-text text-muted" x-show="field.description" x-text="field.description"></small>
+              </div>
+            </template>
+
             <!-- Expandable Text Widget -->
             <template x-if="getWidget(field) === 'expandable_text'">
               <div>
@@ -333,10 +352,15 @@
               }
             });
 
-            // Initialize Python editors after DOM is rendered
+            // Initialize editors after DOM is rendered
             this.$nextTick(() => {
-              if (window.SiteJS && window.SiteJS.editors && window.SiteJS.editors.initPythonEditors) {
-                window.SiteJS.editors.initPythonEditors();
+              if (window.SiteJS && window.SiteJS.editors) {
+                if (window.SiteJS.editors.initPythonEditors) {
+                  window.SiteJS.editors.initPythonEditors();
+                }
+                if (window.SiteJS.editors.initPromptEditors) {
+                  window.SiteJS.editors.initPromptEditors();
+                }
               }
             });
           }
