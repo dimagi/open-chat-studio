@@ -647,11 +647,9 @@ class ChannelBase(ABC):
     def _reply_voice_message(self, text: str):
         voice_provider = self.experiment.voice_provider
         synthetic_voice = self.experiment.synthetic_voice
-        if self.experiment.use_processor_bot_voice and (
-            self.bot.processor_experiment and self.bot.processor_experiment.voice_provider
-        ):
-            voice_provider = self.bot.processor_experiment.voice_provider
-            synthetic_voice = self.bot.processor_experiment.synthetic_voice
+        voice = self.bot.synthesize_voice()
+        if voice:
+            synthetic_voice = voice
 
         speech_service = voice_provider.get_speech_service()
         synthetic_voice_audio = speech_service.synthesize_voice(text, synthetic_voice)
@@ -679,7 +677,8 @@ class ChannelBase(ABC):
         return "Unable to transcribe audio"
 
     def _get_bot_response(self, message: str) -> ChatMessage:
-        return self.bot.process_input(message, attachments=self.message.attachments)
+        chat_message = self.bot.process_input(message, attachments=self.message.attachments)
+        return chat_message
 
     def _add_message_to_history(self, message: str, message_type: ChatMessageType):
         """Use this to update the chat history when not using the normal bot flow"""

@@ -2,9 +2,10 @@ import {githubDarkInit, githubLightInit} from "@uiw/codemirror-theme-github";
 import {ReactCodeMirrorProps} from "@uiw/react-codemirror/src";
 import React, {useEffect, useState} from "react";
 import CodeMirror, {EditorState} from "@uiw/react-codemirror";
-import {autocompletion, Completion, CompletionContext, snippetCompletion as snip} from "@codemirror/autocomplete";
+import {autocompletion, CompletionContext, snippetCompletion as snip} from "@codemirror/autocomplete";
 import {python} from "@codemirror/lang-python";
-import {Decoration, DecorationSet, EditorView, ViewPlugin, ViewUpdate} from "@codemirror/view";
+import {EditorView} from "@codemirror/view";
+import {textEditorVarCompletions, highlightAutoCompleteVars, autocompleteVarTheme} from "../../../utils/codemirror-extensions.js";
 
 const githubDark = githubDarkInit({
   "settings": {
@@ -239,90 +240,3 @@ export function PromptEditor(
 }
 
 
-function textEditorVarCompletions(autocompleteVars: string[]) {
-  return (context: CompletionContext) => {
-    const word = context.matchBefore(/[a-zA-Z0-9._[\]"]*$/);
-    if (!word || (word.from === word.to && !context.explicit)) return null;
-
-    return {
-      from: word.from,
-      options: autocompleteVars.map((v) => ({
-        label: v,
-        type: "variable",
-        info: `Insert {${v}}`,
-        apply: (view: EditorView, completion: Completion, from: number, to: number) => {
-          const beforeText = view.state.doc.sliceString(from - 1, from);
-          const insertText =
-            beforeText === "{" ? `${completion.label}` : `{${completion.label}}`;
-          view.dispatch({
-            changes: {from, to, insert: insertText},
-          });
-        },
-      })),
-    };
-  };
-}
-
-// highlight auto complete words. valid - blue, invalid - red
-function highlightAutoCompleteVars(autocompleteVars: string[]) {
-  return ViewPlugin.fromClass(
-    class {
-      decorations: DecorationSet;
-
-      constructor(view: EditorView) {
-        this.decorations = this.buildDecorations(view);
-      }
-
-      update(update: ViewUpdate) {
-        if (update.docChanged || update.viewportChanged) {
-          this.decorations = this.buildDecorations(update.view);
-        }
-      }
-
-      buildDecorations(view: EditorView) {
-        const widgets: any[] = [];
-        const text = view.state.doc.toString();
-        const regex = /\{([a-zA-Z0-9._[\]"]+)\}/g;
-        let match;
-        while ((match = regex.exec(text)) !== null) {
-          const varName = match[1];
-          const from = match.index;
-          const to = from + match[0].length;
-          const isValidVar = autocompleteVars.some(
-            v => varName === v || varName.startsWith(v + ".") || varName.startsWith(v + "[")
-          );
-          const deco = Decoration.mark({
-            class: isValidVar
-              ? "autocomplete-var-valid"
-              : "autocomplete-var-invalid",
-          });
-          widgets.push(deco.range(from, to));
-        }
-        return Decoration.set(widgets);
-      }
-    },
-    {
-      decorations: (v) => v.decorations,
-    }
-  );
-}
-
-const autocompleteVarTheme = () =>
-  EditorView.baseTheme({
-    "&dark .autocomplete-var-valid": {
-      color: "#93c5fd",
-      fontWeight: "bold",
-    },
-    "&light .autocomplete-var-valid": {
-      color: "navy",
-      fontWeight: "bold",
-    },
-    "&dark .autocomplete-var-invalid": {
-      color: "#f87171",
-      fontWeight: "bold",
-    },
-    "&light .autocomplete-var-invalid": {
-      color: "red",
-      fontWeight: "bold",
-    },
-  });

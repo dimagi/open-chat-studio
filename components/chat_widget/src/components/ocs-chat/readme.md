@@ -24,6 +24,7 @@ For more information, see the [Open Chat Studio documentation](https://docs.open
 | `persistentSessionExpire`    | `persistent-session-expire`     | Minutes since the most recent message after which the session data in local storage will expire. Set this to `0` to never expire. | `number`                        | `60 * 24`                                                               |
 | `position`                   | `position`                      | The initial position of the chat widget on the screen.                                                                            | `"center" \| "left" \| "right"` | `'right'`                                                               |
 | `starterQuestions`           | `starter-questions`             | Array of starter questions that users can click to send (JSON array of strings)                                                   | `string`                        | `undefined`                                                             |
+| `typingIndicatorText`        | `typing-indicator-text`         | The text to display while the assistant is typing/preparing a response.                                                           | `string`                        | `"Preparing response"`                                                  |
 | `userId`                     | `user-id`                       | Used to associate chat sessions with a specific user across multiple visits/sessions                                              | `string`                        | `undefined`                                                             |
 | `userName`                   | `user-name`                     | Display name for the user.                                                                                                        | `string`                        | `undefined`                                                             |
 | `visible`                    | `visible`                       | Whether the chat widget is visible on load.                                                                                       | `boolean`                       | `false`                                                                 |
@@ -40,7 +41,6 @@ For more information, see the [Open Chat Studio documentation](https://docs.open
 | `--button-border-color-hover`                  | Button border color on hover (#374151)                                           |
 | `--button-font-size`                           | Button text font size (0.875em)                                                  |
 | `--button-icon-size`                           | Button icon size (1.5em)                                                         |
-| `--button-padding`                             | Button padding (0.75em)                                                          |
 | `--button-text-color`                          | Button text color (#111827)                                                      |
 | `--button-text-color-hover`                    | Button text color on hover (#1d4ed8)                                             |
 | `--chat-window-bg-color`                       | Chat window background color (#ffffff)                                           |
@@ -72,8 +72,6 @@ For more information, see the [Open Chat Studio documentation](https://docs.open
 | `--confirmation-overlay-bg-color`              | Confirmation dialog overlay background color (rgba(0, 0, 0, 0.5))                |
 | `--confirmation-title-color`                   | Confirmation dialog title text color (uses #111827)                              |
 | `--confirmation-title-font-size`               | Confirmation dialog title font size (1.125em)                                    |
-| `--container-padding`                          | General container padding (1em)                                                  |
-| `--error-message-padding`                      | Error message padding (0.5em)                                                    |
 | `--error-text-color`                           | Error text color (#ef4444)                                                       |
 | `--file-attachment-button-bg-color`            | Attach file button background color (transparent)                                |
 | `--file-attachment-button-bg-hover-color`      | Attach file button background hover color (--header-button-bg-hover-color)       |
@@ -86,7 +84,6 @@ For more information, see the [Open Chat Studio documentation](https://docs.open
 | `--header-button-icon-size`                    | Icon size for buttons in the header (1.5em)                                      |
 | `--header-button-text-color`                   | Header button text color (#6b7280)                                               |
 | `--header-font-size`                           | Header font size (1em)                                                           |
-| `--header-padding`                             | Header padding (0.5em)                                                           |
 | `--header-text-color`                          | Color for the text in the header (#525762)                                       |
 | `--header-text-font-size`                      | Font size for the text in the header (1em)                                       |
 | `--input-bg-color`                             | Input area background color (transparent)                                        |
@@ -94,23 +91,22 @@ For more information, see the [Open Chat Studio documentation](https://docs.open
 | `--input-outline-focus-color`                  | Input field focus ring color (#3b82f6)                                           |
 | `--input-placeholder-color`                    | Input placeholder text color (#6b7280)                                           |
 | `--input-text-color`                           | Input text color (#111827)                                                       |
-| `--input-textarea-padding-x`                   | Input textarea horizontal padding (0.75em)                                       |
-| `--input-textarea-padding-y`                   | Input textarea vertical padding (0.5em)                                          |
 | `--loading-spinner-fill-color`                 | Loading spinner fill color (#3b82f6)                                             |
 | `--loading-spinner-size`                       | Loading spinner size (1.25em)                                                    |
 | `--loading-spinner-track-color`                | Loading spinner track color (#e5e7eb)                                            |
 | `--loading-text-color`                         | Loading text color (#6b7280)                                                     |
-| `--message-assistant-bg-color`                 | Assistant message background color (#e5e7eb)                                     |
-| `--message-assistant-text-color`               | Assistant message text color (#1f2937)                                           |
+| `--message-assistant-bg-color`                 | Assistant message background color (#eae7e8)                                     |
+| `--message-assistant-link-color`               | Assistant message link color (--message-user-link-color)                         |
+| `--message-assistant-text-color`               | Assistant message text color (--message-user-text-color)                         |
 | `--message-attachment-icon-size`               | Message attachment icon size (1em)                                               |
-| `--message-padding-x`                          | Message horizontal padding (1em)                                                 |
-| `--message-padding-y`                          | Message vertical padding (0.5em)                                                 |
-| `--message-system-bg-color`                    | System message background color (#f3f4f6)                                        |
-| `--message-system-text-color`                  | System message text color (#4b5563)                                              |
+| `--message-system-bg-color`                    | System message background color (#fbe4f8)                                        |
+| `--message-system-link-color`                  | System message link color (--message-user-link-color)                            |
+| `--message-system-text-color`                  | System message text color (--message-user-text-color)                            |
 | `--message-timestamp-assistant-color`          | Assistant message timestamp color (rgba(75, 85, 99, 0.7))                        |
 | `--message-timestamp-color`                    | User message timestamp color (rgba(255, 255, 255, 0.7))                          |
-| `--message-user-bg-color`                      | User message background color (#3b82f6)                                          |
-| `--message-user-text-color`                    | User message text color (#ffffff)                                                |
+| `--message-user-bg-color`                      | User message background color (#e4edfb)                                          |
+| `--message-user-link-color`                    | User message link color (#155dfc)                                                |
+| `--message-user-text-color`                    | User message text color (#1f2937)                                                |
 | `--scrollbar-thumb-color`                      | Scrollbar thumb color (#d1d5db)                                                  |
 | `--scrollbar-thumb-hover-color`                | Scrollbar thumb hover color (#9ca3af)                                            |
 | `--scrollbar-track-color`                      | Scrollbar track color (#f3f4f6)                                                  |
@@ -126,15 +122,12 @@ For more information, see the [Open Chat Studio documentation](https://docs.open
 | `--send-button-bg-color`                       | Send button background color (#3b82f6)                                           |
 | `--send-button-bg-disabled-color`              | Send button background when disabled (#d1d5db)                                   |
 | `--send-button-bg-hover-color`                 | Send button background on hover (#2563eb)                                        |
-| `--send-button-padding-x`                      | Send button horizontal padding (1em)                                             |
-| `--send-button-padding-y`                      | Send button vertical padding (0.5em)                                             |
 | `--send-button-text-color`                     | Send button text color (#ffffff)                                                 |
 | `--send-button-text-disabled-color`            | Send button text when disabled (#6b7280)                                         |
 | `--starter-question-bg-color`                  | Starter question background color (transparent)                                  |
 | `--starter-question-bg-hover-color`            | Starter question background on hover (#eff6ff)                                   |
 | `--starter-question-border-color`              | Starter question border color (#3b82f6)                                          |
 | `--starter-question-border-hover-color`        | Starter question border on hover (#2563eb)                                       |
-| `--starter-question-padding`                   | Starter question padding (0.75em)                                                |
 | `--starter-question-text-color`                | Starter question text color (#3b82f6)                                            |
 | `--success-text-color`                         | Success text color (#10b981)                                                     |
 | `--typing-progress-bg-color`                   | Typing progress bar background color (#ade3ff)                                   |

@@ -41,11 +41,13 @@ class DeleteReminderSchema(BaseModel):
 
 
 class ScheduledMessageSchema(BaseModel):
-    message_id: str = Field(description="The UD of the scheduled message to update")
+    message_id: str = Field(description="The ID of the scheduled message to update")
     weekday: WeekdaysEnum = Field(description="The new day of the week")
     hour: int = Field(description="The new hour of the day, in UTC")
     minute: int = Field(description="The new minute of the hour")
-    specified_date: datetime = Field(description="True if the user requested a specific date", default=None)
+    specified_date: datetime = Field(
+        description="A specific date to re-schedule the message for in ISO 8601 format", default=None
+    )
 
 
 class UpdateUserDataSchema(BaseModel):
@@ -58,13 +60,13 @@ class AppendToParticipantData(BaseModel):
     value: str | int | list = Field(description="The value to append")
 
 
-class IncrementParticipantDataSchema(BaseModel):
-    key: str = Field(description="The key in the user data to increment")
-    value: int = Field(description="The value to increment the current value by", default=1)
+class IncrementCounterSchema(BaseModel):
+    counter: str = Field(description="The name of the counter to increment")
+    value: int = Field(description="The value to increment the counter by", default=1)
 
 
 class AttachMediaSchema(BaseModel):
-    file_id: int = Field(description="The file id of the media to attach")
+    file_id: int = Field(description="The ID of the media file to attach")
 
 
 class SearchIndexSchema(BaseModel):

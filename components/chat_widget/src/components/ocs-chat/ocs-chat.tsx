@@ -1,3 +1,4 @@
+// eslint-disable-next-line @typescript-eslint/no-unused-vars
 import {Component, Host, h, Prop, State, Element, Watch} from '@stencil/core';
 import {
   XMarkIcon,
@@ -178,6 +179,11 @@ export class OcsChat {
    */
   @Prop() allowAttachments: boolean = false;
 
+  /**
+   * The text to display while the assistant is typing/preparing a response.
+   */
+  @Prop() typingIndicatorText?: string = "Preparing response";
+
   @State() error: string = "";
   @State() messages: ChatMessage[] = [];
   @State() sessionId?: string;
@@ -206,6 +212,7 @@ export class OcsChat {
   private chatWindowHeight: number = 600;
   private chatWindowWidth: number = 450;
   private chatWindowFullscreenWidth: number = 1024;
+  private positionInitialized: boolean = false;
   @Element() host: HTMLElement;
 
 
@@ -224,7 +231,9 @@ export class OcsChat {
     }
     this.parseWelcomeMessages();
     this.parseStarterQuestions();
+  }
 
+  componentDidLoad() {
     const computedStyle = getComputedStyle(this.host);
     const windowHeightVar = computedStyle.getPropertyValue('--chat-window-height');
     const windowWidthVar = computedStyle.getPropertyValue('--chat-window-width');
@@ -232,10 +241,10 @@ export class OcsChat {
     this.chatWindowHeight = varToPixels(windowHeightVar, window.innerHeight, this.chatWindowHeight);
     this.chatWindowWidth = varToPixels(windowWidthVar, window.innerWidth, this.chatWindowWidth);
     this.chatWindowFullscreenWidth = varToPixels(fullscreenWidthVar, window.innerWidth, this.chatWindowFullscreenWidth);
-    this.initializePosition();
-  }
+    if (this.visible) {
+      this.initializePosition();
+    }
 
-  componentDidLoad() {
     // Only auto-start session if we don't have an existing one
     if (this.visible && !this.sessionId) {
       this.startSession();
@@ -351,7 +360,8 @@ export class OcsChat {
       });
 
       if (!response.ok) {
-        throw new Error(`Failed to start session: ${response.statusText}`);
+        this.handleError(`Failed to start session: ${response.statusText}`);
+        return;
       }
 
       const data: ChatStartSessionResponse = await response.json();
@@ -368,8 +378,7 @@ export class OcsChat {
       // Start polling for messages
       this.startPolling();
     } catch (error) {
-      const errorText = error instanceof Error ? error.message : 'Failed to start chat session';
-      this.handleError(errorText);
+      this.handleError('Failed to start chat session');
     } finally {
       this.isLoading = false;
     }
@@ -649,15 +658,34 @@ export class OcsChat {
         this.scrollToBottom();
         this.focusInput();
       }
-    } catch (error) {
+    } catch {
       // Silently fail for polling
     }
   }
 
-  private scrollToBottom(): void {
+  /**
+   * Scroll the message container to the bottom.
+   * @param forceEnd When `false`, scroll the top of the last message into view.
+   *    When `true`, scroll all the way to the end of the last message.
+   */
+  private scrollToBottom(forceEnd: boolean =false): void {
     setTimeout(() => {
       if (this.messageListRef) {
-        this.messageListRef.scrollTop = this.messageListRef.scrollHeight;
+        const lastChild = this.messageListRef.lastElementChild;
+        if (!forceEnd && lastChild) {
+          // scroll so that the top of the last message is in the centre of the message container
+          const parentRect = this.messageListRef.getBoundingClientRect();
+          const childRect = lastChild.getBoundingClientRect();
+          const currentScrollTop = this.messageListRef.scrollTop;
+          const childTopRelativeToParent = childRect.top - parentRect.top;
+          const targetScroll = currentScrollTop + childTopRelativeToParent - (parentRect.height / 2);
+          this.messageListRef.scrollTo({
+              top: targetScroll,
+              behavior: 'smooth'
+          });
+        } else {
+          this.messageListRef.scrollTop = this.messageListRef.scrollHeight;
+        }
       }
     }, OcsChat.SCROLL_DELAY_MS);
   }
@@ -757,11 +785,15 @@ export class OcsChat {
    */
   @Watch('visible')
   async visibilityHandler(visible: boolean) {
+    if (visible) {
+      this.initializePosition();
+    }
     if (visible && !this.sessionId) {
       await this.startSession();
     } else if (!visible) {
       this.pauseMessagePolling()
     } else {
+      this.scrollToBottom(true);
       this.resumeMessagePolling();
     }
   }
@@ -786,6 +818,7 @@ export class OcsChat {
     const centeredX = (windowWidth - actualChatWidth) / 2;
     const maxOffset = (windowWidth - actualChatWidth) / 2;
 
+    console.log( windowWidth, actualChatWidth, centeredX, maxOffset )
     return { windowWidth, actualChatWidth, centeredX, maxOffset };
   }
 
@@ -807,6 +840,11 @@ export class OcsChat {
   }
 
   private initializePosition(): void {
+    if (this.positionInitialized) {
+      return;
+    }
+    this.positionInitialized = true;
+
     const windowWidth = window.innerWidth;
     const windowHeight = window.innerHeight;
     const chatWidth = windowWidth < OcsChat.MOBILE_BREAKPOINT ? windowWidth : this.chatWindowWidth;
@@ -964,6 +1002,7 @@ export class OcsChat {
   };
 
   private handleWindowResize = (): void => {
+    this.positionInitialized = false;
     this.initializePosition();
   };
 
@@ -1188,7 +1227,7 @@ export class OcsChat {
               <div class="header-text">{this.headerText}</div>
               <div class="header-buttons">
                 {/* New Chat button */}
-                {this.sessionId && this.messages.length > 0 && (
+                {this.messages.length > 0 && (
                   <button
                     class="header-button"
                     onClick={() => this.showConfirmationDialog()}
@@ -1255,7 +1294,7 @@ export class OcsChat {
               )}
 
               {/* Messages */}
-              {this.sessionId && (
+              {(
                 <div
                   ref={(el) => this.messageListRef = el}
                   class="messages-container"
@@ -1321,7 +1360,7 @@ export class OcsChat {
                         <div class="typing-progress"></div>
                       </div>
                       <div class="typing-text">
-                        <span>Preparing response</span>
+                        <span>{this.typingIndicatorText}</span>
                         <span class="typing-dots"></span>
                       </div>
                     </div>

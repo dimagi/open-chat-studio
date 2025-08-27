@@ -9,18 +9,22 @@ export namespace Components {
     interface OpenChatStudioWidget {
         /**
           * Allow the user to attach files to their messages.
+          * @default false
          */
         "allowAttachments": boolean;
         /**
           * Allow the user to make the chat window full screen.
+          * @default true
          */
         "allowFullScreen": boolean;
         /**
           * The base URL for the API (defaults to current origin).
+          * @default "https://chatbots.dimagi.com"
          */
         "apiBaseUrl"?: string;
         /**
           * The shape of the chat button. 'round' makes it circular, 'square' keeps it rectangular.
+          * @default 'square'
          */
         "buttonShape": 'round' | 'square';
         /**
@@ -41,24 +45,33 @@ export namespace Components {
         "iconUrl"?: string;
         /**
           * The message to display in the new chat confirmation dialog.
+          * @default "Starting a new chat will clear your current conversation. Continue?"
          */
         "newChatConfirmationMessage"?: string;
         /**
           * Whether to persist session data to local storage to allow resuming previous conversations after page reload.
+          * @default true
          */
         "persistentSession": boolean;
         /**
           * Minutes since the most recent message after which the session data in local storage will expire. Set this to `0` to never expire.
+          * @default 60 * 24
          */
         "persistentSessionExpire": number;
         /**
           * The initial position of the chat widget on the screen.
+          * @default 'right'
          */
         "position": 'left' | 'center' | 'right';
         /**
           * Array of starter questions that users can click to send (JSON array of strings)
          */
         "starterQuestions"?: string;
+        /**
+          * The text to display while the assistant is typing/preparing a response.
+          * @default "Preparing response"
+         */
+        "typingIndicatorText"?: string;
         /**
           * Used to associate chat sessions with a specific user across multiple visits/sessions
          */
@@ -69,6 +82,7 @@ export namespace Components {
         "userName"?: string;
         /**
           * Whether the chat widget is visible on load.
+          * @default false
          */
         "visible": boolean;
         /**
@@ -92,18 +106,22 @@ declare namespace LocalJSX {
     interface OpenChatStudioWidget {
         /**
           * Allow the user to attach files to their messages.
+          * @default false
          */
         "allowAttachments"?: boolean;
         /**
           * Allow the user to make the chat window full screen.
+          * @default true
          */
         "allowFullScreen"?: boolean;
         /**
           * The base URL for the API (defaults to current origin).
+          * @default "https://chatbots.dimagi.com"
          */
         "apiBaseUrl"?: string;
         /**
           * The shape of the chat button. 'round' makes it circular, 'square' keeps it rectangular.
+          * @default 'square'
          */
         "buttonShape"?: 'round' | 'square';
         /**
@@ -124,24 +142,33 @@ declare namespace LocalJSX {
         "iconUrl"?: string;
         /**
           * The message to display in the new chat confirmation dialog.
+          * @default "Starting a new chat will clear your current conversation. Continue?"
          */
         "newChatConfirmationMessage"?: string;
         /**
           * Whether to persist session data to local storage to allow resuming previous conversations after page reload.
+          * @default true
          */
         "persistentSession"?: boolean;
         /**
           * Minutes since the most recent message after which the session data in local storage will expire. Set this to `0` to never expire.
+          * @default 60 * 24
          */
         "persistentSessionExpire"?: number;
         /**
           * The initial position of the chat widget on the screen.
+          * @default 'right'
          */
         "position"?: 'left' | 'center' | 'right';
         /**
           * Array of starter questions that users can click to send (JSON array of strings)
          */
         "starterQuestions"?: string;
+        /**
+          * The text to display while the assistant is typing/preparing a response.
+          * @default "Preparing response"
+         */
+        "typingIndicatorText"?: string;
         /**
           * Used to associate chat sessions with a specific user across multiple visits/sessions
          */
@@ -152,6 +179,7 @@ declare namespace LocalJSX {
         "userName"?: string;
         /**
           * Whether the chat widget is visible on load.
+          * @default false
          */
         "visible"?: boolean;
         /**

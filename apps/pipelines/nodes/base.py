@@ -97,6 +97,7 @@ class PipelineState(dict):
     node_source: str
 
     intents: Annotated[list[Intents], operator.add]
+    synthetic_voice_id: int | None
 
     def json_safe(self):
         # We need to make a copy of `self` to not change the actual value of `experiment_session` forever
@@ -122,12 +123,17 @@ class PipelineState(dict):
         return PipelineState(copied)
 
     @classmethod
-    def from_node_output(cls, node_name: str, node_id: str, output: Any = None, **kwargs) -> Self:
+    def from_node_output(
+        cls,
+        node_name: str,
+        node_id: str,
+        output: Any = None,
+        **kwargs,
+    ) -> Self:
         kwargs["outputs"] = {node_name: {"message": output, "node_id": node_id}}
         kwargs.setdefault("temp_state", {}).update({"outputs": {node_name: output}})
         if output is not None:
             kwargs["messages"] = [output]
-
         return cls(**kwargs)
 
     def add_message_tag(self, tag: str):
@@ -433,6 +439,7 @@ class Widgets(StrEnum):
     built_in_tools = "built_in_tools"
     key_value_pairs = "key_value_pairs"
     text_editor = "text_editor_widget"
+    voice_widget = "voice_widget"
 
 
 class OptionsSource(StrEnum):
@@ -447,6 +454,8 @@ class OptionsSource(StrEnum):
     built_in_tools_config = "built_in_tools_config"
     text_editor_autocomplete_vars_llm_node = "text_editor_autocomplete_vars_llm_node"
     text_editor_autocomplete_vars_router_node = "text_editor_autocomplete_vars_router_node"
+    voice_provider_id = "voice_provider_id"
+    synthetic_voice_id = "synthetic_voice_id"
 
 
 class UiSchema(BaseModel):
