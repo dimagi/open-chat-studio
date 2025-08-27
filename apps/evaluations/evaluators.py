@@ -12,6 +12,7 @@ from apps.service_providers.llm_service.main import LlmService
 from apps.service_providers.llm_service.prompt_context import SafeAccessWrapper
 from apps.service_providers.models import LlmProviderModel
 from apps.utils.langchain import dict_to_json_schema
+from apps.utils.python_execution import RestrictedPythonExecutionMixin, get_code_error_message
 
 
 class EvaluatorSchema(BaseModel):
@@ -96,4 +97,74 @@ class LlmEvaluator(LLMResponseMixin, BaseEvaluator):
             generated_response=generated_response,
         )
         result = llm.invoke(formatted_prompt)
+        return EvaluatorResult(result=result, generated_response=generated_response)
+
+
+DEFAULT_FUNCTION = """# The main function is called for each message in the evaluation dataset
+
+def main(input: dict, output: dict, context: dict, full_history: str, generated_response: str, **kwargs) -> dict:
+    \"""Evaluate a single message and return metrics.
+
+    Args:
+        input: The input message data (e.g., {'content': 'Hello', 'role': 'human'})
+        output: The actual output message / ground-truth data (e.g., {'content': 'Hello', 'role': 'ai'})
+        context: Additional context of the message (e.g., {'current_datetime': '2025-06-02T18:51:55.334974+00:00'})
+        full_history: Complete conversation history as a string (e.g., "user: hello!\nassistant: hello!\n")
+        generated_response: The AI-generated response being evaluated, if enabled
+
+    Returns:
+        dict: Evaluation results where keys become columns in the output
+              (e.g., {'accuracy': 0.95, 'relevance': 'high'})
+    \"""
+    return {'python_evaluation': input['content']}
+"""
+
+
+class PythonEvaluator(BaseEvaluator, RestrictedPythonExecutionMixin):
+    """Runs python"""
+
+    model_config = ConfigDict(
+        evaluator_schema=EvaluatorSchema(
+            label="Python Evaluator",
+            icon="fa-solid fa-file-code",
+        )
+    )
+    code: str = Field(
+        default=DEFAULT_FUNCTION,
+        description="The code to run",
+        json_schema_extra=UiSchema(widget=Widgets.code),
+    )
+
+    @classmethod
+    def _get_default_code(cls) -> str:
+        return DEFAULT_FUNCTION
+
+    @classmethod
+    def _get_function_args(cls) -> list[str]:
+        return ["input", "output", "context", "full_history", "generated_response", "**kwargs"]
+
+    def run(self, message: EvaluationMessage, generated_response: str) -> EvaluatorResult:
+        try:
+            input = EvaluationMessageContent.model_validate(message.input).model_dump()
+        except ValidationError as err:
+            raise EvaluationRunException("Missing input text") from err
+
+        try:
+            output = EvaluationMessageContent.model_validate(message.output).model_dump()
+        except ValidationError as err:
+            raise EvaluationRunException("Missing output text") from err
+
+        try:
+            result = self.compile_and_execute_code(
+                input=input,
+                output=output,
+                context=message.context,
+                full_history=message.full_history,
+                generated_response=generated_response,
+            )
+            if not isinstance(result, dict):
+                raise EvaluationRunException("The python function did not return a dictionary")
+        except Exception as exc:
+            raise EvaluationRunException(get_code_error_message("<inline_code>", self.code)) from exc
+
         return EvaluatorResult(result=result, generated_response=generated_response)
