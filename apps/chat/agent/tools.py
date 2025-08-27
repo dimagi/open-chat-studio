@@ -491,6 +491,8 @@ TOOL_CLASS_MAP = {
     AgentTools.END_SESSION: EndSessionTool,
     AgentTools.ATTACH_MEDIA: AttachMediaTool,
     AgentTools.SEARCH_INDEX: SearchIndexTool,
+    AgentTools.SET_SESSION_STATE: SetSessionStateTool,
+    AgentTools.GET_SESSION_STATE: GetSessionStateTool,
 }
 
 
