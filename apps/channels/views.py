@@ -3,9 +3,9 @@ import uuid
 
 from django.conf import settings
 from django.http import Http404, HttpRequest, HttpResponse, HttpResponseBadRequest, JsonResponse
-from django.shortcuts import get_object_or_404
+from django.shortcuts import get_object_or_404, render
 from django.views.decorators.csrf import csrf_exempt
-from django.views.decorators.http import require_POST
+from django.views.decorators.http import require_GET, require_POST
 from drf_spectacular.types import OpenApiTypes
 from drf_spectacular.utils import OpenApiParameter, extend_schema
 from rest_framework import status
@@ -189,3 +189,58 @@ def new_connect_message(request: HttpRequest):
         experiment_channel_id=channel.id, participant_data_id=participant_data.id, messages=serializer.data["messages"]
     )
     return HttpResponse()
+
+
+@require_GET
+def channel_edit_dialog(request, team_slug, experiment_id, channel_id):
+    channel = get_object_or_404(
+        ExperimentChannel, id=channel_id, experiment__id=experiment_id, experiment__team__slug=team_slug
+    )
+    form = channel.form
+    extra_form = channel.extra_form
+    context = {
+        "request": request,
+        "team": request.team,
+        "experiment": channel.experiment,
+        "channel": channel,
+        "form": form,
+        "extra_form": extra_form,
+    }
+
+    return render(request, "chatbots/partials/channel_edit_dialog.html", context)
+
+
+@require_GET
+def channel_create_dialog(request, team_slug, experiment_id, platform_value):
+    experiment = get_object_or_404(Experiment, id=experiment_id, team__slug=team_slug)
+
+    channels = experiment.experimentchannel_set.exclude(
+        platform__in=[ChannelPlatform.WEB, ChannelPlatform.API, ChannelPlatform.EVALUATIONS]
+    ).all()
+    used_platforms = {channel.platform_enum for channel in channels}
+    available_platforms = ChannelPlatform.for_dropdown(used_platforms, experiment.team)
+
+    platform_forms = {}
+    form_kwargs = {"experiment": experiment}
+    for platform in available_platforms:
+        if platform.form:
+            platform_forms[platform] = platform.form(**form_kwargs)
+    try:
+        platform_enum = ChannelPlatform(platform_value)
+    except ValueError:
+        raise Http404("Platform not found.")
+
+    platform_form = platform_forms.get(platform_enum)
+    extra_form = platform_enum.extra_form()
+    if not platform_form:
+        return HttpResponse("Invalid or unavailable platform.", status=400)
+
+    context = {
+        "request": request,
+        "team": request.team,
+        "experiment": experiment,
+        "platform": platform_enum,
+        "platform_form": platform_form,
+        "extra_form": extra_form,
+    }
+    return render(request, "chatbots/partials/channel_create_dialog.html", context)
