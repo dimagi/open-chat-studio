@@ -1,9 +1,6 @@
-@tailwind base;
-@tailwind components;
-@tailwind utilities;
-
-:host {
-  /**
+@layer utilities {
+  :host {
+    /**
     * @prop --chat-z-index: Z-index for chat widget (50)
     *
     * @prop --button-background-color: Button background color (#ffffff)
@@ -120,148 +117,173 @@
     *
     * @prop --message-attachment-icon-size: Message attachment icon size (1em)
     */
-  /* Global variables */
-  --chat-z-index: 50;
+    /* Global variables */
+    --chat-z-index: 50;
 
-  /* Button variables */
-  --button-background-color: #ffffff;
-  --button-background-color-hover: #f3f4f6;
-  --button-text-color: #111827;
-  --button-text-color-hover: #1d4ed8;
-  --button-border-color: #d1d5db;
-  --button-border-color-hover: #6b7280;
-  --button-font-size: 1em; /* text-sm */
-  --button-icon-size: 1.5em;
+    /* Button variables */
+    --button-background-color: #ffffff;
+    --button-background-color-hover: #f3f4f6;
+    --button-text-color: #111827;
+    --button-text-color-hover: #1d4ed8;
+    --button-border-color: #d1d5db;
+    --button-border-color-hover: #6b7280;
+    --button-font-size: 1em; /* text-sm */
+    --button-icon-size: 1.5em;
 
-  /* Chat window variables */
-  --chat-window-height: 60%;
-  --chat-window-width: 25%;
-  --chat-window-fullscreen-width: 80%;
-  --chat-window-bg-color: #ffffff;
-  --chat-window-border-color: #d1d5db;
-  --chat-window-shadow-color: rgba(0, 0, 0, 0.1);
-  --chat-window-font-size: 0.875em; /* text-sm */
-  --chat-window-font-size-sm: 0.75em; /* text-xs */
+    /* Chat window variables */
+    --chat-window-height: 60%;
+    --chat-window-width: 25%;
+    --chat-window-fullscreen-width: 80%;
+    --chat-window-bg-color: #ffffff;
+    --chat-window-border-color: #d1d5db;
+    --chat-window-shadow-color: rgba(0, 0, 0, 0.1);
+    --chat-window-font-size: 0.875em; /* text-sm */
+    --chat-window-font-size-sm: 0.75em; /* text-xs */
 
-  /* Header variables */
-  --header-bg-color: transparent;
-  --header-bg-hover-color: #f9fafb;
-  --header-border-color: #f3f4f6;
-  --header-button-text-color: #6b7280;
-  --header-button-bg-hover-color: #f3f4f6;
-  --header-font-size: 1em;
-  --header-text-font-size: 1em;
-  --header-text-color: #525762;
-  --header-button-icon-size: 1.5em;
+    /* Header variables */
+    --header-bg-color: transparent;
+    --header-bg-hover-color: #f9fafb;
+    --header-border-color: #f3f4f6;
+    --header-button-text-color: #6b7280;
+    --header-button-bg-hover-color: #f3f4f6;
+    --header-font-size: 1em;
+    --header-text-font-size: 1em;
+    --header-text-color: #525762;
+    --header-button-icon-size: 1.5em;
 
-  /* Starter question variables */
-  --starter-question-bg-color: transparent;
-  --starter-question-bg-hover-color: #eff6ff;
-  --starter-question-text-color: #3b82f6;
-  --starter-question-border-color: #3b82f6;
-  --starter-question-border-hover-color: #2563eb;
+    /* Starter question variables */
+    --starter-question-bg-color: transparent;
+    --starter-question-bg-hover-color: #eff6ff;
+    --starter-question-text-color: #3b82f6;
+    --starter-question-border-color: #3b82f6;
+    --starter-question-border-hover-color: #2563eb;
 
-  /* Message bubble variables */
-  --message-user-bg-color: #e4edfb;
-  --message-user-text-color: #1f2937;
-  --message-user-link-color: #155dfc;
+    /* Message bubble variables */
+    --message-user-bg-color: #e4edfb;
+    --message-user-text-color: #1f2937;
+    --message-user-link-color: #155dfc;
 
-  --message-assistant-bg-color: #eae7e8;
-  --message-assistant-text-color: var(--message-user-text-color);
-  --message-assistant-link-color: var(--message-user-link-color);
+    --message-assistant-bg-color: #eae7e8;
+    --message-assistant-text-color: var(--message-user-text-color);
+    --message-assistant-link-color: var(--message-user-link-color);
 
-  --message-system-bg-color: #fbe4f8;
-  --message-system-text-color: var(--message-user-text-color);
-  --message-system-link-color: var(--message-user-link-color);
+    --message-system-bg-color: #fbe4f8;
+    --message-system-text-color: var(--message-user-text-color);
+    --message-system-link-color: var(--message-user-link-color);
 
-  --message-timestamp-color: rgba(255, 255, 255, 0.7);
-  --message-timestamp-assistant-color: rgba(75, 85, 99, 0.7);
+    --message-timestamp-color: rgba(255, 255, 255, 0.7);
+    --message-timestamp-assistant-color: rgba(75, 85, 99, 0.7);
 
-  /* Input area variables */
-  --input-bg-color: transparent;
-  --input-border-color: #d1d5db;
-  --input-text-color: #111827;
-  --input-placeholder-color: #6b7280;
-  --input-outline-focus-color: #3b82f6;
+    /* Input area variables */
+    --input-bg-color: transparent;
+    --input-border-color: #d1d5db;
+    --input-text-color: #111827;
+    --input-placeholder-color: #6b7280;
+    --input-outline-focus-color: #3b82f6;
 
-  /* Send button variables */
-  --send-button-bg-color: #3b82f6;
-  --send-button-bg-hover-color: #2563eb;
-  --send-button-text-color: #ffffff;
-  --send-button-bg-disabled-color: #d1d5db;
-  --send-button-text-disabled-color: #6b7280;
+    /* Send button variables */
+    --send-button-bg-color: #3b82f6;
+    --send-button-bg-hover-color: #2563eb;
+    --send-button-text-color: #ffffff;
+    --send-button-bg-disabled-color: #d1d5db;
+    --send-button-text-disabled-color: #6b7280;
 
-  /* Loading variables */
-  --loading-text-color: #6b7280;
-  --loading-spinner-track-color: #e5e7eb;
-  --loading-spinner-fill-color: #3b82f6;
-  --loading-spinner-size: 1.25em;
+    /* Loading variables */
+    --loading-text-color: #6b7280;
+    --loading-spinner-track-color: #e5e7eb;
+    --loading-spinner-fill-color: #3b82f6;
+    --loading-spinner-size: 1.25em;
 
-  /* Typing indicator variables */
-  --typing-progress-bg-color: #ade3ff;
+    /* Typing indicator variables */
+    --typing-progress-bg-color: #ade3ff;
 
-  /* Scrollbar variables */
-  --scrollbar-track-color: #f3f4f6;
-  --scrollbar-thumb-color: #d1d5db;
-  --scrollbar-thumb-hover-color: #9ca3af;
+    /* Scrollbar variables */
+    --scrollbar-track-color: #f3f4f6;
+    --scrollbar-thumb-color: #d1d5db;
+    --scrollbar-thumb-hover-color: #9ca3af;
 
-  /* Error variables */
-  --error-text-color: #ef4444;
-  --success-text-color: #10b981; /* Complementary green to existing blue palette */;
+    /* Error variables */
+    --error-text-color: #ef4444;
+    --success-text-color: #10b981; /* Complementary green to existing blue palette */
 
-  /* Markdown code variables */
-  --code-bg-user-color: color-mix(in srgb, var(--message-user-bg-color) 80%, white 20%);
-  --code-text-user-color: var(--message-user-text-color);
-  --code-border-user-color: color-mix(in srgb, var(--message-user-bg-color) 90%, black 10%);
-  --code-bg-assistant-color: color-mix(in srgb, var(--message-assistant-bg-color) 50%, white 50%);
-  --code-text-assistant-color: var(--message-assistant-text-color);
-  --code-border-assistant-color: color-mix(in srgb, var(--message-assistant-bg-color) 90%, black 10%);;
+    /* Markdown code variables */
+    --code-bg-user-color: color-mix(
+      in srgb,
+      var(--message-user-bg-color) 80%,
+      white 20%
+    );
+    --code-text-user-color: var(--message-user-text-color);
+    --code-border-user-color: color-mix(
+      in srgb,
+      var(--message-user-bg-color) 90%,
+      black 10%
+    );
+    --code-bg-assistant-color: color-mix(
+      in srgb,
+      var(--message-assistant-bg-color) 50%,
+      white 50%
+    );
+    --code-text-assistant-color: var(--message-assistant-text-color);
+    --code-border-assistant-color: color-mix(
+      in srgb,
+      var(--message-assistant-bg-color) 90%,
+      black 10%
+    );
 
-  --confirmation-overlay-bg-color: rgba(0, 0, 0, 0.5);
-  --confirmation-dialog-bg-color: var(--chat-window-bg-color);
-  --confirmation-dialog-border-color: var(--chat-window-border-color);
-  --confirmation-dialog-shadow-color: var(--chat-window-shadow-color);
-  --confirmation-title-color: #111827;
-  --confirmation-title-font-size: 1.125em;
-  --confirmation-message-color: var(--loading-text-color);
-  --confirmation-message-font-size: 1em;
-  --confirmation-button-cancel-bg-color: var(--button-background-color-hover);
-  --confirmation-button-cancel-bg-hover-color: #e5e7eb;
-  --confirmation-button-cancel-text-color: var(--header-button-text-color);
-  --confirmation-button-confirm-bg-color: var(--error-text-color);
-  --confirmation-button-confirm-bg-hover-color: var(--error-text-color);
-  --confirmation-button-confirm-text-color: var(--send-button-text-color);
+    --confirmation-overlay-bg-color: rgba(0, 0, 0, 0.5);
+    --confirmation-dialog-bg-color: var(--chat-window-bg-color);
+    --confirmation-dialog-border-color: var(--chat-window-border-color);
+    --confirmation-dialog-shadow-color: var(--chat-window-shadow-color);
+    --confirmation-title-color: #111827;
+    --confirmation-title-font-size: 1.125em;
+    --confirmation-message-color: var(--loading-text-color);
+    --confirmation-message-font-size: 1em;
+    --confirmation-button-cancel-bg-color: var(--button-background-color-hover);
+    --confirmation-button-cancel-bg-hover-color: #e5e7eb;
+    --confirmation-button-cancel-text-color: var(--header-button-text-color);
+    --confirmation-button-confirm-bg-color: var(--error-text-color);
+    --confirmation-button-confirm-bg-hover-color: var(--error-text-color);
+    --confirmation-button-confirm-text-color: var(--send-button-text-color);
 
-  /* File upload variables */
-  --file-attachment-button-bg-color: transparent;
-  --file-attachment-button-bg-hover-color: var(--header-button-bg-hover-color); /* #f3f4f6 */
-  --file-attachment-button-text-color: var(--header-button-text-color); /* #6b7280 */
-  --file-attachment-button-text-disabled-color: var(--send-button-text-disabled-color); /* #6b7280 */
+    /* File upload variables */
+    --file-attachment-button-bg-color: transparent;
+    --file-attachment-button-bg-hover-color: var(
+      --header-button-bg-hover-color
+    ); /* #f3f4f6 */
+    --file-attachment-button-text-color: var(
+      --header-button-text-color
+    ); /* #6b7280 */
+    --file-attachment-button-text-disabled-color: var(
+      --send-button-text-disabled-color
+    ); /* #6b7280 */
 
-  /* Selected files variables */
-  --selected-files-bg-color: var(--chat-window-bg-color); /* transparent */
-  --selected-files-border-color: var(--header-border-color); /* #f3f4f6 */
+    /* Selected files variables */
+    --selected-files-bg-color: var(--chat-window-bg-color); /* transparent */
+    --selected-files-border-color: var(--header-border-color); /* #f3f4f6 */
 
-  /* Selected file item variables */
-  --selected-file-bg-color: var(--message-system-bg-color); /* #f3f4f6 */
+    /* Selected file item variables */
+    --selected-file-bg-color: var(--message-system-bg-color); /* #f3f4f6 */
 
-  /* Selected file text variables */
-  --selected-file-font-size: var(--chat-window-font-size-sm);
-  --selected-file-name-color: var(--message-assistant-text-color); /* #1f2937 */
-  --selected-file-size-color: var(--input-placeholder-color); /* #6b7280 */
+    /* Selected file text variables */
+    --selected-file-font-size: var(--chat-window-font-size-sm);
+    --selected-file-name-color: var(
+      --message-assistant-text-color
+    ); /* #1f2937 */
+    --selected-file-size-color: var(--input-placeholder-color); /* #6b7280 */
 
-  /* Selected file icon variables */
-  --selected-file-icon-size: 1.25em;
-  --selected-file-remove-icon-color: var(--error-text-color); /* #ef4444 */
-  --selected-file-remove-icon-hover-color: #dc2626; /* Darker red for hover */
+    /* Selected file icon variables */
+    --selected-file-icon-size: 1.25em;
+    --selected-file-remove-icon-color: var(--error-text-color); /* #ef4444 */
+    --selected-file-remove-icon-hover-color: #dc2626; /* Darker red for hover */
 
-  /* Message attachment variables */
-  --message-attachment-icon-size: 1em;
+    /* Message attachment variables */
+    --message-attachment-icon-size: 1em;
 
-  display: block;
-  position: fixed;
-  right: 30px;
-  bottom: 30px;
+    display: block;
+    position: fixed;
+    right: 30px;
+    bottom: 30px;
+  }
 }
 
 @layer components {
@@ -276,14 +298,45 @@
     background-color: var(--starter-question-bg-color);
     border: 1px solid var(--starter-question-border-color);
     color: var(--starter-question-text-color);
+
+    &:hover {
+      background-color: var(--starter-question-bg-hover-color);
+      border-color: var(--starter-question-border-hover-color);
+    }
   }
 
-  .starter-question:hover {
-    background-color: var(--starter-question-bg-hover-color);
-    border-color: var(--starter-question-border-hover-color);
+  .chat-btn-text {
+    @apply shadow-lg border-0 transition-all duration-200 ease-in-out transform hover:scale-105 rounded-lg;
+    background-color: var(--button-background-color, white);
+    border: 1px solid var(--button-border-color);
+    z-index: var(--chat-z-index, 50);
+    font-size: var(--button-font-size);
+    padding: 0.5em;
+
+    &:hover {
+      color: var(--button-text-color-hover, #1d4ed8);
+      border: 1px solid var(--button-border-color-hover);
+    }
+
+    /* Button with text and icon */
+    @apply flex gap-[8px] items-center;
+    color: var(--button-text-color, #111827);
+
+    & span {
+      @apply font-medium whitespace-nowrap;
+    }
+
+    & img {
+      @apply object-contain flex-shrink-0;
+      width: var(--button-icon-size);
+      height: var(--button-icon-size);
+    }
+
+    &.round {
+      @apply rounded-full;
+    }
   }
 
-  .chat-btn-text,
   .chat-btn-icon {
     @apply shadow-lg border-0 transition-all duration-200 ease-in-out transform hover:scale-105 rounded-lg;
     background-color: var(--button-background-color, white);
@@ -291,89 +344,83 @@
     z-index: var(--chat-z-index, 50);
     font-size: var(--button-font-size);
     padding: 0.5em;
+
+    &:hover {
+      color: var(--button-text-color-hover, #1d4ed8);
+      border: 1px solid var(--button-border-color-hover);
+    }
+
+    /* Icon-only button */
+
+    & img {
+      @apply object-contain;
+      width: var(--button-icon-size);
+      height: var(--button-icon-size);
+    }
+
+    &.round {
+      @apply rounded-full;
+    }
   }
 
-  .chat-btn-text:hover, .chat-btn-icon:hover {
-    color: var(--button-text-color-hover, #1d4ed8);
-    border: 1px solid var(--button-border-color-hover);
+  .round {
+    &.chat-btn-text {
+      @apply rounded-full;
+    }
+
+    & .chat-btn-icon {
+      @apply rounded-full;
+    }
   }
 
-  /* Button with text and icon */
-  .chat-btn-text {
-    @apply flex gap-[8px] items-center;
-    color: var(--button-text-color, #111827);
-  }
-
-  .chat-btn-text span {
-    @apply font-medium whitespace-nowrap;
-  }
-
-  .chat-btn-text img {
-    @apply object-contain flex-shrink-0;
-    width: var(--button-icon-size);
-    height: var(--button-icon-size);
-  }
-
-  /* Icon-only button */
-  .chat-btn-icon {
-  }
-
-  .chat-btn-icon img {
-    @apply object-contain;
-    width: var(--button-icon-size);
-    height: var(--button-icon-size);
-  }
-
-  .chat-btn-text.round,
-  .chat-btn-icon.round {
-    @apply rounded-full;
-  }
-
-  /* Error message styling */
   .error-message {
+    /* Error message styling */
     padding: 0.5em;
     color: var(--error-text-color);
   }
 
-  /* Chat window positioning classes */
   .chat-window-fullscreen {
-    @apply fixed inset-0 w-full h-full max-h-full border-0 shadow-lg transition-shadow duration-200 rounded-none overflow-hidden flex flex-col z-[9999];
+    /* Chat window positioning classes */
+    @apply fixed inset-0 w-full h-full max-h-full border-0 shadow-lg transition-shadow duration-200 rounded-none overflow-hidden flex flex-col z-9999;
     background-color: var(--chat-window-bg-color);
     max-width: var(--chat-window-fullscreen-width);
   }
 
   .chat-window-normal {
-    @apply fixed w-screen h-screen min-h-[300px] min-w-[300px] sm:w-[var(--chat-window-width)] sm:h-[var(--chat-window-height)] max-w-screen-lg rounded-lg overflow-hidden flex flex-col;
+    @apply fixed w-screen h-screen min-h-[300px] min-w-[300px] sm:w-(--chat-window-width) sm:h-(--chat-window-height) max-w-(--breakpoint-lg) rounded-lg overflow-hidden flex flex-col;
     background-color: var(--chat-window-bg-color);
     border: 1px solid var(--chat-window-border-color);
+
+    &:not(.chat-window-dragging) {
+      @apply shadow-lg transition-shadow duration-200;
+    }
   }
 
   .chat-window-dragging {
     @apply shadow-2xl cursor-grabbing;
   }
 
-  .chat-window-normal:not(.chat-window-dragging) {
-    @apply shadow-lg transition-shadow duration-200;
-  }
-
-  /* Header/drag bar classes */
   .chat-header {
+    /* Header/drag bar classes */
     @apply flex justify-between items-center transition-colors duration-150;
     padding: 0.5em;
     background-color: var(--header-bg-color);
     border-bottom: 1px solid var(--header-border-color);
     font-size: var(--header-font-size);
+
+    &:hover {
+      background-color: var(--header-bg-hover-color);
+    }
+
+    &:active {
+      background-color: var(--header-bg-hover-color);
+    }
   }
 
   .header-text {
     @apply flex items-center justify-center;
     font-size: var(--header-text-font-size);
     color: var(--header-text-color);
-  }
-
-  .chat-header:hover,
-  .chat-header:active {
-    background-color: var(--header-bg-hover-color);
   }
 
   .chat-header-draggable {
@@ -396,33 +443,33 @@
     @apply flex gap-[4px] items-center;
   }
 
-  /* Header button classes */
   .header-button {
+    /* Header button classes */
     @apply rounded-md transition-colors duration-200;
     padding: 0.375em;
     color: var(--header-button-text-color);
-  }
 
-  .header-button svg {
-    width: var(--header-button-icon-size);
-    height: var(--header-button-icon-size);
-  }
+    & svg {
+      width: var(--header-button-icon-size);
+      height: var(--header-button-icon-size);
+    }
 
-  .header-button:hover {
-    background-color: var(--header-button-bg-hover-color);
+    &:hover {
+      background-color: var(--header-button-bg-hover-color);
+    }
   }
 
   .fullscreen-button {
     @apply hidden sm:block;
   }
 
-  /* Chat content area */
   .chat-content {
+    /* Chat content area */
     @apply flex flex-col flex-grow overflow-hidden;
   }
 
-  /* Loading state */
   .loading-container {
+    /* Loading state */
     @apply flex items-center justify-center flex-grow;
   }
 
@@ -431,14 +478,14 @@
     color: var(--loading-text-color);
   }
 
-  /* Messages container */
   .messages-container {
+    /* Messages container */
     @apply flex-grow overflow-y-auto space-y-2;
     padding: 1em;
   }
 
-  /* Message bubbles */
   .message-row {
+    /* Message bubbles */
     @apply flex;
   }
 
@@ -483,13 +530,13 @@
     @apply block underline hover:no-underline;
   }
 
-  /* Welcome messages */
   .welcome-messages {
+    /* Welcome messages */
     @apply space-y-2;
   }
 
-  /* Typing indicator */
   .typing-indicator {
+    /* Typing indicator */
     @apply h-1.5 w-full overflow-hidden;
   }
 
@@ -504,11 +551,11 @@
   }
 
   .typing-dots {
-    @apply loading animate-dots;
+    @apply animate-dots;
   }
 
-  /* Starter questions */
   .starter-questions {
+    /* Starter questions */
     @apply space-y-2;
     padding: 1em;
   }
@@ -517,8 +564,8 @@
     @apply flex justify-end;
   }
 
-  /* Input area */
   .input-area {
+    /* Input area */
     padding: 1em 1em 0 1em;
     background-color: var(--input-bg-color);
     border-top: 1px solid var(--input-border-color);
@@ -534,10 +581,10 @@
     padding: 0.5em 0.75em;
     color: var(--input-text-color);
     border: 1px solid var(--input-border-color);
-  }
 
-  .message-textarea:focus {
-    outline-color: var(--input-outline-focus-color);
+    &:focus {
+      outline-color: var(--input-outline-focus-color);
+    }
   }
 
   .send-button {
@@ -548,10 +595,10 @@
   .send-button-enabled {
     background-color: var(--send-button-bg-color);
     color: var(--send-button-text-color);
-  }
 
-  .send-button-enabled:hover {
-    background-color: var(--send-button-bg-hover-color);
+    &:hover {
+      background-color: var(--send-button-bg-hover-color);
+    }
   }
 
   .send-button-disabled {
@@ -559,8 +606,9 @@
     background-color: var(--send-button-bg-disabled-color);
     color: var(--send-button-text-disabled-color);
   }
-  /* Confirmation dialog */
+
   .confirmation-overlay {
+    /* Confirmation dialog */
     @apply fixed inset-0 flex items-center justify-center;
     background-color: var(--confirmation-overlay-bg-color);
     z-index: 9999;
@@ -603,19 +651,19 @@
   .confirmation-button-cancel {
     background-color: var(--confirmation-button-cancel-bg-color);
     color: var(--confirmation-button-cancel-text-color);
-  }
 
-  .confirmation-button-cancel:hover {
-    background-color: var(--confirmation-button-cancel-bg-hover-color);
+    &:hover {
+      background-color: var(--confirmation-button-cancel-bg-hover-color);
+    }
   }
 
   .confirmation-button-confirm {
     background-color: var(--confirmation-button-confirm-bg-color);
     color: var(--confirmation-button-confirm-text-color);
-  }
 
-  .confirmation-button-confirm:hover {
-    background-color: var(--confirmation-button-confirm-bg-hover-color);
+    &:hover {
+      background-color: var(--confirmation-button-confirm-bg-hover-color);
+    }
   }
 }
 
@@ -636,12 +684,12 @@ textarea {
 }
 
 .overflow-y-auto::-webkit-scrollbar-track {
-  @apply rounded;
+  @apply rounded-sm;
   background-color: var(--scrollbar-track-color);
 }
 
 .overflow-y-auto::-webkit-scrollbar-thumb {
-  @apply rounded;
+  @apply rounded-sm;
   background-color: var(--scrollbar-thumb-color);
 }
 
@@ -651,7 +699,7 @@ textarea {
 
 /* Markdown content styling for chat messages */
 .chat-markdown {
-  @apply prose prose-sm prose-gray max-w-none prose-a:no-underline hover:prose-a:underline;
+  @apply prose prose-sm prose-gray max-w-none prose-a:no-underline prose-a:hover:underline;
   font-size: 1em;
 }
 
@@ -735,6 +783,7 @@ textarea {
 .loading:after {
   content: ' .';
 }
+
 /* File Upload Button */
 .file-attachment-button {
   @apply rounded-md transition-colors duration-200 disabled:opacity-50 disabled:cursor-not-allowed;

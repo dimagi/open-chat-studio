@@ -818,7 +818,6 @@ export class OcsChat {
     const centeredX = (windowWidth - actualChatWidth) / 2;
     const maxOffset = (windowWidth - actualChatWidth) / 2;
 
-    console.log( windowWidth, actualChatWidth, centeredX, maxOffset )
     return { windowWidth, actualChatWidth, centeredX, maxOffset };
   }
 
@@ -1361,7 +1360,7 @@ export class OcsChat {
                       </div>
                       <div class="typing-text">
                         <span>{this.typingIndicatorText}</span>
-                        <span class="typing-dots"></span>
+                        <span class="typing-dots loading"></span>
                       </div>
                     </div>
                   )}
