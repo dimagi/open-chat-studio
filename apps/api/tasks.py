@@ -44,7 +44,6 @@ def setup_connect_channels_for_bots(connect_id: str, experiment_data_map: dict):
             experiment_id__in=Subquery(experiments_using_connect),
         )
         .exclude(system_metadata__has_key="commcare_connect_channel_id")
-        .prefetch_related("experiment")
         .all()
     )
 
@@ -63,8 +62,7 @@ def setup_connect_channels_for_bots(connect_id: str, experiment_data_map: dict):
             participant_datum.id,
             participant_datum.experiment_id,
         )
-        experiment = participant_datum.experiment
-        channel = channels[experiment.id]
+        channel = channels[participant_datum.experiment_id]
         response = connect_client.create_channel(
             connect_id=connect_id, channel_source=channel.extra_data["commcare_connect_bot_name"]
         )
