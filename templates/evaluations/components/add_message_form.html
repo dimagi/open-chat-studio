@@ -12,7 +12,7 @@
   >
     {% csrf_token %}
 
-    {% include "evaluations/components/message_pair_form.html" with context_field_id="add-context-field" disable_button_id="add-message-button" %}
+    {% include "evaluations/components/message_pair_form.html" with context_field_id="add-context-field" disable_button_id="add-message-button" required_fields=True %}
 
     <div class="flex gap-2">
       <button type="submit" class="btn btn-primary" id="add-message-button">

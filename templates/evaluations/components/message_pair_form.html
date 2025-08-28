@@ -9,6 +9,8 @@ Parameters:
 - context_field_id: ID for hidden context field (required for unique IDs)
 - errors: dict with validation errors
 - disable_button_id: ID of button to disable when JSON is invalid (optional)
+- use_alpine_model: if true, use x-model bindings instead of static values (optional)
+- required_fields: if true, the inputs will be required
 {% endcomment %}
 
 <!-- Human Message -->
@@ -20,8 +22,9 @@ Parameters:
     name="human_message"
     class="textarea textarea-bordered w-full min-h-[100px]{% if errors.human %} textarea-error{% endif %}"
     placeholder="{% trans 'Enter human message...' %}"
-    required
-  >{{ human_value|default:'' }}</textarea>
+    {% if use_alpine_model %}x-model="editingMessage.human"{% endif %}
+    {% if required_fields %}required{% endif %}
+  >{% if not use_alpine_model %}{{ human_value|default:'' }}{% endif %}</textarea>
   {% if errors.human %}
   <div class="text-error text-sm mt-1">{{ errors.human }}</div>
   {% endif %}
@@ -36,8 +39,9 @@ Parameters:
     name="ai_message"
     class="textarea textarea-bordered w-full min-h-[100px]{% if errors.ai %} textarea-error{% endif %}"
     placeholder="{% trans 'Enter AI response...' %}"
-    required
-  >{{ ai_value|default:'' }}</textarea>
+    {% if use_alpine_model %}x-model="editingMessage.ai"{% endif %}
+    {% if required_fields %}required{% endif %}
+  >{% if not use_alpine_model %}{{ ai_value|default:'' }}{% endif %}</textarea>
   {% if errors.ai %}
   <div class="text-error text-sm mt-1">{{ errors.ai }}</div>
   {% endif %}
@@ -49,7 +53,8 @@ Parameters:
     <span class="label-text font-semibold">{% trans "Context (JSON)" %}</span>
     <span class="label-text-alt text-gray-500">{% trans "Optional additional context data" %}</span>
   </label>
-  <input type="hidden" name="context" id="{{ context_field_id }}" value="{{ context_value|default:'{}' }}">
+  <input type="hidden" name="context" id="{{ context_field_id }}"
+         {% if use_alpine_model %}x-model="editingMessage.context"{% else %}value="{{ context_value|default:'{}' }}"{% endif %}>
   <div class="json-editor w-full h-32 resize-y overflow-auto"
        data-target-field="#{{ context_field_id }}"
        {% if disable_button_id %}data-disable-elt="#{{ disable_button_id }}"{% endif %}>

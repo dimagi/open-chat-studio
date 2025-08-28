@@ -105,6 +105,7 @@ class CreateDataset(LoginAndTeamRequiredMixin, CreateView, PermissionRequiredMix
         "title": "Create Dataset",
         "button_text": "Create Dataset",
         "active_tab": "evaluation_datasets",
+        "form_attrs": {"id": "dataset-create-form"},
     }
 
     def get_form_kwargs(self):

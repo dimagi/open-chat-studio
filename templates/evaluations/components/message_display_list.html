@@ -1,0 +1,101 @@
+{% load i18n %}
+
+<!-- Empty state -->
+<div x-show="messages.length === 0" class="text-center py-8 text-gray-500">
+  <i class="fa-solid fa-comments text-2xl mb-2"></i>
+  <p>{% trans "No message pairs added yet. Use the form below to add your first message pair." %}</p>
+</div>
+
+<!-- Messages table -->
+<div x-show="messages.length > 0">
+  <div class="flex items-center justify-between mb-4">
+    <h4 class="font-medium">{% trans "Message Pairs" %}</h4>
+    <span class="text-sm text-gray-500" x-text="`${messages.length} message${messages.length !== 1 ? 's' : ''}`"></span>
+  </div>
+
+  <div class="table-responsive">
+    <table class="table w-full">
+      <thead class="bg-base-200 base-content uppercase text-sm leading-normal">
+        <tr>
+          <th class="w-1/4 px-3 py-3 text-left">{% trans "Human Message" %}</th>
+          <th class="w-1/4 px-3 py-3 text-left">{% trans "AI Message" %}</th>
+          <th class="w-1/6 px-3 py-3 text-left">{% trans "Context" %}</th>
+          <th class="w-1/6 px-3 py-3 text-left">{% trans "Actions" %}</th>
+        </tr>
+      </thead>
+      <tbody>
+        <template x-for="(message, index) in messages" :key="index">
+          <tr>
+            <!-- Human Message -->
+            <td class="px-3 py-4 align-top">
+              <div class="text-sm" :title="message.human">
+                <div x-show="message.human.length <= 60" x-text="message.human" class="whitespace-pre-wrap"></div>
+                <div x-show="message.human.length > 60" x-text="message.human.substring(0, 60) + '...'"></div>
+              </div>
+            </td>
+
+            <!-- AI Message -->
+            <td class="px-3 py-4 align-top">
+              <div class="text-sm" :title="message.ai">
+                <div x-show="message.ai.length <= 60" x-text="message.ai" class="whitespace-pre-wrap"></div>
+                <div x-show="message.ai.length > 60" x-text="message.ai.substring(0, 60) + '...'"></div>
+              </div>
+            </td>
+
+            <!-- Context -->
+            <td class="px-3 py-4 align-top">
+              <div class="text-xs">
+                <div x-show="!message.context || message.context.trim() === '' || message.context === '{}'" class="text-gray-400">
+                  {% trans "No context" %}
+                </div>
+                <div x-show="message.context && message.context.trim() !== '' && message.context !== '{}'" x-data="{
+                  get contextPairs() {
+                    try {
+                      const parsed = JSON.parse(this.message.context);
+                      return Object.entries(parsed || {});
+                    } catch (e) {
+                      return [];
+                    }
+                  }
+                }">
+                  <template x-if="contextPairs.length > 0">
+                    <ul class="list-none space-y-1">
+                      <template x-for="[key, value] in contextPairs" :key="key">
+                        <li>
+                          <span class="font-medium" x-text="key + ':'"></span>
+                          <span x-text="String(value).length > 30 ? String(value).substring(0, 30) + '...' : String(value)" :title="String(value)"></span>
+                        </li>
+                      </template>
+                    </ul>
+                  </template>
+                  <template x-if="contextPairs.length === 0">
+                    <div class="text-gray-400 font-mono" x-text="message.context.length > 50 ? message.context.substring(0, 50) + '...' : message.context" :title="message.context"></div>
+                  </template>
+                </div>
+              </div>
+            </td>
+
+            <!-- Actions -->
+            <td class="px-3 py-4 align-top">
+              <div class="join join-vertical lg:join-horizontal">
+                <button type="button"
+                        class="btn btn-sm join-item"
+                        :title="`Edit message pair ${index + 1}`"
+                        @click="editMessage(index)">
+                  <i class="fa-solid fa-pencil"></i>
+                </button>
+
+                <button type="button"
+                        class="btn btn-sm join-item"
+                        :title="`Delete message pair ${index + 1}`"
+                        @click="confirmDelete(index)">
+                  <i class="fa-solid fa-trash"></i>
+                </button>
+              </div>
+            </td>
+          </tr>
+        </template>
+      </tbody>
+    </table>
+  </div>
+</div>
