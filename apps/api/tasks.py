@@ -1,10 +1,8 @@
 import logging
-from uuid import UUID
 
 from celery.app import shared_task
 from django.db.models import Subquery
 from httpx import HTTPError
-from taskbadger.celery import Task as TaskbadgerTask
 
 from apps.channels.clients.connect_client import CommCareConnectClient
 from apps.channels.models import ChannelPlatform, ExperimentChannel
@@ -17,20 +15,19 @@ logger = logging.getLogger("ocs.api.commcare_connect")
 
 
 @shared_task(
-    bind=True,
-    base=TaskbadgerTask,
     acks_late=True,
     ignore_result=True,
     autoretry_for=(HTTPError,),
     retry_backoff=True,
     retry_kwargs={"max_retries": 3},
 )
-def setup_connect_channels_for_bots(self, connect_id: UUID, experiment_data_map: dict):
+def setup_connect_channels_for_bots(connect_id: str, experiment_data_map: dict):
     """
     Set up Connect channels for experiments that are using the ConnectMessaging channel
 
     experiment_data_map: {experiment_id: participant_data_id}
     """
+    logger.info("Creating connect channels for %s: %s", connect_id, experiment_data_map)
 
     experiment_ids = list(experiment_data_map.keys())
     participant_data_ids = list(experiment_data_map.values())
@@ -61,6 +58,11 @@ def setup_connect_channels_for_bots(self, connect_id: UUID, experiment_data_map:
     channels = {ch.experiment_id: ch for ch in channels}
 
     for participant_datum in participant_data:
+        logger.info(
+            "Creating connect channel for participant: participant_data_id=%s, experiment_id=%s",
+            participant_datum.id,
+            participant_datum.experiment_id,
+        )
         experiment = participant_datum.experiment
         channel = channels[experiment.id]
         response = connect_client.create_channel(
