@@ -818,7 +818,6 @@ export class OcsChat {
     const centeredX = (windowWidth - actualChatWidth) / 2;
     const maxOffset = (windowWidth - actualChatWidth) / 2;
 
-    console.log( windowWidth, actualChatWidth, centeredX, maxOffset )
     return { windowWidth, actualChatWidth, centeredX, maxOffset };
   }
 

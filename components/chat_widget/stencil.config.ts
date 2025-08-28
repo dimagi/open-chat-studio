@@ -1,7 +1,9 @@
 import { Config } from '@stencil/core';
-import { postcss } from '@stencil-community/postcss';
-import autoprefixer from 'autoprefixer';
-import tailwind from '@tailwindcss/postcss'
+import tailwind, { setPluginConfigurationDefaults } from 'stencil-tailwind-plugin';
+
+setPluginConfigurationDefaults({
+  tailwindCssPath: './src/tailwind.css',
+});
 
 export const config: Config = {
   namespace: 'open-chat-studio-widget',
@@ -29,12 +31,6 @@ export const config: Config = {
     openBrowser: false,
   },
   plugins : [
-    postcss({
-      plugins: [
-        require("postcss-import"),
-        tailwind(),
-        autoprefixer()
-      ]
-    })
+    tailwind(),
   ],
 };
